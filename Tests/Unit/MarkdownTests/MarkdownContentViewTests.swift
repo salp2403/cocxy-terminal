@@ -235,7 +235,7 @@ struct MarkdownContentViewTests {
         let toolbar = view.subviews.compactMap { $0 as? MarkdownToolbarView }.first
         #expect(toolbar != nil)
 
-        let buttons = toolbar?.subviews.compactMap { $0 as? NSButton } ?? []
+        let buttons = toolbar.map { descendants(of: $0, matching: NSButton.self) } ?? []
         #expect(buttons.count >= 6)
         #expect(buttons.allSatisfy { !($0.toolTip ?? "").isEmpty })
     }
@@ -253,6 +253,7 @@ struct MarkdownContentViewTests {
         #expect(MarkdownToolbarView.localizedShowGitDiff(using: localizer) == "Mostrar diferencias Git")
         #expect(MarkdownToolbarView.localizedCopyAsMarkdown(using: localizer) == "Copiar como Markdown")
         #expect(MarkdownToolbarView.localizedExportSlides(using: localizer) == "Exportar diapositivas (Cmd+Shift+S)")
+        #expect(MarkdownToolbarView.localizedMoreActions(using: localizer) == "Más acciones de Markdown")
         #expect(MarkdownToolbarView.localizedReloadFile(using: localizer) == "Recargar archivo (Cmd+R)")
         #expect(MarkdownContentView.localizedNoFile(using: localizer) == "Sin archivo")
         #expect(
@@ -313,6 +314,45 @@ struct MarkdownContentViewTests {
         #expect(segmented.label(forSegment: 1) == "Previa")
         #expect(segmented.label(forSegment: 2) == "Dual")
         #expect(segmented.toolTip == "Cambiar entre Fuente, Previa y Dividida")
+    }
+
+    @Test("Markdown Spanish toolbar avoids mode switcher overlap in narrow panes")
+    func markdownSpanishToolbarAvoidsModeSwitcherOverlapInNarrowPanes() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 330, height: MarkdownToolbarView.height))
+        let toolbar = MarkdownToolbarView(localizer: localizer)
+        toolbar.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(toolbar)
+        NSLayoutConstraint.activate([
+            toolbar.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            toolbar.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            toolbar.topAnchor.constraint(equalTo: container.topAnchor),
+            toolbar.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+
+        container.layoutSubtreeIfNeeded()
+
+        let segmented = try #require(descendants(of: toolbar, matching: NSSegmentedControl.self).first)
+        let visibleButtons = descendants(of: toolbar, matching: NSButton.self)
+            .filter { !$0.isHidden && $0.frame.width > 0 && $0.frame.height > 0 }
+        let nearestButtonMinX = try #require(
+            visibleButtons.map { $0.convert($0.bounds, to: toolbar).minX }.min()
+        )
+
+        #expect(segmented.frame.minX >= toolbar.bounds.minX)
+        #expect(segmented.frame.maxX <= toolbar.bounds.maxX)
+        #expect(segmented.frame.maxX <= nearestButtonMinX - 6)
+    }
+
+    private func descendants<T: NSView>(of view: NSView, matching type: T.Type) -> [T] {
+        view.subviews.flatMap { subview -> [T] in
+            var matches = descendants(of: subview, matching: type)
+            if let typed = subview as? T {
+                matches.insert(typed, at: 0)
+            }
+            return matches
+        }
     }
 
     // MARK: - Helpers

@@ -28,10 +28,14 @@ final class MarkdownToolbarView: NSView {
     private var exportSlidesButton: NSButton!
     private let outlineToggleButton = NSButton()
     private let reloadButton = NSButton()
+    private let overflowButton = NSButton()
+    private let rightControlsStack = NSStackView()
     private var localizer: AppLocalizer
+    private var isUsingCompactToolbar = false
 
     /// Height of the toolbar.
     static let height: CGFloat = 34
+    private static let compactToolbarWidth: CGFloat = 430
 
     /// Current file name displayed.
     var fileName: String = "" {
@@ -127,6 +131,7 @@ final class MarkdownToolbarView: NSView {
         fileNameLabel.textColor = CocxyColors.text
         fileNameLabel.lineBreakMode = .byTruncatingMiddle
         fileNameLabel.toolTip = fileName
+        fileNameLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         fileNameLabel.translatesAutoresizingMaskIntoConstraints = false
         addSubview(fileNameLabel)
 
@@ -142,6 +147,8 @@ final class MarkdownToolbarView: NSView {
         modeSegmented.toolTip = Self.localizedModeTooltip(using: localizer)
         modeSegmented.target = self
         modeSegmented.action = #selector(modeChanged(_:))
+        modeSegmented.setContentCompressionResistancePriority(.required, for: .horizontal)
+        modeSegmented.setContentHuggingPriority(.required, for: .horizontal)
         modeSegmented.translatesAutoresizingMaskIntoConstraints = false
         addSubview(modeSegmented)
 
@@ -152,7 +159,6 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedShowGitBlame(using: localizer),
             action: #selector(blameClicked)
         )
-        addSubview(blameButton)
 
         // Diff
         configureIconButton(
@@ -161,7 +167,6 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedShowGitDiff(using: localizer),
             action: #selector(diffClicked)
         )
-        addSubview(diffButton)
 
         // Copy menu
         configureIconButton(
@@ -170,7 +175,6 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedCopyAs(using: localizer),
             action: #selector(copyClicked(_:))
         )
-        addSubview(copyButton)
 
         // Export PDF
         configureIconButton(
@@ -179,7 +183,6 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedExportPDF(using: localizer),
             action: #selector(exportPDFClicked)
         )
-        addSubview(exportPDFButton)
 
         // Export HTML
         configureIconButton(
@@ -188,7 +191,6 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedExportHTML(using: localizer),
             action: #selector(exportHTMLClicked)
         )
-        addSubview(exportHTMLButton)
 
         // Export Slides
         let exportSlidesButton = NSButton()
@@ -198,8 +200,16 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedExportSlides(using: localizer),
             action: #selector(exportSlidesClicked)
         )
-        addSubview(exportSlidesButton)
         self.exportSlidesButton = exportSlidesButton
+
+        // Overflow for narrow split panes.
+        configureIconButton(
+            overflowButton,
+            systemName: "ellipsis.circle",
+            accessibility: Self.localizedMoreActions(using: localizer),
+            action: #selector(overflowClicked(_:))
+        )
+        overflowButton.isHidden = true
 
         // Outline toggle
         configureIconButton(
@@ -208,7 +218,6 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedToggleSidebar(using: localizer),
             action: #selector(outlineToggleClicked)
         )
-        addSubview(outlineToggleButton)
 
         // Reload
         configureIconButton(
@@ -217,7 +226,45 @@ final class MarkdownToolbarView: NSView {
             accessibility: Self.localizedReloadFile(using: localizer),
             action: #selector(reloadClicked)
         )
-        addSubview(reloadButton)
+
+        rightControlsStack.orientation = .horizontal
+        rightControlsStack.alignment = .centerY
+        rightControlsStack.spacing = 4
+        rightControlsStack.translatesAutoresizingMaskIntoConstraints = false
+        rightControlsStack.setContentCompressionResistancePriority(.required, for: .horizontal)
+        [
+            blameButton,
+            diffButton,
+            copyButton,
+            exportPDFButton,
+            exportHTMLButton,
+            exportSlidesButton,
+            overflowButton,
+            outlineToggleButton,
+            reloadButton
+        ].forEach(rightControlsStack.addArrangedSubview)
+        addSubview(rightControlsStack)
+
+        let modeCenterX = modeSegmented.centerXAnchor.constraint(equalTo: centerXAnchor)
+        modeCenterX.priority = .defaultHigh
+
+        let allToolbarButtons = [
+            blameButton,
+            diffButton,
+            copyButton,
+            exportPDFButton,
+            exportHTMLButton,
+            exportSlidesButton,
+            overflowButton,
+            outlineToggleButton,
+            reloadButton
+        ]
+        let buttonSizeConstraints = allToolbarButtons.flatMap { button in
+            [
+                button.widthAnchor.constraint(equalToConstant: 22),
+                button.heightAnchor.constraint(equalToConstant: 22)
+            ]
+        }
 
         NSLayoutConstraint.activate([
             iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
@@ -229,49 +276,19 @@ final class MarkdownToolbarView: NSView {
             fileNameLabel.centerYAnchor.constraint(equalTo: centerYAnchor),
             fileNameLabel.trailingAnchor.constraint(lessThanOrEqualTo: modeSegmented.leadingAnchor, constant: -10),
 
-            modeSegmented.centerXAnchor.constraint(equalTo: centerXAnchor),
+            modeCenterX,
+            modeSegmented.leadingAnchor.constraint(greaterThanOrEqualTo: fileNameLabel.trailingAnchor, constant: 10),
+            modeSegmented.trailingAnchor.constraint(lessThanOrEqualTo: rightControlsStack.leadingAnchor, constant: -8),
             modeSegmented.centerYAnchor.constraint(equalTo: centerYAnchor),
 
-            reloadButton.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
-            reloadButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            reloadButton.widthAnchor.constraint(equalToConstant: 22),
-            reloadButton.heightAnchor.constraint(equalToConstant: 22),
+            rightControlsStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            rightControlsStack.centerYAnchor.constraint(equalTo: centerYAnchor)
+        ] + buttonSizeConstraints)
+    }
 
-            exportSlidesButton.trailingAnchor.constraint(equalTo: outlineToggleButton.leadingAnchor, constant: -4),
-            exportSlidesButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            exportSlidesButton.widthAnchor.constraint(equalToConstant: 22),
-            exportSlidesButton.heightAnchor.constraint(equalToConstant: 22),
-
-            outlineToggleButton.trailingAnchor.constraint(equalTo: reloadButton.leadingAnchor, constant: -4),
-            outlineToggleButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            outlineToggleButton.widthAnchor.constraint(equalToConstant: 22),
-            outlineToggleButton.heightAnchor.constraint(equalToConstant: 22),
-
-            exportHTMLButton.trailingAnchor.constraint(equalTo: exportSlidesButton.leadingAnchor, constant: -4),
-            exportHTMLButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            exportHTMLButton.widthAnchor.constraint(equalToConstant: 22),
-            exportHTMLButton.heightAnchor.constraint(equalToConstant: 22),
-
-            exportPDFButton.trailingAnchor.constraint(equalTo: exportHTMLButton.leadingAnchor, constant: -4),
-            exportPDFButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            exportPDFButton.widthAnchor.constraint(equalToConstant: 22),
-            exportPDFButton.heightAnchor.constraint(equalToConstant: 22),
-
-            copyButton.trailingAnchor.constraint(equalTo: exportPDFButton.leadingAnchor, constant: -4),
-            copyButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            copyButton.widthAnchor.constraint(equalToConstant: 22),
-            copyButton.heightAnchor.constraint(equalToConstant: 22),
-
-            diffButton.trailingAnchor.constraint(equalTo: copyButton.leadingAnchor, constant: -4),
-            diffButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            diffButton.widthAnchor.constraint(equalToConstant: 22),
-            diffButton.heightAnchor.constraint(equalToConstant: 22),
-
-            blameButton.trailingAnchor.constraint(equalTo: diffButton.leadingAnchor, constant: -4),
-            blameButton.centerYAnchor.constraint(equalTo: centerYAnchor),
-            blameButton.widthAnchor.constraint(equalToConstant: 22),
-            blameButton.heightAnchor.constraint(equalToConstant: 22)
-        ])
+    override func layout() {
+        applyResponsiveToolbarLayout(for: bounds.width)
+        super.layout()
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
@@ -291,8 +308,25 @@ final class MarkdownToolbarView: NSView {
         applyButtonCopy(exportPDFButton, Self.localizedExportPDF(using: localizer))
         applyButtonCopy(exportHTMLButton, Self.localizedExportHTML(using: localizer))
         applyButtonCopy(exportSlidesButton, Self.localizedExportSlides(using: localizer))
+        applyButtonCopy(overflowButton, Self.localizedMoreActions(using: localizer))
         applyButtonCopy(outlineToggleButton, Self.localizedToggleSidebar(using: localizer))
         applyButtonCopy(reloadButton, Self.localizedReloadFile(using: localizer))
+    }
+
+    private func applyResponsiveToolbarLayout(for width: CGFloat) {
+        let useCompact = width < Self.compactToolbarWidth
+        guard useCompact != isUsingCompactToolbar else { return }
+        isUsingCompactToolbar = useCompact
+        [
+            blameButton,
+            diffButton,
+            copyButton,
+            exportPDFButton,
+            exportHTMLButton,
+            exportSlidesButton
+        ].forEach { $0.isHidden = useCompact }
+        overflowButton.isHidden = !useCompact
+        rightControlsStack.needsLayout = true
     }
 
     private func configureIconButton(
@@ -371,6 +405,34 @@ final class MarkdownToolbarView: NSView {
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
 
+    @objc private func overflowClicked(_ sender: NSButton) {
+        let menu = NSMenu()
+        addMenuItem(menu, title: Self.localizedShowGitBlame(using: localizer), action: #selector(blameClicked))
+        addMenuItem(menu, title: Self.localizedShowGitDiff(using: localizer), action: #selector(diffClicked))
+        menu.addItem(.separator())
+
+        let copyItem = NSMenuItem(title: Self.localizedCopyAs(using: localizer), action: nil, keyEquivalent: "")
+        let copyMenu = NSMenu()
+        addMenuItem(copyMenu, title: Self.localizedCopyAsMarkdown(using: localizer), action: #selector(copyMarkdownClicked))
+        addMenuItem(copyMenu, title: Self.localizedCopyAsHTML(using: localizer), action: #selector(copyHTMLClicked))
+        addMenuItem(copyMenu, title: Self.localizedCopyAsRichText(using: localizer), action: #selector(copyRichTextClicked))
+        addMenuItem(copyMenu, title: Self.localizedCopyAsPlainText(using: localizer), action: #selector(copyPlainTextClicked))
+        copyItem.submenu = copyMenu
+        menu.addItem(copyItem)
+
+        menu.addItem(.separator())
+        addMenuItem(menu, title: Self.localizedExportPDF(using: localizer), action: #selector(exportPDFClicked))
+        addMenuItem(menu, title: Self.localizedExportHTML(using: localizer), action: #selector(exportHTMLClicked))
+        addMenuItem(menu, title: Self.localizedExportSlides(using: localizer), action: #selector(exportSlidesClicked))
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
+    }
+
+    private func addMenuItem(_ menu: NSMenu, title: String, action: Selector) {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+    }
+
     @objc private func exportPDFClicked() {
         onExportPDF?()
     }
@@ -435,6 +497,10 @@ final class MarkdownToolbarView: NSView {
 
     static func localizedExportSlides(using localizer: AppLocalizer) -> String {
         localizer.string("markdown.toolbar.exportSlides", fallback: "Export Slides (Cmd+Shift+S)")
+    }
+
+    static func localizedMoreActions(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.moreActions", fallback: "More Markdown actions")
     }
 
     static func localizedToggleSidebar(using localizer: AppLocalizer) -> String {

@@ -1457,6 +1457,7 @@
 "markdown.toolbar.exportPDF" = "Export PDF (Cmd+Shift+E)";
 "markdown.toolbar.exportHTML" = "Export HTML (Cmd+Shift+H)";
 "markdown.toolbar.exportSlides" = "Export Slides (Cmd+Shift+S)";
+"markdown.toolbar.moreActions" = "More Markdown actions";
 "markdown.exportPanel.pdf.title" = "Export Markdown as PDF";
 "markdown.exportPanel.pdf.message" = "Choose where to save the PDF export.";
 "markdown.exportPanel.html.title" = "Export Markdown as HTML";
