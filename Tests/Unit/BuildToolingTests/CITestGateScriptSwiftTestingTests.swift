@@ -604,6 +604,39 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!spanishGettingStarted.contains("servidores locales, docs y apps web"))
     }
 
+    @Test("Spanish public docs keep metadata and structured data accent-safe")
+    func spanishPublicDocsKeepMetadataAndStructuredDataAccentSafe() throws {
+        let root = repositoryRoot()
+        let webRoot = root.appendingPathComponent("web/public/es", isDirectory: true)
+        let files = try Self.files(under: webRoot, fileExtension: "html")
+        let forbiddenFragments = [
+            "agentes de codigo",
+            "revision de codigo",
+            "cero telemetria",
+            "documentacion",
+            "deteccion de agentes",
+            "configuracion por proyecto",
+            "analiticas",
+            "automatico",
+            "accion o configuracion explicita",
+            "tambien puedes",
+            "como instalo",
+            "que es cocxy",
+            "guia en espanol",
+            "comentarios en linea",
+        ]
+
+        for file in files {
+            let contents = try String(contentsOf: file, encoding: .utf8).lowercased()
+            for fragment in forbiddenFragments {
+                #expect(
+                    !contents.contains(fragment),
+                    "\(Self.relativePath(file, root: root)) contains accentless Spanish public metadata: \(fragment)"
+                )
+            }
+        }
+    }
+
     @Test("Spanish public docs keep primary navigation inside the Spanish site")
     func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
         let root = repositoryRoot()
