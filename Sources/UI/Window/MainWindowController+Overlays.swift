@@ -78,6 +78,9 @@ extension MainWindowController {
         var swiftUIView = CommandPaletteView(viewModel: viewModel)
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = FocusableHostingView(rootView: swiftUIView)
+        hostingView.onCancelOperation = { [weak self] in
+            self?.dismissCommandPalette()
+        }
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
         self.commandPaletteHostingView = hostingView
@@ -1618,6 +1621,9 @@ extension MainWindowController {
             }
         )
         let hostingView = FocusableHostingView(rootView: overlayView)
+        hostingView.onCancelOperation = { [weak self] in
+            self?.dismissSmartRouting()
+        }
         hostingView.frame = overlayContainer.bounds
         hostingView.autoresizingMask = [.width, .height]
         self.smartRoutingHostingView = hostingView

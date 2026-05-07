@@ -380,6 +380,22 @@ final class SmartRoutingIntegrationTests: XCTestCase {
         XCTAssertNil(controller.smartRoutingHostingView)
     }
 
+    func testSmartRoutingEscapeKeyEventDismissesOverlay() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.showSmartRouting()
+        let hostingView = try XCTUnwrap(controller.smartRoutingHostingView)
+        hostingView.keyDown(with: try XCTUnwrap(Self.escapeKeyEvent(window: controller.window)))
+
+        XCTAssertFalse(
+            controller.isSmartRoutingVisible,
+            "A real Escape key event sent to the overlay responder must dismiss Smart Routing"
+        )
+        XCTAssertNil(controller.smartRoutingHostingView)
+    }
+
     func testSmartRoutingActionIsObjCCallable() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -403,6 +419,21 @@ final class SmartRoutingIntegrationTests: XCTestCase {
         XCTAssertTrue(
             controller.window?.firstResponder === controller.smartRoutingHostingView,
             "Smart routing overlay should become first responder so keyboard navigation works immediately"
+        )
+    }
+
+    private static func escapeKeyEvent(window: NSWindow?) -> NSEvent? {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window?.windowNumber ?? 0,
+            context: nil,
+            characters: "\u{1B}",
+            charactersIgnoringModifiers: "\u{1B}",
+            isARepeat: false,
+            keyCode: 53
         )
     }
 }

@@ -2796,10 +2796,28 @@ final class PassthroughView: NSView {
 
 @MainActor
 final class FocusableHostingView<Content: View>: NSHostingView<Content> {
+    var onCancelOperation: (() -> Void)?
+
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
 
     override func becomeFirstResponder() -> Bool {
         true
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        guard let onCancelOperation else {
+            super.cancelOperation(sender)
+            return
+        }
+        onCancelOperation()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.keyCode == 53 || event.charactersIgnoringModifiers == "\u{1B}" {
+            cancelOperation(nil)
+            return
+        }
+        super.keyDown(with: event)
     }
 }
