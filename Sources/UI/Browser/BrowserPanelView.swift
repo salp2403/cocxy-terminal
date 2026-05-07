@@ -460,6 +460,7 @@ struct BrowserPanelView: View {
                     viewModel: viewModel,
                     consoleCapture: consoleCapture,
                     networkMonitor: networkMonitor,
+                    localizer: localizer,
                     onConsoleEntry: { entry in
                         Task { @MainActor in
                             consoleEntries.append(entry)
@@ -654,6 +655,9 @@ struct WebViewRepresentable: NSViewRepresentable {
     /// Network monitor to start polling the web view.
     var networkMonitor: BrowserNetworkMonitor?
 
+    /// Local app-language resolver used by themed browser-owned pages.
+    var localizer: AppLocalizer
+
     /// Callback fired each time a new console entry is captured.
     var onConsoleEntry: ((ConsoleEntry) -> Void)?
 
@@ -678,9 +682,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         webView.isInspectable = true
         #endif
 
-        // Set dark background while page loads.
-        webView.wantsLayer = true
-        webView.layer?.backgroundColor = CocxyColors.base.cgColor
+        BrowserWebViewAppearance.configure(webView)
 
         // Install console capture if provided.
         if let consoleCapture {
@@ -717,7 +719,7 @@ struct WebViewRepresentable: NSViewRepresentable {
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(viewModel: viewModel)
+        Coordinator(viewModel: viewModel, localizer: localizer)
     }
 
     // MARK: - Coordinator
@@ -726,12 +728,14 @@ struct WebViewRepresentable: NSViewRepresentable {
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
 
         private let viewModel: BrowserViewModel
+        private let localizer: AppLocalizer
         private var cancellables = Set<AnyCancellable>()
         let domGrabHandler: BrowserDOMGrabHandler
         weak var webView: WKWebView?
 
-        init(viewModel: BrowserViewModel) {
+        init(viewModel: BrowserViewModel, localizer: AppLocalizer) {
             self.viewModel = viewModel
+            self.localizer = localizer
             self.domGrabHandler = BrowserDOMGrabHandler()
             super.init()
             self.domGrabHandler.onPayload = { [weak viewModel] payload in
@@ -798,6 +802,13 @@ struct WebViewRepresentable: NSViewRepresentable {
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
+                BrowserErrorPageRenderer.render(
+                    error: error,
+                    failedURL: webView.url,
+                    fallbackURLString: self.viewModel.urlString,
+                    localizer: self.localizer,
+                    into: webView
+                )
             }
         }
 
@@ -809,18 +820,23 @@ struct WebViewRepresentable: NSViewRepresentable {
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
+                BrowserErrorPageRenderer.render(
+                    error: error,
+                    failedURL: webView.url,
+                    fallbackURLString: self.viewModel.urlString,
+                    localizer: self.localizer,
+                    into: webView
+                )
             }
         }
 
-        /// Filters navigation to only allow http/https schemes.
+        /// Filters navigation to web pages plus browser-owned internal pages.
         func webView(
             _ webView: WKWebView,
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
-            guard let url = navigationAction.request.url,
-                  let scheme = url.scheme?.lowercased(),
-                  ["http", "https"].contains(scheme) else {
+            guard BrowserNavigationPolicy.allows(navigationAction.request.url) else {
                 decisionHandler(.cancel)
                 return
             }
@@ -866,7 +882,9 @@ struct WebViewRepresentable: NSViewRepresentable {
             viewModel.canGoForward = webView.canGoForward
             let title = webView.title ?? ""
             viewModel.updateActiveTabTitle(title)
-            if let url = webView.url {
+            if let url = webView.url,
+               let scheme = url.scheme?.lowercased(),
+               ["http", "https"].contains(scheme) {
                 viewModel.currentURL = url
                 viewModel.urlString = url.absoluteString
             }

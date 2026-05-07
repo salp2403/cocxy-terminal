@@ -364,6 +364,7 @@ final class BrowserContentView: NSView {
         wv.translatesAutoresizingMaskIntoConstraints = false
         wv.navigationDelegate = self
         wv.allowsBackForwardNavigationGestures = true
+        BrowserWebViewAppearance.configure(wv)
         addSubview(wv, positioned: .below, relativeTo: toolbarContainer)
         webView = wv
 
@@ -656,9 +657,7 @@ extension BrowserContentView: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        guard let url = navigationAction.request.url,
-              let scheme = url.scheme?.lowercased(),
-              ["http", "https"].contains(scheme) else {
+        guard BrowserNavigationPolicy.allows(navigationAction.request.url) else {
             decisionHandler(.cancel)
             return
         }
@@ -719,80 +718,18 @@ extension BrowserContentView: WKNavigationDelegate {
 
 extension BrowserContentView {
 
-    /// Escapes HTML special characters to prevent XSS when embedding
-    /// user-controlled strings in HTML error pages.
-    private func htmlEscape(_ string: String) -> String {
-        string.replacingOccurrences(of: "&", with: "&amp;")
-              .replacingOccurrences(of: "<", with: "&lt;")
-              .replacingOccurrences(of: ">", with: "&gt;")
-              .replacingOccurrences(of: "\"", with: "&quot;")
-              .replacingOccurrences(of: "'", with: "&#39;")
-    }
-
     /// Loads an HTML error page into the web view when navigation fails.
     ///
     /// Shows the error description and the URL that failed to load,
     /// styled to match the Catppuccin Mocha terminal theme.
     private func showErrorPage(error: Error, failedURL: URL?) {
-        let urlDisplay = failedURL?.absoluteString ?? viewModel.urlString
-        let title = localized("browser.content.error.title", fallback: "Cannot reach this page")
-        let hint = localized(
-            "browser.content.error.hint",
-            fallback: "Type a URL in the address bar above or start a dev server."
+        guard let webView else { return }
+        BrowserErrorPageRenderer.render(
+            error: error,
+            failedURL: failedURL,
+            fallbackURLString: viewModel.urlString,
+            localizer: localizer,
+            into: webView
         )
-        let errorHTML = """
-        <!DOCTYPE html>
-        <html>
-        <head>
-        <meta charset="utf-8">
-        <style>
-            body {
-                background: #1e1e2e;
-                color: #cdd6f4;
-                font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                min-height: 100vh;
-                margin: 0;
-                padding: 20px;
-                box-sizing: border-box;
-            }
-            .container {
-                text-align: center;
-                max-width: 480px;
-            }
-            .icon { font-size: 48px; margin-bottom: 16px; }
-            h1 { font-size: 18px; font-weight: 600; color: #f38ba8; margin: 0 0 8px; }
-            .url {
-                font-family: ui-monospace, SFMono-Regular, monospace;
-                font-size: 12px;
-                color: #89b4fa;
-                word-break: break-all;
-                margin: 12px 0;
-                padding: 8px 12px;
-                background: #313244;
-                border-radius: 6px;
-            }
-            .detail { font-size: 13px; color: #a6adc8; line-height: 1.5; }
-            .hint {
-                margin-top: 20px;
-                font-size: 12px;
-                color: #6c7086;
-            }
-        </style>
-        </head>
-        <body>
-        <div class="container">
-            <div class="icon">&#9888;&#65039;</div>
-            <h1>\(htmlEscape(title))</h1>
-            <div class="url">\(htmlEscape(urlDisplay))</div>
-            <p class="detail">\(htmlEscape(error.localizedDescription))</p>
-            <p class="hint">\(htmlEscape(hint))</p>
-        </div>
-        </body>
-        </html>
-        """
-        webView?.loadHTMLString(errorHTML, baseURL: nil)
     }
 }
