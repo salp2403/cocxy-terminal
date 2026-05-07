@@ -197,6 +197,8 @@ final class PluginMarketplaceViewModel: ObservableObject {
 }
 
 struct PluginMarketplaceView: View {
+    static let initialScrollAnchorID = "plugin-marketplace-top"
+
     @StateObject private var viewModel: PluginMarketplaceViewModel
     @State private var replaceExisting = false
     @State private var pendingUninstallID: String?
@@ -225,134 +227,143 @@ struct PluginMarketplaceView: View {
     }
 
     var body: some View {
-        Form {
-            Section(localized("plugins.sources", fallback: "Sources")) {
-                TextField(localized("plugins.urlOrPath", fallback: "URL or local path"), text: $viewModel.sourceURLText)
-                    .textFieldStyle(.roundedBorder)
-                TextField(localized("plugins.name", fallback: "Name"), text: $viewModel.sourceDisplayName)
-                    .textFieldStyle(.roundedBorder)
-                HStack {
-                    Button {
-                        perform { try viewModel.addSource() }
-                    } label: {
-                        Label(localized("plugins.add", fallback: "Add"), systemImage: "plus")
+        ScrollViewReader { scrollProxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    pluginSection(localized("plugins.sources", fallback: "Sources")) {
+                        TextField(
+                            localized("plugins.urlOrPath", fallback: "URL or local path"),
+                            text: $viewModel.sourceURLText
+                        )
+                        .textFieldStyle(.roundedBorder)
+
+                        TextField(localized("plugins.name", fallback: "Name"), text: $viewModel.sourceDisplayName)
+                            .textFieldStyle(.roundedBorder)
+
+                        HStack {
+                            Button {
+                                perform { try viewModel.addSource() }
+                            } label: {
+                                Label(localized("plugins.add", fallback: "Add"), systemImage: "plus")
+                            }
+                            Button {
+                                viewModel.refresh()
+                            } label: {
+                                Label(localized("plugins.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
+                            }
+                            Spacer()
+                        }
+
+                        ForEach(viewModel.sources) { source in
+                            HStack {
+                                Text(source.displayName ?? source.url.absoluteString)
+                                Spacer()
+                                Text(source.url.absoluteString)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
                     }
-                    Button {
-                        viewModel.refresh()
-                    } label: {
-                        Label(localized("plugins.refresh", fallback: "Refresh"), systemImage: "arrow.clockwise")
+                    .id(Self.initialScrollAnchorID)
+
+                    pluginSection(localized("plugins.install.section", fallback: "Install")) {
+                        PluginInstallSheet(
+                            urlText: $viewModel.installURLText,
+                            replaceExisting: $replaceExisting,
+                            localizer: localizer
+                        ) {
+                            perform { try viewModel.installPlugin(replaceExisting: replaceExisting) }
+                        }
                     }
-                    Spacer()
-                }
-                ForEach(viewModel.sources) { source in
-                    HStack {
-                        Text(source.displayName ?? source.url.absoluteString)
-                        Spacer()
-                        Text(source.url.absoluteString)
+
+                    pluginSection(localized("plugins.bundled.section", fallback: "Built-in")) {
+                        if viewModel.bundledPlugins.isEmpty {
+                            emptyText(localized("plugins.empty.bundled", fallback: "No bundled plugins available."))
+                        } else {
+                            ForEach(viewModel.bundledPlugins) { plugin in
+                                PluginCardView(
+                                    title: Self.localizedPluginName(plugin, using: localizer),
+                                    subtitle: plugin.id,
+                                    detail: Self.localizedPluginDescription(plugin, using: localizer),
+                                    capabilities: plugin.capabilities,
+                                    primaryAction: PluginCardAction(
+                                        title: localized("plugins.install", fallback: "Install"),
+                                        systemImage: "square.and.arrow.down",
+                                        perform: {
+                                            perform {
+                                                try viewModel.installBundledPlugin(
+                                                    id: plugin.id,
+                                                    replaceExisting: replaceExisting
+                                                )
+                                            }
+                                        }
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    pluginSection(localized("plugins.installed.section", fallback: "Installed")) {
+                        if viewModel.plugins.isEmpty {
+                            emptyText(localized("plugins.empty.installed", fallback: "No plugins installed."))
+                        } else {
+                            ForEach(viewModel.plugins) { plugin in
+                                PluginCardView(
+                                    title: Self.localizedPluginName(plugin.manifest, using: localizer),
+                                    subtitle: plugin.id,
+                                    detail: Self.localizedPluginDescription(plugin.manifest, using: localizer),
+                                    capabilities: plugin.manifest.capabilities,
+                                    primaryAction: PluginCardAction(
+                                        title: plugin.isEnabled
+                                            ? localized("plugins.disable", fallback: "Disable")
+                                            : localized("plugins.enable", fallback: "Enable"),
+                                        systemImage: plugin.isEnabled ? "pause.circle" : "play.circle",
+                                        perform: {
+                                            perform {
+                                                try viewModel.setPlugin(plugin.id, enabled: !plugin.isEnabled)
+                                            }
+                                        }
+                                    ),
+                                    secondaryAction: PluginCardAction(
+                                        title: localized("plugins.uninstall", fallback: "Uninstall"),
+                                        systemImage: "trash",
+                                        role: .destructive,
+                                        perform: {
+                                            pendingUninstallID = plugin.id
+                                        }
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    pluginSection(localized("plugins.updates.section", fallback: "Updates")) {
+                        PluginUpdatePicker(
+                            updates: viewModel.availableUpdates,
+                            localizer: localizer,
+                            onRefresh: {
+                                viewModel.checkForPluginUpdates()
+                            }
+                        )
+                    }
+
+                    if let status = viewModel.statusMessage {
+                        Text(status)
+                            .font(.caption)
                             .foregroundStyle(.secondary)
-                            .lineLimit(1)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(24)
             }
-
-            Section(localized("plugins.install.section", fallback: "Install")) {
-                PluginInstallSheet(
-                    urlText: $viewModel.installURLText,
-                    replaceExisting: $replaceExisting,
-                    localizer: localizer
-                ) {
-                    perform { try viewModel.installPlugin(replaceExisting: replaceExisting) }
-                }
+            .glassPanelBackground()
+            .onAppear {
+                viewModel.updateLocalizer(localizer)
+                resetInitialScrollPosition(scrollProxy)
             }
-
-            Section(localized("plugins.bundled.section", fallback: "Built-in")) {
-                if viewModel.bundledPlugins.isEmpty {
-                    Text(localized("plugins.empty.bundled", fallback: "No bundled plugins available."))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(viewModel.bundledPlugins) { plugin in
-                        PluginCardView(
-                            title: Self.localizedPluginName(plugin, using: localizer),
-                            subtitle: plugin.id,
-                            detail: Self.localizedPluginDescription(plugin, using: localizer),
-                            capabilities: plugin.capabilities,
-                            primaryAction: PluginCardAction(
-                                title: localized("plugins.install", fallback: "Install"),
-                                systemImage: "square.and.arrow.down",
-                                perform: {
-                                    perform {
-                                        try viewModel.installBundledPlugin(
-                                            id: plugin.id,
-                                            replaceExisting: replaceExisting
-                                        )
-                                    }
-                                }
-                            )
-                        )
-                    }
-                }
+            .onChange(of: localizer.resolvedLanguage) {
+                viewModel.updateLocalizer(localizer)
             }
-
-            Section(localized("plugins.installed.section", fallback: "Installed")) {
-                if viewModel.plugins.isEmpty {
-                    Text(localized("plugins.empty.installed", fallback: "No plugins installed."))
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(viewModel.plugins) { plugin in
-                        PluginCardView(
-                            title: Self.localizedPluginName(plugin.manifest, using: localizer),
-                            subtitle: plugin.id,
-                            detail: Self.localizedPluginDescription(plugin.manifest, using: localizer),
-                            capabilities: plugin.manifest.capabilities,
-                            primaryAction: PluginCardAction(
-                                title: plugin.isEnabled
-                                    ? localized("plugins.disable", fallback: "Disable")
-                                    : localized("plugins.enable", fallback: "Enable"),
-                                systemImage: plugin.isEnabled ? "pause.circle" : "play.circle",
-                                perform: {
-                                    perform {
-                                        try viewModel.setPlugin(plugin.id, enabled: !plugin.isEnabled)
-                                    }
-                                }
-                            ),
-                            secondaryAction: PluginCardAction(
-                                title: localized("plugins.uninstall", fallback: "Uninstall"),
-                                systemImage: "trash",
-                                role: .destructive,
-                                perform: {
-                                    pendingUninstallID = plugin.id
-                                }
-                            )
-                        )
-                    }
-                }
-            }
-
-            Section(localized("plugins.updates.section", fallback: "Updates")) {
-                PluginUpdatePicker(
-                    updates: viewModel.availableUpdates,
-                    localizer: localizer,
-                    onRefresh: {
-                        viewModel.checkForPluginUpdates()
-                    }
-                )
-            }
-
-            if let status = viewModel.statusMessage {
-                Section {
-                    Text(status)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .padding(20)
-        .glassPanelBackground()
-        .onAppear {
-            viewModel.updateLocalizer(localizer)
-        }
-        .onChange(of: localizer.resolvedLanguage) {
-            viewModel.updateLocalizer(localizer)
         }
         .confirmationDialog(
             localized("plugins.uninstall.title", fallback: "Uninstall Plugin"),
@@ -374,6 +385,30 @@ struct PluginMarketplaceView: View {
             if let pendingUninstallID {
                 Text(pendingUninstallID)
             }
+        }
+    }
+
+    private func pluginSection<Content: View>(
+        _ title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            content()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func emptyText(_ text: String) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+    }
+
+    private func resetInitialScrollPosition(_ scrollProxy: ScrollViewProxy) {
+        DispatchQueue.main.async {
+            scrollProxy.scrollTo(Self.initialScrollAnchorID, anchor: .top)
         }
     }
 

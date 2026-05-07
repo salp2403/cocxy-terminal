@@ -126,6 +126,11 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         #expect(viewModel.statusMessage == "No updates found.")
     }
 
+    @Test("plugin marketplace keeps a stable top scroll anchor")
+    func pluginMarketplaceViewKeepsStableTopScrollAnchor() {
+        #expect(PluginMarketplaceView.initialScrollAnchorID == "plugin-marketplace-top")
+    }
+
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
