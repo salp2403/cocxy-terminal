@@ -153,10 +153,13 @@ extension Design {
 
         private var sidebarHeader: some View {
             HStack(spacing: Spacing.hairline) {
-                Text(Self.localizedWorkspacesTitle(using: localizer))
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .tracking(1.7)
-                    .foregroundStyle(palette.textLow.resolvedColor())
+                ViewThatFits(in: .horizontal) {
+                    sidebarHeaderTitle(Self.localizedWorkspacesTitle(using: localizer))
+                    sidebarHeaderTitle(Self.localizedCompactWorkspacesTitle(using: localizer))
+                }
+                .layoutPriority(1)
+                .accessibilityElement()
+                .accessibilityLabel(Self.localizedWorkspacesTitle(using: localizer))
 
                 Spacer()
 
@@ -191,6 +194,16 @@ extension Design {
             }
             .padding(.horizontal, Spacing.xxSmall)
             .padding(.top, Spacing.hairline)
+        }
+
+        private func sidebarHeaderTitle(_ title: String) -> some View {
+            Text(title)
+                .font(.system(size: 10.5, weight: .semibold))
+                .tracking(1.2)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .allowsTightening(true)
+                .foregroundStyle(palette.textLow.resolvedColor())
         }
 
         /// Sidebar header tray button backed by an SF Symbol. The
@@ -275,6 +288,10 @@ extension Design {
 
         static func localizedWorkspacesTitle(using localizer: AppLocalizer) -> String {
             localizer.string("tabbar.workspaces", fallback: "WORKSPACES")
+        }
+
+        static func localizedCompactWorkspacesTitle(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.workspaces.compact", fallback: "SPACES")
         }
 
         static func localizedCommandPaletteTitle(using localizer: AppLocalizer) -> String {

@@ -559,6 +559,7 @@ struct AppLocalizationSwiftTestingTests {
         let update = CocxyUpdateAvailability(displayVersion: "0.2.0", buildVersion: "200", isCritical: true)
 
         #expect(spanish.string("tabbar.workspaces", fallback: "WORKSPACES") == "ESPACIOS")
+        #expect(Design.AuroraSidebarView.localizedCompactWorkspacesTitle(using: spanish) == "ESPACIOS")
         #expect(TabItemView.localizedPinned(using: spanish) == "Fijada")
         #expect(TabItemView.localizedMoreActiveAgents(3, using: spanish) == "3 agentes activos más")
         #expect(TabItemView.localizedAgentAccessibilityValue(.working, using: spanish) == "Agente: El agente está trabajando")

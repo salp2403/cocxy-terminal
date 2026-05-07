@@ -952,6 +952,7 @@
 "renameSheet.placeholder" = "Ingresa nombre...";
 "tabbar.accessibility.tabs" = "Pestañas de terminal";
 "tabbar.workspaces" = "ESPACIOS";
+"tabbar.workspaces.compact" = "ESPACIOS";
 "tabbar.notifications.title" = "Notificaciones";
 "tabbar.notifications.tooltip" = "Notificaciones (Cmd+Shift+I)";
 "tabbar.commandPalette.title" = "Paleta de comandos";

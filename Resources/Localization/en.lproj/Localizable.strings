@@ -952,6 +952,7 @@
 "renameSheet.placeholder" = "Enter name...";
 "tabbar.accessibility.tabs" = "Terminal tabs";
 "tabbar.workspaces" = "WORKSPACES";
+"tabbar.workspaces.compact" = "SPACES";
 "tabbar.notifications.title" = "Notifications";
 "tabbar.notifications.tooltip" = "Notifications (Cmd+Shift+I)";
 "tabbar.commandPalette.title" = "Command Palette";
