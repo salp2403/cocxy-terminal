@@ -2139,7 +2139,7 @@
 "command.category.dashboard" = "Panel";
 "command.category.search" = "Búsqueda";
 "command.category.theme" = "Tema";
-"command.category.config" = "Config";
+"command.category.config" = "Ajustes";
 "command.category.cli" = "CLI";
 "command.category.worktree" = "Worktree";
 "command.category.editor" = "Editor";

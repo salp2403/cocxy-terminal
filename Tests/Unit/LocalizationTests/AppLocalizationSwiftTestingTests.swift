@@ -109,6 +109,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(english.string("command.tabs.new.name", fallback: "New Tab") == "New Tab")
         #expect(spanish.string("command.tabs.new.name", fallback: "New Tab") == "Nueva pestaña")
         #expect(spanish.string("command.category.tabs", fallback: "Tabs") == "Pestañas")
+        #expect(spanish.string("command.category.config", fallback: "Config") == "Ajustes")
         #expect(spanish.string("commandPalette.empty", fallback: "No commands found") == "No se encontraron comandos")
         #expect(spanish.string("commandPalette.footer.navigate", fallback: "Navigate") == "Navegar")
         #expect(spanish.string("commandPalette.footer.action.plural", fallback: "actions") == "acciones")

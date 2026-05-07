@@ -10,6 +10,7 @@ final class CommandPaletteWiringTests: XCTestCase {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         let engine = controller.createWiredCommandPaletteEngine()
         let actionIDs = Set(engine.allActions.map(\.id))
+        let actionsByID = Dictionary(uniqueKeysWithValues: engine.allActions.map { ($0.id, $0) })
 
         let expectedIDs: Set<String> = [
             "window.new",
@@ -81,6 +82,11 @@ final class CommandPaletteWiringTests: XCTestCase {
         XCTAssertTrue(
             actionIDs.isSuperset(of: expectedIDs),
             "The runtime command palette must expose every app action and panel that has a live handler"
+        )
+        XCTAssertEqual(
+            actionsByID["preferences.show"]?.category,
+            .config,
+            "The Preferences command must be grouped with settings/configuration actions, not navigation."
         )
     }
 

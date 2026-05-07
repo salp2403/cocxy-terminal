@@ -491,7 +491,7 @@ extension MainWindowController {
                 name: "Show Preferences",
                 description: "Open terminal settings",
                 shortcut: paletteShortcutLabel("preferences.show", fallback: nil),
-                category: .navigation,
+                category: .config,
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.openPreferences(nil) }
