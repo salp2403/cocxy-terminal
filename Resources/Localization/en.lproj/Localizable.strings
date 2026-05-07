@@ -316,6 +316,8 @@
 "menu.file.moveTabToNewWindow" = "Move Tab to New Window";
 "menu.file.saveCurrentTabAsConfig" = "Save Current Tab as Config...";
 "menu.file.openTabFromConfig" = "Open Tab from Config...";
+"menu.file.importFromDevice" = "Import from iPhone or iPad...";
+"Import From Device" = "Import from iPhone or iPad...";
 "menu.file.closeTab" = "Close Tab";
 "menu.edit.title" = "Edit";
 "menu.edit.find" = "Find...";

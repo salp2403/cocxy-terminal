@@ -44,7 +44,7 @@ import UserNotifications
 ///   -> Bridge = nil (deinit frees terminal resources)
 /// ```
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Properties
 

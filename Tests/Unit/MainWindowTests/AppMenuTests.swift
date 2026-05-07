@@ -83,6 +83,7 @@ final class AppMenuStructureTests: XCTestCase {
         let helpMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "Ayuda" })?.submenu)
 
         XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Nueva pestaña" }))
+        XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Importar desde iPhone o iPad..." }))
         XCTAssertNotNil(viewMenu.items.first(where: { $0.title == "Abrir panel Notebook" }))
         XCTAssertEqual(
             viewMenu.items.first(where: { $0.title == "Entrar a pantalla completa" })?.action,
@@ -95,6 +96,21 @@ final class AppMenuStructureTests: XCTestCase {
         XCTAssertEqual(
             helpMenu.items.first(where: { $0.title == "Mostrar configuración guiada" })?.action,
             #selector(MainWindowController.showOnboardingAction(_:))
+        )
+    }
+
+    func testContinuityCameraIncludesAppKitStandardLocalizationKey() throws {
+        let bundle = try XCTUnwrap(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        XCTAssertEqual(
+            english.string("Import From Device", fallback: ""),
+            "Import from iPhone or iPad..."
+        )
+        XCTAssertEqual(
+            spanish.string("Import From Device", fallback: ""),
+            "Importar desde iPhone o iPad..."
         )
     }
 }
@@ -110,18 +126,20 @@ private func localizationBundle() -> Bundle? {
 @MainActor
 final class FileMenuItemTests: XCTestCase {
 
+    private var appDelegate: AppDelegate!
     private var fileMenu: NSMenu!
 
     override func setUp() {
         super.setUp()
-        let delegate = AppDelegate()
-        delegate.setupMainMenuForTesting()
+        appDelegate = AppDelegate()
+        appDelegate.setupMainMenuForTesting()
         fileMenu = NSApplication.shared.mainMenu?.items
             .first(where: { $0.submenu?.title == "File" })?.submenu
     }
 
     override func tearDown() {
         fileMenu = nil
+        appDelegate = nil
         super.tearDown()
     }
 
@@ -153,6 +171,32 @@ final class FileMenuItemTests: XCTestCase {
     func testFileMenuHasMoveTabToNewWindowItem() {
         let moveTab = fileMenu.items.first(where: { $0.title == "Move Tab to New Window" })
         XCTAssertNotNil(moveTab, "File menu must have 'Move Tab to New Window' item")
+    }
+
+    func testFileMenuHasContinuityCameraImportItem() {
+        let importItem = fileMenu.items.first {
+            $0.identifier == NSMenuItem.importFromDeviceIdentifier
+        }
+
+        XCTAssertNotNil(importItem, "File menu must expose the standard Continuity Camera import item")
+        XCTAssertEqual(importItem?.title, "Import from iPhone or iPad...")
+        XCTAssertEqual(importItem?.submenu?.title, "Import from iPhone or iPad...")
+        XCTAssertTrue(importItem?.hasSubmenu == true)
+    }
+
+    func testContinuityCameraTitleIsReappliedWhenMenuRefreshes() throws {
+        let importItem = try XCTUnwrap(fileMenu.items.first {
+            $0.identifier == NSMenuItem.importFromDeviceIdentifier
+        })
+        importItem.title = "<<Import From Device - unlocalized>>"
+        importItem.submenu?.title = "<<Import From Device - unlocalized>>"
+
+        appDelegate.menuNeedsUpdate(fileMenu)
+
+        XCTAssertEqual(importItem.title, "Import from iPhone or iPad...")
+        XCTAssertEqual(importItem.submenu?.title, "Import from iPhone or iPad...")
+        XCTAssertEqual(importItem.accessibilityTitle(), "Import from iPhone or iPad...")
+        XCTAssertEqual(importItem.accessibilityLabel(), "Import from iPhone or iPad...")
     }
 
     func testCloseTabHasCorrectShortcut() {

@@ -105,6 +105,7 @@ extension AppDelegate {
     private func createFileMenu(localizer: AppLocalizer) -> NSMenuItem {
         let fileMenuItem = NSMenuItem()
         let fileMenu = NSMenu(title: menuString("menu.file.title", "File", localizer))
+        fileMenu.delegate = self
 
         let newTabItem = NSMenuItem(
             title: menuString("menu.file.newTab", "New Tab", localizer),
@@ -145,6 +146,24 @@ extension AppDelegate {
 
         fileMenu.addItem(NSMenuItem.separator())
 
+        let importFromDeviceTitle = menuString(
+            "menu.file.importFromDevice",
+            "Import from iPhone or iPad...",
+            localizer
+        )
+        let continuityCameraItem = NSMenuItem(
+            title: importFromDeviceTitle,
+            action: nil,
+            keyEquivalent: ""
+        )
+        continuityCameraItem.identifier = NSMenuItem.importFromDeviceIdentifier
+        continuityCameraItem.representedObject = importFromDeviceTitle
+        continuityCameraItem.submenu = NSMenu(title: importFromDeviceTitle)
+        localizeContinuityCameraMenuItem(continuityCameraItem)
+        fileMenu.addItem(continuityCameraItem)
+
+        fileMenu.addItem(NSMenuItem.separator())
+
         let closeTabItem = NSMenuItem(
             title: menuString("menu.file.closeTab", "Close Tab", localizer),
             action: #selector(MainWindowController.closeTabAction(_:)),
@@ -155,6 +174,33 @@ extension AppDelegate {
 
         fileMenuItem.submenu = fileMenu
         return fileMenuItem
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        localizeContinuityCameraItems(in: menu)
+    }
+
+    func menuWillOpen(_ menu: NSMenu) {
+        localizeContinuityCameraItems(in: menu)
+    }
+
+    private func localizeContinuityCameraItems(in menu: NSMenu) {
+        for item in menu.items where item.identifier == NSMenuItem.importFromDeviceIdentifier {
+            localizeContinuityCameraMenuItem(item)
+        }
+    }
+
+    private func localizeContinuityCameraMenuItem(_ item: NSMenuItem) {
+        let fallback = menuString(
+            "menu.file.importFromDevice",
+            "Import from iPhone or iPad...",
+            appLocalizer()
+        )
+        let title = item.representedObject as? String ?? fallback
+        item.title = title
+        item.submenu?.title = title
+        item.setAccessibilityTitle(title)
+        item.setAccessibilityLabel(title)
     }
 
     private func createEditMenu(localizer: AppLocalizer) -> NSMenuItem {

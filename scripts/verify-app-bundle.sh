@@ -144,6 +144,8 @@ esac
 check_plist_string "$CONTENTS/Info.plist" "SUFeedURL" "$expected_feed_url" "Sparkle feed URL"
 check_plist_exists "$CONTENTS/Info.plist" "SUPublicEDKey" "Sparkle public key"
 check_plist_exists "$CONTENTS/Info.plist" "OSAScriptingDefinition" "AppleScript definition key"
+check_plist_exists "$CONTENTS/Info.plist" "NSCameraUsageDescription" "Camera privacy description"
+check_plist_bool_true "$CONTENTS/Info.plist" "NSCameraUseContinuityCameraDeviceType" "Continuity Camera device type opt-in"
 check_plist_exists "$CONTENTS/Info.plist" "NSMicrophoneUsageDescription" "Microphone privacy description"
 check_plist_exists "$CONTENTS/Info.plist" "NSSpeechRecognitionUsageDescription" "Speech recognition privacy description"
 check_plist_string "$CONTENTS/Info.plist" "NSUserActivityTypes.0" "dev.cocxy.terminal.continue" "Handoff activity type"

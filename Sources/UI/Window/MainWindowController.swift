@@ -1125,7 +1125,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func buildRootView(contentFrame: NSRect, splitView: NSSplitView) -> NSView {
-        let rootView = NSView(frame: contentFrame)
+        let rootView = ContinuityCameraImportResponderView(frame: contentFrame)
+        rootView.onImportPasteboard = { [weak self] pasteboard in
+            self?.handleContinuityCameraImportPasteboard(pasteboard) ?? false
+        }
         rootView.autoresizingMask = [.width, .height]
 
         // Status bar at the bottom.

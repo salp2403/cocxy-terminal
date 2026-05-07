@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>Cocxy Terminal</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>CocxyTerminal</string>
 	<key>CFBundleIconFile</key>
@@ -50,6 +52,10 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright (c) 2026 Said Arturo Lopez. MIT License.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Cocxy uses the camera only when you explicitly import an image with Continuity Camera.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cocxy uses the microphone only when you start local Voice input.</string>
 	<key>NSPrincipalClass</key>

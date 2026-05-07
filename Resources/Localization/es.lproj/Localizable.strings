@@ -316,6 +316,8 @@
 "menu.file.moveTabToNewWindow" = "Mover pestaña a nueva ventana";
 "menu.file.saveCurrentTabAsConfig" = "Guardar pestaña actual como configuración...";
 "menu.file.openTabFromConfig" = "Abrir pestaña desde configuración...";
+"menu.file.importFromDevice" = "Importar desde iPhone o iPad...";
+"Import From Device" = "Importar desde iPhone o iPad...";
 "menu.file.closeTab" = "Cerrar pestaña";
 "menu.edit.title" = "Edición";
 "menu.edit.find" = "Buscar...";
