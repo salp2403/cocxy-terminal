@@ -422,6 +422,42 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("cero telemetr&iacute;a"))
     }
 
+    @Test("Spanish public docs avoid untranslated visible product terms")
+    func spanishPublicDocsAvoidUntranslatedVisibleProductTerms() throws {
+        let root = repositoryRoot()
+        let webRoot = root.appendingPathComponent("web/public/es", isDirectory: true)
+        let files = try Self.files(under: webRoot, fileExtension: "html")
+        let forbiddenFragments = [
+            "workspace markdown",
+            "workspaces",
+            "remote workspaces",
+            "browser integrado",
+            "shell integration",
+            "browser data",
+            "feedback",
+            "preview",
+            "hot-reload",
+            "copy-on-select",
+            "protecci&oacute;n de paste",
+            "providers remotos",
+            "snippets",
+            "tabs,",
+            "splits",
+        ]
+
+        for file in files {
+            let contents = Self.htmlSearchableText(
+                try String(contentsOf: file, encoding: .utf8)
+            ).lowercased()
+            for fragment in forbiddenFragments {
+                #expect(
+                    !contents.contains(fragment),
+                    "\(Self.relativePath(file, root: root)) contains untranslated Spanish public copy: \(fragment)"
+                )
+            }
+        }
+    }
+
     @Test("Spanish public docs keep primary navigation inside the Spanish site")
     func spanishPublicDocsKeepPrimaryNavigationInsideSpanishSite() throws {
         let root = repositoryRoot()
@@ -706,6 +742,32 @@ struct CITestGateScriptSwiftTestingTests {
             return (contents as NSString).substring(with: match.range(at: 1))
         } ?? []
         return Set(ids)
+    }
+
+    private static func htmlSearchableText(_ contents: String) -> String {
+        let withoutStyles = replacing(
+            #"(?is)<style\b[^>]*>.*?</style>"#,
+            in: contents,
+            with: " "
+        )
+        let withoutComments = replacing(
+            #"(?is)<!--.*?-->"#,
+            in: withoutStyles,
+            with: " "
+        )
+        return replacing(#"(?is)<[^>]+>"#, in: withoutComments, with: " ")
+    }
+
+    private static func replacing(_ pattern: String, in contents: String, with replacement: String) -> String {
+        guard let regex = try? NSRegularExpression(pattern: pattern) else {
+            return contents
+        }
+        let range = NSRange(location: 0, length: (contents as NSString).length)
+        return regex.stringByReplacingMatches(
+            in: contents,
+            range: range,
+            withTemplate: replacement
+        )
     }
 
     private static func localWebsiteReference(

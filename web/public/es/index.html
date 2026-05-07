@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Cocxy Terminal &mdash; Terminal nativa para macOS</title>
-  <meta name="description" content="Cocxy Terminal es una terminal nativa para macOS con detecci&oacute;n de agentes de c&oacute;digo, revisi&oacute;n integrada, workspace Markdown, sesiones remotas, renderizado GPU y cero telemetr&iacute;a.">
+  <meta name="description" content="Cocxy Terminal es una terminal nativa para macOS con detecci&oacute;n de agentes de c&oacute;digo, revisi&oacute;n integrada, espacio Markdown, sesiones remotas, renderizado GPU y cero telemetr&iacute;a.">
   <meta name="keywords" content="Cocxy Terminal, terminal macOS, agentes de codigo, revision de codigo, Markdown, SSH, cero telemetria">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
@@ -52,19 +52,19 @@
     "screenshot": "https://cocxy.dev/images/og-image.png",
     "softwareVersion": "0.0.0",
     "softwareRequirements": "macOS 14.0 o posterior",
-    "description": "Terminal nativa para macOS con deteccion de agentes de codigo, revision integrada, workspace Markdown, renderizado GPU, sesiones remotas y cero telemetria.",
+    "description": "Terminal nativa para macOS con deteccion de agentes de codigo, revision integrada, espacio Markdown, renderizado GPU, sesiones remotas y cero telemetria.",
     "inLanguage": "es-HN",
     "featureList": [
       "Deteccion local de agentes de codigo",
       "Panel de revision de codigo con comentarios inline",
-      "Workspace Markdown con preview local",
+      "Espacio Markdown con previsualizaci&oacute;n local",
       "Renderizado acelerado por GPU",
       "Sesiones remotas SSH persistentes",
       "Sistema de plugins con sandbox",
       "CLI local por Unix Domain Socket",
-      "Browser integrado para localhost",
+      "Navegador integrado para localhost",
       "Terminal web local",
-      "Shell integration para zsh, bash y fish",
+      "Integraci&oacute;n de shell para zsh, bash y fish",
       "Configuracion por proyecto",
       "Cero telemetria"
     ],
@@ -103,7 +103,7 @@
         </div>
         <h1 class="hero-title" id="hero-title">Cocxy Terminal</h1>
         <p class="hero-tagline">Tu terminal entiende flujos con agentes de c&oacute;digo.</p>
-        <p class="hero-sub">Terminal nativa para macOS con detecci&oacute;n local de agentes, revisi&oacute;n de c&oacute;digo integrada, workspace Markdown, sesiones remotas persistentes y cero telemetr&iacute;a. Construida en Swift. Licencia MIT.</p>
+        <p class="hero-sub">Terminal nativa para macOS con detecci&oacute;n local de agentes, revisi&oacute;n de c&oacute;digo integrada, espacio Markdown, sesiones remotas persistentes y cero telemetr&iacute;a. Construida en Swift. Licencia MIT.</p>
         <div class="hero-actions">
           <a href="#download" class="btn btn-primary">Descargar para macOS</a>
           <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Ver en GitHub</a>
@@ -113,7 +113,7 @@
           <span class="version-req">macOS 14.0+</span>
         </div>
 
-        <div class="hero-mockup" aria-label="Vista previa de Cocxy Terminal con workspaces y una sesi&oacute;n local activa">
+        <div class="hero-mockup" aria-label="Vista previa de Cocxy Terminal con espacios y una sesi&oacute;n local activa">
           <div class="mock-window">
             <div class="mock-titlebar">
               <div class="mock-dots"><span class="d r"></span><span class="d y"></span><span class="d g"></span></div>
@@ -125,12 +125,12 @@
             </div>
             <div class="mock-body">
               <aside class="mock-sidebar">
-                <div class="mock-sidebar-header">WORKSPACES</div>
+                <div class="mock-sidebar-header">ESPACIOS</div>
                 <div class="mock-ws active">
                   <span class="ws-dot working"></span>
                   <div class="ws-info">
                     <span class="ws-name">api-local</span>
-                    <span class="ws-detail">Trabajando &middot; 2m 14s &middot; Edit</span>
+                    <span class="ws-detail">Trabajando &middot; 2m 14s &middot; Editando</span>
                     <span class="ws-path">~/proyectos/api-local</span>
                   </div>
                 </div>
@@ -203,22 +203,22 @@
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--review" aria-hidden="true"></div>
             <h3>Revisi&oacute;n integrada</h3>
-            <p>Panel nativo para ver diffs, comentar l&iacute;neas, aceptar o revertir hunks y devolver feedback al agente desde el flujo local.</p>
+            <p>Panel nativo para ver diffs, comentar l&iacute;neas, aceptar o revertir hunks y devolver comentarios al agente desde el flujo local.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--markdown" aria-hidden="true"></div>
-            <h3>Workspace Markdown</h3>
-            <p>Editor y preview con Mermaid, KaTeX, callouts, footnotes, QuickLook offline, b&uacute;squeda y exportaci&oacute;n local.</p>
+            <h3>Espacio Markdown</h3>
+            <p>Editor y previsualizaci&oacute;n con Mermaid, KaTeX, callouts, footnotes, QuickLook offline, b&uacute;squeda y exportaci&oacute;n local.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--ssh" aria-hidden="true"></div>
             <h3>Sesiones remotas</h3>
-            <p>SSH, perfiles, Keychain opcional, t&uacute;neles, SFTP y tmux para workspaces remotos persistentes sin backend propietario.</p>
+            <p>SSH, perfiles, Keychain opcional, t&uacute;neles, SFTP y tmux para espacios remotos persistentes sin backend propietario.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--browser" aria-hidden="true"></div>
-            <h3>Browser integrado</h3>
-            <p>Perfiles, DevTools, favoritos, descargas y preview de localhost en split junto a la terminal.</p>
+            <h3>Navegador integrado</h3>
+            <p>Perfiles, DevTools, favoritos, descargas y previsualizaci&oacute;n de localhost en una divisi&oacute;n junto a la terminal.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--privacy" aria-hidden="true"></div>
@@ -233,7 +233,7 @@
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--cli" aria-hidden="true"></div>
             <h3>CLI local</h3>
-            <p>API por Unix socket para manejar tabs, sesiones, agentes, remotos, dashboards, plugins y revisiones desde shell.</p>
+            <p>API por Unix socket para manejar pesta&ntilde;as, sesiones, agentes, remotos, dashboards, plugins y revisiones desde shell.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--plugin" aria-hidden="true"></div>
@@ -243,7 +243,7 @@
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--config" aria-hidden="true"></div>
             <h3>Config por proyecto</h3>
-            <p>Un archivo <code>.cocxy.toml</code> permite ajustar fuentes, opacidad, detecci&oacute;n y atajos con hot-reload.</p>
+            <p>Un archivo <code>.cocxy.toml</code> permite ajustar fuentes, opacidad, detecci&oacute;n y atajos con recarga en caliente.</p>
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--web" aria-hidden="true"></div>
@@ -252,7 +252,7 @@
           </article>
           <article class="feature-card" data-animate>
             <div class="feature-icon feature-icon--shell" aria-hidden="true"></div>
-            <h3>Shell integration</h3>
+            <h3>Integraci&oacute;n de shell</h3>
             <p>Integraci&oacute;n nativa para zsh, bash y fish con CWD, l&iacute;mites de comando y bootstrap que respeta tu setup.</p>
           </article>
         </div>
@@ -332,7 +332,7 @@
           </details>
           <details class="faq-item">
             <summary><span>&iquest;Puedo usarla como terminal diaria?</span></summary>
-            <p>S&iacute;. Incluye tabs, splits, b&uacute;squeda, shell integration, SSH, CLI, temas, imagen inline y renderizado GPU.</p>
+            <p>S&iacute;. Incluye pesta&ntilde;as, divisiones, b&uacute;squeda, integraci&oacute;n de shell, SSH, CLI, temas, imagen inline y renderizado GPU.</p>
           </details>
         </div>
         <div style="text-align:center;margin-top:2rem;">
