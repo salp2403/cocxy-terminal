@@ -2643,4 +2643,19 @@
 "shortcuts.error.noActiveTerminal" = "No hay una superficie de terminal activa disponible.";
 "shortcuts.error.noWindow" = "No hay una ventana de Cocxy disponible.";
 
+/* AppIntent literals used by Shortcuts.app metadata. */
+"Open Cocxy" = "Abrir Cocxy";
+"Bring the local Cocxy Terminal window forward." = "Traer al frente la ventana local de Cocxy Terminal.";
+"Run Command in Cocxy" = "Ejecutar comando en Cocxy";
+"Send text to the focused Cocxy terminal and optionally press Return." = "Enviar texto a la terminal enfocada de Cocxy y opcionalmente presionar Return.";
+"Command" = "Comando";
+"Press Return" = "Presionar Return";
+"Open Cocxy Notebook" = "Abrir notebook de Cocxy";
+"Open a local Cocxy notebook panel in the current workspace." = "Abrir un panel de notebook local de Cocxy en el espacio actual.";
+"List Cocxy Skills" = "Listar habilidades de Cocxy";
+"Return local Cocxy skill identifiers." = "Devolver identificadores locales de habilidades de Cocxy.";
+"Run Command" = "Ejecutar comando";
+"Open Notebook" = "Abrir notebook";
+"List Skills" = "Listar habilidades";
+
 "handoff.activity.title" = "Continuar Cocxy Terminal";

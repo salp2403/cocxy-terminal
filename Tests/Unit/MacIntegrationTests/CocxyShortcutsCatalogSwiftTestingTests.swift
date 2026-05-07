@@ -37,6 +37,36 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
         #expect(CocxyShortcutError.noActiveTerminal.localizedDescription(using: spanish) == "No hay una superficie de terminal activa disponible.")
     }
 
+    @Test("Shortcuts AppIntent literals are covered by localization resources")
+    func appIntentLiteralsAreCoveredByLocalizationResources() throws {
+        let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        let literals = [
+            "Open Cocxy",
+            "Bring the local Cocxy Terminal window forward.",
+            "Run Command in Cocxy",
+            "Send text to the focused Cocxy terminal and optionally press Return.",
+            "Command",
+            "Press Return",
+            "Open Cocxy Notebook",
+            "Open a local Cocxy notebook panel in the current workspace.",
+            "List Cocxy Skills",
+            "Return local Cocxy skill identifiers.",
+            "Run Command",
+            "Open Notebook",
+            "List Skills",
+        ]
+
+        for literal in literals {
+            #expect(english.string(literal, fallback: "") == literal)
+            #expect(spanish.string(literal, fallback: literal) != literal)
+        }
+        #expect(spanish.string("Run Command", fallback: "Run Command") == "Ejecutar comando")
+        #expect(spanish.string("Open Notebook", fallback: "Open Notebook") == "Abrir notebook")
+    }
+
     @Test("app bundle scripts emit and verify Shortcuts metadata")
     func appBundleScriptsEmitAndVerifyShortcutsMetadata() throws {
         let root = repositoryRoot()
