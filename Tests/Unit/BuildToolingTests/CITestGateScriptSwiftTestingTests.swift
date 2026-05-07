@@ -64,6 +64,10 @@ struct CITestGateScriptSwiftTestingTests {
             encoding: .utf8
         )
 
+        #expect(script.contains("BENCHMARK_ENV=\"COCXY_COLD_START_BENCHMARK=1\""))
+        #expect(script.contains("/usr/bin/open -n --env \"$BENCHMARK_ENV\" \"$APP_PATH\""))
+        #expect(script.contains("Cocxy Terminal is already running outside this benchmark."))
+        #expect(script.contains("COCXY_BENCH_FORCE_KILL"))
         #expect(script.contains("combined_gate_passed"))
         #expect(script.contains("internal_critical_path_within_budget\" == \"0\""))
         #expect(script.contains("\"$ENFORCE\" == \"1\" && \"$combined_gate_passed\" != \"1\""))

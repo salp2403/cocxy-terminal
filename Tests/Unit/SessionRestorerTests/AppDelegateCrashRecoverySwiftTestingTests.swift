@@ -216,6 +216,17 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(copy.secondaryButton == "Cancelar")
     }
 
+    @Test("cold start benchmark environment bypasses modal quit confirmation")
+    func coldStartBenchmarkEnvironmentBypassesModalQuitConfirmation() {
+        #expect(AppDelegate.shouldBypassQuitConfirmationForAutomation(
+            environment: ["COCXY_COLD_START_BENCHMARK": "1"]
+        ))
+        #expect(!AppDelegate.shouldBypassQuitConfirmationForAutomation(
+            environment: ["COCXY_COLD_START_BENCHMARK": "0"]
+        ))
+        #expect(!AppDelegate.shouldBypassQuitConfirmationForAutomation(environment: [:]))
+    }
+
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))

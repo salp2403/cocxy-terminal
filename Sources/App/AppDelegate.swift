@@ -463,6 +463,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if Self.shouldBypassQuitConfirmationForAutomation() {
+            return .terminateNow
+        }
+
         let alert = NSAlert()
         let copy = Self.localizedQuitConfirmationCopy(localizer: appLocalizer())
         alert.messageText = copy.messageText
@@ -473,6 +477,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: copy.secondaryButton)
         let response = alert.runModal()
         return response == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    static func shouldBypassQuitConfirmationForAutomation(
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> Bool {
+        environment["COCXY_COLD_START_BENCHMARK"] == "1"
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
