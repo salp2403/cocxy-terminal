@@ -34,6 +34,21 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         }
     }
 
+    @Test("panel-like UI surfaces are covered or explicitly scoped out")
+    func panelLikeUISurfacesHaveExplicitGlassDecision() throws {
+        let discovered = try discoveredPanelCandidatePaths()
+        let covered = Set(Self.planSurfacePaths)
+            .union(Self.appKitPlanSurfacePaths)
+            .union(Self.scopedNonGlassSurfacePaths.keys)
+        let uncovered = discovered.subtracting(covered).sorted()
+
+        #expect(
+            uncovered.isEmpty,
+            Comment(rawValue: "Panel-like UI surfaces need glass coverage or a scoped non-glass rationale: \(uncovered.joined(separator: ", "))")
+        )
+        #expect(Self.scopedNonGlassSurfacePaths.values.allSatisfy { !$0.isEmpty })
+    }
+
     @Test("UI sources no longer use old direct full-panel backgrounds")
     func uiSourcesDoNotUseDirectFullPanelBackgrounds() throws {
         let root = repositoryRoot().appendingPathComponent("Sources/UI", isDirectory: true)
@@ -73,6 +88,7 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Design/AuroraCommandPaletteView.swift",
         "Sources/UI/Design/AuroraSidebarView.swift",
         "Sources/UI/Design/AuroraStatusBarView.swift",
+        "Sources/UI/Design/AuroraTweaksPanel.swift",
         "Sources/UI/Dashboard/DashboardPanelView.swift",
         "Sources/UI/GitHub/GitHubPaneView.swift",
         "Sources/UI/Macros/MacroSnippetPanelView.swift",
@@ -102,6 +118,17 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Markdown/MarkdownContentView.swift",
     ]
 
+    private static let scopedNonGlassSurfacePaths = [
+        "Sources/UI/Markdown/MarkdownSidebarView.swift":
+            "Child AppKit sidebar inside MarkdownContentView; parent installs the shared glass backing.",
+        "Sources/UI/Markdown/MarkdownStatusBarView.swift":
+            "Child AppKit status strip inside MarkdownContentView; parent installs the shared glass backing.",
+        "Sources/UI/QuickTerminal/QuickTerminalPanel.swift":
+            "NSPanel shell owns terminal contrast/performance background outside the SwiftUI glass primitive.",
+        "Sources/UI/Terminal/Block/TerminalBlockOverlayView.swift":
+            "Transparent AppKit overlay drawn on top of terminal cells; per-row rails/buttons are not standalone panels.",
+    ]
+
     private static let legacyFullPanelBackgroundMarkers = [
         ".background(Color(nsColor: CocxyColors.base))",
         ".background(Color(nsColor: CocxyColors.mantle))",
@@ -112,11 +139,65 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Color(nsColor: CocxyColors.mantle)\n                VisualEffectBackground(",
     ]
 
+    private static let panelCandidateNameMarkers = [
+        "DashboardView",
+        "OverlayView",
+        "PaletteView",
+        "PanelView",
+        "Panel",
+        "PreferencesView",
+        "ProjectTemplatePanelView",
+        "RemoteConnectionView",
+        "RemoteProfileEditor",
+        "SidebarView",
+        "SSHKeyManagerView",
+        "StatusBarView",
+        "TimelineView",
+        "WelcomeOverlayView",
+    ]
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func discoveredPanelCandidatePaths() throws -> Set<String> {
+        let root = repositoryRoot()
+        let uiRoot = root.appendingPathComponent("Sources/UI", isDirectory: true)
+        let urls = FileManager.default.enumerator(
+            at: uiRoot,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )?.compactMap { $0 as? URL } ?? []
+
+        var paths = Set<String>()
+        for url in urls where url.pathExtension == "swift" {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else { continue }
+            let fileName = url.lastPathComponent
+            if fileName.hasSuffix("ViewModel.swift")
+                || fileName.hasSuffix("Background.swift")
+                || fileName.hasSuffix("BackgroundView.swift")
+                || fileName.hasSuffix("Button.swift") {
+                continue
+            }
+            guard Self.panelCandidateNameMarkers.contains(where: { fileName.contains($0) }) else {
+                continue
+            }
+            paths.insert(relativePath(for: url, from: root))
+        }
+        return paths
+    }
+
+    private func relativePath(for fileURL: URL, from root: URL) -> String {
+        let rootPath = root.standardizedFileURL.path
+        let filePath = fileURL.standardizedFileURL.path
+        guard filePath.hasPrefix(rootPath + "/") else {
+            return filePath
+        }
+        return String(filePath.dropFirst(rootPath.count + 1))
     }
 }
