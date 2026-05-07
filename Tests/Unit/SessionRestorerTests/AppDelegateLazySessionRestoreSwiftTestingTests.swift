@@ -456,6 +456,36 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(trackingWindow.displayIfNeededCount == 0)
     }
 
+    @Test("crash recovery restore does not force synchronous content layout")
+    func crashRecoveryRestoreDoesNotForceSynchronousContentLayout() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let delegate = AppDelegate()
+        delegate.installTerminalEngineForTesting(bridge)
+
+        let trackingWindow = TrackingRestoreWindow(
+            contentRect: controller.window?.frame ?? NSRect(x: 0, y: 0, width: 1200, height: 800),
+            styleMask: controller.window?.styleMask ?? [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let trackingContentView = TrackingContentView(frame: controller.window?.contentView?.bounds ?? .zero)
+        if let originalContentView = controller.window?.contentView {
+            originalContentView.removeFromSuperview()
+            originalContentView.frame = trackingContentView.bounds
+            originalContentView.autoresizingMask = [.width, .height]
+            trackingContentView.addSubview(originalContentView)
+        }
+        trackingWindow.contentView = trackingContentView
+        trackingWindow.backgroundColor = CocxyColors.base.withAlphaComponent(0.35)
+        controller.window = trackingWindow
+
+        let session = makeSession(tabIDs: [TabID(), TabID()], activeTabIndex: 0)
+
+        #expect(delegate.restoreCrashRecoverySession(session, into: controller))
+        #expect(trackingContentView.layoutSubtreeIfNeededCount == 0)
+    }
+
     private func makeSession(
         tabIDs: [TabID],
         activeTabIndex: Int,
@@ -559,6 +589,15 @@ private final class TrackingRestoreWindow: NSWindow {
     override func displayIfNeeded() {
         displayIfNeededCount += 1
         super.displayIfNeeded()
+    }
+}
+
+private final class TrackingContentView: NSView {
+    private(set) var layoutSubtreeIfNeededCount = 0
+
+    override func layoutSubtreeIfNeeded() {
+        layoutSubtreeIfNeededCount += 1
+        super.layoutSubtreeIfNeeded()
     }
 }
 

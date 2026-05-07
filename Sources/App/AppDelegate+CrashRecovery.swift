@@ -87,8 +87,6 @@ extension AppDelegate {
     }
 
     func restoreCrashRecoverySession(_ session: Session, into controller: MainWindowController) -> Bool {
-        let restored = restoreSession(session, into: controller)
-        controller.window?.contentView?.layoutSubtreeIfNeeded()
-        return restored
+        return restoreSession(session, into: controller)
     }
 }
