@@ -1339,12 +1339,12 @@
 "dbCloud.helper.cocxy-kubernetes.description" = "Agrega comprobaciones locales de kubectl y comandos auxiliares.";
 "templates.title" = "Plantillas";
 "templates.refresh" = "Actualizar";
-"templates.scaffold" = "Crear scaffold";
+"templates.scaffold" = "Generar";
 "templates.close" = "Cerrar plantillas";
 "templates.status.noTemplates" = "Sin plantillas";
 "templates.status.loadFailed" = "Carga fallida";
 "templates.status.selectTemplate" = "Selecciona una plantilla";
-"templates.status.scaffoldFailed" = "Scaffold fallido";
+"templates.status.scaffoldFailed" = "No se pudo generar";
 "templates.count.template.one" = "%d plantilla";
 "templates.count.template.many" = "%d plantillas";
 "templates.status.created.one" = "%d archivo creado";
@@ -2277,7 +2277,7 @@
 "command.workspace.aiEditHistory.name" = "Abrir historial de ediciones";
 "command.workspace.aiEditHistory.description" = "Abrir historial local de ediciones del agente y controles de reversión";
 "command.workspace.templates.name" = "Abrir panel de plantillas";
-"command.workspace.templates.description" = "Abrir scaffolds de proyecto locales y variables de plantilla";
+"command.workspace.templates.description" = "Abrir plantillas de proyecto locales y sus variables";
 "command.workspace.macros.name" = "Abrir panel de macros";
 "command.workspace.macros.description" = "Abrir macros, fragmentos, alias e historial del portapapeles locales";
 "command.workspace.dbCloud.name" = "Abrir ayudantes DB/Cloud";

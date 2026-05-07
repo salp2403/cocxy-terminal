@@ -101,6 +101,14 @@ struct ProjectTemplatePanelViewModelSwiftTestingTests {
 
         try viewModel.refresh()
 
+        #expect(spanish.string("templates.scaffold", fallback: "Scaffold") == "Generar")
+        #expect(spanish.string("templates.status.scaffoldFailed", fallback: "Scaffold failed") == "No se pudo generar")
+        #expect(
+            spanish.string(
+                "command.workspace.templates.description",
+                fallback: "Open local project scaffolds and template variables"
+            ) == "Abrir plantillas de proyecto locales y sus variables"
+        )
         #expect(ProjectTemplateSource.builtIn.localizedTitle(using: spanish) == "incluida")
         #expect(viewModel.statusText == "1 plantilla")
 
