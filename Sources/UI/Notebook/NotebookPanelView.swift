@@ -23,22 +23,7 @@ struct NotebookPanelView: View {
         VStack(spacing: 0) {
             toolbar
             Divider()
-            HSplitView {
-                TextEditor(text: $viewModel.sourceText)
-                    .font(.system(.body, design: .monospaced))
-                    .padding(8)
-                    .frame(minWidth: 320)
-
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(viewModel.cellPresentations) { cell in
-                            NotebookCellPanel(cell: cell)
-                        }
-                    }
-                    .padding(12)
-                }
-                .frame(minWidth: 260)
-            }
+            content
         }
         .glassPanelBackground()
         .onAppear {
@@ -46,6 +31,45 @@ struct NotebookPanelView: View {
         }
         .onChange(of: localizer.resolvedLanguage) {
             viewModel.updateLocalizer(localizer)
+        }
+    }
+
+    private var content: some View {
+        GeometryReader { proxy in
+            let layout = AdaptiveEditorResultPanelLayout.resolve(width: proxy.size.width)
+
+            if layout.stacksVertically {
+                VSplitView {
+                    sourceEditor
+                        .frame(minHeight: 180)
+                    cellList
+                        .frame(minHeight: 180)
+                }
+            } else {
+                HSplitView {
+                    sourceEditor
+                        .frame(minWidth: 320)
+                    cellList
+                        .frame(minWidth: 260)
+                }
+            }
+        }
+    }
+
+    private var sourceEditor: some View {
+        TextEditor(text: $viewModel.sourceText)
+            .font(.system(.body, design: .monospaced))
+            .padding(8)
+    }
+
+    private var cellList: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                ForEach(viewModel.cellPresentations) { cell in
+                    NotebookCellPanel(cell: cell)
+                }
+            }
+            .padding(12)
         }
     }
 

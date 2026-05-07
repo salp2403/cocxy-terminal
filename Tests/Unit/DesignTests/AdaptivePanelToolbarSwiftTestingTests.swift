@@ -25,4 +25,17 @@ struct AdaptivePanelToolbarSwiftTestingTests {
             showsStatus: true
         ))
     }
+
+    @Test("editor result panels stack vertically before columns become unreadable")
+    func editorResultPanelsStackVerticallyBeforeColumnsBecomeUnreadable() {
+        #expect(AdaptiveEditorResultPanelLayout.resolve(width: 520) == .init(
+            stacksVertically: true
+        ))
+        #expect(AdaptiveEditorResultPanelLayout.resolve(width: 700) == .init(
+            stacksVertically: false
+        ))
+        #expect(AdaptiveEditorResultPanelLayout.resolve(width: 920) == .init(
+            stacksVertically: false
+        ))
+    }
 }

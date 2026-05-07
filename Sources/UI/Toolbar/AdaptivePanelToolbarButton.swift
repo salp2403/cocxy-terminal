@@ -18,6 +18,18 @@ struct AdaptivePanelToolbarPresentation: Equatable, Sendable {
     }
 }
 
+struct AdaptiveEditorResultPanelLayout: Equatable, Sendable {
+    static let verticalStackWidth: CGFloat = 700
+
+    let stacksVertically: Bool
+
+    static func resolve(width: CGFloat) -> AdaptiveEditorResultPanelLayout {
+        AdaptiveEditorResultPanelLayout(
+            stacksVertically: width < verticalStackWidth
+        )
+    }
+}
+
 struct AdaptivePanelToolbarButton: View {
     let title: String
     let systemImage: String
