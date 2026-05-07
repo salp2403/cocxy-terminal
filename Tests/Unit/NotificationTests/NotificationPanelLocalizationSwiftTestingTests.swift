@@ -34,6 +34,21 @@ struct NotificationPanelLocalizationSwiftTestingTests {
         )
     }
 
+    @Test("mark-all control stays compact and only appears when useful")
+    func markAllControlStaysCompactAndUseful() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(NotificationPanelView.shouldShowMarkAllControl(unreadCount: 0) == false)
+        #expect(NotificationPanelView.shouldShowMarkAllControl(unreadCount: 2))
+        #expect(NotificationPanelView.markAllReadSystemImageName == "checkmark.circle")
+        #expect(NotificationPanelView.localizedMarkAllReadHelp(using: localizer) == "Marcar todo como leído")
+        #expect(
+            NotificationPanelView.localizedMarkAllReadAccessibility(using: localizer)
+                == "Marcar todas las notificaciones como leídas"
+        )
+    }
+
     @MainActor
     @Test("state-change notifications localize generated copy to Spanish")
     func stateChangeNotificationsLocalizeGeneratedCopy() throws {

@@ -127,6 +127,22 @@ struct NotificationPanelView: View {
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     static let panelWidth: CGFloat = 320
+    static let markAllReadSystemImageName = "checkmark.circle"
+
+    static func shouldShowMarkAllControl(unreadCount: Int) -> Bool {
+        unreadCount > 0
+    }
+
+    static func localizedMarkAllReadHelp(using localizer: AppLocalizer) -> String {
+        localizer.string("notifications.panel.markAllRead", fallback: "Mark all read")
+    }
+
+    static func localizedMarkAllReadAccessibility(using localizer: AppLocalizer) -> String {
+        localizer.string(
+            "notifications.panel.markAllRead.accessibility",
+            fallback: "Mark all notifications as read"
+        )
+    }
 
     // MARK: - Body
 
@@ -163,18 +179,17 @@ struct NotificationPanelView: View {
 
             Spacer()
 
-            Button(action: { viewModel.markAllAsRead() }) {
-                Text(localized("notifications.panel.markAllRead", fallback: "Mark all read"))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundColor(.secondary)
+            if Self.shouldShowMarkAllControl(unreadCount: viewModel.unreadCount) {
+                Button(action: { viewModel.markAllAsRead() }) {
+                    Image(systemName: Self.markAllReadSystemImageName)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .help(Self.localizedMarkAllReadHelp(using: localizer))
+                .accessibilityLabel(Self.localizedMarkAllReadAccessibility(using: localizer))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(
-                localized(
-                    "notifications.panel.markAllRead.accessibility",
-                    fallback: "Mark all notifications as read"
-                )
-            )
 
             Button(action: onDismiss) {
                 Image(systemName: "xmark")
