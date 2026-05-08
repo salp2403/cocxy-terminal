@@ -77,6 +77,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("GH_BIN="))
         #expect(script.contains("/opt/homebrew/bin/gh /usr/local/bin/gh"))
         #expect(script.contains("cd \"$ROOT_DIR\""))
+        #expect(script.contains("git ls-remote --tags origin"))
+        #expect(script.contains("already exists on origin"))
         #expect(script.contains("\"$GH_BIN\" auth status"))
         #expect(script.contains("\"$GH_BIN\" workflow run prepare-release.yml"))
         #expect(script.contains(".github/workflows/prepare-release.yml"))

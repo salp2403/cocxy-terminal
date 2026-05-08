@@ -84,6 +84,18 @@ if git show-ref --tags --verify --quiet "refs/tags/v${VERSION}" 2>/dev/null; the
     exit 66
 fi
 
+REMOTE_TAGS="$(git ls-remote --tags origin "refs/tags/v${VERSION}" 2>&1)"
+REMOTE_STATUS=$?
+if [ "$REMOTE_STATUS" -ne 0 ]; then
+    echo "error: unable to check remote tags on origin" >&2
+    echo "$REMOTE_TAGS" >&2
+    exit 67
+fi
+if [ -n "$REMOTE_TAGS" ]; then
+    echo "error: tag v${VERSION} already exists on origin" >&2
+    exit 68
+fi
+
 for candidate in /opt/homebrew/bin/gh /usr/local/bin/gh; do
     if [ -x "$candidate" ]; then
         GH_BIN="$candidate"
