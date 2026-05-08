@@ -73,11 +73,18 @@ struct CITestGateScriptSwiftTestingTests {
 
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("[--dry-run] <version>"))
+        #expect(script.contains("ROOT_DIR="))
+        #expect(script.contains("GH_BIN="))
+        #expect(script.contains("/opt/homebrew/bin/gh /usr/local/bin/gh"))
+        #expect(script.contains("cd \"$ROOT_DIR\""))
+        #expect(script.contains("\"$GH_BIN\" auth status"))
+        #expect(script.contains("\"$GH_BIN\" workflow run prepare-release.yml"))
+        #expect(script.contains(".github/workflows/prepare-release.yml"))
         #expect(script.contains("DRY_RUN=1"))
         #expect(script.contains("No GitHub workflow was triggered."))
 
         let dryRunRange = try #require(script.range(of: "if [ \"$DRY_RUN\" -eq 1 ]; then"))
-        let dispatchRange = try #require(script.range(of: "gh workflow run prepare-release.yml"))
+        let dispatchRange = try #require(script.range(of: "\"$GH_BIN\" workflow run prepare-release.yml"))
         #expect(dryRunRange.lowerBound < dispatchRange.lowerBound)
     }
 

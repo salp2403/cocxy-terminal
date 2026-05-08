@@ -24,8 +24,11 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 DRY_RUN=0
 VERSION=""
+GH_BIN=""
 
 usage() {
     echo "usage: $0 [--dry-run] <version>" >&2
@@ -64,6 +67,8 @@ if [ -z "$VERSION" ]; then
     exit 64
 fi
 
+cd "$ROOT_DIR"
+
 # Strip an accidental leading 'v' so the workflow input is clean.
 VERSION="${VERSION#v}"
 
@@ -79,9 +84,30 @@ if git show-ref --tags --verify --quiet "refs/tags/v${VERSION}" 2>/dev/null; the
     exit 66
 fi
 
-if ! command -v gh >/dev/null 2>&1; then
+for candidate in /opt/homebrew/bin/gh /usr/local/bin/gh; do
+    if [ -x "$candidate" ]; then
+        GH_BIN="$candidate"
+        break
+    fi
+done
+
+if [ -z "$GH_BIN" ] && command -v gh >/dev/null 2>&1; then
+    GH_BIN="$(command -v gh)"
+fi
+
+if [ -z "$GH_BIN" ]; then
     echo "error: gh CLI not found; install it from https://cli.github.com/" >&2
     exit 69
+fi
+
+if ! "$GH_BIN" auth status >/dev/null 2>&1; then
+    echo "error: gh CLI is not authenticated for GitHub release dispatch" >&2
+    exit 70
+fi
+
+if [ ! -f ".github/workflows/prepare-release.yml" ]; then
+    echo "error: missing .github/workflows/prepare-release.yml" >&2
+    exit 72
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
@@ -91,7 +117,7 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 echo "Dispatching Prepare Release workflow for v${VERSION}..."
-gh workflow run prepare-release.yml \
+"$GH_BIN" workflow run prepare-release.yml \
     --ref main \
     -f version="$VERSION"
 
