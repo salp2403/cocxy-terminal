@@ -93,6 +93,79 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(dryRunRange.lowerBound < dispatchRange.lowerBound)
     }
 
+    @Test("release workflow uses the shared app bundle builder")
+    func releaseWorkflowUsesSharedAppBundleBuilder() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("./scripts/build-app.sh release --version \"$VERSION\""))
+        #expect(workflow.contains("mv build/CocxyTerminal.app \"build/Cocxy Terminal.app\""))
+        #expect(workflow.contains("./scripts/verify-app-bundle.sh \"$APP_DIR\""))
+        #expect(!workflow.contains("cp \".build/arm64-apple-macosx/release/CocxyTerminal\" \"$MACOS_DIR/Cocxy Terminal\""))
+        #expect(!workflow.contains("[ -d Resources/Markdown ] && cp -R Resources/Markdown \"$RESOURCES_DIR/\" || true"))
+    }
+
+    @Test("release workflow fails if Homebrew cask update does not publish")
+    func releaseWorkflowFailsIfHomebrewCaskUpdateDoesNotPublish() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        let homebrewStart = try #require(workflow.range(of: "- name: Update Homebrew Cask"))
+        let homebrewBlock = String(workflow[homebrewStart.lowerBound..<workflow.endIndex])
+        #expect(homebrewBlock.contains("git config user.name \"Said Arturo Lopez\""))
+        #expect(homebrewBlock.contains("git config user.email \"dev@cocxy.dev\""))
+        #expect(homebrewBlock.contains("git diff --cached --quiet"))
+        #expect(homebrewBlock.contains("Homebrew cask did not change"))
+        #expect(homebrewBlock.contains("git commit -m \"Update cocxy to ${VERSION}\""))
+        #expect(homebrewBlock.contains("git push"))
+        #expect(!homebrewBlock.contains("git commit -m \"Update cocxy to ${VERSION}\" || true"))
+        #expect(!homebrewBlock.contains("git push || true"))
+    }
+
+    @Test("release workflow fails if required nested signing fails")
+    func releaseWorkflowFailsIfRequiredNestedSigningFails() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        let signingStart = try #require(workflow.range(of: "- name: Code sign with Developer ID"))
+        let dmgStart = try #require(workflow.range(of: "- name: Create DMG", range: signingStart.upperBound..<workflow.endIndex))
+        let signingBlock = String(workflow[signingStart.lowerBound..<dmgStart.lowerBound])
+        #expect(signingBlock.contains("\"$APP_DIR/Contents/Resources/cocxy\""))
+        #expect(signingBlock.contains("\"$APP_DIR/Contents/Resources/cocxyd\""))
+        #expect(signingBlock.contains("\"$APP_DIR/Contents/Library/LaunchServices/cocxyd.app\""))
+        #expect(!signingBlock.contains("\"$APP_DIR/Contents/Resources/cocxy\" || true"))
+        #expect(!signingBlock.contains("\"$APP_DIR/Contents/Resources/cocxyd\" || true"))
+        #expect(!signingBlock.contains("\"$APP_DIR/Contents/Library/LaunchServices/cocxyd.app\" || true"))
+    }
+
+    @Test("nightly workflow uses shared app bundle builder")
+    func nightlyWorkflowUsesSharedAppBundleBuilder() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/nightly.yml"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("./scripts/build-app.sh release --version \"$VERSION\""))
+        #expect(workflow.contains("mv build/CocxyTerminal.app \"$APP_DIR\""))
+        #expect(workflow.contains("--bundle-id \"dev.cocxy.terminal.nightly\""))
+        #expect(workflow.contains("--feed-url \"https://cocxy.dev/appcast-nightly.xml\""))
+        #expect(workflow.contains("--executable \"CocxyTerminal\""))
+        #expect(workflow.contains("codesign --force --sign - --entitlements Resources/CocxyTerminal.entitlements \"$APP_DIR\""))
+        #expect(workflow.contains("./scripts/verify-app-bundle.sh \"$APP_DIR\""))
+        #expect(!workflow.contains("cp \".build/arm64-apple-macosx/release/CocxyTerminal\" \"$MACOS_DIR/Cocxy Terminal Nightly\""))
+        #expect(!workflow.contains("[ -d Resources/Markdown ] && cp -R Resources/Markdown \"$RESOURCES_DIR/\" || true"))
+    }
+
     @Test("critical coverage checker reports and enforces configured modules")
     func criticalCoverageCheckerReportsAndEnforcesConfiguredModules() throws {
         let root = repositoryRoot()

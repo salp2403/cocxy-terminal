@@ -46,90 +46,15 @@ jobs:
 
           rm $RUNNER_TEMP/certificate.p12
 
-      - name: Build release binary (arm64)
-        run: swift build -c release --arch arm64
-
-      - name: Build CLI companion
-        run: swift build --target cocxy -c release --arch arm64 || true
-
-      - name: Build PTY daemon helper
-        run: swift build --target cocxyd -c release --arch arm64 || true
-
       - name: Install xcodegen
         run: brew install xcodegen
 
-      - name: Build QuickLook extension
-        run: ./scripts/build-quicklook-extension.sh release
-
-      - name: Create app bundle
+      - name: Build app bundle
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          APP_DIR="build/Cocxy Terminal.app"
-          CONTENTS_DIR="$APP_DIR/Contents"
-          MACOS_DIR="$CONTENTS_DIR/MacOS"
-          RESOURCES_DIR="$CONTENTS_DIR/Resources"
-          PLUGINS_DIR="$CONTENTS_DIR/PlugIns"
-
-          FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
-          mkdir -p "$MACOS_DIR" "$RESOURCES_DIR" "$FRAMEWORKS_DIR" "$PLUGINS_DIR"
-
-          # Copy arm64 binary
-          cp ".build/arm64-apple-macosx/release/CocxyTerminal" "$MACOS_DIR/Cocxy Terminal"
-
-          # Copy Sparkle.framework into bundle
-          SPARKLE_FW=$(find .build/artifacts -name "Sparkle.framework" -path "*/macos-*" -type d | head -1)
-          if [ -n "$SPARKLE_FW" ]; then
-            cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
-            echo "Sparkle.framework copied to bundle"
-          else
-            SPARKLE_FW=$(find .build -name "Sparkle.framework" -type d | head -1)
-            if [ -n "$SPARKLE_FW" ]; then
-              cp -R "$SPARKLE_FW" "$FRAMEWORKS_DIR/"
-              echo "Sparkle.framework copied from build dir"
-            fi
-          fi
-
-          # Set rpath so binary finds Sparkle.framework
-          install_name_tool -add_rpath @executable_path/../Frameworks "$MACOS_DIR/Cocxy Terminal" 2>/dev/null || true
-
-          # Copy CLI companion if built
-          if [ -f ".build/arm64-apple-macosx/release/cocxy" ]; then
-            cp ".build/arm64-apple-macosx/release/cocxy" "$RESOURCES_DIR/cocxy"
-          fi
-
-          ./scripts/generate-app-info-plist.sh "$CONTENTS_DIR/Info.plist" \
-            --bundle-name "Cocxy Terminal" \
-            --display-name "Cocxy Terminal" \
-            --bundle-id "dev.cocxy.terminal" \
-            --executable "Cocxy Terminal" \
-            --version "$VERSION" \
-            --short-version "$VERSION" \
-            --feed-url "https://cocxy.dev/appcast.xml" \
-            --public-key "${{ secrets.SPARKLE_PUBLIC_KEY }}"
-
-          # Embed the PTY daemon both as a signed LSUIElement helper app and as
-          # a legacy Resources/cocxyd probe path. Sparkle replaces the whole app
-          # artifact atomically, so the helper app carries the same version as
-          # the host bundle.
-          if [ -f ".build/arm64-apple-macosx/release/cocxyd" ]; then
-            ./scripts/embed-pty-daemon-helper.sh \
-              "$APP_DIR" ".build/arm64-apple-macosx/release/cocxyd"
-          fi
-
-          # Copy resources
-          [ -d Resources/Themes ] && cp -R Resources/Themes "$RESOURCES_DIR/" || true
-          [ -f Resources/AppIcon.png ] && cp Resources/AppIcon.png "$RESOURCES_DIR/" || true
-          [ -f Resources/CocxyTerminal.sdef ] && \
-            cp Resources/CocxyTerminal.sdef "$RESOURCES_DIR/" || true
-          [ -d Resources/Fonts ] && cp -R Resources/Fonts "$RESOURCES_DIR/" || true
-          [ -d Resources/shell-integration ] && \
-            cp -R Resources/shell-integration "$RESOURCES_DIR/" || true
-          [ -d Resources/defaults ] && cp -R Resources/defaults "$RESOURCES_DIR/" || true
-          [ -d Resources/Sounds ] && cp -R Resources/Sounds "$RESOURCES_DIR/" || true
-          [ -d Resources/Markdown ] && cp -R Resources/Markdown "$RESOURCES_DIR/" || true
-          [ -d Resources/JS ] && cp -R Resources/JS "$RESOURCES_DIR/" || true
-          [ -d build/QuickLookDerived/Build/Products/Release/CocxyQuickLook.appex ] && \
-            cp -R build/QuickLookDerived/Build/Products/Release/CocxyQuickLook.appex "$PLUGINS_DIR/" || true
+          ./scripts/build-app.sh release --version "$VERSION"
+          rm -rf "build/Cocxy Terminal.app"
+          mv build/CocxyTerminal.app "build/Cocxy Terminal.app"
 
       - name: Verify app bundle contents
         run: |
@@ -181,18 +106,18 @@ jobs:
             codesign --force --options runtime --timestamp \
               --entitlements "$ENTITLEMENTS" \
               --sign "$SIGNING_IDENTITY" \
-              "$APP_DIR/Contents/Resources/cocxy" || true
+              "$APP_DIR/Contents/Resources/cocxy"
 
           # Sign PTY daemon helper (required for notarization). Keep the raw
           # compatibility path and the LaunchServices helper app aligned.
           [ -f "$APP_DIR/Contents/Resources/cocxyd" ] && \
             codesign --force --options runtime --timestamp \
               --sign "$SIGNING_IDENTITY" \
-              "$APP_DIR/Contents/Resources/cocxyd" || true
+              "$APP_DIR/Contents/Resources/cocxyd"
           [ -d "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app" ] && \
             codesign --force --options runtime --timestamp \
               --sign "$SIGNING_IDENTITY" \
-              "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app" || true
+              "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app"
 
           # Sign QuickLook extension
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
@@ -889,9 +814,13 @@ jobs:
           end
           CASK
 
-          git config user.name "said lopez"
+          git config user.name "Said Arturo Lopez"
           git config user.email "dev@cocxy.dev"
           git add Casks/cocxy.rb
-          git commit -m "Update cocxy to ${VERSION}" || true
-          git push || true
+          if git diff --cached --quiet; then
+            echo "::error::Homebrew cask did not change for ${VERSION}"
+            exit 1
+          fi
+          git commit -m "Update cocxy to ${VERSION}"
+          git push
           rm -rf /tmp/tap
