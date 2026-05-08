@@ -168,7 +168,7 @@ struct CITestGateScriptSwiftTestingTests {
         let deployBlock = String(workflow[deployStart.lowerBound..<homebrewStart.lowerBound])
         #expect(deployBlock.contains(#"case "$DEPLOY_PATH" in"#))
         #expect(deployBlock.contains(#"*) DEPLOY_PATH="${DEPLOY_PATH}/" ;;"#))
-        #expect(deployBlock.contains("mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}images ${DEPLOY_PATH}es"))
+        #expect(deployBlock.contains("mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es"))
         #expect(deployBlock.contains("if [ -d web/public/js ]; then"))
         #expect(deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
         #expect(!deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))

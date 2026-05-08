@@ -453,7 +453,7 @@ jobs:
           esac
 
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}images ${DEPLOY_PATH}es"
+            "mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es"
 
           # Deploy appcast.xml
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
