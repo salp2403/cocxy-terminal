@@ -637,6 +637,8 @@ final class CocxyCoreView: NSView {
         surfaceID sid: SurfaceID,
         modifiers: KeyModifiers
     ) {
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+
         if let literalText = Self.literalTextForOptionGeneratedCharacter(
             characters: event.characters,
             charactersIgnoringModifiers: event.charactersIgnoringModifiers,
@@ -694,11 +696,13 @@ final class CocxyCoreView: NSView {
 
     private func sendControlSequence(_ seq: String) {
         guard let bridge = bridge, let sid = surfaceID else { return }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         bridge.sendText(seq, to: sid)
     }
 
     private func sendArrowKeys(_ arrows: [ArrowDirection]) {
         guard !arrows.isEmpty, let bridge, let sid = surfaceID else { return }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         // Route arrow key synthesis through the bridge's key event path
         // so the terminal emits the correct CSI/SS3 escape sequence for
         // its current keypad / cursor mode.
@@ -811,6 +815,8 @@ final class CocxyCoreView: NSView {
         guard let bridge = bridge, let sid = surfaceID,
               let text = clipboardService.read(), !text.isEmpty else { return }
 
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+
         // Bracketed paste if terminal supports it
         guard let state = bridge.surfaceState(for: sid) else { return }
         if cocxycore_terminal_mode_bracketed_paste(state.terminal) {
@@ -910,6 +916,7 @@ final class CocxyCoreView: NSView {
             paste: { [weak bridge] in
                 guard let bridge else { return }
                 if let text = self.clipboardService.read(), !text.isEmpty {
+                    self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
                     bridge.sendText(text, to: sid)
                 }
             },
@@ -961,6 +968,13 @@ final class CocxyCoreView: NSView {
         return modifiers.contains(.option) || modifiers.contains(.shift)
     }
 
+    private func followLiveViewportBeforeUserInput(
+        bridge: CocxyCoreBridge,
+        surfaceID: SurfaceID
+    ) {
+        bridge.scrollToLiveBottom(surfaceID: surfaceID)
+    }
+
     // MARK: - Drag and Drop
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
@@ -987,6 +1001,7 @@ final class CocxyCoreView: NSView {
         // terminal on the platform.
         let paths = FileDropPathFormatter.format(urls)
         guard let bridge = bridge, let sid = surfaceID else { return false }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         bridge.sendText(paths, to: sid)
         return true
     }
@@ -1196,6 +1211,7 @@ final class CocxyCoreView: NSView {
               let sid = surfaceID else {
             return
         }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         bridge.sendText(block.command + "\r", to: sid)
     }
 
@@ -1375,6 +1391,7 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
         else { return }
 
         guard !text.isEmpty, let bridge = bridge, let sid = surfaceID else { return }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         bridge.sendText(text, to: sid)
     }
 

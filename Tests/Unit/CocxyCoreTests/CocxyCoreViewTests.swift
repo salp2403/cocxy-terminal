@@ -716,6 +716,38 @@ struct CocxyCoreViewTests {
         #expect(after < before)
     }
 
+    @Test("paste after local agent scroll returns viewport to live bottom")
+    func pasteAfterLocalAgentScrollReturnsViewportToLiveBottom() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1049h\u{001B}[?1000h\u{001B}[?1006h\u{001B}[?2004h", into: state.terminal)
+        feed(numberedTerminalLines(100), into: state.terminal)
+
+        let bottomBeforeScroll = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == bottomBeforeScroll)
+
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+        let scrolledStart = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(scrolledStart < bottomBeforeScroll)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        harness.view.clipboardService = RecordingClipboardService(readText: "notes paste\n")
+
+        harness.view.paste(nil)
+
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains("notes paste") == true
+        }
+
+        let bottomAfterPaste = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == bottomAfterPaste)
+    }
+
     @Test("file drop routes host handler and terminal paste fallback")
     func fileDropRoutesHostHandlerAndTerminalPasteFallback() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")

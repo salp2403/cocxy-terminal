@@ -2442,6 +2442,27 @@ final class CocxyCoreBridge: TerminalEngine {
         return true
     }
 
+    /// Moves the viewport to the live bottom before user-driven input.
+    ///
+    /// Local agent scrollback intentionally lets full-screen CLIs keep mouse
+    /// tracking while Cocxy scrolls its own viewport. Once the user types or
+    /// pastes again, the interaction target is the live prompt/input area, so
+    /// the viewport must follow the bottom or the input appears to be lost.
+    @discardableResult
+    func scrollToLiveBottom(surfaceID: SurfaceID) -> Bool {
+        let moved = withTerminalLock(surfaceID) { state in
+            let bottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+            return cocxycore_terminal_history_set_visible_start(state.terminal, bottom)
+        } ?? false
+        guard moved else { return false }
+
+        if surfaces[surfaceID]?.protocolV2Observed == true {
+            _ = sendProtocolV2Viewport(for: surfaceID, requestID: nil)
+        }
+        (surfaces[surfaceID]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+        return true
+    }
+
     /// Scroll the surface viewport by a signed number of rows.
     /// Positive values move upward into older scrollback.
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {
