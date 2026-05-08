@@ -2,7 +2,7 @@
 # prepare-release.sh - Trigger the `Prepare Release` workflow remotely.
 #
 # Usage:
-#   ./scripts/prepare-release.sh <version>
+#   ./scripts/prepare-release.sh [--dry-run] <version>
 #
 # Example:
 #   ./scripts/prepare-release.sh 0.1.80
@@ -24,11 +24,43 @@
 
 set -euo pipefail
 
-VERSION="${1:-}"
+DRY_RUN=0
+VERSION=""
+
+usage() {
+    echo "usage: $0 [--dry-run] <version>" >&2
+    echo "example: $0 0.1.80" >&2
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --dry-run)
+            DRY_RUN=1
+            shift
+            ;;
+        -h|--help)
+            usage
+            exit 0
+            ;;
+        -*)
+            echo "error: unknown option '$1'" >&2
+            usage
+            exit 64
+            ;;
+        *)
+            if [ -n "$VERSION" ]; then
+                echo "error: unexpected extra argument '$1'" >&2
+                usage
+                exit 64
+            fi
+            VERSION="$1"
+            shift
+            ;;
+    esac
+done
 
 if [ -z "$VERSION" ]; then
-    echo "usage: $0 <version>" >&2
-    echo "example: $0 0.1.80" >&2
+    usage
     exit 64
 fi
 
@@ -50,6 +82,12 @@ fi
 if ! command -v gh >/dev/null 2>&1; then
     echo "error: gh CLI not found; install it from https://cli.github.com/" >&2
     exit 69
+fi
+
+if [ "$DRY_RUN" -eq 1 ]; then
+    echo "Dry run passed: Prepare Release workflow would be dispatched for v${VERSION}."
+    echo "No GitHub workflow was triggered."
+    exit 0
 fi
 
 echo "Dispatching Prepare Release workflow for v${VERSION}..."

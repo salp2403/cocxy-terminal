@@ -65,6 +65,22 @@ struct CITestGateScriptSwiftTestingTests {
         #expect((baselinePayload?["metrics"] as? [[String: Any]])?.isEmpty == false)
     }
 
+    @Test("prepare release script has a non-mutating dry run preflight")
+    func prepareReleaseScriptHasDryRunPreflight() throws {
+        let root = repositoryRoot()
+        let scriptURL = root.appendingPathComponent("scripts/prepare-release.sh")
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+        #expect(script.contains("[--dry-run] <version>"))
+        #expect(script.contains("DRY_RUN=1"))
+        #expect(script.contains("No GitHub workflow was triggered."))
+
+        let dryRunRange = try #require(script.range(of: "if [ \"$DRY_RUN\" -eq 1 ]; then"))
+        let dispatchRange = try #require(script.range(of: "gh workflow run prepare-release.yml"))
+        #expect(dryRunRange.lowerBound < dispatchRange.lowerBound)
+    }
+
     @Test("critical coverage checker reports and enforces configured modules")
     func criticalCoverageCheckerReportsAndEnforcesConfiguredModules() throws {
         let root = repositoryRoot()
