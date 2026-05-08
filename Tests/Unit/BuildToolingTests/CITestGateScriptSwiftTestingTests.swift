@@ -602,6 +602,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html"#))
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}press.html"#))
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/press.html"#))
+        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html"#))
 
         let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
         let cleanupStart = try #require(
@@ -651,6 +652,7 @@ struct CITestGateScriptSwiftTestingTests {
             #expect(releasePage.contains(#"href="/appcast.xml""#))
             #expect(releasePage.contains("https://github.com/salp2403/cocxy-terminal/releases/latest"))
         }
+        #expect(spanishReleases.contains("CocxyTerminal-0.0.0.dmg"))
 
         #expect(workflow.contains("release_items = []"))
         #expect(workflow.contains(#""@type": "CollectionPage""#))
@@ -659,6 +661,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains(#"<link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">"#))
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html"#))
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html"#))
+        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html"#))
     }
 
     @Test("primary public docs do not pin the retired CLI command count")

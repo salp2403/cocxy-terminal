@@ -765,6 +765,7 @@ jobs:
              if [ -f ${DEPLOY_PATH}press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}press.html; fi; \
              if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html; fi; \
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/index.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html; fi; \
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}es/index.html; fi; \
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/index.html; fi; \
              if [ -f ${DEPLOY_PATH}es/getting-started.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/getting-started.html; fi; \
