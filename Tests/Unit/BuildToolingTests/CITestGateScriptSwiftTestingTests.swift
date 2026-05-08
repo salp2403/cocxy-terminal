@@ -184,6 +184,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("--require-public-release"))
         #expect(script.contains("--require-critical-coverage"))
         #expect(script.contains("--critical-coverage"))
+        #expect(script.contains("RELEASE_PUSH_TOKEN"))
         #expect(script.contains("DEVELOPER_ID_P12"))
         #expect(script.contains("DEVELOPER_ID_PASSWORD"))
         #expect(script.contains("SIGNING_IDENTITY"))

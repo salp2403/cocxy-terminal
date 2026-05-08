@@ -342,6 +342,7 @@ fi
 
 echo ""
 echo "[Release secrets]"
+check_secret RELEASE_PUSH_TOKEN
 check_secret DEVELOPER_ID_P12
 check_secret DEVELOPER_ID_PASSWORD
 check_secret SIGNING_IDENTITY
