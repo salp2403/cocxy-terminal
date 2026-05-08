@@ -199,9 +199,12 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("CocxyTerminal-${VERSION}.dmg"))
         #expect(script.contains("build/appcast.xml"))
         #expect(script.contains("gh release view \"v${VERSION}\""))
+        #expect(script.contains("latest_release_tag"))
         #expect(script.contains("https://cocxy.dev/appcast.xml"))
+        #expect(script.contains("appcast_version"))
         #expect(script.contains("sparkle:shortVersionString=\\\"${VERSION}\\\""))
         #expect(script.contains("brew info --cask salp2403/tap/cocxy"))
+        #expect(script.contains("brew_version"))
         #expect(!script.contains(#"echo "${!name}""#))
     }
 

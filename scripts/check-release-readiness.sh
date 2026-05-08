@@ -142,7 +142,7 @@ check_optional_secret() {
 }
 
 check_public_release_surfaces() {
-    local appcast_payload brew_payload
+    local appcast_payload appcast_version brew_payload brew_version latest_release_tag
 
     echo ""
     echo "[Public release surfaces]"
@@ -152,21 +152,24 @@ check_public_release_surfaces() {
     if gh release view "v${VERSION}" --repo "$REPO_FULL_NAME" >/dev/null 2>&1; then
         ok "GitHub Release v${VERSION} exists"
     else
-        block "GitHub Release v${VERSION} missing"
+        latest_release_tag="$(gh release view --repo "$REPO_FULL_NAME" --json tagName --jq .tagName 2>/dev/null || true)"
+        block "GitHub Release v${VERSION} missing (latest ${latest_release_tag:-unknown})"
     fi
 
     appcast_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/appcast.xml 2>/dev/null || true)"
+    appcast_version="$(printf "%s" "$appcast_payload" | sed -n 's/.*sparkle:shortVersionString="\([^"]*\)".*/\1/p' | head -1)"
     if echo "$appcast_payload" | grep -q "sparkle:shortVersionString=\"${VERSION}\""; then
         ok "public Sparkle appcast points at ${VERSION}"
     else
-        block "public Sparkle appcast does not point at ${VERSION}"
+        block "public Sparkle appcast does not point at ${VERSION} (current ${appcast_version:-unknown})"
     fi
 
     brew_payload="$(brew info --cask salp2403/tap/cocxy 2>/dev/null || true)"
+    brew_version="$(printf "%s" "$brew_payload" | sed -n 's/^==> cocxy.*): \([^[:space:]]*\)$/\1/p' | head -1)"
     if echo "$brew_payload" | grep -q "): ${VERSION}$"; then
         ok "Homebrew cask reports ${VERSION}"
     else
-        block "Homebrew cask does not report ${VERSION}"
+        block "Homebrew cask does not report ${VERSION} (current ${brew_version:-unknown})"
     fi
 }
 
