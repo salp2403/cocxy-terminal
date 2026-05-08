@@ -82,6 +82,30 @@ struct RelayTokenTests {
     }
 }
 
+@Suite("RelayKeychainStore", .serialized)
+struct RelayKeychainStoreTests {
+    @Test("keychain store saves replaces loads and deletes channel tokens")
+    func keychainStoreSavesReplacesLoadsAndDeletesChannelTokens() throws {
+        let store = RelayKeychainStore()
+        let channelID = UUID()
+        defer { try? store.delete(channelID: channelID) }
+
+        try store.delete(channelID: channelID)
+        #expect(try store.load(channelID: channelID) == nil)
+
+        let firstToken = RelayToken(secret: Data(repeating: 7, count: 32))
+        try store.save(token: firstToken, channelID: channelID)
+        #expect(try store.load(channelID: channelID)?.secret == firstToken.secret)
+
+        let replacementToken = RelayToken(secret: Data(repeating: 9, count: 32))
+        try store.save(token: replacementToken, channelID: channelID)
+        #expect(try store.load(channelID: channelID)?.secret == replacementToken.secret)
+
+        try store.delete(channelID: channelID)
+        #expect(try store.load(channelID: channelID) == nil)
+    }
+}
+
 // MARK: - Replay Tracker Tests
 
 @Suite("ReplayTracker")

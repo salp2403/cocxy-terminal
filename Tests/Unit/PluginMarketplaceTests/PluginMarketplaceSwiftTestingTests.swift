@@ -361,6 +361,100 @@ struct PluginMarketplaceSwiftTestingTests {
         }
     }
 
+    @Test("sandbox builds sanitized execution plan for plugin script")
+    func sandboxBuildsSanitizedExecutionPlan() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        let longValue = String(repeating: "x", count: 9_000)
+        let plan = try PluginSandbox().makeExecutionPlan(
+            scriptPath: scriptURL.path,
+            environment: [
+                "COCXY_EVENT": "session-start",
+                "LONG_VALUE": longValue,
+            ],
+            pluginID: "safe-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.networkClient, .filesystemRead]
+        )
+
+        #expect(plan.executableURL.path == "/bin/sh")
+        #expect(plan.arguments == [scriptURL.resolvingSymlinksInPath().standardizedFileURL.path])
+        #expect(plan.currentDirectoryURL.path == pluginDirectory.resolvingSymlinksInPath().standardizedFileURL.path)
+        #expect(plan.environment["COCXY_EVENT"] == "session-start")
+        #expect(plan.environment["COCXY_PLUGIN_ID"] == "safe-plugin")
+        #expect(plan.environment["COCXY_SCRIPT_PATH"] == scriptURL.resolvingSymlinksInPath().standardizedFileURL.path)
+        #expect(plan.environment["COCXY_PLUGIN_CAPABILITIES"] == "filesystem-read,network-client")
+        #expect(plan.environment["PATH"] == "/usr/local/bin:/usr/bin:/bin")
+        #expect(plan.environment["HOME"] == NSHomeDirectory())
+        #expect(plan.environment["LONG_VALUE"]?.count == 8_192)
+    }
+
+    @Test("sandbox rejects unsafe environment keys before launch")
+    func sandboxRejectsUnsafeEnvironmentKeysBeforeLaunch() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        #expect(throws: PluginSandboxError.self) {
+            _ = try PluginSandbox().makeExecutionPlan(
+                scriptPath: scriptURL.path,
+                environment: ["lowercase": "blocked"],
+                pluginID: "safe-plugin",
+                pluginDirectory: pluginDirectory.path,
+                capabilities: []
+            )
+        }
+    }
+
+    @Test("sandbox executes plugin script with sanitized environment")
+    func sandboxExecutesPluginScriptWithSanitizedEnvironment() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let markerURL = root.appendingPathComponent("marker.txt")
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try """
+        #!/bin/sh
+        printf "%s|%s|%s|%s" "$COCXY_PLUGIN_ID" "$COCXY_EVENT" "$COCXY_PLUGIN_CAPABILITIES" "$(pwd)" > "$MARKER_PATH"
+        """.write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        PluginSandbox(timeoutSeconds: 2).execute(
+            scriptPath: scriptURL.path,
+            environment: [
+                "COCXY_EVENT": "session-start",
+                "MARKER_PATH": markerURL.path,
+            ],
+            pluginID: "safe-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.environmentRead]
+        )
+
+        let deadline = Date().addingTimeInterval(2)
+        while !FileManager.default.fileExists(atPath: markerURL.path), Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+
+        let marker = try String(contentsOf: markerURL, encoding: .utf8)
+        let expectedDirectory = pluginDirectory.path
+        let privateVarDirectory = "/private" + expectedDirectory
+        #expect([
+            "safe-plugin|session-start|environment-read|\(expectedDirectory)",
+            "safe-plugin|session-start|environment-read|\(privateVarDirectory)",
+        ].contains(marker))
+    }
+
     private func repositoryRoot() -> URL {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()

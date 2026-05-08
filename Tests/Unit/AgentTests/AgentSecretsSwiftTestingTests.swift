@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AgentSecretsSwiftTestingTests.swift - Keychain-backed Agent secret contracts.
 
+import Foundation
 import Testing
 @testable import CocxyTerminal
 
@@ -93,5 +94,24 @@ struct AgentSecretsSwiftTestingTests {
         #expect(AgentProviderKind.anthropic.keychainAccount == "anthropic")
         #expect(AgentProviderKind.openai.keychainAccount == "openai")
         #expect(AgentProviderKind.google.keychainAccount == "google")
+    }
+
+    @Test("keychain store saves replaces loads and deletes generic secrets")
+    func keychainStoreSavesReplacesLoadsAndDeletesGenericSecrets() throws {
+        let store = KeychainAgentSecretStore()
+        let account = "agent-secret-test-\(UUID().uuidString)"
+        defer { try? store.deleteSecret(account: account) }
+
+        try store.deleteSecret(account: account)
+        #expect(try store.secret(account: account) == nil)
+
+        try store.saveSecret("first-secret", account: account)
+        #expect(try store.secret(account: account) == "first-secret")
+
+        try store.saveSecret("replacement-secret", account: account)
+        #expect(try store.secret(account: account) == "replacement-secret")
+
+        try store.deleteSecret(account: account)
+        #expect(try store.secret(account: account) == nil)
     }
 }
