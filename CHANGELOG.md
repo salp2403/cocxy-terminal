@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-05-08
+
+First public stable release. Cocxy Terminal is now a complete native macOS
+terminal for working alongside local AI agents, with a privacy-first design,
+zero telemetry, and a fully local feature set.
+
 ### Added
 - Native editor foundation with reusable editor sessions, multi-cursor
   gestures, readable source theming, Markdown source/preview improvements,
@@ -24,12 +30,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   merge flow, worktree cleanup/templates, remote workspace profiles, SSH key
   import, SFTP panes, project templates, local plugin catalog/events, and
   DB/cloud helper previews.
-- macOS integrations for Quick Look notebook previews, shortcuts, local
-  clipboard observation, Handoff metadata, and Spotlight notes indexing with a
-  privacy opt-out.
+- macOS integrations for Quick Look notebook previews, Shortcuts.app actions,
+  Touch Bar, Handoff metadata, Continuity Camera image import into the local
+  agent, Stage Manager-friendly window grouping, local clipboard observation,
+  and Spotlight notes indexing with a per-workspace privacy opt-out.
+- Thirteen built-in plugins shipping locally: AWS, Azure, GCP, Cloudflare,
+  Docker, Kubernetes, GitHub pane, Jira, Linear, and database helpers for
+  SQLite, MySQL, PostgreSQL, and Redis.
 - Public EN/ES website coverage for landing, features, releases,
   getting-started, FAQ, migration guidance, and release workflow deployment of
   the Spanish surface.
+- Release-readiness tooling: local SSH smoke (`scripts/smoke-local-ssh.sh`),
+  read-only GitHub PR smoke (`scripts/smoke-github-pr-readonly.sh`), local
+  security audit (`scripts/run-security-audit.sh`), local privacy audit
+  (`scripts/run-privacy-audit.sh`), and a release readiness preflight
+  (`scripts/check-release-readiness.sh`) that fails closed when secrets,
+  signed artifacts, public surfaces, or version drift are missing.
 - Bundled CocxyCoreKit 0.15.0 with expanded stable API coverage and updated
   device-attribute version reporting.
 
