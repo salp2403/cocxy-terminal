@@ -152,10 +152,28 @@ check_optional_secret() {
     fi
 }
 
+fetch_public_payload() {
+    local url="$1"
+    local body_var="$2"
+    local status_var="$3"
+    local body_file
+    local status
+
+    body_file="$(mktemp "${TMPDIR:-/tmp}/cocxy-release-readiness.XXXXXX")"
+    status="$(curl -sS -L --max-time 10 -o "$body_file" -w "%{http_code}" "$url" 2>/dev/null || true)"
+    if [ -z "$status" ]; then
+        status="000"
+    fi
+    printf -v "$body_var" "%s" "$(cat "$body_file" 2>/dev/null || true)"
+    printf -v "$status_var" "%s" "$status"
+    rm -f "$body_file"
+}
+
 check_public_release_surfaces() {
     local appcast_payload appcast_version brew_payload brew_version
     local homepage_payload homepage_version latest_release_tag releases_payload releases_version
     local spanish_homepage_payload spanish_homepage_version spanish_releases_payload spanish_releases_version
+    local appcast_status homepage_status releases_status spanish_homepage_status spanish_releases_status
 
     echo ""
     echo "[Public release surfaces]"
@@ -169,12 +187,12 @@ check_public_release_surfaces() {
         block "GitHub Release v${VERSION} missing (latest ${latest_release_tag:-unknown})"
     fi
 
-    appcast_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/appcast.xml 2>/dev/null || true)"
+    fetch_public_payload "https://cocxy.dev/appcast.xml" appcast_payload appcast_status
     appcast_version="$(printf "%s" "$appcast_payload" | sed -n 's/.*sparkle:shortVersionString="\([^"]*\)".*/\1/p' | head -1)"
     if echo "$appcast_payload" | grep -q "sparkle:shortVersionString=\"${VERSION}\""; then
         ok "public Sparkle appcast points at ${VERSION}"
     else
-        block "public Sparkle appcast does not point at ${VERSION} (current ${appcast_version:-unknown})"
+        block "public Sparkle appcast does not point at ${VERSION} (current ${appcast_version:-unknown}, http ${appcast_status})"
     fi
 
     brew_payload="$(brew info --cask salp2403/tap/cocxy 2>/dev/null || true)"
@@ -185,36 +203,36 @@ check_public_release_surfaces() {
         block "Homebrew cask does not report ${VERSION} (current ${brew_version:-unknown})"
     fi
 
-    homepage_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/ 2>/dev/null || true)"
+    fetch_public_payload "https://cocxy.dev/" homepage_payload homepage_status
     homepage_version="$(printf "%s" "$homepage_payload" | sed -n 's/.*"softwareVersion": "\([^"]*\)".*/\1/p' | head -1)"
     if echo "$homepage_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
         ok "public homepage download points at ${VERSION}"
     else
-        block "public homepage download does not point at ${VERSION} (current ${homepage_version:-unknown})"
+        block "public homepage download does not point at ${VERSION} (current ${homepage_version:-unknown}, http ${homepage_status})"
     fi
 
-    releases_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/releases.html 2>/dev/null || true)"
+    fetch_public_payload "https://cocxy.dev/releases.html" releases_payload releases_status
     releases_version="$(printf "%s" "$releases_payload" | sed -n 's/.*>v\([0-9][^<]*\)<.*/\1/p' | head -1)"
     if echo "$releases_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
         ok "public releases page includes ${VERSION}"
     else
-        block "public releases page does not include ${VERSION} (latest listed ${releases_version:-unknown})"
+        block "public releases page does not include ${VERSION} (latest listed ${releases_version:-unknown}, http ${releases_status})"
     fi
 
-    spanish_homepage_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/es/ 2>/dev/null || true)"
+    fetch_public_payload "https://cocxy.dev/es/" spanish_homepage_payload spanish_homepage_status
     spanish_homepage_version="$(printf "%s" "$spanish_homepage_payload" | sed -n 's/.*"softwareVersion": "\([^"]*\)".*/\1/p' | head -1)"
     if echo "$spanish_homepage_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
         ok "public Spanish homepage download points at ${VERSION}"
     else
-        block "public Spanish homepage download does not point at ${VERSION} (current ${spanish_homepage_version:-unknown})"
+        block "public Spanish homepage download does not point at ${VERSION} (current ${spanish_homepage_version:-unknown}, http ${spanish_homepage_status})"
     fi
 
-    spanish_releases_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/es/releases.html 2>/dev/null || true)"
+    fetch_public_payload "https://cocxy.dev/es/releases.html" spanish_releases_payload spanish_releases_status
     spanish_releases_version="$(printf "%s" "$spanish_releases_payload" | sed -n 's/.*>v\([0-9][^<]*\)<.*/\1/p' | head -1)"
     if echo "$spanish_releases_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
         ok "public Spanish releases page includes ${VERSION}"
     else
-        block "public Spanish releases page does not include ${VERSION} (latest listed ${spanish_releases_version:-unknown})"
+        block "public Spanish releases page does not include ${VERSION} (latest listed ${spanish_releases_version:-unknown}, http ${spanish_releases_status})"
     fi
 }
 
