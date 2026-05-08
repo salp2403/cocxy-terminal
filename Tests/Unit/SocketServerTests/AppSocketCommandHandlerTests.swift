@@ -1171,42 +1171,77 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configSet_withValidParams_returnsAcknowledged() {
-        let didReload = LockedBox(false)
-        let handler = AppSocketCommandHandler(
-            tabManager: nil,
-            hookEventReceiver: nil,
-            configReloadProvider: {
-                didReload.withValue { $0 = true }
-                return true
-            }
-        )
-        let request = SocketRequest(
-            id: "cs-3",
-            command: "config-set",
-            params: ["key": "appearance.theme", "value": "dracula"]
-        )
-        let response = handler.handleCommand(request)
+        preservingUserConfig {
+            let didReload = LockedBox(false)
+            let handler = AppSocketCommandHandler(
+                tabManager: nil,
+                hookEventReceiver: nil,
+                configReloadProvider: {
+                    didReload.withValue { $0 = true }
+                    return true
+                }
+            )
+            let request = SocketRequest(
+                id: "cs-3",
+                command: "config-set",
+                params: ["key": "appearance.theme", "value": "dracula"]
+            )
+            let response = handler.handleCommand(request)
 
-        XCTAssertTrue(response.success)
-        XCTAssertEqual(response.data?["status"], "updated")
-        XCTAssertTrue(didReload.withValue { $0 })
+            XCTAssertTrue(response.success)
+            XCTAssertEqual(response.data?["status"], "updated")
+            XCTAssertTrue(didReload.withValue { $0 })
+        }
     }
 
     func test_configSet_reportsReloadFailure() {
-        let handler = AppSocketCommandHandler(
-            tabManager: nil,
-            hookEventReceiver: nil,
-            configReloadProvider: { false }
-        )
-        let request = SocketRequest(
-            id: "cs-reload-failure",
-            command: "config-set",
-            params: ["key": "appearance.theme", "value": "dracula"]
-        )
-        let response = handler.handleCommand(request)
+        preservingUserConfig {
+            let handler = AppSocketCommandHandler(
+                tabManager: nil,
+                hookEventReceiver: nil,
+                configReloadProvider: { false }
+            )
+            let request = SocketRequest(
+                id: "cs-reload-failure",
+                command: "config-set",
+                params: ["key": "appearance.theme", "value": "dracula"]
+            )
+            let response = handler.handleCommand(request)
 
-        XCTAssertFalse(response.success)
-        XCTAssertEqual(response.error, "Configuration was written but could not be reloaded")
+            XCTAssertFalse(response.success)
+            XCTAssertEqual(response.error, "Configuration was written but could not be reloaded")
+        }
+    }
+
+    func test_configSet_rendersSpecialValidatedKeys() {
+        preservingUserConfig {
+            let reloadCount = LockedBox(0)
+            let handler = AppSocketCommandHandler(
+                tabManager: nil,
+                hookEventReceiver: nil,
+                configReloadProvider: {
+                    reloadCount.withValue { $0 += 1 }
+                    return true
+                }
+            )
+            let cases = [
+                ("appearance.app-language", "es-HN"),
+                ("appearance.aurora-enabled", "FALSE"),
+                ("completions.provider", "foundation-models-on-device"),
+                ("completions.enabled-languages", "[\"swift\", python, \"markdown\"]"),
+            ]
+
+            for (index, testCase) in cases.enumerated() {
+                let response = handler.handleCommand(SocketRequest(
+                    id: "cs-special-\(index)",
+                    command: "config-set",
+                    params: ["key": testCase.0, "value": testCase.1]
+                ))
+                XCTAssertTrue(response.success)
+                XCTAssertEqual(response.data?["key"], testCase.0)
+            }
+            XCTAssertEqual(reloadCount.withValue { $0 }, cases.count)
+        }
     }
 
     func test_configTOMLUpdater_insertsMissingFieldInsideExistingSection() {
@@ -1886,6 +1921,587 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["removed"], "3")
     }
 
+    func test_allKnownSocketCommandsDispatchAndPreserveRequestID() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+
+        for command in CLICommandName.allCases {
+            let request = SocketRequest(
+                id: "dispatch-\(command.rawValue)",
+                command: command.rawValue,
+                params: minimalParams(for: command)
+            )
+
+            let response = handler.handleCommand(request)
+
+            XCTAssertEqual(response.id, request.id, "Command \(command.rawValue) should preserve request id")
+        }
+    }
+
+    func test_coreSnapshotCommands_withProvidersReturnData() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreSelectionProvider: { ["active": "true", "text": "selected"] },
+            coreFontMetricsProvider: { ["cell_width": "8", "cell_height": "16"] },
+            corePreeditProvider: { ["active": "false"] },
+            blockRerunProvider: { id in ["status": "rerun", "id": "\(id)"] }
+        )
+
+        let selection = handler.handleCommand(SocketRequest(id: "core-selection-1", command: "core-selection", params: nil))
+        XCTAssertTrue(selection.success)
+        XCTAssertEqual(selection.data?["text"], "selected")
+
+        let fontMetrics = handler.handleCommand(SocketRequest(id: "core-font-1", command: "core-font-metrics", params: nil))
+        XCTAssertTrue(fontMetrics.success)
+        XCTAssertEqual(fontMetrics.data?["cell_height"], "16")
+
+        let preedit = handler.handleCommand(SocketRequest(id: "core-preedit-1", command: "core-preedit", params: nil))
+        XCTAssertTrue(preedit.success)
+        XCTAssertEqual(preedit.data?["active"], "false")
+
+        let rerun = handler.handleCommand(SocketRequest(id: "block-rerun-2", command: "block-rerun", params: ["id": "22"]))
+        XCTAssertTrue(rerun.success)
+        XCTAssertEqual(rerun.data?["id"], "22")
+    }
+
+    func test_protocolSendCommand_withTypeAndJSONRoutesPayload() {
+        let captured = LockedBox<(type: String?, payload: String?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            protocolSendProvider: { type, payload in
+                captured.withValue { value in
+                    value = (type, payload)
+                }
+                return ["status": "sent", "type": type]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "protocol-send-2",
+            command: "protocol-send",
+            params: ["type": "terminal.input", "json": "{\"text\":\"ls\"}"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["type"], "terminal.input")
+        XCTAssertEqual(captured.withValue { $0.type }, "terminal.input")
+        XCTAssertEqual(captured.withValue { $0.payload }, "{\"text\":\"ls\"}")
+    }
+
+    func test_coreSignalCommand_acceptsNumericAndNamedSignals() {
+        let capturedSignals = LockedBox<[Int32]>([])
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            coreSignalProvider: { signal in
+                capturedSignals.withValue { $0.append(signal) }
+                return ["status": "sent", "signal": "\(signal)"]
+            }
+        )
+
+        let cases: [(raw: String, expected: Int32)] = [
+            ("1", 1),
+            ("hup", SIGHUP),
+            ("int", SIGINT),
+            ("quit", SIGQUIT),
+            ("kill", SIGKILL),
+            ("stop", SIGSTOP),
+            ("tstp", SIGTSTP),
+            ("cont", SIGCONT),
+            ("usr1", SIGUSR1),
+            ("usr2", SIGUSR2),
+            ("winch", SIGWINCH),
+        ]
+
+        for testCase in cases {
+            let response = handler.handleCommand(SocketRequest(
+                id: "core-signal-\(testCase.raw)",
+                command: "core-signal",
+                params: ["signal": testCase.raw]
+            ))
+            XCTAssertTrue(response.success)
+            XCTAssertEqual(response.data?["signal"], "\(testCase.expected)")
+        }
+
+        XCTAssertEqual(capturedSignals.withValue { $0 }, cases.map(\.expected))
+    }
+
+    func test_v4PanelAndSplitCommands_coverStatusBranches() {
+        let visibleToggle = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            dashboardToggleProvider: {
+                visibleToggle.withValue { value in
+                    value.toggle()
+                    return value
+                }
+            },
+            dashboardStatusProvider: {
+                ["visible": visibleToggle.withValue { $0 } ? "true" : "false"]
+            },
+            reviewToggleProvider: { true },
+            reviewRefreshProvider: { ["status": "refreshed"] },
+            reviewSubmitProvider: { ["status": "submitted"] },
+            reviewStatsProvider: { ["comments": "2"] },
+            splitCreateProvider: { isVertical in isVertical },
+            splitFocusProvider: { $0 == 1 },
+            splitFocusByDirectionProvider: { $0 == "right" },
+            splitCloseProvider: { true },
+            splitResizeProvider: { id, ratio in id == "split-1" && ratio == 0.33 },
+            splitResizeByDirectionProvider: { direction, pixels in direction == "left" && pixels == 24 }
+        )
+
+        let show = handler.handleCommand(SocketRequest(id: "dashboard-show-2", command: "dashboard-show", params: nil))
+        XCTAssertTrue(show.success)
+        XCTAssertEqual(show.data?["status"], "shown")
+
+        let showAgain = handler.handleCommand(SocketRequest(id: "dashboard-show-3", command: "dashboard-show", params: nil))
+        XCTAssertTrue(showAgain.success)
+        XCTAssertEqual(showAgain.data?["status"], "already_visible")
+
+        let hide = handler.handleCommand(SocketRequest(id: "dashboard-hide-2", command: "dashboard-hide", params: nil))
+        XCTAssertTrue(hide.success)
+        XCTAssertEqual(hide.data?["status"], "hidden")
+
+        let hideAgain = handler.handleCommand(SocketRequest(id: "dashboard-hide-3", command: "dashboard-hide", params: nil))
+        XCTAssertTrue(hideAgain.success)
+        XCTAssertEqual(hideAgain.data?["status"], "already_hidden")
+
+        XCTAssertTrue(handler.handleCommand(SocketRequest(id: "review-1", command: "review", params: nil)).success)
+        XCTAssertEqual(
+            handler.handleCommand(SocketRequest(id: "review-refresh-2", command: "review-refresh", params: nil)).data?["status"],
+            "refreshed"
+        )
+        XCTAssertEqual(
+            handler.handleCommand(SocketRequest(id: "review-submit-2", command: "review-submit", params: nil)).data?["status"],
+            "submitted"
+        )
+        XCTAssertEqual(
+            handler.handleCommand(SocketRequest(id: "review-stats-2", command: "review-stats", params: nil)).data?["comments"],
+            "2"
+        )
+
+        let split = handler.handleCommand(SocketRequest(id: "split-vertical", command: "split", params: ["direction": "v"]))
+        XCTAssertTrue(split.success)
+        XCTAssertEqual(split.data?["direction"], "vertical")
+
+        XCTAssertTrue(handler.handleCommand(SocketRequest(id: "split-focus-index", command: "split-focus", params: ["index": "1"])).success)
+        XCTAssertTrue(handler.handleCommand(SocketRequest(id: "split-focus-direction", command: "split-focus", params: ["direction": "right"])).success)
+        XCTAssertTrue(handler.handleCommand(SocketRequest(id: "split-close-2", command: "split-close", params: nil)).success)
+
+        let resizeByID = handler.handleCommand(SocketRequest(
+            id: "split-resize-id",
+            command: "split-resize",
+            params: ["id": "split-1", "ratio": "0.33"]
+        ))
+        XCTAssertTrue(resizeByID.success)
+        XCTAssertEqual(resizeByID.data?["ratio"], "0.33")
+
+        let resizeByDirection = handler.handleCommand(SocketRequest(
+            id: "split-resize-direction",
+            command: "split-resize",
+            params: ["direction": "left", "pixels": "24"]
+        ))
+        XCTAssertTrue(resizeByDirection.success)
+        XCTAssertEqual(resizeByDirection.data?["pixels"], "24")
+    }
+
+    func test_timelineAndSearchValidationBranches() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            timelineQueryProvider: { tabID in
+                TimelineQueryResult(tabID: tabID, sessionIDs: [], events: [])
+            },
+            timelineExportProvider: { _, format in
+                Data("format=\(format)".utf8)
+            },
+            searchProvider: { _, _, _, tabID in
+                SearchCommandResult(tabID: tabID, lineCount: 0, results: [])
+            }
+        )
+        let tabID = UUID().uuidString
+
+        let timelineShow = handler.handleCommand(SocketRequest(
+            id: "timeline-show-tab",
+            command: "timeline-show",
+            params: ["tabId": tabID]
+        ))
+        XCTAssertTrue(timelineShow.success)
+        XCTAssertEqual(timelineShow.data?["tabId"], tabID)
+
+        let invalidTimeline = handler.handleCommand(SocketRequest(
+            id: "timeline-show-invalid",
+            command: "timeline-show",
+            params: ["tabId": "not-a-uuid"]
+        ))
+        XCTAssertFalse(invalidTimeline.success)
+
+        let markdownExport = handler.handleCommand(SocketRequest(
+            id: "timeline-export-md",
+            command: "timeline-export",
+            params: ["format": "md"]
+        ))
+        XCTAssertTrue(markdownExport.success)
+        XCTAssertEqual(markdownExport.data?["format"], "markdown")
+
+        let invalidExport = handler.handleCommand(SocketRequest(
+            id: "timeline-export-invalid",
+            command: "timeline-export",
+            params: ["format": "html"]
+        ))
+        XCTAssertFalse(invalidExport.success)
+
+        let search = handler.handleCommand(SocketRequest(
+            id: "search-tab",
+            command: "search",
+            params: ["query": "needle", "caseSensitive": "yes", "regex": "no", "tabId": tabID]
+        ))
+        XCTAssertTrue(search.success)
+        XCTAssertEqual(search.data?["tabId"], tabID)
+
+        let invalidSearch = handler.handleCommand(SocketRequest(
+            id: "search-invalid-tab",
+            command: "search",
+            params: ["query": "needle", "tabId": "bad"]
+        ))
+        XCTAssertFalse(invalidSearch.success)
+    }
+
+    func test_providerOverrideCommands_coverTabProjectAndConfigBranches() throws {
+        let tabID = UUID().uuidString
+        let directory = try temporaryDirectory("provider-overrides")
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabCountProviderOverride: { 2 },
+            tabInfoProviderOverride: {
+                [
+                    (id: tabID, title: "api", isActive: true),
+                    (id: UUID().uuidString, title: "worker", isActive: false),
+                ]
+            },
+            tabFocusProviderOverride: { $0 == tabID },
+            tabCloseProviderOverride: { $0 == tabID ? .closed : .notFound },
+            tabCreateWithEngineProviderOverride: { dir, engine in
+                ("new-tab", "\(dir ?? "home")|\(engine ?? "system")")
+            },
+            tabRenameProviderOverride: { $0 == tabID && $1 == "Renamed" },
+            tabMoveProviderOverride: { $0 == tabID && $1 == 1 },
+            tabConfigListProvider: { ["api", "worker"] },
+            tabConfigPathProvider: { name in name == "api" ? "/tmp/api.toml" : nil },
+            tabConfigExportProvider: { name, output, force in
+                force && name == "api" ? (name: name, path: output) : nil
+            },
+            projectConfigProviderOverride: {
+                ["profile": "dev", "source": "local"]
+            }
+        )
+
+        let status = handler.handleCommand(SocketRequest(id: "override-status", command: "status", params: nil))
+        XCTAssertTrue(status.success)
+        XCTAssertEqual(status.data?["tabs"], "2")
+
+        let tabs = handler.handleCommand(SocketRequest(id: "override-tabs", command: "list-tabs", params: nil))
+        XCTAssertTrue(tabs.success)
+        XCTAssertEqual(tabs.data?["tab_0_title"], "api")
+        XCTAssertEqual(tabs.data?["tab_1_active"], "false")
+
+        XCTAssertTrue(handler.handleCommand(SocketRequest(
+            id: "override-focus",
+            command: "focus-tab",
+            params: ["id": tabID]
+        )).success)
+        XCTAssertTrue(handler.handleCommand(SocketRequest(
+            id: "override-close",
+            command: "close-tab",
+            params: ["id": tabID]
+        )).success)
+        XCTAssertTrue(handler.handleCommand(SocketRequest(
+            id: "override-rename",
+            command: "tab-rename",
+            params: ["id": tabID, "name": "Renamed"]
+        )).success)
+        XCTAssertTrue(handler.handleCommand(SocketRequest(
+            id: "override-move",
+            command: "tab-move",
+            params: ["id": tabID, "position": "1"]
+        )).success)
+
+        let newTab = handler.handleCommand(SocketRequest(
+            id: "override-new-tab",
+            command: "new-tab",
+            params: ["dir": directory.path, "engine": "daemon"]
+        ))
+        XCTAssertTrue(newTab.success)
+        XCTAssertEqual(newTab.data?["title"], "\(directory.path)|daemon")
+
+        let project = handler.handleCommand(SocketRequest(id: "override-project", command: "config-project", params: nil))
+        XCTAssertTrue(project.success)
+        XCTAssertEqual(project.data?["profile"], "dev")
+
+        let configList = handler.handleCommand(SocketRequest(id: "tab-config-list-2", command: "tab-config-list", params: nil))
+        XCTAssertTrue(configList.success)
+        XCTAssertEqual(configList.data?["count"], "2")
+        XCTAssertEqual(configList.data?["config_1_name"], "worker")
+
+        let configPath = handler.handleCommand(SocketRequest(
+            id: "tab-config-path-2",
+            command: "tab-config-path",
+            params: ["name": "api"]
+        ))
+        XCTAssertTrue(configPath.success)
+        XCTAssertEqual(configPath.data?["path"], "/tmp/api.toml")
+
+        let missingPath = handler.handleCommand(SocketRequest(
+            id: "tab-config-path-missing",
+            command: "tab-config-path",
+            params: ["name": "missing"]
+        ))
+        XCTAssertFalse(missingPath.success)
+
+        let export = handler.handleCommand(SocketRequest(
+            id: "tab-config-export-2",
+            command: "tab-config-export",
+            params: ["name": "api", "output": "/tmp/api-copy.toml", "force": "true"]
+        ))
+        XCTAssertTrue(export.success)
+        XCTAssertEqual(export.data?["path"], "/tmp/api-copy.toml")
+
+        let invalidExport = handler.handleCommand(SocketRequest(
+            id: "tab-config-export-invalid",
+            command: "tab-config-export",
+            params: ["name": "api", "output": "/tmp/api-copy.toml"]
+        ))
+        XCTAssertFalse(invalidExport.success)
+    }
+
+    func test_sessionCommands_coverManagerBackfillAndCRUD() {
+        let session = makeSocketHandlerSession()
+        let store = SocketHandlerSessionStore(session: session)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            sessionManagerProvider: { store },
+            sessionCaptureProvider: { session }
+        )
+
+        let save = handler.handleCommand(SocketRequest(
+            id: "session-save-2",
+            command: "session-save",
+            params: ["name": "morning"]
+        ))
+        XCTAssertTrue(save.success)
+        XCTAssertEqual(save.data?["tabs"], "1")
+        XCTAssertEqual(store.savedNames.withValue { $0 }, ["morning"])
+
+        let list = handler.handleCommand(SocketRequest(id: "session-list-2", command: "session-list", params: nil))
+        XCTAssertTrue(list.success)
+        XCTAssertEqual(list.data?["count"], "1")
+        XCTAssertEqual(list.data?["session_0_name"], "morning")
+
+        let restore = handler.handleCommand(SocketRequest(
+            id: "session-restore-2",
+            command: "session-restore",
+            params: ["name": "morning"]
+        ))
+        XCTAssertTrue(restore.success)
+        XCTAssertEqual(restore.data?["status"], "loaded")
+        XCTAssertEqual(restore.data?["tab_0_title"], "api")
+
+        let delete = handler.handleCommand(SocketRequest(
+            id: "session-delete-2",
+            command: "session-delete",
+            params: ["name": "morning"]
+        ))
+        XCTAssertTrue(delete.success)
+        XCTAssertEqual(store.deletedNames.withValue { $0 }, ["morning"])
+    }
+
+    func test_remoteWorkspaceCommands_coverProfileStoreSuccessBranches() {
+        let profile = RemoteConnectionProfile(
+            name: "dev-box",
+            host: "example.invalid",
+            user: "dev",
+            port: 2222
+        )
+        let store = SocketHandlerRemoteProfileStore(profiles: [profile])
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            remoteProfileStoreProvider: { store }
+        )
+
+        let list = handler.handleCommand(SocketRequest(id: "remote-list-2", command: "remote-list", params: nil))
+        XCTAssertTrue(list.success)
+        XCTAssertEqual(list.data?["count"], "1")
+        XCTAssertEqual(list.data?["profile_0_name"], "dev-box")
+        XCTAssertEqual(list.data?["profile_0_state"], "disconnected")
+
+        let statusByName = handler.handleCommand(SocketRequest(
+            id: "remote-status-name",
+            command: "remote-status",
+            params: ["name": "dev-box"]
+        ))
+        XCTAssertTrue(statusByName.success)
+        XCTAssertEqual(statusByName.data?["host"], "dev@example.invalid:2222")
+        XCTAssertEqual(statusByName.data?["state"], "disconnected")
+
+        let connect = handler.handleCommand(SocketRequest(
+            id: "remote-connect-2",
+            command: "remote-connect",
+            params: ["name": "dev-box"]
+        ))
+        XCTAssertTrue(connect.success)
+        XCTAssertEqual(connect.data?["status"], "connecting")
+
+        let disconnect = handler.handleCommand(SocketRequest(
+            id: "remote-disconnect-2",
+            command: "remote-disconnect",
+            params: ["name": profile.id.uuidString]
+        ))
+        XCTAssertTrue(disconnect.success)
+        XCTAssertEqual(disconnect.data?["status"], "disconnecting")
+    }
+
+    func test_splitCaptureWebAndCLIProviderFailures_coverRuntimeBranches() {
+        let worktreeKinds = LockedBox<[String]>([])
+        let githubKinds = LockedBox<[String]>([])
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            splitSwapProvider: { $0 == 0 && $1 == 1 },
+            splitSwapByDirectionProvider: { $0 == "left" },
+            splitZoomProvider: { (success: true, isZoomed: true) },
+            capturePaneProvider: { ["one", "two", "three"] },
+            webStartProvider: { bind, port, token, _, fps in
+                [
+                    "status": "started",
+                    "bind": bind,
+                    "port": "\(port)",
+                    "token": token,
+                    "fps": "\(fps)",
+                ]
+            },
+            webStopProvider: { true },
+            webStatusProvider: { nil },
+            worktreeCLIProvider: { kind, _ in
+                worktreeKinds.withValue { $0.append(kind) }
+                return (success: false, data: ["error": "blocked"])
+            },
+            githubCLIProvider: { kind, _ in
+                githubKinds.withValue { $0.append(kind) }
+                return (success: false, data: [:])
+            }
+        )
+
+        let swapByIndex = handler.handleCommand(SocketRequest(
+            id: "split-swap-index",
+            command: "split-swap",
+            params: ["indexA": "0", "indexB": "1"]
+        ))
+        XCTAssertTrue(swapByIndex.success)
+        XCTAssertEqual(swapByIndex.data?["indexB"], "1")
+
+        let swapByDirection = handler.handleCommand(SocketRequest(
+            id: "split-swap-direction",
+            command: "split-swap",
+            params: ["direction": "left"]
+        ))
+        XCTAssertTrue(swapByDirection.success)
+        XCTAssertEqual(swapByDirection.data?["direction"], "left")
+
+        let zoom = handler.handleCommand(SocketRequest(id: "split-zoom-2", command: "split-zoom", params: nil))
+        XCTAssertTrue(zoom.success)
+        XCTAssertEqual(zoom.data?["status"], "zoomed")
+
+        let capture = handler.handleCommand(SocketRequest(
+            id: "capture-pane-2",
+            command: "capture-pane",
+            params: ["lines": "2"]
+        ))
+        XCTAssertTrue(capture.success)
+        XCTAssertEqual(capture.data?["lines"], "2")
+        XCTAssertEqual(capture.data?["content"], "two\nthree")
+
+        let webStart = handler.handleCommand(SocketRequest(
+            id: "web-start-2",
+            command: "web-start",
+            params: ["bind": "127.0.0.1", "port": "8787", "token": "local", "fps": "45"]
+        ))
+        XCTAssertTrue(webStart.success)
+        XCTAssertEqual(webStart.data?["port"], "8787")
+        XCTAssertEqual(webStart.data?["fps"], "45")
+
+        let webStop = handler.handleCommand(SocketRequest(id: "web-stop-2", command: "web-stop", params: nil))
+        XCTAssertTrue(webStop.success)
+        XCTAssertEqual(webStop.data?["status"], "stopped")
+
+        let webStatus = handler.handleCommand(SocketRequest(id: "web-status-empty", command: "web-status", params: nil))
+        XCTAssertFalse(webStatus.success)
+        XCTAssertEqual(webStatus.error, "No active terminal surface")
+
+        let worktreeFailure = handler.handleCommand(SocketRequest(
+            id: "worktree-failure",
+            command: "worktree-remove",
+            params: ["id": "local"]
+        ))
+        XCTAssertFalse(worktreeFailure.success)
+        XCTAssertEqual(worktreeFailure.error, "blocked")
+        XCTAssertEqual(worktreeKinds.withValue { $0 }, ["remove"])
+
+        let githubFailure = handler.handleCommand(SocketRequest(
+            id: "github-failure",
+            command: "github-pr-merge",
+            params: ["number": "1"]
+        ))
+        XCTAssertFalse(githubFailure.success)
+        XCTAssertEqual(githubFailure.error, "GitHub pr-merge failed")
+        XCTAssertEqual(githubKinds.withValue { $0 }, ["pr-merge"])
+    }
+
+    @MainActor
+    func test_notificationCommands_coverStructuredListAndClear() {
+        let manager = NotificationManagerImpl(
+            config: CocxyConfig.defaults,
+            systemEmitter: SocketHandlerNotificationEmitter(),
+            coalescenceWindow: 0,
+            rateLimitPerTab: 0
+        )
+        let tabID = TabID()
+        manager.notify(CocxyNotification(
+            type: .agentNeedsAttention,
+            tabId: tabID,
+            title: "Input needed",
+            body: "A local task is waiting."
+        ))
+        manager.notify(CocxyNotification(
+            type: .processExited(code: 2),
+            tabId: tabID,
+            title: "Exited",
+            body: "Process exited."
+        ))
+
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            notificationManagerProvider: { manager }
+        )
+
+        let list = handler.handleCommand(SocketRequest(id: "notification-list-2", command: "notification-list", params: nil))
+        XCTAssertTrue(list.success)
+        XCTAssertEqual(list.data?["count"], "2")
+        XCTAssertEqual(list.data?["notif_0_read"], "false")
+        XCTAssertNotNil(list.data?["notif_0_timestamp"])
+
+        let clear = handler.handleCommand(SocketRequest(id: "notification-clear-2", command: "notification-clear", params: nil))
+        XCTAssertTrue(clear.success)
+        XCTAssertEqual(clear.data?["status"], "cleared")
+        XCTAssertEqual(clear.data?["unread"], "0")
+    }
+
     func test_notebookImport_convertsJupyterToCocxyMarkdown() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -2467,6 +3083,217 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 response.success,
                 "Command '\(command)' without provider should return failure"
             )
+        }
+    }
+
+    private func makeSocketHandlerSession() -> Session {
+        let workingDirectory = URL(fileURLWithPath: "/tmp")
+        let tab = TabState(
+            id: TabID(),
+            title: "api",
+            workingDirectory: workingDirectory,
+            splitTree: .leaf(workingDirectory: workingDirectory, command: nil)
+        )
+        let window = WindowState(
+            frame: CodableRect(x: 10, y: 20, width: 800, height: 600),
+            isFullScreen: false,
+            tabs: [tab],
+            activeTabIndex: 0
+        )
+        return Session(
+            savedAt: Date(timeIntervalSince1970: 1_700_000_000),
+            windows: [window]
+        )
+    }
+
+    private final class SocketHandlerSessionStore: SessionManaging, @unchecked Sendable {
+        let savedNames = LockedBox<[String]>([])
+        let deletedNames = LockedBox<[String]>([])
+        private let session: Session
+
+        init(session: Session) {
+            self.session = session
+        }
+
+        func saveSession(_ session: Session, named name: String?) throws {
+            savedNames.withValue { $0.append(name ?? "last") }
+        }
+
+        func loadLastSession() throws -> Session? {
+            session
+        }
+
+        func loadSession(named name: String) throws -> Session? {
+            name == "morning" ? session : nil
+        }
+
+        func listSessions() -> [SessionMetadata] {
+            [
+                SessionMetadata(
+                    name: "morning",
+                    savedAt: session.savedAt,
+                    windowCount: session.windows.count,
+                    tabCount: session.windows.reduce(0) { $0 + $1.tabs.count }
+                )
+            ]
+        }
+
+        func deleteSession(named name: String?) throws {
+            deletedNames.withValue { $0.append(name ?? "last") }
+        }
+    }
+
+    private final class SocketHandlerRemoteProfileStore: RemoteProfileStoring, @unchecked Sendable {
+        private let profiles: [RemoteConnectionProfile]
+
+        init(profiles: [RemoteConnectionProfile]) {
+            self.profiles = profiles
+        }
+
+        func loadAll() throws -> [RemoteConnectionProfile] {
+            profiles
+        }
+
+        func save(_ profile: RemoteConnectionProfile) throws {}
+
+        func delete(id: UUID) throws {}
+
+        func findByName(_ name: String) throws -> RemoteConnectionProfile? {
+            profiles.first { $0.name == name }
+        }
+
+        func findByGroup(_ group: String) throws -> [RemoteConnectionProfile] {
+            profiles.filter { $0.group == group }
+        }
+    }
+
+    @MainActor
+    private final class SocketHandlerNotificationEmitter: SystemNotificationEmitting {
+        func emit(_ notification: CocxyNotification) {}
+    }
+
+    private func preservingUserConfig(_ body: () -> Void) {
+        let configURL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/cocxy/config.toml")
+        let configDirectory = configURL.deletingLastPathComponent()
+        let originalData = try? Data(contentsOf: configURL)
+        let originallyExisted = FileManager.default.fileExists(atPath: configURL.path)
+        let directoryOriginallyExisted = FileManager.default.fileExists(atPath: configDirectory.path)
+        defer {
+            if originallyExisted, let originalData {
+                try? FileManager.default.createDirectory(
+                    at: configDirectory,
+                    withIntermediateDirectories: true
+                )
+                try? originalData.write(to: configURL, options: .atomic)
+            } else {
+                try? FileManager.default.removeItem(at: configURL)
+                if !directoryOriginallyExisted {
+                    try? FileManager.default.removeItem(at: configDirectory)
+                }
+            }
+        }
+
+        body()
+    }
+
+    private func minimalParams(for command: CLICommandName) -> [String: String]? {
+        let id = UUID().uuidString
+        switch command {
+        case .notify:
+            return ["message": "ok"]
+        case .focusTab, .closeTab:
+            return ["id": id]
+        case .newTab:
+            return nil
+        case .tabRename:
+            return ["id": id, "name": "Renamed"]
+        case .tabMove:
+            return ["id": id, "position": "0"]
+        case .tabConfigSave:
+            return ["name": "default"]
+        case .tabConfigOpen, .tabConfigList, .tabConfigPath:
+            return ["name": "default"]
+        case .tabConfigExport:
+            return ["name": "default", "output": "/tmp/default.toml"]
+        case .configGet:
+            return ["key": "appearance.theme"]
+        case .configSet:
+            return ["key": "appearance.theme", "value": "system"]
+        case .themeSet:
+            return ["name": "system"]
+        case .browserNavigate:
+            return ["url": "https://example.invalid"]
+        case .browserEval:
+            return ["script": "document.title"]
+        case .remoteConnect:
+            return ["profile": id]
+        case .remoteDisconnect, .remoteStatus, .remoteTunnels:
+            return ["id": id]
+        case .windowFocus, .windowClose:
+            return ["id": id]
+        case .sessionSave, .sessionRestore, .sessionDelete:
+            return ["name": "default"]
+        case .tabPin:
+            return ["id": id]
+        case .splitFocus:
+            return ["index": "0"]
+        case .splitResize:
+            return ["id": id, "ratio": "0.5"]
+        case .notificationClear:
+            return ["id": id]
+        case .timelineShow:
+            return ["tabId": id]
+        case .timelineExport:
+            return ["format": "json"]
+        case .search:
+            return ["query": "needle"]
+        case .send:
+            return ["text": "echo ok"]
+        case .sendKey:
+            return ["key": "enter"]
+        case .ssh:
+            return ["destination": "user@example.invalid"]
+        case .streamCurrent:
+            return ["id": "1"]
+        case .protocolViewport:
+            return ["request_id": "req-1"]
+        case .protocolSend:
+            return ["type": "terminal.input", "json": "{}"]
+        case .coreSignal:
+            return ["signal": "term"]
+        case .coreSemantic, .blockList, .blockOutputs:
+            return ["limit": "5"]
+        case .blockCopy:
+            return ["id": "1", "field": "output"]
+        case .blockRerun, .imageDelete:
+            return ["id": "1"]
+        case .notebookImport:
+            return ["input": "/tmp/source.ipynb", "output": "/tmp/result.cocxynb"]
+        case .notebookExport:
+            return ["input": "/tmp/source.cocxynb", "output": "/tmp/result.ipynb"]
+        case .notebookExportHTML:
+            return ["input": "/tmp/source.cocxynb", "output": "/tmp/result.html"]
+        case .notebookTemplateCreate:
+            return ["name": "Swift", "output": "/tmp/template.cocxynb"]
+        case .notebookRun, .workflowRun:
+            return ["path": "/tmp/source.cocxynb"]
+        case .pluginEnable, .pluginDisable, .pluginUninstall,
+             .skillInstall, .skillUninstall:
+            return ["id": "local"]
+        case .pluginSourceAdd, .pluginInstall,
+             .skillSourceAdd:
+            return ["url": "/tmp/local"]
+        case .worktreeAdd:
+            return ["repo": "/tmp/repo"]
+        case .worktreeFocus, .worktreeRemove:
+            return ["id": "local"]
+        case .githubOpen:
+            return ["url": "https://example.invalid"]
+        case .githubPRMerge:
+            return ["number": "1"]
+        default:
+            return nil
         }
     }
 
