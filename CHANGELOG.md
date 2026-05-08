@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-05-08
+
+### Fixed
+- Local scroll and keyboard input now stay enabled inside the terminal
+  view when a known agent command is still running but its semantic
+  banner has not been promoted yet. Previously the surface would forward
+  scroll gestures and key events to the foreground TUI as mouse events,
+  blocking local scroll and visibly stranding typed input until the
+  agent banner was detected. The fallback now also recognises the active
+  agent through the running command line so the user-visible behaviour
+  matches the agent context immediately.
+
 ## [1.0.1] - 2026-05-08
 
 ### Fixed
