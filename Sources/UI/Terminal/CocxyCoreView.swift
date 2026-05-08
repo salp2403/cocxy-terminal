@@ -142,6 +142,13 @@ final class CocxyCoreView: NSView {
     /// Whether the view currently has keyboard focus.
     private(set) var isFocused: Bool = false
 
+    /// Active async paste delivery, used to keep large clipboard writes from
+    /// monopolizing the main thread while an agent TUI is reading from the PTY.
+    private var pasteDeliveryTask: Task<Void, Never>?
+
+    /// Last dispatched repeated delete key event by hardware key code.
+    private var repeatedDeleteDispatchTimestamps: [UInt16: TimeInterval] = [:]
+
     // MARK: - Selection State
 
     /// Anchor point for mouse-drag text selection (absolute history row, col).
@@ -162,6 +169,10 @@ final class CocxyCoreView: NSView {
     // MARK: - Constants
 
     private static let scrollSpeedFactor: CGFloat = 0.15
+    private static let pasteChunkMaxUTF8Bytes = 2_048
+    private static let pasteChunkDelayNanoseconds: UInt64 = 2_000_000
+    private static let repeatedDeleteMinimumInterval: TimeInterval = 0.055
+    private static let throttledDeleteKeyCodes: Set<UInt16> = [51, 117]
 
     private var contentPadding: (x: CGFloat, y: CGFloat) {
         guard let bridge else { return (8, 4) }
@@ -194,6 +205,7 @@ final class CocxyCoreView: NSView {
 
     deinit {
         MainActor.assumeIsolated {
+            pasteDeliveryTask?.cancel()
             removeWindowObservers()
             stopDisplayLink()
         }
@@ -615,6 +627,9 @@ final class CocxyCoreView: NSView {
             bridge.sendKeyEvent(keyEvent, to: sid)
             return
         case .sendToTerminal:
+            if shouldThrottleTerminalDeleteRepeat(event, bridge: bridge, surfaceID: sid) {
+                return
+            }
             handleTerminalInput(event, bridge: bridge, surfaceID: sid, modifiers: modifiers)
         }
     }
@@ -812,18 +827,118 @@ final class CocxyCoreView: NSView {
     }
 
     private func handlePaste() {
-        guard let bridge = bridge, let sid = surfaceID,
-              let text = clipboardService.read(), !text.isEmpty else { return }
+        guard let bridge = bridge, let sid = surfaceID else { return }
 
-        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-
-        // Bracketed paste if terminal supports it
-        guard let state = bridge.surfaceState(for: sid) else { return }
-        if cocxycore_terminal_mode_bracketed_paste(state.terminal) {
-            bridge.sendText("\u{1B}[200~\(text)\u{1B}[201~", to: sid)
-        } else {
-            bridge.sendText(text, to: sid)
+        if let text = clipboardService.read(), !text.isEmpty {
+            sendClipboardText(text, bridge: bridge, surfaceID: sid)
+            return
         }
+
+        if let imageAttachment = clipboardService.readImageAttachment() {
+            sendClipboardText(
+                FileDropPathFormatter.format([imageAttachment.fileURL]),
+                bridge: bridge,
+                surfaceID: sid
+            )
+        }
+    }
+
+    private func sendClipboardText(
+        _ text: String,
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) {
+        guard let state = bridge.surfaceState(for: sid) else { return }
+
+        let usesBracketedPaste = cocxycore_terminal_mode_bracketed_paste(state.terminal)
+        let chunks = Self.terminalPasteChunks(for: text, maxUTF8Bytes: Self.pasteChunkMaxUTF8Bytes)
+        guard !chunks.isEmpty else { return }
+
+        pasteDeliveryTask?.cancel()
+        pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
+            guard let self, let bridge else { return }
+            self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+
+            if usesBracketedPaste {
+                bridge.sendText("\u{1B}[200~", to: sid)
+                await Self.sleepBetweenPasteChunksIfNeeded(chunks.count)
+            }
+
+            for chunk in chunks {
+                guard !Task.isCancelled,
+                      bridge.surfaceState(for: sid) != nil else { return }
+                bridge.sendText(chunk, to: sid)
+                await Self.sleepBetweenPasteChunksIfNeeded(chunks.count)
+            }
+
+            guard !Task.isCancelled,
+                  bridge.surfaceState(for: sid) != nil else { return }
+            if usesBracketedPaste {
+                bridge.sendText("\u{1B}[201~", to: sid)
+            }
+        }
+    }
+
+    static func terminalPasteChunks(
+        for text: String,
+        maxUTF8Bytes: Int
+    ) -> [String] {
+        guard maxUTF8Bytes > 0 else { return [text] }
+
+        var chunks: [String] = []
+        var current = ""
+        var currentBytes = 0
+
+        for character in text {
+            let characterText = String(character)
+            let byteCount = characterText.utf8.count
+            if currentBytes > 0, currentBytes + byteCount > maxUTF8Bytes {
+                chunks.append(current)
+                current = ""
+                currentBytes = 0
+            }
+            current.append(character)
+            currentBytes += byteCount
+        }
+
+        if !current.isEmpty {
+            chunks.append(current)
+        }
+        return chunks
+    }
+
+    private static func sleepBetweenPasteChunksIfNeeded(_ chunkCount: Int) async {
+        guard chunkCount > 1 else { return }
+        try? await Task.sleep(nanoseconds: pasteChunkDelayNanoseconds)
+    }
+
+    internal func shouldThrottleTerminalDeleteRepeat(
+        _ event: NSEvent,
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) -> Bool {
+        guard Self.throttledDeleteKeyCodes.contains(event.keyCode),
+              let state = bridge.surfaceState(for: sid),
+              cocxycore_terminal_is_alt_screen(state.terminal)
+                || cocxycore_terminal_mode_mouse(state.terminal) > 0 else {
+            return false
+        }
+
+        let timestamp = event.timestamp > 0
+            ? event.timestamp
+            : ProcessInfo.processInfo.systemUptime
+        guard event.isARepeat else {
+            repeatedDeleteDispatchTimestamps[event.keyCode] = timestamp
+            return false
+        }
+
+        guard let lastTimestamp = repeatedDeleteDispatchTimestamps[event.keyCode],
+              timestamp >= lastTimestamp,
+              timestamp - lastTimestamp < Self.repeatedDeleteMinimumInterval else {
+            repeatedDeleteDispatchTimestamps[event.keyCode] = timestamp
+            return false
+        }
+        return true
     }
 
     // MARK: - Mouse Input + Selection
@@ -916,8 +1031,13 @@ final class CocxyCoreView: NSView {
             paste: { [weak bridge] in
                 guard let bridge else { return }
                 if let text = self.clipboardService.read(), !text.isEmpty {
-                    self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-                    bridge.sendText(text, to: sid)
+                    self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
+                } else if let imageAttachment = self.clipboardService.readImageAttachment() {
+                    self.sendClipboardText(
+                        FileDropPathFormatter.format([imageAttachment.fileURL]),
+                        bridge: bridge,
+                        surfaceID: sid
+                    )
                 }
             },
             localizer: localizer

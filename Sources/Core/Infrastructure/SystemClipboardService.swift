@@ -19,6 +19,19 @@ final class SystemClipboardService: ClipboardServiceProtocol {
         NSPasteboard.general.string(forType: .string)
     }
 
+    func readImageAttachment() -> ClipboardImageAttachment? {
+        let pasteboard = NSPasteboard.general
+        if let fileURL = readImageFileURL(from: pasteboard) {
+            return ClipboardImageAttachment(fileURL: fileURL)
+        }
+
+        guard let pngData = readPNGData(from: pasteboard),
+              let storedURL = try? storeClipboardImage(pngData) else {
+            return nil
+        }
+        return ClipboardImageAttachment(fileURL: storedURL)
+    }
+
     /// Writes text to the system clipboard.
     ///
     /// Clears existing content before writing the new text.
@@ -32,5 +45,81 @@ final class SystemClipboardService: ClipboardServiceProtocol {
     /// Clears all content from the system clipboard.
     func clear() {
         NSPasteboard.general.clearContents()
+    }
+
+    private func readImageFileURL(from pasteboard: NSPasteboard) -> URL? {
+        let urls = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [URL]
+        return urls?.first(where: Self.isSupportedImageFile)
+    }
+
+    private func readPNGData(from pasteboard: NSPasteboard) -> Data? {
+        if let pngData = pasteboard.data(forType: .png) {
+            return pngData
+        }
+        if let tiffData = pasteboard.data(forType: .tiff),
+           let bitmap = NSBitmapImageRep(data: tiffData) {
+            return bitmap.representation(using: .png, properties: [:])
+        }
+        guard let image = NSImage(pasteboard: pasteboard),
+              let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData) else {
+            return nil
+        }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    private func storeClipboardImage(_ data: Data) throws -> URL {
+        let directory = try clipboardImageDirectory()
+        pruneOldClipboardImages(in: directory)
+
+        let fileURL = directory.appendingPathComponent(
+            "clipboard-image-\(UUID().uuidString.lowercased()).png",
+            isDirectory: false
+        )
+        try data.write(to: fileURL, options: [.atomic])
+        return fileURL
+    }
+
+    private func clipboardImageDirectory() throws -> URL {
+        let baseDirectory = FileManager.default.urls(
+            for: .cachesDirectory,
+            in: .userDomainMask
+        ).first ?? FileManager.default.temporaryDirectory
+        let directory = baseDirectory
+            .appendingPathComponent("Cocxy", isDirectory: true)
+            .appendingPathComponent("ClipboardImages", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        return directory
+    }
+
+    private func pruneOldClipboardImages(in directory: URL) {
+        let cutoff = Date().addingTimeInterval(-7 * 24 * 60 * 60)
+        guard let urls = try? FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for url in urls where url.pathExtension.lowercased() == "png" {
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey])
+            if let modified = values?.contentModificationDate, modified < cutoff {
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
+    private static func isSupportedImageFile(_ url: URL) -> Bool {
+        switch url.pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "gif", "webp", "heic", "heif", "tif", "tiff", "bmp":
+            return true
+        default:
+            return false
+        }
     }
 }

@@ -5,6 +5,10 @@ import Foundation
 
 // MARK: - Clipboard Service Protocol
 
+struct ClipboardImageAttachment: Equatable, Sendable {
+    let fileURL: URL
+}
+
 /// Abstraction for clipboard operations.
 ///
 /// Decouples terminal clipboard operations from `NSPasteboard` so the domain
@@ -21,6 +25,10 @@ import Foundation
     ///   does not contain plain text.
     func read() -> String?
 
+    /// Reads image content from the clipboard and returns a local file URL
+    /// that can be injected into a terminal prompt.
+    func readImageAttachment() -> ClipboardImageAttachment?
+
     /// Writes text to the clipboard, replacing any existing content.
     ///
     /// - Parameter text: The text to write.
@@ -28,6 +36,10 @@ import Foundation
 
     /// Clears all content from the clipboard.
     func clear()
+}
+
+extension ClipboardServiceProtocol {
+    func readImageAttachment() -> ClipboardImageAttachment? { nil }
 }
 
 #if DEBUG

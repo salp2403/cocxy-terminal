@@ -478,6 +478,62 @@ struct CocxyCoreViewTests {
         #expect(String(data: output.data, encoding: .utf8)?.contains("from paste") == true)
     }
 
+    @Test("paste routes clipboard image attachments as escaped file paths")
+    func pasteRoutesClipboardImageAttachmentsAsEscapedFilePaths() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("Cocxy Clipboard Image.png")
+        let clipboard = RecordingClipboardService(
+            readText: nil,
+            imageAttachment: ClipboardImageAttachment(fileURL: imageURL)
+        )
+        harness.view.clipboardService = clipboard
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        let expectedPayload = FileDropPathFormatter.format([imageURL])
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true
+        }
+
+        #expect(clipboard.readCallCount == 1)
+        #expect(clipboard.readImageAttachmentCallCount == 1)
+        #expect(String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true)
+    }
+
+    @Test("paste prefers clipboard text over image attachments")
+    func pastePrefersClipboardTextOverImageAttachments() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("ignored.png")
+        let clipboard = RecordingClipboardService(
+            readText: "typed prompt\n",
+            imageAttachment: ClipboardImageAttachment(fileURL: imageURL)
+        )
+        harness.view.clipboardService = clipboard
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains("typed prompt") == true
+        }
+
+        #expect(clipboard.readCallCount == 1)
+        #expect(clipboard.readImageAttachmentCallCount == 0)
+    }
+
     @Test("bracketed paste wraps clipboard payload when the terminal enables it")
     func bracketedPasteWrapsClipboardPayload() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
@@ -500,6 +556,41 @@ struct CocxyCoreViewTests {
         }
         let text = String(data: output.data, encoding: .utf8) ?? ""
         #expect(text.contains("\u{001B}[200~"))
+        #expect(clipboard.readCallCount == 1)
+    }
+
+    @Test("large bracketed paste is delivered in ordered chunks")
+    func largeBracketedPasteIsDeliveredInOrderedChunks() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?2004h", into: state.terminal)
+
+        let payload = (0..<220)
+            .map { "notes-line-\($0)-abcdefghijklmnopqrstuvwxyz0123456789" }
+            .joined(separator: "\n") + "\n"
+        let chunks = CocxyCoreView.terminalPasteChunks(for: payload, maxUTF8Bytes: 2_048)
+        #expect(chunks.count > 3)
+        #expect(chunks.joined() == payload)
+        #expect(chunks.allSatisfy { $0.utf8.count <= 2_048 })
+
+        let clipboard = RecordingClipboardService(readText: payload)
+        harness.view.clipboardService = clipboard
+
+        var deliveredEvents = 0
+        harness.bridge.inputDeliveryObserver = { _, event in
+            if case .delivered = event {
+                deliveredEvents += 1
+            }
+        }
+
+        harness.view.paste(nil)
+
+        try await waitUntil {
+            deliveredEvents >= chunks.count + 2
+        }
+
+        #expect(deliveredEvents >= chunks.count + 2)
         #expect(clipboard.readCallCount == 1)
     }
 
@@ -586,6 +677,35 @@ struct CocxyCoreViewTests {
 
         let text = String(data: output.data, encoding: .utf8) ?? ""
         #expect(text.contains("@"))
+    }
+
+    @Test("agent delete key repeat is throttled in terminal app mode")
+    func agentDeleteKeyRepeatIsThrottledInTerminalAppMode() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let initialDelete = makeKeyEvent(characters: "\u{7F}", keyCode: 51, timestamp: 10.000)
+        let fastRepeat = makeKeyEvent(
+            characters: "\u{7F}",
+            keyCode: 51,
+            isARepeat: true,
+            timestamp: 10.020
+        )
+        let pacedRepeat = makeKeyEvent(
+            characters: "\u{7F}",
+            keyCode: 51,
+            isARepeat: true,
+            timestamp: 10.080
+        )
+
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
+
+        feed("\u{001B}[?1049h\u{001B}[?1000h", into: state.terminal)
+
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
     }
 
     @Test("keyDown arrow and return keys update IDE prompt tracking")
@@ -885,16 +1005,24 @@ struct CocxyCoreViewTests {
 @MainActor
 private final class RecordingClipboardService: ClipboardServiceProtocol {
     private let readText: String?
+    private let imageAttachment: ClipboardImageAttachment?
     private(set) var readCallCount = 0
+    private(set) var readImageAttachmentCallCount = 0
     private(set) var writtenText: String?
 
-    init(readText: String?) {
+    init(readText: String?, imageAttachment: ClipboardImageAttachment? = nil) {
         self.readText = readText
+        self.imageAttachment = imageAttachment
     }
 
     func read() -> String? {
         readCallCount += 1
         return readText
+    }
+
+    func readImageAttachment() -> ClipboardImageAttachment? {
+        readImageAttachmentCallCount += 1
+        return imageAttachment
     }
 
     func write(_ text: String) {
@@ -990,18 +1118,20 @@ private func makeKeyEvent(
     characters: String,
     charactersIgnoringModifiers: String? = nil,
     modifiers: NSEvent.ModifierFlags = [],
-    keyCode: UInt16 = 15
+    keyCode: UInt16 = 15,
+    isARepeat: Bool = false,
+    timestamp: TimeInterval = ProcessInfo.processInfo.systemUptime
 ) -> NSEvent {
     NSEvent.keyEvent(
         with: .keyDown,
         location: .zero,
         modifierFlags: modifiers,
-        timestamp: ProcessInfo.processInfo.systemUptime,
+        timestamp: timestamp,
         windowNumber: 0,
         context: nil,
         characters: characters,
         charactersIgnoringModifiers: charactersIgnoringModifiers ?? characters.lowercased(),
-        isARepeat: false,
+        isARepeat: isARepeat,
         keyCode: keyCode
     )!
 }

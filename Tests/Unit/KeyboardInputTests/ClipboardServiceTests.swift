@@ -28,6 +28,12 @@ final class ClipboardServiceTests: XCTestCase {
         XCTAssertNil(clipboard.read(), "Empty clipboard must return nil")
     }
 
+    func testMockClipboardImageAttachmentDefaultsToNil() {
+        let clipboard = MockClipboardService()
+        XCTAssertNil(clipboard.readImageAttachment(),
+                     "Mock clipboard should not expose image attachments by default")
+    }
+
     func testMockClipboardOverwritesPrevious() {
         let clipboard = MockClipboardService()
         clipboard.write("first")
