@@ -120,7 +120,13 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(controller.window?.childWindows?.contains { $0 === offer.window } == true)
     }
 
-    @Test("crash recovery offer controller floats above parent instead of becoming a sheet")
+    @Test(
+        "crash recovery offer controller floats above parent instead of becoming a sheet",
+        .disabled(
+            if: ProcessInfo.processInfo.environment["CI"] != nil,
+            "Allocates a real titled NSWindow; CI runners without a window server abort the suite."
+        )
+    )
     func crashRecoveryOfferControllerFloatsAboveParentInsteadOfSheet() throws {
         let parent = NSWindow(
             contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
@@ -146,7 +152,13 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(offer.window?.isOpaque == true)
     }
 
-    @Test("restore action keeps the recovery offer visible through the restore handoff")
+    @Test(
+        "restore action keeps the recovery offer visible through the restore handoff",
+        .disabled(
+            if: ProcessInfo.processInfo.environment["CI"] != nil,
+            "Allocates a real titled NSWindow; CI runners without a window server abort the suite."
+        )
+    )
     func restoreActionKeepsRecoveryOfferVisibleThroughRestoreHandoff() async throws {
         let parent = NSWindow(
             contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
