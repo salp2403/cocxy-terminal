@@ -119,6 +119,17 @@ jobs:
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app"
 
+          # Sign Tree-sitter dylibs (core + grammar parsers). Apple
+          # notarization rejects unsigned or ad-hoc-signed mach-o binaries
+          # nested inside the app bundle.
+          find "$APP_DIR/Contents/Resources" \
+            \( -name "libtree-sitter.dylib" -o -name "parser.dylib" \) \
+            -type f -print0 2>/dev/null | \
+            while IFS= read -r -d '' dylib; do
+              codesign --force --options runtime --timestamp \
+                --sign "$SIGNING_IDENTITY" "$dylib"
+            done
+
           # Sign QuickLook extension
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
             codesign --force --options runtime --timestamp \
