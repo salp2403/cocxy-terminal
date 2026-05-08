@@ -142,7 +142,8 @@ check_optional_secret() {
 }
 
 check_public_release_surfaces() {
-    local appcast_payload appcast_version brew_payload brew_version latest_release_tag
+    local appcast_payload appcast_version brew_payload brew_version
+    local homepage_payload homepage_version latest_release_tag releases_payload releases_version
 
     echo ""
     echo "[Public release surfaces]"
@@ -170,6 +171,22 @@ check_public_release_surfaces() {
         ok "Homebrew cask reports ${VERSION}"
     else
         block "Homebrew cask does not report ${VERSION} (current ${brew_version:-unknown})"
+    fi
+
+    homepage_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/ 2>/dev/null || true)"
+    homepage_version="$(printf "%s" "$homepage_payload" | sed -n 's/.*"softwareVersion": "\([^"]*\)".*/\1/p' | head -1)"
+    if echo "$homepage_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+        ok "public homepage download points at ${VERSION}"
+    else
+        block "public homepage download does not point at ${VERSION} (current ${homepage_version:-unknown})"
+    fi
+
+    releases_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/releases.html 2>/dev/null || true)"
+    releases_version="$(printf "%s" "$releases_payload" | sed -n 's/.*>v\([0-9][^<]*\)<.*/\1/p' | head -1)"
+    if echo "$releases_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+        ok "public releases page includes ${VERSION}"
+    else
+        block "public releases page does not include ${VERSION} (latest listed ${releases_version:-unknown})"
     fi
 }
 

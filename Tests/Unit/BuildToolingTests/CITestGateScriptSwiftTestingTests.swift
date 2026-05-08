@@ -205,6 +205,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("sparkle:shortVersionString=\\\"${VERSION}\\\""))
         #expect(script.contains("brew info --cask salp2403/tap/cocxy"))
         #expect(script.contains("brew_version"))
+        #expect(script.contains("https://cocxy.dev/"))
+        #expect(script.contains("homepage_version"))
+        #expect(script.contains("https://cocxy.dev/releases.html"))
+        #expect(script.contains("releases_version"))
         #expect(!script.contains(#"echo "${!name}""#))
     }
 
