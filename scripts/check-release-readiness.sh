@@ -342,6 +342,8 @@ fi
 
 echo ""
 echo "[Release secrets]"
+check_secret DEVELOPER_ID_P12
+check_secret DEVELOPER_ID_PASSWORD
 check_secret SIGNING_IDENTITY
 check_secret APPLE_ID
 check_secret APPLE_TEAM_ID
