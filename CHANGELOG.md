@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.3] - 2026-05-08
+
+### Fixed
+- Local viewport now snaps back to the live bottom before delivering any
+  user-driven input (typing, paste, IME commit, file drop, command rerun)
+  inside full-screen agent surfaces. The previous patch let users scroll
+  the local viewport while the agent kept running, but if the viewport
+  remained parked on older history when a paste or keystroke arrived the
+  input still reached the PTY while the rendered cells stayed on the
+  scrolled-up frame, making the terminal feel stuck. The viewport now
+  follows the bottom on every user input path so the input lands on the
+  live frame the user can see.
+
 ## [1.0.2] - 2026-05-08
 
 ### Fixed
