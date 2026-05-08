@@ -171,6 +171,77 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
     }
 
+    @Test("release readiness script documents external blockers")
+    func releaseReadinessScriptDocumentsExternalBlockers() throws {
+        let root = repositoryRoot()
+        let scriptURL = root.appendingPathComponent("scripts/check-release-readiness.sh")
+        let script = try String(contentsOf: scriptURL, encoding: .utf8)
+
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+        #expect(script.contains("set -euo pipefail"))
+        #expect(script.contains("--enforce"))
+        #expect(script.contains("--version"))
+        #expect(script.contains("SIGNING_IDENTITY"))
+        #expect(script.contains("APPLE_ID"))
+        #expect(script.contains("APPLE_TEAM_ID"))
+        #expect(script.contains("APPLE_APP_PASSWORD"))
+        #expect(script.contains("SPARKLE_PRIVATE_KEY"))
+        #expect(script.contains("HOMEBREW_TAP_TOKEN"))
+        #expect(script.contains("LIGHTSAIL_SSH_KEY"))
+        #expect(script.contains("DEPLOY_HOST"))
+        #expect(script.contains("POSTGRES_URL"))
+        #expect(script.contains("AWS_ACCESS_KEY_ID"))
+        #expect(script.contains("git status --porcelain --untracked-files=no"))
+        #expect(script.contains("git config user.email"))
+        #expect(script.contains("origin/main..HEAD"))
+        #expect(script.contains("private_trace_pattern"))
+        #expect(script.contains("CocxyTerminal-${VERSION}.dmg"))
+        #expect(script.contains("build/appcast.xml"))
+        #expect(!script.contains(#"echo "${!name}""#))
+    }
+
+    @Test("release readiness report mode does not fail while blockers remain")
+    func releaseReadinessReportModeDoesNotFailWhileBlockersRemain() throws {
+        let root = repositoryRoot()
+        let missingRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-release-readiness-\(UUID().uuidString)", isDirectory: true)
+        let result = try runProcess(
+            root.appendingPathComponent("scripts/check-release-readiness.sh"),
+            arguments: [
+                "--version", "0.1.93",
+                "--app", missingRoot.appendingPathComponent("Missing.app").path,
+                "--dmg", missingRoot.appendingPathComponent("Missing.dmg").path,
+                "--appcast", missingRoot.appendingPathComponent("missing-appcast.xml").path,
+            ]
+        )
+
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("Cocxy release readiness report"))
+        #expect(result.stdout.contains("app bundle missing"))
+        #expect(result.stdout.contains("Release readiness has"))
+    }
+
+    @Test("release readiness enforce mode fails closed while blockers remain")
+    func releaseReadinessEnforceModeFailsClosedWhileBlockersRemain() throws {
+        let root = repositoryRoot()
+        let missingRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-release-readiness-\(UUID().uuidString)", isDirectory: true)
+        let result = try runProcess(
+            root.appendingPathComponent("scripts/check-release-readiness.sh"),
+            arguments: [
+                "--enforce",
+                "--version", "0.1.93",
+                "--app", missingRoot.appendingPathComponent("Missing.app").path,
+                "--dmg", missingRoot.appendingPathComponent("Missing.dmg").path,
+                "--appcast", missingRoot.appendingPathComponent("missing-appcast.xml").path,
+            ]
+        )
+
+        #expect(result.terminationStatus == 1)
+        #expect(result.stdout.contains("Release readiness has"))
+        #expect(result.stdout.contains("appcast missing"))
+    }
+
     @Test("release workflow fails if required nested signing fails")
     func releaseWorkflowFailsIfRequiredNestedSigningFails() throws {
         let root = repositoryRoot()
