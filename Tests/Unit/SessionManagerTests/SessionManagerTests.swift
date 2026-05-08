@@ -368,6 +368,10 @@ final class SessionManagerTests: XCTestCase {
 
     func testAutoSaveTimerFires() {
         let expectation = expectation(description: "Auto-save fires")
+        // The auto-save timer can fire more than once before the wait
+        // returns; allow over-fulfilment so the second tick does not raise
+        // an uncaught NSException on slower CI runners.
+        expectation.assertForOverFulfill = false
 
         var saveCount = 0
         sessionManager.startAutoSave(intervalSeconds: 0.1) {
