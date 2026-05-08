@@ -122,6 +122,22 @@ struct MainWindowMacIntegrationSwiftTestingTests {
         #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
     }
 
+    @Test("root responder forwards stranded key and scroll events to the terminal target")
+    func rootResponderForwardsStrandedTerminalEvents() throws {
+        let responderView = ContinuityCameraImportResponderView(
+            frame: NSRect(x: 0, y: 0, width: 640, height: 400)
+        )
+        let terminalView = RecordingTerminalEventHostView()
+        responderView.addSubview(terminalView)
+        responderView.terminalEventTargetProvider = { terminalView }
+
+        responderView.keyDown(with: Self.keyEvent("x"))
+        responderView.scrollWheel(with: Self.scrollEvent(deltaY: 80))
+
+        #expect(terminalView.keyDownCount == 1)
+        #expect(terminalView.scrollWheelCount == 1)
+    }
+
     private static func makeTemporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-mac-integration-\(UUID().uuidString)", isDirectory: true)
@@ -129,9 +145,64 @@ struct MainWindowMacIntegrationSwiftTestingTests {
         return url
     }
 
+    private static func keyEvent(_ characters: String) -> NSEvent {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime,
+            windowNumber: 0,
+            context: nil,
+            characters: characters,
+            charactersIgnoringModifiers: characters,
+            isARepeat: false,
+            keyCode: 7
+        )!
+    }
+
+    private static func scrollEvent(deltaY: CGFloat) -> NSEvent {
+        let event = CGEvent(
+            scrollWheelEvent2Source: nil,
+            units: .pixel,
+            wheelCount: 1,
+            wheel1: Int32(deltaY),
+            wheel2: 0,
+            wheel3: 0
+        )!
+        event.location = NSPoint(x: 10, y: 10)
+        return NSEvent(cgEvent: event)!
+    }
+
     private static let pngData = Data(base64Encoded:
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
     )!
+}
+
+@MainActor
+private final class RecordingTerminalEventHostView: NSView, TerminalHostingView {
+    var terminalViewModel: TerminalViewModel?
+    var onFileDrop: (([URL]) -> Bool)?
+    var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
+    private(set) var keyDownCount = 0
+    private(set) var scrollWheelCount = 0
+
+    override func keyDown(with event: NSEvent) {
+        keyDownCount += 1
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        scrollWheelCount += 1
+    }
+
+    func syncSizeWithTerminal() {}
+    func showNotificationRing(color: NSColor) {}
+    func hideNotificationRing() {}
+    func handleShellPrompt(row: Int, column: Int) {}
+    func updateInteractionMetrics() {}
+    func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {}
+    func requestImmediateRedraw() {}
+    func refreshDisplayLinkAnchor() {}
 }
 
 private actor RecordingMacIntegrationAgentPromptRunner: AgentPromptRunning {

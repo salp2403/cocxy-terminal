@@ -69,6 +69,10 @@ final class CocxyCoreView: NSView {
     /// AppKit first-responder changes.
     var onFocusRequested: (() -> Void)?
 
+    /// Returns whether scroll gestures should move Cocxy's viewport even
+    /// while the foreground process has enabled terminal mouse tracking.
+    var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
+
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
@@ -924,7 +928,7 @@ final class CocxyCoreView: NSView {
         }
 
         let mouseMode = cocxycore_terminal_mode_mouse(state.terminal)
-        if mouseMode > 0 {
+        if mouseMode > 0 && !shouldScrollLocallyWhileMouseTracking(event) {
             // Terminal app is tracking mouse — forward scroll as mouse events
             let delta = event.scrollingDeltaY * Self.scrollSpeedFactor
             let button: UInt8 = delta > 0 ? 64 : 65 // scroll up / down
@@ -946,6 +950,15 @@ final class CocxyCoreView: NSView {
         let signedSteps = scaledDelta > 0 ? steps : -steps
         bridge.scrollViewport(surfaceID: sid, deltaRows: signedSteps)
         refreshCommandBlockOverlay()
+    }
+
+    private func shouldScrollLocallyWhileMouseTracking(_ event: NSEvent) -> Bool {
+        if prefersLocalScrollInMouseTrackingMode?() == true {
+            return true
+        }
+
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return modifiers.contains(.option) || modifiers.contains(.shift)
     }
 
     // MARK: - Drag and Drop

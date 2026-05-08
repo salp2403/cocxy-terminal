@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-05-08
+
+### Fixed
+- Local scroll now works inside full-screen TUIs that enable mouse
+  tracking when an agent is running on the surface. Modifier keys
+  (Option/Shift) also force local scroll regardless of mouse mode.
+- Stranded keyboard and scroll events that AppKit dispatches to the
+  window's root responder are now forwarded to the focused terminal
+  surface so input never silently disappears when AppKit places the
+  first responder above the terminal view.
+
+### Changed
+- The terminal screen keeps a separate ephemeral history buffer for the
+  alternate screen so full-screen TUIs stay locally scrollable without
+  contaminating the main shell scrollback. The alternate buffer is
+  cleared every time a TUI enters its alternate screen and is freed when
+  the screen is destroyed.
+- Bundled CocxyCoreKit binary is rebuilt against the dual-buffer screen
+  while keeping the public version reported as 0.15.0 (additive change,
+  no API breakage).
+
 ## [1.0.0] - 2026-05-08
 
 First public stable release. Cocxy Terminal is now a complete native macOS

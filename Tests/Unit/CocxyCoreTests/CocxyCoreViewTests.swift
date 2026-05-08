@@ -675,6 +675,47 @@ struct CocxyCoreViewTests {
         #expect(harness.view.commandBlockOverlayView != nil)
     }
 
+    @Test("active agent scroll uses local viewport when terminal mouse mode is enabled")
+    func activeAgentScrollUsesLocalViewportInMouseMode() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+        let before = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        let maxVisibleStart = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(maxVisibleStart > 0)
+        #expect(before == maxVisibleStart)
+
+        feed("\u{001B}[?1000h", into: state.terminal)
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(after < before)
+    }
+
+    @Test("active agent scroll uses local viewport in alt screen mouse mode")
+    func activeAgentScrollUsesLocalViewportInAltScreenMouseMode() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1049h", into: state.terminal)
+        feed(numberedTerminalLines(100), into: state.terminal)
+        let before = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        let maxVisibleStart = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(maxVisibleStart > 0)
+        #expect(before == maxVisibleStart)
+
+        feed("\u{001B}[?1000h", into: state.terminal)
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(after < before)
+    }
+
     @Test("file drop routes host handler and terminal paste fallback")
     func fileDropRoutesHostHandlerAndTerminalPasteFallback() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
@@ -967,6 +1008,12 @@ private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
 private func feed(_ text: String, into terminal: OpaquePointer) {
     let bytes = Array(text.utf8)
     cocxycore_terminal_feed(terminal, bytes, bytes.count)
+}
+
+private func numberedTerminalLines(_ count: Int) -> String {
+    (0..<count)
+        .map { "line-\($0)" }
+        .joined(separator: "\r\n") + "\r\n"
 }
 
 private func makeCommandBlock(

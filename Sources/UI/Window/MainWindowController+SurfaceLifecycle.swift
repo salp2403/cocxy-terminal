@@ -3,6 +3,10 @@
 
 import AppKit
 
+private enum CocxyCoreSemanticState {
+    static let agentActive: UInt8 = 4
+}
+
 // MARK: - Surface Lifecycle
 
 /// Extension that manages the lifecycle of terminal surfaces:
@@ -168,6 +172,19 @@ extension MainWindowController {
             cocxyView.onFocusRequested = { [weak self] in
                 guard let self else { return }
                 self.applyFocusToSurface(surfaceID: capturedSurfaceID)
+            }
+            cocxyView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
+                guard let self else {
+                    return false
+                }
+
+                let surfaceState = self.injectedPerSurfaceStore?.state(for: capturedSurfaceID)
+                let semanticState = self.cocxyCoreBridge(forSurface: capturedSurfaceID)?
+                    .semanticDiagnostics(for: capturedSurfaceID)?
+                    .state
+                return surfaceState?.isActive == true
+                    || surfaceState?.hasAgent == true
+                    || semanticState == CocxyCoreSemanticState.agentActive
             }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,

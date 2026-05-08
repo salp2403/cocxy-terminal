@@ -496,7 +496,9 @@ uint32_t cocxycore_terminal_history_max_visible_start(const cocxycore_terminal* 
 
 /**
  * Set the absolute history row shown at the top of the viewport.
- * Returns false when the terminal is NULL or the alternate screen is active.
+ * Returns false when the terminal is NULL.
+ * When the alternate screen is active, this controls its separate ephemeral
+ * history instead of the main shell scrollback.
  */
 bool cocxycore_terminal_history_set_visible_start(
     cocxycore_terminal* term,
@@ -506,7 +508,9 @@ bool cocxycore_terminal_history_set_visible_start(
 /**
  * Scroll the viewport by a signed number of rows.
  * Positive values move upward into older scrollback.
- * Returns false when the terminal is NULL or the alternate screen is active.
+ * Returns false when the terminal is NULL.
+ * When the alternate screen is active, this controls its separate ephemeral
+ * history instead of the main shell scrollback.
  */
 bool cocxycore_terminal_history_scroll_viewport(
     cocxycore_terminal* term,

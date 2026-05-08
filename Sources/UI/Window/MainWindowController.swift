@@ -1130,6 +1130,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         rootView.onImportPasteboard = { [weak self] pasteboard in
             self?.handleContinuityCameraImportPasteboard(pasteboard) ?? false
         }
+        rootView.terminalEventTargetProvider = { [weak self] in
+            guard let self else { return nil }
+            if let focusedPane = self.focusedPaneView() {
+                return focusedPane as? TerminalHostView
+            }
+            return self.activeTerminalSurfaceView
+        }
         rootView.autoresizingMask = [.width, .height]
 
         // Status bar at the bottom.
