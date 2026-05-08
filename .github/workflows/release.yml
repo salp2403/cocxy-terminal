@@ -427,14 +427,14 @@ jobs:
           # bumped and tagged in a single commit, so this step has
           # nothing to do for `Resources/Info.plist` — we only push the
           # CHANGELOG entry that the Python block above generated.
-          git config user.name "said lopez"
+          git config user.name "Said Arturo Lopez"
           git config user.email "dev@cocxy.dev"
           git add CHANGELOG.md
           if git diff --cached --quiet; then
             echo "No CHANGELOG changes to commit"
           else
             git commit -m "docs: update CHANGELOG for v${VERSION}"
-            git push origin HEAD:main || echo "Push to main failed (non-blocking)"
+            git push origin HEAD:main
           fi
 
       - name: Deploy website
@@ -459,8 +459,10 @@ jobs:
           # Deploy CSS, JS, and image assets
           scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/css/ ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
-          [ -d web/public/js ] && scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true
+          if [ -d web/public/js ]; then
+            scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
+          fi
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "mkdir -p ${DEPLOY_PATH}images"
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \

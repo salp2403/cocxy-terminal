@@ -70,6 +70,10 @@ struct CITestGateScriptSwiftTestingTests {
         let root = repositoryRoot()
         let scriptURL = root.appendingPathComponent("scripts/prepare-release.sh")
         let script = try String(contentsOf: scriptURL, encoding: .utf8)
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/prepare-release.yml"),
+            encoding: .utf8
+        )
 
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("[--dry-run] <version>"))
@@ -87,6 +91,9 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains(".github/workflows/prepare-release.yml"))
         #expect(script.contains("DRY_RUN=1"))
         #expect(script.contains("No GitHub workflow was triggered."))
+        #expect(workflow.contains("git config user.name \"Said Arturo Lopez\""))
+        #expect(workflow.contains("git config user.email \"dev@cocxy.dev\""))
+        #expect(!workflow.contains("git config user.name \"said lopez\""))
 
         let dryRunRange = try #require(script.range(of: "if [ \"$DRY_RUN\" -eq 1 ]; then"))
         let dispatchRange = try #require(script.range(of: "\"$GH_BIN\" workflow run prepare-release.yml"))
@@ -126,6 +133,42 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(homebrewBlock.contains("git push"))
         #expect(!homebrewBlock.contains("git commit -m \"Update cocxy to ${VERSION}\" || true"))
         #expect(!homebrewBlock.contains("git push || true"))
+    }
+
+    @Test("release workflow fails if changelog publish does not land")
+    func releaseWorkflowFailsIfChangelogPublishDoesNotLand() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        let changelogStart = try #require(workflow.range(of: "- name: Update CHANGELOG on main"))
+        let deployStart = try #require(workflow.range(of: "- name: Deploy website"))
+        let changelogBlock = String(workflow[changelogStart.lowerBound..<deployStart.lowerBound])
+        #expect(changelogBlock.contains("git config user.name \"Said Arturo Lopez\""))
+        #expect(changelogBlock.contains("git config user.email \"dev@cocxy.dev\""))
+        #expect(changelogBlock.contains("git commit -m \"docs: update CHANGELOG for v${VERSION}\""))
+        #expect(changelogBlock.contains("git push origin HEAD:main"))
+        #expect(!changelogBlock.contains("said lopez"))
+        #expect(!changelogBlock.contains("git push origin HEAD:main ||"))
+        #expect(!changelogBlock.contains("Push to main failed"))
+    }
+
+    @Test("release workflow fails if existing website assets do not deploy")
+    func releaseWorkflowFailsIfExistingWebsiteAssetsDoNotDeploy() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+
+        let deployStart = try #require(workflow.range(of: "- name: Deploy website"))
+        let homebrewStart = try #require(workflow.range(of: "- name: Update Homebrew Cask"))
+        let deployBlock = String(workflow[deployStart.lowerBound..<homebrewStart.lowerBound])
+        #expect(deployBlock.contains("if [ -d web/public/js ]; then"))
+        #expect(deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
+        #expect(!deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
     }
 
     @Test("release workflow fails if required nested signing fails")

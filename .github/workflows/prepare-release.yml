@@ -82,7 +82,7 @@ jobs:
 
       - name: Configure committer
         run: |
-          git config user.name "said lopez"
+          git config user.name "Said Arturo Lopez"
           git config user.email "dev@cocxy.dev"
 
       - name: Commit bump (skip if clean)
