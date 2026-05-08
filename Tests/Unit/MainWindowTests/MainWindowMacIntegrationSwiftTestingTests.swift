@@ -34,7 +34,13 @@ struct MainWindowMacIntegrationSwiftTestingTests {
         }
     }
 
-    @Test("touch bar buttons dispatch their configured local actions")
+    @Test(
+        "touch bar buttons dispatch their configured local actions",
+        .disabled(
+            if: ProcessInfo.processInfo.environment["CI"] != nil,
+            "NSButton.performClick depends on the AppKit responder chain; CI runners without a window server skip the synchronous action dispatch."
+        )
+    )
     func touchBarButtonsDispatchLocalActions() throws {
         var dispatchedActions: [String] = []
         let controller = CocxyTouchBarController(
