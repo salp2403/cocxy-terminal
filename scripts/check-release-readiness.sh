@@ -5,6 +5,7 @@
 #   ./scripts/check-release-readiness.sh [--enforce] [--version X.Y.Z]
 #   ./scripts/check-release-readiness.sh --app build/CocxyTerminal.app
 #   ./scripts/check-release-readiness.sh --require-public-release --version X.Y.Z
+#   ./scripts/check-release-readiness.sh --require-critical-coverage --critical-coverage coverage.json
 #
 # Report mode exits 0 so it can be used while preparing a release. Enforce mode
 # exits non-zero if a hard blocker remains.
@@ -20,6 +21,8 @@ APP_BUNDLE="build/CocxyTerminal.app"
 DMG_PATH=""
 APPCAST_PATH="build/appcast.xml"
 REQUIRE_PUBLIC_RELEASE=0
+REQUIRE_CRITICAL_COVERAGE=0
+CRITICAL_COVERAGE_PATHS=()
 REPO_FULL_NAME="salp2403/cocxy-terminal"
 
 usage() {
@@ -66,6 +69,14 @@ while [ "$#" -gt 0 ]; do
         --require-public-release)
             REQUIRE_PUBLIC_RELEASE=1
             shift
+            ;;
+        --require-critical-coverage)
+            REQUIRE_CRITICAL_COVERAGE=1
+            shift
+            ;;
+        --critical-coverage)
+            CRITICAL_COVERAGE_PATHS+=("${2:?missing critical coverage path}")
+            shift 2
             ;;
         -h|--help)
             usage
@@ -207,6 +218,53 @@ check_public_release_surfaces() {
     fi
 }
 
+check_critical_coverage() {
+    local coverage_args=()
+    local coverage_output
+    local missing=0
+    local path
+
+    echo ""
+    echo "[Critical coverage]"
+
+    if ! command -v python3 >/dev/null 2>&1; then
+        block "python3 missing for critical coverage gate"
+        return
+    fi
+
+    if [ ! -x "$ROOT_DIR/scripts/check-critical-coverage.py" ]; then
+        block "critical coverage checker is not executable"
+        return
+    fi
+
+    if [ "${#CRITICAL_COVERAGE_PATHS[@]}" -eq 0 ]; then
+        block "critical coverage artifacts missing; pass --critical-coverage <llvm-cov-json>"
+        return
+    fi
+
+    for path in "${CRITICAL_COVERAGE_PATHS[@]}"; do
+        path="$(resolve_path "$path")"
+        if [ -f "$path" ]; then
+            coverage_args+=("--coverage" "$path")
+        else
+            block "critical coverage artifact missing at $path"
+            missing=1
+        fi
+    done
+
+    if [ "$missing" -ne 0 ]; then
+        return
+    fi
+
+    if coverage_output="$(python3 "$ROOT_DIR/scripts/check-critical-coverage.py" "${coverage_args[@]}" --enforce 2>&1)"; then
+        printf "%s\n" "$coverage_output"
+        ok "critical coverage gate passed"
+    else
+        printf "%s\n" "$coverage_output"
+        block "critical coverage gate failed"
+    fi
+}
+
 echo "==> Cocxy release readiness report"
 echo "Version: $VERSION"
 echo ""
@@ -312,6 +370,10 @@ if [ -f "$APPCAST_PATH" ]; then
     ok "appcast exists at $APPCAST_PATH"
 else
     block "appcast missing at $APPCAST_PATH"
+fi
+
+if [ "$REQUIRE_CRITICAL_COVERAGE" -eq 1 ] || [ "${#CRITICAL_COVERAGE_PATHS[@]}" -gt 0 ]; then
+    check_critical_coverage
 fi
 
 if [ "$REQUIRE_PUBLIC_RELEASE" -eq 1 ]; then

@@ -182,6 +182,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("--enforce"))
         #expect(script.contains("--version"))
         #expect(script.contains("--require-public-release"))
+        #expect(script.contains("--require-critical-coverage"))
+        #expect(script.contains("--critical-coverage"))
         #expect(script.contains("SIGNING_IDENTITY"))
         #expect(script.contains("APPLE_ID"))
         #expect(script.contains("APPLE_TEAM_ID"))
@@ -213,6 +215,9 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("spanish_homepage_version"))
         #expect(script.contains("https://cocxy.dev/es/releases.html"))
         #expect(script.contains("spanish_releases_version"))
+        #expect(script.contains("scripts/check-critical-coverage.py"))
+        #expect(script.contains("critical coverage artifacts missing"))
+        #expect(script.contains("critical coverage gate passed"))
         #expect(!script.contains(#"echo "${!name}""#))
     }
 
