@@ -312,9 +312,19 @@ fi
 # Contents/Library/LaunchServices is the preferred runtime path for the
 # experimental [experimental].pty-daemon gate.
 echo "==> Building PTY daemon helper..."
-swift build --target cocxyd ${SWIFT_FLAGS} 2>&1 | tail -1
-if [ -f "${BUILD_DIR}/cocxyd" ]; then
-    "${PROJECT_ROOT}/scripts/embed-pty-daemon-helper.sh" "${APP_BUNDLE}" "${BUILD_DIR}/cocxyd"
+swift build --product cocxyd ${SWIFT_FLAGS} 2>&1 | tail -1
+COCXYD_BINARY="${BUILD_DIR}/cocxyd"
+if [ ! -f "${COCXYD_BINARY}" ]; then
+    DETECTED_BIN_DIR="$(swift build --product cocxyd --show-bin-path ${SWIFT_FLAGS} 2>/dev/null || true)"
+    if [ -n "${DETECTED_BIN_DIR}" ] && [ -f "${DETECTED_BIN_DIR}/cocxyd" ]; then
+        COCXYD_BINARY="${DETECTED_BIN_DIR}/cocxyd"
+    fi
+fi
+if [ -f "${COCXYD_BINARY}" ]; then
+    "${PROJECT_ROOT}/scripts/embed-pty-daemon-helper.sh" "${APP_BUNDLE}" "${COCXYD_BINARY}"
+else
+    echo "ERROR: cocxyd binary not found (looked in ${BUILD_DIR}/cocxyd and SwiftPM bin path)"
+    exit 1
 fi
 
 # Step 8: Ad-hoc code sign (required for local execution on modern macOS).
