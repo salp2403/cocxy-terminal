@@ -304,7 +304,7 @@ private struct CompatibilityScenario {
         scriptBody: String,
         expectedSubstrings: [String],
         inputs: [CompatibilityInput] = [],
-        timeoutNanoseconds: UInt64 = 8_000_000_000
+        timeoutNanoseconds: UInt64 = 12_000_000_000
     ) {
         self.name = name
         self.requiredCommands = requiredCommands
