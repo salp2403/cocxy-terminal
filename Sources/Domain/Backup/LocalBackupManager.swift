@@ -68,14 +68,14 @@ struct LocalBackupManager: @unchecked Sendable {
             throw LocalBackupError.missingBackupArtifact(kind)
         }
 
-        let source = backupURL.appendingPathComponent(entry.path, isDirectory: true)
+        let source = try Self.containedBackupArtifactURL(entry.path, under: backupURL)
         let destination = roots.sourceURL(for: kind)
         let restored: Int
         if restoresAsSingleFile(kind) {
             let file = source.appendingPathComponent(destination.lastPathComponent, isDirectory: false)
             restored = try copyFileReplacingExisting(from: file, to: destination)
         } else {
-            restored = try copyDirectoryContentsReplacingExisting(from: source, to: destination)
+            restored = try restoreDirectoryContentsExactly(from: source, to: destination, kind: kind)
         }
         return BackupRestoreResult(kind: kind, restoredFiles: restored)
     }
@@ -179,6 +179,54 @@ struct LocalBackupManager: @unchecked Sendable {
             }
         }
         return copied
+    }
+
+    private func restoreDirectoryContentsExactly(
+        from source: URL,
+        to destination: URL,
+        kind: BackupArtifactKind
+    ) throws -> Int {
+        guard fileManager.fileExists(atPath: source.path),
+              try sourceArtifactType(for: source) == .directory else {
+            throw LocalBackupError.missingBackupArtifact(kind)
+        }
+
+        try validateRestoreDestination(destination)
+        let parent = destination.deletingLastPathComponent()
+        try fileManager.createDirectory(
+            at: parent,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+
+        let stagingDirectory = parent.appendingPathComponent(
+            ".\(destination.lastPathComponent).restore-\(UUID().uuidString)",
+            isDirectory: true
+        )
+
+        do {
+            let copied = try copyDirectoryContentsReplacingExisting(from: source, to: stagingDirectory)
+            if fileManager.fileExists(atPath: destination.path) {
+                try fileManager.removeItem(at: destination)
+            }
+            try fileManager.moveItem(at: stagingDirectory, to: destination)
+            try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: destination.path)
+            return copied
+        } catch {
+            try? fileManager.removeItem(at: stagingDirectory)
+            throw error
+        }
+    }
+
+    private func validateRestoreDestination(_ destination: URL) throws {
+        let standardized = destination.standardizedFileURL
+        let path = standardized.path
+        let homePath = fileManager.homeDirectoryForCurrentUser.standardizedFileURL.path
+        guard path != "/",
+              path != homePath,
+              standardized.pathComponents.count > 2 else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
     }
 
     private func copyFileReplacingExisting(from source: URL, to destination: URL) throws -> Int {
@@ -319,5 +367,19 @@ struct LocalBackupManager: @unchecked Sendable {
             throw CocoaError(.fileReadInvalidFileName)
         }
         return String(filePath.dropFirst(rootPath.count + 1))
+    }
+
+    private static func containedBackupArtifactURL(_ relativePath: String, under backupURL: URL) throws -> URL {
+        let trimmedPath = relativePath.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPath.isEmpty else {
+            throw CocoaError(.fileReadInvalidFileName)
+        }
+
+        let root = backupURL.standardizedFileURL
+        let artifact = root.appendingPathComponent(trimmedPath, isDirectory: true).standardizedFileURL
+        guard artifact.path.hasPrefix(root.path + "/") else {
+            throw CocoaError(.fileReadInvalidFileName)
+        }
+        return artifact
     }
 }

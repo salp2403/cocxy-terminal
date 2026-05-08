@@ -79,6 +79,83 @@ struct LocalBackupSwiftTestingTests {
         #expect(settings == "changed")
     }
 
+    @Test("restores directory artifacts as exact snapshots")
+    func restoresDirectoryArtifactsAsExactSnapshots() throws {
+        let fixture = try BackupFixture()
+        defer { fixture.cleanup() }
+        try fixture.writeFixtureFiles()
+        let manager = LocalBackupManager(now: { fixture.date("2026-05-03T12:00:00Z") })
+        let result = try manager.createBackup(
+            config: BackupConfig(
+                enabled: true,
+                storageDirectory: fixture.backupRoot.path,
+                artifactKinds: [.settings, .notebooks]
+            ),
+            roots: fixture.roots
+        )
+
+        try "stale".write(
+            to: fixture.roots.notebooks.appendingPathComponent("stale.cocxynb"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "changed".write(to: fixture.roots.settings, atomically: true, encoding: .utf8)
+        try "changed notebook".write(
+            to: fixture.roots.notebooks.appendingPathComponent("demo.cocxynb"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let restore = try manager.restore(kind: .notebooks, from: result.backupURL, to: fixture.roots)
+
+        let restoredNotebook = try String(
+            contentsOf: fixture.roots.notebooks.appendingPathComponent("demo.cocxynb"),
+            encoding: .utf8
+        )
+        let settings = try String(contentsOf: fixture.roots.settings, encoding: .utf8)
+        #expect(restore.restoredFiles == 1)
+        #expect(restoredNotebook.contains("notebook"))
+        #expect(!restoredNotebook.contains("changed"))
+        #expect(!FileManager.default.fileExists(
+            atPath: fixture.roots.notebooks.appendingPathComponent("stale.cocxynb").path
+        ))
+        #expect(settings == "changed")
+    }
+
+    @Test("restore rejects manifest paths that escape the backup directory")
+    func restoreRejectsManifestPathsThatEscapeTheBackupDirectory() throws {
+        let fixture = try BackupFixture()
+        defer { fixture.cleanup() }
+        try fixture.writeFixtureFiles()
+        let manager = LocalBackupManager(now: { fixture.date("2026-05-03T12:00:00Z") })
+        let result = try manager.createBackup(
+            config: BackupConfig(
+                enabled: true,
+                storageDirectory: fixture.backupRoot.path,
+                artifactKinds: [.notebooks]
+            ),
+            roots: fixture.roots
+        )
+        let manifestURL = result.backupURL.appendingPathComponent("manifest.json", isDirectory: false)
+        let escapedManifest = BackupManifest(
+            createdAt: result.manifest.createdAt,
+            artifacts: [
+                BackupManifestEntry(kind: .notebooks, path: "../outside", fileCount: 1)
+            ]
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(escapedManifest).write(to: manifestURL, options: [.atomic])
+
+        #expect(throws: CocoaError.self) {
+            try manager.restore(kind: .notebooks, from: result.backupURL, to: fixture.roots)
+        }
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.roots.notebooks.appendingPathComponent("demo.cocxynb").path
+        ))
+    }
+
     @Test("restores single-file artifacts to exact destinations")
     func restoresSingleFileArtifactsToExactDestinations() throws {
         let fixture = try BackupFixture()
