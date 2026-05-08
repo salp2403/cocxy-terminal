@@ -209,6 +209,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("homepage_version"))
         #expect(script.contains("https://cocxy.dev/releases.html"))
         #expect(script.contains("releases_version"))
+        #expect(script.contains("https://cocxy.dev/es/"))
+        #expect(script.contains("spanish_homepage_version"))
+        #expect(script.contains("https://cocxy.dev/es/releases.html"))
+        #expect(script.contains("spanish_releases_version"))
         #expect(!script.contains(#"echo "${!name}""#))
     }
 

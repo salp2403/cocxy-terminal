@@ -144,6 +144,7 @@ check_optional_secret() {
 check_public_release_surfaces() {
     local appcast_payload appcast_version brew_payload brew_version
     local homepage_payload homepage_version latest_release_tag releases_payload releases_version
+    local spanish_homepage_payload spanish_homepage_version spanish_releases_payload spanish_releases_version
 
     echo ""
     echo "[Public release surfaces]"
@@ -187,6 +188,22 @@ check_public_release_surfaces() {
         ok "public releases page includes ${VERSION}"
     else
         block "public releases page does not include ${VERSION} (latest listed ${releases_version:-unknown})"
+    fi
+
+    spanish_homepage_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/es/ 2>/dev/null || true)"
+    spanish_homepage_version="$(printf "%s" "$spanish_homepage_payload" | sed -n 's/.*"softwareVersion": "\([^"]*\)".*/\1/p' | head -1)"
+    if echo "$spanish_homepage_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+        ok "public Spanish homepage download points at ${VERSION}"
+    else
+        block "public Spanish homepage download does not point at ${VERSION} (current ${spanish_homepage_version:-unknown})"
+    fi
+
+    spanish_releases_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/es/releases.html 2>/dev/null || true)"
+    spanish_releases_version="$(printf "%s" "$spanish_releases_payload" | sed -n 's/.*>v\([0-9][^<]*\)<.*/\1/p' | head -1)"
+    if echo "$spanish_releases_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+        ok "public Spanish releases page includes ${VERSION}"
+    else
+        block "public Spanish releases page does not include ${VERSION} (latest listed ${spanish_releases_version:-unknown})"
     fi
 }
 
