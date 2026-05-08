@@ -4,6 +4,7 @@
 # Usage:
 #   ./scripts/check-release-readiness.sh [--enforce] [--version X.Y.Z]
 #   ./scripts/check-release-readiness.sh --app build/CocxyTerminal.app
+#   ./scripts/check-release-readiness.sh --require-public-release --version X.Y.Z
 #
 # Report mode exits 0 so it can be used while preparing a release. Enforce mode
 # exits non-zero if a hard blocker remains.
@@ -18,6 +19,8 @@ VERSION=""
 APP_BUNDLE="build/CocxyTerminal.app"
 DMG_PATH=""
 APPCAST_PATH="build/appcast.xml"
+REQUIRE_PUBLIC_RELEASE=0
+REPO_FULL_NAME="salp2403/cocxy-terminal"
 
 usage() {
     sed -n '1,8p' "$0"
@@ -59,6 +62,10 @@ while [ "$#" -gt 0 ]; do
         --appcast)
             APPCAST_PATH="${2:?missing appcast path}"
             shift 2
+            ;;
+        --require-public-release)
+            REQUIRE_PUBLIC_RELEASE=1
+            shift
             ;;
         -h|--help)
             usage
@@ -131,6 +138,35 @@ check_optional_secret() {
         ok "$name=set"
     else
         warn "$name=missing"
+    fi
+}
+
+check_public_release_surfaces() {
+    local appcast_payload brew_payload
+
+    echo ""
+    echo "[Public release surfaces]"
+    check_tool curl
+    check_tool brew
+
+    if gh release view "v${VERSION}" --repo "$REPO_FULL_NAME" >/dev/null 2>&1; then
+        ok "GitHub Release v${VERSION} exists"
+    else
+        block "GitHub Release v${VERSION} missing"
+    fi
+
+    appcast_payload="$(curl -fsSL --max-time 10 https://cocxy.dev/appcast.xml 2>/dev/null || true)"
+    if echo "$appcast_payload" | grep -q "sparkle:shortVersionString=\"${VERSION}\""; then
+        ok "public Sparkle appcast points at ${VERSION}"
+    else
+        block "public Sparkle appcast does not point at ${VERSION}"
+    fi
+
+    brew_payload="$(brew info --cask salp2403/tap/cocxy 2>/dev/null || true)"
+    if echo "$brew_payload" | grep -q "): ${VERSION}$"; then
+        ok "Homebrew cask reports ${VERSION}"
+    else
+        block "Homebrew cask does not report ${VERSION}"
     fi
 }
 
@@ -239,6 +275,10 @@ if [ -f "$APPCAST_PATH" ]; then
     ok "appcast exists at $APPCAST_PATH"
 else
     block "appcast missing at $APPCAST_PATH"
+fi
+
+if [ "$REQUIRE_PUBLIC_RELEASE" -eq 1 ]; then
+    check_public_release_surfaces
 fi
 
 echo ""

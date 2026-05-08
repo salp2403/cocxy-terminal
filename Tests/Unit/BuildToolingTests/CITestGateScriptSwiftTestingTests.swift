@@ -181,6 +181,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("set -euo pipefail"))
         #expect(script.contains("--enforce"))
         #expect(script.contains("--version"))
+        #expect(script.contains("--require-public-release"))
         #expect(script.contains("SIGNING_IDENTITY"))
         #expect(script.contains("APPLE_ID"))
         #expect(script.contains("APPLE_TEAM_ID"))
@@ -197,6 +198,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("private_trace_pattern"))
         #expect(script.contains("CocxyTerminal-${VERSION}.dmg"))
         #expect(script.contains("build/appcast.xml"))
+        #expect(script.contains("gh release view \"v${VERSION}\""))
+        #expect(script.contains("https://cocxy.dev/appcast.xml"))
+        #expect(script.contains("sparkle:shortVersionString=\\\"${VERSION}\\\""))
+        #expect(script.contains("brew info --cask salp2403/tap/cocxy"))
         #expect(!script.contains(#"echo "${!name}""#))
     }
 
