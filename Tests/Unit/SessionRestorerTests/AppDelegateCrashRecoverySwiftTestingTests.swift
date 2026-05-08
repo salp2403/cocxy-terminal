@@ -6,7 +6,11 @@ import AppKit
 import Testing
 @testable import CocxyTerminal
 
-@Suite("AppDelegate crash recovery wiring")
+/// Serialized because every test instantiates `AppDelegate`, which mutates
+/// process-wide AppKit singletons (`NSApplication.shared`, observers, etc.).
+/// Running them concurrently inside the same test process corrupts memory on
+/// CI runners and leads to SIGSEGV mid-suite.
+@Suite("AppDelegate crash recovery wiring", .serialized)
 @MainActor
 struct AppDelegateCrashRecoverySwiftTestingTests {
     @Test("initializeCrashRecovery records pending snapshot after unclean previous launch")

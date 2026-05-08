@@ -4,8 +4,12 @@ import AppKit
 import Testing
 @testable import CocxyTerminal
 
+/// Serialized because every test instantiates `AppDelegate`, which mutates
+/// process-wide AppKit singletons (`NSApplication.shared`, observers, etc.).
+/// Running them concurrently inside the same test process corrupts memory on
+/// CI runners and leads to SIGSEGV mid-suite.
 @MainActor
-@Suite("AppDelegate lazy session restore")
+@Suite("AppDelegate lazy session restore", .serialized)
 struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
     @Test("restore materializes only the active tab surface")
