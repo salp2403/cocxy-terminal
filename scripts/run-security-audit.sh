@@ -57,7 +57,31 @@ fi
 if [ "$RUN_TESTS" -eq 1 ]; then
     echo ""
     echo "[Focused security regression tests]"
-    swift test --filter 'QuickLookOfflineSecuritySwiftTestingTests|Phase7SocketSecurityTests|Phase7CLIIntegrationTests|SocketServerRegressionSwiftTestingTests|LSPProcessPrivacySwiftTestingTests|AgentToolPermissionSwiftTestingTests|AgentSecretsSwiftTestingTests|ICloudSyncSecretsSwiftTestingTests|RelayTokenTests|ReplayTrackerTests|PluginMarketplaceSwiftTestingTests|PluginEventWiringSwiftTestingTests|NotebookExecutionSwiftTestingTests|ProjectTemplateSwiftTestingTests|PRReviewSuggestionSwiftTestingTests|GitHubPaneViewModelSwiftTestingTests/reviewThreadSuggestionsRejectSymlinkEscapes'
+    security_filters=(
+        'Phase7SocketSecurityTests|Phase7CLIIntegrationTests'
+        'QuickLookOfflineSecuritySwiftTestingTests'
+        'SocketServerRegressionSwiftTestingTests'
+        'LSPProcessPrivacySwiftTestingTests'
+        'AgentToolPermissionSwiftTestingTests'
+        'AgentSecretsSwiftTestingTests'
+        'ICloudSyncSecretsSwiftTestingTests'
+        'RelayTokenTests|ReplayTrackerTests'
+        'PluginMarketplaceSwiftTestingTests'
+        'PluginEventWiringSwiftTestingTests'
+        'NotebookExecutionSwiftTestingTests'
+        'ProjectTemplateSwiftTestingTests'
+        'PRReviewSuggestionSwiftTestingTests'
+        'GitHubPaneViewModelSwiftTestingTests/reviewThreadSuggestionsRejectSymlinkEscapes'
+    )
+    first_filter=1
+    for filter in "${security_filters[@]}"; do
+        if [ "$first_filter" -eq 1 ]; then
+            swift test --filter "$filter"
+            first_filter=0
+        else
+            swift test --skip-build --filter "$filter"
+        fi
+    done
 fi
 
 echo ""
