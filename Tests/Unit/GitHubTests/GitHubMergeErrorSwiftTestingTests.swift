@@ -230,4 +230,59 @@ struct GitHubMergeErrorDescriptionSwiftTestingTests {
         let description = error.errorDescription ?? ""
         #expect(description.lowercased().contains("install"))
     }
+
+    @Test("localizedDescription covers every typed merge error in both locales")
+    func localizedDescriptionCoversTypedErrors() {
+        let localizers = [
+            AppLocalizer(languagePreference: .english),
+            AppLocalizer(languagePreference: .spanish),
+        ]
+        let cases: [GitHubMergeError] = [
+            .mergeConflict,
+            .checksFailing(stderr: " ci failed "),
+            .checksFailing(stderr: "  "),
+            .reviewRequired,
+            .changesRequested,
+            .behindBaseBranch,
+            .insufficientPermissions,
+            .branchProtected(reason: " protected policy "),
+            .branchProtected(reason: "  "),
+            .alreadyMerged,
+            .prClosed,
+            .pullRequestNotFound(number: 1234),
+            .autoMergeEnabled,
+            .notMergeable(reason: " custom reason "),
+            .notMergeable(reason: "  "),
+        ]
+
+        for localizer in localizers {
+            for error in cases {
+                let description = error.localizedDescription(using: localizer)
+                #expect(!description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+    }
+
+    @Test("localizedDescription preserves transport-level CLI guidance")
+    func localizedDescriptionCoversUnderlyingCLIErrorCases() {
+        let localizer = AppLocalizer(languagePreference: .english)
+        let cases: [GitHubCLIError] = [
+            .notInstalled,
+            .notAuthenticated(stderr: ""),
+            .noRemote,
+            .notAGitRepository(path: "/tmp/repo"),
+            .rateLimited(resetAt: nil),
+            .timeout(seconds: 42),
+            .invalidJSON(reason: "bad payload"),
+            .unsupportedVersion(stderr: ""),
+            .commandFailed(command: "gh pr merge", stderr: "remote rejected", exitCode: 1),
+            .commandFailed(command: "gh pr merge", stderr: "  ", exitCode: 1),
+        ]
+
+        for cliError in cases {
+            let description = GitHubMergeError.underlyingCLIError(cliError)
+                .localizedDescription(using: localizer)
+            #expect(!description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
 }

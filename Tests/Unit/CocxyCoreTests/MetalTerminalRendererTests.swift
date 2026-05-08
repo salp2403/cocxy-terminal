@@ -246,6 +246,41 @@ struct MetalTerminalRendererTests {
 
         #expect(drawn == false)
     }
+
+    @Test("draw commits a configured frame into an offscreen layer")
+    func drawCommitsConfiguredFrameIntoOffscreenLayer() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try makeConfiguredTerminal(text: "frame\r\n")
+        defer { cocxycore_terminal_destroy(terminal) }
+        let layer = makeOffscreenLayer()
+        let lock = NSLock()
+
+        let drawn = renderer.draw(terminal: terminal, layer: layer, terminalLock: lock)
+
+        #expect(drawn == true)
+        #expect(lock.try() == true)
+        lock.unlock()
+    }
+
+    @Test("draw renders background and foreground image passes when inline images exist")
+    func drawRendersInlineImagePasses() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try makeConfiguredTerminal(text: "")
+        defer { cocxycore_terminal_destroy(terminal) }
+        let backgroundImage = "\u{1B}_Ga=T,f=32,s=1,v=1,z=-1;/wAA/w==\u{1B}\\"
+        let foregroundImage = "\u{1B}_Ga=T,f=32,s=1,v=1,z=1;/wAA/w==\u{1B}\\"
+        for payload in [backgroundImage, foregroundImage] {
+            let bytes = Array(payload.utf8)
+            cocxycore_terminal_feed(terminal, bytes, bytes.count)
+        }
+
+        let drawn = renderer.draw(terminal: terminal, layer: makeOffscreenLayer())
+        let state = renderer.debugState
+
+        #expect(drawn == true)
+        #expect(state.imageQuadCount == 2)
+        #expect(state.backgroundImageCount == 1)
+    }
 }
 
 private func makeConfiguredTerminal(
@@ -270,4 +305,14 @@ private func makeConfiguredTerminal(
     let bytes = Array(text.utf8)
     cocxycore_terminal_feed(terminal, bytes, bytes.count)
     return terminal
+}
+
+private func makeOffscreenLayer() -> CAMetalLayer {
+    let layer = CAMetalLayer()
+    layer.device = MTLCreateSystemDefaultDevice()
+    layer.pixelFormat = .bgra8Unorm
+    layer.frame = CGRect(x: 0, y: 0, width: 160, height: 96)
+    layer.drawableSize = CGSize(width: 320, height: 192)
+    layer.contentsScale = 2
+    return layer
 }
