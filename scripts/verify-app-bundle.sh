@@ -33,6 +33,16 @@ check_exists() {
     fi
 }
 
+check_optional() {
+    local path="$1"
+    local label="$2"
+    if [ -e "$path" ]; then
+        echo "  OK  $label"
+    else
+        echo "  WARN  $label  (missing: $path)"
+    fi
+}
+
 check_dir_not_empty() {
     local dir="$1"
     local label="$2"
@@ -220,12 +230,14 @@ check_exists "$RESOURCES/AppIcon.png" "App icon"
 check_exists "$RESOURCES/CocxyTerminal.sdef" "AppleScript definition"
 check_codesign_entitlement_true "$APP_BUNDLE" "com.apple.security.device.audio-input" "App audio input entitlement"
 
-# 7b. Shortcuts/App Intents metadata
+# 7b. Shortcuts/App Intents metadata. Optional: only present when the build
+# toolchain ships AppIntents.json (Xcode with App Intents support). Builds
+# made on older toolchains skip metadata generation; the binary still works.
 echo ""
 echo "[Shortcuts]"
-check_exists "$RESOURCES/Metadata.appintents" "Shortcuts metadata bundle"
-check_exists "$RESOURCES/Metadata.appintents/version.json" "Shortcuts metadata version"
-check_exists "$RESOURCES/Metadata.appintents/extract.actionsdata" "Shortcuts actions metadata"
+check_optional "$RESOURCES/Metadata.appintents" "Shortcuts metadata bundle"
+check_optional "$RESOURCES/Metadata.appintents/version.json" "Shortcuts metadata version"
+check_optional "$RESOURCES/Metadata.appintents/extract.actionsdata" "Shortcuts actions metadata"
 
 # 8. Markdown preview resources (Mermaid, KaTeX)
 echo ""

@@ -311,13 +311,14 @@ private final class TerminalBlockHeaderView: NSView {
     }
 
     private func configureLabels() {
-        let statusText = block.exitCode.map {
-            $0 == 0
-                ? localizer.string("terminal.blockOverlay.status.ok", fallback: "ok")
-                : String(
-                    format: localizer.string("terminal.blockOverlay.status.exit", fallback: "exit %d"),
-                    $0
-                )
+        let statusText: String = block.exitCode.map { exitCode -> String in
+            if exitCode == 0 {
+                return localizer.string("terminal.blockOverlay.status.ok", fallback: "ok")
+            }
+            return String(
+                format: localizer.string("terminal.blockOverlay.status.exit", fallback: "exit %d"),
+                exitCode
+            )
         } ?? localizer.string("terminal.blockOverlay.status.run", fallback: "run")
         statusLabel.stringValue = statusText
         statusLabel.font = .systemFont(ofSize: 10, weight: .semibold)
