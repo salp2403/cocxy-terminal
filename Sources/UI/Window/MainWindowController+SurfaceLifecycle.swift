@@ -4,7 +4,25 @@
 import AppKit
 
 private enum CocxyCoreSemanticState {
+    static let commandRunning: UInt8 = 3
     static let agentActive: UInt8 = 4
+}
+
+private enum CocxyCoreSemanticBlockType {
+    static let commandInput: UInt8 = 1
+}
+
+private enum AgentScrollFallback {
+    static let launchConfigs = AgentConfigService
+        .defaultAgentConfigs()
+        .map(AgentConfigService.compile)
+
+    static func commandInputLaunchesKnownAgent(_ command: String) -> Bool {
+        AgentConfigService.agentIdentifier(
+            matchingLaunchLine: command,
+            compiledConfigs: launchConfigs
+        ) != nil
+    }
 }
 
 // MARK: - Surface Lifecycle
@@ -179,12 +197,16 @@ extension MainWindowController {
                 }
 
                 let surfaceState = self.injectedPerSurfaceStore?.state(for: capturedSurfaceID)
-                let semanticState = self.cocxyCoreBridge(forSurface: capturedSurfaceID)?
-                    .semanticDiagnostics(for: capturedSurfaceID)?
-                    .state
+                let bridge = self.cocxyCoreBridge(forSurface: capturedSurfaceID)
+                let semantic = bridge?.semanticDiagnostics(for: capturedSurfaceID)
                 return surfaceState?.isActive == true
                     || surfaceState?.hasAgent == true
-                    || semanticState == CocxyCoreSemanticState.agentActive
+                    || semantic?.state == CocxyCoreSemanticState.agentActive
+                    || self.semanticCommandInputLooksLikeActiveAgent(
+                        bridge: bridge,
+                        surfaceID: capturedSurfaceID,
+                        semantic: semantic
+                    )
             }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,
@@ -192,6 +214,22 @@ extension MainWindowController {
                 in: cocxyView
             )
         }
+    }
+
+    private func semanticCommandInputLooksLikeActiveAgent(
+        bridge: CocxyCoreBridge?,
+        surfaceID: SurfaceID,
+        semantic: TerminalSemanticDiagnostics?
+    ) -> Bool {
+        guard semantic?.state == CocxyCoreSemanticState.commandRunning,
+              let command = bridge?
+                .semanticBlocks(for: surfaceID, limit: 8)
+                .first(where: { $0.blockType == CocxyCoreSemanticBlockType.commandInput })?
+                .detail else {
+            return false
+        }
+
+        return AgentScrollFallback.commandInputLaunchesKnownAgent(command)
     }
 
     private func commandTracker(for tabID: TabID) -> CommandDurationTracker {

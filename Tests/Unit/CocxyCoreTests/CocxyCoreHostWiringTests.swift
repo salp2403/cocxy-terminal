@@ -2,6 +2,7 @@
 
 import AppKit
 import Testing
+import CocxyCoreKit
 @testable import CocxyTerminal
 import CocxyShared
 
@@ -146,6 +147,107 @@ struct CocxyCoreHostWiringTests {
         #expect(lines.contains("alpha"))
         #expect(lines.contains("beta"))
     }
+
+    @Test("known agent command input keeps local scroll when semantic agent block is absent")
+    func knownAgentCommandInputKeepsLocalScrollWithoutAgentBlock() throws {
+        let bridge = try makeBridge()
+        let controller = MainWindowController(bridge: bridge)
+        let tabID = try #require(controller.tabManager.tabs.first?.id)
+        let viewModel = TerminalViewModel(engine: bridge)
+        let view = CocxyCoreView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        _ = view.layer
+
+        let surfaceID = try bridge.createSurface(
+            in: view,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+
+        controller.wireSurfaceHandlers(
+            for: surfaceID,
+            tabID: tabID,
+            in: view,
+            initialWorkingDirectory: nil
+        )
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        feed("\u{1B}]133;A\u{07}", into: state.terminal)
+        feed("\u{1B}]133;B\u{07}", into: state.terminal)
+        feed("\u{1B}]133;C;claude\u{07}", into: state.terminal)
+        feed("\u{1B}[?1049h\u{1B}[?1000h\u{1B}[?1006h", into: state.terminal)
+        feed(numberedTerminalLines(100), into: state.terminal)
+
+        let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
+        #expect(diagnostics.state == 3)
+        #expect(diagnostics.agentBlockCount == 0)
+        #expect(bridge.semanticBlocks(for: surfaceID, limit: 8).contains {
+            $0.blockType == 1 && $0.detail == "claude"
+        })
+
+        let before = try #require(bridge.historyVisibleStart(for: surfaceID))
+        #expect(before == cocxycore_terminal_history_max_visible_start(state.terminal))
+        #expect(view.prefersLocalScrollInMouseTrackingMode?() == true)
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        let after = try #require(bridge.historyVisibleStart(for: surfaceID))
+        #expect(after < before)
+    }
+
+    @Test("known agent command input keeps keyboard input writable in mouse mode")
+    func knownAgentCommandInputKeepsKeyboardInputWritableInMouseMode() async throws {
+        let bridge = try makeBridge()
+        let controller = MainWindowController(bridge: bridge)
+        let tabID = try #require(controller.tabManager.tabs.first?.id)
+        let viewModel = TerminalViewModel(engine: bridge)
+        let view = CocxyCoreView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        _ = view.layer
+
+        let surfaceID = try bridge.createSurface(
+            in: view,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+
+        controller.wireSurfaceHandlers(
+            for: surfaceID,
+            tabID: tabID,
+            in: view,
+            initialWorkingDirectory: nil
+        )
+
+        let output = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            output.data.append(data)
+        }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        feed("\u{1B}]133;A\u{07}", into: state.terminal)
+        feed("\u{1B}]133;B\u{07}", into: state.terminal)
+        feed("\u{1B}]133;C;claude\u{07}", into: state.terminal)
+        feed("\u{1B}[?1049h\u{1B}[?1000h\u{1B}[?1006h", into: state.terminal)
+
+        let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
+        #expect(diagnostics.state == 3)
+        #expect(diagnostics.agentBlockCount == 0)
+
+        for character in "typed-ok" {
+            view.keyDown(with: makeKeyEvent(characters: String(character)))
+        }
+        view.keyDown(with: makeKeyEvent(characters: "\r", keyCode: 0x24))
+
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains("typed-ok") == true
+        }
+
+        #expect(String(data: output.data, encoding: .utf8)?.contains("typed-ok") == true)
+    }
 }
 
 @MainActor
@@ -159,4 +261,48 @@ private final class FactoryMockPTYDaemonConnection: PTYDaemonClientConnection {
     }
 
     func reconnect() throws {}
+}
+
+private func feed(_ text: String, into terminal: OpaquePointer) {
+    let bytes = Array(text.utf8)
+    cocxycore_terminal_feed(terminal, bytes, bytes.count)
+}
+
+private func numberedTerminalLines(_ count: Int) -> String {
+    (0..<count)
+        .map { String(format: "agent-line-%03d", $0) }
+        .joined(separator: "\r\n") + "\r\n"
+}
+
+private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
+    let event = CGEvent(
+        scrollWheelEvent2Source: nil,
+        units: .pixel,
+        wheelCount: 1,
+        wheel1: Int32(deltaY),
+        wheel2: 0,
+        wheel3: 0
+    )!
+    event.location = NSPoint(x: 10, y: 10)
+    return NSEvent(cgEvent: event)!
+}
+
+private func makeKeyEvent(
+    characters: String,
+    charactersIgnoringModifiers: String? = nil,
+    modifiers: NSEvent.ModifierFlags = [],
+    keyCode: UInt16 = 15
+) -> NSEvent {
+    NSEvent.keyEvent(
+        with: .keyDown,
+        location: .zero,
+        modifierFlags: modifiers,
+        timestamp: ProcessInfo.processInfo.systemUptime,
+        windowNumber: 0,
+        context: nil,
+        characters: characters,
+        charactersIgnoringModifiers: charactersIgnoringModifiers ?? characters.lowercased(),
+        isARepeat: false,
+        keyCode: keyCode
+    )!
 }
