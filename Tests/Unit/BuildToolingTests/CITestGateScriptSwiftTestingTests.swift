@@ -65,6 +65,91 @@ struct CITestGateScriptSwiftTestingTests {
         #expect((baselinePayload?["metrics"] as? [[String: Any]])?.isEmpty == false)
     }
 
+    @Test("critical coverage checker reports and enforces configured modules")
+    func criticalCoverageCheckerReportsAndEnforcesConfiguredModules() throws {
+        let root = repositoryRoot()
+        let fixtureRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-critical-coverage-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: fixtureRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+
+        let configURL = fixtureRoot.appendingPathComponent("critical-coverage.json")
+        let coverageURL = fixtureRoot.appendingPathComponent("coverage.json")
+        try """
+        {
+          "threshold": 90,
+          "modules": [
+            {
+              "name": "sample-critical",
+              "include": ["Sources/Critical/*.swift"]
+            }
+          ]
+        }
+        """.write(to: configURL, atomically: true, encoding: .utf8)
+        try """
+        {
+          "data": [
+            {
+              "files": [
+                {
+                  "filename": "\(root.path)/Sources/Critical/Auth.swift",
+                  "summary": { "lines": { "count": 10, "covered": 7, "percent": 70.0 } }
+                },
+                {
+                  "filename": "\(root.path)/Sources/Critical/Safe.swift",
+                  "summary": { "lines": { "count": 10, "covered": 10, "percent": 100.0 } }
+                }
+              ]
+            }
+          ]
+        }
+        """.write(to: coverageURL, atomically: true, encoding: .utf8)
+
+        let scriptURL = root.appendingPathComponent("scripts/check-critical-coverage.py")
+        #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
+
+        let reportOnly = try runProcess(scriptURL, arguments: [
+            "--config", configURL.path,
+            "--coverage", coverageURL.path,
+        ])
+        #expect(reportOnly.terminationStatus == 0)
+        #expect(reportOnly.stdout.contains("sample-critical"))
+        #expect(reportOnly.stdout.contains("17/20"))
+        #expect(reportOnly.stdout.contains("FAIL"))
+
+        let enforced = try runProcess(scriptURL, arguments: [
+            "--config", configURL.path,
+            "--coverage", coverageURL.path,
+            "--enforce",
+        ])
+        #expect(enforced.terminationStatus == 1)
+        #expect(enforced.stdout.contains("Enforce mode"))
+    }
+
+    @Test("critical coverage config resolves every include pattern")
+    func criticalCoverageConfigResolvesEveryIncludePattern() throws {
+        let root = repositoryRoot()
+        let configURL = root.appendingPathComponent("scripts/critical-coverage.json")
+        let payload = try JSONSerialization.jsonObject(with: Data(contentsOf: configURL)) as? [String: Any]
+        let modules = try #require(payload?["modules"] as? [[String: Any]])
+        let sourceFiles = try Self.files(
+            under: root.appendingPathComponent("Sources", isDirectory: true),
+            fileExtension: "swift"
+        )
+        .map { Self.relativePath($0, root: root) }
+
+        for module in modules {
+            let name = try #require(module["name"] as? String)
+            let includes = try #require(module["include"] as? [String])
+            for pattern in includes {
+                #expect(
+                    sourceFiles.contains { Self.matchesGlob($0, pattern: pattern) },
+                    "\(name) include pattern should match a source file: \(pattern)"
+                )
+            }
+        }
+    }
+
     @Test("cold start enforce fails when the internal critical path is over budget")
     func coldStartEnforceFailsOnInternalCriticalPathRegression() throws {
         let root = repositoryRoot()
@@ -1149,6 +1234,22 @@ struct CITestGateScriptSwiftTestingTests {
             return (contents as NSString).substring(with: match.range(at: 1))
         } ?? []
         return Set(ids)
+    }
+
+    private static func matchesGlob(_ path: String, pattern: String) -> Bool {
+        var regex = "^"
+        for scalar in pattern.unicodeScalars {
+            switch scalar {
+            case "*":
+                regex += "[^/]*"
+            case "?":
+                regex += "[^/]"
+            default:
+                regex += NSRegularExpression.escapedPattern(for: String(scalar))
+            }
+        }
+        regex += "$"
+        return path.range(of: regex, options: .regularExpression) != nil
     }
 
     private static func sitemapURLBlock(for loc: String, in contents: String) -> String? {

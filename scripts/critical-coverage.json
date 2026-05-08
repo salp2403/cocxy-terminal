@@ -1,0 +1,66 @@
+{
+  "threshold": 80.0,
+  "modules": [
+    {
+      "name": "core-ipc-runtime",
+      "include": [
+        "Sources/Core/Infrastructure/AppSocketCommandHandler*.swift",
+        "Sources/Core/Infrastructure/SocketServer.swift",
+        "Sources/Domain/Models/SocketProtocol.swift",
+        "Sources/Domain/Protocols/CLISocketServing.swift"
+      ]
+    },
+    {
+      "name": "local-execution-sandbox",
+      "include": [
+        "Sources/Domain/Agent/AgentLocalToolExecutor.swift",
+        "Sources/Domain/Agent/AgentToolPermission.swift",
+        "Sources/Domain/Notebook/NotebookExecution.swift",
+        "Sources/Domain/Plugins/PluginSandbox.swift",
+        "Sources/Domain/Templates/TemplateSandbox.swift"
+      ]
+    },
+    {
+      "name": "secrets-and-encryption",
+      "include": [
+        "Sources/Domain/Agent/AgentConversationEncryption.swift",
+        "Sources/Domain/Agent/AgentSecrets.swift",
+        "Sources/Domain/iCloudSync/ICloudSyncEncryption.swift",
+        "Sources/Domain/iCloudSync/ICloudSyncSecrets.swift",
+        "Sources/Domain/RemoteWorkspace/Relay/RelayKeychainStore.swift"
+      ]
+    },
+    {
+      "name": "recovery-and-local-state",
+      "include": [
+        "Sources/Domain/CrashRecovery/CrashRecoveryManager.swift",
+        "Sources/Domain/SessionRestorer.swift",
+        "Sources/Domain/SessionReplay/*.swift",
+        "Sources/Domain/Activity/ActivityRecorder.swift",
+        "Sources/Domain/Backup/AutomaticBackupController.swift",
+        "Sources/Domain/Backup/LocalBackupManager.swift"
+      ]
+    },
+    {
+      "name": "safe-review-mutations",
+      "include": [
+        "Sources/Domain/GitHub/GitHubService.swift",
+        "Sources/Domain/GitHub/GitHubMergeError.swift",
+        "Sources/Domain/PRReview/PRAutoMergeOrchestrator.swift",
+        "Sources/Domain/PRReview/PRSuggestionApplier.swift",
+        "Sources/Domain/PRReview/PRSuggestionConflictResolver.swift",
+        "Sources/Domain/PRReview/PRRemoteReviewThreadSuggestionExtractor.swift"
+      ]
+    },
+    {
+      "name": "cocxycore-bridge",
+      "include": [
+        "Sources/Core/Infrastructure/CocxyCoreBridge.swift",
+        "Sources/Core/Infrastructure/MetalTerminalRenderer.swift",
+        "Sources/Core/Infrastructure/MainActorSync.swift",
+        "Sources/Domain/Protocols/TerminalEngine.swift",
+        "Sources/UI/Terminal/CocxyCoreView.swift"
+      ]
+    }
+  ]
+}
