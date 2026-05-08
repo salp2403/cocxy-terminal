@@ -35,6 +35,26 @@ usage() {
     echo "example: $0 0.1.80" >&2
 }
 
+version_greater_than() {
+    local candidate="$1"
+    local current="$2"
+    local candidate_major candidate_minor candidate_patch
+    local current_major current_minor current_patch
+
+    IFS=. read -r candidate_major candidate_minor candidate_patch <<< "$candidate"
+    IFS=. read -r current_major current_minor current_patch <<< "$current"
+
+    if [ "$((10#$candidate_major))" -ne "$((10#$current_major))" ]; then
+        [ "$((10#$candidate_major))" -gt "$((10#$current_major))" ]
+        return
+    fi
+    if [ "$((10#$candidate_minor))" -ne "$((10#$current_minor))" ]; then
+        [ "$((10#$candidate_minor))" -gt "$((10#$current_minor))" ]
+        return
+    fi
+    [ "$((10#$candidate_patch))" -gt "$((10#$current_patch))" ]
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --dry-run)
@@ -75,6 +95,16 @@ VERSION="${VERSION#v}"
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "error: invalid version '$VERSION' (expected semver X.Y.Z, no leading v)" >&2
     exit 65
+fi
+
+CURRENT_VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)"
+if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "error: invalid current Info.plist version '$CURRENT_VERSION'" >&2
+    exit 73
+fi
+if ! version_greater_than "$VERSION" "$CURRENT_VERSION"; then
+    echo "error: target version '$VERSION' must be greater than current Info.plist version '$CURRENT_VERSION'" >&2
+    exit 71
 fi
 
 # Refuse locally if the tag already exists — avoids a trip to the
