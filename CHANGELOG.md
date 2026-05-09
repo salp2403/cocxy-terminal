@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.5] - 2026-05-09
+
+### Fixed
+- Subagent auto-split panels now keep the active terminal substantially
+  wider than the inspector pane by pinning the parent split to a 0.68
+  ratio, instead of leaving the panel and the terminal at a 50/50 split.
+- The fade-in animation for a freshly appended subagent panel now uses
+  the normalized subagent identifier, so trimmed or differently cased
+  identifiers no longer skip the entrance animation.
+
+### Changed
+- The Agent Mode bullet in the public README describes the provider
+  model in abstract terms instead of listing third-party vendors.
+- Trimmed a stale comparison reference from the subagent panel doc
+  comment so the public source no longer cites unrelated tooling.
+
+### Tests
+- Added a regression test that drives a mouse selection on the visible
+  viewport, scrolls through scrollback locally and asserts that the
+  highlighted range stays anchored to the original text rather than
+  moving with the viewport.
+
 ## [1.0.4] - 2026-05-08
 
 ### Fixed
