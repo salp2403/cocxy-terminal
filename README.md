@@ -33,7 +33,7 @@ Cocxy knows when your coding agent is thinking, working, waiting for input, or d
 
 ## Why Cocxy
 
-Every terminal shows you text. Cocxy shows you what your agent is actually doing. It detects six coding agents across four independent detection layers, gives you a live dashboard of every session, lets you review an agent's changes inline before shipping them, and ships with a native Markdown workspace for notes, plans, and docs. When your agent finishes a task at 3 AM, Cocxy knows — and you know.
+Every terminal shows you text. Cocxy is a native macOS workspace built around how developers work with AI coding agents. It detects multiple coding agents across four independent layers, gives you a live dashboard of every session, lets you review an agent's changes inline before shipping them, runs your own local AI workspace (multi-provider Agent Mode, MCP servers, codebase indexing, skills, inline completions, sandboxed Computer Use), executes notebooks and workflows on-device, and ships with a native Markdown workspace for notes, plans, and docs. When your agent finishes a task at 3 AM, Cocxy knows — and you know.
 
 Built from scratch in Swift and Metal. No Electron. No web view wrapping a terminal. No data leaves your machine. Just a fast, native macOS app designed for the way developers work in 2026.
 
@@ -99,6 +99,36 @@ A native panel to review every change an agent made, comment inline, and feed co
 - **Cross-tab-safe** — Feedback always reaches the agent in the tab the review belongs to, even if you switched tabs
 
 Open with `Cmd+Option+R` or `cocxy review`.
+
+### Local AI Workspace
+
+A complete local-first AI workspace baked into the terminal. You bring the keys, Cocxy keeps the conversation on your machine.
+
+- **Agent Mode** — Multi-provider local Agent Mode (Anthropic, OpenAI, Google, Apple Foundation Models) with per-action approval, encrypted conversation persistence, retry on transient provider errors, and threaded conversation export
+- **MCP servers** — Native Model Context Protocol client with stdio and HTTP transports, hardened auth boundaries, and a local-only server registry editable from Preferences
+- **Codebase indexing** — On-device semantic + lexical index with incremental sync, query suggestions, vector store, and a fallback that runs without cloud embeddings
+- **Skills** — Local skills loader with a built-in skill marketplace and bundled skill resources
+- **Inline AI completions** — Foundation Models-powered ghost text, 200 ms idle trigger, Tab to accept, Esc to dismiss; gated behind an explicit toggle and respects an offline-first policy
+- **Computer Use** — Sandboxed Computer Use actor with explicit per-action approval, Accessibility permission gate, screenshot capture, and an audit log
+- **PR review depth** — Suggestion applier, conflict resolver, auto-merge safety gate, response templates, diff timeline, and reviewer suggestions from local `git blame`
+
+### Notebooks and Workflows
+
+Run notebooks and pipelines directly in Cocxy without spinning up a separate kernel server.
+
+- **Multi-language cells** — Bash, Python, and Swift cells executed locally with a default sandbox (`sandbox-exec`, `deny network*`, `deny file-write*` outside the workspace) and an explicit `--sandbox none` escape
+- **Jupyter import / export** — Open `.ipynb` directly and export back to Jupyter format
+- **Standalone HTML export** — Self-contained HTML with bundled assets for sharing
+- **Built-in templates** — Ready-to-run notebook templates
+- **Workflows** — Local workflow runner with cell composition for repeatable pipelines
+
+### Voice Input
+
+On-device voice input powered by Apple's Speech framework. Multi-locale auto-detection with a manual override.
+
+- **Local-only** — Audio never leaves the Mac; no cloud transcription
+- **Auto-detect locale** — Picks the active locale and falls back to manual selection when needed
+- **Configurable trigger** — Push-to-talk or toggle, configurable in Preferences
 
 ### Native Markdown Workspace
 
@@ -184,6 +214,58 @@ extra-launch-patterns = ["^python manage.py"]
 
 Cocxy detects and applies the project config automatically when you `cd` into a directory. Hot-reload on file changes.
 
+### macOS-Native Integrations
+
+First-class macOS system integrations — every entry point is local-only with explicit privacy copy.
+
+- **Shortcuts.app** — Catalog of local-only Shortcuts actions: open Cocxy, run command in Cocxy, open notebook, list skills
+- **Touch Bar** — Contextual local terminal actions (new tab, command palette, agent panel, scrollback search) on supported MacBook Pro models
+- **Handoff** — Privacy-preserving Handoff metadata; activity advertised across your devices without leaking terminal contents, paths, env, or search history
+- **Continuity Camera** — Import images directly from an iPhone or iPad into the local Agent Mode attachments with `0600` permissions
+- **Universal Clipboard** — Local clipboard history observer that respects macOS Universal Clipboard
+- **Stage Manager** — Window collection behaviour tuned to participate cleanly in Stage Manager, Spaces, and Mission Control
+- **Spotlight (Notes)** — Optional local Spotlight indexing for notes with a per-workspace privacy opt-out (`.cocxy-spotlight-ignore`)
+- **QuickLook** — Sandboxed QuickLook extension renders Markdown directly in Finder
+
+### Productivity Tools
+
+A full productivity layer that lives next to the terminal so you do not switch apps for the small things.
+
+- **Macros and Snippets** — Recordable terminal input macros, alias manager, snippet manager with parameter expansion, and inline replay
+- **Clipboard history** — Local clipboard history observer with searchable history and a paste-by-keyword overlay
+- **Project templates** — Ten built-in scaffolds covering Swift package, Python package, Rust crate, Node TypeScript, Go module, PHP composer, Ruby gem, static site, Docker service, and Flutter app, with sandbox hooks for custom templates
+- **Notes** — Per-workspace Markdown notes panel with file watcher, autosave, and Spotlight opt-in
+- **Tab configs** — Save, list, export, and replay terminal tab configurations as TOML
+
+### Reliability and Recovery
+
+Cocxy keeps your work safe even when something goes wrong.
+
+- **Automatic local backups** — Daily backups under `~/.config/cocxy/backups/` with configurable retention (default 30 daily + 12 monthly), exact directory snapshots, manifest path containment guard, and a Preferences pane to inspect and restore
+- **Crash recovery** — Periodic 5-minute snapshots, a local crash log, a restore prompt on the next launch, and best-effort panel and scroll restore. Tested under `kill -9` smoke
+- **Session replay** — Local session recording store and panel with auto-record opt-in, deterministic 60-second replay, search and bookmark, delete-all, and `.cast` export
+- **AI edit history** — Local timeline of agent-driven edits with diff and revert, plus hook recording for cross-tool tracking
+
+### Activity Insights
+
+Optional local analytics for your own work — never leaves the Mac.
+
+- SQLite-backed activity store and dashboard with command duration, agent state, working directory, and error counts
+- JSON / CSV export
+- Default off; opt in from Preferences
+
+### iCloud Sync
+
+Encrypted opt-in sync across your Macs. Cocxy never sees the data.
+
+- **Encrypted export / import** — End-to-end encryption with a master password you control
+- **Manual conflict resolution** — Visual conflict UI; no silent overwrites
+- **Two-device smoke gate** — Continuous regression coverage for the sync round-trip
+
+### Onboarding
+
+A six-step guided setup the first time Cocxy launches: theme, agent autonomy, LSP setup, tab configs, first skill, and first workflow. Skippable, and reachable any time from the Help menu.
+
 ### AppleScript Automation
 
 Full AppleScript vocabulary for workflow automation and integration with Shortcuts, Automator, and Raycast.
@@ -209,6 +291,8 @@ Event-driven plugin architecture for extending Cocxy with custom integrations.
 
 Plugins respond to eight terminal events: session start / end, agent detected, state changed, command complete, tab created / closed, directory changed. Scripts run in a sandboxed environment with timeout enforcement.
 
+**Bundled plugins (thirteen).** Cocxy ships with a curated catalogue of local plugins ready to enable from the marketplace panel: AWS CLI helper, Azure CLI, GCP CLI, Cloudflare, Docker, Kubernetes, GitHub pane, Jira, Linear, MySQL, PostgreSQL, Redis, and SQLite. Each plugin runs locally with the same sandbox and event contract as user plugins.
+
 ### Tabs, Splits, and Windows
 
 - **Vertical sidebar** with git branch, agent state, and activity timing
@@ -230,6 +314,14 @@ Native shell integration for zsh, bash, and fish — installed automatically, no
 - OSC 7 working-directory reporting with URI encoding
 - OSC 133 semantic prompts for command boundaries and duration
 - Safe environment-variable injection that restores originals in every subshell
+
+### Liquid Glass UI
+
+A polished glass-material design system covering 36+ surfaces — sidebar, command palette, status bar, panels, overlays, and contextual sheets — tuned for macOS 14 through macOS 26 and ready for the Liquid Glass aesthetic when the host supports it.
+
+### Localization
+
+Shipped in English and Spanish out of the box (2,651+ strings each, kept symmetric). The active language follows the system or can be picked manually from Preferences. Public website covers EN and ES landings, features, releases, getting started, FAQ, and migration guidance.
 
 ### Zero Telemetry
 
