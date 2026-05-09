@@ -104,7 +104,7 @@ Open with `Cmd+Option+R` or `cocxy review`.
 
 A complete local-first AI workspace baked into the terminal. You bring the keys, Cocxy keeps the conversation on your machine.
 
-- **Agent Mode** — Multi-provider local Agent Mode (Anthropic, OpenAI, Google, Apple Foundation Models) with per-action approval, encrypted conversation persistence, retry on transient provider errors, and threaded conversation export
+- **Agent Mode** — Multi-provider local Agent Mode with on-device and bring-your-own-key providers, per-action approval, encrypted conversation persistence, retry on transient provider errors, and threaded conversation export
 - **MCP servers** — Native Model Context Protocol client with stdio and HTTP transports, hardened auth boundaries, and a local-only server registry editable from Preferences
 - **Codebase indexing** — On-device semantic + lexical index with incremental sync, query suggestions, vector store, and a fallback that runs without cloud embeddings
 - **Skills** — Local skills loader with a built-in skill marketplace and bundled skill resources

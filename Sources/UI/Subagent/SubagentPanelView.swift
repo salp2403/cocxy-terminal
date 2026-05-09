@@ -12,8 +12,7 @@ import SwiftUI
 /// Shows the agent type, state, tool activity feed, and stats.
 /// Updates reactively via the dashboard ViewModel's `@Published sessions`.
 ///
-/// This is Cocxy's answer to cmux's "native pane splits" for Agent Teams,
-/// but with structured data instead of raw terminal output.
+/// Uses structured local activity data instead of raw terminal output.
 struct SubagentPanelView: View {
 
     @ObservedObject var viewModel: AgentDashboardViewModel
