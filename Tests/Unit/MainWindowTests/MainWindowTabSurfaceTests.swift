@@ -1174,6 +1174,29 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testSpawnSubagentPanelKeepsTerminalWiderThanPanel() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-wide",
+            sessionId: "sess-1",
+            agentType: "research"
+        )
+
+        guard case .split(_, .horizontal, _, _, let ratio)? = controller.activeSplitManager?.rootNode else {
+            XCTFail("Expected subagent auto-split to create a horizontal split")
+            return
+        }
+        XCTAssertGreaterThan(
+            ratio,
+            0.5,
+            "Subagent auto-panels should preserve a wider terminal pane instead of splitting the window evenly"
+        )
+    }
+
     func testSpawnSubagentPanelIgnoresGenericSubprocessAgentType() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

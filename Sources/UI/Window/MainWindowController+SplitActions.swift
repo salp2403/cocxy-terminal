@@ -13,6 +13,7 @@ import SwiftUI
 /// Extracted from MainWindowController to keep the main file focused on
 /// window management, tabs, and core layout.
 extension MainWindowController {
+    private static var preferredSubagentTerminalRatio: CGFloat { 0.68 }
 
     // MARK: - Active Split Manager
 
@@ -1283,17 +1284,25 @@ extension MainWindowController {
         performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
 
         if let activeTabID = visibleTabID ?? tabManager.activeTabID {
-            if let contentID = panelContentViews.first(where: { _, view in
+            let matchingPanel = panelContentViews.first(where: { _, view in
                 guard let subagentView = view as? SubagentContentView else { return false }
                 return subagentView.subagentId == normalizedSubagentId && subagentView.sessionId == sessionId
-            })?.key {
-                tabSplitCoordinator.splitManager(for: activeTabID)
-                    .setPanelTitle(for: contentID, title: normalizedAgentType)
+            })
+            if let contentID = matchingPanel?.key {
+                let splitManager = tabSplitCoordinator.splitManager(for: activeTabID)
+                splitManager.setPanelTitle(for: contentID, title: normalizedAgentType)
+                if let leafID = splitManager.rootNode.allLeafIDs().first(where: { $0.terminalID == contentID })?.leafID,
+                   let parentSplitID = splitManager.parentSplitID(of: leafID) {
+                    splitManager.setRatio(splitID: parentSplitID, ratio: Self.preferredSubagentTerminalRatio)
+                    applyCurrentSplitRatiosAfterLayout()
+                }
             }
         }
 
         // Animate the new panel entrance (fade-in).
-        if let newPanelView = panelContentViews.values.first(where: { ($0 as? SubagentContentView)?.subagentId == subagentId }) {
+        if let newPanelView = panelContentViews.values.first(where: {
+            ($0 as? SubagentContentView)?.subagentId == normalizedSubagentId
+        }) {
             let duration = AnimationConfig.duration(AnimationConfig.splitTransitionDuration)
             if duration > 0 {
                 newPanelView.alphaValue = 0
