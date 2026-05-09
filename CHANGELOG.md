@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.4] - 2026-05-08
+
+### Fixed
+- Large clipboard pastes now stream to the terminal in paced UTF-8-safe
+  chunks while bracketed paste is active, so terminal app sessions stay
+  responsive instead of locking the UI when megabyte-sized payloads are
+  pasted into a full-screen agent.
+- Pasting an image-only clipboard payload now writes the image to a
+  local cache (`~/Library/Caches/Cocxy/ClipboardImages/`) and inserts
+  the escaped path into the terminal prompt so agents can pick it up as
+  a file reference. Cached images older than seven days are pruned
+  automatically.
+- Held Backspace and Forward Delete repeats now respect a small
+  throttle while a TUI is in alt-screen or mouse-tracking mode. Normal
+  shells and non-repeat keystrokes are not affected.
+
 ## [1.0.3] - 2026-05-08
 
 ### Fixed
