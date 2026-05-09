@@ -836,6 +836,37 @@ struct CocxyCoreViewTests {
         #expect(after < before)
     }
 
+    @Test("selection highlight remains anchored after local history scroll")
+    func selectionHighlightRemainsAnchoredAfterLocalHistoryScroll() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(120), into: state.terminal)
+
+        let beforeScrollStart = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(beforeScrollStart == cocxycore_terminal_history_max_visible_start(state.terminal))
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: NSPoint(x: 12, y: 12)))
+        harness.view.mouseDragged(with: makeMouseEvent(type: .leftMouseDragged, location: NSPoint(x: 96, y: 12)))
+
+        let selectionBeforeScroll = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
+        #expect(selectionBeforeScroll.active == true)
+        harness.view.needsRender = false
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        let afterScrollStart = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        let selectionAfterScroll = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
+        #expect(afterScrollStart < beforeScrollStart)
+        #expect(selectionAfterScroll.active == true)
+        #expect(selectionAfterScroll.startRow == selectionBeforeScroll.startRow)
+        #expect(selectionAfterScroll.startCol == selectionBeforeScroll.startCol)
+        #expect(selectionAfterScroll.endRow == selectionBeforeScroll.endRow)
+        #expect(selectionAfterScroll.endCol == selectionBeforeScroll.endCol)
+        #expect(selectionAfterScroll.text == selectionBeforeScroll.text)
+        #expect(harness.view.needsRender == true)
+    }
+
     @Test("paste after local agent scroll returns viewport to live bottom")
     func pasteAfterLocalAgentScrollReturnsViewportToLiveBottom() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
