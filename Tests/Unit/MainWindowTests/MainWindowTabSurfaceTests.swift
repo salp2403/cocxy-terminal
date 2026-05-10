@@ -1190,10 +1190,11 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             XCTFail("Expected subagent auto-split to create a horizontal split")
             return
         }
-        XCTAssertGreaterThan(
+        XCTAssertEqual(
             ratio,
-            0.5,
-            "Subagent auto-panels should preserve a wider terminal pane instead of splitting the window evenly"
+            0.68,
+            accuracy: 0.001,
+            "Subagent auto-panels should reserve the dominant width for the terminal pane"
         )
     }
 

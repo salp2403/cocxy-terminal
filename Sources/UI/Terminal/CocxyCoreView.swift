@@ -145,6 +145,8 @@ final class CocxyCoreView: NSView {
     /// Active async paste delivery, used to keep large clipboard writes from
     /// monopolizing the main thread while an agent TUI is reading from the PTY.
     private var pasteDeliveryTask: Task<Void, Never>?
+    private var activeBracketedPasteSurfaceID: SurfaceID?
+    private var activeBracketedPasteSessionID: UUID?
 
     /// Last dispatched repeated delete key event by hardware key code.
     private var repeatedDeleteDispatchTimestamps: [UInt16: TimeInterval] = [:]
@@ -169,9 +171,10 @@ final class CocxyCoreView: NSView {
     // MARK: - Constants
 
     private static let scrollSpeedFactor: CGFloat = 0.15
-    private static let pasteChunkMaxUTF8Bytes = 2_048
-    private static let pasteChunkDelayNanoseconds: UInt64 = 2_000_000
-    private static let repeatedDeleteMinimumInterval: TimeInterval = 0.055
+    static let defaultPasteChunkMaxUTF8Bytes = 512
+    private static let pasteChunkMaxUTF8Bytes = defaultPasteChunkMaxUTF8Bytes
+    private static let pasteChunkDelayNanoseconds: UInt64 = 6_000_000
+    private static let repeatedDeleteMinimumInterval: TimeInterval = 0.095
     private static let throttledDeleteKeyCodes: Set<UInt16> = [51, 117]
 
     private var contentPadding: (x: CGFloat, y: CGFloat) {
@@ -829,17 +832,17 @@ final class CocxyCoreView: NSView {
     private func handlePaste() {
         guard let bridge = bridge, let sid = surfaceID else { return }
 
-        if let text = clipboardService.read(), !text.isEmpty {
-            sendClipboardText(text, bridge: bridge, surfaceID: sid)
-            return
-        }
-
         if let imageAttachment = clipboardService.readImageAttachment() {
             sendClipboardText(
                 FileDropPathFormatter.format([imageAttachment.fileURL]),
                 bridge: bridge,
                 surfaceID: sid
             )
+            return
+        }
+
+        if let text = clipboardService.read(), !text.isEmpty {
+            sendClipboardText(text, bridge: bridge, surfaceID: sid)
         }
     }
 
@@ -851,16 +854,27 @@ final class CocxyCoreView: NSView {
         guard let state = bridge.surfaceState(for: sid) else { return }
 
         let usesBracketedPaste = cocxycore_terminal_mode_bracketed_paste(state.terminal)
-        let chunks = Self.terminalPasteChunks(for: text, maxUTF8Bytes: Self.pasteChunkMaxUTF8Bytes)
+        let normalizedText = Self.normalizedTerminalPasteText(text)
+        let chunks = Self.terminalPasteChunks(for: normalizedText)
         guard !chunks.isEmpty else { return }
 
+        closeActiveBracketedPasteIfNeeded(bridge: bridge)
         pasteDeliveryTask?.cancel()
+        let pasteSessionID = UUID()
         pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
             guard let self, let bridge else { return }
             self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+            defer {
+                if self.activeBracketedPasteSessionID == pasteSessionID {
+                    self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
+                }
+            }
+            guard !Task.isCancelled else { return }
 
             if usesBracketedPaste {
                 bridge.sendText("\u{1B}[200~", to: sid)
+                self.activeBracketedPasteSurfaceID = sid
+                self.activeBracketedPasteSessionID = pasteSessionID
                 await Self.sleepBetweenPasteChunksIfNeeded(chunks.count)
             }
 
@@ -874,9 +888,44 @@ final class CocxyCoreView: NSView {
             guard !Task.isCancelled,
                   bridge.surfaceState(for: sid) != nil else { return }
             if usesBracketedPaste {
-                bridge.sendText("\u{1B}[201~", to: sid)
+                self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
             }
         }
+    }
+
+    private func closeActiveBracketedPasteIfNeeded(bridge: CocxyCoreBridge) {
+        guard let activeSurfaceID = activeBracketedPasteSurfaceID else { return }
+        if bridge.surfaceState(for: activeSurfaceID) != nil {
+            bridge.sendText("\u{1B}[201~", to: activeSurfaceID)
+        }
+        activeBracketedPasteSurfaceID = nil
+        activeBracketedPasteSessionID = nil
+    }
+
+    static func normalizedTerminalPasteText(_ text: String) -> String {
+        let lineNormalized = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\u{2028}", with: "\n")
+            .replacingOccurrences(of: "\u{2029}", with: "\n")
+
+        var scalars = String.UnicodeScalarView()
+        scalars.reserveCapacity(lineNormalized.unicodeScalars.count)
+        for scalar in lineNormalized.unicodeScalars {
+            switch scalar.value {
+            case 0x09, 0x0A:
+                scalars.append(scalar)
+            case 0x00...0x1F, 0x7F:
+                continue
+            default:
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
+    }
+
+    static func terminalPasteChunks(for text: String) -> [String] {
+        terminalPasteChunks(for: text, maxUTF8Bytes: pasteChunkMaxUTF8Bytes)
     }
 
     static func terminalPasteChunks(
@@ -1030,14 +1079,14 @@ final class CocxyCoreView: NSView {
             clipboardService: clipboardService,
             paste: { [weak bridge] in
                 guard let bridge else { return }
-                if let text = self.clipboardService.read(), !text.isEmpty {
-                    self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
-                } else if let imageAttachment = self.clipboardService.readImageAttachment() {
+                if let imageAttachment = self.clipboardService.readImageAttachment() {
                     self.sendClipboardText(
                         FileDropPathFormatter.format([imageAttachment.fileURL]),
                         bridge: bridge,
                         surfaceID: sid
                     )
+                } else if let text = self.clipboardService.read(), !text.isEmpty {
+                    self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
                 }
             },
             localizer: localizer

@@ -192,6 +192,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(MarkdownViewMode.split.localizedLabel(using: spanish) == "Dividida")
         #expect(spanish.string("keyboardShortcuts.splits.horizontal", fallback: "Split horizontal") == "Dividir horizontalmente")
         #expect(spanish.string("keyboardShortcuts.splits.vertical", fallback: "Split vertical") == "Dividir verticalmente")
+        #expect(spanish.string("keybindings.action.split.toggleZoom.name", fallback: "Toggle Split Zoom") == "Alternar zoom de división")
+        #expect(spanish.string("keybindings.action.navigation.splitLeft.name", fallback: "Navigate Split Left") == "Navegar a división izquierda")
+        #expect(spanish.string("window.pane.terminalSplit", fallback: "terminal split") == "panel dividido de terminal")
     }
 
     @Test

@@ -502,17 +502,17 @@ struct CocxyCoreViewTests {
             String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true
         }
 
-        #expect(clipboard.readCallCount == 1)
+        #expect(clipboard.readCallCount == 0)
         #expect(clipboard.readImageAttachmentCallCount == 1)
         #expect(String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true)
     }
 
-    @Test("paste prefers clipboard text over image attachments")
-    func pastePrefersClipboardTextOverImageAttachments() async throws {
+    @Test("paste prefers image attachments over companion clipboard text")
+    func pastePrefersImageAttachmentsOverCompanionClipboardText() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("ignored.png")
+            .appendingPathComponent("pasted.png")
         let clipboard = RecordingClipboardService(
             readText: "typed prompt\n",
             imageAttachment: ClipboardImageAttachment(fileURL: imageURL)
@@ -526,12 +526,14 @@ struct CocxyCoreViewTests {
 
         harness.view.paste(nil)
 
+        let expectedPayload = FileDropPathFormatter.format([imageURL])
         try await waitUntil {
-            String(data: output.data, encoding: .utf8)?.contains("typed prompt") == true
+            String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true
         }
 
-        #expect(clipboard.readCallCount == 1)
-        #expect(clipboard.readImageAttachmentCallCount == 0)
+        #expect(clipboard.readImageAttachmentCallCount == 1)
+        #expect(clipboard.readCallCount == 0)
+        #expect(String(data: output.data, encoding: .utf8)?.contains("typed prompt") == false)
     }
 
     @Test("bracketed paste wraps clipboard payload when the terminal enables it")
@@ -592,6 +594,65 @@ struct CocxyCoreViewTests {
 
         #expect(deliveredEvents >= chunks.count + 2)
         #expect(clipboard.readCallCount == 1)
+    }
+
+    @Test("canceling bracketed paste closes the previous paste before the next payload")
+    func cancelingBracketedPasteClosesPreviousPasteBeforeNextPayload() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?2004h", into: state.terminal)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        let firstPayload = String(repeating: "first-paste-line\n", count: 2_600)
+        harness.view.clipboardService = RecordingClipboardService(readText: firstPayload)
+        harness.view.paste(nil)
+
+        try await waitUntil {
+            let text = String(data: output.data, encoding: .utf8) ?? ""
+            return text.contains("\u{001B}[200~") && text.contains("first-paste-line")
+        }
+
+        harness.view.clipboardService = RecordingClipboardService(readText: "second-paste\n")
+        harness.view.paste(nil)
+
+        try await waitUntil {
+            let text = String(data: output.data, encoding: .utf8) ?? ""
+            return text.contains("second-paste")
+        }
+
+        let text = String(data: output.data, encoding: .utf8) ?? ""
+        let closeRange = try #require(text.range(of: "\u{001B}[201~"))
+        let secondOpenRange = try #require(
+            text.range(of: "\u{001B}[200~", range: closeRange.upperBound..<text.endIndex)
+        )
+        let secondPayloadRange = try #require(text.range(of: "second-paste"))
+        #expect(closeRange.lowerBound < secondOpenRange.lowerBound)
+        #expect(secondOpenRange.lowerBound < secondPayloadRange.lowerBound)
+    }
+
+    @Test("terminal paste text normalizes Notes control characters")
+    func terminalPasteTextNormalizesNotesControlCharacters() {
+        let text = "alpha\rbravo\r\ncharlie\u{2028}delta\u{2029}echo\u{0000}\u{001B}[31m"
+
+        let normalized = CocxyCoreView.normalizedTerminalPasteText(text)
+
+        #expect(normalized == "alpha\nbravo\ncharlie\ndelta\necho[31m")
+    }
+
+    @Test("default paste chunking uses small TUI-safe chunks")
+    func defaultPasteChunkingUsesSmallTUISafeChunks() {
+        let payload = String(repeating: "a", count: 1_400)
+
+        let chunks = CocxyCoreView.terminalPasteChunks(for: payload)
+
+        #expect(chunks.count == 3)
+        #expect(chunks.joined() == payload)
+        #expect(chunks.allSatisfy { $0.utf8.count <= CocxyCoreView.defaultPasteChunkMaxUTF8Bytes })
     }
 
     @Test("keyDown application shortcuts route copy paste select all and clear screen")
@@ -695,6 +756,12 @@ struct CocxyCoreViewTests {
             characters: "\u{7F}",
             keyCode: 51,
             isARepeat: true,
+            timestamp: 10.120
+        )
+        let stillTooFastRepeat = makeKeyEvent(
+            characters: "\u{7F}",
+            keyCode: 51,
+            isARepeat: true,
             timestamp: 10.080
         )
 
@@ -705,6 +772,7 @@ struct CocxyCoreViewTests {
 
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(stillTooFastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
     }
 
