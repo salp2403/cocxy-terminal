@@ -1707,7 +1707,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 132)
+        XCTAssertEqual(CLICommand.allCases.count, 141)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1720,6 +1720,8 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.closeTab.rawValue, "close-tab")
         XCTAssertEqual(CLICommand.split.rawValue, "split")
         XCTAssertEqual(CLICommand.status.rawValue, "status")
+        XCTAssertEqual(CLICommand.identify.rawValue, "identify")
+        XCTAssertEqual(CLICommand.capabilities.rawValue, "capabilities")
     }
 
     // MARK: - 40. All commands have non-empty help descriptions

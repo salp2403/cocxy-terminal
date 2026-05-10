@@ -176,6 +176,12 @@ public enum ParsedCommand: Equatable {
     /// `cocxy classify <input>`
     case classify(input: String)
 
+    /// `cocxy identify`
+    case identify
+
+    /// `cocxy capabilities`
+    case capabilities
+
     /// `cocxy keys generate --author <name>`
     case keysGenerate(author: String)
 
@@ -546,10 +552,14 @@ public enum CLIArgumentParser {
     /// reachable.
     public static let version: String = resolveVersion()
 
+    /// The bundle identifier for the app that owns this CLI.
+    public static let bundleIdentifier: String = resolveBundleIdentifier()
+
     /// Last-resort fallback. It mirrors `Resources/Info.plist` and is only
     /// used when neither the enclosing `.app` nor a SwiftPM checkout can be
     /// resolved.
     internal static let fallbackVersion = "1.0.5"
+    internal static let fallbackBundleIdentifier = "dev.cocxy.terminal"
 
     /// Resolves the CLI version by preferring the enclosing app bundle's
     /// `Info.plist`, then the checkout's `Resources/Info.plist`, with a
@@ -569,9 +579,31 @@ public enum CLIArgumentParser {
     /// - Returns: the bundled or checkout version when reachable, or
     ///   `fallbackVersion` for unresolvable standalone layouts.
     internal static func resolveVersion(executablePath: String? = nil) -> String {
+        resolveMetadataValue(
+            key: "CFBundleShortVersionString",
+            executablePath: executablePath,
+            fallback: fallbackVersion
+        )
+    }
+
+    /// Resolves the owning app bundle identifier using the same search
+    /// order as `resolveVersion`.
+    internal static func resolveBundleIdentifier(executablePath: String? = nil) -> String {
+        resolveMetadataValue(
+            key: "CFBundleIdentifier",
+            executablePath: executablePath,
+            fallback: fallbackBundleIdentifier
+        )
+    }
+
+    private static func resolveMetadataValue(
+        key: String,
+        executablePath: String?,
+        fallback: String
+    ) -> String {
         let rawPath = executablePath ?? Bundle.main.executablePath
         guard let exePath = rawPath else {
-            return fallbackVersion
+            return fallback
         }
         // Resolve any symlinks so `/opt/homebrew/bin/cocxy` → the real
         // `Cocxy Terminal.app/Contents/Resources/cocxy`. `standardizedFileURL`
@@ -585,16 +617,16 @@ public enum CLIArgumentParser {
         let contentsDir = (resourcesDir as NSString).deletingLastPathComponent
         let plistPath = (contentsDir as NSString).appendingPathComponent("Info.plist")
 
-        if let bundledVersion = version(inInfoPlistAt: plistPath) {
-            return bundledVersion
+        if let bundledValue = metadataValue(inInfoPlistAt: plistPath, key: key) {
+            return bundledValue
         }
-        if let checkoutVersion = resolveDevelopmentVersion(startingAt: realPath) {
-            return checkoutVersion
+        if let checkoutValue = resolveDevelopmentMetadataValue(startingAt: realPath, key: key) {
+            return checkoutValue
         }
-        return fallbackVersion
+        return fallback
     }
 
-    private static func resolveDevelopmentVersion(startingAt path: String) -> String? {
+    private static func resolveDevelopmentMetadataValue(startingAt path: String, key: String) -> String? {
         var candidate = URL(fileURLWithPath: path).deletingLastPathComponent()
         let root = URL(fileURLWithPath: "/", isDirectory: true)
         while true {
@@ -602,8 +634,8 @@ public enum CLIArgumentParser {
                 .appendingPathComponent("Resources")
                 .appendingPathComponent("Info.plist")
                 .path
-            if let version = version(inInfoPlistAt: plistPath) {
-                return version
+            if let value = metadataValue(inInfoPlistAt: plistPath, key: key) {
+                return value
             }
             if candidate == root {
                 return nil
@@ -612,16 +644,16 @@ public enum CLIArgumentParser {
         }
     }
 
-    private static func version(inInfoPlistAt plistPath: String) -> String? {
+    private static func metadataValue(inInfoPlistAt plistPath: String, key: String) -> String? {
         guard let data = try? Data(contentsOf: URL(fileURLWithPath: plistPath)),
               let plist = try? PropertyListSerialization.propertyList(
                 from: data,
                 options: [],
                 format: nil
               ) as? [String: Any],
-              let shortVersion = plist["CFBundleShortVersionString"] as? String
+              let value = plist[key] as? String
         else { return nil }
-        let trimmed = shortVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
     }
 
@@ -707,6 +739,12 @@ public enum CLIArgumentParser {
 
         case "classify":
             return try parseClassify(arguments: Array(arguments.dropFirst()))
+
+        case "identify":
+            return .identify
+
+        case "capabilities":
+            return .capabilities
 
         case "keys":
             return try parseKeys(arguments: Array(arguments.dropFirst()))

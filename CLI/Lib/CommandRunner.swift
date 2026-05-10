@@ -91,6 +91,10 @@ public struct CommandRunner {
             return executeEditorOpen(path: path, editor: editor, line: line, column: column)
         case .classify(let input):
             return executeClassify(input: input)
+        case .identify:
+            return executeIdentify()
+        case .capabilities:
+            return executeCapabilities()
         case .keysGenerate(let author):
             return executeKeysGenerate(author: author)
         case .keysList:
@@ -333,6 +337,32 @@ public struct CommandRunner {
         }
         semaphore.wait()
         return box.load()!
+    }
+
+    // MARK: - Local Commands: Discovery
+
+    private func executeIdentify() -> CLIResult {
+        do {
+            return CLIResult(
+                exitCode: 0,
+                stdout: try CLIEnvironmentDiscovery.json(for: CLIEnvironmentDiscovery.identity()),
+                stderr: ""
+            )
+        } catch {
+            return errorResult("Failed to encode identity", error)
+        }
+    }
+
+    private func executeCapabilities() -> CLIResult {
+        do {
+            return CLIResult(
+                exitCode: 0,
+                stdout: try CLIEnvironmentDiscovery.json(for: CLIEnvironmentDiscovery.capabilities()),
+                stderr: ""
+            )
+        } catch {
+            return errorResult("Failed to encode capabilities", error)
+        }
     }
 
     // MARK: - Local Commands: Signatures
@@ -600,7 +630,8 @@ public struct CommandRunner {
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
         case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen,
-             .classify, .keysGenerate, .keysList, .keysExportPublic, .keysImport,
+             .classify, .identify, .capabilities,
+             .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
