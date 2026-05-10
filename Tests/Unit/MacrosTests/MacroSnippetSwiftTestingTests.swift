@@ -3,6 +3,7 @@
 
 import Foundation
 import Testing
+import CocxyCommandSignatures
 @testable import CocxyTerminal
 
 @Suite("Macros and snippets foundation")
@@ -247,18 +248,46 @@ struct MacroSnippetSwiftTestingTests {
 
     @Test("macro event payloads codable round-trip")
     func macroEventPayloadsCodableRoundTrip() throws {
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let signature = try SignatureSigner().sign(
+            payload: Data("abc".utf8),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
         let macro = TerminalMacro(
             id: "roundtrip",
             name: "Roundtrip",
             events: [.text("abc"), .key("return"), .command("clear"), .delay(milliseconds: 150)],
             createdAt: Date(timeIntervalSince1970: 1),
-            updatedAt: Date(timeIntervalSince1970: 2)
+            updatedAt: Date(timeIntervalSince1970: 2),
+            signature: signature
         )
 
         let data = try JSONEncoder().encode(macro)
         let decoded = try JSONDecoder().decode(TerminalMacro.self, from: data)
 
         #expect(decoded == macro)
+    }
+
+    @Test("legacy macro JSON decodes without signature")
+    func legacyMacroJSONDecodesWithoutSignature() throws {
+        let data = Data("""
+        {
+          "id": "legacy",
+          "name": "Legacy",
+          "events": [{ "text": { "_0": "abc" } }],
+          "createdAt": 1,
+          "updatedAt": 2
+        }
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+
+        let decoded = try decoder.decode(TerminalMacro.self, from: data)
+
+        #expect(decoded.id == "legacy")
+        #expect(decoded.signature == nil)
     }
 
     private func makeTemporaryDirectory() throws -> URL {

@@ -2,6 +2,7 @@
 // ProjectTemplate.swift - Local project scaffold template models.
 
 import Foundation
+import CocxyCommandSignatures
 
 enum ProjectTemplateSource: String, Sendable, Codable, Equatable {
     case builtIn = "built-in"
@@ -36,6 +37,7 @@ struct ProjectTemplate: Sendable, Equatable {
     let summary: String
     let variables: [ProjectTemplateVariable]
     let hooks: ProjectTemplateHooks
+    let signature: SignedArtifact?
     let source: ProjectTemplateSource
     let directoryURL: URL
 
@@ -152,6 +154,23 @@ struct ProjectTemplateManifest: Codable, Sendable, Equatable {
     let description: String
     let variables: [ProjectTemplateVariable]
     let hooks: ProjectTemplateHooks?
+    let signature: SignedArtifact?
+
+    init(
+        id: String,
+        name: String,
+        description: String,
+        variables: [ProjectTemplateVariable],
+        hooks: ProjectTemplateHooks?,
+        signature: SignedArtifact? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.description = description
+        self.variables = variables
+        self.hooks = hooks
+        self.signature = signature
+    }
 }
 
 enum ProjectTemplateHookPhase: String, Sendable, Hashable, Equatable {

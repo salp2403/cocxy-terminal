@@ -2,6 +2,7 @@
 // PluginManifest.swift - Parser and model for plugin manifest.toml files.
 
 import Foundation
+import CocxyCommandSignatures
 
 // MARK: - Plugin Manifest
 
@@ -112,6 +113,28 @@ struct PluginSignature: Codable, Equatable, Sendable {
     let algorithm: String
     let keyID: String?
     let value: String
+    let author: String?
+    let timestamp: Date?
+    let payloadSHA256: String?
+
+    func signedArtifact() -> SignedArtifact? {
+        guard let algorithm = SignatureAlgorithm(rawValue: algorithm),
+              let keyID,
+              let author,
+              let timestamp,
+              let payloadSHA256
+        else {
+            return nil
+        }
+        return SignedArtifact(
+            algorithm: algorithm,
+            keyID: keyID,
+            author: author,
+            timestamp: timestamp,
+            payloadSHA256: payloadSHA256,
+            signature: value
+        )
+    }
 }
 
 // MARK: - Plugin Event
@@ -211,7 +234,12 @@ enum PluginManifestParser {
             PluginSignature(
                 algorithm: values["signature-algorithm"] ?? "unknown",
                 keyID: values["signature-key-id"],
-                value: $0
+                value: $0,
+                author: values["signature-author"],
+                timestamp: values["signature-timestamp"].flatMap {
+                    ISO8601DateFormatter.cocxySignature.date(from: $0)
+                },
+                payloadSHA256: values["signature-payload-sha256"]
             )
         }
 

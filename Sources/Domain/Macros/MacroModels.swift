@@ -2,6 +2,7 @@
 // MacroModels.swift - Shared models for local macros, snippets, aliases, and clipboard history.
 
 import Foundation
+import CocxyCommandSignatures
 
 enum MacroEvent: Codable, Equatable, Sendable {
     case text(String)
@@ -16,19 +17,22 @@ struct TerminalMacro: Identifiable, Codable, Equatable, Sendable {
     let events: [MacroEvent]
     let createdAt: Date
     let updatedAt: Date
+    let signature: SignedArtifact?
 
     init(
         id: String = UUID().uuidString,
         name: String,
         events: [MacroEvent],
         createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        updatedAt: Date = Date(),
+        signature: SignedArtifact? = nil
     ) {
         self.id = id
         self.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
         self.events = events
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.signature = signature
     }
 }
 

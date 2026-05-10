@@ -122,7 +122,7 @@ public enum SignedArtifactFrontmatter {
     }
 }
 
-extension ISO8601DateFormatter {
+public extension ISO8601DateFormatter {
     static let cocxySignature: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]

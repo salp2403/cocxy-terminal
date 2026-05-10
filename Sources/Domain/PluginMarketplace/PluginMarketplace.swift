@@ -2,6 +2,7 @@
 // PluginMarketplace.swift - Decentralized plugin source, validation, and install domain.
 
 import Foundation
+import CocxyCommandSignatures
 
 // MARK: - Plugin Source URL Resolver
 
@@ -165,11 +166,13 @@ enum PluginSignatureStatus: Equatable, Sendable {
     case verified
     case unsignedAllowed
     case presentButUnverified
+    case invalid
 }
 
 enum PluginValidationWarning: Equatable, Sendable {
     case unsignedPlugin
     case signaturePresentButUnverified
+    case invalidSignature
 }
 
 enum PluginValidationError: Error, Equatable {
@@ -181,11 +184,17 @@ struct PluginValidationReport: Equatable, Sendable {
     let signatureStatus: PluginSignatureStatus
     let warnings: Set<PluginValidationWarning>
 
-    var isInstallable: Bool { true }
+    var isInstallable: Bool { signatureStatus != .invalid }
 }
 
 /// Validates decentralized plugin metadata before registration.
 struct PluginValidator: Sendable {
+    let trustedAuthors: TrustedAuthorRegistry
+
+    init(trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry()) {
+        self.trustedAuthors = trustedAuthors
+    }
+
     func validate(
         manifest: PluginManifest,
         sourceURL: URL,
@@ -195,9 +204,37 @@ struct PluginValidator: Sendable {
         try Self.validatePluginID(manifest.id)
 
         if let signature = manifest.signature, !signature.value.isEmpty {
+            guard let artifact = signature.signedArtifact(),
+                  let publicKey = trustedAuthors.publicKey(for: artifact.keyID)
+            else {
+                return PluginValidationReport(
+                    signatureStatus: .presentButUnverified,
+                    warnings: [.signaturePresentButUnverified]
+                )
+            }
+
+            let manifestURL = pluginDirectory.appendingPathComponent(manifest.manifestFileName)
+            guard let manifestContent = try? String(contentsOf: manifestURL, encoding: .utf8) else {
+                return PluginValidationReport(
+                    signatureStatus: .presentButUnverified,
+                    warnings: [.signaturePresentButUnverified]
+                )
+            }
+            let verification = SignatureVerifier().verify(
+                payload: PluginSignaturePayload.canonicalManifestPayload(from: manifestContent),
+                artifact: artifact,
+                publicKey: publicKey
+            )
+            guard verification == .valid else {
+                return PluginValidationReport(
+                    signatureStatus: .invalid,
+                    warnings: [.invalidSignature]
+                )
+            }
+
             return PluginValidationReport(
-                signatureStatus: .presentButUnverified,
-                warnings: [.signaturePresentButUnverified]
+                signatureStatus: .verified,
+                warnings: []
             )
         }
 
@@ -226,12 +263,37 @@ struct PluginValidator: Sendable {
     }
 }
 
+enum PluginSignaturePayload {
+    private static let signatureKeys: Set<String> = [
+        "signature",
+        "signature-algorithm",
+        "signature-key-id",
+        "signature-author",
+        "signature-timestamp",
+        "signature-payload-sha256",
+    ]
+
+    static func canonicalManifestPayload(from content: String) -> Data {
+        var lines = content.components(separatedBy: .newlines).filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard let separator = trimmed.firstIndex(of: "=") else { return true }
+            let key = trimmed[..<separator].trimmingCharacters(in: .whitespaces)
+            return !signatureKeys.contains(key)
+        }
+        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+            lines.removeLast()
+        }
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+}
+
 // MARK: - Plugin Installer
 
 enum PluginInstallerError: Error, Equatable {
     case missingManifest(String)
     case pluginAlreadyInstalled(String)
     case pluginNotInstalled(String)
+    case invalidSignature(String)
     case unsafeSourceName(String)
     case unsupportedLocalSource(String)
     case gitCloneFailed(Int32)
@@ -292,6 +354,9 @@ struct PluginInstaller {
             sourceURL: sourceURL,
             pluginDirectory: stagedPlugin
         )
+        guard report.isInstallable else {
+            throw PluginInstallerError.invalidSignature(stagedManifest.id)
+        }
 
         let finalURL = pluginsDirectory.appendingPathComponent(stagedManifest.id, isDirectory: true)
         if fileManager.fileExists(atPath: finalURL.path) {

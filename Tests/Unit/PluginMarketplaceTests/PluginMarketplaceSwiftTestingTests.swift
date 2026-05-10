@@ -3,6 +3,7 @@
 
 import Foundation
 import Testing
+import CocxyCommandSignatures
 @testable import CocxyTerminal
 
 @Suite("Plugin marketplace")
@@ -102,6 +103,153 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(report.isInstallable)
         #expect(report.signatureStatus == .unsignedAllowed)
         #expect(report.warnings.contains(.unsignedPlugin))
+    }
+
+    @Test("validator verifies signed plugin manifests with trusted authors")
+    func validatorVerifiesSignedPluginManifestsWithTrustedAuthors() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginDirectory = root.appendingPathComponent("signed-helper", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+
+        let unsignedManifest = """
+        name = "Signed Helper"
+        version = "1.0.0"
+        author = "Cocxy"
+        capabilities = ["environment-read"]
+        """
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let artifact = try SignatureSigner().sign(
+            payload: Data((unsignedManifest + "\n").utf8),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        try (unsignedManifest + """
+
+        signature = "\(artifact.signature)"
+        signature-algorithm = "\(artifact.algorithm.rawValue)"
+        signature-key-id = "\(artifact.keyID)"
+        signature-author = "\(artifact.author)"
+        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
+        signature-payload-sha256 = "\(artifact.payloadSHA256)"
+        """).write(
+            to: pluginDirectory.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        let manifest = try PluginRegistry.loadManifest(from: pluginDirectory)
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+
+        let report = try PluginValidator(trustedAuthors: registry).validate(
+            manifest: manifest,
+            sourceURL: pluginDirectory,
+            pluginDirectory: pluginDirectory
+        )
+
+        #expect(report.isInstallable)
+        #expect(report.signatureStatus == .verified)
+        #expect(report.warnings.isEmpty)
+    }
+
+    @Test("validator blocks signed plugin manifests that fail verification")
+    func validatorBlocksSignedPluginManifestsThatFailVerification() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginDirectory = root.appendingPathComponent("tampered-helper", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+
+        let unsignedManifest = """
+        name = "Tampered Helper"
+        version = "1.0.0"
+        author = "Cocxy"
+        """
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let artifact = try SignatureSigner().sign(
+            payload: Data((unsignedManifest + "\n").utf8),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        try """
+        name = "Tampered Helper"
+        version = "2.0.0"
+        author = "Cocxy"
+        signature = "\(artifact.signature)"
+        signature-algorithm = "\(artifact.algorithm.rawValue)"
+        signature-key-id = "\(artifact.keyID)"
+        signature-author = "\(artifact.author)"
+        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
+        signature-payload-sha256 = "\(artifact.payloadSHA256)"
+        """.write(
+            to: pluginDirectory.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        let manifest = try PluginRegistry.loadManifest(from: pluginDirectory)
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+
+        let report = try PluginValidator(trustedAuthors: registry).validate(
+            manifest: manifest,
+            sourceURL: pluginDirectory,
+            pluginDirectory: pluginDirectory
+        )
+
+        #expect(!report.isInstallable)
+        #expect(report.signatureStatus == .invalid)
+        #expect(report.warnings.contains(.invalidSignature))
+    }
+
+    @Test("installer refuses plugins with invalid signatures")
+    func installerRefusesPluginsWithInvalidSignatures() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repo = root.appendingPathComponent("signed-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+
+        let unsignedManifest = """
+        name = "Signed Plugin"
+        version = "1.0.0"
+        author = "Cocxy"
+        """
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let artifact = try SignatureSigner().sign(
+            payload: Data((unsignedManifest + "\n").utf8),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        try """
+        name = "Signed Plugin"
+        version = "9.9.9"
+        author = "Cocxy"
+        signature = "\(artifact.signature)"
+        signature-algorithm = "\(artifact.algorithm.rawValue)"
+        signature-key-id = "\(artifact.keyID)"
+        signature-author = "\(artifact.author)"
+        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
+        signature-payload-sha256 = "\(artifact.payloadSHA256)"
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            validator: PluginValidator(trustedAuthors: registry)
+        )
+
+        #expect(throws: PluginInstallerError.invalidSignature("signed-plugin")) {
+            _ = try installer.install(from: repo)
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: pluginsDirectory.appendingPathComponent("signed-plugin").path
+        ))
     }
 
     @Test("installer stages local repo and installed plugin loads next scan")

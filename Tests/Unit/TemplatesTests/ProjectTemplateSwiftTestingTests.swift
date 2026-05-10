@@ -3,6 +3,7 @@
 
 import Foundation
 import Testing
+import CocxyCommandSignatures
 @testable import CocxyTerminal
 
 @Suite("ProjectTemplates")
@@ -51,6 +52,33 @@ struct ProjectTemplateSwiftTestingTests {
         #expect(swiftTemplate.name == "Project Swift Package")
         #expect(swiftTemplate.source == .project)
         #expect(swiftTemplate.hooks.post == ["swift test"])
+    }
+
+    @Test("loader preserves optional template signature metadata")
+    func loaderPreservesOptionalTemplateSignatureMetadata() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let artifact = try SignatureSigner().sign(
+            payload: Data("template".utf8),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+
+        try writeTemplate(
+            id: "signed-template",
+            name: "Signed Template",
+            summary: "Signed local template",
+            signature: artifact,
+            in: root
+        )
+
+        let template = try #require(ProjectTemplateRegistry(
+            directories: [ProjectTemplateDirectory(url: root, source: .user)]
+        ).templateMap()["signed-template"])
+
+        #expect(template.signature == artifact)
     }
 
     @Test("resolver applies defaults and rejects missing or unknown placeholders")
@@ -371,6 +399,7 @@ struct ProjectTemplateSwiftTestingTests {
         ],
         files: [String: String] = ["README.md": "# {{project_name}}\n"],
         hooks: ProjectTemplateHooks = ProjectTemplateHooks(post: ["swift test"]),
+        signature: SignedArtifact? = nil,
         in root: URL
     ) throws {
         let directory = root.appendingPathComponent(id, isDirectory: true)
@@ -382,7 +411,8 @@ struct ProjectTemplateSwiftTestingTests {
             name: name,
             description: summary,
             variables: variables,
-            hooks: hooks
+            hooks: hooks,
+            signature: signature
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

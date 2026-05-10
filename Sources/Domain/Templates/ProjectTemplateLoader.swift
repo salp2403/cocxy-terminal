@@ -42,6 +42,7 @@ struct ProjectTemplateLoader {
             summary: manifest.description,
             variables: manifest.variables,
             hooks: manifest.hooks ?? ProjectTemplateHooks(),
+            signature: manifest.signature,
             source: source,
             directoryURL: templateDirectory
         )
