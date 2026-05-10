@@ -178,6 +178,14 @@ enum KeybindingActionCatalog {
         )
     )
 
+    static let windowFocusLocation = KeybindingAction(
+        id: "window.focusLocation",
+        displayName: "Focus Location",
+        summary: "Focus the browser address field, opening a browser split when needed.",
+        category: .window,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "l")
+    )
+
     // MARK: - Tab
 
     static let tabNew = KeybindingAction(
@@ -490,6 +498,7 @@ enum KeybindingActionCatalog {
         windowQuickTerminal,
         windowGitHubPane,
         windowNotes,
+        windowFocusLocation,
         // Tab
         tabNew,
         tabClose,

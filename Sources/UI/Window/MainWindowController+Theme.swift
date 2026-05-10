@@ -91,6 +91,7 @@ extension MainWindowController {
         gitHubPaneViewModel?.updateLocalizer(localizer)
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshTabStrip(syncFromFirstResponder: false)
+        refreshShortcutHintsOverlay(config: config.uxPolish, keybindings: config.keybindings)
         refreshVisibleActivityDashboardLocalizer()
         refreshVisibleAgentModeLocalizer()
         tabBarView?.flashTabEnabled = config.notifications.flashTab

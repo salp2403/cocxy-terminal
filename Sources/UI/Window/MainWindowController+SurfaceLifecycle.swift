@@ -42,11 +42,14 @@ extension MainWindowController {
     /// frame for Metal rendering.
     func createTerminalSurface() {
         guard let surfaceView = terminalSurfaceView else { return }
+        let firstTabWorkingDirectory = tabManager.tabs.first.flatMap { tab in
+            tabManager.tab(for: tab.id)?.workingDirectory
+        }
 
         do {
             let surfaceID = try bridge.createSurface(
                 in: surfaceView,
-                workingDirectory: nil,
+                workingDirectory: firstTabWorkingDirectory,
                 command: nil
             )
             terminalViewModel.markRunning(surfaceID: surfaceID)
@@ -67,7 +70,7 @@ extension MainWindowController {
                     for: surfaceID,
                     tabID: firstTabID,
                     in: surfaceView,
-                    initialWorkingDirectory: tabManager.tab(for: firstTabID)?.workingDirectory
+                    initialWorkingDirectory: firstTabWorkingDirectory
                 )
                 attachRestoredCommandBlocksIfAvailable(
                     tabID: firstTabID,

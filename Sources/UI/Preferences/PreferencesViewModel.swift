@@ -102,6 +102,23 @@ final class PreferencesViewModel: ObservableObject {
     /// App UI language policy for localizable Cocxy strings.
     @Published var appLanguage: AppLanguage
 
+    // MARK: - UX Polish
+
+    /// Whether shortcut hints stay visible without hover.
+    @Published var alwaysShowShortcutHints: Bool
+
+    /// Whether the shortcut hint debug placement overlay is visible.
+    @Published var shortcutHintDebugOverlay: Bool
+
+    /// Horizontal shortcut hint offset in points.
+    @Published var shortcutHintOffsetX: Double
+
+    /// Vertical shortcut hint offset in points.
+    @Published var shortcutHintOffsetY: Double
+
+    /// Shortcut hint scale multiplier.
+    @Published var shortcutHintScale: Double
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -531,6 +548,7 @@ final class PreferencesViewModel: ObservableObject {
             || rateLimitIndicatorEnabled != c.appearance.rateLimitIndicatorEnabled
             || quickSwitchMode != c.appearance.quickSwitchMode
             || appLanguage != c.appearance.appLanguage
+            || uxPolishHasUnsavedChanges(comparedTo: c.uxPolish)
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -628,6 +646,11 @@ final class PreferencesViewModel: ObservableObject {
         rateLimitIndicatorEnabled = c.appearance.rateLimitIndicatorEnabled
         quickSwitchMode = c.appearance.quickSwitchMode
         appLanguage = c.appearance.appLanguage
+        alwaysShowShortcutHints = c.uxPolish.alwaysShowShortcutHints
+        shortcutHintDebugOverlay = c.uxPolish.shortcutHintDebugOverlay
+        shortcutHintOffsetX = c.uxPolish.shortcutHintOffsetX
+        shortcutHintOffsetY = c.uxPolish.shortcutHintOffsetY
+        shortcutHintScale = c.uxPolish.shortcutHintScale
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -844,6 +867,11 @@ final class PreferencesViewModel: ObservableObject {
         self.rateLimitIndicatorEnabled = config.appearance.rateLimitIndicatorEnabled
         self.quickSwitchMode = config.appearance.quickSwitchMode
         self.appLanguage = config.appearance.appLanguage
+        self.alwaysShowShortcutHints = config.uxPolish.alwaysShowShortcutHints
+        self.shortcutHintDebugOverlay = config.uxPolish.shortcutHintDebugOverlay
+        self.shortcutHintOffsetX = config.uxPolish.shortcutHintOffsetX
+        self.shortcutHintOffsetY = config.uxPolish.shortcutHintOffsetY
+        self.shortcutHintScale = config.uxPolish.shortcutHintScale
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -1535,6 +1563,7 @@ final class PreferencesViewModel: ObservableObject {
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
         let spotlight = buildSpotlightConfigFromViewModel()
+        let uxPolish = buildUXPolishConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -1593,6 +1622,7 @@ final class PreferencesViewModel: ObservableObject {
                 timingHeuristics: timingHeuristics,
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
+            uxPolish: uxPolish,
             agent: agent,
             backup: backup,
             activity: activity,
@@ -1650,6 +1680,9 @@ final class PreferencesViewModel: ObservableObject {
         spotlightIncludeCommandOutput = spotlight.includeCommandOutput
         spotlightIncludeWorkingDirectories = spotlight.includeWorkingDirectories
         spotlightIncludeToolMetadata = spotlight.includeToolMetadata
+        shortcutHintOffsetX = uxPolish.shortcutHintOffsetX
+        shortcutHintOffsetY = uxPolish.shortcutHintOffsetY
+        shortcutHintScale = uxPolish.shortcutHintScale
         pendingKeybindings = nil
     }
 
@@ -2175,6 +2208,24 @@ final class PreferencesViewModel: ObservableObject {
             || notesAutoSaveIntervalSeconds != config.autoSaveIntervalSeconds
     }
 
+    private func buildUXPolishConfigFromViewModel() -> UXPolishConfig {
+        UXPolishConfig(
+            alwaysShowShortcutHints: alwaysShowShortcutHints,
+            shortcutHintDebugOverlay: shortcutHintDebugOverlay,
+            shortcutHintOffsetX: min(max(shortcutHintOffsetX, -120), 120),
+            shortcutHintOffsetY: min(max(shortcutHintOffsetY, -120), 120),
+            shortcutHintScale: min(max(shortcutHintScale, 0.5), 2.0)
+        )
+    }
+
+    private func uxPolishHasUnsavedChanges(comparedTo config: UXPolishConfig) -> Bool {
+        alwaysShowShortcutHints != config.alwaysShowShortcutHints
+            || shortcutHintDebugOverlay != config.shortcutHintDebugOverlay
+            || shortcutHintOffsetX != config.shortcutHintOffsetX
+            || shortcutHintOffsetY != config.shortcutHintOffsetY
+            || shortcutHintScale != config.shortcutHintScale
+    }
+
     private func buildLSPConfigFromViewModel() -> LSPConfig {
         LSPConfig(
             enabled: lspEnabled,
@@ -2224,6 +2275,7 @@ final class PreferencesViewModel: ObservableObject {
         let voice = buildVoiceConfigFromViewModel()
         let completions = buildCompletionConfigFromViewModel()
         let spotlight = buildSpotlightConfigFromViewModel()
+        let uxPolish = buildUXPolishConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
@@ -2287,6 +2339,13 @@ final class PreferencesViewModel: ObservableObject {
         pattern-matching = \(patternMatching)
         timing-heuristics = \(timingHeuristics)
         idle-timeout-seconds = \(clampedTimeout)
+
+        [ux-polish]
+        always-show-shortcut-hints = \(uxPolish.alwaysShowShortcutHints)
+        shortcut-hint-debug-overlay = \(uxPolish.shortcutHintDebugOverlay)
+        shortcut-hint-offset-x = \(Self.tomlNumber(uxPolish.shortcutHintOffsetX))
+        shortcut-hint-offset-y = \(Self.tomlNumber(uxPolish.shortcutHintOffsetY))
+        shortcut-hint-scale = \(Self.tomlNumber(uxPolish.shortcutHintScale))
 
         [agent]
         enabled = \(agent.enabled)

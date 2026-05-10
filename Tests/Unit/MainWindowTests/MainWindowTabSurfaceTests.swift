@@ -89,6 +89,30 @@ final class TabSurfaceMappingTests: XCTestCase {
         )
     }
 
+    func testInitialTerminalSurfaceUsesFirstTabWorkingDirectory() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        guard let firstTabID = controller.tabManager.tabs.first?.id else {
+            XCTFail("TabManager must have at least one tab on creation")
+            return
+        }
+
+        let directory = URL(fileURLWithPath: "/tmp/cocxy-finder-window-cwd", isDirectory: true)
+        controller.tabManager.updateTab(id: firstTabID) { tab in
+            tab.workingDirectory = directory
+        }
+
+        controller.createTerminalSurface()
+
+        XCTAssertEqual(
+            bridge.createSurfaceRequests.last?.workingDirectory?.standardizedFileURL.path,
+            directory.standardizedFileURL.path,
+            "The bootstrap terminal surface must spawn in the tab directory used by Finder Services"
+        )
+    }
+
     func testInitialTabHasViewModelMapping() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

@@ -137,6 +137,7 @@ extension MainWindowController {
         "editor.resetZoom": KeybindingActionCatalog.editorResetZoom.id,
         "preferences.show": KeybindingActionCatalog.windowPreferences.id,
         "notifications.toggle": KeybindingActionCatalog.reviewNotifications.id,
+        "browser.focusLocation": KeybindingActionCatalog.windowFocusLocation.id,
         "browser.toggle": KeybindingActionCatalog.markdownBrowser.id,
         "navigation.quickterminal": KeybindingActionCatalog.windowQuickTerminal.id,
         "navigation.quickswitch": KeybindingActionCatalog.remoteGoToAttention.id,
@@ -542,6 +543,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleNotificationPanel() }
+                }
+            ),
+            CommandAction(
+                id: "browser.focusLocation",
+                name: "Focus Location",
+                description: "Focus the browser address field or open a browser split",
+                shortcut: paletteShortcutLabel("browser.focusLocation", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.focusLocationOrOpenBrowserAction(nil) }
                 }
             ),
             CommandAction(

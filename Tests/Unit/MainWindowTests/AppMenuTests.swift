@@ -66,6 +66,17 @@ final class AppMenuStructureTests: XCTestCase {
         XCTAssertNotNil(viewMenu, "View menu must exist")
     }
 
+    func testViewMenuHasContextAwareFocusLocationShortcut() throws {
+        let mainMenu = try XCTUnwrap(NSApplication.shared.mainMenu)
+        let viewMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "View" })?.submenu)
+        let item = try XCTUnwrap(viewMenu.items.first(where: { $0.title == "Focus Location" }))
+
+        XCTAssertEqual(item.action, #selector(MainWindowController.focusLocationOrOpenBrowserAction(_:)))
+        XCTAssertEqual(item.keyEquivalent, "l")
+        XCTAssertEqual(item.keyEquivalentModifierMask, [.command])
+        XCTAssertEqual(MenuKeybindingsBinder.actionId(of: item), KeybindingActionCatalog.windowFocusLocation.id)
+    }
+
     func testWindowMenuExists() {
         let mainMenu = NSApplication.shared.mainMenu
         let windowMenu = mainMenu?.items.first(where: { $0.submenu?.title == "Window" })

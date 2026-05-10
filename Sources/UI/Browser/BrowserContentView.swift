@@ -466,6 +466,12 @@ final class BrowserContentView: NSView {
         }
     }
 
+    func focusAddressField() {
+        guard let urlField else { return }
+        window?.makeFirstResponder(urlField)
+        urlField.currentEditor()?.selectAll(nil)
+    }
+
     // MARK: - Actions
 
     @objc private func urlFieldAction(_ sender: NSTextField) {

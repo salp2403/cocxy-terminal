@@ -88,6 +88,31 @@ struct MainWindowMacIntegrationSwiftTestingTests {
         )
     }
 
+    @Test("app Info.plist declares Finder workspace services")
+    func appInfoPlistDeclaresFinderWorkspaceServices() throws {
+        let plistURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Info.plist")
+        let data = try Data(contentsOf: plistURL)
+        let plist = try #require(
+            PropertyListSerialization.propertyList(from: data, options: [], format: nil) as? [String: Any]
+        )
+        let services = try #require(plist["NSServices"] as? [[String: Any]])
+        let messages = Set(services.compactMap { $0["NSMessage"] as? String })
+
+        #expect(messages.contains("openWorkspaceHere"))
+        #expect(messages.contains("openWindowHere"))
+        for service in services {
+            guard let message = service["NSMessage"] as? String,
+                  message == "openWorkspaceHere" || message == "openWindowHere" else {
+                continue
+            }
+            #expect(service["NSPortName"] as? String == "Cocxy Terminal")
+            let sendTypes = try #require(service["NSSendTypes"] as? [String])
+            #expect(sendTypes.contains("NSFilenamesPboardType"))
+            #expect(sendTypes.contains("public.file-url"))
+        }
+    }
+
     @Test("window imports Continuity Camera pasteboard images into local Agent attachments")
     func windowImportsContinuityCameraPasteboardImagesIntoAgentAttachments() throws {
         let root = try Self.makeTemporaryDirectory()

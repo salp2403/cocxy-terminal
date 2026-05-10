@@ -744,6 +744,73 @@ struct EditableAppearanceSection: View {
                 }
             }
 
+            Section(viewModel.localizedString("preferences.appearance.shortcutHints.section", fallback: "Shortcut hints")) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.alwaysShowShortcutHints",
+                            fallback: "Always show keyboard shortcut hints"
+                        ),
+                        isOn: $viewModel.alwaysShowShortcutHints
+                    )
+                    .help(
+                        viewModel.localizedString(
+                            "preferences.appearance.alwaysShowShortcutHints.help",
+                            fallback: "Keeps small shortcut labels visible in supported chrome and pane surfaces instead of showing them only on hover."
+                        )
+                    )
+
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.appearance.shortcutHintDebugOverlay",
+                            fallback: "Show shortcut hint tuning overlay"
+                        ),
+                        isOn: $viewModel.shortcutHintDebugOverlay
+                    )
+                    .disabled(!viewModel.alwaysShowShortcutHints)
+
+                    HStack {
+                        Text(viewModel.localizedString("preferences.appearance.shortcutHintOffsetX", fallback: "Horizontal offset"))
+                        Spacer()
+                        Text("\(viewModel.shortcutHintOffsetX, specifier: "%.0f") pt")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $viewModel.shortcutHintOffsetX, in: -120...120, step: 1)
+                        .disabled(!viewModel.alwaysShowShortcutHints)
+
+                    HStack {
+                        Text(viewModel.localizedString("preferences.appearance.shortcutHintOffsetY", fallback: "Vertical offset"))
+                        Spacer()
+                        Text("\(viewModel.shortcutHintOffsetY, specifier: "%.0f") pt")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $viewModel.shortcutHintOffsetY, in: -120...120, step: 1)
+                        .disabled(!viewModel.alwaysShowShortcutHints)
+
+                    HStack {
+                        Text(viewModel.localizedString("preferences.appearance.shortcutHintScale", fallback: "Scale"))
+                        Spacer()
+                        Text("\(viewModel.shortcutHintScale, specifier: "%.2f")x")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Slider(value: $viewModel.shortcutHintScale, in: 0.5...2.0, step: 0.05)
+                        .disabled(!viewModel.alwaysShowShortcutHints)
+
+                    Text(
+                        viewModel.localizedString(
+                            "preferences.appearance.shortcutHints.caption",
+                            fallback: "Hints are local UI only and use the same editable shortcuts shown in the Keybindings section."
+                        )
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
             Section(viewModel.localizedString("preferences.appearance.notes.section", fallback: "Notes")) {
                 VStack(alignment: .leading, spacing: 12) {
                     Toggle(

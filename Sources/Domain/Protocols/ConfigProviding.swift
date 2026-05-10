@@ -53,6 +53,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let agentDetection: AgentDetectionConfig
     let inputClassifier: InputClassifierConfig
     let security: SecurityConfig
+    let uxPolish: UXPolishConfig
     let agent: AgentModeConfig
     let backup: BackupConfig
     let activity: ActivityConfig
@@ -81,6 +82,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         agentDetection: AgentDetectionConfig,
         inputClassifier: InputClassifierConfig = .defaults,
         security: SecurityConfig = .defaults,
+        uxPolish: UXPolishConfig = .defaults,
         agent: AgentModeConfig = .defaults,
         backup: BackupConfig = .defaults,
         activity: ActivityConfig = .defaults,
@@ -108,6 +110,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agentDetection = agentDetection
         self.inputClassifier = inputClassifier
         self.security = security
+        self.uxPolish = uxPolish
         self.agent = agent
         self.backup = backup
         self.activity = activity
@@ -143,6 +146,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agentDetection: .defaults,
             inputClassifier: .defaults,
             security: .defaults,
+            uxPolish: .defaults,
             agent: .defaults,
             backup: .defaults,
             activity: .defaults,
@@ -173,7 +177,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, security, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -189,6 +193,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.inputClassifier = try container.decodeIfPresent(InputClassifierConfig.self, forKey: .inputClassifier)
             ?? .defaults
         self.security = try container.decodeIfPresent(SecurityConfig.self, forKey: .security)
+            ?? .defaults
+        self.uxPolish = try container.decodeIfPresent(UXPolishConfig.self, forKey: .uxPolish)
             ?? .defaults
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
             ?? .defaults
@@ -319,6 +325,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
             security: security,
+            uxPolish: uxPolish,
             // Built-in Agent Mode is a global user preference. Project
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
@@ -954,6 +961,31 @@ struct SecurityConfig: Codable, Sendable, Equatable {
             requireSignedPlugins: false,
             warnOnUnsigned: true,
             trustOnFirstUse: false
+        )
+    }
+}
+
+// MARK: - UX Polish Config
+
+/// `[ux-polish]` section for local-only UI affordances.
+///
+/// Shortcut hints default off to avoid changing the visual density for
+/// existing users. Debug controls are also opt-in and only affect local
+/// overlay placement; they do not enable telemetry or external reporting.
+struct UXPolishConfig: Codable, Sendable, Equatable {
+    let alwaysShowShortcutHints: Bool
+    let shortcutHintDebugOverlay: Bool
+    let shortcutHintOffsetX: Double
+    let shortcutHintOffsetY: Double
+    let shortcutHintScale: Double
+
+    static var defaults: UXPolishConfig {
+        UXPolishConfig(
+            alwaysShowShortcutHints: false,
+            shortcutHintDebugOverlay: false,
+            shortcutHintOffsetX: 0,
+            shortcutHintOffsetY: 0,
+            shortcutHintScale: 1
         )
     }
 }

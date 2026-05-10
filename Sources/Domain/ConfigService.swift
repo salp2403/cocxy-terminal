@@ -378,6 +378,16 @@ final class ConfigService: ConfigProviding {
         warn-on-unsigned = \(defaults.security.warnOnUnsigned)
         trust-on-first-use = \(defaults.security.trustOnFirstUse)
 
+        [ux-polish]
+        # Always-show keyboard shortcut hints. Off by default so existing
+        # layouts keep their current density. Debug overlay controls are
+        # local-only placement aids for tuning hint position and scale.
+        always-show-shortcut-hints = \(defaults.uxPolish.alwaysShowShortcutHints)
+        shortcut-hint-debug-overlay = \(defaults.uxPolish.shortcutHintDebugOverlay)
+        shortcut-hint-offset-x = \(defaults.uxPolish.shortcutHintOffsetX)
+        shortcut-hint-offset-y = \(defaults.uxPolish.shortcutHintOffsetY)
+        shortcut-hint-scale = \(defaults.uxPolish.shortcutHintScale)
+
         [agent]
         # Built-in Agent Mode. Disabled by default; enabling this never
         # enables auto-mode. Foundation Models is preferred on supported
@@ -650,6 +660,7 @@ final class ConfigService: ConfigProviding {
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let inputClassifier = parseInputClassifierConfig(from: parsed)
         let security = parseSecurityConfig(from: parsed)
+        let uxPolish = parseUXPolishConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
         let backup = parseBackupConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
@@ -682,6 +693,7 @@ final class ConfigService: ConfigProviding {
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
             security: security,
+            uxPolish: uxPolish,
             agent: agent,
             backup: backup,
             activity: activity,
@@ -955,6 +967,26 @@ final class ConfigService: ConfigProviding {
                 ?? defaults.requireSignedPlugins,
             warnOnUnsigned: boolValue(table["warn-on-unsigned"]) ?? defaults.warnOnUnsigned,
             trustOnFirstUse: boolValue(table["trust-on-first-use"]) ?? defaults.trustOnFirstUse
+        )
+    }
+
+    /// Parses the `[ux-polish]` section.
+    private func parseUXPolishConfig(from parsed: [String: TOMLValue]) -> UXPolishConfig {
+        let table = extractTable("ux-polish", from: parsed)
+        let defaults = UXPolishConfig.defaults
+        let rawScale = doubleValue(table["shortcut-hint-scale"])
+        let scale = rawScale.map { raw in
+            (0.5...2.0).contains(raw) ? raw : defaults.shortcutHintScale
+        } ?? defaults.shortcutHintScale
+
+        return UXPolishConfig(
+            alwaysShowShortcutHints: boolValue(table["always-show-shortcut-hints"])
+                ?? defaults.alwaysShowShortcutHints,
+            shortcutHintDebugOverlay: boolValue(table["shortcut-hint-debug-overlay"])
+                ?? defaults.shortcutHintDebugOverlay,
+            shortcutHintOffsetX: doubleValue(table["shortcut-hint-offset-x"]) ?? defaults.shortcutHintOffsetX,
+            shortcutHintOffsetY: doubleValue(table["shortcut-hint-offset-y"]) ?? defaults.shortcutHintOffsetY,
+            shortcutHintScale: scale
         )
     }
 

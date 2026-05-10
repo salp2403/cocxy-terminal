@@ -60,6 +60,41 @@
 	<string>Cocxy uses the microphone only when you start local Voice input.</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Open Workspace in Cocxy</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>openWorkspaceHere</string>
+			<key>NSPortName</key>
+			<string>Cocxy Terminal</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+				<string>public.file-url</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Open Window in Cocxy</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>openWindowHere</string>
+			<key>NSPortName</key>
+			<string>Cocxy Terminal</string>
+			<key>NSSendTypes</key>
+			<array>
+				<string>NSFilenamesPboardType</string>
+				<string>public.file-url</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Cocxy uses on-device speech recognition to turn your local Voice input into text.</string>
 	<key>NSUserActivityTypes</key>

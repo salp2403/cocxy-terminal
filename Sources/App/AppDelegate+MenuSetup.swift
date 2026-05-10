@@ -263,6 +263,14 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(commandPaletteItem, with: KeybindingActionCatalog.windowCommandPalette)
         viewMenu.addItem(commandPaletteItem)
 
+        let focusLocationItem = NSMenuItem(
+            title: menuString("menu.view.focusLocation", "Focus Location", localizer),
+            action: #selector(MainWindowController.focusLocationOrOpenBrowserAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(focusLocationItem, with: KeybindingActionCatalog.windowFocusLocation)
+        viewMenu.addItem(focusLocationItem)
+
         let voiceInputItem = NSMenuItem(
             title: menuString("menu.view.voiceInput", "Voice Input", localizer),
             action: #selector(MainWindowController.startVoiceInputAction(_:)),

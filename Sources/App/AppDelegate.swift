@@ -107,6 +107,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// without requiring an app restart.
     private var menuKeybindingsCancellable: AnyCancellable?
 
+    /// Services-provider bridge for Finder contextual actions.
+    var finderServiceProvider: FinderServiceProvider?
+
     /// The quick terminal view model for state management.
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var quickTerminalViewModel: QuickTerminalViewModel?
@@ -285,6 +288,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             initializeNotificationStack()
             wireAgentDetectionToNotifications()
         }
+        installFinderServices()
         AppLaunchSignposts.measure(.socketServer) { initializeSocketServer() }
         scheduleDeferredLaunchWork()
     }
@@ -401,6 +405,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         sessionAutoSaveConfigCancellable = nil
         menuKeybindingsCancellable?.cancel()
         menuKeybindingsCancellable = nil
+        if NSApp.servicesProvider as AnyObject? === finderServiceProvider {
+            NSApp.servicesProvider = nil
+        }
+        finderServiceProvider = nil
 
         // Save the current session synchronously before shutting down.
         saveSessionBeforeTermination()

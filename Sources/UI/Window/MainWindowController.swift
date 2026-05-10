@@ -283,6 +283,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var smartRoutingHostingView: NSHostingView<AnyView>?
     var isSmartRoutingVisible: Bool = false
 
+    /// Non-interactive always-show shortcut hint hosts keyed by chrome placement.
+    var shortcutHintOverlayHosts: [ShortcutHintPlacement: ShortcutHintPassthroughHostingView<ShortcutHintsOverlayView>] = [:]
+
     var timelineHostingView: NSView?
     var timelineViewModel: TimelineViewModel?
     var isTimelineVisible: Bool = false
@@ -796,6 +799,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         )
 
         window.contentView = rootView
+        if let config = configService?.current {
+            refreshShortcutHintsOverlay(config: config.uxPolish, keybindings: config.keybindings)
+        }
 
         applyTabPosition(
             configService?.current.appearance.tabPosition ?? .left,
@@ -1853,6 +1859,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// collapses to zero width below a smaller threshold.
     private func adjustLayoutForWindowSize() {
         guard let windowWidth = window?.frame.width else { return }
+        layoutShortcutHintOverlays()
 
         // Auto-dismiss side panels when window is too narrow.
         if windowWidth < Self.panelAutoHideThreshold {

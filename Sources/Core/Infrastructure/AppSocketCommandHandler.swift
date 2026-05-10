@@ -1730,6 +1730,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "appearance.app-language":
             return config.appearance.appLanguage.rawValue
 
+        // UX polish
+        case "ux-polish.always-show-shortcut-hints":
+            return "\(config.uxPolish.alwaysShowShortcutHints)"
+        case "ux-polish.shortcut-hint-debug-overlay":
+            return "\(config.uxPolish.shortcutHintDebugOverlay)"
+        case "ux-polish.shortcut-hint-offset-x":
+            return "\(config.uxPolish.shortcutHintOffsetX)"
+        case "ux-polish.shortcut-hint-offset-y":
+            return "\(config.uxPolish.shortcutHintOffsetY)"
+        case "ux-polish.shortcut-hint-scale":
+            return "\(config.uxPolish.shortcutHintScale)"
+
         // Terminal
         case "terminal.scrollback-lines":
             return "\(config.terminal.scrollbackLines)"
@@ -1900,6 +1912,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "appearance.app-language":
             guard let language = AppLanguage.normalized(rawValue) else { return nil }
             return AppSocketConfigTOMLUpdater.renderedScalarValue(language.rawValue)
+        case "ux-polish.always-show-shortcut-hints",
+             "ux-polish.shortcut-hint-debug-overlay":
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
         case "completions.inline-ai":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
@@ -3277,6 +3293,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "appearance.background-opacity", "appearance.background-blur-radius",
             "appearance.aurora-enabled", "appearance.rate-limit-indicator-enabled",
             "appearance.quickswitch-mode", "appearance.app-language",
+            "ux-polish.always-show-shortcut-hints", "ux-polish.shortcut-hint-debug-overlay",
+            "ux-polish.shortcut-hint-offset-x", "ux-polish.shortcut-hint-offset-y",
+            "ux-polish.shortcut-hint-scale",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",

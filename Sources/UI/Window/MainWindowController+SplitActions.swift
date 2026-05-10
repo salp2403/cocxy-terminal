@@ -476,6 +476,10 @@ extension MainWindowController {
     }
 
     func focusPanelView(_ panelView: NSView) {
+        if let browserView = panelView as? BrowserContentView {
+            browserView.focusAddressField()
+            return
+        }
         if let editorView = panelView as? EditorView {
             editorView.focusTextView()
             return
