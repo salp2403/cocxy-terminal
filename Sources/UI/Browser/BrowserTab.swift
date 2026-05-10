@@ -25,6 +25,19 @@ struct BrowserTab: Identifiable, Equatable {
     /// Whether this tab's web view is currently loading.
     var isLoading: Bool
 
+    /// Title safe for browser chrome.
+    ///
+    /// WebKit can report an empty title while a page is loading, when a
+    /// localhost server is down, or when the document simply has no title.
+    /// The tab strip should still expose a stable label and hit target.
+    var displayTitle: String {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            return trimmed
+        }
+        return Self.fallbackDisplayTitle(for: url)
+    }
+
     /// Default URL for new tabs.
     static let defaultURL = URL(string: "http://localhost:3000")!
 
@@ -45,5 +58,25 @@ struct BrowserTab: Identifiable, Equatable {
         self.url = url
         self.title = title
         self.isLoading = isLoading
+    }
+
+    static func fallbackDisplayTitle(for url: URL) -> String {
+        if let host = url.host, !host.isEmpty {
+            if let port = url.port {
+                return "\(host):\(port)"
+            }
+            return host
+        }
+
+        let lastPathComponent = url.lastPathComponent
+        if !lastPathComponent.isEmpty {
+            return lastPathComponent
+        }
+
+        if !url.absoluteString.isEmpty {
+            return url.absoluteString
+        }
+
+        return "New Tab"
     }
 }

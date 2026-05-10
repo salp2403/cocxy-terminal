@@ -129,6 +129,13 @@ final class TabBarViewTests: XCTestCase {
         XCTAssertNotNil(closeItem, "Context menu should have 'Close Tab' item")
     }
 
+    func testContextMenuForTabHasRenameItem() {
+        let menu = tabBarView.buildContextMenu(for: tabManager.tabs[0].id)
+
+        let renameItem = menu.items.first { $0.title == "Rename Tab..." }
+        XCTAssertNotNil(renameItem, "Context menu should have 'Rename Tab...' item")
+    }
+
     func testContextMenuForTabHasNewTabItem() {
         let menu = tabBarView.buildContextMenu(for: tabManager.tabs[0].id)
 
@@ -182,6 +189,7 @@ final class TabBarViewTests: XCTestCase {
 
         let menu = spanishTabBarView.buildContextMenu(for: tabManager.tabs[0].id)
         XCTAssertNotNil(menu.items.first { $0.title == "Cerrar pestaña" })
+        XCTAssertNotNil(menu.items.first { $0.title == "Renombrar pestaña..." })
         XCTAssertNotNil(menu.items.first { $0.title == "Nueva pestaña" })
         XCTAssertNotNil(menu.items.first { $0.title == "Cerrar otras pestañas" })
         XCTAssertNotNil(menu.items.first { $0.title == "Mover pestaña arriba" })

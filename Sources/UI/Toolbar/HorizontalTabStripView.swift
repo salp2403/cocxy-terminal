@@ -474,14 +474,12 @@ final class HorizontalTabStripView: NSView {
         closeBtn.isHidden = !showCloseButton
         container.addSubview(closeBtn)
 
-        // Context menu for reordering.
-        if showCloseButton {
-            container.menu = buildTabContextMenu(
-                index: index,
-                isFirst: index == 0,
-                isLast: index == tabs.count - 1
-            )
-        }
+        container.menu = buildTabContextMenu(
+            index: index,
+            isFirst: index == 0,
+            isLast: index == tabs.count - 1,
+            canClose: showCloseButton
+        )
 
         // Styling for the container background.
         if isActive {
@@ -510,8 +508,24 @@ final class HorizontalTabStripView: NSView {
     }
 
     /// Builds a context menu for reordering a horizontal tab or panel.
-    private func buildTabContextMenu(index: Int, isFirst: Bool, isLast: Bool) -> NSMenu {
+    private func buildTabContextMenu(index: Int, isFirst: Bool, isLast: Bool, canClose: Bool) -> NSMenu {
         let menu = NSMenu()
+
+        let renameItem = NSMenuItem(
+            title: itemKind == .workspaceTab
+                ? Self.localizedRenameTabTitle(using: localizer)
+                : Self.localizedRenamePanelTitle(using: localizer),
+            action: #selector(handleRenameTab(_:)),
+            keyEquivalent: ""
+        )
+        renameItem.target = self
+        renameItem.tag = index
+        if let img = NSImage(systemSymbolName: "pencil", accessibilityDescription: nil) {
+            renameItem.image = img
+        }
+        menu.addItem(renameItem)
+
+        menu.addItem(NSMenuItem.separator())
 
         let moveLeftItem = NSMenuItem(
             title: Self.localizedMoveLeft(using: localizer),
@@ -550,6 +564,7 @@ final class HorizontalTabStripView: NSView {
         )
         closeItem.target = self
         closeItem.tag = index
+        closeItem.isEnabled = canClose
         if let img = NSImage(systemSymbolName: "xmark", accessibilityDescription: nil) {
             closeItem.image = img
         }
@@ -568,6 +583,12 @@ final class HorizontalTabStripView: NSView {
         let index = sender.tag
         guard index < tabs.count - 1 else { return }
         onSwapTabs?(index, index + 1)
+    }
+
+    @objc private func handleRenameTab(_ sender: NSMenuItem) {
+        guard let container = tabStack.arrangedSubviews.compactMap({ $0 as? DraggableTabContainer })
+            .first(where: { $0.tabIndex == sender.tag }) else { return }
+        container.startEditing()
     }
 
     private func createTabButton(title: String, icon: String, isActive: Bool, index: Int) -> NSButton {
@@ -669,6 +690,14 @@ final class HorizontalTabStripView: NSView {
 
     static func localizedClosePanelTitle(using localizer: AppLocalizer) -> String {
         localizer.string("horizontalTab.context.closePanel", fallback: "Close Panel")
+    }
+
+    static func localizedRenameTabTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("tabbar.context.rename", fallback: "Rename Tab...")
+    }
+
+    static func localizedRenamePanelTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("horizontalTab.context.renamePanel", fallback: "Rename Panel...")
     }
 
     static func localizedCloseTabControl(using localizer: AppLocalizer) -> String {

@@ -232,9 +232,10 @@ struct BrowserPanelView: View {
     private func browserTabItem(_ tab: BrowserTab) -> some View {
         let isActive = tab.id == viewModel.activeTabID
         let showClose = viewModel.browserTabs.count > 1
+        let title = tab.displayTitle
 
         return HStack(spacing: 4) {
-            Text(tab.title)
+            Text(title)
                 .font(.system(size: 11, weight: isActive ? .semibold : .regular))
                 .foregroundColor(
                     isActive
@@ -243,6 +244,7 @@ struct BrowserPanelView: View {
                 )
                 .lineLimit(1)
                 .truncationMode(.tail)
+                .frame(minWidth: 54, maxWidth: 150, alignment: .leading)
 
             if showClose {
                 Button(action: { viewModel.closeBrowserTab(tab.id) }) {
@@ -251,6 +253,7 @@ struct BrowserPanelView: View {
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 }
                 .buttonStyle(.plain)
+                .frame(width: 18, height: 18)
                 .accessibilityLabel(localized("browser.panel.closeTab", fallback: "Close browser tab"))
             }
         }
@@ -263,6 +266,7 @@ struct BrowserPanelView: View {
                       : Color.clear
                 )
         )
+        .contentShape(Rectangle())
         .onTapGesture {
             viewModel.selectBrowserTab(tab.id)
         }
@@ -270,7 +274,7 @@ struct BrowserPanelView: View {
         .accessibilityLabel(
             String(
                 format: localized("browser.panel.tab.accessibility", fallback: "Browser tab: %@"),
-                tab.title
+                title
             )
         )
     }

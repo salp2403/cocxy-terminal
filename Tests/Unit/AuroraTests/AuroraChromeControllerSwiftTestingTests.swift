@@ -295,6 +295,22 @@ struct AuroraChromeControllerSwiftTestingTests {
     }
 
     @Test
+    func renameSessionCallbackResolvesTabID() {
+        let harness = makeHarness()
+        let tab = harness.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/aurora-rename")
+        )
+        var renamed: TabID?
+        harness.controller.onRenameSession = { renamed = $0 }
+
+        if let tabID = harness.controller.tabID(forSessionID: tab.id.rawValue.uuidString) {
+            harness.controller.onRenameSession?(tabID)
+        }
+
+        #expect(renamed == tab.id)
+    }
+
+    @Test
     func moveSessionBeforeReordersUnderlyingTabs() {
         let harness = makeHarness()
         let first = harness.tabManager.tabs[0]

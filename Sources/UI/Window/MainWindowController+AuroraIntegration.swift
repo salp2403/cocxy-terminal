@@ -244,6 +244,9 @@ extension MainWindowController {
             self.tabManager.togglePin(id: tabID)
             self.refreshAuroraChromeAfterTabMutation()
         }
+        controller.onRenameSession = { [weak self] tabID in
+            self?.presentAuroraTabRename(for: tabID)
+        }
         controller.onCloseOtherSessions = { [weak self] tabID in
             guard let self else { return }
             self.tabBarViewModel?.closeOtherTabs(except: tabID)
@@ -802,6 +805,27 @@ extension MainWindowController {
         refreshTabStrip()
         auroraChromeController?.refreshSources()
         refreshAuroraSidebarTooltipAnchor()
+    }
+
+    private func presentAuroraTabRename(for tabID: TabID) {
+        guard let parentWindow = window,
+              let tab = tabManager.tab(for: tabID) else { return }
+
+        let localizer = appLocalizer()
+        RenameSheetController.present(
+            on: parentWindow,
+            currentName: tab.customTitle ?? tab.displayTitle,
+            placeholder: TabItemView.localizedRenamePlaceholder(using: localizer),
+            icon: "terminal.fill",
+            localizer: localizer,
+            onComplete: { [weak self] newTitle in
+                guard let self else { return }
+                guard let newTitle else { return }
+                let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                self.tabManager.renameTab(id: tabID, newTitle: trimmed.isEmpty ? nil : trimmed)
+                self.refreshAuroraChromeAfterTabMutation()
+            }
+        )
     }
 
     /// Keeps the window-level tooltip overlay aligned with the sidebar's

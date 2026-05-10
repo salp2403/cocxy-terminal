@@ -575,6 +575,18 @@ final class TabBarView: NSView {
         }
         menu.addItem(pinItem)
 
+        let renameItem = NSMenuItem(
+            title: localized("tabbar.context.rename", fallback: "Rename Tab..."),
+            action: #selector(handleRenameTab(_:)),
+            keyEquivalent: ""
+        )
+        renameItem.target = self
+        renameItem.representedObject = tabID.rawValue
+        if let img = NSImage(systemSymbolName: "pencil", accessibilityDescription: renameItem.title) {
+            renameItem.image = img
+        }
+        menu.addItem(renameItem)
+
         menu.addItem(NSMenuItem.separator())
 
         let closeItem = NSMenuItem(
@@ -639,6 +651,11 @@ final class TabBarView: NSView {
     @objc private func handleTogglePin(_ sender: NSMenuItem) {
         guard let tabID = tabIDFromMenuItem(sender) else { return }
         viewModel.togglePin(id: tabID)
+    }
+
+    @objc private func handleRenameTab(_ sender: NSMenuItem) {
+        guard let tabID = tabIDFromMenuItem(sender) else { return }
+        tabItemViews[tabID]?.startEditing()
     }
 
     @objc private func handleCloseTab(_ sender: NSMenuItem) {

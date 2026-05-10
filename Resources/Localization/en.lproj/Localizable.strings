@@ -90,6 +90,14 @@
 "preferences.appearance.showRateLimitIndicator" = "Show rate-limit indicator";
 "preferences.appearance.showRateLimitIndicator.help" = "Displays a status-bar pill with locally-estimated usage for the active agent. The pill only appears when the active agent has a registered local provider with available data; turning this off hides it for every agent.";
 "preferences.appearance.showRateLimitIndicator.caption" = "Reads only local files the agent's CLI already keeps on disk. No data leaves your machine.";
+"preferences.appearance.shortcutHints.section" = "Shortcut hints";
+"preferences.appearance.alwaysShowShortcutHints" = "Always show keyboard shortcut hints";
+"preferences.appearance.alwaysShowShortcutHints.help" = "Keeps small shortcut labels visible in supported chrome and pane surfaces instead of showing them only on hover.";
+"preferences.appearance.shortcutHintDebugOverlay" = "Show shortcut hint tuning overlay";
+"preferences.appearance.shortcutHintOffsetX" = "Horizontal offset";
+"preferences.appearance.shortcutHintOffsetY" = "Vertical offset";
+"preferences.appearance.shortcutHintScale" = "Scale";
+"preferences.appearance.shortcutHints.caption" = "Hints are local UI only and use the same editable shortcuts shown in the Keybindings section.";
 "preferences.appearance.notes.section" = "Notes";
 "preferences.appearance.enableWorkspaceNotes" = "Enable workspace notes";
 "preferences.appearance.enableWorkspaceNotes.help" = "Shows the Notes panel and enables the configured notes shortcut.";
@@ -366,6 +374,7 @@
 "menu.view.agentTimeline" = "Agent Timeline";
 "menu.view.notifications" = "Notifications";
 "menu.view.browser" = "Browser";
+"menu.view.focusLocation" = "Focus Location";
 "menu.view.openMarkdownPanel" = "Open Markdown Panel";
 "menu.view.openTextEditorPanel" = "Open Text Editor Panel";
 "menu.view.openNotebookPanel" = "Open Notebook Panel";
@@ -522,6 +531,8 @@
 "keybindings.action.window.githubPane.summary" = "Show or hide the GitHub pane with pull requests, issues and checks.";
 "keybindings.action.window.notes.name" = "Toggle Notes";
 "keybindings.action.window.notes.summary" = "Show or hide per-workspace notes.";
+"keybindings.action.window.focusLocation.name" = "Focus Location";
+"keybindings.action.window.focusLocation.summary" = "Focus the browser address field, opening a browser split when needed.";
 "keybindings.action.tab.new.name" = "New Tab";
 "keybindings.action.tab.new.summary" = "Open a new terminal tab.";
 "keybindings.action.tab.close.name" = "Close Tab";
@@ -748,6 +759,15 @@
 "preferences.terminal.cursorBlink" = "Cursor blink";
 "preferences.terminal.cursorBlink.on" = "On";
 "preferences.terminal.cursorBlink.off" = "Off";
+"preferences.terminal.commandCorrections.section" = "Command Corrections";
+"preferences.terminal.commandCorrections.enabled" = "Suggest fixes after failed commands";
+"preferences.terminal.commandCorrections.autoShow" = "Show suggestions automatically";
+"preferences.terminal.commandCorrections.confidence" = "Show confidence badge";
+"preferences.terminal.commandCorrections.foundationModels" = "Use on-device Foundation Models when available";
+"preferences.terminal.commandCorrections.agentFallback" = "Allow active agent fallback";
+"preferences.terminal.commandCorrections.editDistance" = "Edit-distance threshold: %d";
+"preferences.terminal.commandCorrections.maxSuggestions" = "Max suggestions shown: %d";
+"terminal.commandCorrections.shortcutHint" = "Tab accept · Esc dismiss";
 "preferences.terminal.inlineImages.section" = "Inline Images";
 "preferences.terminal.enableSixelImages" = "Enable Sixel images";
 "preferences.terminal.enableKittyImages" = "Enable Kitty images";
@@ -1009,12 +1029,17 @@
 "tabbar.remoteUnread.many" = "%d notifications in other windows";
 "tabbar.context.pin" = "Pin Tab";
 "tabbar.context.unpin" = "Unpin Tab";
+"tabbar.context.rename" = "Rename Tab...";
 "tabbar.context.close" = "Close Tab";
 "tabbar.context.closeOthers" = "Close Other Tabs";
 "tabbar.context.moveUp" = "Move Tab Up";
 "tabbar.context.moveDown" = "Move Tab Down";
 "tabbar.close.title" = "Close this tab?";
 "tabbar.close.message" = "A process may still be running in this tab.";
+"shortcutHints.debug.title" = "Shortcut Hints";
+"shortcutHints.debug.offsetX" = "x %@";
+"shortcutHints.debug.offsetY" = "y %@";
+"shortcutHints.debug.scale" = "scale %@";
 "workspaceToolbar.panel.terminal" = "Terminal %d";
 "workspaceToolbar.panel.terminal.default" = "Terminal";
 "workspaceToolbar.panel.browser" = "Browser";
@@ -1161,6 +1186,7 @@
 "horizontalTab.themeToggle.light" = "Switch to light theme";
 "horizontalTab.context.moveLeft" = "Move Left";
 "horizontalTab.context.moveRight" = "Move Right";
+"horizontalTab.context.renamePanel" = "Rename Panel...";
 "horizontalTab.context.closePanel" = "Close Panel";
 "horizontalTab.closeTab.control" = "Close tab";
 "horizontalTab.closePanel.control" = "Close panel";
@@ -2202,6 +2228,8 @@
 "command.window.pictureInPicture.name" = "Float Active Terminal";
 "command.window.pictureInPicture.description.enabled" = "Move the active terminal into a floating Picture-in-Picture panel";
 "command.window.pictureInPicture.description.disabled" = "Enable [experimental].pip-enabled to use terminal Picture-in-Picture";
+"command.browser.focusLocation.name" = "Focus Location";
+"command.browser.focusLocation.description" = "Focus the browser address field or open a browser split";
 "pip.window.title" = "Cocxy PIP - %@";
 
 "command.voice.input.name" = "Voice Input";

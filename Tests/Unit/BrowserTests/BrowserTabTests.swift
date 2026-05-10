@@ -32,6 +32,42 @@ final class BrowserTabTests: XCTestCase {
         XCTAssertNotEqual(tab1.id, tab2.id)
     }
 
+    func testDisplayTitleUsesPageTitleWhenPresent() {
+        let tab = BrowserTab(
+            url: URL(string: "https://example.com")!,
+            title: "Example"
+        )
+
+        XCTAssertEqual(tab.displayTitle, "Example")
+    }
+
+    func testDisplayTitleFallsBackToHostWhenPageTitleIsEmpty() {
+        let tab = BrowserTab(
+            url: URL(string: "https://ioplat.com/")!,
+            title: ""
+        )
+
+        XCTAssertEqual(tab.displayTitle, "ioplat.com")
+    }
+
+    func testDisplayTitleFallsBackToHostAndPortForLocalhost() {
+        let tab = BrowserTab(
+            url: URL(string: "http://localhost:3000")!,
+            title: "   "
+        )
+
+        XCTAssertEqual(tab.displayTitle, "localhost:3000")
+    }
+
+    func testDisplayTitleFallsBackToFileNameForFileURL() {
+        let tab = BrowserTab(
+            url: URL(fileURLWithPath: "/tmp/README.md"),
+            title: ""
+        )
+
+        XCTAssertEqual(tab.displayTitle, "README.md")
+    }
+
     // MARK: - Multi-Tab Management in ViewModel
 
     func testViewModelStartsWithOneTab() {
@@ -130,5 +166,14 @@ final class BrowserTabTests: XCTestCase {
 
         let activeTab = vm.browserTabs.first { $0.id == vm.activeTabID }
         XCTAssertEqual(activeTab?.title, "Swift Documentation")
+    }
+
+    func testTabListExposesFallbackTitleWhenPageTitleIsEmpty() {
+        let vm = BrowserViewModel()
+        vm.navigate(to: "localhost:3000")
+        vm.updateActiveTabTitle("")
+
+        let first = vm.getTabList().first
+        XCTAssertEqual(first?["title"], "localhost:3000")
     }
 }

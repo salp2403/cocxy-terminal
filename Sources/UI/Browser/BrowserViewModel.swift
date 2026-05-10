@@ -324,7 +324,7 @@ final class BrowserViewModel: ObservableObject {
             [
                 "id": tab.id.uuidString,
                 "url": tab.url.absoluteString,
-                "title": tab.title,
+                "title": tab.displayTitle,
                 "isActive": tab.id == activeTabID ? "true" : "false"
             ]
         }

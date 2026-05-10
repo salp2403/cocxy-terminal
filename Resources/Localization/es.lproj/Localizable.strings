@@ -90,6 +90,14 @@
 "preferences.appearance.showRateLimitIndicator" = "Mostrar indicador de límite de uso";
 "preferences.appearance.showRateLimitIndicator.help" = "Muestra una píldora en la barra de estado con uso estimado localmente para el agente activo. Solo aparece cuando el agente activo tiene un proveedor local registrado con datos disponibles; desactivarlo lo oculta para todos los agentes.";
 "preferences.appearance.showRateLimitIndicator.caption" = "Lee solo archivos locales que la CLI del agente ya guarda en disco. Nada sale de tu máquina.";
+"preferences.appearance.shortcutHints.section" = "Atajos visibles";
+"preferences.appearance.alwaysShowShortcutHints" = "Mostrar siempre pistas de atajos";
+"preferences.appearance.alwaysShowShortcutHints.help" = "Mantiene etiquetas pequeñas de atajos visibles en superficies de chrome y paneles compatibles en vez de mostrarlas solo al pasar el cursor.";
+"preferences.appearance.shortcutHintDebugOverlay" = "Mostrar overlay de ajuste de atajos";
+"preferences.appearance.shortcutHintOffsetX" = "Desplazamiento horizontal";
+"preferences.appearance.shortcutHintOffsetY" = "Desplazamiento vertical";
+"preferences.appearance.shortcutHintScale" = "Escala";
+"preferences.appearance.shortcutHints.caption" = "Las pistas son solo UI local y usan los mismos atajos editables de la sección Atajos.";
 "preferences.appearance.notes.section" = "Notas";
 "preferences.appearance.enableWorkspaceNotes" = "Activar notas de espacio";
 "preferences.appearance.enableWorkspaceNotes.help" = "Muestra el panel de Notas y activa el atajo de notas configurado.";
@@ -366,6 +374,7 @@
 "menu.view.agentTimeline" = "Línea de tiempo de agentes";
 "menu.view.notifications" = "Notificaciones";
 "menu.view.browser" = "Navegador";
+"menu.view.focusLocation" = "Enfocar ubicación";
 "menu.view.openMarkdownPanel" = "Abrir panel Markdown";
 "menu.view.openTextEditorPanel" = "Abrir panel de editor";
 "menu.view.openNotebookPanel" = "Abrir panel Notebook";
@@ -522,6 +531,8 @@
 "keybindings.action.window.githubPane.summary" = "Mostrar u ocultar el panel de GitHub con solicitudes de cambio, incidencias y verificaciones.";
 "keybindings.action.window.notes.name" = "Alternar notas";
 "keybindings.action.window.notes.summary" = "Mostrar u ocultar notas por espacio de trabajo.";
+"keybindings.action.window.focusLocation.name" = "Enfocar ubicación";
+"keybindings.action.window.focusLocation.summary" = "Enfocar la barra de dirección del navegador y abrir un split de navegador cuando haga falta.";
 "keybindings.action.tab.new.name" = "Nueva pestaña";
 "keybindings.action.tab.new.summary" = "Abrir una nueva pestaña de terminal.";
 "keybindings.action.tab.close.name" = "Cerrar pestaña";
@@ -748,6 +759,15 @@
 "preferences.terminal.cursorBlink" = "Parpadeo del cursor";
 "preferences.terminal.cursorBlink.on" = "Activado";
 "preferences.terminal.cursorBlink.off" = "Desactivado";
+"preferences.terminal.commandCorrections.section" = "Correcciones de comandos";
+"preferences.terminal.commandCorrections.enabled" = "Sugerir correcciones después de comandos fallidos";
+"preferences.terminal.commandCorrections.autoShow" = "Mostrar sugerencias automáticamente";
+"preferences.terminal.commandCorrections.confidence" = "Mostrar porcentaje de confianza";
+"preferences.terminal.commandCorrections.foundationModels" = "Usar Foundation Models en dispositivo cuando esté disponible";
+"preferences.terminal.commandCorrections.agentFallback" = "Permitir respaldo del agente activo";
+"preferences.terminal.commandCorrections.editDistance" = "Umbral de distancia de edición: %d";
+"preferences.terminal.commandCorrections.maxSuggestions" = "Máximo de sugerencias mostradas: %d";
+"terminal.commandCorrections.shortcutHint" = "Tab aceptar · Esc descartar";
 "preferences.terminal.inlineImages.section" = "Imágenes en línea";
 "preferences.terminal.enableSixelImages" = "Activar imágenes Sixel";
 "preferences.terminal.enableKittyImages" = "Activar imágenes Kitty";
@@ -1009,12 +1029,17 @@
 "tabbar.remoteUnread.many" = "%d notificaciones en otras ventanas";
 "tabbar.context.pin" = "Fijar pestaña";
 "tabbar.context.unpin" = "Desfijar pestaña";
+"tabbar.context.rename" = "Renombrar pestaña...";
 "tabbar.context.close" = "Cerrar pestaña";
 "tabbar.context.closeOthers" = "Cerrar otras pestañas";
 "tabbar.context.moveUp" = "Mover pestaña arriba";
 "tabbar.context.moveDown" = "Mover pestaña abajo";
 "tabbar.close.title" = "¿Cerrar esta pestaña?";
 "tabbar.close.message" = "Puede que todavía haya un proceso en ejecución en esta pestaña.";
+"shortcutHints.debug.title" = "Atajos visibles";
+"shortcutHints.debug.offsetX" = "x %@";
+"shortcutHints.debug.offsetY" = "y %@";
+"shortcutHints.debug.scale" = "escala %@";
 "workspaceToolbar.panel.terminal" = "Terminal %d";
 "workspaceToolbar.panel.terminal.default" = "Terminal";
 "workspaceToolbar.panel.browser" = "Navegador";
@@ -1161,6 +1186,7 @@
 "horizontalTab.themeToggle.light" = "Cambiar a tema claro";
 "horizontalTab.context.moveLeft" = "Mover a la izquierda";
 "horizontalTab.context.moveRight" = "Mover a la derecha";
+"horizontalTab.context.renamePanel" = "Renombrar panel...";
 "horizontalTab.context.closePanel" = "Cerrar panel";
 "horizontalTab.closeTab.control" = "Cerrar pestaña";
 "horizontalTab.closePanel.control" = "Cerrar panel";
@@ -2202,6 +2228,8 @@
 "command.window.pictureInPicture.name" = "Flotar terminal activo";
 "command.window.pictureInPicture.description.enabled" = "Mover el terminal activo a un panel flotante Picture-in-Picture";
 "command.window.pictureInPicture.description.disabled" = "Activa [experimental].pip-enabled para usar Picture-in-Picture del terminal";
+"command.browser.focusLocation.name" = "Enfocar ubicación";
+"command.browser.focusLocation.description" = "Enfocar la barra de dirección del navegador o abrir un split de navegador";
 "pip.window.title" = "Cocxy PIP - %@";
 
 "command.voice.input.name" = "Entrada por voz";

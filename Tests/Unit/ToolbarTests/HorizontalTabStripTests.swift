@@ -111,4 +111,39 @@ final class HorizontalTabStripTests: XCTestCase {
 
         XCTAssertEqual(strip.tabContentLeadingInsetForTesting, 8)
     }
+
+    func testPanelContextMenuHasRenameItemEvenForSinglePanel() throws {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.updateTabs([
+            (title: "Terminal", icon: "terminal.fill", isActive: true),
+        ])
+
+        let container = try XCTUnwrap(findContainer(in: strip))
+
+        XCTAssertNotNil(container.menu?.items.first { $0.title == "Rename Panel..." })
+    }
+
+    func testWorkspaceTabContextMenuUsesRenameTabCopy() throws {
+        let strip = HorizontalTabStripView(frame: NSRect(x: 0, y: 0, width: 800, height: 30))
+        strip.setItemKind(.workspaceTab)
+        strip.updateTabs([
+            (title: "Galf", icon: "terminal.fill", isActive: true),
+        ])
+
+        let container = try XCTUnwrap(findContainer(in: strip))
+
+        XCTAssertNotNil(container.menu?.items.first { $0.title == "Rename Tab..." })
+    }
+
+    private func findContainer(in view: NSView) -> DraggableTabContainer? {
+        for subview in view.subviews {
+            if let container = subview as? DraggableTabContainer {
+                return container
+            }
+            if let container = findContainer(in: subview) {
+                return container
+            }
+        }
+        return nil
+    }
 }

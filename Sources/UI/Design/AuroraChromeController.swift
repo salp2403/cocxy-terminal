@@ -125,6 +125,7 @@ final class AuroraChromeController: ObservableObject {
     /// are routed through explicit callbacks instead of reusing AppKit's
     /// `NSMenuItem` target-action handlers.
     var onTogglePinSession: ((TabID) -> Void)?
+    var onRenameSession: ((TabID) -> Void)?
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
@@ -702,6 +703,11 @@ struct AuroraSidebarHost: View {
             onTogglePinSession: { sessionID in
                 if let tabID = controller.tabID(forSessionID: sessionID) {
                     controller.onTogglePinSession?(tabID)
+                }
+            },
+            onRequestRenameSession: { sessionID in
+                if let tabID = controller.tabID(forSessionID: sessionID) {
+                    controller.onRenameSession?(tabID)
                 }
             },
             onCloseOtherSessions: { sessionID in

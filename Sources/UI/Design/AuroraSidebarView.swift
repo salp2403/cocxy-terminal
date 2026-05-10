@@ -58,6 +58,7 @@ extension Design {
         let onActivateSession: (String) -> Void
         var onCloseSession: ((String) -> Void)? = nil
         var onTogglePinSession: ((String) -> Void)? = nil
+        var onRequestRenameSession: ((String) -> Void)? = nil
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
         var onMoveSessionDown: ((String) -> Void)? = nil
@@ -381,6 +382,9 @@ extension Design {
                                 onTogglePin: onTogglePinSession.map { handler in
                                     { handler(session.id) }
                                 },
+                                onRename: onRequestRenameSession.map { handler in
+                                    { handler(session.id) }
+                                },
                                 onCloseOthers: onCloseOtherSessions.map { handler in
                                     { handler(session.id) }
                                 },
@@ -541,6 +545,7 @@ extension Design {
         let onActivate: () -> Void
         var onClose: (() -> Void)? = nil
         var onTogglePin: (() -> Void)? = nil
+        var onRename: (() -> Void)? = nil
         var onCloseOthers: (() -> Void)? = nil
         var onMoveUp: (() -> Void)? = nil
         var onMoveDown: (() -> Void)? = nil
@@ -704,6 +709,9 @@ extension Design {
             if let onTogglePin {
                 Button(session.isPinned ? Self.localizedUnpinTab(using: localizer) : Self.localizedPinTab(using: localizer), action: onTogglePin)
             }
+            if let onRename {
+                Button(Self.localizedRenameTab(using: localizer), action: onRename)
+            }
             if let onClose {
                 Button(Self.localizedCloseTab(using: localizer), action: onClose)
                     .disabled(session.isPinned)
@@ -747,6 +755,10 @@ extension Design {
 
         static func localizedCloseTab(using localizer: AppLocalizer) -> String {
             localizer.string("tabbar.context.close", fallback: "Close Tab")
+        }
+
+        static func localizedRenameTab(using localizer: AppLocalizer) -> String {
+            localizer.string("tabbar.context.rename", fallback: "Rename Tab...")
         }
 
         static func localizedCloseOtherTabs(using localizer: AppLocalizer) -> String {

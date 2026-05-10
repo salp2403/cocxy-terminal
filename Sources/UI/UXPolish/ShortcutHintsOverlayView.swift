@@ -37,14 +37,15 @@ struct ShortcutHintsOverlayView: View {
 
 struct ShortcutHintsDebugWindow: View {
     let config: UXPolishConfig
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Shortcut Hints")
+            Text(Self.localizedTitle(using: localizer))
                 .font(.headline)
-            Text("x \(Self.format(config.shortcutHintOffsetX))")
-            Text("y \(Self.format(config.shortcutHintOffsetY))")
-            Text("scale \(Self.format(config.shortcutHintScale))")
+            Text(Self.localizedOffsetX(Self.format(config.shortcutHintOffsetX), using: localizer))
+            Text(Self.localizedOffsetY(Self.format(config.shortcutHintOffsetY), using: localizer))
+            Text(Self.localizedScale(Self.format(config.shortcutHintScale), using: localizer))
         }
         .padding(12)
         .frame(minWidth: 180, alignment: .leading)
@@ -53,6 +54,22 @@ struct ShortcutHintsDebugWindow: View {
     private static func format(_ value: Double) -> String {
         let rounded = (value * 100).rounded() / 100
         return "\(rounded)"
+    }
+
+    static func localizedTitle(using localizer: AppLocalizer) -> String {
+        localizer.string("shortcutHints.debug.title", fallback: "Shortcut Hints")
+    }
+
+    static func localizedOffsetX(_ value: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("shortcutHints.debug.offsetX", fallback: "x %@"), value)
+    }
+
+    static func localizedOffsetY(_ value: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("shortcutHints.debug.offsetY", fallback: "y %@"), value)
+    }
+
+    static func localizedScale(_ value: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("shortcutHints.debug.scale", fallback: "scale %@"), value)
     }
 }
 
