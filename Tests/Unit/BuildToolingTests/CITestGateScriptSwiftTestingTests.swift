@@ -302,13 +302,11 @@ struct CITestGateScriptSwiftTestingTests {
             encoding: .utf8
         )
 
-        #expect(workflow.contains("./scripts/build-app.sh release --version \"$VERSION\""))
-        #expect(workflow.contains("mv build/CocxyTerminal.app \"$APP_DIR\""))
-        #expect(workflow.contains("--bundle-id \"dev.cocxy.terminal.nightly\""))
-        #expect(workflow.contains("--feed-url \"https://cocxy.dev/appcast-nightly.xml\""))
-        #expect(workflow.contains("--executable \"CocxyTerminal\""))
+        #expect(workflow.contains("./scripts/build-app.sh release --version \"$VERSION\" --channel nightly"))
+        #expect(workflow.contains("mv build/CocxyTerminalNightly.app \"$APP_DIR\""))
         #expect(workflow.contains("codesign --force --sign - --entitlements Resources/CocxyTerminal.entitlements \"$APP_DIR\""))
         #expect(workflow.contains("./scripts/verify-app-bundle.sh \"$APP_DIR\""))
+        #expect(workflow.contains("https://cocxy.dev/appcast-nightly.xml"))
         #expect(!workflow.contains("cp \".build/arm64-apple-macosx/release/CocxyTerminal\" \"$MACOS_DIR/Cocxy Terminal Nightly\""))
         #expect(!workflow.contains("[ -d Resources/Markdown ] && cp -R Resources/Markdown \"$RESOURCES_DIR/\" || true"))
     }

@@ -44,6 +44,11 @@ final class PreferencesViewModel: ObservableObject {
     /// Whether to confirm before closing a tab with a running process.
     @Published var confirmCloseProcess: Bool
 
+    // MARK: - Updates
+
+    /// Sparkle update channel selected by the user.
+    @Published var updateChannel: ChannelKind
+
     // MARK: - Appearance
 
     /// Name of the active theme (e.g., "catppuccin-mocha").
@@ -510,6 +515,7 @@ final class PreferencesViewModel: ObservableObject {
         return shell != c.general.shell
             || workingDirectory != c.general.workingDirectory
             || confirmCloseProcess != c.general.confirmCloseProcess
+            || updateChannel != c.updates.channel
             || !Self.themeNamesMatch(theme, c.appearance.theme)
             || fontFamily != c.appearance.fontFamily
             || fontSize != c.appearance.fontSize
@@ -816,6 +822,9 @@ final class PreferencesViewModel: ObservableObject {
         self.shell = config.general.shell
         self.workingDirectory = config.general.workingDirectory
         self.confirmCloseProcess = config.general.confirmCloseProcess
+
+        // Updates
+        self.updateChannel = config.updates.channel
 
         // Appearance — resolve theme to display name for picker compatibility.
         // Config may store "catppuccin-mocha" but picker uses "Catppuccin Mocha".
@@ -1538,6 +1547,7 @@ final class PreferencesViewModel: ObservableObject {
                 workingDirectory: workingDirectory,
                 confirmCloseProcess: confirmCloseProcess
             ),
+            updates: UpdatesConfig(channel: updateChannel),
             appearance: AppearanceConfig(
                 theme: theme,
                 lightTheme: savedConfig.appearance.lightTheme,
@@ -2231,6 +2241,9 @@ final class PreferencesViewModel: ObservableObject {
         shell = "\(shell)"
         working-directory = "\(workingDirectory)"
         confirm-close-process = \(confirmCloseProcess)
+
+        [updates]
+        channel = "\(updateChannel.rawValue)"
 
         [appearance]
         theme = "\(theme)"

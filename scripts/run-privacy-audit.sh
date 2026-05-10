@@ -95,6 +95,9 @@ else
     auto_checks="$(plist_raw "$INFO_PLIST" SUEnableAutomaticChecks)"
 
     case "$bundle_id" in
+        dev.cocxy.terminal.preview)
+            expected_feed_url="https://cocxy.dev/appcast-preview.xml"
+            ;;
         dev.cocxy.terminal.nightly)
             expected_feed_url="https://cocxy.dev/appcast-nightly.xml"
             ;;

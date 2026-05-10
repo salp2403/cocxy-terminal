@@ -1,17 +1,22 @@
-name: Nightly Build
+name: Preview Build
 
 on:
   push:
-    branches:
-      - nightly
+    tags:
+      - 'v*-preview.*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Preview version, for example 1.1.0-preview.1'
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 jobs:
-  build-nightly:
-    name: Build Nightly
+  build-preview:
+    name: Build Preview
     runs-on: macos-15
     timeout-minutes: 60
     environment: production
@@ -22,13 +27,23 @@ jobs:
         with:
           lfs: true
 
-      - name: Generate nightly version
+      - name: Resolve preview version
         id: version
         run: |
-          BASE_VERSION=$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)
-          NIGHTLY_VERSION="${BASE_VERSION}-nightly.$(date +%Y%m%d)"
-          echo "VERSION=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
-          echo "Nightly version: $NIGHTLY_VERSION"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          case "$VERSION" in
+            *-preview.*) ;;
+            *)
+              echo "::error::Preview versions must match X.Y.Z-preview.N"
+              exit 1
+              ;;
+          esac
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Preview version: $VERSION"
 
       - name: Import Developer ID certificate
         env:
@@ -54,25 +69,25 @@ jobs:
       - name: Install xcodegen
         run: brew install xcodegen
 
-      - name: Create app bundle (nightly)
+      - name: Create app bundle (preview)
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          APP_DIR="build/Cocxy Terminal Nightly.app"
-          ./scripts/build-app.sh release --version "$VERSION" --channel nightly
+          APP_DIR="build/Cocxy Terminal Preview.app"
+          ./scripts/build-app.sh release --version "$VERSION" --channel preview
           rm -rf "$APP_DIR"
-          mv build/CocxyTerminalNightly.app "$APP_DIR"
+          mv build/CocxyTerminalPreview.app "$APP_DIR"
 
           codesign --force --sign - --entitlements Resources/CocxyTerminal.entitlements "$APP_DIR"
 
       - name: Verify app bundle contents
         run: |
-          APP_DIR="build/Cocxy Terminal Nightly.app"
+          APP_DIR="build/Cocxy Terminal Preview.app"
           chmod +x scripts/verify-app-bundle.sh
           ./scripts/verify-app-bundle.sh "$APP_DIR"
 
       - name: Privacy audit
         run: |
-          APP_DIR="build/Cocxy Terminal Nightly.app"
+          APP_DIR="build/Cocxy Terminal Preview.app"
           chmod +x scripts/run-privacy-audit.sh
           ./scripts/run-privacy-audit.sh --app "$APP_DIR"
 
@@ -80,7 +95,7 @@ jobs:
         env:
           SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
         run: |
-          APP_DIR="build/Cocxy Terminal Nightly.app"
+          APP_DIR="build/Cocxy Terminal Preview.app"
           ENTITLEMENTS="Resources/CocxyTerminal.entitlements"
 
           SPARKLE_DIR="$APP_DIR/Contents/Frameworks/Sparkle.framework"
@@ -114,9 +129,6 @@ jobs:
               --sign "$SIGNING_IDENTITY" \
               "$APP_DIR/Contents/Library/LaunchServices/cocxyd.app"
 
-          # Sign Tree-sitter dylibs (core + grammar parsers). Apple
-          # notarization rejects unsigned or ad-hoc-signed mach-o binaries
-          # nested inside the app bundle.
           find "$APP_DIR/Contents/Resources" \
             \( -name "libtree-sitter.dylib" -o -name "parser.dylib" \) \
             -type f -print0 2>/dev/null | \
@@ -141,12 +153,12 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           mkdir -p build/dmg-staging
-          cp -R "build/Cocxy Terminal Nightly.app" build/dmg-staging/
+          cp -R "build/Cocxy Terminal Preview.app" build/dmg-staging/
           ln -s /Applications build/dmg-staging/Applications
-          hdiutil create -volname "Cocxy Terminal Nightly" \
+          hdiutil create -volname "Cocxy Terminal Preview" \
             -srcfolder build/dmg-staging \
             -ov -format UDZO \
-            "build/CocxyTerminal-Nightly-${VERSION}.dmg"
+            "build/CocxyTerminal-Preview-${VERSION}.dmg"
 
       - name: Sign DMG
         env:
@@ -155,7 +167,7 @@ jobs:
           VERSION="${{ steps.version.outputs.VERSION }}"
           codesign --force --timestamp \
             --sign "$SIGNING_IDENTITY" \
-            "build/CocxyTerminal-Nightly-${VERSION}.dmg"
+            "build/CocxyTerminal-Preview-${VERSION}.dmg"
 
       - name: Notarize DMG
         env:
@@ -164,7 +176,7 @@ jobs:
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
+          DMG="build/CocxyTerminal-Preview-${VERSION}.dmg"
 
           set +e
           SUBMISSION=$(xcrun notarytool submit "$DMG" \
@@ -177,7 +189,6 @@ jobs:
 
           echo "$SUBMISSION"
 
-          # Extract submission ID and get detailed log
           SUB_ID=$(echo "$SUBMISSION" | grep "id:" | head -1 | awk '{print $2}')
           if [ -n "$SUB_ID" ]; then
             echo "=== Notarization Log ==="
@@ -188,46 +199,52 @@ jobs:
           fi
 
           if [ "$NOTARY_STATUS" -ne 0 ]; then
-            echo "::error::Notarization command failed. The nightly DMG will not be published without a valid notary ticket."
+            echo "::error::Notarization command failed. The preview DMG will not be published without a valid notary ticket."
             exit "$NOTARY_STATUS"
           fi
 
           if ! echo "$SUBMISSION" | grep -q "status: Accepted"; then
-            echo "::error::Notarization was not accepted. The nightly DMG will not be published without a valid notary ticket."
+            echo "::error::Notarization was not accepted. The preview DMG will not be published without a valid notary ticket."
             exit 1
           fi
 
           xcrun stapler staple "$DMG"
           xcrun stapler validate "$DMG"
-          echo "Notarization complete."
+          echo "Preview notarization complete."
 
-      - name: Generate nightly appcast
+      - name: Generate preview appcast
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
-          DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
+          TAG="v${VERSION}"
+          DMG="build/CocxyTerminal-Preview-${VERSION}.dmg"
           DATE=$(date -u +"%a, %d %b %Y %H:%M:%S +0000")
           DMG_SIZE=$(stat -f%z "$DMG")
-          DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/nightly-${VERSION}/CocxyTerminal-Nightly-${VERSION}.dmg"
+          DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/${TAG}/CocxyTerminal-Preview-${VERSION}.dmg"
 
           SPARKLE_BIN=$(find .build -name "sign_update" -type f 2>/dev/null | head -1)
-          if [ -n "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN" ]; then
-            SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN" -p "$DMG" --ed-key-file -)
-          else
-            SIGNATURE=""
+          if [ -z "$SPARKLE_BIN" ] || [ ! -f "$SPARKLE_BIN" ]; then
+            echo "ERROR: sign_update not found. Cannot generate Sparkle signature."
+            exit 1
           fi
 
-          cat > build/appcast-nightly.xml << APPCAST
+          SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN" -p "$DMG" --ed-key-file -)
+          if [ -z "$SIGNATURE" ]; then
+            echo "ERROR: Failed to generate Sparkle EdDSA signature."
+            exit 1
+          fi
+
+          cat > build/appcast-preview.xml << APPCAST
           <?xml version="1.0" encoding="utf-8"?>
           <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
             <channel>
-              <title>Cocxy Terminal Nightly</title>
-              <link>https://cocxy.dev/appcast-nightly.xml</link>
-              <description>Nightly builds for Cocxy Terminal</description>
+              <title>Cocxy Terminal Preview</title>
+              <link>https://cocxy.dev/appcast-preview.xml</link>
+              <description>Preview builds for Cocxy Terminal</description>
               <language>en</language>
               <item>
-                <title>Nightly ${VERSION}</title>
+                <title>Preview ${VERSION}</title>
                 <pubDate>${DATE}</pubDate>
                 <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
                 <enclosure
@@ -242,23 +259,20 @@ jobs:
           </rss>
           APPCAST
 
-      - name: Create GitHub Release (nightly)
+      - name: Create GitHub Release (preview)
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: nightly-${{ steps.version.outputs.VERSION }}
-          prerelease: true
+          tag_name: v${{ steps.version.outputs.VERSION }}
+          name: Cocxy Terminal Preview ${{ steps.version.outputs.VERSION }}
           files: |
-            build/CocxyTerminal-Nightly-*.dmg
+            build/CocxyTerminal-Preview-*.dmg
+          prerelease: true
           body: |
-            ## Cocxy Terminal Nightly ${{ steps.version.outputs.VERSION }}
+            ## Cocxy Terminal Preview ${{ steps.version.outputs.VERSION }}
 
-            **This is a nightly build.** It may contain experimental features and bugs.
-            For the stable version, visit [cocxy.dev](https://cocxy.dev).
+            Preview builds are signed, notarized, and intended for early validation before stable release.
 
-            ### Install
-            Download the DMG below. Nightly builds can be installed side-by-side with the stable version.
-
-      - name: Deploy nightly appcast
+      - name: Deploy preview appcast
         env:
           SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         run: |
@@ -266,9 +280,12 @@ jobs:
           chmod 600 /tmp/deploy_key
           DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
+          case "$DEPLOY_PATH" in
+            */) ;;
+            *) DEPLOY_PATH="${DEPLOY_PATH}/" ;;
+          esac
 
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "mkdir -p ${DEPLOY_PATH}"
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            build/appcast-nightly.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
-
-          rm /tmp/deploy_key
-          echo "Nightly appcast deployed."
+            build/appcast-preview.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}

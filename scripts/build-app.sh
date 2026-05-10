@@ -5,9 +5,11 @@
 #   ./scripts/build-app.sh                   # Debug build
 #   ./scripts/build-app.sh release           # Release build (optimized)
 #   ./scripts/build-app.sh release --version 0.1.86
+#   ./scripts/build-app.sh release --channel preview
 #   ./scripts/build-app.sh release --install # Build, install, and register Quick Look
 #
-# Output: build/CocxyTerminal.app
+# Output: build/CocxyTerminal.app by default; channel builds use
+# build/CocxyTerminalPreview.app or build/CocxyTerminalNightly.app.
 #
 # Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
@@ -17,8 +19,13 @@ PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD_MODE="debug"
 INSTALL_AFTER_BUILD=0
 VERSION_OVERRIDE=""
+CHANNEL="stable"
 APP_NAME="CocxyTerminal"
+APP_BUNDLE_BASENAME="CocxyTerminal"
 BUNDLE_NAME="Cocxy Terminal"
+BUNDLE_ID="dev.cocxy.terminal"
+FEED_URL="https://cocxy.dev/appcast.xml"
+PUBLIC_KEY="gMWhWC+AqrUZqRg1RbTr32MDdkk7H3DhLfnEqtQnWQU="
 APP_ENTITLEMENTS="${PROJECT_ROOT}/Resources/CocxyTerminal.entitlements"
 QL_ENTITLEMENTS="${PROJECT_ROOT}/QuickLook/CocxyQuickLook.entitlements"
 
@@ -35,15 +42,24 @@ while [ $# -gt 0 ]; do
         --version)
             if [ $# -lt 2 ]; then
                 echo "ERROR: --version requires a value"
-                echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--install]"
+                echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--channel stable|preview|nightly] [--install]"
                 exit 1
             fi
             VERSION_OVERRIDE="${2#v}"
             shift 2
             ;;
+        --channel)
+            if [ $# -lt 2 ]; then
+                echo "ERROR: --channel requires stable, preview, or nightly"
+                echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--channel stable|preview|nightly] [--install]"
+                exit 1
+            fi
+            CHANNEL="$2"
+            shift 2
+            ;;
         *)
             echo "ERROR: Unknown argument: $1"
-            echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--install]"
+            echo "Usage: ./scripts/build-app.sh [debug|release] [--version X.Y.Z] [--channel stable|preview|nightly] [--install]"
             exit 1
             ;;
     esac
@@ -53,6 +69,31 @@ if [ -n "${VERSION_OVERRIDE}" ] && ! [[ "${VERSION_OVERRIDE}" =~ ^[0-9]+\.[0-9]+
     echo "ERROR: Invalid --version '${VERSION_OVERRIDE}' (expected semver X.Y.Z)"
     exit 1
 fi
+
+case "${CHANNEL}" in
+    stable)
+        APP_BUNDLE_BASENAME="CocxyTerminal"
+        BUNDLE_NAME="Cocxy Terminal"
+        BUNDLE_ID="dev.cocxy.terminal"
+        FEED_URL="https://cocxy.dev/appcast.xml"
+        ;;
+    preview)
+        APP_BUNDLE_BASENAME="CocxyTerminalPreview"
+        BUNDLE_NAME="Cocxy Terminal Preview"
+        BUNDLE_ID="dev.cocxy.terminal.preview"
+        FEED_URL="https://cocxy.dev/appcast-preview.xml"
+        ;;
+    nightly)
+        APP_BUNDLE_BASENAME="CocxyTerminalNightly"
+        BUNDLE_NAME="Cocxy Terminal Nightly"
+        BUNDLE_ID="dev.cocxy.terminal.nightly"
+        FEED_URL="https://cocxy.dev/appcast-nightly.xml"
+        ;;
+    *)
+        echo "ERROR: Invalid --channel '${CHANNEL}' (expected stable, preview, or nightly)"
+        exit 1
+        ;;
+esac
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then
@@ -69,7 +110,7 @@ APPINTENTS_SOURCE_LIST="${APPINTENTS_WORK_DIR}/sources.list"
 APPINTENTS_DEPLOYMENT_TARGET="14.0"
 
 OUTPUT_DIR="${PROJECT_ROOT}/build"
-APP_BUNDLE="${OUTPUT_DIR}/${APP_NAME}.app"
+APP_BUNDLE="${OUTPUT_DIR}/${APP_BUNDLE_BASENAME}.app"
 CONTENTS="${APP_BUNDLE}/Contents"
 MACOS="${CONTENTS}/MacOS"
 RESOURCES="${CONTENTS}/Resources"
@@ -171,8 +212,10 @@ PLIST_ARGS=(
     "${CONTENTS}/Info.plist"
     --bundle-name "${BUNDLE_NAME}"
     --display-name "${BUNDLE_NAME}"
-    --bundle-id "dev.cocxy.terminal"
+    --bundle-id "${BUNDLE_ID}"
     --executable "${APP_NAME}"
+    --feed-url "${FEED_URL}"
+    --public-key "${PUBLIC_KEY}"
 )
 if [ -n "${VERSION_OVERRIDE}" ]; then
     PLIST_ARGS+=(--version "${VERSION_OVERRIDE}" --short-version "${VERSION_OVERRIDE}")

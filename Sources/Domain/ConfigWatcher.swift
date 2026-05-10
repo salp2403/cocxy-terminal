@@ -51,11 +51,16 @@ final class ConfigWatcher {
     /// - Parameters:
     ///   - configService: The service to reload on file changes.
     ///   - fileProvider: The file provider for reading config content.
-    init(configService: ConfigService, fileProvider: ConfigFileProviding) {
+    init(
+        configService: ConfigService,
+        fileProvider: ConfigFileProviding,
+        configPath: String? = nil
+    ) {
         self.configService = configService
         self.fileProvider = fileProvider
-        self.configPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/cocxy/config.toml").path
+        self.configPath = configPath
+            ?? (fileProvider as? DiskConfigFileProvider)?.resolvedConfigFilePath
+            ?? DiskConfigFileProvider().resolvedConfigFilePath
     }
 
     deinit {

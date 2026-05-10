@@ -144,6 +144,9 @@ check_dir_not_empty "$CONTENTS/MacOS" "Executable binary"
 
 bundle_id="$(plutil -extract CFBundleIdentifier raw -o - "$CONTENTS/Info.plist" 2>/dev/null || true)"
 case "$bundle_id" in
+    dev.cocxy.terminal.preview)
+        expected_feed_url="https://cocxy.dev/appcast-preview.xml"
+        ;;
     dev.cocxy.terminal.nightly)
         expected_feed_url="https://cocxy.dev/appcast-nightly.xml"
         ;;

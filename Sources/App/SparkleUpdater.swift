@@ -52,23 +52,29 @@ final class SparkleUpdater: NSObject, ObservableObject {
     /// callbacks.
     @Published var availableUpdate: CocxyUpdateAvailability?
     @Published private(set) var lastProbeErrorDescription: String?
+    @Published private(set) var channel: ChannelKind
 
     var canCheckForUpdates: Bool {
         updaterController?.updater.canCheckForUpdates ?? true
     }
 
-    /// The current update channel based on the bundle identifier.
-    ///
-    /// Returns "nightly" for `dev.cocxy.terminal.nightly` builds,
-    /// "stable" for production builds.
+    /// The current update channel.
     var updateChannel: String {
-        let bundleID = Bundle.main.bundleIdentifier ?? ""
-        return bundleID.hasSuffix(".nightly") ? "nightly" : "stable"
+        channel.rawValue
     }
 
     /// Whether this is a nightly build.
     var isNightly: Bool {
-        updateChannel == "nightly"
+        channel == .nightly
+    }
+
+    var currentFeedURLString: String {
+        ChannelSparkleConfiguration(channel: channel).feedURLString
+    }
+
+    init(channel: ChannelKind = ChannelResolver().currentChannel()) {
+        self.channel = channel
+        super.init()
     }
 
     // MARK: - Actions
@@ -117,6 +123,16 @@ final class SparkleUpdater: NSObject, ObservableObject {
     func checkForUpdates() {
         startUpdaterIfNeeded()
         updaterController?.checkForUpdates(nil)
+    }
+
+    func setChannel(_ newChannel: ChannelKind) {
+        guard channel != newChannel else { return }
+        channel = newChannel
+        availableUpdate = nil
+        lastProbeErrorDescription = nil
+        if hasStartedAutomaticDetection {
+            probeForUpdateInformation()
+        }
     }
 
     func stopAutomaticUpdateDetection() {
@@ -186,6 +202,10 @@ final class SparkleUpdater: NSObject, ObservableObject {
 extension SparkleUpdater: SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate {
 
     var supportsGentleScheduledUpdateReminders: Bool { true }
+
+    func feedURLString(for updater: SPUUpdater) -> String? {
+        currentFeedURLString
+    }
 
     func updater(_ updater: SPUUpdater, didFindValidUpdate item: SUAppcastItem) {
         updateAvailability(from: item)

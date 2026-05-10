@@ -11,6 +11,7 @@ permissions:
 jobs:
   build-release:
     name: Build, Sign & Release
+    if: ${{ !contains(github.ref_name, '-preview.') }}
     runs-on: macos-15
     timeout-minutes: 60
     environment: production

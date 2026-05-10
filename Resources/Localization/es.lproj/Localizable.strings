@@ -1,5 +1,6 @@
 "preferences.window.title" = "Ajustes de Cocxy Terminal";
 "preferences.section.general" = "General";
+"preferences.section.updates" = "Actualizaciones";
 "preferences.section.appearance" = "Apariencia";
 "preferences.section.agentDetection" = "Detección de agentes";
 "preferences.section.agentMode" = "Modo agente";
@@ -30,6 +31,14 @@
 "preferences.general.shellPath" = "Ruta del shell";
 "preferences.general.workingDirectory" = "Directorio de trabajo";
 "preferences.general.confirmBeforeClosing" = "Confirmar antes de cerrar";
+"preferences.updates.channel.section" = "Canal de actualización";
+"preferences.updates.channel.label" = "Canal";
+"preferences.updates.channel.stable" = "Stable";
+"preferences.updates.channel.preview" = "Preview";
+"preferences.updates.channel.nightly" = "Nightly";
+"preferences.updates.channel.stable.help" = "Stable recibe releases de producción firmados.";
+"preferences.updates.channel.preview.help" = "Preview recibe builds anticipadas firmadas y puede ser menos estable.";
+"preferences.updates.channel.nightly.help" = "Nightly recibe builds diarias firmadas y puede contener cambios incompletos.";
 "preferences.appearance.theme.section" = "Tema";
 "preferences.appearance.activeTheme" = "Tema activo";
 "preferences.appearance.language.title" = "Idioma";

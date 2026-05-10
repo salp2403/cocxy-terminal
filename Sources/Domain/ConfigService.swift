@@ -32,10 +32,39 @@ final class DiskConfigFileProvider: ConfigFileProviding {
     private let configDirectoryPath: String
     private let configFilePath: String
 
-    init() {
-        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
-        configDirectoryPath = "\(homeDirectory)/.config/cocxy"
-        configFilePath = "\(configDirectoryPath)/config.toml"
+    init(
+        homeDirectory: String = FileManager.default.homeDirectoryForCurrentUser.path,
+        channel: ChannelKind = ChannelResolver().currentChannel()
+    ) {
+        configDirectoryPath = Self.configDirectoryPath(
+            homeDirectory: homeDirectory,
+            channel: channel
+        )
+        configFilePath = Self.configFilePath(
+            homeDirectory: homeDirectory,
+            channel: channel
+        )
+    }
+
+    var resolvedConfigFilePath: String {
+        configFilePath
+    }
+
+    static func configDirectoryPath(
+        homeDirectory: String,
+        channel: ChannelKind
+    ) -> String {
+        if channel == .stable {
+            return "\(homeDirectory)/.config/cocxy"
+        }
+        return "\(homeDirectory)/.config/cocxy/\(channel.bundleIdentifier)"
+    }
+
+    static func configFilePath(
+        homeDirectory: String,
+        channel: ChannelKind
+    ) -> String {
+        "\(configDirectoryPath(homeDirectory: homeDirectory, channel: channel))/config.toml"
     }
 
     func readConfigFile() -> String? {
@@ -88,6 +117,7 @@ final class ConfigService: ConfigProviding {
     private let fileProvider: ConfigFileProviding
     private let parser: TOMLParser
     private let configSubject: CurrentValueSubject<CocxyConfig, Never>
+    private let fallbackUpdatesChannel: ChannelKind
 
     /// The current validated configuration snapshot.
     var current: CocxyConfig {
@@ -106,11 +136,15 @@ final class ConfigService: ConfigProviding {
     /// - Parameter fileProvider: The source of configuration file content.
     ///   Defaults to `DiskConfigFileProvider` for production use.
     init(
-        fileProvider: ConfigFileProviding = DiskConfigFileProvider()
+        fileProvider: ConfigFileProviding = DiskConfigFileProvider(),
+        fallbackUpdatesChannel: ChannelKind = ChannelResolver().currentChannel()
     ) {
         self.fileProvider = fileProvider
+        self.fallbackUpdatesChannel = fallbackUpdatesChannel
         self.parser = TOMLParser()
-        self.configSubject = CurrentValueSubject(.defaults)
+        self.configSubject = CurrentValueSubject(
+            CocxyConfig.defaults(updateChannel: fallbackUpdatesChannel)
+        )
     }
 
     // MARK: - Loading
@@ -125,7 +159,7 @@ final class ConfigService: ConfigProviding {
 
     func reload() throws {
         guard let rawContent = fileProvider.readConfigFile() else {
-            configSubject.send(.defaults)
+            configSubject.send(CocxyConfig.defaults(updateChannel: fallbackUpdatesChannel))
             try createDefaultConfigFile()
             return
         }
@@ -164,7 +198,8 @@ final class ConfigService: ConfigProviding {
         displayMode: AuroraSidebarDisplayMode,
         primaryInfo: AuroraSidebarPrimaryInfo
     ) throws {
-        var content = fileProvider.readConfigFile() ?? Self.generateDefaultToml()
+        var content = fileProvider.readConfigFile()
+            ?? Self.generateDefaultToml(updateChannel: fallbackUpdatesChannel)
         content = Self.upsertingAppearanceValue(
             key: "aurora-sidebar-display-mode",
             value: "\"\(displayMode.rawValue)\"",
@@ -233,15 +268,17 @@ final class ConfigService: ConfigProviding {
 
     /// Creates the default config file via the file provider.
     private func createDefaultConfigFile() throws {
-        let defaultToml = ConfigService.generateDefaultToml()
+        let defaultToml = ConfigService.generateDefaultToml(
+            updateChannel: fallbackUpdatesChannel
+        )
         try fileProvider.writeConfigFile(defaultToml)
     }
 
     /// Generates a documented TOML string with all default values.
     ///
     /// Used both for creating the initial config file and for tests.
-    static func generateDefaultToml() -> String {
-        let defaults = CocxyConfig.defaults
+    static func generateDefaultToml(updateChannel: ChannelKind = .stable) -> String {
+        let defaults = CocxyConfig.defaults(updateChannel: updateChannel)
         return """
         # Cocxy Terminal Configuration
         # Documentation: ~/.config/cocxy/
@@ -250,6 +287,13 @@ final class ConfigService: ConfigProviding {
         shell = "\(defaults.general.shell)"
         working-directory = "\(defaults.general.workingDirectory)"
         confirm-close-process = \(defaults.general.confirmCloseProcess)
+
+        [updates]
+        # Update channel: stable, preview, or nightly. Stable is the
+        # production default. Preview and nightly use Cocxy-owned signed
+        # appcasts and can be installed side-by-side when built with their
+        # channel bundle identifiers.
+        channel = "\(defaults.updates.channel.rawValue)"
 
         [appearance]
         theme = "\(defaults.appearance.theme)"
@@ -581,6 +625,7 @@ final class ConfigService: ConfigProviding {
         }
 
         let general = parseGeneralConfig(from: parsed)
+        let updates = parseUpdatesConfig(from: parsed)
         let appearance = parseAppearanceConfig(from: parsed)
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
@@ -610,6 +655,7 @@ final class ConfigService: ConfigProviding {
 
         return CocxyConfig(
             general: general,
+            updates: updates,
             appearance: appearance,
             terminal: terminal,
             agentDetection: agentDetection,
@@ -660,6 +706,16 @@ final class ConfigService: ConfigProviding {
             workingDirectory: stringValue(table["working-directory"]) ?? defaults.workingDirectory,
             confirmCloseProcess: boolValue(table["confirm-close-process"]) ?? defaults.confirmCloseProcess
         )
+    }
+
+    /// Parses the `[updates]` section.
+    private func parseUpdatesConfig(from parsed: [String: TOMLValue]) -> UpdatesConfig {
+        let table = extractTable("updates", from: parsed)
+        let rawChannel = stringValue(table["channel"])
+        if let rawChannel {
+            return UpdatesConfig(channel: ChannelKind(configRawValue: rawChannel))
+        }
+        return UpdatesConfig(channel: fallbackUpdatesChannel)
     }
 
     /// Parses the `[appearance]` section with validation.

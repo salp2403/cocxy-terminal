@@ -47,6 +47,7 @@ protocol ConfigProviding: AnyObject, Sendable {
 /// All fields have sensible defaults so the app works without any config file.
 struct CocxyConfig: Codable, Sendable, Equatable {
     let general: GeneralConfig
+    let updates: UpdatesConfig
     let appearance: AppearanceConfig
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
@@ -72,6 +73,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
 
     init(
         general: GeneralConfig,
+        updates: UpdatesConfig = .defaults,
         appearance: AppearanceConfig,
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
@@ -96,6 +98,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         experimental: ExperimentalConfig = .defaults
     ) {
         self.general = general
+        self.updates = updates
         self.appearance = appearance
         self.terminal = terminal
         self.agentDetection = agentDetection
@@ -122,8 +125,13 @@ struct CocxyConfig: Codable, Sendable, Equatable {
 
     /// Creates a configuration with all default values.
     static var defaults: CocxyConfig {
+        defaults(updateChannel: .stable)
+    }
+
+    static func defaults(updateChannel: ChannelKind) -> CocxyConfig {
         CocxyConfig(
             general: .defaults,
+            updates: UpdatesConfig(channel: updateChannel),
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
@@ -157,7 +165,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, appearance, terminal, agentDetection, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -165,6 +173,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.general = try container.decode(GeneralConfig.self, forKey: .general)
+        self.updates = try container.decodeIfPresent(UpdatesConfig.self, forKey: .updates)
+            ?? .defaults
         self.appearance = try container.decode(AppearanceConfig.self, forKey: .appearance)
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
@@ -291,6 +301,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
 
         return CocxyConfig(
             general: general,
+            updates: updates,
             appearance: mergedAppearance,
             terminal: terminal,
             agentDetection: agentDetection,
@@ -367,6 +378,18 @@ struct GeneralConfig: Codable, Sendable, Equatable {
             workingDirectory: "~",
             confirmCloseProcess: true
         )
+    }
+}
+
+// MARK: - Updates Config
+
+/// `[updates]` section of the configuration.
+struct UpdatesConfig: Codable, Sendable, Equatable {
+    /// Sparkle update channel selected by the user.
+    let channel: ChannelKind
+
+    static var defaults: UpdatesConfig {
+        UpdatesConfig(channel: .stable)
     }
 }
 

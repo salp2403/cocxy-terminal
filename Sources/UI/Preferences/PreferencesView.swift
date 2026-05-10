@@ -140,6 +140,8 @@ struct PreferencesView: View {
         switch selectedSection {
         case .general:
             EditableGeneralSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .updates:
+            UpdatesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .appearance:
             EditableAppearanceSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .agentDetection:
@@ -200,6 +202,7 @@ struct PreferencesView: View {
 /// The sections available in the preferences sidebar.
 enum PreferencesSection: String, CaseIterable, Identifiable {
     case general
+    case updates
     case appearance
     case agentDetection
     case agentMode
@@ -232,6 +235,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
+        case .updates: return "Updates"
         case .appearance: return "Appearance"
         case .agentDetection: return "Agent Detection"
         case .agentMode: return "Agent Mode"
@@ -259,6 +263,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     var iconName: String {
         switch self {
         case .general: return "gear"
+        case .updates: return "arrow.triangle.2.circlepath"
         case .appearance: return "paintbrush"
         case .agentDetection: return "brain.head.profile"
         case .agentMode: return "sparkles"
@@ -379,6 +384,65 @@ struct EditableGeneralSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle(viewModel.localizedString("preferences.section.general", fallback: "General"))
+    }
+}
+
+// MARK: - Updates Section
+
+struct UpdatesPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section(viewModel.localizedString("preferences.updates.channel.section", fallback: "Update Channel")) {
+                Picker(
+                    viewModel.localizedString("preferences.updates.channel.label", fallback: "Channel"),
+                    selection: $viewModel.updateChannel
+                ) {
+                    ForEach(ChannelKind.allCases) { channel in
+                        Text(localizedChannelName(channel)).tag(channel)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Text(channelHelpText)
+                    .font(.caption)
+                    .foregroundStyle(viewModel.updateChannel == .stable ? Color.secondary : Color.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle(viewModel.localizedString("preferences.section.updates", fallback: "Updates"))
+    }
+
+    private var channelHelpText: String {
+        switch viewModel.updateChannel {
+        case .stable:
+            return viewModel.localizedString(
+                "preferences.updates.channel.stable.help",
+                fallback: "Stable receives signed production releases."
+            )
+        case .preview:
+            return viewModel.localizedString(
+                "preferences.updates.channel.preview.help",
+                fallback: "Preview receives signed early-access builds and may be less stable."
+            )
+        case .nightly:
+            return viewModel.localizedString(
+                "preferences.updates.channel.nightly.help",
+                fallback: "Nightly receives signed daily builds and may contain unfinished changes."
+            )
+        }
+    }
+
+    private func localizedChannelName(_ channel: ChannelKind) -> String {
+        viewModel.localizedString(
+            "preferences.updates.channel.\(channel.rawValue)",
+            fallback: channel.displayName
+        )
     }
 }
 
