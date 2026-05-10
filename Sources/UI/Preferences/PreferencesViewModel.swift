@@ -119,6 +119,29 @@ final class PreferencesViewModel: ObservableObject {
     /// Shortcut hint scale multiplier.
     @Published var shortcutHintScale: Double
 
+    // MARK: - Command Corrections
+
+    /// Master switch for local command-failure suggestions.
+    @Published var commandCorrectionsEnabled: Bool
+
+    /// Maximum edit distance for command-name typo suggestions.
+    @Published var commandCorrectionsEditDistanceThreshold: Int
+
+    /// Whether on-device Foundation Models may be used when available.
+    @Published var commandCorrectionsFoundationModelsEnabled: Bool
+
+    /// Whether the active user-configured agent may be asked for fallback suggestions.
+    @Published var commandCorrectionsAgentFallback: Bool
+
+    /// Whether suggestions appear automatically after failed commands.
+    @Published var commandCorrectionsAutoShowOnFailure: Bool
+
+    /// Whether suggestion confidence is displayed in the UI.
+    @Published var commandCorrectionsShowConfidenceBadge: Bool
+
+    /// Maximum suggestions shown in one correction prompt.
+    @Published var commandCorrectionsMaxSuggestionsShown: Int
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -549,6 +572,7 @@ final class PreferencesViewModel: ObservableObject {
             || quickSwitchMode != c.appearance.quickSwitchMode
             || appLanguage != c.appearance.appLanguage
             || uxPolishHasUnsavedChanges(comparedTo: c.uxPolish)
+            || commandCorrectionsHasUnsavedChanges(comparedTo: c.commandCorrections)
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -651,6 +675,13 @@ final class PreferencesViewModel: ObservableObject {
         shortcutHintOffsetX = c.uxPolish.shortcutHintOffsetX
         shortcutHintOffsetY = c.uxPolish.shortcutHintOffsetY
         shortcutHintScale = c.uxPolish.shortcutHintScale
+        commandCorrectionsEnabled = c.commandCorrections.enabled
+        commandCorrectionsEditDistanceThreshold = c.commandCorrections.editDistanceThreshold
+        commandCorrectionsFoundationModelsEnabled = c.commandCorrections.foundationModelsEnabled
+        commandCorrectionsAgentFallback = c.commandCorrections.agentFallback
+        commandCorrectionsAutoShowOnFailure = c.commandCorrections.autoShowOnFailure
+        commandCorrectionsShowConfidenceBadge = c.commandCorrections.showConfidenceBadge
+        commandCorrectionsMaxSuggestionsShown = c.commandCorrections.maxSuggestionsShown
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -872,6 +903,13 @@ final class PreferencesViewModel: ObservableObject {
         self.shortcutHintOffsetX = config.uxPolish.shortcutHintOffsetX
         self.shortcutHintOffsetY = config.uxPolish.shortcutHintOffsetY
         self.shortcutHintScale = config.uxPolish.shortcutHintScale
+        self.commandCorrectionsEnabled = config.commandCorrections.enabled
+        self.commandCorrectionsEditDistanceThreshold = config.commandCorrections.editDistanceThreshold
+        self.commandCorrectionsFoundationModelsEnabled = config.commandCorrections.foundationModelsEnabled
+        self.commandCorrectionsAgentFallback = config.commandCorrections.agentFallback
+        self.commandCorrectionsAutoShowOnFailure = config.commandCorrections.autoShowOnFailure
+        self.commandCorrectionsShowConfidenceBadge = config.commandCorrections.showConfidenceBadge
+        self.commandCorrectionsMaxSuggestionsShown = config.commandCorrections.maxSuggestionsShown
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -1564,6 +1602,7 @@ final class PreferencesViewModel: ObservableObject {
         let completions = buildCompletionConfigFromViewModel()
         let spotlight = buildSpotlightConfigFromViewModel()
         let uxPolish = buildUXPolishConfigFromViewModel()
+        let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -1622,6 +1661,7 @@ final class PreferencesViewModel: ObservableObject {
                 timingHeuristics: timingHeuristics,
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
+            commandCorrections: commandCorrections,
             uxPolish: uxPolish,
             agent: agent,
             backup: backup,
@@ -1683,6 +1723,8 @@ final class PreferencesViewModel: ObservableObject {
         shortcutHintOffsetX = uxPolish.shortcutHintOffsetX
         shortcutHintOffsetY = uxPolish.shortcutHintOffsetY
         shortcutHintScale = uxPolish.shortcutHintScale
+        commandCorrectionsEditDistanceThreshold = commandCorrections.editDistanceThreshold
+        commandCorrectionsMaxSuggestionsShown = commandCorrections.maxSuggestionsShown
         pendingKeybindings = nil
     }
 
@@ -1726,6 +1768,22 @@ final class PreferencesViewModel: ObservableObject {
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
         voiceEnabled != config.enabled
             || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier
+    }
+
+    private func buildCommandCorrectionsConfigFromViewModel() -> CommandCorrectionsConfig {
+        CommandCorrectionsConfig(
+            enabled: commandCorrectionsEnabled,
+            editDistanceThreshold: commandCorrectionsEditDistanceThreshold,
+            foundationModelsEnabled: commandCorrectionsFoundationModelsEnabled,
+            agentFallback: commandCorrectionsAgentFallback,
+            autoShowOnFailure: commandCorrectionsAutoShowOnFailure,
+            showConfidenceBadge: commandCorrectionsShowConfidenceBadge,
+            maxSuggestionsShown: commandCorrectionsMaxSuggestionsShown
+        )
+    }
+
+    private func commandCorrectionsHasUnsavedChanges(comparedTo config: CommandCorrectionsConfig) -> Bool {
+        buildCommandCorrectionsConfigFromViewModel() != config
     }
 
     private func buildCompletionConfigFromViewModel() -> CompletionConfig {
@@ -2276,6 +2334,7 @@ final class PreferencesViewModel: ObservableObject {
         let completions = buildCompletionConfigFromViewModel()
         let spotlight = buildSpotlightConfigFromViewModel()
         let uxPolish = buildUXPolishConfigFromViewModel()
+        let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
@@ -2339,6 +2398,15 @@ final class PreferencesViewModel: ObservableObject {
         pattern-matching = \(patternMatching)
         timing-heuristics = \(timingHeuristics)
         idle-timeout-seconds = \(clampedTimeout)
+
+        [command-corrections]
+        enabled = \(commandCorrections.enabled)
+        edit-distance-threshold = \(commandCorrections.editDistanceThreshold)
+        foundation-models-enabled = \(commandCorrections.foundationModelsEnabled)
+        agent-fallback = \(commandCorrections.agentFallback)
+        auto-show-on-failure = \(commandCorrections.autoShowOnFailure)
+        show-confidence-badge = \(commandCorrections.showConfidenceBadge)
+        max-suggestions-shown = \(commandCorrections.maxSuggestionsShown)
 
         [ux-polish]
         always-show-shortcut-hints = \(uxPolish.alwaysShowShortcutHints)

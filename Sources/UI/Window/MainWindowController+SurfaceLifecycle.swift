@@ -2,6 +2,7 @@
 // MainWindowController+SurfaceLifecycle.swift - Terminal surface creation, destruction, and wiring.
 
 import AppKit
+import CocxyCommandCorrections
 
 private enum CocxyCoreSemanticState {
     static let commandRunning: UInt8 = 3
@@ -916,6 +917,7 @@ extension MainWindowController {
 
         preserveCommandBlockMetadata(for: surfaceID, liveBlocks: liveBlocks)
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
+        updateCommandCorrectionSuggestion(for: block, tabID: tabID, surfaceID: surfaceID)
 
         let key = "\(surfaceID.rawValue.uuidString)#\(block.id)"
         guard persistedCommandBlockKeys.insert(key).inserted else { return }
@@ -932,6 +934,53 @@ extension MainWindowController {
                     config: spotlightConfig
                 )
             }
+        }
+    }
+
+    private func updateCommandCorrectionSuggestion(
+        for block: TerminalCommandBlock,
+        tabID: TabID,
+        surfaceID: SurfaceID
+    ) {
+        guard let coreView = surfaceView(for: surfaceID) as? CocxyCoreView else { return }
+
+        let correctionConfig = configService?.current.commandCorrections ?? .defaults
+        guard correctionConfig.enabled,
+              correctionConfig.autoShowOnFailure,
+              block.exitCode != nil,
+              block.exitCode != 0,
+              !block.command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            coreView.dismissCommandCorrection()
+            return
+        }
+
+        let workingDirectory = block.pwd.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? workingDirectory(for: surfaceID)
+            ?? tabManager.tab(for: tabID)?.workingDirectory
+        let engine = CommandCorrectionEngine.localDefault(
+            editDistanceThreshold: correctionConfig.editDistanceThreshold,
+            foundationModelsEnabled: correctionConfig.foundationModelsEnabled,
+            agentFallback: correctionConfig.agentFallback,
+            maxSuggestions: correctionConfig.maxSuggestionsShown
+        )
+        let execution = CommandExecutionSnapshot(
+            command: block.command,
+            exitCode: block.exitCode,
+            stdout: block.output,
+            stderr: block.output,
+            workingDirectory: workingDirectory
+        )
+
+        if let correction = CommandCorrectionListener(engine: engine).suggestion(
+            for: execution,
+            enabled: true
+        ) {
+            coreView.presentCommandCorrection(
+                correction,
+                showConfidenceBadge: correctionConfig.showConfidenceBadge
+            )
+        } else {
+            coreView.dismissCommandCorrection()
         }
     }
 

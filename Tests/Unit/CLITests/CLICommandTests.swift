@@ -1580,6 +1580,27 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertNotNil(json["dangerReason"])
     }
 
+    func testCorrectCommandReturnsJSONWithoutServer() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["correct", "gti", "status"]),
+            .correct(input: "gti status")
+        )
+
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: "/tmp/nonexistent.sock")
+        )
+
+        let result = runner.run(arguments: ["correct", "gti", "status"])
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.isEmpty)
+        let data = try XCTUnwrap(result.stdout.data(using: .utf8))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["command"] as? String, "gti status")
+        let suggestions = try XCTUnwrap(json["suggestions"] as? [[String: Any]])
+        XCTAssertEqual(suggestions.first?["suggestion"] as? String, "git status")
+    }
+
     func testSignatureCommandsRoundTripWithoutServer() throws {
         let tempDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-cli-signature-\(UUID().uuidString)", isDirectory: true)

@@ -82,6 +82,7 @@ public enum CLICommand: String, CaseIterable {
     case send
     case sendKey = "send-key"
     case classify
+    case correct
     case identify
     case capabilities
     case top
@@ -298,6 +299,7 @@ public enum CLICommand: String, CaseIterable {
         case .send: return "Send text to the active terminal (or read it from stdin)"
         case .sendKey: return "Send a keystroke to the active terminal"
         case .classify: return "Classify terminal input locally as JSON"
+        case .correct: return "Suggest local fixes for a failed shell command as JSON"
         case .identify: return "Describe this Cocxy CLI and owning app as JSON"
         case .capabilities: return "List discoverable local capabilities as JSON"
         case .top: return "Show a top-style live view of Cocxy tabs and active process state"
@@ -489,6 +491,7 @@ public enum CLICommand: String, CaseIterable {
         case .send: return "cocxy send <text>|--stdin"
         case .sendKey: return "cocxy send-key <key>"
         case .classify: return "cocxy classify <input>"
+        case .correct: return "cocxy correct <command>"
         case .identify: return "cocxy identify"
         case .capabilities: return "cocxy capabilities"
         case .top: return "cocxy top [--once|--json] [--interval <seconds>]"

@@ -5,6 +5,7 @@ import Foundation
 import CocxyShared
 import CocxyInputClassifier
 import CocxyCommandSignatures
+import CocxyCommandCorrections
 
 // MARK: - Command Runner
 
@@ -91,6 +92,8 @@ public struct CommandRunner {
             return executeEditorOpen(path: path, editor: editor, line: line, column: column)
         case .classify(let input):
             return executeClassify(input: input)
+        case .correct(let input):
+            return executeCorrect(input: input)
         case .identify:
             return executeIdentify()
         case .capabilities:
@@ -325,6 +328,29 @@ public struct CommandRunner {
                 stderr: "Error: Failed to encode classification: \(error.localizedDescription)"
             )
         }
+    }
+
+    /// Executes `cocxy correct` locally. The command may include sensitive
+    /// shell text, so suggestions are generated in-process and never require
+    /// the app socket.
+    private func executeCorrect(input: String) -> CLIResult {
+        let engine = CommandCorrectionEngine.localDefault()
+        let suggestions = engine.corrections(
+            for: CommandCorrectionContext(command: input, exitCode: 127)
+        )
+        let json: [String: Any] = [
+            "command": input,
+            "count": suggestions.count,
+            "suggestions": suggestions.map { correction in
+                [
+                    "suggestion": correction.suggestion,
+                    "reason": correction.reason,
+                    "confidence": correction.confidence,
+                    "source": correction.source.rawValue
+                ] as [String: Any]
+            }
+        ]
+        return jsonResult(json)
     }
 
     private static func runBlocking<T: Sendable>(
@@ -632,7 +658,7 @@ public struct CommandRunner {
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
         case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen,
-             .classify, .identify, .capabilities, .top,
+             .classify, .correct, .identify, .capabilities, .top,
              .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:
             // These are handled locally; should never reach socket request building.

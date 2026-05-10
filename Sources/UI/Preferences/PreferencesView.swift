@@ -2631,6 +2631,59 @@ struct TerminalPreferencesSection: View {
                 }
             }
 
+            Section(viewModel.localizedString("preferences.terminal.commandCorrections.section", fallback: "Command Corrections")) {
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandCorrections.enabled", fallback: "Suggest fixes after failed commands"),
+                    isOn: $viewModel.commandCorrectionsEnabled
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandCorrections.autoShow", fallback: "Show suggestions automatically"),
+                    isOn: $viewModel.commandCorrectionsAutoShowOnFailure
+                )
+                .disabled(!viewModel.commandCorrectionsEnabled)
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandCorrections.confidence", fallback: "Show confidence badge"),
+                    isOn: $viewModel.commandCorrectionsShowConfidenceBadge
+                )
+                .disabled(!viewModel.commandCorrectionsEnabled)
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandCorrections.foundationModels", fallback: "Use on-device Foundation Models when available"),
+                    isOn: $viewModel.commandCorrectionsFoundationModelsEnabled
+                )
+                .disabled(!viewModel.commandCorrectionsEnabled)
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandCorrections.agentFallback", fallback: "Allow active agent fallback"),
+                    isOn: $viewModel.commandCorrectionsAgentFallback
+                )
+                .disabled(!viewModel.commandCorrectionsEnabled)
+
+                Stepper(
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.terminal.commandCorrections.editDistance",
+                            fallback: "Edit-distance threshold: %d"
+                        ),
+                        viewModel.commandCorrectionsEditDistanceThreshold
+                    ),
+                    value: $viewModel.commandCorrectionsEditDistanceThreshold,
+                    in: CommandCorrectionsConfig.minEditDistanceThreshold...CommandCorrectionsConfig.maxEditDistanceThreshold
+                )
+                .disabled(!viewModel.commandCorrectionsEnabled)
+
+                Stepper(
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.terminal.commandCorrections.maxSuggestions",
+                            fallback: "Max suggestions shown: %d"
+                        ),
+                        viewModel.commandCorrectionsMaxSuggestionsShown
+                    ),
+                    value: $viewModel.commandCorrectionsMaxSuggestionsShown,
+                    in: CommandCorrectionsConfig.minSuggestionsShown...CommandCorrectionsConfig.maxSuggestionsShownLimit
+                )
+                .disabled(!viewModel.commandCorrectionsEnabled)
+            }
+
             Section(viewModel.localizedString("preferences.terminal.inlineImages.section", fallback: "Inline Images")) {
                 Toggle(
                     viewModel.localizedString("preferences.terminal.enableSixelImages", fallback: "Enable Sixel images"),

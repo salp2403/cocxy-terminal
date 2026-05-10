@@ -369,6 +369,18 @@ final class ConfigService: ConfigProviding {
         locale-detection = \(defaults.inputClassifier.localeDetection)
         foundation-models-fallback = \(defaults.inputClassifier.foundationModelsFallback)
 
+        [command-corrections]
+        # Local command-failure suggestions. Heuristics are instant and
+        # private; Foundation Models means on-device only when available.
+        # Agent fallback is opt-in because a user provider may be remote.
+        enabled = \(defaults.commandCorrections.enabled)
+        edit-distance-threshold = \(defaults.commandCorrections.editDistanceThreshold)
+        foundation-models-enabled = \(defaults.commandCorrections.foundationModelsEnabled)
+        agent-fallback = \(defaults.commandCorrections.agentFallback)
+        auto-show-on-failure = \(defaults.commandCorrections.autoShowOnFailure)
+        show-confidence-badge = \(defaults.commandCorrections.showConfidenceBadge)
+        max-suggestions-shown = \(defaults.commandCorrections.maxSuggestionsShown)
+
         [security]
         # Local artifact signature policy. Defaults preserve existing
         # unsigned templates, macros, and plugins while surfacing warnings.
@@ -659,6 +671,7 @@ final class ConfigService: ConfigProviding {
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let inputClassifier = parseInputClassifierConfig(from: parsed)
+        let commandCorrections = parseCommandCorrectionsConfig(from: parsed)
         let security = parseSecurityConfig(from: parsed)
         let uxPolish = parseUXPolishConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
@@ -692,6 +705,7 @@ final class ConfigService: ConfigProviding {
             terminal: terminal,
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
+            commandCorrections: commandCorrections,
             security: security,
             uxPolish: uxPolish,
             agent: agent,
@@ -950,6 +964,37 @@ final class ConfigService: ConfigProviding {
             localeDetection: boolValue(table["locale-detection"]) ?? defaults.localeDetection,
             foundationModelsFallback: boolValue(table["foundation-models-fallback"])
                 ?? defaults.foundationModelsFallback
+        )
+    }
+
+    /// Parses `[command-corrections]` as a local-only command help feature.
+    /// Out-of-range numeric values fall back to defaults instead of clamping
+    /// silently, so a typo cannot unexpectedly broaden suggestion behavior.
+    private func parseCommandCorrectionsConfig(from parsed: [String: TOMLValue]) -> CommandCorrectionsConfig {
+        let table = extractTable("command-corrections", from: parsed)
+        let defaults = CommandCorrectionsConfig.defaults
+
+        let rawThreshold = intValue(table["edit-distance-threshold"])
+        let threshold = rawThreshold.flatMap { value -> Int? in
+            (CommandCorrectionsConfig.minEditDistanceThreshold...CommandCorrectionsConfig.maxEditDistanceThreshold)
+                .contains(value) ? value : nil
+        } ?? defaults.editDistanceThreshold
+
+        let rawMaxSuggestions = intValue(table["max-suggestions-shown"])
+        let maxSuggestions = rawMaxSuggestions.flatMap { value -> Int? in
+            (CommandCorrectionsConfig.minSuggestionsShown...CommandCorrectionsConfig.maxSuggestionsShownLimit)
+                .contains(value) ? value : nil
+        } ?? defaults.maxSuggestionsShown
+
+        return CommandCorrectionsConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            editDistanceThreshold: threshold,
+            foundationModelsEnabled: boolValue(table["foundation-models-enabled"])
+                ?? defaults.foundationModelsEnabled,
+            agentFallback: boolValue(table["agent-fallback"]) ?? defaults.agentFallback,
+            autoShowOnFailure: boolValue(table["auto-show-on-failure"]) ?? defaults.autoShowOnFailure,
+            showConfidenceBadge: boolValue(table["show-confidence-badge"]) ?? defaults.showConfidenceBadge,
+            maxSuggestionsShown: maxSuggestions
         )
     }
 

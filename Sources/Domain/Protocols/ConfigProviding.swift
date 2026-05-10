@@ -52,6 +52,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
     let inputClassifier: InputClassifierConfig
+    let commandCorrections: CommandCorrectionsConfig
     let security: SecurityConfig
     let uxPolish: UXPolishConfig
     let agent: AgentModeConfig
@@ -81,6 +82,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
         inputClassifier: InputClassifierConfig = .defaults,
+        commandCorrections: CommandCorrectionsConfig = .defaults,
         security: SecurityConfig = .defaults,
         uxPolish: UXPolishConfig = .defaults,
         agent: AgentModeConfig = .defaults,
@@ -109,6 +111,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = terminal
         self.agentDetection = agentDetection
         self.inputClassifier = inputClassifier
+        self.commandCorrections = commandCorrections
         self.security = security
         self.uxPolish = uxPolish
         self.agent = agent
@@ -145,6 +148,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: .defaults,
             agentDetection: .defaults,
             inputClassifier: .defaults,
+            commandCorrections: .defaults,
             security: .defaults,
             uxPolish: .defaults,
             agent: .defaults,
@@ -177,7 +181,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -191,6 +195,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
         self.inputClassifier = try container.decodeIfPresent(InputClassifierConfig.self, forKey: .inputClassifier)
+            ?? .defaults
+        self.commandCorrections = try container.decodeIfPresent(CommandCorrectionsConfig.self, forKey: .commandCorrections)
             ?? .defaults
         self.security = try container.decodeIfPresent(SecurityConfig.self, forKey: .security)
             ?? .defaults
@@ -938,6 +944,59 @@ struct InputClassifierConfig: Codable, Sendable, Equatable {
             localeDetection: true,
             foundationModelsFallback: true
         )
+    }
+}
+
+// MARK: - Command Corrections Config
+
+/// `[command-corrections]` section for local command-failure suggestions.
+///
+/// The feature is local-first by default. Foundation Models refers only to
+/// on-device models when available; agent fallback is opt-in because a user
+/// configured provider may involve a network request under that user's own
+/// credentials.
+struct CommandCorrectionsConfig: Codable, Sendable, Equatable {
+    static let minEditDistanceThreshold = 1
+    static let maxEditDistanceThreshold = 4
+    static let minSuggestionsShown = 1
+    static let maxSuggestionsShownLimit = 8
+
+    let enabled: Bool
+    let editDistanceThreshold: Int
+    let foundationModelsEnabled: Bool
+    let agentFallback: Bool
+    let autoShowOnFailure: Bool
+    let showConfidenceBadge: Bool
+    let maxSuggestionsShown: Int
+
+    init(
+        enabled: Bool = true,
+        editDistanceThreshold: Int = 2,
+        foundationModelsEnabled: Bool = true,
+        agentFallback: Bool = false,
+        autoShowOnFailure: Bool = true,
+        showConfidenceBadge: Bool = true,
+        maxSuggestionsShown: Int = 3
+    ) {
+        self.enabled = enabled
+        self.editDistanceThreshold = Self.clampedEditDistanceThreshold(editDistanceThreshold)
+        self.foundationModelsEnabled = foundationModelsEnabled
+        self.agentFallback = agentFallback
+        self.autoShowOnFailure = autoShowOnFailure
+        self.showConfidenceBadge = showConfidenceBadge
+        self.maxSuggestionsShown = Self.clampedSuggestionsShown(maxSuggestionsShown)
+    }
+
+    static var defaults: CommandCorrectionsConfig {
+        CommandCorrectionsConfig()
+    }
+
+    static func clampedEditDistanceThreshold(_ value: Int) -> Int {
+        min(max(value, minEditDistanceThreshold), maxEditDistanceThreshold)
+    }
+
+    static func clampedSuggestionsShown(_ value: Int) -> Int {
+        min(max(value, minSuggestionsShown), maxSuggestionsShownLimit)
     }
 }
 

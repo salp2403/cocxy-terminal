@@ -1081,6 +1081,20 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], AppearanceConfig.defaults.appLanguage.rawValue)
     }
 
+    func test_configGet_commandCorrectionsKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-command-corrections",
+            command: "config-get",
+            params: ["key": "command-corrections.enabled"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "command-corrections.enabled")
+        XCTAssertEqual(response.data?["value"], "\(CommandCorrectionsConfig.defaults.enabled)")
+    }
+
     func test_configList_includesNewNotesAndRateLimitKeys() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
@@ -1107,6 +1121,11 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(
             response.data?["completions.enabled-languages"],
             CompletionConfig.defaults.enabledLanguageIDs.joined(separator: ",")
+        )
+        XCTAssertEqual(response.data?["command-corrections.enabled"], "\(CommandCorrectionsConfig.defaults.enabled)")
+        XCTAssertEqual(
+            response.data?["command-corrections.edit-distance-threshold"],
+            "\(CommandCorrectionsConfig.defaults.editDistanceThreshold)"
         )
     }
 
@@ -1140,6 +1159,24 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["completions.provider"], CompletionConfig.defaults.provider.rawValue)
         XCTAssertEqual(response.data?["completions.idle-delay-seconds"], "\(CompletionConfig.defaults.idleDelaySeconds)")
         XCTAssertNil(response.data?["worktree.enabled"])
+    }
+
+    func test_configList_withCommandCorrectionsFilterOnlyReturnsCommandCorrectionKeys() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cl-command-corrections",
+            command: "config-list",
+            params: ["filter": "command-corrections."]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "7")
+        XCTAssertEqual(response.data?["command-corrections.enabled"], "\(CommandCorrectionsConfig.defaults.enabled)")
+        XCTAssertEqual(
+            response.data?["command-corrections.foundation-models-enabled"],
+            "\(CommandCorrectionsConfig.defaults.foundationModelsEnabled)"
+        )
+        XCTAssertNil(response.data?["completions.inline-ai"])
     }
 
     // MARK: config-set
@@ -1227,6 +1264,9 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             let cases = [
                 ("appearance.app-language", "es-HN"),
                 ("appearance.aurora-enabled", "FALSE"),
+                ("command-corrections.enabled", "FALSE"),
+                ("command-corrections.edit-distance-threshold", "1"),
+                ("command-corrections.max-suggestions-shown", "5"),
                 ("completions.provider", "foundation-models-on-device"),
                 ("completions.enabled-languages", "[\"swift\", python, \"markdown\"]"),
             ]

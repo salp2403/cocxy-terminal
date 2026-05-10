@@ -2,6 +2,7 @@
 // CocxyCoreView.swift - NSView that hosts a CocxyCore terminal surface with Metal rendering.
 
 import AppKit
+import CocxyCommandCorrections
 import CocxyCoreKit
 
 // MARK: - CocxyCore View
@@ -120,6 +121,12 @@ final class CocxyCoreView: NSView {
 
     private(set) var commandBlockOverlayView: TerminalBlockOverlayView?
 
+    // MARK: - Command Corrections
+
+    private(set) var pendingCommandCorrection: CommandCorrection?
+    private var commandCorrectionSuggestionView: CommandCorrectionSuggestionView?
+    private var commandCorrectionShowsConfidenceBadge = true
+
     // MARK: - Display Link
 
     private var displayLink: CVDisplayLink?
@@ -210,6 +217,13 @@ final class CocxyCoreView: NSView {
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
         commandBlockOverlayView?.updateLocalizer(localizer)
+        if let pendingCommandCorrection {
+            commandCorrectionSuggestionView?.update(
+                correction: pendingCommandCorrection,
+                showConfidenceBadge: commandCorrectionShowsConfidenceBadge,
+                localizer: localizer
+            )
+        }
     }
 
     deinit {
@@ -402,6 +416,7 @@ final class CocxyCoreView: NSView {
         refreshIDECursorMetrics()
         updateNotificationRingFrame()
         commandBlockOverlayView?.frame = bounds
+        layoutCommandCorrectionSuggestion()
         refreshCommandBlockOverlay()
     }
 
@@ -636,6 +651,14 @@ final class CocxyCoreView: NSView {
             bridge.sendKeyEvent(keyEvent, to: sid)
             return
         case .sendToTerminal:
+            if handlePendingCommandCorrectionShortcut(
+                event,
+                bridge: bridge,
+                surfaceID: sid,
+                modifiers: modifiers
+            ) {
+                return
+            }
             if shouldThrottleTerminalDeleteRepeat(event, bridge: bridge, surfaceID: sid) {
                 return
             }
@@ -806,6 +829,80 @@ final class CocxyCoreView: NSView {
         sendControlSequence("\r")
     }
     override func noResponder(for eventSelector: Selector) {}
+
+    // MARK: - Command Corrections
+
+    func presentCommandCorrection(
+        _ correction: CommandCorrection,
+        showConfidenceBadge: Bool = true
+    ) {
+        pendingCommandCorrection = correction
+        commandCorrectionShowsConfidenceBadge = showConfidenceBadge
+
+        let suggestionView: CommandCorrectionSuggestionView
+        if let existing = commandCorrectionSuggestionView {
+            suggestionView = existing
+        } else {
+            let view = CommandCorrectionSuggestionView(localizer: localizer)
+            view.autoresizingMask = [.width, .minYMargin]
+            addSubview(view)
+            commandCorrectionSuggestionView = view
+            suggestionView = view
+        }
+
+        suggestionView.update(
+            correction: correction,
+            showConfidenceBadge: showConfidenceBadge,
+            localizer: localizer
+        )
+        layoutCommandCorrectionSuggestion()
+    }
+
+    func dismissCommandCorrection() {
+        pendingCommandCorrection = nil
+        commandCorrectionSuggestionView?.removeFromSuperview()
+        commandCorrectionSuggestionView = nil
+    }
+
+    private func handlePendingCommandCorrectionShortcut(
+        _ event: NSEvent,
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID,
+        modifiers: KeyModifiers
+    ) -> Bool {
+        guard let correction = pendingCommandCorrection,
+              modifiers.isEmpty else {
+            return false
+        }
+
+        switch event.keyCode {
+        case 48: // Tab
+            followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+            bridge.sendText(correction.suggestion, to: sid)
+            dismissCommandCorrection()
+            return true
+        case 53: // Escape
+            dismissCommandCorrection()
+            return true
+        default:
+            dismissCommandCorrection()
+            return false
+        }
+    }
+
+    private func layoutCommandCorrectionSuggestion() {
+        guard let suggestionView = commandCorrectionSuggestionView else { return }
+        let horizontalInset = max(12, contentPadding.x)
+        let width = max(0, bounds.width - horizontalInset * 2)
+        let height: CGFloat = 34
+        let y = max(8, bounds.height - height - 12)
+        suggestionView.frame = NSRect(
+            x: horizontalInset,
+            y: y,
+            width: width,
+            height: height
+        )
+    }
 
     // MARK: - Copy / Paste
 

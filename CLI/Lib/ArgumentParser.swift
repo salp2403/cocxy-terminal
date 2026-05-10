@@ -176,6 +176,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy classify <input>`
     case classify(input: String)
 
+    /// `cocxy correct <command>`
+    case correct(input: String)
+
     /// `cocxy identify`
     case identify
 
@@ -742,6 +745,9 @@ public enum CLIArgumentParser {
 
         case "classify":
             return try parseClassify(arguments: Array(arguments.dropFirst()))
+
+        case "correct":
+            return try parseCorrect(arguments: Array(arguments.dropFirst()))
 
         case "identify":
             return .identify
@@ -1696,6 +1702,14 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "classify", argument: "input")
         }
         return .classify(input: arguments.joined(separator: " "))
+    }
+
+    /// Parses `cocxy correct <command>`.
+    private static func parseCorrect(arguments: [String]) throws -> ParsedCommand {
+        guard !arguments.isEmpty else {
+            throw CLIError.missingArgument(command: "correct", argument: "command")
+        }
+        return .correct(input: arguments.joined(separator: " "))
     }
 
     private static func parseTop(arguments: [String]) throws -> ParsedCommand {

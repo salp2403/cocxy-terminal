@@ -1742,6 +1742,22 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "ux-polish.shortcut-hint-scale":
             return "\(config.uxPolish.shortcutHintScale)"
 
+        // Command corrections
+        case "command-corrections.enabled":
+            return "\(config.commandCorrections.enabled)"
+        case "command-corrections.edit-distance-threshold":
+            return "\(config.commandCorrections.editDistanceThreshold)"
+        case "command-corrections.foundation-models-enabled":
+            return "\(config.commandCorrections.foundationModelsEnabled)"
+        case "command-corrections.agent-fallback":
+            return "\(config.commandCorrections.agentFallback)"
+        case "command-corrections.auto-show-on-failure":
+            return "\(config.commandCorrections.autoShowOnFailure)"
+        case "command-corrections.show-confidence-badge":
+            return "\(config.commandCorrections.showConfidenceBadge)"
+        case "command-corrections.max-suggestions-shown":
+            return "\(config.commandCorrections.maxSuggestionsShown)"
+
         // Terminal
         case "terminal.scrollback-lines":
             return "\(config.terminal.scrollbackLines)"
@@ -1916,6 +1932,25 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
              "ux-polish.shortcut-hint-debug-overlay":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
+        case "command-corrections.enabled",
+             "command-corrections.foundation-models-enabled",
+             "command-corrections.agent-fallback",
+             "command-corrections.auto-show-on-failure",
+             "command-corrections.show-confidence-badge":
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
+        case "command-corrections.edit-distance-threshold":
+            guard let value = Int(rawValue),
+                  (CommandCorrectionsConfig.minEditDistanceThreshold...CommandCorrectionsConfig.maxEditDistanceThreshold)
+                    .contains(value)
+            else { return nil }
+            return "\(value)"
+        case "command-corrections.max-suggestions-shown":
+            guard let value = Int(rawValue),
+                  (CommandCorrectionsConfig.minSuggestionsShown...CommandCorrectionsConfig.maxSuggestionsShownLimit)
+                    .contains(value)
+            else { return nil }
+            return "\(value)"
         case "completions.inline-ai":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
@@ -3296,6 +3331,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "ux-polish.always-show-shortcut-hints", "ux-polish.shortcut-hint-debug-overlay",
             "ux-polish.shortcut-hint-offset-x", "ux-polish.shortcut-hint-offset-y",
             "ux-polish.shortcut-hint-scale",
+            "command-corrections.enabled", "command-corrections.edit-distance-threshold",
+            "command-corrections.foundation-models-enabled", "command-corrections.agent-fallback",
+            "command-corrections.auto-show-on-failure", "command-corrections.show-confidence-badge",
+            "command-corrections.max-suggestions-shown",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",

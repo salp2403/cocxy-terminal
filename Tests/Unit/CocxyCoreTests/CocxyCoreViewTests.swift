@@ -3,6 +3,7 @@
 import AppKit
 import Testing
 import CocxyCoreKit
+import CocxyCommandCorrections
 @testable import CocxyTerminal
 
 @Suite("CocxyCoreView", .serialized)
@@ -799,6 +800,65 @@ struct CocxyCoreViewTests {
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
+    }
+
+    @Test("pending command correction uses Tab to accept and Escape to dismiss")
+    func pendingCommandCorrectionUsesTabToAcceptAndEscapeToDismiss() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.presentCommandCorrection(
+            CommandCorrection(
+                original: "gti status",
+                suggestion: "git status",
+                reason: "Recognized common shell typo",
+                confidence: 0.97,
+                source: .commonTypo
+            ),
+            showConfidenceBadge: true
+        )
+
+        harness.view.keyDown(with: makeKeyEvent(characters: "\t", keyCode: 48))
+
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains("git status") == true
+        }
+        #expect(harness.view.pendingCommandCorrection == nil)
+
+        harness.view.presentCommandCorrection(
+            CommandCorrection(
+                original: "sl",
+                suggestion: "ls",
+                reason: "Recognized common shell typo",
+                confidence: 0.97,
+                source: .commonTypo
+            ),
+            showConfidenceBadge: false
+        )
+        harness.view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+
+        #expect(harness.view.pendingCommandCorrection == nil)
+
+        harness.view.presentCommandCorrection(
+            CommandCorrection(
+                original: "pyhton -m venv .",
+                suggestion: "python -m venv .",
+                reason: "Recognized common shell typo",
+                confidence: 0.97,
+                source: .commonTypo
+            )
+        )
+        harness.view.keyDown(with: makeKeyEvent(characters: "x", keyCode: 7))
+
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.hasSuffix("x") == true
+        }
+        #expect(harness.view.pendingCommandCorrection == nil)
     }
 
     @Test("keyDown arrow and return keys update IDE prompt tracking")

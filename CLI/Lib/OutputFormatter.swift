@@ -144,6 +144,8 @@ public enum OutputFormatter {
             return "Key sent."
         case .classify:
             return formatDataOrJSON(response: response)
+        case .correct:
+            return formatDataOrJSON(response: response)
         case .identify, .capabilities:
             return formatDataOrJSON(response: response)
         case .top:
