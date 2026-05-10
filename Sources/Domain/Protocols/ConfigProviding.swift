@@ -52,6 +52,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
     let inputClassifier: InputClassifierConfig
+    let security: SecurityConfig
     let agent: AgentModeConfig
     let backup: BackupConfig
     let activity: ActivityConfig
@@ -79,6 +80,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
         inputClassifier: InputClassifierConfig = .defaults,
+        security: SecurityConfig = .defaults,
         agent: AgentModeConfig = .defaults,
         backup: BackupConfig = .defaults,
         activity: ActivityConfig = .defaults,
@@ -105,6 +107,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = terminal
         self.agentDetection = agentDetection
         self.inputClassifier = inputClassifier
+        self.security = security
         self.agent = agent
         self.backup = backup
         self.activity = activity
@@ -139,6 +142,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: .defaults,
             agentDetection: .defaults,
             inputClassifier: .defaults,
+            security: .defaults,
             agent: .defaults,
             backup: .defaults,
             activity: .defaults,
@@ -169,7 +173,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, security, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -183,6 +187,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
         self.inputClassifier = try container.decodeIfPresent(InputClassifierConfig.self, forKey: .inputClassifier)
+            ?? .defaults
+        self.security = try container.decodeIfPresent(SecurityConfig.self, forKey: .security)
             ?? .defaults
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
             ?? .defaults
@@ -312,6 +318,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: terminal,
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
+            security: security,
             // Built-in Agent Mode is a global user preference. Project
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
@@ -923,6 +930,30 @@ struct InputClassifierConfig: Codable, Sendable, Equatable {
             autoRouteNaturalLanguage: false,
             localeDetection: true,
             foundationModelsFallback: true
+        )
+    }
+}
+
+// MARK: - Security Config
+
+/// `[security]` section for local artifact signature policy.
+///
+/// Signed artifacts are additive. Existing templates, macros, and plugins
+/// remain usable by default; stricter blocking can be enabled explicitly.
+struct SecurityConfig: Codable, Sendable, Equatable {
+    let requireSignedTemplates: Bool
+    let requireSignedMacros: Bool
+    let requireSignedPlugins: Bool
+    let warnOnUnsigned: Bool
+    let trustOnFirstUse: Bool
+
+    static var defaults: SecurityConfig {
+        SecurityConfig(
+            requireSignedTemplates: false,
+            requireSignedMacros: false,
+            requireSignedPlugins: false,
+            warnOnUnsigned: true,
+            trustOnFirstUse: false
         )
     }
 }

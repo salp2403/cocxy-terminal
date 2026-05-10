@@ -369,6 +369,15 @@ final class ConfigService: ConfigProviding {
         locale-detection = \(defaults.inputClassifier.localeDetection)
         foundation-models-fallback = \(defaults.inputClassifier.foundationModelsFallback)
 
+        [security]
+        # Local artifact signature policy. Defaults preserve existing
+        # unsigned templates, macros, and plugins while surfacing warnings.
+        require-signed-templates = \(defaults.security.requireSignedTemplates)
+        require-signed-macros = \(defaults.security.requireSignedMacros)
+        require-signed-plugins = \(defaults.security.requireSignedPlugins)
+        warn-on-unsigned = \(defaults.security.warnOnUnsigned)
+        trust-on-first-use = \(defaults.security.trustOnFirstUse)
+
         [agent]
         # Built-in Agent Mode. Disabled by default; enabling this never
         # enables auto-mode. Foundation Models is preferred on supported
@@ -640,6 +649,7 @@ final class ConfigService: ConfigProviding {
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let inputClassifier = parseInputClassifierConfig(from: parsed)
+        let security = parseSecurityConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
         let backup = parseBackupConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
@@ -671,6 +681,7 @@ final class ConfigService: ConfigProviding {
             terminal: terminal,
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
+            security: security,
             agent: agent,
             backup: backup,
             activity: activity,
@@ -927,6 +938,23 @@ final class ConfigService: ConfigProviding {
             localeDetection: boolValue(table["locale-detection"]) ?? defaults.localeDetection,
             foundationModelsFallback: boolValue(table["foundation-models-fallback"])
                 ?? defaults.foundationModelsFallback
+        )
+    }
+
+    /// Parses the `[security]` section.
+    private func parseSecurityConfig(from parsed: [String: TOMLValue]) -> SecurityConfig {
+        let table = extractTable("security", from: parsed)
+        let defaults = SecurityConfig.defaults
+
+        return SecurityConfig(
+            requireSignedTemplates: boolValue(table["require-signed-templates"])
+                ?? defaults.requireSignedTemplates,
+            requireSignedMacros: boolValue(table["require-signed-macros"])
+                ?? defaults.requireSignedMacros,
+            requireSignedPlugins: boolValue(table["require-signed-plugins"])
+                ?? defaults.requireSignedPlugins,
+            warnOnUnsigned: boolValue(table["warn-on-unsigned"]) ?? defaults.warnOnUnsigned,
+            trustOnFirstUse: boolValue(table["trust-on-first-use"]) ?? defaults.trustOnFirstUse
         )
     }
 
