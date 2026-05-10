@@ -21,6 +21,10 @@ let package = Package(
             name: "CocxyInputClassifier",
             targets: ["CocxyInputClassifier"]
         ),
+        .library(
+            name: "CocxyCommandSignatures",
+            targets: ["CocxyCommandSignatures"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
@@ -44,6 +48,11 @@ let package = Package(
                 .linkedFramework("NaturalLanguage"),
             ]
         ),
+        .target(
+            name: "CocxyCommandSignatures",
+            dependencies: [],
+            path: "Sources/Domain/CommandSignatures"
+        ),
         // MARK: - Main App
         .executableTarget(
             name: "CocxyTerminal",
@@ -51,12 +60,13 @@ let package = Package(
                 "CocxyShared",
                 "CocxyMarkdownLib",
                 "CocxyInputClassifier",
+                "CocxyCommandSignatures",
                 "CocxyTreeSitterABI",
                 "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources",
-            exclude: ["Domain/Markdown", "Domain/InputClassifier", "CocxyTreeSitterABI"],
+            exclude: ["Domain/Markdown", "Domain/InputClassifier", "Domain/CommandSignatures", "CocxyTreeSitterABI"],
             resources: [
                 .process("App/Assets.xcassets"),
             ],
@@ -80,6 +90,7 @@ let package = Package(
                 "CocxyShared",
                 "CocxyMarkdownLib",
                 "CocxyInputClassifier",
+                "CocxyCommandSignatures",
                 "CocxyTestRuntime",
             ],
             path: "Tests",
@@ -102,7 +113,7 @@ let package = Package(
         // MARK: - CLI Companion
         .target(
             name: "CocxyCLILib",
-            dependencies: ["CocxyShared", "CocxyInputClassifier"],
+            dependencies: ["CocxyShared", "CocxyInputClassifier", "CocxyCommandSignatures"],
             path: "CLI/Lib"
         ),
         .executableTarget(
@@ -122,7 +133,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CocxyCLITests",
-            dependencies: ["CocxyCLILib", "CocxyShared", "CocxyInputClassifier", "CocxyDaemonLib"],
+            dependencies: ["CocxyCLILib", "CocxyShared", "CocxyInputClassifier", "CocxyCommandSignatures", "CocxyDaemonLib"],
             path: "Tests/Unit/CLITests"
         ),
     ]
