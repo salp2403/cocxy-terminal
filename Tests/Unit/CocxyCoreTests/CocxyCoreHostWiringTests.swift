@@ -190,6 +190,7 @@ struct CocxyCoreHostWiringTests {
         let before = try #require(bridge.historyVisibleStart(for: surfaceID))
         #expect(before == cocxycore_terminal_history_max_visible_start(state.terminal))
         #expect(view.prefersLocalScrollInMouseTrackingMode?() == true)
+        #expect(view.prefersPacedDeleteRepeat?() == true)
 
         view.scrollWheel(with: makeScrollEvent(deltaY: 120))
 

@@ -192,21 +192,10 @@ extension MainWindowController {
                 self.applyFocusToSurface(surfaceID: capturedSurfaceID)
             }
             cocxyView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
-                guard let self else {
-                    return false
-                }
-
-                let surfaceState = self.injectedPerSurfaceStore?.state(for: capturedSurfaceID)
-                let bridge = self.cocxyCoreBridge(forSurface: capturedSurfaceID)
-                let semantic = bridge?.semanticDiagnostics(for: capturedSurfaceID)
-                return surfaceState?.isActive == true
-                    || surfaceState?.hasAgent == true
-                    || semantic?.state == CocxyCoreSemanticState.agentActive
-                    || self.semanticCommandInputLooksLikeActiveAgent(
-                        bridge: bridge,
-                        surfaceID: capturedSurfaceID,
-                        semantic: semantic
-                    )
+                self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
+            }
+            cocxyView.prefersPacedDeleteRepeat = { [weak self] in
+                self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,
@@ -214,6 +203,20 @@ extension MainWindowController {
                 in: cocxyView
             )
         }
+    }
+
+    private func surfaceLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
+        let surfaceState = injectedPerSurfaceStore?.state(for: surfaceID)
+        let bridge = cocxyCoreBridge(forSurface: surfaceID)
+        let semantic = bridge?.semanticDiagnostics(for: surfaceID)
+        return surfaceState?.isActive == true
+            || surfaceState?.hasAgent == true
+            || semantic?.state == CocxyCoreSemanticState.agentActive
+            || semanticCommandInputLooksLikeActiveAgent(
+                bridge: bridge,
+                surfaceID: surfaceID,
+                semantic: semantic
+            )
     }
 
     private func semanticCommandInputLooksLikeActiveAgent(

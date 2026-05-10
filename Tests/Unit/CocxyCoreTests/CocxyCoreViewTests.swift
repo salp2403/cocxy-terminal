@@ -502,13 +502,13 @@ struct CocxyCoreViewTests {
             String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true
         }
 
-        #expect(clipboard.readCallCount == 0)
+        #expect(clipboard.readCallCount == 1)
         #expect(clipboard.readImageAttachmentCallCount == 1)
         #expect(String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true)
     }
 
-    @Test("paste prefers image attachments over companion clipboard text")
-    func pastePrefersImageAttachmentsOverCompanionClipboardText() async throws {
+    @Test("paste prefers non-empty text over rich pasteboard image side data")
+    func pastePrefersNonEmptyTextOverRichPasteboardImageSideData() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -526,14 +526,14 @@ struct CocxyCoreViewTests {
 
         harness.view.paste(nil)
 
-        let expectedPayload = FileDropPathFormatter.format([imageURL])
         try await waitUntil {
-            String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true
+            String(data: output.data, encoding: .utf8)?.contains("typed prompt") == true
         }
 
-        #expect(clipboard.readImageAttachmentCallCount == 1)
-        #expect(clipboard.readCallCount == 0)
-        #expect(String(data: output.data, encoding: .utf8)?.contains("typed prompt") == false)
+        #expect(clipboard.readCallCount == 1)
+        #expect(clipboard.readImageAttachmentCallCount == 0)
+        #expect(String(data: output.data, encoding: .utf8)?.contains("typed prompt") == true)
+        #expect(String(data: output.data, encoding: .utf8)?.contains(imageURL.path) == false)
     }
 
     @Test("bracketed paste wraps clipboard payload when the terminal enables it")
@@ -773,6 +773,31 @@ struct CocxyCoreViewTests {
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(stillTooFastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
+    }
+
+    @Test("agent delete key repeat is throttled when semantic agent context is active")
+    func agentDeleteKeyRepeatIsThrottledWhenSemanticAgentContextIsActive() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.view.prefersPacedDeleteRepeat = { true }
+
+        let initialDelete = makeKeyEvent(characters: "\u{7F}", keyCode: 51, timestamp: 20.000)
+        let fastRepeat = makeKeyEvent(
+            characters: "\u{7F}",
+            keyCode: 51,
+            isARepeat: true,
+            timestamp: 20.030
+        )
+        let pacedRepeat = makeKeyEvent(
+            characters: "\u{7F}",
+            keyCode: 51,
+            isARepeat: true,
+            timestamp: 20.140
+        )
+
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
     }
 

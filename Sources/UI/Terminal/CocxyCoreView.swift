@@ -73,6 +73,12 @@ final class CocxyCoreView: NSView {
     /// while the foreground process has enabled terminal mouse tracking.
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
 
+    /// Returns whether delete-key autorepeat should be paced because the
+    /// foreground prompt is an agent UI. This keeps agent prompt editing
+    /// controllable even when the TUI has not enabled alt-screen or mouse
+    /// tracking flags.
+    var prefersPacedDeleteRepeat: (() -> Bool)?
+
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
@@ -832,17 +838,17 @@ final class CocxyCoreView: NSView {
     private func handlePaste() {
         guard let bridge = bridge, let sid = surfaceID else { return }
 
+        if let text = clipboardService.read(), !text.isEmpty {
+            sendClipboardText(text, bridge: bridge, surfaceID: sid)
+            return
+        }
+
         if let imageAttachment = clipboardService.readImageAttachment() {
             sendClipboardText(
                 FileDropPathFormatter.format([imageAttachment.fileURL]),
                 bridge: bridge,
                 surfaceID: sid
             )
-            return
-        }
-
-        if let text = clipboardService.read(), !text.isEmpty {
-            sendClipboardText(text, bridge: bridge, surfaceID: sid)
         }
     }
 
@@ -967,11 +973,13 @@ final class CocxyCoreView: NSView {
         surfaceID sid: SurfaceID
     ) -> Bool {
         guard Self.throttledDeleteKeyCodes.contains(event.keyCode),
-              let state = bridge.surfaceState(for: sid),
-              cocxycore_terminal_is_alt_screen(state.terminal)
-                || cocxycore_terminal_mode_mouse(state.terminal) > 0 else {
+              let state = bridge.surfaceState(for: sid) else {
             return false
         }
+        let shouldPaceRepeat = prefersPacedDeleteRepeat?() == true
+            || cocxycore_terminal_is_alt_screen(state.terminal)
+            || cocxycore_terminal_mode_mouse(state.terminal) > 0
+        guard shouldPaceRepeat else { return false }
 
         let timestamp = event.timestamp > 0
             ? event.timestamp
@@ -1079,14 +1087,14 @@ final class CocxyCoreView: NSView {
             clipboardService: clipboardService,
             paste: { [weak bridge] in
                 guard let bridge else { return }
-                if let imageAttachment = self.clipboardService.readImageAttachment() {
+                if let text = self.clipboardService.read(), !text.isEmpty {
+                    self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
+                } else if let imageAttachment = self.clipboardService.readImageAttachment() {
                     self.sendClipboardText(
                         FileDropPathFormatter.format([imageAttachment.fileURL]),
                         bridge: bridge,
                         surfaceID: sid
                     )
-                } else if let text = self.clipboardService.read(), !text.isEmpty {
-                    self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
                 }
             },
             localizer: localizer
