@@ -1563,15 +1563,21 @@ extension CocxyCoreView: TerminalHostingView {
 extension CocxyCoreView: @preconcurrency NSTextInputClient {
 
     func insertText(_ string: Any, replacementRange: NSRange) {
-        compositionState.commit()
-
         let text: String
         if let attr = string as? NSAttributedString { text = attr.string }
         else if let plain = string as? String { text = plain }
         else { return }
 
-        guard !text.isEmpty, let bridge = bridge, let sid = surfaceID else { return }
+        guard !text.isEmpty else { return }
+
+        let wasComposing = compositionState.hasMarkedText
+        compositionState.commit()
+
+        guard let bridge = bridge, let sid = surfaceID else { return }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        if wasComposing {
+            bridge.sendPreeditText("", to: sid)
+        }
         bridge.sendText(text, to: sid)
     }
 
