@@ -53,6 +53,10 @@ struct CLIIdentityCapabilitiesSwiftTestingTests {
         #expect(capabilities.contains { $0["id"] as? String == "mcp" && $0["supported"] as? Bool == true })
         #expect(capabilities.contains { $0["id"] as? String == "lsp" && $0["supported"] as? Bool == true })
         #expect(capabilities.contains { $0["id"] as? String == "voice" && $0["supported"] as? Bool == true })
+        #expect(capabilities.contains {
+            $0["id"] as? String == "high-fidelity-clipboard"
+                && $0["supported"] as? Bool == true
+        })
         #expect(capabilities.contains { $0["id"] as? String == "vault" && $0["supported"] as? Bool == false })
     }
 

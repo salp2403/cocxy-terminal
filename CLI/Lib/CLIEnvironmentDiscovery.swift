@@ -169,9 +169,9 @@ enum CLIEnvironmentDiscovery {
                 ),
                 CLIDiscoverableCapability(
                     id: "high-fidelity-clipboard",
-                    supported: false,
+                    supported: true,
                     enabledByDefault: false,
-                    summary: "Full multi-type pasteboard preservation is not complete yet"
+                    summary: "Multi-type pasteboard capture and restore"
                 ),
                 CLIDiscoverableCapability(
                     id: "vault",
