@@ -176,6 +176,24 @@ public enum ParsedCommand: Equatable {
     /// `cocxy classify <input>`
     case classify(input: String)
 
+    /// `cocxy keys generate --author <name>`
+    case keysGenerate(author: String)
+
+    /// `cocxy keys list`
+    case keysList
+
+    /// `cocxy keys export-public <key-id> [--output <path>]`
+    case keysExportPublic(keyID: String, outputPath: String?)
+
+    /// `cocxy keys import <path>`
+    case keysImport(path: String)
+
+    /// `cocxy sign <template|macro|plugin|notebook|file> <path> [--key <id>] [--author <name>]`
+    case signArtifact(kind: String, path: String, keyID: String?, author: String?)
+
+    /// `cocxy verify <template|macro|plugin|notebook|file> <path> [--public-key <path>]`
+    case verifyArtifact(kind: String, path: String, publicKeyPath: String?)
+
     // MARK: - Window Management (v3)
 
     /// `cocxy window new [--engine system|in-process|daemon]`
@@ -689,6 +707,15 @@ public enum CLIArgumentParser {
 
         case "classify":
             return try parseClassify(arguments: Array(arguments.dropFirst()))
+
+        case "keys":
+            return try parseKeys(arguments: Array(arguments.dropFirst()))
+
+        case "sign":
+            return try parseSign(arguments: Array(arguments.dropFirst()))
+
+        case "verify":
+            return try parseVerify(arguments: Array(arguments.dropFirst()))
 
         // MARK: v3 compound commands
 
@@ -1625,6 +1652,133 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "classify", argument: "input")
         }
         return .classify(input: arguments.joined(separator: " "))
+    }
+
+    /// Parses `cocxy keys <subcommand>`.
+    private static func parseKeys(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "keys", argument: "subcommand")
+        }
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "generate":
+            var author: String?
+            var index = 0
+            while index < rest.count {
+                switch rest[index] {
+                case "--author":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(command: "keys generate", argument: "author")
+                    }
+                    author = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "keys generate",
+                        argument: rest[index],
+                        reason: "Use --author <name>"
+                    )
+                }
+            }
+            guard let author, !author.isEmpty else {
+                throw CLIError.missingArgument(command: "keys generate", argument: "author")
+            }
+            return .keysGenerate(author: author)
+        case "list":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(command: "keys list", argument: rest[0], reason: "No arguments expected")
+            }
+            return .keysList
+        case "export-public":
+            guard let keyID = rest.first else {
+                throw CLIError.missingArgument(command: "keys export-public", argument: "key-id")
+            }
+            var outputPath: String?
+            var index = 1
+            while index < rest.count {
+                switch rest[index] {
+                case "--output":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(command: "keys export-public", argument: "output")
+                    }
+                    outputPath = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "keys export-public",
+                        argument: rest[index],
+                        reason: "Use --output <path>"
+                    )
+                }
+            }
+            return .keysExportPublic(keyID: keyID, outputPath: outputPath)
+        case "import":
+            guard rest.count == 1 else {
+                throw CLIError.missingArgument(command: "keys import", argument: "path")
+            }
+            return .keysImport(path: rest[0])
+        default:
+            throw CLIError.invalidArgument(
+                command: "keys",
+                argument: subcommand,
+                reason: "Use generate, list, export-public, or import"
+            )
+        }
+    }
+
+    /// Parses `cocxy sign <kind> <path>`.
+    private static func parseSign(arguments: [String]) throws -> ParsedCommand {
+        guard arguments.count >= 2 else {
+            throw CLIError.missingArgument(command: "sign", argument: "kind path")
+        }
+        let kind = arguments[0]
+        let path = arguments[1]
+        var keyID: String?
+        var author: String?
+        var index = 2
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--key":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "sign", argument: "key")
+                }
+                keyID = arguments[index + 1]
+                index += 2
+            case "--author":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "sign", argument: "author")
+                }
+                author = arguments[index + 1]
+                index += 2
+            default:
+                throw CLIError.invalidArgument(command: "sign", argument: arguments[index], reason: "Use --key or --author")
+            }
+        }
+        return .signArtifact(kind: kind, path: path, keyID: keyID, author: author)
+    }
+
+    /// Parses `cocxy verify <kind> <path>`.
+    private static func parseVerify(arguments: [String]) throws -> ParsedCommand {
+        guard arguments.count >= 2 else {
+            throw CLIError.missingArgument(command: "verify", argument: "kind path")
+        }
+        let kind = arguments[0]
+        let path = arguments[1]
+        var publicKeyPath: String?
+        var index = 2
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--public-key":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "verify", argument: "public-key")
+                }
+                publicKeyPath = arguments[index + 1]
+                index += 2
+            default:
+                throw CLIError.invalidArgument(command: "verify", argument: arguments[index], reason: "Use --public-key <path>")
+            }
+        }
+        return .verifyArtifact(kind: kind, path: path, publicKeyPath: publicKeyPath)
     }
 
     // MARK: - Private: v3 Subcommand Parsers

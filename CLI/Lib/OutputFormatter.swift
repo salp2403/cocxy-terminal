@@ -144,6 +144,9 @@ public enum OutputFormatter {
             return "Key sent."
         case .classify:
             return formatDataOrJSON(response: response)
+        case .keysGenerate, .keysList, .keysExportPublic, .keysImport,
+             .signArtifact, .verifyArtifact:
+            return formatDataOrJSON(response: response)
 
         // MARK: Window Management (v3)
 

@@ -4,6 +4,7 @@
 import Foundation
 import CocxyShared
 import CocxyInputClassifier
+import CocxyCommandSignatures
 
 // MARK: - Command Runner
 
@@ -19,13 +20,22 @@ public struct CommandRunner {
 
     /// The socket client to use for communication.
     public let socketClient: SocketClient
+    public let signatureKeyStore: SignatureKeychainStore
+    public let trustedAuthorRegistryURL: URL
 
     /// Creates a command runner with a socket client.
     ///
     /// - Parameter socketClient: The socket client. Defaults to a new instance
     ///   with the default socket path.
-    public init(socketClient: SocketClient = SocketClient()) {
+    public init(
+        socketClient: SocketClient = SocketClient(),
+        signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
+        trustedAuthorRegistryURL: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cocxy/security/trusted-authors.json")
+    ) {
         self.socketClient = socketClient
+        self.signatureKeyStore = signatureKeyStore
+        self.trustedAuthorRegistryURL = trustedAuthorRegistryURL
     }
 
     /// Runs the CLI with the given arguments.
@@ -81,6 +91,18 @@ public struct CommandRunner {
             return executeEditorOpen(path: path, editor: editor, line: line, column: column)
         case .classify(let input):
             return executeClassify(input: input)
+        case .keysGenerate(let author):
+            return executeKeysGenerate(author: author)
+        case .keysList:
+            return executeKeysList()
+        case .keysExportPublic(let keyID, let outputPath):
+            return executeKeysExportPublic(keyID: keyID, outputPath: outputPath)
+        case .keysImport(let path):
+            return executeKeysImport(path: path)
+        case .signArtifact(let kind, let path, let keyID, let author):
+            return executeSignArtifact(kind: kind, path: path, keyID: keyID, author: author)
+        case .verifyArtifact(let kind, let path, let publicKeyPath):
+            return executeVerifyArtifact(kind: kind, path: path, publicKeyPath: publicKeyPath)
         default:
             break
         }
@@ -313,6 +335,218 @@ public struct CommandRunner {
         return box.load()!
     }
 
+    // MARK: - Local Commands: Signatures
+
+    private func executeKeysGenerate(author: String) -> CLIResult {
+        do {
+            let keyPair = try SignatureKeyPair.generate(author: author)
+            try signatureKeyStore.save(keyPair)
+            var registry = try TrustedAuthorRegistry.load(from: trustedAuthorRegistryURL)
+            try registry.trust(displayName: author, publicKey: keyPair.publicKey)
+            try registry.save()
+            return jsonResult([
+                "keyID": keyPair.keyID,
+                "author": keyPair.author,
+                "publicKey": keyPair.publicKeyBase64,
+            ])
+        } catch {
+            return errorResult("Failed to generate signature key", error)
+        }
+    }
+
+    private func executeKeysList() -> CLIResult {
+        do {
+            let keys = try signatureKeyStore.listKeyIDs().map { keyID -> [String: String] in
+                let keyPair = try signatureKeyStore.load(keyID: keyID)
+                return [
+                    "keyID": keyID,
+                    "author": keyPair?.author ?? "",
+                    "publicKey": keyPair?.publicKeyBase64 ?? "",
+                ]
+            }
+            return jsonResult(["keys": keys])
+        } catch {
+            return errorResult("Failed to list signature keys", error)
+        }
+    }
+
+    private func executeKeysExportPublic(keyID: String, outputPath: String?) -> CLIResult {
+        do {
+            guard let keyPair = try signatureKeyStore.load(keyID: keyID) else {
+                return CLIResult(exitCode: 1, stdout: "", stderr: "Error: Signature key not found: \(keyID)")
+            }
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            let data = try encoder.encode(keyPair.publicKey)
+            if let outputPath {
+                try data.write(to: URL(fileURLWithPath: outputPath), options: [.atomic])
+                return jsonResult(["status": "exported", "path": outputPath, "keyID": keyID])
+            }
+            return CLIResult(exitCode: 0, stdout: String(decoding: data, as: UTF8.self), stderr: "")
+        } catch {
+            return errorResult("Failed to export public signature key", error)
+        }
+    }
+
+    private func executeKeysImport(path: String) -> CLIResult {
+        do {
+            let data = try Data(contentsOf: URL(fileURLWithPath: path))
+            let publicKey = try JSONDecoder().decode(SignaturePublicKey.self, from: data)
+            var registry = try TrustedAuthorRegistry.load(from: trustedAuthorRegistryURL)
+            try registry.trust(displayName: publicKey.author, publicKey: publicKey)
+            try registry.save()
+            return jsonResult(["status": "imported", "keyID": publicKey.keyID, "author": publicKey.author])
+        } catch {
+            return errorResult("Failed to import public signature key", error)
+        }
+    }
+
+    private func executeSignArtifact(kind: String, path: String, keyID: String?, author: String?) -> CLIResult {
+        do {
+            try validateSignatureKind(kind)
+            let payloadURL = URL(fileURLWithPath: path)
+            let payload = try signaturePayloadData(for: payloadURL)
+            let availableKeyIDs = try signatureKeyStore.listKeyIDs()
+            guard let signingKeyID = keyID ?? availableKeyIDs.first else {
+                return CLIResult(
+                    exitCode: 1,
+                    stdout: "",
+                    stderr: "Error: No signature keys are available. Run `cocxy keys generate --author <name>` first."
+                )
+            }
+            guard let keyPair = try signatureKeyStore.load(keyID: signingKeyID) else {
+                return CLIResult(exitCode: 1, stdout: "", stderr: "Error: Signature key not found: \(signingKeyID)")
+            }
+            let artifact = try SignatureSigner().sign(
+                payload: payload,
+                author: author ?? keyPair.author,
+                keyPair: keyPair
+            )
+            let sidecarURL = signatureSidecarURL(for: payloadURL)
+            let encoder = JSONEncoder()
+            encoder.dateEncodingStrategy = .iso8601
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(artifact).write(to: sidecarURL, options: [.atomic])
+            return jsonResult([
+                "status": "signed",
+                "kind": kind,
+                "path": payloadURL.path,
+                "signaturePath": sidecarURL.path,
+                "keyID": artifact.keyID,
+            ])
+        } catch {
+            return errorResult("Failed to sign artifact", error)
+        }
+    }
+
+    private func executeVerifyArtifact(kind: String, path: String, publicKeyPath: String?) -> CLIResult {
+        do {
+            try validateSignatureKind(kind)
+            let payloadURL = URL(fileURLWithPath: path)
+            let payload = try signaturePayloadData(for: payloadURL)
+            let sidecarURL = signatureSidecarURL(for: payloadURL)
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let artifact = try decoder.decode(SignedArtifact.self, from: Data(contentsOf: sidecarURL))
+            let publicKey: SignaturePublicKey
+            if let publicKeyPath {
+                publicKey = try decoder.decode(
+                    SignaturePublicKey.self,
+                    from: Data(contentsOf: URL(fileURLWithPath: publicKeyPath))
+                )
+            } else if let keyPair = try signatureKeyStore.load(keyID: artifact.keyID) {
+                publicKey = keyPair.publicKey
+            } else if let trusted = try TrustedAuthorRegistry.load(from: trustedAuthorRegistryURL).publicKey(for: artifact.keyID) {
+                publicKey = trusted
+            } else {
+                return CLIResult(exitCode: 1, stdout: "", stderr: "Error: No trusted public key for \(artifact.keyID)")
+            }
+            let result = SignatureVerifier().verify(payload: payload, artifact: artifact, publicKey: publicKey)
+            return jsonResult([
+                "status": result == .valid ? "valid" : "invalid",
+                "result": String(describing: result),
+                "kind": kind,
+                "keyID": artifact.keyID,
+            ], exitCode: result == .valid ? 0 : 1)
+        } catch {
+            return errorResult("Failed to verify artifact", error)
+        }
+    }
+
+    private func validateSignatureKind(_ kind: String) throws {
+        let allowed: Set<String> = ["template", "macro", "plugin", "notebook", "file"]
+        guard allowed.contains(kind) else {
+            throw CLIError.invalidArgument(
+                command: "signatures",
+                argument: kind,
+                reason: "Kind must be template, macro, plugin, notebook, or file"
+            )
+        }
+    }
+
+    private func signaturePayloadData(for url: URL) throws -> Data {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else {
+            throw CLIError.invalidArgument(command: "signatures", argument: url.path, reason: "Path does not exist")
+        }
+        if isDirectory.boolValue {
+            let manifestURL = url.appendingPathComponent("template.json")
+            if FileManager.default.fileExists(atPath: manifestURL.path) {
+                return try Data(contentsOf: manifestURL)
+            }
+            let pluginURL = url.appendingPathComponent("cocxy-plugin.toml")
+            if FileManager.default.fileExists(atPath: pluginURL.path),
+               let content = try? String(contentsOf: pluginURL, encoding: .utf8) {
+                return Self.canonicalPluginManifestPayload(from: content)
+            }
+            throw CLIError.invalidArgument(command: "signatures", argument: url.path, reason: "Directory has no supported manifest")
+        }
+        return try Data(contentsOf: url)
+    }
+
+    private static func canonicalPluginManifestPayload(from content: String) -> Data {
+        let signatureKeys: Set<String> = [
+            "signature",
+            "signature-algorithm",
+            "signature-key-id",
+            "signature-author",
+            "signature-timestamp",
+            "signature-payload-sha256",
+        ]
+        var lines = content.components(separatedBy: .newlines).filter { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard let separator = trimmed.firstIndex(of: "=") else { return true }
+            let key = trimmed[..<separator].trimmingCharacters(in: .whitespaces)
+            return !signatureKeys.contains(key)
+        }
+        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
+            lines.removeLast()
+        }
+        return Data((lines.joined(separator: "\n") + "\n").utf8)
+    }
+
+    private func signatureSidecarURL(for url: URL) -> URL {
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            return url.appendingPathComponent(".cocxy-signature.json")
+        }
+        return URL(fileURLWithPath: url.path + ".cocxy-signature.json")
+    }
+
+    private func jsonResult(_ object: Any, exitCode: Int32 = 0) -> CLIResult {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+            return CLIResult(exitCode: exitCode, stdout: String(decoding: data, as: UTF8.self), stderr: "")
+        } catch {
+            return errorResult("Failed to encode JSON", error)
+        }
+    }
+
+    private func errorResult(_ prefix: String, _ error: Error) -> CLIResult {
+        CLIResult(exitCode: 1, stdout: "", stderr: "Error: \(prefix): \(error.localizedDescription)")
+    }
+
     // MARK: - Request Building
 
     /// Builds a `CLISocketRequest` from a parsed command.
@@ -365,7 +599,9 @@ public struct CommandRunner {
         case .status:
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
-        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen, .classify:
+        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen,
+             .classify, .keysGenerate, .keysList, .keysExportPublic, .keysImport,
+             .signArtifact, .verifyArtifact:
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 

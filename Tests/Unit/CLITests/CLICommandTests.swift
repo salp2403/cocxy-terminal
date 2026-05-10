@@ -3,6 +3,7 @@
 
 import XCTest
 import CocxyShared
+@testable import CocxyCommandSignatures
 @testable import CocxyCLILib
 
 // MARK: - Argument Parser Tests
@@ -59,6 +60,39 @@ final class CLIArgumentParserTests: XCTestCase {
             XCTAssertEqual(
                 cliError,
                 .missingArgument(command: "classify", argument: "input")
+            )
+        }
+    }
+
+    func testSignatureCommandsParse() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["keys", "generate", "--author", "Cocxy"]),
+            .keysGenerate(author: "Cocxy")
+        )
+        XCTAssertEqual(try CLIArgumentParser.parse(["keys", "list"]), .keysList)
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["keys", "export-public", "abc", "--output", "/tmp/key.json"]),
+            .keysExportPublic(keyID: "abc", outputPath: "/tmp/key.json")
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["keys", "import", "/tmp/key.json"]),
+            .keysImport(path: "/tmp/key.json")
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["sign", "template", "/tmp/template", "--key", "abc", "--author", "Cocxy"]),
+            .signArtifact(kind: "template", path: "/tmp/template", keyID: "abc", author: "Cocxy")
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["verify", "template", "/tmp/template"]),
+            .verifyArtifact(kind: "template", path: "/tmp/template", publicKeyPath: nil)
+        )
+    }
+
+    func testKeysGenerateWithoutAuthorThrowsMissingArgument() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse(["keys", "generate"])) { error in
+            XCTAssertEqual(
+                error as? CLIError,
+                .missingArgument(command: "keys generate", argument: "author")
             )
         }
     }
@@ -1544,6 +1578,48 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertEqual(json["category"] as? String, "dangerous-command")
         XCTAssertEqual(json["shouldWarnBeforeExecution"] as? Bool, true)
         XCTAssertNotNil(json["dangerReason"])
+    }
+
+    func testSignatureCommandsRoundTripWithoutServer() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-cli-signature-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let payloadURL = tempDirectory.appendingPathComponent("template.json")
+        try #"{"id":"demo"}"#.write(to: payloadURL, atomically: true, encoding: .utf8)
+        let keyStore = SignatureKeychainStore(backend: MemorySignatureKeyValueStore())
+        let registryURL = tempDirectory.appendingPathComponent("trusted-authors.json")
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: tempDirectory.appendingPathComponent("missing.sock").path),
+            signatureKeyStore: keyStore,
+            trustedAuthorRegistryURL: registryURL
+        )
+
+        let generate = runner.run(arguments: ["keys", "generate", "--author", "Cocxy"])
+        XCTAssertEqual(generate.exitCode, 0, generate.stderr)
+        let keyID = try XCTUnwrap(Self.jsonObject(from: generate.stdout)["keyID"] as? String)
+
+        let sign = runner.run(arguments: [
+            "sign", "template", payloadURL.path,
+            "--key", keyID,
+            "--author", "Cocxy",
+        ])
+        XCTAssertEqual(sign.exitCode, 0, sign.stderr)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: payloadURL.path + ".cocxy-signature.json"
+        ))
+
+        let verify = runner.run(arguments: ["verify", "template", payloadURL.path])
+        XCTAssertEqual(verify.exitCode, 0, verify.stderr)
+        XCTAssertEqual(try Self.jsonObject(from: verify.stdout)["status"] as? String, "valid")
+    }
+
+    private static func jsonObject(from text: String) throws -> [String: Any] {
+        let data = Data(text.utf8)
+        return try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
     }
 
     // MARK: - 34. Unknown command returns exit code 1

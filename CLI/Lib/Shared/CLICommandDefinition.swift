@@ -82,6 +82,12 @@ public enum CLICommand: String, CaseIterable {
     case send
     case sendKey = "send-key"
     case classify
+    case keysGenerate = "keys-generate"
+    case keysList = "keys-list"
+    case keysExportPublic = "keys-export-public"
+    case keysImport = "keys-import"
+    case signArtifact = "sign"
+    case verifyArtifact = "verify"
 
     // MARK: - Remote Workspace (v2)
 
@@ -289,6 +295,12 @@ public enum CLICommand: String, CaseIterable {
         case .send: return "Send text to the active terminal (or read it from stdin)"
         case .sendKey: return "Send a keystroke to the active terminal"
         case .classify: return "Classify terminal input locally as JSON"
+        case .keysGenerate: return "Generate a local signing key"
+        case .keysList: return "List local signing keys"
+        case .keysExportPublic: return "Export a signing public key"
+        case .keysImport: return "Trust an imported signing public key"
+        case .signArtifact: return "Sign a local artifact with a sidecar signature"
+        case .verifyArtifact: return "Verify a local artifact sidecar signature"
 
         // Plugins
         case .pluginList: return "List all installed plugins"
@@ -471,6 +483,12 @@ public enum CLICommand: String, CaseIterable {
         case .send: return "cocxy send <text>|--stdin"
         case .sendKey: return "cocxy send-key <key>"
         case .classify: return "cocxy classify <input>"
+        case .keysGenerate: return "cocxy keys generate --author <name>"
+        case .keysList: return "cocxy keys list"
+        case .keysExportPublic: return "cocxy keys export-public <key-id> [--output <path>]"
+        case .keysImport: return "cocxy keys import <path>"
+        case .signArtifact: return "cocxy sign <template|macro|plugin|notebook|file> <path> [--key <id>] [--author <name>]"
+        case .verifyArtifact: return "cocxy verify <template|macro|plugin|notebook|file> <path> [--public-key <path>]"
 
         // Plugins
         case .pluginList: return "cocxy plugin-list"
