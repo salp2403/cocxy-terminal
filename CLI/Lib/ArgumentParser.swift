@@ -182,6 +182,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy capabilities`
     case capabilities
 
+    /// `cocxy top [--once|--json] [--interval <seconds>]`
+    case top(mode: CLITopMode)
+
     /// `cocxy keys generate --author <name>`
     case keysGenerate(author: String)
 
@@ -745,6 +748,9 @@ public enum CLIArgumentParser {
 
         case "capabilities":
             return .capabilities
+
+        case "top":
+            return try parseTop(arguments: Array(arguments.dropFirst()))
 
         case "keys":
             return try parseKeys(arguments: Array(arguments.dropFirst()))
@@ -1690,6 +1696,63 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "classify", argument: "input")
         }
         return .classify(input: arguments.joined(separator: " "))
+    }
+
+    private static func parseTop(arguments: [String]) throws -> ParsedCommand {
+        var mode: CLITopMode = .interactive(intervalSeconds: 1.0)
+        var sawOutputMode = false
+        var index = 0
+
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--once":
+                guard !sawOutputMode else {
+                    throw CLIError.invalidArgument(
+                        command: "top",
+                        argument: "--once",
+                        reason: "Use only one of --once or --json."
+                    )
+                }
+                mode = .once
+                sawOutputMode = true
+                index += 1
+            case "--json":
+                guard !sawOutputMode else {
+                    throw CLIError.invalidArgument(
+                        command: "top",
+                        argument: "--json",
+                        reason: "Use only one of --once or --json."
+                    )
+                }
+                mode = .json
+                sawOutputMode = true
+                index += 1
+            case "--interval":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "top", argument: "seconds")
+                }
+                let rawValue = arguments[index + 1]
+                guard let interval = TimeInterval(rawValue), interval >= 0.2 else {
+                    throw CLIError.invalidArgument(
+                        command: "top",
+                        argument: rawValue,
+                        reason: "Interval must be a number >= 0.2 seconds."
+                    )
+                }
+                if case .interactive = mode {
+                    mode = .interactive(intervalSeconds: interval)
+                }
+                index += 2
+            default:
+                throw CLIError.invalidArgument(
+                    command: "top",
+                    argument: arguments[index],
+                    reason: "Unknown flag. Use --once, --json, or --interval <seconds>."
+                )
+            }
+        }
+
+        return .top(mode: mode)
     }
 
     /// Parses `cocxy keys <subcommand>`.

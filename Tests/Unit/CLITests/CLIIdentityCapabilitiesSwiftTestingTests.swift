@@ -37,6 +37,7 @@ struct CLIIdentityCapabilitiesSwiftTestingTests {
         #expect(enabledFeatures.contains("terminal"))
         #expect(enabledFeatures.contains("local-cli"))
         #expect(enabledFeatures.contains("app-socket"))
+        #expect(enabledFeatures.contains("top-cli"))
     }
 
     @Test("capabilities returns supported feature JSON without requiring the app socket")
@@ -57,6 +58,7 @@ struct CLIIdentityCapabilitiesSwiftTestingTests {
             $0["id"] as? String == "high-fidelity-clipboard"
                 && $0["supported"] as? Bool == true
         })
+        #expect(capabilities.contains { $0["id"] as? String == "top-cli" && $0["supported"] as? Bool == true })
         #expect(capabilities.contains { $0["id"] as? String == "vault" && $0["supported"] as? Bool == false })
     }
 

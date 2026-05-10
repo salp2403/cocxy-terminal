@@ -95,6 +95,8 @@ public struct CommandRunner {
             return executeIdentify()
         case .capabilities:
             return executeCapabilities()
+        case .top(let mode):
+            return CLITopCommand(socketClient: socketClient).run(mode: mode)
         case .keysGenerate(let author):
             return executeKeysGenerate(author: author)
         case .keysList:
@@ -630,7 +632,7 @@ public struct CommandRunner {
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
         case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen,
-             .classify, .identify, .capabilities,
+             .classify, .identify, .capabilities, .top,
              .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:
             // These are handled locally; should never reach socket request building.

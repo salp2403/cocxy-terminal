@@ -146,6 +146,8 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .identify, .capabilities:
             return formatDataOrJSON(response: response)
+        case .top:
+            return formatDataOrJSON(response: response)
         case .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:
             return formatDataOrJSON(response: response)

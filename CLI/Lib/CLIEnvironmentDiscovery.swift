@@ -58,6 +58,7 @@ enum CLIEnvironmentDiscovery {
                 "notebooks",
                 "plugins",
                 "command-signatures",
+                "top-cli",
             ]
         )
     }
@@ -172,6 +173,12 @@ enum CLIEnvironmentDiscovery {
                     supported: true,
                     enabledByDefault: false,
                     summary: "Multi-type pasteboard capture and restore"
+                ),
+                CLIDiscoverableCapability(
+                    id: "top-cli",
+                    supported: true,
+                    enabledByDefault: true,
+                    summary: "Terminal top-style view for tabs, active process metrics, and agent state"
                 ),
                 CLIDiscoverableCapability(
                     id: "vault",
