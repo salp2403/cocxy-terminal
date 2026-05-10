@@ -178,6 +178,43 @@ final class WorkspaceToolbarTests: XCTestCase {
         XCTAssertTrue(titles.contains("Browser"))
     }
 
+    func testPanelTabTitlesUseCustomPanelTitle() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        let contentID = manager.splitFocusedWithPanel(
+            direction: .horizontal,
+            panel: .subagent(id: "sub-1", sessionId: "session-1")
+        )
+        XCTAssertNotNil(contentID)
+        manager.setPanelTitle(for: contentID!, title: "Research")
+
+        controller.update(splitManager: manager)
+
+        let subagentTabs = controller.panelTabs.filter { $0.panelType == .subagent }
+        XCTAssertEqual(subagentTabs.count, 1)
+        XCTAssertEqual(subagentTabs.first?.title, "Research")
+    }
+
+    func testPanelTabTitlesKeepCustomTitleWhenLocalizerChanges() {
+        let window = NSWindow()
+        let controller = WorkspaceToolbarController(window: window)
+        let manager = SplitManager()
+        let contentID = manager.splitFocusedWithPanel(
+            direction: .horizontal,
+            panel: .subagent(id: "sub-1", sessionId: "session-1")
+        )
+        XCTAssertNotNil(contentID)
+        manager.setPanelTitle(for: contentID!, title: "Research")
+        controller.update(splitManager: manager)
+
+        controller.updateLocalizer(AppLocalizer(languagePreference: .spanish))
+
+        let subagentTabs = controller.panelTabs.filter { $0.panelType == .subagent }
+        XCTAssertEqual(subagentTabs.count, 1)
+        XCTAssertEqual(subagentTabs.first?.title, "Research")
+    }
+
     func testPanelTabTitlesLocalizeToSpanish() throws {
         let bundle = try XCTUnwrap(localizationBundle())
         let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)

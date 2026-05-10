@@ -71,6 +71,9 @@ final class WorkspaceToolbarController: NSObject {
     /// Current panel tab items.
     private(set) var panelTabs: [PanelTabInfo] = []
 
+    /// Custom titles supplied by `SplitManager`, keyed by panel content id.
+    private var customPanelTitles: [UUID: String] = [:]
+
     /// Callback when a panel tab is clicked.
     var onPanelSelected: ((UUID) -> Void)?
 
@@ -119,7 +122,8 @@ final class WorkspaceToolbarController: NSObject {
 
         panelTabs = leaves.enumerated().map { index, leaf in
             let type = splitManager.panelType(for: leaf.terminalID)
-            let title = Self.localizedPanelTitle(for: type, index: index, using: localizer)
+            let title = splitManager.panelTitle(for: leaf.terminalID)
+                ?? Self.localizedPanelTitle(for: type, index: index, using: localizer)
             return PanelTabInfo(
                 leafID: leaf.leafID,
                 contentID: leaf.terminalID,
@@ -128,6 +132,10 @@ final class WorkspaceToolbarController: NSObject {
                 isFocused: leaf.leafID == focusedID
             )
         }
+        customPanelTitles = Dictionary(uniqueKeysWithValues: leaves.compactMap { leaf in
+            guard let title = splitManager.panelTitle(for: leaf.terminalID) else { return nil }
+            return (leaf.terminalID, title)
+        })
 
         // Always show the toolbar — even with 1 panel, show the tab.
         if !isVisible {
@@ -143,7 +151,8 @@ final class WorkspaceToolbarController: NSObject {
                 leafID: tab.leafID,
                 contentID: tab.contentID,
                 panelType: tab.panelType,
-                title: Self.localizedPanelTitle(for: tab.panelType, index: index, using: localizer),
+                title: customPanelTitles[tab.contentID]
+                    ?? Self.localizedPanelTitle(for: tab.panelType, index: index, using: localizer),
                 isFocused: tab.isFocused
             )
         }
