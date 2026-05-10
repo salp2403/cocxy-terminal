@@ -359,6 +359,16 @@ final class ConfigService: ConfigProviding {
         timing-heuristics = \(defaults.agentDetection.timingHeuristics)
         idle-timeout-seconds = \(defaults.agentDetection.idleTimeoutSeconds)
 
+        [input-classifier]
+        # Local pre-execution classifier. Dangerous-command warnings are
+        # enabled by default; natural-language routing remains manual by
+        # default so existing terminal behavior does not change.
+        enabled = \(defaults.inputClassifier.enabled)
+        dangerous-command-warning = \(defaults.inputClassifier.dangerousCommandWarning)
+        auto-route-natural-language = \(defaults.inputClassifier.autoRouteNaturalLanguage)
+        locale-detection = \(defaults.inputClassifier.localeDetection)
+        foundation-models-fallback = \(defaults.inputClassifier.foundationModelsFallback)
+
         [agent]
         # Built-in Agent Mode. Disabled by default; enabling this never
         # enables auto-mode. Foundation Models is preferred on supported
@@ -629,6 +639,7 @@ final class ConfigService: ConfigProviding {
         let appearance = parseAppearanceConfig(from: parsed)
         let terminal = parseTerminalConfig(from: parsed)
         let agentDetection = parseAgentDetectionConfig(from: parsed)
+        let inputClassifier = parseInputClassifierConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
         let backup = parseBackupConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
@@ -659,6 +670,7 @@ final class ConfigService: ConfigProviding {
             appearance: appearance,
             terminal: terminal,
             agentDetection: agentDetection,
+            inputClassifier: inputClassifier,
             agent: agent,
             backup: backup,
             activity: activity,
@@ -898,6 +910,23 @@ final class ConfigService: ConfigProviding {
             patternMatching: boolValue(table["pattern-matching"]) ?? defaults.patternMatching,
             timingHeuristics: boolValue(table["timing-heuristics"]) ?? defaults.timingHeuristics,
             idleTimeoutSeconds: validatedTimeout
+        )
+    }
+
+    /// Parses the `[input-classifier]` section.
+    private func parseInputClassifierConfig(from parsed: [String: TOMLValue]) -> InputClassifierConfig {
+        let table = extractTable("input-classifier", from: parsed)
+        let defaults = InputClassifierConfig.defaults
+
+        return InputClassifierConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            dangerousCommandWarning: boolValue(table["dangerous-command-warning"])
+                ?? defaults.dangerousCommandWarning,
+            autoRouteNaturalLanguage: boolValue(table["auto-route-natural-language"])
+                ?? defaults.autoRouteNaturalLanguage,
+            localeDetection: boolValue(table["locale-detection"]) ?? defaults.localeDetection,
+            foundationModelsFallback: boolValue(table["foundation-models-fallback"])
+                ?? defaults.foundationModelsFallback
         )
     }
 

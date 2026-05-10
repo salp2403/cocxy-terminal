@@ -1,7 +1,8 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// HookEvent.swift - Models for Claude Code lifecycle hook events.
+// HookEvent.swift - Models for lifecycle hook events.
 
 import Foundation
+import CocxyInputClassifier
 
 // MARK: - Hook Event Type
 
@@ -112,11 +113,13 @@ struct HookEvent: Codable, Sendable {
                 let toolName = (try? container.decode(String.self, forKey: .toolName)) ?? "unknown"
                 // tool_input can be complex nested JSON — extract file_path/command as strings.
                 let toolInput = Self.extractToolInput(from: container)
+                let classification = Self.classifyToolInput(toolName: toolName, toolInput: toolInput)
                 let result = Self.extractToolResult(from: container)
                 let error = eventType == .postToolUseFailure ? result : nil
                 self.data = .toolUse(ToolUseData(
                     toolName: toolName,
                     toolInput: toolInput,
+                    inputClassification: classification,
                     result: eventType == .postToolUse ? result : nil,
                     error: error
                 ))
@@ -241,6 +244,24 @@ struct HookEvent: Codable, Sendable {
             return "ok"
         }
         return nil
+    }
+
+    private static func classifyToolInput(
+        toolName: String,
+        toolInput: [String: String]?
+    ) -> InputClassification? {
+        let normalizedToolName = toolName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let shellToolNames: Set<String> = [
+            "bash", "shell", "run_shell_command", "terminal", "execute"
+        ]
+        guard shellToolNames.contains(normalizedToolName),
+              let command = toolInput?["command"],
+              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
+            return nil
+        }
+
+        return HeuristicInputClassifier().classify(command)
     }
 }
 
@@ -399,12 +420,20 @@ struct StopData: Codable, Sendable, Equatable {
 struct ToolUseData: Codable, Sendable, Equatable {
     let toolName: String
     let toolInput: [String: String]?
+    let inputClassification: InputClassification?
     let result: String?
     let error: String?
 
-    init(toolName: String, toolInput: [String: String]? = nil, result: String? = nil, error: String? = nil) {
+    init(
+        toolName: String,
+        toolInput: [String: String]? = nil,
+        inputClassification: InputClassification? = nil,
+        result: String? = nil,
+        error: String? = nil
+    ) {
         self.toolName = toolName
         self.toolInput = toolInput
+        self.inputClassification = inputClassification
         self.result = result
         self.error = error
     }

@@ -17,6 +17,10 @@ let package = Package(
             name: "CocxyShared",
             targets: ["CocxyShared"]
         ),
+        .library(
+            name: "CocxyInputClassifier",
+            targets: ["CocxyInputClassifier"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.0"),
@@ -32,18 +36,27 @@ let package = Package(
             dependencies: [],
             path: "Shared"
         ),
+        .target(
+            name: "CocxyInputClassifier",
+            dependencies: [],
+            path: "Sources/Domain/InputClassifier",
+            linkerSettings: [
+                .linkedFramework("NaturalLanguage"),
+            ]
+        ),
         // MARK: - Main App
         .executableTarget(
             name: "CocxyTerminal",
             dependencies: [
                 "CocxyShared",
                 "CocxyMarkdownLib",
+                "CocxyInputClassifier",
                 "CocxyTreeSitterABI",
                 "CocxyCoreKit",
                 .product(name: "Sparkle", package: "Sparkle"),
             ],
             path: "Sources",
-            exclude: ["Domain/Markdown", "CocxyTreeSitterABI"],
+            exclude: ["Domain/Markdown", "Domain/InputClassifier", "CocxyTreeSitterABI"],
             resources: [
                 .process("App/Assets.xcassets"),
             ],
@@ -66,6 +79,7 @@ let package = Package(
                 "CocxyTerminal",
                 "CocxyShared",
                 "CocxyMarkdownLib",
+                "CocxyInputClassifier",
                 "CocxyTestRuntime",
             ],
             path: "Tests",
@@ -88,7 +102,7 @@ let package = Package(
         // MARK: - CLI Companion
         .target(
             name: "CocxyCLILib",
-            dependencies: ["CocxyShared"],
+            dependencies: ["CocxyShared", "CocxyInputClassifier"],
             path: "CLI/Lib"
         ),
         .executableTarget(
@@ -108,7 +122,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CocxyCLITests",
-            dependencies: ["CocxyCLILib", "CocxyShared", "CocxyDaemonLib"],
+            dependencies: ["CocxyCLILib", "CocxyShared", "CocxyInputClassifier", "CocxyDaemonLib"],
             path: "Tests/Unit/CLITests"
         ),
     ]

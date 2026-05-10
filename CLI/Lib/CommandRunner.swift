@@ -3,6 +3,7 @@
 
 import Foundation
 import CocxyShared
+import CocxyInputClassifier
 
 // MARK: - Command Runner
 
@@ -78,6 +79,8 @@ public struct CommandRunner {
             return SetupHooksCommand.execute(target: agent, remove: remove)
         case .editorOpen(let path, let editor, let line, let column):
             return executeEditorOpen(path: path, editor: editor, line: line, column: column)
+        case .classify(let input):
+            return executeClassify(input: input)
         default:
             break
         }
@@ -268,6 +271,48 @@ public struct CommandRunner {
         return nil
     }
 
+    // MARK: - Local Commands: Input Classification
+
+    /// Executes `cocxy classify` locally. The command does not require the
+    /// app socket because the input may contain sensitive shell text.
+    private func executeClassify(input: String) -> CLIResult {
+        let classifier = InputClassifierComposer()
+        let classification = Self.runBlocking {
+            await classifier.classify(input)
+        }
+
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        do {
+            let data = try encoder.encode(classification)
+            return CLIResult(
+                exitCode: 0,
+                stdout: String(decoding: data, as: UTF8.self),
+                stderr: ""
+            )
+        } catch {
+            return CLIResult(
+                exitCode: 1,
+                stdout: "",
+                stderr: "Error: Failed to encode classification: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func runBlocking<T: Sendable>(
+        _ operation: @escaping @Sendable () async -> T
+    ) -> T {
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = CLIValueBox<T>()
+        Task {
+            let value = await operation()
+            box.store(value)
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return box.load()!
+    }
+
     // MARK: - Request Building
 
     /// Builds a `CLISocketRequest` from a parsed command.
@@ -320,7 +365,7 @@ public struct CommandRunner {
         case .status:
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
-        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen:
+        case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen, .classify:
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
 
@@ -1062,6 +1107,23 @@ private extension ParsedCommand {
         let data = FileHandle.standardInput.readDataToEndOfFile()
         return String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+}
+
+private final class CLIValueBox<Value>: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedValue: Value?
+
+    func store(_ value: Value) {
+        lock.lock()
+        storedValue = value
+        lock.unlock()
+    }
+
+    func load() -> Value? {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedValue
     }
 }
 

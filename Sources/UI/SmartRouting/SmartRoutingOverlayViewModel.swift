@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import CocxyInputClassifier
 
 // MARK: - Smart Routing Filter
 
@@ -51,6 +52,11 @@ final class SmartRoutingOverlayViewModel: ObservableObject {
     /// Message shown when no agents need attention.
     let emptyMessage: String = "No agents need attention"
 
+    /// Optional natural-language input routing offer. The overlay can show
+    /// this when the terminal input classifier sees a prompt-like line while
+    /// an agent is waiting for input.
+    @Published private(set) var pendingInputRoute: InputClassifierAgentRoute?
+
     // MARK: - Dependencies
 
     private let router: SmartAgentRouting
@@ -98,6 +104,17 @@ final class SmartRoutingOverlayViewModel: ObservableObject {
         guard index >= 0, index < displayedAgents.count else { return }
         let session = displayedAgents[index]
         router.navigateToAgent(session.id)
+    }
+
+    func updateInputRoutingOffer(
+        classification: InputClassification,
+        config: InputClassifierConfig
+    ) {
+        let inputRouter = InputClassifierAgentRouter(router: router)
+        pendingInputRoute = inputRouter.routeIfNeeded(
+            classification: classification,
+            config: config
+        )
     }
 
     func localizedEmptyMessage(using localizer: AppLocalizer) -> String {

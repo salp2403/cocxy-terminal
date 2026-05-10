@@ -2,6 +2,7 @@
 // CommandPaletteEngine.swift - Engine for the Command Palette feature.
 
 import Foundation
+import CocxyInputClassifier
 
 // MARK: - Command Palette Searching Protocol
 
@@ -84,6 +85,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
     /// Optional coordinator for wiring built-in actions to real managers.
     /// When nil, built-in actions are registered as no-ops (safe defaults).
     private weak var coordinator: CommandPaletteCoordinatorImpl?
+    private let queryClassifier: HeuristicInputClassifier
 
     // MARK: - Initialization
 
@@ -92,8 +94,12 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
     /// - Parameter coordinator: Optional coordinator that wires built-in actions
     ///   to real managers (TabManager, SplitManager, etc.). When nil, built-in
     ///   actions are safe no-ops. Defaults to nil for backwards compatibility.
-    init(coordinator: CommandPaletteCoordinatorImpl? = nil) {
+    init(
+        coordinator: CommandPaletteCoordinatorImpl? = nil,
+        queryClassifier: HeuristicInputClassifier = HeuristicInputClassifier()
+    ) {
         self.coordinator = coordinator
+        self.queryClassifier = queryClassifier
         registerBuiltInActions()
     }
 
@@ -130,13 +136,19 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
             }
         }
 
+        let searchQueries = paletteSearchQueries(for: query)
+
         // Fuzzy match each action and collect scored results.
         var scoredResults: [(action: CommandAction, score: Int)] = []
 
         for action in actions {
-            if let matchResult = FuzzyMatcher.fuzzyMatch(query: query, target: action.name) {
+            let bestScore = searchQueries.compactMap { searchQuery in
+                FuzzyMatcher.fuzzyMatch(query: searchQuery, target: action.name)?.score
+            }.max()
+
+            if let bestScore {
                 let frequencyBoost = counts[action.id] ?? 0
-                let combinedScore = matchResult.score + frequencyBoost
+                let combinedScore = bestScore + frequencyBoost
                 scoredResults.append((action: action, score: combinedScore))
             }
         }
@@ -150,6 +162,23 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
         }
 
         return scoredResults.map { $0.action }
+    }
+
+    private func paletteSearchQueries(for query: String) -> [String] {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return [query] }
+
+        let classification = queryClassifier.classify(normalized)
+        guard let suggestedCommand = classification.suggestedCommand else {
+            return [query]
+        }
+
+        var parts = normalized.split(separator: " ").map(String.init)
+        guard !parts.isEmpty else { return [query] }
+        parts[0] = suggestedCommand
+        let corrected = parts.joined(separator: " ")
+        guard corrected != query else { return [query] }
+        return [query, corrected]
     }
 
     func registerAction(_ action: CommandAction) {

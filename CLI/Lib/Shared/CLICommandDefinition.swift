@@ -81,6 +81,7 @@ public enum CLICommand: String, CaseIterable {
 
     case send
     case sendKey = "send-key"
+    case classify
 
     // MARK: - Remote Workspace (v2)
 
@@ -287,6 +288,7 @@ public enum CLICommand: String, CaseIterable {
         // System
         case .send: return "Send text to the active terminal (or read it from stdin)"
         case .sendKey: return "Send a keystroke to the active terminal"
+        case .classify: return "Classify terminal input locally as JSON"
 
         // Plugins
         case .pluginList: return "List all installed plugins"
@@ -468,6 +470,7 @@ public enum CLICommand: String, CaseIterable {
         // System
         case .send: return "cocxy send <text>|--stdin"
         case .sendKey: return "cocxy send-key <key>"
+        case .classify: return "cocxy classify <input>"
 
         // Plugins
         case .pluginList: return "cocxy plugin-list"

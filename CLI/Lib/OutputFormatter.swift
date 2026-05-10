@@ -142,6 +142,8 @@ public enum OutputFormatter {
             return "Text sent."
         case .sendKey:
             return "Key sent."
+        case .classify:
+            return formatDataOrJSON(response: response)
 
         // MARK: Window Management (v3)
 

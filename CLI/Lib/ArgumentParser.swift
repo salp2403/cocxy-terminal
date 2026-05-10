@@ -173,6 +173,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy send-key <key>`
     case sendKey(key: String)
 
+    /// `cocxy classify <input>`
+    case classify(input: String)
+
     // MARK: - Window Management (v3)
 
     /// `cocxy window new [--engine system|in-process|daemon]`
@@ -683,6 +686,9 @@ public enum CLIArgumentParser {
 
         case "send-key":
             return try parseSendKey(arguments: Array(arguments.dropFirst()))
+
+        case "classify":
+            return try parseClassify(arguments: Array(arguments.dropFirst()))
 
         // MARK: v3 compound commands
 
@@ -1611,6 +1617,14 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "send-key", argument: "key")
         }
         return .sendKey(key: key)
+    }
+
+    /// Parses `cocxy classify <input>`.
+    private static func parseClassify(arguments: [String]) throws -> ParsedCommand {
+        guard !arguments.isEmpty else {
+            throw CLIError.missingArgument(command: "classify", argument: "input")
+        }
+        return .classify(input: arguments.joined(separator: " "))
     }
 
     // MARK: - Private: v3 Subcommand Parsers

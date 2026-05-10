@@ -2,6 +2,7 @@
 // HookEventTests.swift - Tests for HookEvent model parsing and encoding.
 
 import XCTest
+import CocxyInputClassifier
 @testable import CocxyTerminal
 
 // MARK: - Hook Event Tests
@@ -103,6 +104,30 @@ final class HookEventTests: XCTestCase {
         XCTAssertEqual(data.toolInput?["path"], "/src/main.swift")
         XCTAssertNil(data.result)
         XCTAssertNil(data.error)
+    }
+
+    func testRealPreToolUseClassifiesDangerousShellCommand() throws {
+        let json = """
+        {
+            "hook_event_name": "PreToolUse",
+            "session_id": "sess-shell-001",
+            "tool_name": "Bash",
+            "tool_input": { "command": "rm -rf /" },
+            "cwd": "/Users/dev/project"
+        }
+        """
+
+        let event = try makeDecoder().decode(HookEvent.self, from: Data(json.utf8))
+
+        XCTAssertEqual(event.type, .preToolUse)
+        guard case .toolUse(let data) = event.data else {
+            XCTFail("Expected toolUse data")
+            return
+        }
+        XCTAssertEqual(data.toolInput?["command"], "rm -rf /")
+        XCTAssertEqual(data.inputClassification?.category, .dangerousCommand)
+        XCTAssertEqual(data.inputClassification?.shouldWarnBeforeExecution, true)
+        XCTAssertEqual(data.inputClassification?.routingHint, .requireConfirmation)
     }
 
     // MARK: - PostToolUse Parsing

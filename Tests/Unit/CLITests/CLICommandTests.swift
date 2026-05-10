@@ -43,6 +43,26 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(try CLIArgumentParser.parse(["-v"]), .version)
     }
 
+    func testClassifyCommandJoinsInputWords() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["classify", "what", "is", "the", "weather"]),
+            .classify(input: "what is the weather")
+        )
+    }
+
+    func testClassifyWithoutInputThrowsMissingArgument() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse(["classify"])) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .missingArgument(command: "classify", argument: "input")
+            )
+        }
+    }
+
     // MARK: - 4. Notify command
 
     func testNotifyWithSingleWordMessage() throws {
@@ -1508,6 +1528,22 @@ final class CommandRunnerTests: XCTestCase {
         // drift on release bumps.
         XCTAssertEqual(result.stdout, "cocxy \(CLIArgumentParser.version)")
         XCTAssertTrue(result.stderr.isEmpty)
+    }
+
+    func testClassifyCommandReturnsJSONWithoutServer() throws {
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: "/tmp/nonexistent.sock")
+        )
+
+        let result = runner.run(arguments: ["classify", "rm", "-rf", "/"])
+
+        XCTAssertEqual(result.exitCode, 0)
+        XCTAssertTrue(result.stderr.isEmpty)
+        let data = try XCTUnwrap(result.stdout.data(using: .utf8))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        XCTAssertEqual(json["category"] as? String, "dangerous-command")
+        XCTAssertEqual(json["shouldWarnBeforeExecution"] as? Bool, true)
+        XCTAssertNotNil(json["dangerReason"])
     }
 
     // MARK: - 34. Unknown command returns exit code 1

@@ -51,6 +51,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let appearance: AppearanceConfig
     let terminal: TerminalConfig
     let agentDetection: AgentDetectionConfig
+    let inputClassifier: InputClassifierConfig
     let agent: AgentModeConfig
     let backup: BackupConfig
     let activity: ActivityConfig
@@ -77,6 +78,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         appearance: AppearanceConfig,
         terminal: TerminalConfig,
         agentDetection: AgentDetectionConfig,
+        inputClassifier: InputClassifierConfig = .defaults,
         agent: AgentModeConfig = .defaults,
         backup: BackupConfig = .defaults,
         activity: ActivityConfig = .defaults,
@@ -102,6 +104,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.appearance = appearance
         self.terminal = terminal
         self.agentDetection = agentDetection
+        self.inputClassifier = inputClassifier
         self.agent = agent
         self.backup = backup
         self.activity = activity
@@ -135,6 +138,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
+            inputClassifier: .defaults,
             agent: .defaults,
             backup: .defaults,
             activity: .defaults,
@@ -165,7 +169,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
         case experimental
     }
@@ -178,6 +182,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.appearance = try container.decode(AppearanceConfig.self, forKey: .appearance)
         self.terminal = try container.decode(TerminalConfig.self, forKey: .terminal)
         self.agentDetection = try container.decode(AgentDetectionConfig.self, forKey: .agentDetection)
+        self.inputClassifier = try container.decodeIfPresent(InputClassifierConfig.self, forKey: .inputClassifier)
+            ?? .defaults
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
             ?? .defaults
         self.backup = try container.decodeIfPresent(BackupConfig.self, forKey: .backup)
@@ -305,6 +311,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             appearance: mergedAppearance,
             terminal: terminal,
             agentDetection: agentDetection,
+            inputClassifier: inputClassifier,
             // Built-in Agent Mode is a global user preference. Project
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
@@ -891,6 +898,31 @@ struct AgentDetectionConfig: Codable, Sendable, Equatable {
             patternMatching: true,
             timingHeuristics: true,
             idleTimeoutSeconds: 5
+        )
+    }
+}
+
+// MARK: - Input Classifier Config
+
+/// `[input-classifier]` section for local pre-execution input analysis.
+///
+/// Classification is local-only. `autoRouteNaturalLanguage` defaults to
+/// false so natural-language routing remains a user gesture instead of an
+/// automatic behavior change.
+struct InputClassifierConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let dangerousCommandWarning: Bool
+    let autoRouteNaturalLanguage: Bool
+    let localeDetection: Bool
+    let foundationModelsFallback: Bool
+
+    static var defaults: InputClassifierConfig {
+        InputClassifierConfig(
+            enabled: true,
+            dangerousCommandWarning: true,
+            autoRouteNaturalLanguage: false,
+            localeDetection: true,
+            foundationModelsFallback: true
         )
     }
 }

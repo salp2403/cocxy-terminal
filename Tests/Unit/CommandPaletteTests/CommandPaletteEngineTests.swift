@@ -73,6 +73,15 @@ final class CommandPaletteEngineTests: XCTestCase {
         XCTAssertEqual(results.first?.id, "custom.fuzzy.target")
     }
 
+    func testSearchUsesInputClassifierSuggestionForCommandTypos() {
+        let action = makeAction(id: "custom.git.status", name: "Git Status")
+        sut.registerAction(action)
+
+        let results = sut.search(query: "gti status")
+
+        XCTAssertEqual(results.first?.id, "custom.git.status")
+    }
+
     // MARK: - Test 4: Search No Match
 
     func testSearchNoMatchReturnsEmptyResults() {
