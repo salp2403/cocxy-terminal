@@ -838,17 +838,17 @@ final class CocxyCoreView: NSView {
     private func handlePaste() {
         guard let bridge = bridge, let sid = surfaceID else { return }
 
-        if let text = clipboardService.read(), !text.isEmpty {
+        switch clipboardService.readTerminalPastePayload() {
+        case .text(let text):
             sendClipboardText(text, bridge: bridge, surfaceID: sid)
-            return
-        }
-
-        if let imageAttachment = clipboardService.readImageAttachment() {
+        case .fileURLs(let urls):
             sendClipboardText(
-                FileDropPathFormatter.format([imageAttachment.fileURL]),
+                FileDropPathFormatter.format(urls),
                 bridge: bridge,
                 surfaceID: sid
             )
+        case nil:
+            break
         }
     }
 
@@ -1087,14 +1087,17 @@ final class CocxyCoreView: NSView {
             clipboardService: clipboardService,
             paste: { [weak bridge] in
                 guard let bridge else { return }
-                if let text = self.clipboardService.read(), !text.isEmpty {
+                switch self.clipboardService.readTerminalPastePayload() {
+                case .text(let text):
                     self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
-                } else if let imageAttachment = self.clipboardService.readImageAttachment() {
+                case .fileURLs(let urls):
                     self.sendClipboardText(
-                        FileDropPathFormatter.format([imageAttachment.fileURL]),
+                        FileDropPathFormatter.format(urls),
                         bridge: bridge,
                         surfaceID: sid
                     )
+                case nil:
+                    break
                 }
             },
             localizer: localizer

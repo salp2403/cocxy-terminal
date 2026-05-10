@@ -11,16 +11,25 @@ import AppKit
 /// This service is `@MainActor` because `NSPasteboard` must be accessed from the main thread.
 @MainActor
 final class SystemClipboardService: ClipboardServiceProtocol {
+    private let pasteboard: NSPasteboard
+    private let configuredClipboardImageDirectory: URL?
+
+    init(
+        pasteboard: NSPasteboard = .general,
+        clipboardImageDirectory: URL? = nil
+    ) {
+        self.pasteboard = pasteboard
+        self.configuredClipboardImageDirectory = clipboardImageDirectory
+    }
 
     /// Reads the current string from the system clipboard.
     ///
     /// - Returns: The clipboard text, or `nil` if empty or not plain text.
     func read() -> String? {
-        NSPasteboard.general.string(forType: .string)
+        pasteboard.string(forType: .string)
     }
 
     func readImageAttachment() -> ClipboardImageAttachment? {
-        let pasteboard = NSPasteboard.general
         if let fileURL = readImageFileURL(from: pasteboard) {
             return ClipboardImageAttachment(fileURL: fileURL)
         }
@@ -32,19 +41,34 @@ final class SystemClipboardService: ClipboardServiceProtocol {
         return ClipboardImageAttachment(fileURL: storedURL)
     }
 
+    func readTerminalPastePayload() -> ClipboardTerminalPastePayload? {
+        if let fileURL = readImageFileURL(from: pasteboard) {
+            return .fileURLs([fileURL])
+        }
+
+        if let text = read(), !text.isEmpty {
+            return .text(text)
+        }
+
+        if let imageAttachment = readImageAttachment() {
+            return .fileURLs([imageAttachment.fileURL])
+        }
+
+        return nil
+    }
+
     /// Writes text to the system clipboard.
     ///
     /// Clears existing content before writing the new text.
     /// - Parameter text: The text to write to the clipboard.
     func write(_ text: String) {
-        let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
     }
 
     /// Clears all content from the system clipboard.
     func clear() {
-        NSPasteboard.general.clearContents()
+        pasteboard.clearContents()
     }
 
     private func readImageFileURL(from pasteboard: NSPasteboard) -> URL? {
@@ -59,15 +83,18 @@ final class SystemClipboardService: ClipboardServiceProtocol {
         if let pngData = pasteboard.data(forType: .png) {
             return pngData
         }
+        if let jpegData = pasteboard.data(forType: Self.jpegPasteboardType) {
+            return convertImageDataToPNG(jpegData)
+        }
         if let tiffData = pasteboard.data(forType: .tiff),
            let bitmap = NSBitmapImageRep(data: tiffData) {
             return bitmap.representation(using: .png, properties: [:])
         }
-        guard let image = NSImage(pasteboard: pasteboard),
-              let tiffData = image.tiffRepresentation,
-              let bitmap = NSBitmapImageRep(data: tiffData) else {
-            return nil
-        }
+        return nil
+    }
+
+    private func convertImageDataToPNG(_ data: Data) -> Data? {
+        guard let bitmap = NSBitmapImageRep(data: data) else { return nil }
         return bitmap.representation(using: .png, properties: [:])
     }
 
@@ -84,6 +111,13 @@ final class SystemClipboardService: ClipboardServiceProtocol {
     }
 
     private func clipboardImageDirectory() throws -> URL {
+        if let configuredClipboardImageDirectory {
+            try FileManager.default.createDirectory(
+                at: configuredClipboardImageDirectory,
+                withIntermediateDirectories: true
+            )
+            return configuredClipboardImageDirectory
+        }
         let baseDirectory = FileManager.default.urls(
             for: .cachesDirectory,
             in: .userDomainMask
@@ -122,4 +156,6 @@ final class SystemClipboardService: ClipboardServiceProtocol {
             return false
         }
     }
+
+    private static let jpegPasteboardType = NSPasteboard.PasteboardType("public.jpeg")
 }

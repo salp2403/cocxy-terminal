@@ -9,6 +9,11 @@ struct ClipboardImageAttachment: Equatable, Sendable {
     let fileURL: URL
 }
 
+enum ClipboardTerminalPastePayload: Equatable, Sendable {
+    case text(String)
+    case fileURLs([URL])
+}
+
 /// Abstraction for clipboard operations.
 ///
 /// Decouples terminal clipboard operations from `NSPasteboard` so the domain
@@ -29,6 +34,11 @@ struct ClipboardImageAttachment: Equatable, Sendable {
     /// that can be injected into a terminal prompt.
     func readImageAttachment() -> ClipboardImageAttachment?
 
+    /// Reads the best terminal paste payload in one decision. Production
+    /// implementations can inspect pasteboard types before doing expensive
+    /// image decoding; test doubles use the default text-then-image behavior.
+    func readTerminalPastePayload() -> ClipboardTerminalPastePayload?
+
     /// Writes text to the clipboard, replacing any existing content.
     ///
     /// - Parameter text: The text to write.
@@ -40,6 +50,16 @@ struct ClipboardImageAttachment: Equatable, Sendable {
 
 extension ClipboardServiceProtocol {
     func readImageAttachment() -> ClipboardImageAttachment? { nil }
+
+    func readTerminalPastePayload() -> ClipboardTerminalPastePayload? {
+        if let text = read(), !text.isEmpty {
+            return .text(text)
+        }
+        if let imageAttachment = readImageAttachment() {
+            return .fileURLs([imageAttachment.fileURL])
+        }
+        return nil
+    }
 }
 
 #if DEBUG
