@@ -11,30 +11,30 @@ final class RichInputComposerViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private let imageProcessor: AgentImageProcessor
-    private let attachmentStorage: AgentAttachmentStorage
+    private let attachmentStore: RichInputAttachmentStore
 
     init(
         text: String = "",
         attachments: [AgentImageAttachment] = [],
         imageProcessor: AgentImageProcessor = AgentImageProcessor(),
-        attachmentStorage: AgentAttachmentStorage = AgentAttachmentStorage()
+        attachmentStore: RichInputAttachmentStore = RichInputAttachmentStore()
     ) {
         self.text = text
         self.attachments = attachments
         self.imageProcessor = imageProcessor
-        self.attachmentStorage = attachmentStorage
+        self.attachmentStore = attachmentStore
     }
 
     convenience init(
         draft: RichInputDraft,
         imageProcessor: AgentImageProcessor = AgentImageProcessor(),
-        attachmentStorage: AgentAttachmentStorage = AgentAttachmentStorage()
+        attachmentStore: RichInputAttachmentStore = RichInputAttachmentStore()
     ) {
         self.init(
             text: draft.text,
             attachments: draft.attachments,
             imageProcessor: imageProcessor,
-            attachmentStorage: attachmentStorage
+            attachmentStore: attachmentStore
         )
     }
 
@@ -45,7 +45,7 @@ final class RichInputComposerViewModel: ObservableObject {
     func attachImageData(_ data: Data, suggestedFilename: String?) {
         do {
             let processed = try imageProcessor.process(data: data)
-            let attachment = try attachmentStorage.store(processed, originalFilename: suggestedFilename)
+            let attachment = try attachmentStore.store(processed, originalFilename: suggestedFilename)
             attachments.append(attachment)
             errorMessage = nil
         } catch {
@@ -57,7 +57,7 @@ final class RichInputComposerViewModel: ObservableObject {
         for url in urls where url.isFileURL {
             do {
                 let processed = try imageProcessor.process(fileURL: url)
-                let attachment = try attachmentStorage.store(
+                let attachment = try attachmentStore.store(
                     processed,
                     originalFilename: url.lastPathComponent
                 )
@@ -72,7 +72,7 @@ final class RichInputComposerViewModel: ObservableObject {
     func removeAttachment(id: String) {
         guard let index = attachments.firstIndex(where: { $0.id == id }) else { return }
         let attachment = attachments.remove(at: index)
-        attachmentStorage.remove(attachment)
+        attachmentStore.remove(attachment)
     }
 
     func terminalPayload() -> String {

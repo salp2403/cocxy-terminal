@@ -66,8 +66,8 @@ struct RichInputSubmitterSwiftTestingTests {
         let rootDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-rich-input-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: rootDirectory) }
-        let storage = AgentAttachmentStorage(rootDirectory: rootDirectory)
-        let viewModel = RichInputComposerViewModel(attachmentStorage: storage)
+        let store = RichInputAttachmentStore(rootDirectory: rootDirectory)
+        let viewModel = RichInputComposerViewModel(attachmentStore: store)
 
         viewModel.attachImageData(Self.pngData, suggestedFilename: "from-notes.png")
 
