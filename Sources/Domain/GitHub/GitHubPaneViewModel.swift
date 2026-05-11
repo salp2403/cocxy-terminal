@@ -118,6 +118,22 @@ final class GitHubPaneViewModel: ObservableObject {
                 )
             }
         }
+        func compactLocalizedTitle(using localizer: AppLocalizer) -> String {
+            switch self {
+            case .branches, .commits, .diffs, .issues, .checks:
+                return localizedTitle(using: localizer)
+            case .pullRequests:
+                return localizer.string(
+                    "github.pane.tab.pullRequests.compact",
+                    fallback: "PRs"
+                )
+            case .reviewThreads:
+                return localizer.string(
+                    "github.pane.tab.reviewThreads.compact",
+                    fallback: "Threads"
+                )
+            }
+        }
         var systemImage: String {
             switch self {
             case .branches: return "arrow.triangle.branch"

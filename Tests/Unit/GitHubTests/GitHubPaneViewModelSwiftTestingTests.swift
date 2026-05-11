@@ -93,6 +93,19 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(GitHubPaneViewModel.Tab.reviewThreads.systemImage == "bubble.left.and.bubble.right")
     }
 
+    @Test("Tab compact titles keep the side panel strip from overflowing")
+    func tab_compactTitlesKeepSidePanelUsable() {
+        let localizer = AppLocalizer(languagePreference: .english)
+
+        #expect(GitHubPaneViewModel.Tab.pullRequests.compactLocalizedTitle(using: localizer) == "PRs")
+        #expect(GitHubPaneViewModel.Tab.reviewThreads.compactLocalizedTitle(using: localizer) == "Threads")
+        #expect(
+            GitHubPaneViewModel.Tab.allCases
+                .map { $0.compactLocalizedTitle(using: localizer) }
+                .allSatisfy { !$0.isEmpty && $0.count <= 8 }
+        )
+    }
+
     // MARK: - clampedState
 
     @Test("clampedState returns the raw value when allowed")

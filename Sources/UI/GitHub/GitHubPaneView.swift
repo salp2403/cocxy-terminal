@@ -168,18 +168,11 @@ struct GitHubPaneView: View {
     // MARK: Tab picker
 
     private var tabPicker: some View {
-        Picker(
-            localized("github.pane.view", fallback: "GitHub view"),
-            selection: $viewModel.selectedTab
-        ) {
-            ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
-                Label(tab.localizedTitle(using: localizer), systemImage: tab.systemImage)
-                    .tag(tab)
-            }
-        }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .padding(.horizontal, 12)
+        GitHubPaneTabStrip(
+            selection: $viewModel.selectedTab,
+            localizer: localizer
+        )
+        .padding(.horizontal, 10)
         .padding(.vertical, 8)
     }
 
@@ -560,5 +553,77 @@ struct GitHubPaneView: View {
 
     private func localized(_ key: String, fallback: String) -> String {
         localizer.string(key, fallback: fallback)
+    }
+}
+
+// MARK: - Tab Strip
+
+struct GitHubPaneTabStrip: View {
+    @Binding var selection: GitHubPaneViewModel.Tab
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+
+    private let columns = [
+        GridItem(.adaptive(minimum: 82, maximum: 128), spacing: 6, alignment: .leading),
+    ]
+
+    var body: some View {
+        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
+            ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
+                let fullTitle = tab.localizedTitle(using: localizer)
+                Button {
+                    selection = tab
+                } label: {
+                    Label {
+                        Text(tab.compactLocalizedTitle(using: localizer))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.78)
+                    } icon: {
+                        Image(systemName: tab.systemImage)
+                            .imageScale(.small)
+                    }
+                }
+                .buttonStyle(GitHubPaneTabButtonStyle(isSelected: selection == tab))
+                .accessibilityLabel(fullTitle)
+                .accessibilityValue(selection == tab ? "Selected" : "")
+                .help(fullTitle)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(localizer.string("github.pane.view", fallback: "GitHub view"))
+    }
+}
+
+struct GitHubPaneTabButtonStyle: ButtonStyle {
+    let isSelected: Bool
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
+            .foregroundColor(isSelected ? .primary : .secondary)
+            .labelStyle(.titleAndIcon)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .padding(.horizontal, 7)
+            .background(background(isPressed: configuration.isPressed))
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .strokeBorder(
+                        isSelected ? Color.accentColor.opacity(0.35) : Color.white.opacity(0.08),
+                        lineWidth: 1
+                    )
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
+    private func background(isPressed: Bool) -> some View {
+        RoundedRectangle(cornerRadius: 7, style: .continuous)
+            .fill(backgroundColor(isPressed: isPressed))
+    }
+
+    private func backgroundColor(isPressed: Bool) -> Color {
+        if isSelected {
+            return Color.accentColor.opacity(isPressed ? 0.28 : 0.20)
+        }
+        return Color.white.opacity(isPressed ? 0.10 : 0.055)
     }
 }

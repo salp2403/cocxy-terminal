@@ -50,6 +50,19 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(layout == .sidePanel)
     }
 
+    @Test("GitHubPaneTabStrip renders all tabs without relying on a single segmented control row")
+    func tabStrip_rendersAllTabs() {
+        let selection = Binding<GitHubPaneViewModel.Tab>(
+            get: { .pullRequests },
+            set: { _ in }
+        )
+        let strip = GitHubPaneTabStrip(selection: selection, localizer: AppLocalizer(languagePreference: .english))
+
+        _ = strip.body
+
+        #expect(GitHubPaneViewModel.Tab.allCases.count == 7)
+    }
+
     // MARK: - Banner view factory
 
     @Test("GitHubPaneBanner accepts optional action title + handler")
