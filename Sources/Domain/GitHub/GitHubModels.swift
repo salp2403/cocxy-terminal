@@ -174,6 +174,69 @@ struct GitHubRepo: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Branches
+
+struct GitBranch: Equatable, Sendable, Identifiable {
+    let name: String
+    let upstreamName: String?
+    let isCurrent: Bool
+    let isRemote: Bool
+    let lastCommitHash: String?
+    let lastCommitSubject: String?
+
+    var id: String {
+        isRemote ? "remote:\(name)" : "local:\(name)"
+    }
+
+    init(
+        name: String,
+        upstreamName: String? = nil,
+        isCurrent: Bool = false,
+        isRemote: Bool = false,
+        lastCommitHash: String? = nil,
+        lastCommitSubject: String? = nil
+    ) {
+        self.name = name
+        self.upstreamName = upstreamName
+        self.isCurrent = isCurrent
+        self.isRemote = isRemote
+        self.lastCommitHash = lastCommitHash
+        self.lastCommitSubject = lastCommitSubject
+    }
+}
+
+// MARK: - Commits
+
+struct GitCommit: Equatable, Sendable, Identifiable {
+    let hash: String
+    let shortHash: String
+    let subject: String
+    let authorName: String
+    let authorEmail: String
+    let authoredAt: Date
+    let refs: [String]
+
+    var id: String { hash }
+
+    init(
+        hash: String,
+        shortHash: String,
+        subject: String,
+        authorName: String,
+        authorEmail: String,
+        authoredAt: Date,
+        refs: [String] = []
+    ) {
+        self.hash = hash
+        self.shortHash = shortHash
+        self.subject = subject
+        self.authorName = authorName
+        self.authorEmail = authorEmail
+        self.authoredAt = authoredAt
+        self.refs = refs
+    }
+}
+
 // MARK: - Pull request
 
 /// High-level state for a pull request.
