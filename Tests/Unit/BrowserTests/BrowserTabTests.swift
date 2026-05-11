@@ -24,6 +24,16 @@ final class BrowserTabTests: XCTestCase {
 
         XCTAssertEqual(tab.url.absoluteString, "http://localhost:3000")
         XCTAssertEqual(tab.title, "New Tab")
+        XCTAssertEqual(tab.displayTitle, "localhost:3000")
+    }
+
+    func testDisplayTitleTreatsNewTabAsPlaceholder() {
+        let tab = BrowserTab(
+            url: URL(string: "https://example.com/dashboard")!,
+            title: "New Tab"
+        )
+
+        XCTAssertEqual(tab.displayTitle, "example.com")
     }
 
     func testBrowserTabHasUniqueID() {

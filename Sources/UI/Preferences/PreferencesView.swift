@@ -462,11 +462,20 @@ struct EditableAppearanceSection: View {
         Form {
             Section(viewModel.localizedString("preferences.appearance.theme.section", fallback: "Theme")) {
                 Picker(
-                    viewModel.localizedString("preferences.appearance.activeTheme", fallback: "Active theme"),
+                    viewModel.localizedString("preferences.appearance.darkTheme", fallback: "Dark theme"),
                     selection: $viewModel.theme
                 ) {
-                    ForEach(viewModel.availableThemes, id: \.self) { name in
-                        Text(name).tag(name)
+                    ForEach(viewModel.availableDarkThemes, id: \.self) { name in
+                        Text(viewModel.displayNameForThemePickerValue(name)).tag(name)
+                    }
+                }
+
+                Picker(
+                    viewModel.localizedString("preferences.appearance.lightTheme", fallback: "Light theme"),
+                    selection: $viewModel.lightTheme
+                ) {
+                    ForEach(viewModel.availableLightThemes, id: \.self) { name in
+                        Text(viewModel.displayNameForThemePickerValue(name)).tag(name)
                     }
                 }
             }

@@ -42,6 +42,9 @@
 "preferences.updates.channel.nightly.help" = "Nightly recibe builds diarias firmadas y puede contener cambios incompletos.";
 "preferences.appearance.theme.section" = "Tema";
 "preferences.appearance.activeTheme" = "Tema activo";
+"preferences.appearance.darkTheme" = "Tema oscuro";
+"preferences.appearance.lightTheme" = "Tema claro";
+"preferences.appearance.followSystem" = "Seguir sistema";
 "preferences.appearance.language.title" = "Idioma";
 "preferences.appearance.language.picker" = "Idioma de la app";
 "preferences.appearance.language.help" = "Sistema usa el primer idioma compatible preferido de macOS. Inglés y español están disponibles ahora.";

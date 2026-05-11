@@ -42,6 +42,9 @@
 "preferences.updates.channel.nightly.help" = "Nightly receives signed daily builds and may contain unfinished changes.";
 "preferences.appearance.theme.section" = "Theme";
 "preferences.appearance.activeTheme" = "Active theme";
+"preferences.appearance.darkTheme" = "Dark theme";
+"preferences.appearance.lightTheme" = "Light theme";
+"preferences.appearance.followSystem" = "Follow System";
 "preferences.appearance.language.title" = "Language";
 "preferences.appearance.language.picker" = "App language";
 "preferences.appearance.language.help" = "System follows the first supported macOS preferred language. English and Spanish are available now.";

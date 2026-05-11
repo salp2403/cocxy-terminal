@@ -32,7 +32,7 @@ struct BrowserTab: Identifiable, Equatable {
     /// The tab strip should still expose a stable label and hit target.
     var displayTitle: String {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
+        if !trimmed.isEmpty, !Self.placeholderTitles.contains(trimmed.lowercased()) {
             return trimmed
         }
         return Self.fallbackDisplayTitle(for: url)
@@ -40,6 +40,10 @@ struct BrowserTab: Identifiable, Equatable {
 
     /// Default URL for new tabs.
     static let defaultURL = URL(string: "http://localhost:3000")!
+
+    private static let placeholderTitles: Set<String> = [
+        "new tab",
+    ]
 
     /// Creates a new browser tab.
     ///

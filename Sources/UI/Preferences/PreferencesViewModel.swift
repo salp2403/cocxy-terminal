@@ -51,8 +51,11 @@ final class PreferencesViewModel: ObservableObject {
 
     // MARK: - Appearance
 
-    /// Name of the active theme (e.g., "catppuccin-mocha").
+    /// Name of the dark/system theme (e.g., "catppuccin-mocha" or "system").
     @Published var theme: String
+
+    /// Name of the light theme used by the one-click/system light mode switch.
+    @Published var lightTheme: String
 
     /// Font family for terminal text (e.g., "JetBrainsMono Nerd Font Mono").
     @Published var fontFamily: String
@@ -516,6 +519,12 @@ final class PreferencesViewModel: ObservableObject {
     /// Theme names available for selection in the picker.
     let availableThemes: [String]
 
+    /// Dark-capable themes plus the system-following sentinel.
+    let availableDarkThemes: [String]
+
+    /// Light-capable themes available for the paired light-mode picker.
+    let availableLightThemes: [String]
+
     /// Installed fixed-pitch font families available on this Mac.
     let availableFontFamilies: [String]
 
@@ -557,6 +566,7 @@ final class PreferencesViewModel: ObservableObject {
             || confirmCloseProcess != c.general.confirmCloseProcess
             || updateChannel != c.updates.channel
             || !Self.themeNamesMatch(theme, c.appearance.theme)
+            || !Self.themeNamesMatch(lightTheme, c.appearance.lightTheme)
             || fontFamily != c.appearance.fontFamily
             || fontSize != c.appearance.fontSize
             || tabPosition != c.appearance.tabPosition.rawValue
@@ -656,6 +666,7 @@ final class PreferencesViewModel: ObservableObject {
         workingDirectory = c.general.workingDirectory
         confirmCloseProcess = c.general.confirmCloseProcess
         theme = Self.resolveDisplayName(for: c.appearance.theme, from: availableThemes)
+        lightTheme = Self.resolveDisplayName(for: c.appearance.lightTheme, from: availableThemes)
         fontFamily = c.appearance.fontFamily
         fontSize = c.appearance.fontSize
         tabPosition = c.appearance.tabPosition.rawValue
@@ -884,6 +895,7 @@ final class PreferencesViewModel: ObservableObject {
         // Config may store "catppuccin-mocha" but picker uses "Catppuccin Mocha".
         let themeNames = Self.defaultThemeNames()
         self.theme = Self.resolveDisplayName(for: config.appearance.theme, from: themeNames)
+        self.lightTheme = Self.resolveDisplayName(for: config.appearance.lightTheme, from: themeNames)
         self.fontFamily = config.appearance.fontFamily
         self.fontSize = config.appearance.fontSize
         self.tabPosition = config.appearance.tabPosition.rawValue
@@ -1034,6 +1046,8 @@ final class PreferencesViewModel: ObservableObject {
 
         // Available themes from built-in list.
         self.availableThemes = Self.defaultThemeNames()
+        self.availableDarkThemes = Self.defaultDarkThemeNames()
+        self.availableLightThemes = Self.defaultLightThemeNames()
         self.availableFontFamilies = FontFallbackResolver.availableFixedPitchFamilies()
         self.recommendedFontFamilies = FontFallbackResolver.recommendedFamilies()
         self.bundledFontFamilies = FontFallbackResolver.bundledFamilies
@@ -1618,7 +1632,7 @@ final class PreferencesViewModel: ObservableObject {
             updates: UpdatesConfig(channel: updateChannel),
             appearance: AppearanceConfig(
                 theme: theme,
-                lightTheme: savedConfig.appearance.lightTheme,
+                lightTheme: lightTheme,
                 fontFamily: fontFamily,
                 fontSize: fontSize,
                 tabPosition: TabPosition(rawValue: tabPosition) ?? .left,
@@ -2359,7 +2373,7 @@ final class PreferencesViewModel: ObservableObject {
 
         [appearance]
         theme = "\(theme)"
-        light-theme = "\(defaults.appearance.lightTheme)"
+        light-theme = "\(lightTheme)"
         app-language = "\(appLanguage.rawValue)"
         font-family = "\(fontFamily)"
         font-size = \(clampedFontSize)
@@ -2586,6 +2600,34 @@ final class PreferencesViewModel: ObservableObject {
             "Gruvbox Dark",
             "Tokyo Night",
         ]
+    }
+
+    private static func defaultDarkThemeNames() -> [String] {
+        [
+            "system",
+            "Catppuccin Mocha",
+            "Catppuccin Frappe",
+            "Catppuccin Macchiato",
+            "One Dark",
+            "Solarized Dark",
+            "Dracula",
+            "Nord",
+            "Gruvbox Dark",
+            "Tokyo Night",
+        ]
+    }
+
+    private static func defaultLightThemeNames() -> [String] {
+        [
+            "Catppuccin Latte",
+            "Solarized Light",
+        ]
+    }
+
+    func displayNameForThemePickerValue(_ value: String) -> String {
+        ThemeSelectionResolver.isSystemAlias(value)
+            ? localizedString("preferences.appearance.followSystem", fallback: "Follow System")
+            : value
     }
 
     /// Resolves a config theme name to the matching display name.

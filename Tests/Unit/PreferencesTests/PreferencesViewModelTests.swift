@@ -25,6 +25,7 @@ final class PreferencesViewModelTests: XCTestCase {
 
         // Theme is resolved from config kebab-case to display name.
         XCTAssertEqual(viewModel.theme, "Catppuccin Mocha")
+        XCTAssertEqual(viewModel.lightTheme, "Catppuccin Latte")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
         XCTAssertEqual(viewModel.fontFamily, config.appearance.fontFamily)
         XCTAssertEqual(viewModel.fontSize, config.appearance.fontSize)
@@ -38,6 +39,38 @@ final class PreferencesViewModelTests: XCTestCase {
 
         XCTAssertEqual(config.appearance.theme, "catppuccin-mocha")
         XCTAssertEqual(viewModel.theme, "Catppuccin Mocha")
+        XCTAssertEqual(viewModel.lightTheme, "Catppuccin Latte")
+        XCTAssertFalse(viewModel.hasUnsavedChanges)
+    }
+
+    func testSystemThemeIsSelectableWithoutDirtyingSnapshot() {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: AppearanceConfig(
+                theme: "system",
+                lightTheme: "catppuccin-latte",
+                fontFamily: "JetBrainsMono Nerd Font",
+                fontSize: 14,
+                tabPosition: .left,
+                windowPadding: 8,
+                windowPaddingX: nil,
+                windowPaddingY: nil,
+                backgroundOpacity: 1.0,
+                backgroundBlurRadius: 0
+            ),
+            terminal: .defaults,
+            agentDetection: .defaults,
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+
+        let viewModel = PreferencesViewModel(config: config)
+
+        XCTAssertEqual(viewModel.theme, "system")
+        XCTAssertTrue(viewModel.availableDarkThemes.contains("system"))
+        XCTAssertEqual(viewModel.displayNameForThemePickerValue("system"), "Follow System")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
@@ -45,11 +78,13 @@ final class PreferencesViewModelTests: XCTestCase {
         let viewModel = PreferencesViewModel(config: .defaults)
 
         viewModel.theme = "Dracula"
+        viewModel.lightTheme = "Solarized Light"
         XCTAssertTrue(viewModel.hasUnsavedChanges)
 
         viewModel.discardChanges()
 
         XCTAssertEqual(viewModel.theme, "Catppuccin Mocha")
+        XCTAssertEqual(viewModel.lightTheme, "Catppuccin Latte")
         XCTAssertFalse(viewModel.hasUnsavedChanges)
     }
 
@@ -125,6 +160,7 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.workingDirectory, "/tmp")
         XCTAssertFalse(viewModel.confirmCloseProcess)
         XCTAssertEqual(viewModel.theme, "Dracula")
+        XCTAssertEqual(viewModel.lightTheme, "Catppuccin Latte")
         XCTAssertEqual(viewModel.fontFamily, "Fira Code")
         XCTAssertEqual(viewModel.fontSize, 16)
         XCTAssertEqual(viewModel.tabPosition, "top")
@@ -146,6 +182,8 @@ final class PreferencesViewModelTests: XCTestCase {
         let viewModel = PreferencesViewModel(config: .defaults)
         // Theme names use display format ("Catppuccin Mocha") to match ThemeEngine.
         XCTAssertTrue(viewModel.availableThemes.contains("Catppuccin Mocha"))
+        XCTAssertTrue(viewModel.availableDarkThemes.contains("Catppuccin Mocha"))
+        XCTAssertTrue(viewModel.availableLightThemes.contains("Catppuccin Latte"))
     }
 
     func testAvailableFontFamiliesContainsMenlo() {
@@ -326,7 +364,17 @@ final class PreferencesViewModelTests: XCTestCase {
         let viewModel = PreferencesViewModel(config: config)
         let toml = viewModel.generateToml()
 
-        XCTAssertTrue(toml.contains("light-theme = \"solarized-light\""))
+        XCTAssertTrue(toml.contains("light-theme = \"Solarized Light\""))
+    }
+
+    func testGenerateTomlWritesEditedLightTheme() {
+        let viewModel = PreferencesViewModel(config: .defaults)
+        viewModel.lightTheme = "Solarized Light"
+
+        let toml = viewModel.generateToml()
+
+        XCTAssertTrue(toml.contains("theme = \"Catppuccin Mocha\""))
+        XCTAssertTrue(toml.contains("light-theme = \"Solarized Light\""))
     }
 
     func testGenerateTomlPreservesNonEditableConfigFields() {
@@ -509,6 +557,7 @@ final class PreferencesViewModelTests: XCTestCase {
         let fileProvider = InMemoryConfigFileProvider(content: nil)
         let viewModel = PreferencesViewModel(config: .defaults, fileProvider: fileProvider)
         viewModel.theme = "dracula"
+        viewModel.lightTheme = "Solarized Light"
         viewModel.fontFamily = "Fira Code"
         viewModel.fontSize = 20
         viewModel.windowPadding = 16
@@ -517,6 +566,7 @@ final class PreferencesViewModelTests: XCTestCase {
 
         let content = fileProvider.writtenContent ?? ""
         XCTAssertTrue(content.contains("theme = \"dracula\""))
+        XCTAssertTrue(content.contains("light-theme = \"Solarized Light\""))
         XCTAssertTrue(content.contains("font-family = \"Fira Code\""))
         XCTAssertTrue(content.contains("font-size = 20"))
         XCTAssertTrue(content.contains("window-padding = 16"))

@@ -235,6 +235,15 @@ struct BrowserPanelView: View {
         let title = tab.displayTitle
 
         return HStack(spacing: 4) {
+            Image(systemName: "globe")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundColor(
+                    isActive
+                        ? Color(nsColor: CocxyColors.subtext1)
+                        : Color(nsColor: CocxyColors.overlay1)
+                )
+                .frame(width: 12, height: 12)
+
             Text(title)
                 .font(.system(size: 11, weight: isActive ? .semibold : .regular))
                 .foregroundColor(
@@ -244,7 +253,7 @@ struct BrowserPanelView: View {
                 )
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(minWidth: 54, maxWidth: 150, alignment: .leading)
+                .frame(minWidth: 76, maxWidth: 150, alignment: .leading)
 
             if showClose {
                 Button(action: { viewModel.closeBrowserTab(tab.id) }) {
@@ -259,6 +268,7 @@ struct BrowserPanelView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .frame(minWidth: 112, minHeight: 28, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 4)
                 .fill(isActive
@@ -270,6 +280,7 @@ struct BrowserPanelView: View {
         .onTapGesture {
             viewModel.selectBrowserTab(tab.id)
         }
+        .help(tab.url.absoluteString)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
             String(
