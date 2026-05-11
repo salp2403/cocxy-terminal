@@ -519,6 +519,7 @@
       <a href="#command-palette" class="sidebar-link">Command Palette</a>
       <a href="#sessions" class="sidebar-link">Sessions</a>
       <a href="#local-backups" class="sidebar-link">Local Backups</a>
+      <a href="#input-classifier" class="sidebar-link">Input Classifier</a>
     </div>
     <div class="sidebar-group">
       <h3>Agent Integrations</h3>
@@ -625,6 +626,9 @@
     <h3>Zero Telemetry</h3>
     <p>Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend.</p>
 
+    <h3>Local Input Classification</h3>
+    <p>The input classifier runs on this Mac before execution. It distinguishes <code>shell-command</code>, <code>natural-language</code>, <code>dangerous-command</code>, empty input, and unknown text so Cocxy can warn on destructive commands and offer agent routing without changing the default shell flow.</p>
+
     <!-- Configuration -->
     <h2 id="configuration">Configuration</h2>
     <p>Cocxy is configured via TOML files in <code>~/.config/cocxy/</code>. Changes are detected automatically within one second.</p>
@@ -662,6 +666,13 @@ pattern-matching = true
 timing-heuristics = true
 idle-timeout-seconds = 5
 
+[input-classifier]
+enabled = true
+dangerous-command-warning = true
+auto-route-natural-language = false
+locale-detection = true
+foundation-models-fallback = true
+
 [notifications]
 macos-notifications = true
 sound = true
@@ -693,6 +704,21 @@ restore-on-launch = true</code></pre>
     <div class="callout">
       <p><strong>Tip:</strong> Invalid values are clamped to valid ranges instead of causing errors. For example, <code>font-size = 200</code> is clamped to 72.</p>
     </div>
+
+    <!-- Input Classifier -->
+    <h2 id="input-classifier">Input Classifier</h2>
+    <p>Cocxy classifies short prompt input locally before it is sent to a shell or routed to an agent workflow. The classifier detects shell commands such as <code>git status</code>, natural-language prompts such as <code>what is the weather</code>, and dangerous commands such as <code>rm -rf /</code>. Dangerous matches return <code>dangerous-command</code>, a confidence score, severity, and <code>shouldWarnBeforeExecution</code>.</p>
+    <p>Use <code>cocxy classify "git status"</code> or <code>cocxy classify "what is the weather"</code> to inspect the local JSON decision. The command prints fields such as <code>category</code>, <code>confidence</code>, <code>languageCode</code>, <code>routingHint</code>, and <code>shouldWarnBeforeExecution</code> without contacting a Cocxy service.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>[input-classifier]
+enabled = true
+dangerous-command-warning = true
+auto-route-natural-language = false
+locale-detection = true
+foundation-models-fallback = true</code></pre>
+    </div>
+    <p><code>auto-route-natural-language</code> defaults to <code>false</code>, so natural-language detection remains an explicit user choice instead of changing existing terminal behavior.</p>
 
     <!-- Keyboard Shortcuts -->
     <h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2>

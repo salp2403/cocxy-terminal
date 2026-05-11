@@ -828,6 +828,39 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("Restaura solo el artefacto seleccionado"))
     }
 
+    @Test("public getting started docs document local input classification in both locales")
+    func publicGettingStartedDocsDocumentLocalInputClassificationInBothLocales() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/getting-started.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains(#"<h2 id="input-classifier">Input Classifier</h2>"#))
+        #expect(english.contains(##"<a href="#input-classifier" class="sidebar-link">Input Classifier</a>"##))
+        #expect(english.contains("[input-classifier]"))
+        #expect(english.contains("dangerous-command-warning = true"))
+        #expect(english.contains("auto-route-natural-language = false"))
+        #expect(english.contains("foundation-models-fallback = true"))
+        #expect(english.contains("cocxy classify"))
+        #expect(english.contains("dangerous-command"))
+        #expect(english.contains("natural-language"))
+
+        #expect(spanish.contains(#"id="input-classifier""#))
+        #expect(spanish.contains("clasificador de entrada"))
+        #expect(spanish.contains("[input-classifier]"))
+        #expect(spanish.contains("dangerous-command-warning = true"))
+        #expect(spanish.contains("auto-route-natural-language = false"))
+        #expect(spanish.contains("foundation-models-fallback = true"))
+        #expect(spanish.contains("cocxy classify"))
+        #expect(spanish.contains("dangerous-command"))
+        #expect(spanish.contains("natural-language"))
+    }
+
     @Test("Spanish getting started docs cover the same core user guide surfaces")
     func spanishGettingStartedDocsCoverCoreUserGuideSurfaces() throws {
         let root = repositoryRoot()
@@ -858,6 +891,7 @@ struct CITestGateScriptSwiftTestingTests {
             "command-palette",
             "sessions",
             "local-backups",
+            "input-classifier",
             "cli-companion",
             "themes",
             "agents-toml",

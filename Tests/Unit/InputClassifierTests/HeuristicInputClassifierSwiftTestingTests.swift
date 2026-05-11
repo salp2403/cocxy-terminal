@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import Testing
+import Foundation
 @testable import CocxyInputClassifier
 
 @Suite("Heuristic input classifier")
@@ -62,5 +63,27 @@ struct HeuristicInputClassifierSwiftTestingTests {
 
         #expect(result.category == .unknown)
         #expect(result.confidence < 0.75)
+    }
+
+    @Test("short inputs stay under the interactive heuristic latency budget")
+    func shortInputsStayUnderInteractiveHeuristicLatencyBudget() {
+        let classifier = HeuristicInputClassifier()
+        let samples = [
+            "git status",
+            "rm -rf /",
+            "what is the weather",
+            "cual es el clima",
+            "swift test --filter InputClassifier",
+        ]
+        #expect(samples.allSatisfy { $0.count < 100 })
+
+        let iterations = 500
+        let start = Date()
+        for index in 0..<iterations {
+            _ = classifier.classify(samples[index % samples.count])
+        }
+        let averageSeconds = Date().timeIntervalSince(start) / Double(iterations)
+
+        #expect(averageSeconds < 0.005)
     }
 }

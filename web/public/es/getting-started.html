@@ -226,6 +226,13 @@
           <p>Para migrar a otra Mac, copia la carpeta de backups, configura esa ruta en Preferencias y restaura solo los artefactos que quieras conservar. Cocxy bloquea la restauraci&oacute;n manual si hay cambios de preferencias sin guardar.</p>
         </details>
 
+        <details class="faq-item" id="input-classifier">
+          <summary><span>Clasificador de entrada local</span></summary>
+          <p>El clasificador de entrada analiza texto corto en esta Mac antes de enviarlo al shell o a un flujo de agente. Distingue <code>shell-command</code>, <code>natural-language</code>, <code>dangerous-command</code>, entrada vac&iacute;a y texto desconocido para mostrar advertencias locales sin cambiar el flujo normal de terminal.</p>
+          <p>Prueba <code>cocxy classify "git status"</code> o <code>cocxy classify "cual es el clima"</code> para ver la decisi&oacute;n JSON local con <code>category</code>, <code>confidence</code>, <code>languageCode</code>, <code>routingHint</code> y <code>shouldWarnBeforeExecution</code>.</p>
+          <p>La secci&oacute;n <code>[input-classifier]</code> usa <code>enabled = true</code>, <code>dangerous-command-warning = true</code>, <code>auto-route-natural-language = false</code>, <code>locale-detection = true</code> y <code>foundation-models-fallback = true</code>. El ruteo autom&aacute;tico de lenguaje natural queda apagado por defecto para no cambiar h&aacute;bitos existentes.</p>
+        </details>
+
         <details class="faq-item" id="cli-companion">
           <summary><span>CLI local</span></summary>
           <p>El binario <code>cocxy</code> controla pesta&ntilde;as, ventanas, divisiones, sesi&oacute;n, paneles, plugins, remoto, Markdown, historial, estado y diagn&oacute;sticos mediante un Unix Domain Socket local con permisos por usuario. Prueba <code>cocxy status</code>, <code>cocxy new-tab</code>, <code>cocxy list-tabs</code>, <code>cocxy review</code>, <code>cocxy setup-hooks</code> y <code>cocxy help</code>.</p>
