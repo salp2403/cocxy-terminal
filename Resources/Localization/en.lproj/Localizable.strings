@@ -1082,6 +1082,9 @@
 "auroraSidebar.commandPalette.help" = "Command palette (%@)";
 "auroraSidebar.notes.help" = "Toggle notes for this workspace";
 "auroraSidebar.newTab.help" = "New tab (%@)";
+"auroraSidebar.workspace.rename" = "Rename Workspace...";
+"auroraSidebar.workspace.rename.accessibility" = "Rename workspace %@";
+"auroraSidebar.workspace.rename.placeholder" = "Workspace name";
 "auroraSidebar.session.worktree.help" = "Attached to a cocxy-managed worktree";
 "auroraSidebar.session.close.help" = "Close tab";
 "auroraSidebar.session.close.accessibility" = "Close %@";

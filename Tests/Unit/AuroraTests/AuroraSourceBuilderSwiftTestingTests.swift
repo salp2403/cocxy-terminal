@@ -29,6 +29,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
         cwd: URL = URL(fileURLWithPath: "/Users/user/proj"),
         branch: String? = nil,
         processName: String? = nil,
+        customTitle: String? = nil,
+        workspaceCustomTitle: String? = nil,
         isPinned: Bool = false,
         lastCommandStartedAt: Date? = nil,
         lastCommandDuration: TimeInterval? = nil,
@@ -39,6 +41,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
             workingDirectory: cwd,
             gitBranch: branch,
             processName: processName,
+            customTitle: customTitle,
+            workspaceCustomTitle: workspaceCustomTitle,
             isPinned: isPinned,
             lastCommandStartedAt: lastCommandStartedAt,
             lastCommandDuration: lastCommandDuration,
@@ -277,6 +281,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
         let tab = makeTab(
             cwd: URL(fileURLWithPath: "/Users/user/proj"),
             processName: "claude",
+            customTitle: "Agent Work",
+            workspaceCustomTitle: "Core Project",
             isPinned: true,
             lastCommandStartedAt: Date(timeIntervalSince1970: 10),
             lastCommandDuration: nil,
@@ -290,6 +296,8 @@ struct AuroraSourceBuilderSwiftTestingTests {
             workspaceRootResolver: Self.alwaysNilResolver
         )
 
+        #expect(result.first?.name == "Agent Work")
+        #expect(result.first?.workspaceTitle == "Core Project")
         #expect(result.first?.workingDirectory == "/Users/user/proj")
         #expect(result.first?.foregroundProcessName == "claude")
         #expect(result.first?.lastCommandSummary == "Command: running")

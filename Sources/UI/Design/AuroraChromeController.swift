@@ -126,6 +126,7 @@ final class AuroraChromeController: ObservableObject {
     /// `NSMenuItem` target-action handlers.
     var onTogglePinSession: ((TabID) -> Void)?
     var onRenameSession: ((TabID) -> Void)?
+    var onRenameWorkspace: ((String, String) -> Void)?
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
@@ -709,6 +710,9 @@ struct AuroraSidebarHost: View {
                 if let tabID = controller.tabID(forSessionID: sessionID) {
                     controller.onRenameSession?(tabID)
                 }
+            },
+            onRequestRenameWorkspace: { workspaceID, currentName in
+                controller.onRenameWorkspace?(workspaceID, currentName)
             },
             onCloseOtherSessions: { sessionID in
                 if let tabID = controller.tabID(forSessionID: sessionID) {

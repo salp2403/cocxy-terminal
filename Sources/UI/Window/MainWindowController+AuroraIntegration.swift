@@ -247,6 +247,9 @@ extension MainWindowController {
         controller.onRenameSession = { [weak self] tabID in
             self?.presentAuroraTabRename(for: tabID)
         }
+        controller.onRenameWorkspace = { [weak self] workspaceID, currentName in
+            self?.presentAuroraWorkspaceRename(workspaceID: workspaceID, currentName: currentName)
+        }
         controller.onCloseOtherSessions = { [weak self] tabID in
             guard let self else { return }
             self.tabBarViewModel?.closeOtherTabs(except: tabID)
@@ -859,12 +862,53 @@ extension MainWindowController {
             localizer: localizer,
             onComplete: { [weak self] newTitle in
                 guard let self else { return }
-                guard let newTitle else { return }
-                let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+                let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 self.tabManager.renameTab(id: tabID, newTitle: trimmed.isEmpty ? nil : trimmed)
                 self.refreshAuroraChromeAfterTabMutation()
             }
         )
+    }
+
+    private func presentAuroraWorkspaceRename(workspaceID: String, currentName: String) {
+        guard let parentWindow = window else { return }
+
+        let localizer = appLocalizer()
+        RenameSheetController.present(
+            on: parentWindow,
+            currentName: currentName,
+            placeholder: Self.localizedAuroraWorkspaceRenamePlaceholder(using: localizer),
+            icon: "square.stack.3d.up",
+            localizer: localizer,
+            onComplete: { [weak self] newTitle in
+                guard let self else { return }
+                let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                self.applyAuroraWorkspaceRename(
+                    workspaceID: workspaceID,
+                    newTitle: trimmed.isEmpty ? nil : trimmed
+                )
+            }
+        )
+    }
+
+    private func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
+        let resolver = GitAncestorWorkspaceRootResolver()
+        let matchingIDs = tabManager.tabs.compactMap { tab -> TabID? in
+            AuroraSourceBuilder.workspaceGroup(for: tab, resolver: resolver) == workspaceID
+                ? tab.id
+                : nil
+        }
+        guard !matchingIDs.isEmpty else { return }
+
+        for tabID in matchingIDs {
+            tabManager.updateTab(id: tabID) { tab in
+                tab.workspaceCustomTitle = newTitle
+            }
+        }
+        refreshAuroraChromeAfterTabMutation()
+    }
+
+    private static func localizedAuroraWorkspaceRenamePlaceholder(using localizer: AppLocalizer) -> String {
+        localizer.string("auroraSidebar.workspace.rename.placeholder", fallback: "Workspace name")
     }
 
     /// Keeps the window-level tooltip overlay aligned with the sidebar's

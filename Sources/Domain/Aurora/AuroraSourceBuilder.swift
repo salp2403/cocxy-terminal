@@ -170,6 +170,7 @@ enum AuroraSourceBuilder {
                 id: tab.id.rawValue.uuidString,
                 name: tab.displayTitle,
                 workspaceGroup: workspaceGroup(for: tab, resolver: workspaceRootResolver),
+                workspaceTitle: tab.workspaceCustomTitle,
                 branch: tab.gitBranch,
                 isPinned: tab.isPinned,
                 surfaces: surfaces,

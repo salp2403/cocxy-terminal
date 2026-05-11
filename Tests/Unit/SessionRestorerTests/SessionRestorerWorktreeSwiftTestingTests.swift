@@ -57,6 +57,26 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(decoded.terminalEnginePreference == .daemon)
     }
 
+    @Test("TabState Codable preserves custom tab and workspace titles")
+    func tabStateCodablePreservesCustomTitles() throws {
+        let root = URL(fileURLWithPath: "/tmp")
+        let tabState = TabState(
+            id: TabID(),
+            title: "Legacy Title",
+            customTitle: "API Server",
+            workspaceCustomTitle: "Operations",
+            workingDirectory: root,
+            splitTree: .leaf(workingDirectory: root, command: nil)
+        )
+
+        let data = try JSONEncoder().encode(tabState)
+        let decoded = try JSONDecoder().decode(TabState.self, from: data)
+
+        #expect(decoded.title == "Legacy Title")
+        #expect(decoded.customTitle == "API Server")
+        #expect(decoded.workspaceCustomTitle == "Operations")
+    }
+
     @Test("legacy TabState JSON without worktree keys decodes with nils")
     func legacyTabStateDecodesWithoutWorktreeKeys() throws {
         // JSON shape corresponds to the v0.1.80 TabState layout: no
@@ -87,6 +107,8 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(decoded.worktreeOriginRepo == nil)
         #expect(decoded.worktreeBranch == nil)
         #expect(decoded.terminalEnginePreference == nil)
+        #expect(decoded.customTitle == nil)
+        #expect(decoded.workspaceCustomTitle == nil)
     }
 
     @Test("TabState Codable roundtrip is nil-preserving for unset worktrees")
@@ -139,6 +161,8 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         let tabState = TabState(
             id: tabID,
             title: "Worktree Tab",
+            customTitle: "Build Agent",
+            workspaceCustomTitle: "Platform Core",
             workingDirectory: worktreeRoot,
             splitTree: .leaf(
                 workingDirectory: worktreeRoot,
@@ -171,6 +195,8 @@ struct SessionRestorerWorktreeSwiftTestingTests {
         #expect(restored.worktreeOriginRepo == originRepo)
         #expect(restored.worktreeBranch == "cocxy/claude/wt-xyz")
         #expect(restored.terminalEnginePreference == .daemon)
+        #expect(restored.customTitle == "Build Agent")
+        #expect(restored.workspaceCustomTitle == "Platform Core")
     }
 
     @Test("SessionRestorer clears worktree metadata when the worktree root is missing")

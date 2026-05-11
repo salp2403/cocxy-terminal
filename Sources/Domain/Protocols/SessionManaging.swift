@@ -154,6 +154,12 @@ struct TabState: Codable, Sendable {
     let sessionID: SessionID
     /// User-visible title, if manually set.
     let title: String?
+    /// User-visible custom tab title. Added after the original `title`
+    /// field so restore can preserve manual tab renames without treating
+    /// legacy default titles like "Terminal" as custom names.
+    let customTitle: String?
+    /// User-visible custom workspace title shown by grouped sidebar chrome.
+    let workspaceCustomTitle: String?
     /// Working directory of the tab's primary terminal.
     let workingDirectory: URL
     /// Layout of the split panes inside this tab.
@@ -177,6 +183,8 @@ struct TabState: Codable, Sendable {
         id: TabID,
         sessionID: SessionID = SessionID(),
         title: String?,
+        customTitle: String? = nil,
+        workspaceCustomTitle: String? = nil,
         workingDirectory: URL,
         splitTree: SplitNodeState,
         worktreeID: String? = nil,
@@ -189,6 +197,8 @@ struct TabState: Codable, Sendable {
         self.id = id
         self.sessionID = sessionID
         self.title = title
+        self.customTitle = customTitle
+        self.workspaceCustomTitle = workspaceCustomTitle
         self.workingDirectory = workingDirectory
         self.splitTree = splitTree
         self.worktreeID = worktreeID
@@ -204,6 +214,8 @@ struct TabState: Codable, Sendable {
         id = try container.decode(TabID.self, forKey: .id)
         sessionID = try container.decodeIfPresent(SessionID.self, forKey: .sessionID) ?? SessionID()
         title = try container.decodeIfPresent(String.self, forKey: .title)
+        customTitle = try container.decodeIfPresent(String.self, forKey: .customTitle)
+        workspaceCustomTitle = try container.decodeIfPresent(String.self, forKey: .workspaceCustomTitle)
         workingDirectory = try container.decode(URL.self, forKey: .workingDirectory)
         splitTree = try container.decode(SplitNodeState.self, forKey: .splitTree)
         // Worktree fields are all optional and `decodeIfPresent` by

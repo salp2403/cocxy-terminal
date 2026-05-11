@@ -68,6 +68,7 @@ extension Design {
         let id: String
         let name: String
         let workspaceGroup: String
+        let workspaceTitle: String?
         let branch: String?
         let isPinned: Bool
         let surfaces: [AuroraSourceSurface]
@@ -92,6 +93,7 @@ extension Design {
             id: String,
             name: String,
             workspaceGroup: String,
+            workspaceTitle: String? = nil,
             branch: String? = nil,
             isPinned: Bool = false,
             surfaces: [AuroraSourceSurface],
@@ -104,6 +106,7 @@ extension Design {
             self.id = id
             self.name = name
             self.workspaceGroup = workspaceGroup
+            self.workspaceTitle = workspaceTitle
             self.branch = branch
             self.isPinned = isPinned
             self.surfaces = surfaces
@@ -160,15 +163,26 @@ extension Design {
                 let branch = tabs.lazy.compactMap(\.branch).first
                 let sessions = tabs.map(session(from:))
                 let notesWorkspaceID = notesWorkspaceID(forTabs: tabs)
+                let workspaceName = tabs.lazy
+                    .compactMap { cleaned($0.workspaceTitle) }
+                    .first ?? group
                 return AuroraWorkspace(
                     id: group,
-                    name: group,
+                    name: workspaceName,
                     branch: branch,
                     isCollapsed: false,
                     sessions: sessions,
                     notesWorkspaceID: notesWorkspaceID
                 )
             }
+        }
+
+        private static func cleaned(_ value: String?) -> String? {
+            guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !trimmed.isEmpty else {
+                return nil
+            }
+            return trimmed
         }
 
         /// Computes the per-workspace `NoteWorkspaceID` raw value used

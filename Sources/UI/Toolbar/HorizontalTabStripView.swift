@@ -1465,9 +1465,7 @@ final class DraggableTabContainer: NSView, NSDraggingSource {
             localizer: localizer
         ) { [weak self] newTitle in
             self?.isEditing = false
-            if let newTitle {
-                self?.onRename?(index, newTitle)
-            }
+            self?.onRename?(index, newTitle ?? "")
         }
     }
 

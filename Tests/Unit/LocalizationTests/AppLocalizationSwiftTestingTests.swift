@@ -590,6 +590,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(Design.AuroraSidebarView.localizedToggleNotesTitle(using: spanish) == "Notas")
         #expect(Design.AuroraSidebarView.localizedNotificationsTitle(using: spanish) == "Notificaciones")
         #expect(Design.AuroraSidebarView.localizedNewTabTitle(using: spanish) == "Nueva pestaña")
+        #expect(Design.AuroraSidebarView.localizedRenameWorkspace(using: spanish) == "Renombrar espacio...")
+        #expect(Design.AuroraSidebarView.localizedRenameWorkspaceAccessibility("Galf", using: spanish) == "Renombrar espacio Galf")
         #expect(Design.AuroraSidebarView.localizedUpdateButton(using: spanish) == "Actualizar")
         #expect(Design.AuroraSidebarView.localizedUpdateTitle(update, using: spanish) == "Actualización crítica")
         #expect(Design.SessionNodeView.localizedRenameTab(using: spanish) == "Renombrar pestaña...")

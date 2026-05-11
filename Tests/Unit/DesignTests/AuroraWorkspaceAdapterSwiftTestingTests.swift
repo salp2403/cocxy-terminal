@@ -39,6 +39,7 @@ struct AuroraWorkspaceAdapterTests {
         id: String = "t",
         name: String = "tab",
         workspaceGroup: String = "cocxy",
+        workspaceTitle: String? = nil,
         branch: String? = nil,
         isPinned: Bool = false,
         surfaces: [Design.AuroraSourceSurface] = [],
@@ -50,6 +51,7 @@ struct AuroraWorkspaceAdapterTests {
             id: id,
             name: name,
             workspaceGroup: workspaceGroup,
+            workspaceTitle: workspaceTitle,
             branch: branch,
             isPinned: isPinned,
             surfaces: surfaces,
@@ -78,6 +80,32 @@ struct AuroraWorkspaceAdapterTests {
         #expect(result.count == 1)
         #expect(result[0].id == "cocxy")
         #expect(result[0].sessions.map(\.id) == ["a", "b"])
+    }
+
+    @Test("Workspace title override changes display name without changing grouping id")
+    func workspaceTitleOverrideChangesDisplayNameOnly() {
+        let sources = [
+            tab(id: "a", workspaceGroup: "cocxy", workspaceTitle: "Main Project"),
+            tab(id: "b", workspaceGroup: "cocxy"),
+        ]
+
+        let result = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+
+        #expect(result.count == 1)
+        #expect(result[0].id == "cocxy")
+        #expect(result[0].name == "Main Project")
+        #expect(result[0].sessions.map(\.id) == ["a", "b"])
+    }
+
+    @Test("Blank workspace title override falls back to workspace group")
+    func blankWorkspaceTitleOverrideFallsBackToGroup() {
+        let sources = [
+            tab(id: "a", workspaceGroup: "cocxy", workspaceTitle: "   "),
+        ]
+
+        let result = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+
+        #expect(result[0].name == "cocxy")
     }
 
     @Test("Distinct workspace groups produce distinct workspaces in source order")

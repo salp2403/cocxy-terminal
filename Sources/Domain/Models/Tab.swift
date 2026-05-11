@@ -75,6 +75,13 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// User-defined custom title. When set, overrides the auto-generated displayTitle.
     var customTitle: String?
 
+    /// User-defined workspace title shown by grouped workspace chrome.
+    ///
+    /// This intentionally stays separate from `customTitle`: a tab rename
+    /// changes the session row, while a workspace rename changes the group
+    /// header that can contain several related tabs.
+    var workspaceCustomTitle: String?
+
     /// Whether this tab is pinned. Pinned tabs are sorted to the top and cannot be closed.
     var isPinned: Bool
 
@@ -182,6 +189,7 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         isActive: Bool = false,
         processName: String? = nil,
         customTitle: String? = nil,
+        workspaceCustomTitle: String? = nil,
         isPinned: Bool = false,
         createdAt: Date = Date(),
         lastCommandStartedAt: Date? = nil,
@@ -204,6 +212,7 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         self.isActive = isActive
         self.processName = processName
         self.customTitle = customTitle
+        self.workspaceCustomTitle = workspaceCustomTitle
         self.isPinned = isPinned
         self.createdAt = createdAt
         self.lastCommandStartedAt = lastCommandStartedAt

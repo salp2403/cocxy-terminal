@@ -872,9 +872,7 @@ final class TabItemView: NSView {
             localizer: localizer,
             onComplete: { [weak self] newTitle in
                 self?.isEditing = false
-                if let newTitle {
-                    self?.onRename?(tabID, newTitle)
-                }
+                self?.onRename?(tabID, newTitle ?? "")
             }
         )
     }

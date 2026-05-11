@@ -191,6 +191,8 @@ extension AppDelegate {
                 id: tab.id,
                 sessionID: controller.sessionIDForTab(tab.id),
                 title: tab.title,
+                customTitle: tab.customTitle,
+                workspaceCustomTitle: tab.workspaceCustomTitle,
                 workingDirectory: tab.workingDirectory,
                 splitTree: splitState,
                 // Preserve worktree metadata across app restarts so the
@@ -452,6 +454,8 @@ extension AppDelegate {
                 title: restoredTab.title,
                 workingDirectory: restoredTab.workingDirectory,
                 gitBranch: gitBranch,
+                customTitle: restoredTab.customTitle,
+                workspaceCustomTitle: restoredTab.workspaceCustomTitle,
                 // Carry worktree metadata forward from the saved session
                 // so the tab keeps pointing at the same worktree on disk
                 // after restore. The `worktreeRoot` anchor survives even

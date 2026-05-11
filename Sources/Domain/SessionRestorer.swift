@@ -168,6 +168,8 @@ enum SessionRestorer {
             tabID: tabState.id,
             sessionID: tabState.sessionID,
             title: tabState.title ?? "Terminal",
+            customTitle: tabState.customTitle,
+            workspaceCustomTitle: tabState.workspaceCustomTitle,
             workingDirectory: validatedDirectory,
             splitTreeState: validatedSplitTree,
             splitNode: splitNode,
@@ -310,6 +312,10 @@ struct RestoredTab: Sendable {
     let sessionID: SessionID
     /// The tab's display title.
     let title: String
+    /// Custom tab title restored from newer session files.
+    let customTitle: String?
+    /// Custom workspace title restored from newer session files.
+    let workspaceCustomTitle: String?
     /// The validated working directory (falls back to home if the saved path was missing).
     let workingDirectory: URL
     /// The serialized split tree used to rebuild surfaces during restore.

@@ -49,6 +49,7 @@ extension Design {
         var notesByWorkspace: [String: AuroraWorkspaceNotesSummary] = [:]
         @State private var query: String = ""
         @State private var hoveredSession: HoveredSessionContext?
+        @State private var hoveredWorkspaceID: String?
         @State private var sessionFrames: [String: CGRect] = [:]
         @State private var workspaceDisclosure = AuroraWorkspaceDisclosureOverrides()
         @State private var notesExpansion: [String: Bool] = [:]
@@ -59,6 +60,7 @@ extension Design {
         var onCloseSession: ((String) -> Void)? = nil
         var onTogglePinSession: ((String) -> Void)? = nil
         var onRequestRenameSession: ((String) -> Void)? = nil
+        var onRequestRenameWorkspace: ((String, String) -> Void)? = nil
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
         var onMoveSessionDown: ((String) -> Void)? = nil
@@ -333,6 +335,20 @@ extension Design {
             )
         }
 
+        static func localizedRenameWorkspace(using localizer: AppLocalizer) -> String {
+            localizer.string("auroraSidebar.workspace.rename", fallback: "Rename Workspace...")
+        }
+
+        static func localizedRenameWorkspaceAccessibility(_ name: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string(
+                    "auroraSidebar.workspace.rename.accessibility",
+                    fallback: "Rename workspace %@"
+                ),
+                name
+            )
+        }
+
         static func localizedUpdateTitle(_ update: CocxyUpdateAvailability, using localizer: AppLocalizer) -> String {
             update.isCritical
                 ? localizer.string("update.critical.title", fallback: "Critical update")
@@ -457,28 +473,62 @@ extension Design {
         }
 
         private func workspaceRow(_ workspace: AuroraWorkspace, isCollapsed: Bool) -> some View {
-            Button(action: { toggleCollapsed(workspace) }) {
-                HStack(spacing: Spacing.xSmall) {
-                    Text("▾")
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundStyle(palette.textLow.resolvedColor())
-                        .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                        .animation(.easeInOut(duration: 0.18), value: isCollapsed)
-                    Text(workspace.name)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(palette.textHigh.resolvedColor())
-                    Spacer()
-                    if let branch = workspace.branch {
-                        Text(branch)
-                            .font(.system(size: 10.5, design: .monospaced))
+            HStack(spacing: Spacing.xxSmall) {
+                Button(action: { toggleCollapsed(workspace) }) {
+                    HStack(spacing: Spacing.xSmall) {
+                        Text("▾")
+                            .font(.system(size: 10, design: .monospaced))
                             .foregroundStyle(palette.textLow.resolvedColor())
+                            .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                            .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                        Text(workspace.name)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(palette.textHigh.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Spacer()
+                        if let branch = workspace.branch {
+                            Text(branch)
+                                .font(.system(size: 10.5, design: .monospaced))
+                                .foregroundStyle(palette.textLow.resolvedColor())
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                    }
+                    .padding(.horizontal, Spacing.xSmall)
+                    .padding(.vertical, Spacing.xxSmall)
+                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+                .buttonStyle(.plain)
+
+                if let onRequestRenameWorkspace {
+                    Button(action: { onRequestRenameWorkspace(workspace.id, workspace.name) }) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .frame(width: 18, height: 18)
+                            .background(
+                                Circle()
+                                    .fill(palette.glassHighlight.resolvedColor())
+                            )
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(Self.localizedRenameWorkspace(using: localizer))
+                    .accessibilityLabel(Self.localizedRenameWorkspaceAccessibility(workspace.name, using: localizer))
+                    .opacity(hoveredWorkspaceID == workspace.id ? 0.95 : 0.55)
+                }
+            }
+            .onHover { hovering in
+                hoveredWorkspaceID = hovering ? workspace.id : nil
+            }
+            .contextMenu {
+                if let onRequestRenameWorkspace {
+                    Button(Self.localizedRenameWorkspace(using: localizer)) {
+                        onRequestRenameWorkspace(workspace.id, workspace.name)
                     }
                 }
-                .padding(.horizontal, Spacing.xSmall)
-                .padding(.vertical, Spacing.xxSmall)
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
             }
-            .buttonStyle(.plain)
         }
 
         private func toggleCollapsed(_ workspace: AuroraWorkspace) {

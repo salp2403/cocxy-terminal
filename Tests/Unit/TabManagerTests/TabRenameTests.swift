@@ -92,11 +92,13 @@ final class TabCustomTitleTests: XCTestCase {
             gitBranch: "main"
         )
         tab.customTitle = "Production DB"
+        tab.workspaceCustomTitle = "Backend Workspace"
 
         let data = try JSONEncoder().encode(tab)
         let decoded = try JSONDecoder().decode(Tab.self, from: data)
 
         XCTAssertEqual(decoded.customTitle, "Production DB")
+        XCTAssertEqual(decoded.workspaceCustomTitle, "Backend Workspace")
         XCTAssertEqual(decoded.displayTitle, "Production DB")
     }
 

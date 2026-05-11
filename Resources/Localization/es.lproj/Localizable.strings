@@ -1082,6 +1082,9 @@
 "auroraSidebar.commandPalette.help" = "Paleta de comandos (%@)";
 "auroraSidebar.notes.help" = "Alternar notas de este espacio";
 "auroraSidebar.newTab.help" = "Nueva pestaña (%@)";
+"auroraSidebar.workspace.rename" = "Renombrar espacio...";
+"auroraSidebar.workspace.rename.accessibility" = "Renombrar espacio %@";
+"auroraSidebar.workspace.rename.placeholder" = "Nombre del espacio";
 "auroraSidebar.session.worktree.help" = "Vinculada a un worktree administrado por Cocxy";
 "auroraSidebar.session.close.help" = "Cerrar pestaña";
 "auroraSidebar.session.close.accessibility" = "Cerrar %@";
