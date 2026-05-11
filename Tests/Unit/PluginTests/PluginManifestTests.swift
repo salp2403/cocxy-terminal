@@ -90,6 +90,7 @@ struct PluginManifestTests {
         #expect(PluginEvent.agentDetected.scriptName == "on-agent-detected.sh")
         #expect(PluginEvent.commandComplete.scriptName == "on-command-complete.sh")
         #expect(PluginEvent.directoryChanged.scriptName == "on-directory-changed.sh")
+        #expect(PluginEvent.richInputSubmit.scriptName == "on-rich-input-submit.sh")
     }
 
     @Test func allPluginEventsHaveScriptNames() {
@@ -133,7 +134,7 @@ struct PluginManifestTests {
         let toml = """
         name = "test-plugin"
         version = "1.0.0"
-        events = ["session-start", "agent-detected", "command-complete"]
+        events = ["session-start", "agent-detected", "command-complete", "rich-input-submit"]
         """
 
         let tempDir = NSTemporaryDirectory() + "cocxy-test-\(UUID().uuidString)"
@@ -149,10 +150,11 @@ struct PluginManifestTests {
         )
 
         #expect(manifest != nil)
-        #expect(manifest?.events.count == 3)
+        #expect(manifest?.events.count == 4)
         #expect(manifest?.events.contains(.sessionStart) == true)
         #expect(manifest?.events.contains(.agentDetected) == true)
         #expect(manifest?.events.contains(.commandComplete) == true)
+        #expect(manifest?.events.contains(.richInputSubmit) == true)
     }
 
     @Test func manifestUsesDirectoryNameAsID() {

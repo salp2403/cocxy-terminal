@@ -219,6 +219,10 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         case .notification, .userPromptSubmit:
             // Informational events -- no dashboard state change.
             break
+        case .richInputDraftSubmitted:
+            // Rich Input submissions are exposed to plugin/hook observers and
+            // timeline metadata; they do not imply an agent state transition.
+            break
         case .cwdChanged:
             // CwdChanged is consumed by the tab wiring layer
             // (updates `Tab.workingDirectory`). No dashboard effect.

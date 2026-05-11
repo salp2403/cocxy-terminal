@@ -45,4 +45,42 @@ struct PluginEventWiringSwiftTestingTests {
         #expect(events.map(\.0) == [.sessionEnd, .tabClosed])
         #expect(events.allSatisfy { $0.1["COCXY_TAB_ID"] == tabID.rawValue.uuidString })
     }
+
+    @Test("submitting rich input dispatches plugin and hook metadata events")
+    func submittingRichInputDispatchesPluginAndHookEvents() throws {
+        var pluginEvents: [(PluginEvent, [String: String])] = []
+        var hookEvents: [HookEvent] = []
+        let controller = MainWindowController(bridge: MockTerminalEngine(), deferContentSetup: true)
+        controller.pluginEventDispatcher = { event, environment in
+            pluginEvents.append((event, environment))
+        }
+        controller.hookEventDispatcher = { event in
+            hookEvents.append(event)
+        }
+        let tabID = controller.createTab()
+        pluginEvents.removeAll()
+        hookEvents.removeAll()
+
+        controller.dispatchRichInputSubmitEvents(
+            tabID: tabID,
+            text: "local prompt",
+            attachmentCount: 2
+        )
+
+        #expect(pluginEvents.count == 1)
+        #expect(pluginEvents[0].0 == .richInputSubmit)
+        #expect(pluginEvents[0].1["COCXY_TAB_ID"] == tabID.rawValue.uuidString)
+        #expect(pluginEvents[0].1["COCXY_RICH_INPUT_TEXT"] == "local prompt")
+        #expect(pluginEvents[0].1["COCXY_RICH_INPUT_ATTACHMENT_COUNT"] == "2")
+
+        #expect(hookEvents.count == 1)
+        #expect(hookEvents[0].type == .richInputDraftSubmitted)
+        #expect(hookEvents[0].sessionId == controller.sessionIDForTab(tabID).rawValue.uuidString)
+        guard case .richInputDraftSubmitted(let data) = hookEvents[0].data else {
+            Issue.record("Expected rich input draft submitted data")
+            return
+        }
+        #expect(data.textCharacterCount == 12)
+        #expect(data.attachmentCount == 2)
+    }
 }

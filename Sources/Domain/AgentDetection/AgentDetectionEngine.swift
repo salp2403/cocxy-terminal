@@ -624,10 +624,11 @@ final class AgentDetectionEngineImpl: ObservableObject, AgentDetecting {
             )
 
         case .notification, .subagentStart, .subagentStop, .userPromptSubmit,
-             .cwdChanged, .fileChanged:
+             .cwdChanged, .fileChanged, .richInputDraftSubmitted:
             // These events are informational; they do not change agent state.
             // CwdChanged/FileChanged are consumed by TabManager and CodeReview
-            // panels, not by the detection state machine.
+            // panels; RichInputDraftSubmitted is consumed by plugin/hook
+            // observers, not by the detection state machine.
             return nil
         }
     }

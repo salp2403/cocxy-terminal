@@ -274,6 +274,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var injectedVoiceSessionFactory: VoiceTriggerHandler.SessionFactory?
     var touchBarController: CocxyTouchBarController?
     var pluginEventDispatcher: ((PluginEvent, [String: String]) -> Void)?
+    var hookEventDispatcher: ((HookEvent) -> Void)?
 
     var searchBarViewModel: ScrollbackSearchBarViewModel?
     var searchBarHostingView: NSHostingView<ScrollbackSearchBarView>?

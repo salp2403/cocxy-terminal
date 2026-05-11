@@ -204,6 +204,14 @@ struct TimelineEvent: Identifiable, Codable, Sendable, Equatable {
             eventType = .userPrompt
             summary = "User prompt submitted"
 
+        case .richInputDraftSubmitted:
+            eventType = .userPrompt
+            if case .richInputDraftSubmitted(let data) = hookEvent.data {
+                summary = "Rich input submitted: \(data.textCharacterCount) chars, \(data.attachmentCount) attachments"
+            } else {
+                summary = "Rich input submitted"
+            }
+
         case .teammateIdle:
             eventType = .stateChange
             summary = "Teammate idle"

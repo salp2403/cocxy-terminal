@@ -351,6 +351,55 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manager.plugin(id: "run-plugin") == nil)
     }
 
+    @Test("rich input submit plugin event dispatches through sandbox")
+    @MainActor
+    func richInputSubmitPluginEventDispatchesThroughSandbox() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("rich-input-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try """
+        name = "Rich Input Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        events = ["rich-input-submit"]
+        capabilities = ["environment-read"]
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo rich-input\n".write(
+            to: repo.appendingPathComponent("on-rich-input-submit.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+        let receipt = try installer.install(from: repo)
+
+        let sandbox = RecordingPluginSandbox()
+        let manager = PluginManager(
+            pluginsDirectory: pluginsDirectory.path,
+            sandbox: sandbox
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: receipt.pluginID)
+
+        manager.dispatchEvent(.richInputSubmit, environment: [
+            "COCXY_RICH_INPUT_TEXT": "local prompt",
+            "COCXY_RICH_INPUT_ATTACHMENT_COUNT": "1",
+        ])
+
+        #expect(sandbox.executions.count == 1)
+        #expect(sandbox.executions[0].pluginID == "rich-input-plugin")
+        #expect(sandbox.executions[0].scriptPath.hasSuffix("/rich-input-plugin/on-rich-input-submit.sh"))
+        #expect(sandbox.executions[0].environment["COCXY_RICH_INPUT_TEXT"] == "local prompt")
+        #expect(sandbox.executions[0].environment["COCXY_RICH_INPUT_ATTACHMENT_COUNT"] == "1")
+    }
+
     @Test("uninstall removes persisted enabled state")
     func uninstallRemovesPersistedEnabledState() throws {
         let root = try temporaryDirectory()

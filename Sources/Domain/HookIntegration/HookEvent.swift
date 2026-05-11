@@ -6,7 +6,7 @@ import CocxyInputClassifier
 
 // MARK: - Hook Event Type
 
-/// The 14 lifecycle events Cocxy consumes from Claude Code hooks.
+/// The 15 lifecycle events Cocxy consumes from lifecycle hooks.
 ///
 /// Each event maps to a specific phase in the agent's lifecycle.
 /// Unknown event types fail decoding (forward compatibility via receiver layer).
@@ -28,6 +28,7 @@ enum HookEventType: String, Codable, Sendable, CaseIterable {
     case taskCompleted      = "TaskCompleted"
     case cwdChanged         = "CwdChanged"
     case fileChanged        = "FileChanged"
+    case richInputDraftSubmitted = "RichInputDraftSubmitted"
 }
 
 // MARK: - Hook Event
@@ -89,6 +90,8 @@ struct HookEvent: Codable, Sendable {
         case previousCwd = "previous_cwd"
         case filePath = "file_path"
         case changeType = "change_type"
+        case textCharacterCount = "text_character_count"
+        case attachmentCount = "attachment_count"
         // Legacy format keys (camelCase, backward compatibility)
         case type
         case sessionIdCamel = "sessionId"
@@ -178,6 +181,12 @@ struct HookEvent: Codable, Sendable {
                 let path = (try? container.decode(String.self, forKey: .filePath)) ?? ""
                 let change = try? container.decode(String.self, forKey: .changeType)
                 self.data = .fileChanged(FileChangedData(filePath: path, changeType: change))
+
+            case .richInputDraftSubmitted:
+                self.data = .richInputDraftSubmitted(RichInputDraftSubmittedData(
+                    textCharacterCount: (try? container.decode(Int.self, forKey: .textCharacterCount)) ?? 0,
+                    attachmentCount: (try? container.decode(Int.self, forKey: .attachmentCount)) ?? 0
+                ))
             }
             return
         }
@@ -335,6 +344,7 @@ enum HookEventData: Codable, Sendable {
     case teammateIdle(TeammateIdleData)
     case cwdChanged(CwdChangedData)
     case fileChanged(FileChangedData)
+    case richInputDraftSubmitted(RichInputDraftSubmittedData)
     case generic
 
     // MARK: - Coding Keys
@@ -342,7 +352,7 @@ enum HookEventData: Codable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case sessionStart, stop, toolUse, subagent
         case notification, taskCompleted, teammateIdle
-        case cwdChanged, fileChanged, generic
+        case cwdChanged, fileChanged, richInputDraftSubmitted, generic
     }
 
     // MARK: - Decodable
@@ -368,6 +378,11 @@ enum HookEventData: Codable, Sendable {
             self = .cwdChanged(value)
         } else if let value = try container.decodeIfPresent(FileChangedData.self, forKey: .fileChanged) {
             self = .fileChanged(value)
+        } else if let value = try container.decodeIfPresent(
+            RichInputDraftSubmittedData.self,
+            forKey: .richInputDraftSubmitted
+        ) {
+            self = .richInputDraftSubmitted(value)
         } else {
             self = .generic
         }
@@ -388,6 +403,7 @@ enum HookEventData: Codable, Sendable {
         case .teammateIdle(let value): try container.encode(value, forKey: .teammateIdle)
         case .cwdChanged(let value): try container.encode(value, forKey: .cwdChanged)
         case .fileChanged(let value): try container.encode(value, forKey: .fileChanged)
+        case .richInputDraftSubmitted(let value): try container.encode(value, forKey: .richInputDraftSubmitted)
         case .generic: try container.encode(EmptyPayload(), forKey: .generic)
         }
     }
@@ -524,6 +540,11 @@ struct FileChangedData: Codable, Sendable, Equatable {
         case filePath = "file_path"
         case changeType = "change_type"
     }
+}
+
+struct RichInputDraftSubmittedData: Codable, Sendable, Equatable {
+    let textCharacterCount: Int
+    let attachmentCount: Int
 }
 
 private struct EmptyPayload: Codable, Sendable {}

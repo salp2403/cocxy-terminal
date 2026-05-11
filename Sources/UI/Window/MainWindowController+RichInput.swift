@@ -103,6 +103,13 @@ extension MainWindowController {
                     self.richInputDraftStore.delete(tabID: tabKey)
                 }
                 guard !payload.isEmpty else { return }
+                if let tabID {
+                    self.dispatchRichInputSubmitEvents(
+                        tabID: tabID,
+                        text: viewModel.text,
+                        attachmentCount: viewModel.attachments.count
+                    )
+                }
                 surfaceView.submitRichInputPayload(payload)
             },
             onCancel: cancelHandler,

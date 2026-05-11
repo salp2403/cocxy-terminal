@@ -177,10 +177,11 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
             recordEditHistoryIfNeeded(sessionId: event.sessionId)
 
         case .notification, .teammateIdle, .subagentStart, .subagentStop,
-             .userPromptSubmit, .cwdChanged, .fileChanged:
+             .userPromptSubmit, .cwdChanged, .fileChanged, .richInputDraftSubmitted:
             // FileChanged and CwdChanged are handled by higher-level consumers
             // (CodeReviewPanelViewModel refreshes diffs, AppDelegate syncs tab
-            // CWD). The snapshot tracker reacts only to tool use events.
+            // CWD). RichInputDraftSubmitted carries prompt metadata only. The
+            // snapshot tracker reacts only to tool use events.
             break
         }
     }

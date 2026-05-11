@@ -150,6 +150,7 @@ enum PluginEvent: String, Codable, Sendable, CaseIterable {
     case agentDetected = "agent-detected"
     case agentStateChanged = "agent-state-changed"
     case commandComplete = "command-complete"
+    case richInputSubmit = "rich-input-submit"
     case tabCreated = "tab-created"
     case tabClosed = "tab-closed"
     case directoryChanged = "directory-changed"

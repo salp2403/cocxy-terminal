@@ -202,6 +202,25 @@ final class TimelineStoreTests: XCTestCase {
         XCTAssertEqual(retrieved.first?.windowLabel, "Window 2")
     }
 
+    func testRichInputHookEventMappingUsesMetadataOnly() {
+        let hookEvent = HookEvent(
+            type: .richInputDraftSubmitted,
+            sessionId: "sess-rich-input",
+            timestamp: Date(),
+            data: .richInputDraftSubmitted(RichInputDraftSubmittedData(
+                textCharacterCount: 12,
+                attachmentCount: 2
+            ))
+        )
+
+        let event = TimelineEvent.from(hookEvent: hookEvent)
+
+        XCTAssertEqual(event.type, .userPrompt)
+        XCTAssertEqual(event.summary, "Rich input submitted: 12 chars, 2 attachments")
+        XCTAssertNil(event.toolName)
+        XCTAssertNil(event.filePath)
+    }
+
     // MARK: - Test 9: Pattern Detection Fallback Event
 
     func testPatternDetectionFallbackEventAddedAsStateChange() {

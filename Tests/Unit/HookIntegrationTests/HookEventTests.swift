@@ -8,7 +8,7 @@ import CocxyInputClassifier
 // MARK: - Hook Event Tests
 
 /// Tests for `HookEvent` and `HookEventType` models covering:
-/// - JSON parsing for all 12 lifecycle event types.
+/// - JSON parsing for lifecycle event types.
 /// - Graceful handling of malformed/unknown data.
 /// - Round-trip encode/decode fidelity.
 /// - Optional field defaults.
@@ -342,6 +342,31 @@ final class HookEventTests: XCTestCase {
         XCTAssertEqual(HookEventType.notification.rawValue, "Notification")
         XCTAssertEqual(HookEventType.teammateIdle.rawValue, "TeammateIdle")
         XCTAssertEqual(HookEventType.taskCompleted.rawValue, "TaskCompleted")
+        XCTAssertEqual(HookEventType.richInputDraftSubmitted.rawValue, "RichInputDraftSubmitted")
+    }
+
+    func testRichInputDraftSubmittedRoundTripsWithMetadataOnly() throws {
+        let original = HookEvent(
+            type: .richInputDraftSubmitted,
+            sessionId: "sess-rich-1",
+            timestamp: Date(timeIntervalSince1970: 1_760_000_000),
+            data: .richInputDraftSubmitted(RichInputDraftSubmittedData(
+                textCharacterCount: 12,
+                attachmentCount: 2
+            ))
+        )
+
+        let encoded = try makeEncoder().encode(original)
+        let decoded = try makeDecoder().decode(HookEvent.self, from: encoded)
+
+        XCTAssertEqual(decoded.type, .richInputDraftSubmitted)
+        XCTAssertEqual(decoded.sessionId, "sess-rich-1")
+        guard case .richInputDraftSubmitted(let data) = decoded.data else {
+            XCTFail("Expected rich input draft submitted data")
+            return
+        }
+        XCTAssertEqual(data.textCharacterCount, 12)
+        XCTAssertEqual(data.attachmentCount, 2)
     }
 
     // MARK: - Notification Event Parsing
@@ -477,5 +502,11 @@ final class HookEventTests: XCTestCase {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
+    }
+
+    private func makeEncoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
     }
 }
