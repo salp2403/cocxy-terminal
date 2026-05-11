@@ -4,10 +4,16 @@
 import AppKit
 import SwiftUI
 
+struct AgentPromptTextEdit: Equatable {
+    let text: String
+    let selectedRange: NSRange
+}
+
 struct AgentPromptComposerTextView: NSViewRepresentable {
     @Binding var text: String
     let isEnabled: Bool
     let onSubmit: () -> Void
+    var onTab: ((String, NSRange) -> AgentPromptTextEdit?)? = nil
     let onImageData: (Data, String?) -> Void
     let onFileURLs: ([URL]) -> Void
 
@@ -31,6 +37,8 @@ struct AgentPromptComposerTextView: NSViewRepresentable {
         textView.drawsBackground = false
         textView.registerForDraggedTypes(AgentPromptNSTextView.supportedPasteboardTypes)
         textView.onSubmit = onSubmit
+        textView.onTab = onTab
+        textView.onTextChanged = { context.coordinator.parent.text = $0 }
         textView.onImageData = onImageData
         textView.onFileURLs = onFileURLs
 
@@ -47,6 +55,8 @@ struct AgentPromptComposerTextView: NSViewRepresentable {
         context.coordinator.parent = self
         guard let textView = scrollView.documentView as? AgentPromptNSTextView else { return }
         textView.onSubmit = onSubmit
+        textView.onTab = onTab
+        textView.onTextChanged = { context.coordinator.parent.text = $0 }
         textView.onImageData = onImageData
         textView.onFileURLs = onFileURLs
         textView.isEditable = isEnabled
@@ -88,6 +98,8 @@ private final class AgentPromptNSTextView: NSTextView {
 
     private let pasteboardReader = AgentPromptAttachmentPasteboardReader()
     var onSubmit: (() -> Void)?
+    var onTab: ((String, NSRange) -> AgentPromptTextEdit?)?
+    var onTextChanged: ((String) -> Void)?
     var onImageData: ((Data, String?) -> Void)?
     var onFileURLs: (([URL]) -> Void)?
 
@@ -104,6 +116,14 @@ private final class AgentPromptNSTextView: NSTextView {
            event.charactersIgnoringModifiers == "\r" {
             onSubmit?()
             return
+        }
+        if event.keyCode == 48 || event.charactersIgnoringModifiers == "\t" {
+            if let edit = onTab?(string, selectedRange()) {
+                string = edit.text
+                setSelectedRange(edit.selectedRange)
+                onTextChanged?(string)
+                return
+            }
         }
         super.keyDown(with: event)
     }

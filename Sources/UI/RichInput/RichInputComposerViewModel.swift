@@ -12,29 +12,34 @@ final class RichInputComposerViewModel: ObservableObject {
 
     private let imageProcessor: AgentImageProcessor
     private let attachmentStore: RichInputAttachmentStore
+    private let snippetExpander: RichInputSnippetExpander
 
     init(
         text: String = "",
         attachments: [AgentImageAttachment] = [],
         imageProcessor: AgentImageProcessor = AgentImageProcessor(),
-        attachmentStore: RichInputAttachmentStore = RichInputAttachmentStore()
+        attachmentStore: RichInputAttachmentStore = RichInputAttachmentStore(),
+        snippetExpander: RichInputSnippetExpander = RichInputSnippetExpander()
     ) {
         self.text = text
         self.attachments = attachments
         self.imageProcessor = imageProcessor
         self.attachmentStore = attachmentStore
+        self.snippetExpander = snippetExpander
     }
 
     convenience init(
         draft: RichInputDraft,
         imageProcessor: AgentImageProcessor = AgentImageProcessor(),
-        attachmentStore: RichInputAttachmentStore = RichInputAttachmentStore()
+        attachmentStore: RichInputAttachmentStore = RichInputAttachmentStore(),
+        snippetExpander: RichInputSnippetExpander = RichInputSnippetExpander()
     ) {
         self.init(
             text: draft.text,
             attachments: draft.attachments,
             imageProcessor: imageProcessor,
-            attachmentStore: attachmentStore
+            attachmentStore: attachmentStore,
+            snippetExpander: snippetExpander
         )
     }
 
@@ -77,6 +82,10 @@ final class RichInputComposerViewModel: ObservableObject {
 
     func terminalPayload() -> String {
         RichInputSubmitter.terminalPayload(text: text, attachments: attachments)
+    }
+
+    func expandSnippet(in text: String, selectedRange: NSRange) -> RichInputTextEdit? {
+        snippetExpander.expandSnippet(in: text, selectedRange: selectedRange)
     }
 
     func draft(tabID: String, previous: RichInputDraft? = nil, now: Date = Date()) -> RichInputDraft {

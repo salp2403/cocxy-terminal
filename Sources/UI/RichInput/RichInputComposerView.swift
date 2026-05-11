@@ -57,6 +57,11 @@ struct RichInputComposerView: View {
                     text: $viewModel.text,
                     isEnabled: true,
                     onSubmit: { onSubmit?() },
+                    onTab: { text, selectedRange in
+                        viewModel.expandSnippet(in: text, selectedRange: selectedRange).map {
+                            AgentPromptTextEdit(text: $0.text, selectedRange: $0.selectedRange)
+                        }
+                    },
                     onImageData: viewModel.attachImageData(_:suggestedFilename:),
                     onFileURLs: viewModel.attachFiles(_:)
                 )
