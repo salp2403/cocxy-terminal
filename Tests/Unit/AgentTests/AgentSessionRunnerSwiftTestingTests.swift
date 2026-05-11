@@ -203,7 +203,16 @@ struct AgentSessionRunnerSwiftTestingTests {
             processRunner: processRunner,
             commandAllowlist: StaticAgentCommandAllowlist(rules: [
                 .prefix("swift test --filter"),
-            ])
+            ]),
+            securitySandboxConfigProvider: {
+                SecuritySandboxConfig(
+                    pluginsStrict: true,
+                    agentsIsolated: false,
+                    mcpIsolated: true,
+                    auditLogEnabled: false,
+                    warnOnGrant: true
+                )
+            }
         )
 
         let result = try await runner.run(

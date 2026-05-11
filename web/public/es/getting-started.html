@@ -241,6 +241,14 @@
           <p>Flujo local: <code>cocxy keys generate --author "Tu Nombre"</code>, <code>cocxy keys export-public &lt;key-id&gt; --output autor.cocxykey</code>, <code>cocxy keys import autor.cocxykey</code>, <code>cocxy sign template ./mi-plantilla</code> y <code>cocxy verify template ./mi-plantilla</code>.</p>
         </details>
 
+        <details class="faq-item" id="sandbox-controls">
+          <summary><span>Controles de sandbox</span></summary>
+          <p>Cocxy a&iacute;sla extensiones locales con perfiles de sandbox por componente en vez de meter toda la terminal dentro del sandbox completo de macOS. Plugins, herramientas de comandos del modo agente y servidores MCP stdio locales reciben reglas propias de archivos y procesos mientras la terminal conserva acceso normal al espacio de trabajo.</p>
+          <p>El Inspector de sandbox en Preferencias muestra concesiones activas de plugins y el registro de auditor&iacute;a local. Puedes revocar una concesi&oacute;n desde el inspector o usar la CLI para revisiones locales scriptables.</p>
+          <p>La secci&oacute;n <code>[security.sandbox]</code> usa <code>plugins-strict = true</code>, <code>agents-isolated = true</code>, <code>mcp-isolated = true</code>, <code>audit-log-enabled = true</code> y <code>warn-on-grant = true</code>.</p>
+          <p>CLI local: <code>cocxy sandbox list-grants &lt;plugin-id&gt;</code> muestra concesiones persistidas y <code>cocxy sandbox revoke &lt;plugin-id&gt; &lt;capability&gt;</code> revoca una capacidad. Las escrituras de plugins quedan dentro de <code>state/</code>, los comandos del agente quedan acotados al espacio de trabajo y los servidores MCP stdio solo heredan su directorio configurado y argumentos de archivo expl&iacute;citos.</p>
+        </details>
+
         <details class="faq-item" id="command-corrections">
           <summary><span>Correcciones de comandos</span></summary>
           <p>Las correcciones de comandos sugieren arreglos locales despu&eacute;s de un comando fallido. Cocxy revisa errores comunes como <code>gti status</code>, alias como <code>sl</code>, distancia de edici&oacute;n, pistas del shell y rutas cercanas cuando un <code>cd</code> apunta a un directorio mal escrito.</p>

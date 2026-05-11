@@ -292,6 +292,10 @@ final class PluginSandbox: PluginSandboxing, @unchecked Sendable {
     private static let defaultShellExecutables = [
         URL(fileURLWithPath: "/bin/sh"),
         URL(fileURLWithPath: "/bin/bash"),
+        URL(fileURLWithPath: "/private/var/select/sh"),
+        URL(fileURLWithPath: "/var/select/sh"),
+        URL(fileURLWithPath: "/private/var/select/bash"),
+        URL(fileURLWithPath: "/var/select/bash"),
     ]
 
     private static let defaultExecutableSubpaths = [

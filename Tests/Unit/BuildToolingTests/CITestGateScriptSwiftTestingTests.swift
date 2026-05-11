@@ -904,6 +904,44 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("firma inv&aacute;lida"))
     }
 
+    @Test("public getting started docs document granular sandbox controls in both locales")
+    func publicGettingStartedDocsDocumentGranularSandboxControlsInBothLocales() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/getting-started.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains(#"<h2 id="sandbox-controls">Sandbox Controls</h2>"#))
+        #expect(english.contains(##"<a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a>"##))
+        #expect(english.contains("[security.sandbox]"))
+        #expect(english.contains("plugins-strict = true"))
+        #expect(english.contains("agents-isolated = true"))
+        #expect(english.contains("mcp-isolated = true"))
+        #expect(english.contains("audit-log-enabled = true"))
+        #expect(english.contains("warn-on-grant = true"))
+        #expect(english.contains("cocxy sandbox list-grants"))
+        #expect(english.contains("cocxy sandbox revoke"))
+        #expect(english.contains("Sandbox Inspector"))
+        #expect(english.contains("Agent command tools run with workspace-scoped read/write access"))
+
+        #expect(spanish.contains(#"id="sandbox-controls""#))
+        #expect(spanish.lowercased().contains("controles de sandbox"))
+        #expect(spanish.contains("[security.sandbox]"))
+        #expect(spanish.contains("plugins-strict = true"))
+        #expect(spanish.contains("agents-isolated = true"))
+        #expect(spanish.contains("mcp-isolated = true"))
+        #expect(spanish.contains("audit-log-enabled = true"))
+        #expect(spanish.contains("warn-on-grant = true"))
+        #expect(spanish.contains("cocxy sandbox list-grants"))
+        #expect(spanish.contains("cocxy sandbox revoke"))
+        #expect(spanish.contains("Inspector de sandbox"))
+    }
+
     @Test("public getting started docs document command corrections in both locales")
     func publicGettingStartedDocsDocumentCommandCorrectionsInBothLocales() throws {
         let root = repositoryRoot()
@@ -977,6 +1015,7 @@ struct CITestGateScriptSwiftTestingTests {
             "local-backups",
             "input-classifier",
             "command-signatures",
+            "sandbox-controls",
             "command-corrections",
             "cli-companion",
             "themes",

@@ -119,6 +119,35 @@ struct SandboxFoundationSwiftTestingTests {
         }
     }
 
+    @Test("executor launch planning stays under interactive overhead budget")
+    func executorLaunchPlanningStaysUnderInteractiveBudget() throws {
+        let executor = SandboxExecutor(
+            sandboxExecURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+            fileManager: StubSandboxFileManager(executablePaths: ["/usr/bin/sandbox-exec"])
+        )
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .filesystemWrite, .processExec],
+            readablePaths: [URL(fileURLWithPath: "/tmp/workspace")],
+            writablePaths: [URL(fileURLWithPath: "/tmp/workspace")],
+            executablePaths: [URL(fileURLWithPath: "/bin/sh")]
+        )
+
+        let iterations = 100
+        let startedAt = CFAbsoluteTimeGetCurrent()
+        for _ in 0..<iterations {
+            _ = try executor.launchPlan(
+                commandURL: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-lc", "true"],
+                profile: profile,
+                environment: [:],
+                currentDirectoryURL: URL(fileURLWithPath: "/tmp/workspace")
+            )
+        }
+        let averageSeconds = (CFAbsoluteTimeGetCurrent() - startedAt) / Double(iterations)
+
+        #expect(averageSeconds < 0.030)
+    }
+
     @Test("audit log appends and reloads JSONL entries")
     func auditLogAppendsAndLoadsEntries() throws {
         let root = FileManager.default.temporaryDirectory

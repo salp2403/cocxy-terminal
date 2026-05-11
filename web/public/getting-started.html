@@ -521,6 +521,7 @@
       <a href="#local-backups" class="sidebar-link">Local Backups</a>
       <a href="#input-classifier" class="sidebar-link">Input Classifier</a>
       <a href="#command-signatures" class="sidebar-link">Command Signatures</a>
+      <a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a>
       <a href="#command-corrections" class="sidebar-link">Command Corrections</a>
     </div>
     <div class="sidebar-group">
@@ -744,6 +745,26 @@ cocxy sign template ./my-template
 cocxy verify template ./my-template</code></pre>
     </div>
     <p>Strict signature requirements are opt-in through <code>[security]</code>. Leave <code>trust-on-first-use</code> disabled when sharing artifacts across teams so every trusted author key is imported deliberately.</p>
+
+    <!-- Sandbox Controls -->
+    <h2 id="sandbox-controls">Sandbox Controls</h2>
+    <p>Cocxy isolates local extension surfaces with component-level sandbox profiles instead of putting the whole terminal inside the macOS app sandbox. Plugins, Agent Mode command tools, and local MCP stdio servers get their own filesystem and process rules while the terminal keeps normal workspace access.</p>
+    <p>The Sandbox Inspector in Preferences shows active plugin capability grants and the local audit log. Revoke a grant from the inspector or use the CLI when you want a scriptable local check.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>[security.sandbox]
+plugins-strict = true
+agents-isolated = true
+mcp-isolated = true
+audit-log-enabled = true
+warn-on-grant = true</code></pre>
+    </div>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>cocxy sandbox list-grants &lt;plugin-id&gt;
+cocxy sandbox revoke &lt;plugin-id&gt; &lt;capability&gt;</code></pre>
+    </div>
+    <p>Plugin write grants stay scoped to the plugin state directory. Agent command tools run with workspace-scoped read/write access, and MCP stdio servers inherit only the configured working directory and explicit file arguments.</p>
 
     <!-- Command Corrections -->
     <h2 id="command-corrections">Command Corrections</h2>

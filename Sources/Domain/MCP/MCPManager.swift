@@ -88,6 +88,18 @@ struct MCPClientTransportFactory: Sendable {
         self.stdioTransport = stdioTransport
     }
 
+    static func localDefault(securitySandbox: SecuritySandboxConfig = .defaults) -> MCPClientTransportFactory {
+        let auditLog = securitySandbox.auditLogEnabled
+            ? SandboxAuditLog(fileURL: .defaultSandboxAuditLog)
+            : nil
+        return MCPClientTransportFactory(
+            stdioTransport: MCPStdioTransport(processLauncher: MCPStdioProcessLauncher(
+                isolateServers: securitySandbox.mcpIsolated,
+                auditLog: auditLog
+            ))
+        )
+    }
+
     func transport(for server: MCPServer) -> any MCPTransport {
         switch server.transport {
         case .stdio:

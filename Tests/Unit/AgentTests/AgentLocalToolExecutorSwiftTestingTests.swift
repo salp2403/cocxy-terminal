@@ -219,6 +219,59 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         ])
     }
 
+    @Test("sandboxed run_command cannot read or write outside the workspace")
+    func sandboxedRunCommandCannotEscapeWorkspace() async throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec"),
+              FileManager.default.isExecutableFile(atPath: "/bin/sh")
+        else {
+            return
+        }
+
+        let sandboxRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+            .appendingPathComponent(".build/cocxy-agent-sandbox-tests/\(UUID().uuidString)", isDirectory: true)
+        let root = sandboxRoot.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("Sources", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: sandboxRoot) }
+        let outsideReadURL = sandboxRoot.appendingPathComponent("outside-read.txt")
+        let outsideWriteURL = sandboxRoot.appendingPathComponent("outside-write.txt")
+        let allowedURL = root.appendingPathComponent("allowed.txt")
+        try "outside-secret\n".write(to: outsideReadURL, atomically: true, encoding: .utf8)
+
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(approvedCommandCallIDs: ["call-run"]),
+            processRunner: AgentSandboxedProcessRunner(
+                base: AgentProcessRunner(),
+                workspaceURL: root
+            ),
+            shellExecutableURL: URL(fileURLWithPath: "/bin/sh")
+        )
+
+        let command = [
+            "cat ../\(outsideReadURL.lastPathComponent)",
+            "printf ok > allowed.txt",
+            "printf denied > ../\(outsideWriteURL.lastPathComponent)",
+        ].joined(separator: "; ")
+        let result = try await executor.execute(AgentToolCall(
+            id: "call-run",
+            toolID: "run_command",
+            arguments: [
+                "command": .string(command),
+                "timeoutSeconds": .number(5),
+            ]
+        ))
+        let content = try contentObject(result)
+
+        #expect(result.status == .success)
+        #expect((content["exitCode"]?.numberValue ?? 0) != 0)
+        #expect(content["stdout"]?.stringValue?.contains("outside-secret") == false)
+        #expect(FileManager.default.fileExists(atPath: allowedURL.path))
+        #expect(!FileManager.default.fileExists(atPath: outsideWriteURL.path))
+    }
+
     @Test("run_command refuses non-dangerous commands until the call is approved")
     func runCommandRequiresApproval() async throws {
         let root = try makeWorkspace()

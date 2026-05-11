@@ -611,6 +611,10 @@ struct PluginMarketplaceSwiftTestingTests {
 
         let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
         try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: pluginDirectory.appendingPathComponent("state", isDirectory: true),
+            withIntermediateDirectories: true
+        )
         let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
         try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
 
@@ -718,6 +722,7 @@ struct PluginMarketplaceSwiftTestingTests {
         )
 
         #expect(noWritePlan.kernelSandboxProfile?.contains("file-write*") == false)
+        #expect(noWritePlan.kernelSandboxProfile?.contains("network-outbound") == false)
         #expect(writePlan.kernelSandboxProfile?.contains("file-write*") == true)
         #expect(writePlan.kernelSandboxProfile?.contains("/state") == true)
         let parentPath = root
@@ -726,6 +731,59 @@ struct PluginMarketplaceSwiftTestingTests {
             .standardizedFileURL
             .path
         #expect(writePlan.kernelSandboxProfile?.contains(#"(subpath "\#(parentPath)")"#) == false)
+    }
+
+    @Test("kernel sandbox denies plugin writes outside granted state directory")
+    func kernelSandboxDeniesPluginWritesOutsideGrantedStateDirectory() throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec") else {
+            return
+        }
+
+        let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("cocxy-plugin-sandbox-tests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: pluginDirectory.appendingPathComponent("state", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        let touchURL = URL(fileURLWithPath: "/usr/bin/touch")
+        guard FileManager.default.isExecutableFile(atPath: touchURL.path) else {
+            return
+        }
+        let allowedURL = pluginDirectory.appendingPathComponent("state/allowed.txt")
+        let outsideURL = root.appendingPathComponent("outside.txt")
+
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .filesystemWrite, .processExec],
+            readablePaths: [pluginDirectory],
+            writablePaths: [pluginDirectory.appendingPathComponent("state", isDirectory: true)],
+            executablePaths: [touchURL],
+            readableLiteralPaths: SandboxProfileBuilder.parentDirectoryLiterals(for: pluginDirectory),
+            includeSystemReadBaseline: true
+        )
+        let plan = try SandboxExecutor().launchPlan(
+            commandURL: touchURL,
+            arguments: [allowedURL.path, outsideURL.path],
+            profile: profile,
+            environment: [:],
+            currentDirectoryURL: pluginDirectory
+        )
+        let process = Process()
+        process.executableURL = plan.executableURL
+        process.arguments = plan.arguments
+        process.environment = plan.environment
+        process.currentDirectoryURL = plan.currentDirectoryURL
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+
+        try process.run()
+        process.waitUntilExit()
+
+        #expect(process.terminationStatus != 0)
+        #expect(FileManager.default.fileExists(atPath: allowedURL.path))
+        #expect(!FileManager.default.fileExists(atPath: outsideURL.path))
     }
 
     @Test("sandbox rejects unsafe environment keys before launch")

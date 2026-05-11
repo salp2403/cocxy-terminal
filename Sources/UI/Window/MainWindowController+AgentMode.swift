@@ -102,12 +102,19 @@ extension MainWindowController {
             lspDiagnosticsProvider: MainActorAgentLSPDiagnosticsProvider { [weak self] limit in
                 self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
             },
-            mcpManager: MCPConfiguredManager(),
+            mcpManager: MCPConfiguredManager(
+                transportFactory: .localDefault(
+                    securitySandbox: configService?.current.security.sandbox ?? .defaults
+                )
+            ),
             usageRecorder: { [weak self] usage in
                 await self?.recordCurrentAgentModeTokenUsage(usage)
             },
             spotlightConfigProvider: { [weak self] in
                 self?.configService?.current.spotlight ?? .defaults
+            },
+            securitySandboxConfigProvider: { [weak self] in
+                self?.configService?.current.security.sandbox ?? .defaults
             }
         )
         let viewModel = AgentPanelViewModel(

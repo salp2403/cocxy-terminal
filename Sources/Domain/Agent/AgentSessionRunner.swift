@@ -96,6 +96,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
     private let usageRecorder: AgentUsageRecording?
     private let spotlightConfigProvider: @MainActor @Sendable () -> SpotlightIndexConfig
     private let spotlightIndexWriter: any SpotlightIndexWriting
+    private let securitySandboxConfigProvider: @MainActor @Sendable () -> SecuritySandboxConfig
 
     init(
         clientFactory: any AgentLLMClientMaking = AgentProviderClientFactory(),
@@ -112,7 +113,8 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         agentSecrets: AgentSecrets = AgentSecrets(),
         usageRecorder: AgentUsageRecording? = nil,
         spotlightConfigProvider: @escaping @MainActor @Sendable () -> SpotlightIndexConfig = { .defaults },
-        spotlightIndexWriter: any SpotlightIndexWriting = CoreSpotlightIndexWriter()
+        spotlightIndexWriter: any SpotlightIndexWriting = CoreSpotlightIndexWriter(),
+        securitySandboxConfigProvider: @escaping @MainActor @Sendable () -> SecuritySandboxConfig = { .defaults }
     ) {
         self.clientFactory = clientFactory
         self.workspaceRootProvider = workspaceRootProvider
@@ -129,6 +131,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         self.usageRecorder = usageRecorder
         self.spotlightConfigProvider = spotlightConfigProvider
         self.spotlightIndexWriter = spotlightIndexWriter
+        self.securitySandboxConfigProvider = securitySandboxConfigProvider
     }
 
     func run(
@@ -203,10 +206,19 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
             .allowingComputerUseWithoutApproval(!configuration.computerUseConfirm)
             .addingCommandAllowRules(commandAllowRules)
         let workspace = AgentWorkspace(rootURL: workspaceRoot)
+        let sandboxConfig = await securitySandboxConfigProvider()
+        let effectiveProcessRunner: any AgentProcessRunning = AgentSandboxedProcessRunner(
+            base: processRunner,
+            workspaceURL: workspace.rootURL,
+            enabled: sandboxConfig.agentsIsolated,
+            auditLog: sandboxConfig.auditLogEnabled
+                ? SandboxAuditLog(fileURL: .defaultSandboxAuditLog)
+                : nil
+        )
         let executor = AgentLocalToolExecutor(
             workspace: workspace,
             approvals: effectiveApprovals,
-            processRunner: processRunner,
+            processRunner: effectiveProcessRunner,
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider,
             mcpManager: mcpManager,

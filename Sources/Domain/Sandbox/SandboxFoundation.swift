@@ -321,3 +321,16 @@ final class SandboxAuditLog: @unchecked Sendable {
             }
     }
 }
+
+extension URL {
+    static var defaultSandboxAuditLog: URL {
+        FileManager.default
+            .urls(for: .cachesDirectory, in: .userDomainMask)
+            .first?
+            .appendingPathComponent("Cocxy", isDirectory: true)
+            .appendingPathComponent("sandbox-audit.log")
+        ?? FileManager.default.temporaryDirectory
+            .appendingPathComponent("Cocxy", isDirectory: true)
+            .appendingPathComponent("sandbox-audit.log")
+    }
+}
