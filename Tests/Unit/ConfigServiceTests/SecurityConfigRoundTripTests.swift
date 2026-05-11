@@ -31,6 +31,11 @@ struct SecurityConfigRoundTripTests {
         #expect(!defaults.requireSignedPlugins)
         #expect(defaults.warnOnUnsigned)
         #expect(!defaults.trustOnFirstUse)
+        #expect(defaults.sandbox.pluginsStrict)
+        #expect(defaults.sandbox.agentsIsolated)
+        #expect(defaults.sandbox.mcpIsolated)
+        #expect(defaults.sandbox.auditLogEnabled)
+        #expect(defaults.sandbox.warnOnGrant)
     }
 
     @Test("generated TOML documents signature policy")
@@ -43,6 +48,12 @@ struct SecurityConfigRoundTripTests {
         #expect(toml.contains("require-signed-plugins = false"))
         #expect(toml.contains("warn-on-unsigned = true"))
         #expect(toml.contains("trust-on-first-use = false"))
+        #expect(toml.contains("[security.sandbox]"))
+        #expect(toml.contains("plugins-strict = true"))
+        #expect(toml.contains("agents-isolated = true"))
+        #expect(toml.contains("mcp-isolated = true"))
+        #expect(toml.contains("audit-log-enabled = true"))
+        #expect(toml.contains("warn-on-grant = true"))
     }
 
     @Test("TOML preserves explicit security policy")
@@ -54,6 +65,13 @@ struct SecurityConfigRoundTripTests {
         require-signed-plugins = true
         warn-on-unsigned = false
         trust-on-first-use = true
+
+        [security.sandbox]
+        plugins-strict = false
+        agents-isolated = false
+        mcp-isolated = false
+        audit-log-enabled = false
+        warn-on-grant = false
         """)
 
         #expect(config.security.requireSignedTemplates)
@@ -61,6 +79,11 @@ struct SecurityConfigRoundTripTests {
         #expect(config.security.requireSignedPlugins)
         #expect(!config.security.warnOnUnsigned)
         #expect(config.security.trustOnFirstUse)
+        #expect(!config.security.sandbox.pluginsStrict)
+        #expect(!config.security.sandbox.agentsIsolated)
+        #expect(!config.security.sandbox.mcpIsolated)
+        #expect(!config.security.sandbox.auditLogEnabled)
+        #expect(!config.security.sandbox.warnOnGrant)
     }
 
     @Test("missing and malformed security sections fall back safely")
@@ -76,6 +99,13 @@ struct SecurityConfigRoundTripTests {
         require-signed-plugins = 1
         warn-on-unsigned = []
         trust-on-first-use = "never"
+
+        [security.sandbox]
+        plugins-strict = "yes"
+        agents-isolated = 1
+        mcp-isolated = []
+        audit-log-enabled = "always"
+        warn-on-grant = "sure"
         """)
 
         #expect(missing.security == .defaults)

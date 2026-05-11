@@ -1662,6 +1662,7 @@ final class PreferencesViewModel: ObservableObject {
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
             commandCorrections: commandCorrections,
+            security: savedConfig.security,
             uxPolish: uxPolish,
             agent: agent,
             backup: backup,
@@ -2407,6 +2408,20 @@ final class PreferencesViewModel: ObservableObject {
         auto-show-on-failure = \(commandCorrections.autoShowOnFailure)
         show-confidence-badge = \(commandCorrections.showConfidenceBadge)
         max-suggestions-shown = \(commandCorrections.maxSuggestionsShown)
+
+        [security]
+        require-signed-templates = \(defaults.security.requireSignedTemplates)
+        require-signed-macros = \(defaults.security.requireSignedMacros)
+        require-signed-plugins = \(defaults.security.requireSignedPlugins)
+        warn-on-unsigned = \(defaults.security.warnOnUnsigned)
+        trust-on-first-use = \(defaults.security.trustOnFirstUse)
+
+        [security.sandbox]
+        plugins-strict = \(defaults.security.sandbox.pluginsStrict)
+        agents-isolated = \(defaults.security.sandbox.agentsIsolated)
+        mcp-isolated = \(defaults.security.sandbox.mcpIsolated)
+        audit-log-enabled = \(defaults.security.sandbox.auditLogEnabled)
+        warn-on-grant = \(defaults.security.sandbox.warnOnGrant)
 
         [ux-polish]
         always-show-shortcut-hints = \(uxPolish.alwaysShowShortcutHints)

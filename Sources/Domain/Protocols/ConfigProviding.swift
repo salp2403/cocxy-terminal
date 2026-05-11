@@ -1023,16 +1023,75 @@ struct SecurityConfig: Codable, Sendable, Equatable {
     let requireSignedPlugins: Bool
     let warnOnUnsigned: Bool
     let trustOnFirstUse: Bool
+    let sandbox: SecuritySandboxConfig
 
-    static var defaults: SecurityConfig {
-        SecurityConfig(
-            requireSignedTemplates: false,
-            requireSignedMacros: false,
-            requireSignedPlugins: false,
-            warnOnUnsigned: true,
-            trustOnFirstUse: false
-        )
+    init(
+        requireSignedTemplates: Bool,
+        requireSignedMacros: Bool,
+        requireSignedPlugins: Bool,
+        warnOnUnsigned: Bool,
+        trustOnFirstUse: Bool,
+        sandbox: SecuritySandboxConfig = .defaults
+    ) {
+        self.requireSignedTemplates = requireSignedTemplates
+        self.requireSignedMacros = requireSignedMacros
+        self.requireSignedPlugins = requireSignedPlugins
+        self.warnOnUnsigned = warnOnUnsigned
+        self.trustOnFirstUse = trustOnFirstUse
+        self.sandbox = sandbox
     }
+
+    enum CodingKeys: String, CodingKey {
+        case requireSignedTemplates
+        case requireSignedMacros
+        case requireSignedPlugins
+        case warnOnUnsigned
+        case trustOnFirstUse
+        case sandbox
+    }
+
+    init(from decoder: Decoder) throws {
+        let defaults = Self.defaults
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        requireSignedTemplates = try container.decodeIfPresent(Bool.self, forKey: .requireSignedTemplates)
+            ?? defaults.requireSignedTemplates
+        requireSignedMacros = try container.decodeIfPresent(Bool.self, forKey: .requireSignedMacros)
+            ?? defaults.requireSignedMacros
+        requireSignedPlugins = try container.decodeIfPresent(Bool.self, forKey: .requireSignedPlugins)
+            ?? defaults.requireSignedPlugins
+        warnOnUnsigned = try container.decodeIfPresent(Bool.self, forKey: .warnOnUnsigned)
+            ?? defaults.warnOnUnsigned
+        trustOnFirstUse = try container.decodeIfPresent(Bool.self, forKey: .trustOnFirstUse)
+            ?? defaults.trustOnFirstUse
+        sandbox = try container.decodeIfPresent(SecuritySandboxConfig.self, forKey: .sandbox)
+            ?? defaults.sandbox
+    }
+
+    static let defaults = SecurityConfig(
+        requireSignedTemplates: false,
+        requireSignedMacros: false,
+        requireSignedPlugins: false,
+        warnOnUnsigned: true,
+        trustOnFirstUse: false,
+        sandbox: .defaults
+    )
+}
+
+/// `[security.sandbox]` section for granular local component isolation.
+struct SecuritySandboxConfig: Codable, Sendable, Equatable {
+    let pluginsStrict: Bool
+    let agentsIsolated: Bool
+    let mcpIsolated: Bool
+    let auditLogEnabled: Bool
+    let warnOnGrant: Bool
+
+    static let defaults = SecuritySandboxConfig(
+        pluginsStrict: true,
+        agentsIsolated: true,
+        mcpIsolated: true,
+        auditLogEnabled: true,
+        warnOnGrant: true
+    )
 }
 
 // MARK: - UX Polish Config

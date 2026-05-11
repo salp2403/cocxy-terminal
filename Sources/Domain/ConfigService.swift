@@ -390,6 +390,16 @@ final class ConfigService: ConfigProviding {
         warn-on-unsigned = \(defaults.security.warnOnUnsigned)
         trust-on-first-use = \(defaults.security.trustOnFirstUse)
 
+        [security.sandbox]
+        # Granular component isolation. Cocxy stays outside the full macOS
+        # app sandbox so terminal workflows keep filesystem access; plugins,
+        # agents, and MCP servers can still be isolated individually.
+        plugins-strict = \(defaults.security.sandbox.pluginsStrict)
+        agents-isolated = \(defaults.security.sandbox.agentsIsolated)
+        mcp-isolated = \(defaults.security.sandbox.mcpIsolated)
+        audit-log-enabled = \(defaults.security.sandbox.auditLogEnabled)
+        warn-on-grant = \(defaults.security.sandbox.warnOnGrant)
+
         [ux-polish]
         # Always-show keyboard shortcut hints. Off by default so existing
         # layouts keep their current density. Debug overlay controls are
@@ -1015,7 +1025,9 @@ final class ConfigService: ConfigProviding {
     /// Parses the `[security]` section.
     private func parseSecurityConfig(from parsed: [String: TOMLValue]) -> SecurityConfig {
         let table = extractTable("security", from: parsed)
+        let sandboxTable = extractTable("security.sandbox", from: parsed)
         let defaults = SecurityConfig.defaults
+        let sandboxDefaults = defaults.sandbox
 
         return SecurityConfig(
             requireSignedTemplates: boolValue(table["require-signed-templates"])
@@ -1025,7 +1037,19 @@ final class ConfigService: ConfigProviding {
             requireSignedPlugins: boolValue(table["require-signed-plugins"])
                 ?? defaults.requireSignedPlugins,
             warnOnUnsigned: boolValue(table["warn-on-unsigned"]) ?? defaults.warnOnUnsigned,
-            trustOnFirstUse: boolValue(table["trust-on-first-use"]) ?? defaults.trustOnFirstUse
+            trustOnFirstUse: boolValue(table["trust-on-first-use"]) ?? defaults.trustOnFirstUse,
+            sandbox: SecuritySandboxConfig(
+                pluginsStrict: boolValue(sandboxTable["plugins-strict"])
+                    ?? sandboxDefaults.pluginsStrict,
+                agentsIsolated: boolValue(sandboxTable["agents-isolated"])
+                    ?? sandboxDefaults.agentsIsolated,
+                mcpIsolated: boolValue(sandboxTable["mcp-isolated"])
+                    ?? sandboxDefaults.mcpIsolated,
+                auditLogEnabled: boolValue(sandboxTable["audit-log-enabled"])
+                    ?? sandboxDefaults.auditLogEnabled,
+                warnOnGrant: boolValue(sandboxTable["warn-on-grant"])
+                    ?? sandboxDefaults.warnOnGrant
+            )
         )
     }
 

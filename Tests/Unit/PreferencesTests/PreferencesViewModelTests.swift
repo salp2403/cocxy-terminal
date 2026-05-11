@@ -363,6 +363,20 @@ final class PreferencesViewModelTests: XCTestCase {
                 enableKittyImages: false
             ),
             agentDetection: .defaults,
+            security: SecurityConfig(
+                requireSignedTemplates: true,
+                requireSignedMacros: true,
+                requireSignedPlugins: true,
+                warnOnUnsigned: false,
+                trustOnFirstUse: true,
+                sandbox: SecuritySandboxConfig(
+                    pluginsStrict: false,
+                    agentsIsolated: false,
+                    mcpIsolated: false,
+                    auditLogEnabled: false,
+                    warnOnGrant: false
+                )
+            ),
             codeReview: CodeReviewConfig(autoShowOnSessionEnd: false),
             notifications: NotificationConfig(
                 macosNotifications: true,
@@ -397,6 +411,18 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertTrue(toml.contains("cursor-opacity = 0.55"))
         XCTAssertTrue(toml.contains("mouse-hide-while-typing = false"))
         XCTAssertTrue(toml.contains("copy-on-select = false"))
+        XCTAssertTrue(toml.contains("[security]"))
+        XCTAssertTrue(toml.contains("require-signed-templates = true"))
+        XCTAssertTrue(toml.contains("require-signed-macros = true"))
+        XCTAssertTrue(toml.contains("require-signed-plugins = true"))
+        XCTAssertTrue(toml.contains("warn-on-unsigned = false"))
+        XCTAssertTrue(toml.contains("trust-on-first-use = true"))
+        XCTAssertTrue(toml.contains("[security.sandbox]"))
+        XCTAssertTrue(toml.contains("plugins-strict = false"))
+        XCTAssertTrue(toml.contains("agents-isolated = false"))
+        XCTAssertTrue(toml.contains("mcp-isolated = false"))
+        XCTAssertTrue(toml.contains("audit-log-enabled = false"))
+        XCTAssertTrue(toml.contains("warn-on-grant = false"))
         XCTAssertTrue(toml.contains("[code-review]"))
         XCTAssertTrue(toml.contains("auto-show-on-session-end = false"))
         XCTAssertTrue(toml.contains("show-dock-badge = false"))
