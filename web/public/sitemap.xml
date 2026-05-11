@@ -94,6 +94,24 @@
     <priority>0.7</priority>
   </url>
   <url>
+    <loc>https://cocxy.dev/channels.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/channels.html"/>
+    <lastmod>2026-05-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/channels.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/channels.html"/>
+    <lastmod>2026-05-11</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
     <loc>https://cocxy.dev/press.html</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html"/>

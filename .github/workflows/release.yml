@@ -510,6 +510,10 @@ jobs:
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/features.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features.html
           fi
+          if [ -f web/public/channels.html ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/channels.html ${DEPLOY_TARGET}:${DEPLOY_PATH}channels.html
+          fi
           if [ -f web/public/faq.html ]; then
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/faq.html ${DEPLOY_TARGET}:${DEPLOY_PATH}faq.html
@@ -773,6 +777,7 @@ jobs:
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html; \
              sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html; \
              if [ -f ${DEPLOY_PATH}features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}features.html; fi; \
+             if [ -f ${DEPLOY_PATH}channels.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}channels.html; fi; \
              if [ -f ${DEPLOY_PATH}faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}faq.html; fi; \
              if [ -f ${DEPLOY_PATH}press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}press.html; fi; \
              if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html; fi; \
@@ -782,6 +787,7 @@ jobs:
              if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/index.html; fi; \
              if [ -f ${DEPLOY_PATH}es/getting-started.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/getting-started.html; fi; \
              if [ -f ${DEPLOY_PATH}es/features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/features.html; fi; \
+             if [ -f ${DEPLOY_PATH}es/channels.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/channels.html; fi; \
              if [ -f ${DEPLOY_PATH}es/faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/faq.html; fi; \
              if [ -f ${DEPLOY_PATH}es/press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/press.html; fi; \
              if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/releases.html; fi; \

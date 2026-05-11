@@ -611,6 +611,81 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!versionRewriteBlock.contains("|| true"))
     }
 
+    @Test("release website deploy keeps channel docs wired")
+    func releaseWebsiteDeployKeepsChannelDocsWired() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/channels.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/channels.html"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("web/public/channels.html ${DEPLOY_TARGET}:${DEPLOY_PATH}channels.html"))
+        #expect(workflow.contains(#"style.css?v=${VERSION}|g' ${DEPLOY_PATH}channels.html"#))
+        #expect(workflow.contains(#"style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/channels.html"#))
+        #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html">"#))
+        #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html">"#))
+        #expect(english.contains("brew install --cask cocxy-preview"))
+        #expect(english.contains("brew install --cask cocxy-nightly"))
+        #expect(spanish.contains("brew install --cask cocxy-pr&#101;view"))
+        #expect(spanish.contains("brew install --cask cocxy-nightly"))
+        #expect(english.contains("appcast-preview.xml"))
+        #expect(english.contains("appcast-nightly.xml"))
+    }
+
+    @Test("preview and nightly workflows publish signed appcasts and channel casks")
+    func previewAndNightlyWorkflowsPublishSignedAppcastsAndChannelCasks() throws {
+        let root = repositoryRoot()
+        let preview = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/preview.yml"),
+            encoding: .utf8
+        )
+        let nightly = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/nightly.yml"),
+            encoding: .utf8
+        )
+
+        #expect(preview.contains("ERROR: sign_update not found. Cannot generate Sparkle signature."))
+        #expect(preview.contains("ERROR: Failed to generate Sparkle EdDSA signature."))
+        #expect(preview.contains("- name: Update Homebrew preview Cask"))
+        #expect(preview.contains("Casks/cocxy-preview.rb"))
+        #expect(preview.contains(#"cask "cocxy-preview" do"#))
+        #expect(preview.contains(#"app "Cocxy Terminal Preview.app""#))
+        #expect(preview.contains("git commit -m \"Update cocxy-preview to ${VERSION}\""))
+        #expect(preview.contains("git push"))
+        #expect(preview.contains("rm /tmp/deploy_key"))
+
+        #expect(nightly.contains("ERROR: sign_update not found. Cannot generate Sparkle signature."))
+        #expect(nightly.contains("ERROR: Failed to generate Sparkle EdDSA signature."))
+        #expect(nightly.contains("- name: Update Homebrew nightly Cask"))
+        #expect(nightly.contains("Casks/cocxy-nightly.rb"))
+        #expect(nightly.contains(#"cask "cocxy-nightly" do"#))
+        #expect(nightly.contains(#"app "Cocxy Terminal Nightly.app""#))
+        #expect(nightly.contains("git commit -m \"Update cocxy-nightly to ${VERSION}\""))
+        #expect(nightly.contains("git push"))
+    }
+
+    @Test("local installer derives default app destination from bundle display name")
+    func localInstallerDerivesDefaultDestinationFromBundleDisplayName() throws {
+        let root = repositoryRoot()
+        let script = try String(
+            contentsOf: root.appendingPathComponent("scripts/install-local-app.sh"),
+            encoding: .utf8
+        )
+
+        #expect(script.contains("BUNDLE_DISPLAY_NAME="))
+        #expect(script.contains("CFBundleDisplayName"))
+        #expect(script.contains("DEST_APP=\"${2:-/Applications/${BUNDLE_DISPLAY_NAME}.app}\""))
+        #expect(!script.contains("DEST_APP=\"${2:-/Applications/Cocxy Terminal.app}\""))
+    }
+
     @Test("public release website gate keeps badge and structured data wired")
     func publicReleaseWebsiteGateKeepsBadgeAndStructuredDataWired() throws {
         let root = repositoryRoot()
@@ -1422,6 +1497,14 @@ struct CITestGateScriptSwiftTestingTests {
             spanishURL: "https://cocxy.dev/es/releases.html",
             englishHref: "/releases.html",
             spanishHref: "/es/releases.html"
+        ),
+        PublicWebsiteLocalePair(
+            englishPath: "channels.html",
+            spanishPath: "es/channels.html",
+            englishURL: "https://cocxy.dev/channels.html",
+            spanishURL: "https://cocxy.dev/es/channels.html",
+            englishHref: "/channels.html",
+            spanishHref: "/es/channels.html"
         ),
         PublicWebsiteLocalePair(
             englishPath: "getting-started.html",

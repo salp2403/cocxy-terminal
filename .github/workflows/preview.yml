@@ -289,3 +289,52 @@ jobs:
             "mkdir -p ${DEPLOY_PATH}"
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             build/appcast-preview.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
+
+          rm /tmp/deploy_key
+          echo "Preview appcast deployed."
+
+      - name: Update Homebrew preview Cask
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-Preview-${VERSION}.dmg"
+          SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+
+          git clone https://x-access-token:${GH_TOKEN}@github.com/salp2403/homebrew-tap.git /tmp/tap
+          cd /tmp/tap
+
+          cat > Casks/cocxy-preview.rb << CASK
+          cask "cocxy-preview" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/salp2403/cocxy-terminal/releases/download/v#{version}/CocxyTerminal-Preview-#{version}.dmg"
+            name "Cocxy Terminal Preview"
+            desc "Signed early-access builds of the native macOS terminal"
+            homepage "https://cocxy.dev/channels.html"
+
+            depends_on macos: ">= :sonoma"
+
+            app "Cocxy Terminal Preview.app"
+
+            binary "#{appdir}/Cocxy Terminal Preview.app/Contents/Resources/cocxy", target: "cocxy-preview"
+
+            zap trash: [
+              "~/.config/cocxy/dev.cocxy.terminal.preview",
+              "~/Library/Preferences/dev.cocxy.terminal.preview.plist",
+              "~/Library/Caches/dev.cocxy.terminal.preview",
+            ]
+          end
+          CASK
+
+          git config user.name "Said Arturo Lopez"
+          git config user.email "dev@cocxy.dev"
+          git add Casks/cocxy-preview.rb
+          if git diff --cached --quiet; then
+            echo "::error::Homebrew preview cask did not change for ${VERSION}"
+            exit 1
+          fi
+          git commit -m "Update cocxy-preview to ${VERSION}"
+          git push
+          rm -rf /tmp/tap

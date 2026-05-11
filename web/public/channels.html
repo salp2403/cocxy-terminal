@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Update Channels - Cocxy Terminal</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Install and choose Cocxy Terminal stable, preview, and nightly update channels.">
+  <meta property="og:title" content="Update Channels - Cocxy Terminal">
+  <meta property="og:description" content="Stable, preview, and nightly builds for Cocxy Terminal.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://cocxy.dev/channels.html">
+  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://cocxy.dev/channels.html">
+  <link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html">
+  <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html">
+  <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/channels.html">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Stable Appcast" href="/appcast.xml">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <link rel="icon" href="/images/icon.png" type="image/png">
+  <link rel="apple-touch-icon" href="/images/icon.png">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "headline": "Cocxy Terminal Update Channels",
+    "description": "How to install and choose Cocxy Terminal stable, preview, and nightly update channels.",
+    "url": "https://cocxy.dev/channels.html",
+    "inLanguage": "en"
+  }
+  </script>
+  <style>
+    .channel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 2rem 0; }
+    .channel-card { background: var(--surface0); border: 1px solid var(--surface1); border-radius: 12px; padding: 1.5rem; }
+    .channel-card h2 { font-size: 1.15rem; margin: 0 0 0.5rem; }
+    .channel-card p { color: var(--subtext1); line-height: 1.65; margin: 0 0 1rem; }
+    .channel-card code, .channel-command code { color: var(--lavender); font-family: ui-monospace, monospace; font-size: 0.85rem; }
+    .channel-command { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 8px; padding: 0.8rem; overflow-x: auto; }
+    .channel-list { color: var(--subtext1); line-height: 1.75; }
+    @media (max-width: 900px) { .channel-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <nav class="nav" aria-label="Main navigation">
+      <a href="/" class="nav-logo"><img src="/images/icon.png" alt="" width="28" height="28"><span>Cocxy</span></a>
+      <div class="nav-links">
+        <a href="/features.html">Features</a>
+        <a href="/releases.html">Releases</a>
+        <a href="/channels.html" class="nav-active">Channels</a>
+        <a href="/getting-started.html">Docs</a>
+        <a href="/es/channels.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
+        <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
+      <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Update Channels</h1>
+      <p style="color:var(--subtext0);max-width:760px;line-height:1.75;">Cocxy ships three signed macOS apps with separate bundle identifiers, update feeds, preferences, and Homebrew casks. They can be installed side by side in <code>/Applications</code>.</p>
+
+      <div class="channel-grid">
+        <article class="channel-card">
+          <h2>Stable</h2>
+          <p>Production releases for daily use. Stable follows tagged releases and the default Sparkle feed.</p>
+          <div class="channel-command"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></div>
+          <p style="margin-top:1rem;">Feed: <a href="https://cocxy.dev/appcast.xml">appcast.xml</a></p>
+        </article>
+        <article class="channel-card">
+          <h2>Preview</h2>
+          <p>Signed early-access builds for validating changes before the next stable release.</p>
+          <div class="channel-command"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy-preview</code></div>
+          <p style="margin-top:1rem;">Feed: <a href="https://cocxy.dev/appcast-preview.xml">appcast-preview.xml</a></p>
+        </article>
+        <article class="channel-card">
+          <h2>Nightly</h2>
+          <p>Signed daily builds for testing current development state. Keep stable installed for regular work.</p>
+          <div class="channel-command"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy-nightly</code></div>
+          <p style="margin-top:1rem;">Feed: <a href="https://cocxy.dev/appcast-nightly.xml">appcast-nightly.xml</a></p>
+        </article>
+      </div>
+
+      <section class="channel-list" aria-labelledby="channel-faq">
+        <h2 id="channel-faq" style="color:var(--text);font-size:1.35rem;">Channel FAQ</h2>
+        <p><strong style="color:var(--text);">Can I install all channels at once?</strong><br>Yes. Stable uses <code>dev.cocxy.terminal</code>, preview uses <code>dev.cocxy.terminal.preview</code>, and nightly uses <code>dev.cocxy.terminal.nightly</code>.</p>
+        <p><strong style="color:var(--text);">Can I switch the in-app update feed?</strong><br>Yes. Open Preferences and choose Stable, Preview, or Nightly under Update Channel. The selected channel changes the Sparkle feed without reinstalling the app.</p>
+        <p><strong style="color:var(--text);">Where are settings stored?</strong><br>Stable keeps the default <code>~/.config/cocxy/</code> path. Preview and nightly use bundle-specific config directories so testing builds does not overwrite stable settings.</p>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand"><img src="/images/icon.png" alt="" width="24" height="24"><span>Cocxy Terminal</span></div>
+        <div class="footer-links">
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="/releases.html">Releases</a>
+          <a href="/getting-started.html">Docs</a>
+          <a href="/es/channels.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
+        </div>
+        <p class="footer-credit">Made by Said Arturo Lopez</p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

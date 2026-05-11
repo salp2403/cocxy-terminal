@@ -6,14 +6,27 @@ set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SOURCE_APP="${1:-${PROJECT_ROOT}/build/CocxyTerminal.app}"
-DEST_APP="${2:-/Applications/Cocxy Terminal.app}"
-PLUGIN_ID="dev.cocxy.terminal.quicklook"
-PLUGIN_PATH="${DEST_APP}/Contents/PlugIns/CocxyQuickLook.appex"
 
 if [ ! -d "${SOURCE_APP}" ]; then
     echo "ERROR: Source app not found at ${SOURCE_APP}"
     exit 1
 fi
+
+BUNDLE_DISPLAY_NAME="$(plutil -extract CFBundleDisplayName raw -o - "${SOURCE_APP}/Contents/Info.plist" 2>/dev/null || true)"
+if [ -z "${BUNDLE_DISPLAY_NAME}" ]; then
+    BUNDLE_DISPLAY_NAME="$(plutil -extract CFBundleName raw -o - "${SOURCE_APP}/Contents/Info.plist" 2>/dev/null || true)"
+fi
+if [ -z "${BUNDLE_DISPLAY_NAME}" ]; then
+    echo "ERROR: Could not resolve bundle display name from ${SOURCE_APP}"
+    exit 1
+fi
+
+DEST_APP="${2:-/Applications/${BUNDLE_DISPLAY_NAME}.app}"
+PLUGIN_ID="$(plutil -extract CFBundleIdentifier raw -o - "${SOURCE_APP}/Contents/PlugIns/CocxyQuickLook.appex/Contents/Info.plist" 2>/dev/null || true)"
+if [ -z "${PLUGIN_ID}" ]; then
+    PLUGIN_ID="dev.cocxy.terminal.quicklook"
+fi
+PLUGIN_PATH="${DEST_APP}/Contents/PlugIns/CocxyQuickLook.appex"
 
 echo "==> Installing local app bundle..."
 rm -rf "${DEST_APP}"

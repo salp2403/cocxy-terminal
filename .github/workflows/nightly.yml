@@ -212,10 +212,15 @@ jobs:
           DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/nightly-${VERSION}/CocxyTerminal-Nightly-${VERSION}.dmg"
 
           SPARKLE_BIN=$(find .build -name "sign_update" -type f 2>/dev/null | head -1)
-          if [ -n "$SPARKLE_BIN" ] && [ -f "$SPARKLE_BIN" ]; then
-            SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN" -p "$DMG" --ed-key-file -)
-          else
-            SIGNATURE=""
+          if [ -z "$SPARKLE_BIN" ] || [ ! -f "$SPARKLE_BIN" ]; then
+            echo "ERROR: sign_update not found. Cannot generate Sparkle signature."
+            exit 1
+          fi
+
+          SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | "$SPARKLE_BIN" -p "$DMG" --ed-key-file -)
+          if [ -z "$SIGNATURE" ]; then
+            echo "ERROR: Failed to generate Sparkle EdDSA signature."
+            exit 1
           fi
 
           cat > build/appcast-nightly.xml << APPCAST
@@ -272,3 +277,49 @@ jobs:
 
           rm /tmp/deploy_key
           echo "Nightly appcast deployed."
+
+      - name: Update Homebrew nightly Cask
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.VERSION }}"
+          DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
+          SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
+
+          git clone https://x-access-token:${GH_TOKEN}@github.com/salp2403/homebrew-tap.git /tmp/tap
+          cd /tmp/tap
+
+          cat > Casks/cocxy-nightly.rb << CASK
+          cask "cocxy-nightly" do
+            version "${VERSION}"
+            sha256 "${SHA}"
+
+            url "https://github.com/salp2403/cocxy-terminal/releases/download/nightly-#{version}/CocxyTerminal-Nightly-#{version}.dmg"
+            name "Cocxy Terminal Nightly"
+            desc "Signed daily builds of the native macOS terminal"
+            homepage "https://cocxy.dev/channels.html"
+
+            depends_on macos: ">= :sonoma"
+
+            app "Cocxy Terminal Nightly.app"
+
+            binary "#{appdir}/Cocxy Terminal Nightly.app/Contents/Resources/cocxy", target: "cocxy-nightly"
+
+            zap trash: [
+              "~/.config/cocxy/dev.cocxy.terminal.nightly",
+              "~/Library/Preferences/dev.cocxy.terminal.nightly.plist",
+              "~/Library/Caches/dev.cocxy.terminal.nightly",
+            ]
+          end
+          CASK
+
+          git config user.name "Said Arturo Lopez"
+          git config user.email "dev@cocxy.dev"
+          git add Casks/cocxy-nightly.rb
+          if git diff --cached --quiet; then
+            echo "::error::Homebrew nightly cask did not change for ${VERSION}"
+            exit 1
+          fi
+          git commit -m "Update cocxy-nightly to ${VERSION}"
+          git push
+          rm -rf /tmp/tap
