@@ -61,6 +61,7 @@ final class ClipboardServiceTests: XCTestCase {
         let pasteboard = NSPasteboard(name: NSPasteboard.Name("cocxy-clipboard-text-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.setString("notes text", forType: .string)
+        pasteboard.setData(Data("<p>notes text</p>".utf8), forType: .html)
         pasteboard.setData(Self.pngData, forType: .png)
         let imageDirectory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: imageDirectory) }
@@ -75,6 +76,28 @@ final class ClipboardServiceTests: XCTestCase {
             includingPropertiesForKeys: nil
         )
         XCTAssertTrue(storedImages.isEmpty, "Text paste must not decode or store image side data")
+    }
+
+    func testSystemClipboardTerminalPastePrefersRawImageOverPlainTextCompanion() throws {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("cocxy-clipboard-image-companion-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("pasted-image.png", forType: .string)
+        pasteboard.setData(Self.pngData, forType: .png)
+        let imageDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: imageDirectory) }
+        let clipboard = SystemClipboardService(
+            pasteboard: pasteboard,
+            clipboardImageDirectory: imageDirectory
+        )
+
+        let payload = try XCTUnwrap(clipboard.readTerminalPastePayload())
+        guard case .fileURLs(let urls) = payload else {
+            return XCTFail("Expected raw image paste to win over plain text companion")
+        }
+
+        XCTAssertEqual(urls.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path))
+        XCTAssertEqual(urls[0].pathExtension, "png")
     }
 
     func testSystemClipboardTerminalPastePrefersImageFileURLOverCompanionText() throws {

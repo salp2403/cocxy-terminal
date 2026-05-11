@@ -656,6 +656,17 @@ struct CocxyCoreViewTests {
         #expect(chunks.allSatisfy { $0.utf8.count <= CocxyCoreView.defaultPasteChunkMaxUTF8Bytes })
     }
 
+    @Test("agent paste chunking uses smaller prompt-safe chunks")
+    func agentPasteChunkingUsesSmallerPromptSafeChunks() {
+        let payload = String(repeating: "a", count: 400)
+
+        let chunks = CocxyCoreView.terminalPasteChunks(for: payload, agentPaced: true)
+
+        #expect(chunks.count > 1)
+        #expect(chunks.joined() == payload)
+        #expect(chunks.allSatisfy { $0.utf8.count <= CocxyCoreView.agentPasteChunkMaxUTF8Bytes })
+    }
+
     @Test("keyDown application shortcuts route copy paste select all and clear screen")
     func keyDownApplicationShortcutsRouteAppCommands() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
@@ -794,11 +805,18 @@ struct CocxyCoreViewTests {
             characters: "\u{7F}",
             keyCode: 51,
             isARepeat: true,
-            timestamp: 20.140
+            timestamp: 20.170
+        )
+        let stillTooFastRepeat = makeKeyEvent(
+            characters: "\u{7F}",
+            keyCode: 51,
+            isARepeat: true,
+            timestamp: 20.120
         )
 
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(fastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
+        #expect(harness.view.shouldThrottleTerminalDeleteRepeat(stillTooFastRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == true)
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
     }
 

@@ -201,6 +201,9 @@ extension MainWindowController {
             cocxyView.prefersPacedDeleteRepeat = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }
+            cocxyView.prefersPacedPasteDelivery = { [weak self] in
+                self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
+            }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,
                 surfaceID: capturedSurfaceID,

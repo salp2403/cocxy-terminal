@@ -46,12 +46,20 @@ final class SystemClipboardService: ClipboardServiceProtocol {
             return .fileURLs([fileURL])
         }
 
-        if let text = read(), !text.isEmpty {
+        let text = read()
+        let hasImageData = containsInlineImageData(in: pasteboard)
+        let hasRichTextPayload = containsRichTextPayload(in: pasteboard)
+
+        if let text, !text.isEmpty, hasRichTextPayload || !hasImageData {
             return .text(text)
         }
 
         if let imageAttachment = readImageAttachment() {
             return .fileURLs([imageAttachment.fileURL])
+        }
+
+        if let text, !text.isEmpty {
+            return .text(text)
         }
 
         return nil
@@ -91,6 +99,14 @@ final class SystemClipboardService: ClipboardServiceProtocol {
             return bitmap.representation(using: .png, properties: [:])
         }
         return nil
+    }
+
+    private func containsInlineImageData(in pasteboard: NSPasteboard) -> Bool {
+        pasteboard.availableType(from: [.png, Self.jpegPasteboardType, .tiff]) != nil
+    }
+
+    private func containsRichTextPayload(in pasteboard: NSPasteboard) -> Bool {
+        pasteboard.availableType(from: [.rtf, .html]) != nil
     }
 
     private func convertImageDataToPNG(_ data: Data) -> Data? {

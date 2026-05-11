@@ -80,6 +80,12 @@ final class CocxyCoreView: NSView {
     /// tracking flags.
     var prefersPacedDeleteRepeat: (() -> Bool)?
 
+    /// Returns whether large paste delivery should use conservative chunks
+    /// for agent prompts. Agent TUIs often parse paste incrementally while
+    /// updating their own prompt UI, so they need more breathing room than
+    /// a shell reading from the PTY.
+    var prefersPacedPasteDelivery: (() -> Bool)?
+
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
@@ -185,9 +191,12 @@ final class CocxyCoreView: NSView {
 
     private static let scrollSpeedFactor: CGFloat = 0.15
     static let defaultPasteChunkMaxUTF8Bytes = 512
+    static let agentPasteChunkMaxUTF8Bytes = 128
     private static let pasteChunkMaxUTF8Bytes = defaultPasteChunkMaxUTF8Bytes
     private static let pasteChunkDelayNanoseconds: UInt64 = 6_000_000
+    private static let agentPasteChunkDelayNanoseconds: UInt64 = 18_000_000
     private static let repeatedDeleteMinimumInterval: TimeInterval = 0.095
+    private static let agentRepeatedDeleteMinimumInterval: TimeInterval = 0.145
     private static let throttledDeleteKeyCodes: Set<UInt16> = [51, 117]
 
     private var contentPadding: (x: CGFloat, y: CGFloat) {
@@ -958,7 +967,11 @@ final class CocxyCoreView: NSView {
 
         let usesBracketedPaste = cocxycore_terminal_mode_bracketed_paste(state.terminal)
         let normalizedText = Self.normalizedTerminalPasteText(text)
-        let chunks = Self.terminalPasteChunks(for: normalizedText)
+        let agentPacedPaste = prefersPacedPasteDelivery?() == true
+        let chunks = Self.terminalPasteChunks(
+            for: normalizedText,
+            agentPaced: agentPacedPaste
+        )
         guard !chunks.isEmpty else { return }
 
         closeActiveBracketedPasteIfNeeded(bridge: bridge)
@@ -978,14 +991,20 @@ final class CocxyCoreView: NSView {
                 bridge.sendText("\u{1B}[200~", to: sid)
                 self.activeBracketedPasteSurfaceID = sid
                 self.activeBracketedPasteSessionID = pasteSessionID
-                await Self.sleepBetweenPasteChunksIfNeeded(chunks.count)
+                await Self.sleepBetweenPasteChunksIfNeeded(
+                    chunks.count,
+                    agentPaced: agentPacedPaste
+                )
             }
 
             for chunk in chunks {
                 guard !Task.isCancelled,
                       bridge.surfaceState(for: sid) != nil else { return }
                 bridge.sendText(chunk, to: sid)
-                await Self.sleepBetweenPasteChunksIfNeeded(chunks.count)
+                await Self.sleepBetweenPasteChunksIfNeeded(
+                    chunks.count,
+                    agentPaced: agentPacedPaste
+                )
             }
 
             guard !Task.isCancelled,
@@ -1028,7 +1047,14 @@ final class CocxyCoreView: NSView {
     }
 
     static func terminalPasteChunks(for text: String) -> [String] {
-        terminalPasteChunks(for: text, maxUTF8Bytes: pasteChunkMaxUTF8Bytes)
+        terminalPasteChunks(for: text, agentPaced: false)
+    }
+
+    static func terminalPasteChunks(for text: String, agentPaced: Bool) -> [String] {
+        terminalPasteChunks(
+            for: text,
+            maxUTF8Bytes: agentPaced ? agentPasteChunkMaxUTF8Bytes : pasteChunkMaxUTF8Bytes
+        )
     }
 
     static func terminalPasteChunks(
@@ -1059,9 +1085,13 @@ final class CocxyCoreView: NSView {
         return chunks
     }
 
-    private static func sleepBetweenPasteChunksIfNeeded(_ chunkCount: Int) async {
+    private static func sleepBetweenPasteChunksIfNeeded(
+        _ chunkCount: Int,
+        agentPaced: Bool
+    ) async {
         guard chunkCount > 1 else { return }
-        try? await Task.sleep(nanoseconds: pasteChunkDelayNanoseconds)
+        let delay = agentPaced ? agentPasteChunkDelayNanoseconds : pasteChunkDelayNanoseconds
+        try? await Task.sleep(nanoseconds: delay)
     }
 
     internal func shouldThrottleTerminalDeleteRepeat(
@@ -1077,6 +1107,9 @@ final class CocxyCoreView: NSView {
             || cocxycore_terminal_is_alt_screen(state.terminal)
             || cocxycore_terminal_mode_mouse(state.terminal) > 0
         guard shouldPaceRepeat else { return false }
+        let minimumInterval = prefersPacedDeleteRepeat?() == true
+            ? Self.agentRepeatedDeleteMinimumInterval
+            : Self.repeatedDeleteMinimumInterval
 
         let timestamp = event.timestamp > 0
             ? event.timestamp
@@ -1088,7 +1121,7 @@ final class CocxyCoreView: NSView {
 
         guard let lastTimestamp = repeatedDeleteDispatchTimestamps[event.keyCode],
               timestamp >= lastTimestamp,
-              timestamp - lastTimestamp < Self.repeatedDeleteMinimumInterval else {
+              timestamp - lastTimestamp < minimumInterval else {
             repeatedDeleteDispatchTimestamps[event.keyCode] = timestamp
             return false
         }

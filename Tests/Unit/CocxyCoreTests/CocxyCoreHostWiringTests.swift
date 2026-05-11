@@ -191,6 +191,7 @@ struct CocxyCoreHostWiringTests {
         #expect(before == cocxycore_terminal_history_max_visible_start(state.terminal))
         #expect(view.prefersLocalScrollInMouseTrackingMode?() == true)
         #expect(view.prefersPacedDeleteRepeat?() == true)
+        #expect(view.prefersPacedPasteDelivery?() == true)
 
         view.scrollWheel(with: makeScrollEvent(deltaY: 120))
 
