@@ -2210,6 +2210,63 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertFalse(invalidSearch.success)
     }
 
+    func test_richInputShowRoutesToProviderAndValidatesTabID() {
+        let validTabID = UUID().uuidString
+        let capturedTabIDs = LockedBox<[String]>([])
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            richInputShowProvider: { tabID in
+                capturedTabIDs.withValue { $0.append(tabID) }
+                return tabID == validTabID
+            }
+        )
+
+        let shown = handler.handleCommand(SocketRequest(
+            id: "rich-input-show-ok",
+            command: "rich-input-show",
+            params: ["tabId": validTabID]
+        ))
+
+        XCTAssertTrue(shown.success)
+        XCTAssertEqual(shown.data?["status"], "shown")
+        XCTAssertEqual(shown.data?["tabId"], validTabID)
+        XCTAssertEqual(capturedTabIDs.withValue { $0 }, [validTabID])
+
+        let invalidID = handler.handleCommand(SocketRequest(
+            id: "rich-input-show-invalid",
+            command: "rich-input-show",
+            params: ["tabId": "not-a-uuid"]
+        ))
+        XCTAssertFalse(invalidID.success)
+        XCTAssertEqual(
+            invalidID.error,
+            "Invalid UUID format for param: tabId"
+        )
+
+        let missingID = handler.handleCommand(SocketRequest(
+            id: "rich-input-show-missing",
+            command: "rich-input-show",
+            params: nil
+        ))
+        XCTAssertFalse(missingID.success)
+        XCTAssertEqual(
+            missingID.error,
+            "Missing required param: tabId"
+        )
+
+        let notFound = handler.handleCommand(SocketRequest(
+            id: "rich-input-show-not-found",
+            command: "rich-input-show",
+            params: ["tabId": UUID().uuidString]
+        ))
+        XCTAssertFalse(notFound.success)
+        XCTAssertEqual(
+            notFound.error,
+            "Tab not found or Rich Input unavailable"
+        )
+    }
+
     func test_providerOverrideCommands_coverTabProjectAndConfigBranches() throws {
         let tabID = UUID().uuidString
         let directory = try temporaryDirectory("provider-overrides")
@@ -3286,6 +3343,8 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             return ["tabId": id]
         case .timelineExport:
             return ["format": "json"]
+        case .richInputShow:
+            return ["tabId": id]
         case .search:
             return ["query": "needle"]
         case .send:

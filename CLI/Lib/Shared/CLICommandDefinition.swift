@@ -61,6 +61,10 @@ public enum CLICommand: String, CaseIterable {
     case timelineShow = "timeline-show"
     case timelineExport = "timeline-export"
 
+    // MARK: - Rich Input (v2)
+
+    case richInputShow = "rich-input-show"
+
     // MARK: - Search (v2)
 
     case search
@@ -282,6 +286,9 @@ public enum CLICommand: String, CaseIterable {
         case .timelineShow: return "Show timeline for a tab"
         case .timelineExport: return "Export timeline for a tab"
 
+        // Rich Input
+        case .richInputShow: return "Open the Rich Input composer for a tab"
+
         // Search
         case .search: return "Search in scrollback buffer"
 
@@ -473,6 +480,9 @@ public enum CLICommand: String, CaseIterable {
         // Timeline
         case .timelineShow: return "cocxy timeline show <tab-id>"
         case .timelineExport: return "cocxy timeline export <tab-id> [--format json|md]"
+
+        // Rich Input
+        case .richInputShow: return "cocxy rich-input show <tab-id>"
 
         // Search
         case .search: return "cocxy search <query> [--regex] [--case-sensitive] [--tab <id>]"

@@ -179,6 +179,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy correct <command>`
     case correct(input: String)
 
+    /// `cocxy rich-input show <tab-id>`
+    case richInputShow(tabID: String)
+
     /// `cocxy identify`
     case identify
 
@@ -748,6 +751,9 @@ public enum CLIArgumentParser {
 
         case "correct":
             return try parseCorrect(arguments: Array(arguments.dropFirst()))
+
+        case "rich-input":
+            return try parseRichInput(arguments: Array(arguments.dropFirst()))
 
         case "identify":
             return .identify
@@ -1519,6 +1525,32 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "timeline show", argument: "tab-id")
         }
         return .timelineShow(tabID: tabID)
+    }
+
+    /// Parses `cocxy rich-input <subcommand> ...`.
+    private static func parseRichInput(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "rich-input", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "show":
+            return try parseRichInputShow(arguments: Array(arguments.dropFirst()))
+        default:
+            throw CLIError.invalidArgument(
+                command: "rich-input",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use show."
+            )
+        }
+    }
+
+    /// Parses `cocxy rich-input show <tab-id>`.
+    private static func parseRichInputShow(arguments: [String]) throws -> ParsedCommand {
+        guard let tabID = arguments.first, !tabID.isEmpty else {
+            throw CLIError.missingArgument(command: "rich-input show", argument: "tab-id")
+        }
+        return .richInputShow(tabID: tabID)
     }
 
     /// Parses `cocxy timeline export <tab-id> [--format json|md]`.

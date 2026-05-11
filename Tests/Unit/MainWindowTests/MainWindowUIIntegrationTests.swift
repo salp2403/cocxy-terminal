@@ -452,6 +452,17 @@ final class RichInputIntegrationTests: XCTestCase {
         XCTAssertNotNil(controller.richInputHostingView)
     }
 
+    func testRichInputShowForTabIDOpensComposer() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+
+        XCTAssertTrue(controller.showRichInputComposer(tabID: tabID))
+
+        XCTAssertNotNil(controller.richInputHostingView)
+    }
+
     func testRichInputDisabledConfigPreventsManualOpen() throws {
         let provider = RichInputConfigProvider(content: """
         [rich-input]

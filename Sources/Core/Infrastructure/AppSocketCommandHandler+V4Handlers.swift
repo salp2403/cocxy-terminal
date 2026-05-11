@@ -164,6 +164,31 @@ extension AppSocketCommandHandler {
     }
 }
 
+// MARK: - V4 Rich Input Handlers
+
+extension AppSocketCommandHandler {
+
+    /// Opens the confirmed Rich Input composer for a specific tab.
+    func handleRichInputShow(_ request: SocketRequest) -> SocketResponse {
+        guard let tabID = request.params?["tabId"], !tabID.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: tabId")
+        }
+        guard UUID(uuidString: tabID) != nil else {
+            return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
+        }
+        guard let provider = richInputShowProvider else {
+            return .failure(id: request.id, error: "Rich Input not available")
+        }
+        guard provider(tabID) else {
+            return .failure(id: request.id, error: "Tab not found or Rich Input unavailable")
+        }
+        return .ok(id: request.id, data: [
+            "status": "shown",
+            "tabId": tabID
+        ])
+    }
+}
+
 // MARK: - V4 Split Handlers
 
 extension AppSocketCommandHandler {

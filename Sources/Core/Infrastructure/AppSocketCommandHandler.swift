@@ -323,6 +323,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Exports timeline in the given format ("json" or "markdown"), optionally scoped to a tab.
     let timelineExportProvider: (@Sendable (String?, String) -> Data?)?
 
+    /// Opens Rich Input for a tab ID. Returns false when the tab or composer is unavailable.
+    let richInputShowProvider: (@Sendable (String) -> Bool)?
+
     /// Creates a split pane. Bool param = isVertical. Returns true on success.
     let splitCreateProvider: (@Sendable (Bool) -> Bool)?
 
@@ -529,6 +532,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         reviewStatsProvider: (@Sendable () -> [String: String]?)? = nil,
         timelineQueryProvider: (@Sendable (String?) -> TimelineQueryResult?)? = nil,
         timelineExportProvider: (@Sendable (String?, String) -> Data?)? = nil,
+        richInputShowProvider: (@Sendable (String) -> Bool)? = nil,
         splitCreateProvider: (@Sendable (Bool) -> Bool)? = nil,
         splitFocusProvider: (@Sendable (Int) -> Bool)? = nil,
         splitFocusByDirectionProvider: (@Sendable (String) -> Bool)? = nil,
@@ -606,6 +610,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.reviewStatsProvider = reviewStatsProvider
         self.timelineQueryProvider = timelineQueryProvider
         self.timelineExportProvider = timelineExportProvider
+        self.richInputShowProvider = richInputShowProvider
         self.splitCreateProvider = splitCreateProvider
         self.splitFocusProvider = splitFocusProvider
         self.splitFocusByDirectionProvider = splitFocusByDirectionProvider
@@ -1068,6 +1073,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTimelineShow(request)
         case .timelineExport:
             return handleTimelineExport(request)
+
+        // Rich Input (v4)
+        case .richInputShow:
+            return handleRichInputShow(request)
 
         // Search (v4)
         case .search:

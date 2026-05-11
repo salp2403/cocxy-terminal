@@ -225,6 +225,59 @@ final class TimelineCommandTests: XCTestCase {
     }
 }
 
+// MARK: - Rich Input Commands Tests
+
+/// Tests for `rich-input show`, used by automation and agent-facing tools to
+/// open the confirmed multiline composer for one tab.
+final class RichInputCommandTests: XCTestCase {
+
+    private let runner = CommandRunner(
+        socketClient: SocketClient(socketPath: "/tmp/test.sock")
+    )
+
+    func testRichInputShowParsesTabID() throws {
+        let result = try CLIArgumentParser.parse(["rich-input", "show", "tab-uuid-1"])
+
+        XCTAssertEqual(result, .richInputShow(tabID: "tab-uuid-1"))
+    }
+
+    func testRichInputShowWithoutTabIDThrowsMissingArgument() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["rich-input", "show"])
+        ) { error in
+            guard let cliError = error as? CLIError else {
+                XCTFail("Expected CLIError, got \(error)")
+                return
+            }
+            XCTAssertEqual(
+                cliError,
+                .missingArgument(command: "rich-input show", argument: "tab-id")
+            )
+        }
+    }
+
+    func testRichInputShowBuildsSocketRequest() {
+        let request = runner.buildRequest(from: .richInputShow(tabID: "tab-uuid-1"))
+
+        XCTAssertEqual(request.command, "rich-input-show")
+        XCTAssertEqual(request.params?["tabId"], "tab-uuid-1")
+    }
+
+    func testRichInputShowFormatsSuccess() {
+        let response = CLISocketResponse(
+            id: "rich-1",
+            success: true,
+            data: ["status": "shown"],
+            error: nil
+        )
+
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(command: .richInputShow(tabID: "tab-uuid-1"), response: response),
+            "Rich Input shown."
+        )
+    }
+}
+
 // MARK: - Search Commands Tests
 
 /// Tests for search commands: query with flags.

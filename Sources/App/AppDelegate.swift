@@ -2268,6 +2268,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     delegateRef.value?.exportTimeline(for: tabIDString, format: format)
                 }
             },
+            // V4: Rich Input - open the composer for a specific tab.
+            richInputShowProvider: { tabIDString in
+                guard let uuid = UUID(uuidString: tabIDString) else { return false }
+                return syncOnMainActor {
+                    let tabID = TabID(rawValue: uuid)
+                    guard let controller = delegateRef.value?.controllerContainingTab(tabID) else {
+                        return false
+                    }
+                    delegateRef.value?.windowTabRouter?.activateTab(id: tabID)
+                    return controller.showRichInputComposer(tabID: tabID)
+                }
+            },
             // V4: Split create — add a new split pane.
             splitCreateProvider: { isVertical in
                 syncOnMainActor {

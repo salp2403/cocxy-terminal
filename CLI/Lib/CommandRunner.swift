@@ -805,6 +805,13 @@ public struct CommandRunner {
                 params: ["tabId": tabID, "format": normalizedFormat]
             )
 
+        case .richInputShow(let tabID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "rich-input-show",
+                params: ["tabId": tabID]
+            )
+
         // MARK: Search (v2)
 
         case .search(let query, let regex, let caseSensitive, let tabID):

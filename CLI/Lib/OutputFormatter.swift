@@ -114,6 +114,8 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .timelineExport:
             return formatDataOrJSON(response: response)
+        case .richInputShow:
+            return "Rich Input shown."
 
         // MARK: Search (v2)
 

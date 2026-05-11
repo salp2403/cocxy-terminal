@@ -670,9 +670,25 @@ final class Phase7WireProtocolTests: XCTestCase {
     // MARK: - TEST 31: CLI and server CLICommandName rawValues are identical
 
     func testCLICommandRawValuesMatchCLICommandNameRawValues() {
-        // CLICommand (CLI) and CLICommandName (server) must have identical rawValues
-        // so that the CLI sends strings the server will recognize.
+        // Socket-backed CLI commands and CLICommandName must have identical
+        // rawValues so requests sent over the app socket are recognized.
+        // Some CLI commands run locally and must not be accepted by the app
+        // socket because they manage local files, signatures, or discovery.
+        let localOnlyCommands: Set<String> = [
+            "capabilities",
+            "classify",
+            "correct",
+            "identify",
+            "keys-export-public",
+            "keys-generate",
+            "keys-import",
+            "keys-list",
+            "sign",
+            "top",
+            "verify",
+        ]
         let cliCommands = Set(CLICommand.allCases.map { $0.rawValue })
+            .subtracting(localOnlyCommands)
         let serverCommands = Set(CLICommandName.allCases.map { $0.rawValue })
 
         XCTAssertEqual(

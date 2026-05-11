@@ -13,6 +13,21 @@ extension MainWindowController {
             return true
         }
 
+        return showRichInputComposer()
+    }
+
+    @discardableResult
+    func showRichInputComposer(tabID: TabID? = nil) -> Bool {
+        let wasVisible = richInputHostingView != nil
+        if let tabID {
+            guard focusTab(id: tabID) else { return false }
+            if wasVisible {
+                dismissRichInputComposer()
+            }
+        }
+        if richInputHostingView != nil {
+            return true
+        }
         guard (configService?.current.richInput.enabled ?? RichInputConfig.defaults.enabled),
               let surfaceView = activeTerminalSurfaceView as? CocxyCoreView else {
             return false

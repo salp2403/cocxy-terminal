@@ -145,6 +145,11 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// Export timeline for a tab.
     case timelineExport = "timeline-export"
 
+    // MARK: - Rich Input (v2)
+
+    /// Open the Rich Input composer for a tab.
+    case richInputShow = "rich-input-show"
+
     // MARK: - Search (v2)
 
     /// Search in scrollback buffer.
