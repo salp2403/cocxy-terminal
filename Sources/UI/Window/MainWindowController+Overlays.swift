@@ -1872,6 +1872,11 @@ extension MainWindowController {
             )
         }
 
+        applyTerminalReservationForRightDockedPanels(
+            dockedPanelsMinX: currentX,
+            overlayContainer: overlayContainer
+        )
+
         if let suggestionView = codeReviewSuggestionHostingView {
             let width = suggestionView.frame.width
             let height = suggestionView.frame.height
@@ -1882,6 +1887,43 @@ extension MainWindowController {
                 width: width,
                 height: height
             )
+        }
+    }
+
+    private func applyTerminalReservationForRightDockedPanels(
+        dockedPanelsMinX: CGFloat,
+        overlayContainer: NSView
+    ) {
+        guard let terminalContainerView else { return }
+
+        let terminalFrameInOverlay = terminalContainerView.convert(
+            terminalContainerView.bounds,
+            to: overlayContainer
+        )
+        let overlapStart = max(terminalFrameInOverlay.minX, dockedPanelsMinX)
+        let overlappedWidth = max(0, terminalFrameInOverlay.maxX - overlapStart)
+        let reservedWidth = min(terminalContainerView.bounds.width, overlappedWidth)
+        let visibleWidth = max(0, terminalContainerView.bounds.width - reservedWidth)
+        let visibleFrame = NSRect(
+            x: 0,
+            y: 0,
+            width: visibleWidth,
+            height: terminalContainerView.bounds.height
+        )
+
+        if let activeSplitView {
+            activeSplitView.frame = visibleFrame
+            activeSplitView.autoresizingMask = [.width, .height]
+            activeSplitView.needsLayout = true
+            activeSplitView.adjustSubviews()
+            applyCurrentSplitRatiosAfterLayout()
+        } else if let terminalSurfaceView {
+            terminalSurfaceView.frame = visibleFrame
+            terminalSurfaceView.autoresizingMask = [.width, .height]
+        }
+
+        for leaf in collectLeafViews() {
+            (leaf as? TerminalHostView)?.syncSizeWithTerminal()
         }
     }
 

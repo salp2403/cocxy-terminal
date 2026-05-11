@@ -352,7 +352,7 @@ extension MainWindowController {
             }
             return NSHostingView(rootView: view)
         case .subagent:
-            guard let dashboardVM = injectedDashboardViewModel,
+            guard let dashboardVM = injectedDashboardViewModel ?? dashboardViewModel,
                   let subagentId = panel.subagentId,
                   let sessionId = panel.sessionId else { return nil }
             let subView = SubagentContentView(

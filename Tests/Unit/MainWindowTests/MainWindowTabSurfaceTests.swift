@@ -561,6 +561,41 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
+    func testRightDockedAgentPanelReservesTerminalWidth() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.injectedAgentPromptRunner = LayoutTestAgentPromptRunner()
+        controller.showWindow(nil)
+        controller.window?.setContentSize(NSSize(width: 1200, height: 760))
+        controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+
+        guard let container = controller.terminalContainerView else {
+            XCTFail("Expected terminal container")
+            return
+        }
+
+        controller.showAgentModePanel()
+        controller.layoutRightDockedAgentPanels()
+
+        XCTAssertEqual(
+            controller.terminalSurfaceView?.frame.width ?? -1,
+            container.bounds.width - AgentPanelView.panelWidth,
+            accuracy: 0.5,
+            "Right-docked agent panels must reserve width so terminal columns do not render underneath them"
+        )
+
+        controller.agentModeHostingView?.removeFromSuperview()
+        controller.agentModeHostingView = nil
+        controller.isAgentModeVisible = false
+        controller.layoutRightDockedAgentPanels()
+
+        XCTAssertEqual(
+            controller.terminalSurfaceView?.frame.width ?? -1,
+            container.bounds.width,
+            accuracy: 0.5,
+            "Terminal width should restore when no right-docked panel is visible"
+        )
+    }
+
     func testPaneCreationStopsBeforeRightmostPaneBecomesUnreadablyNarrow() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         controller.showWindow(nil)
@@ -1219,6 +1254,24 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             0.68,
             accuracy: 0.001,
             "Subagent auto-panels should reserve the dominant width for the terminal pane"
+        )
+    }
+
+    func testSpawnSubagentPanelUsesControllerDashboardViewModelWhenInjectionAbsent() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.dashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-live",
+            sessionId: "sess-1",
+            agentType: "research"
+        )
+
+        XCTAssertTrue(
+            controller.panelContentViews.values.contains { $0 is SubagentContentView },
+            "Subagent panels should use the controller's live dashboard view-model when no test injection is present"
         )
     }
 
