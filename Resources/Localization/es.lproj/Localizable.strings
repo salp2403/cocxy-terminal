@@ -2718,3 +2718,9 @@
 "List Skills" = "Listar habilidades";
 
 "handoff.activity.title" = "Continuar Cocxy Terminal";
+
+"richInput.accessibility" = "Compositor de entrada enriquecida";
+"richInput.title" = "Entrada enriquecida";
+"richInput.placeholder" = "Escribe o pega un prompt largo...";
+"richInput.send" = "Enviar";
+"richInput.cancel" = "Cancelar";

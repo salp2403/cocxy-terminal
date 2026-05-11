@@ -408,6 +408,9 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("agent.panel.message.you", fallback: "You") == "Tú")
         #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 0, using: spanish) == "Habilidades")
         #expect(AgentPanelView.localizedSkillPickerTitle(selectedCount: 2, using: spanish) == "2 habilidades")
+        #expect(spanish.string("richInput.title", fallback: "Rich Input") == "Entrada enriquecida")
+        #expect(spanish.string("richInput.send", fallback: "Send") == "Enviar")
+        #expect(spanish.string("richInput.cancel", fallback: "Cancel") == "Cancelar")
     }
 
     @Test

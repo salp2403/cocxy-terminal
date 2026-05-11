@@ -204,6 +204,14 @@ extension MainWindowController {
             cocxyView.prefersPacedPasteDelivery = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }
+            cocxyView.onRichInputRequested = { [weak self, weak cocxyView] request in
+                guard let self, let cocxyView else { return false }
+                return self.presentRichInputComposer(
+                    request,
+                    for: cocxyView,
+                    tabID: capturedTabID
+                )
+            }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,
                 surfaceID: capturedSurfaceID,

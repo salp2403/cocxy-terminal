@@ -86,6 +86,11 @@ final class CocxyCoreView: NSView {
     /// a shell reading from the PTY.
     var prefersPacedPasteDelivery: (() -> Bool)?
 
+    /// Gives the host a chance to present a rich composer for complex
+    /// agent input instead of writing a large or image-backed paste directly
+    /// into the PTY.
+    var onRichInputRequested: ((TerminalRichInputRequest) -> Bool)?
+
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
@@ -946,8 +951,15 @@ final class CocxyCoreView: NSView {
 
         switch clipboardService.readTerminalPastePayload() {
         case .text(let text):
+            let normalizedText = Self.normalizedTerminalPasteText(text)
+            if requestRichInputIfNeeded(text: normalizedText, fileURLs: []) {
+                return
+            }
             sendClipboardText(text, bridge: bridge, surfaceID: sid)
         case .fileURLs(let urls):
+            if requestRichInputIfNeeded(text: "", fileURLs: urls) {
+                return
+            }
             sendClipboardText(
                 FileDropPathFormatter.format(urls),
                 bridge: bridge,
@@ -955,6 +967,34 @@ final class CocxyCoreView: NSView {
             )
         case nil:
             break
+        }
+    }
+
+    private func requestRichInputIfNeeded(text: String, fileURLs: [URL]) -> Bool {
+        guard prefersPacedPasteDelivery?() == true,
+              let onRichInputRequested else {
+            return false
+        }
+
+        let hasMultilineText = text.contains("\n")
+        let hasAttachments = fileURLs.contains(where: Self.isLikelyRichInputImageURL(_:))
+        guard hasMultilineText || hasAttachments else { return false }
+
+        return onRichInputRequested(TerminalRichInputRequest(text: text, fileURLs: fileURLs))
+    }
+
+    func submitRichInputPayload(_ text: String) {
+        guard let bridge = bridge, let sid = surfaceID else { return }
+        sendClipboardText(text, bridge: bridge, surfaceID: sid)
+    }
+
+    private static func isLikelyRichInputImageURL(_ url: URL) -> Bool {
+        guard url.isFileURL else { return false }
+        switch url.pathExtension.lowercased() {
+        case "png", "jpg", "jpeg", "tif", "tiff", "gif", "heic", "heif", "webp":
+            return true
+        default:
+            return false
         }
     }
 
@@ -1024,7 +1064,7 @@ final class CocxyCoreView: NSView {
         activeBracketedPasteSessionID = nil
     }
 
-    static func normalizedTerminalPasteText(_ text: String) -> String {
+    nonisolated static func normalizedTerminalPasteText(_ text: String) -> String {
         let lineNormalized = text
             .replacingOccurrences(of: "\r\n", with: "\n")
             .replacingOccurrences(of: "\r", with: "\n")
@@ -1302,6 +1342,8 @@ final class CocxyCoreView: NSView {
         ) as? [URL], !urls.isEmpty else { return false }
 
         if let handler = onFileDrop, handler(urls) { return true }
+
+        if requestRichInputIfNeeded(text: "", fileURLs: urls) { return true }
 
         // Default: paste each file path as shell-escaped text so
         // terminal-aware CLIs treat the drop as a single argument and

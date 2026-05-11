@@ -263,6 +263,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var isAgentModeVisible: Bool = false
     var injectedAgentPromptRunner: (any AgentPromptRunning)?
 
+    var richInputViewModel: RichInputComposerViewModel?
+    var richInputHostingView: NSHostingView<RichInputComposerView>?
+    var richInputDraftStore = RichInputDraftStore()
+
     var voiceTriggerHandler: VoiceTriggerHandler?
     var voiceIndicatorHostingView: NSHostingView<VoiceIndicator>?
     var voiceInputTask: Task<Void, Never>?

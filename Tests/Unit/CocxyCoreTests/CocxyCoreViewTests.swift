@@ -537,6 +537,93 @@ struct CocxyCoreViewTests {
         #expect(String(data: output.data, encoding: .utf8)?.contains(imageURL.path) == false)
     }
 
+    @Test("active agent multiline paste opens rich input instead of writing directly")
+    func activeAgentMultilinePasteOpensRichInputInsteadOfWritingDirectly() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.view.clipboardService = RecordingClipboardService(readText: "line 1\nline 2\n")
+        harness.view.prefersPacedPasteDelivery = { true }
+        var requests: [TerminalRichInputRequest] = []
+        harness.view.onRichInputRequested = { request in
+            requests.append(request)
+            return true
+        }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        #expect(requests.count == 1)
+        #expect(requests.first?.text == "line 1\nline 2\n")
+        #expect(requests.first?.fileURLs == [])
+        #expect(output.data.isEmpty)
+    }
+
+    @Test("active agent image paste opens rich input with attachment")
+    func activeAgentImagePasteOpensRichInputWithAttachment() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("Cocxy Clipboard Image.png")
+        harness.view.clipboardService = RecordingClipboardService(
+            readText: nil,
+            imageAttachment: ClipboardImageAttachment(fileURL: imageURL)
+        )
+        harness.view.prefersPacedPasteDelivery = { true }
+        var requests: [TerminalRichInputRequest] = []
+        harness.view.onRichInputRequested = { request in
+            requests.append(request)
+            return true
+        }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        #expect(requests.count == 1)
+        #expect(requests.first?.text == "")
+        #expect(requests.first?.fileURLs == [imageURL])
+        #expect(output.data.isEmpty)
+    }
+
+    @Test("active agent non-image file paste keeps direct terminal path behavior")
+    func activeAgentNonImageFilePasteKeepsDirectTerminalPathBehavior() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let textURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("notes.txt")
+        harness.view.clipboardService = RecordingClipboardService(
+            readText: nil,
+            imageAttachment: ClipboardImageAttachment(fileURL: textURL)
+        )
+        harness.view.prefersPacedPasteDelivery = { true }
+        var requests: [TerminalRichInputRequest] = []
+        harness.view.onRichInputRequested = { request in
+            requests.append(request)
+            return true
+        }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        let expectedPayload = FileDropPathFormatter.format([textURL])
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true
+        }
+        #expect(requests.isEmpty)
+        #expect(String(data: output.data, encoding: .utf8)?.contains(expectedPayload) == true)
+    }
+
     @Test("bracketed paste wraps clipboard payload when the terminal enables it")
     func bracketedPasteWrapsClipboardPayload() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")

@@ -2718,3 +2718,9 @@
 "List Skills" = "List Skills";
 
 "handoff.activity.title" = "Continue Cocxy Terminal";
+
+"richInput.accessibility" = "Rich input composer";
+"richInput.title" = "Rich Input";
+"richInput.placeholder" = "Write or paste a long prompt...";
+"richInput.send" = "Send";
+"richInput.cancel" = "Cancel";
