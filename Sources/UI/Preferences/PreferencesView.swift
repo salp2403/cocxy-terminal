@@ -179,6 +179,8 @@ struct PreferencesView: View {
             )
         case .worktrees:
             WorktreesPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .security:
+            SandboxInspectorView(localizer: viewModel.appLocalizer())
         case .plugins:
             PluginMarketplaceView(
                 pluginManager: pluginManager,
@@ -220,6 +222,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case editor
     case keybindings
     case worktrees
+    case security
     case plugins
     case github
     case about
@@ -253,6 +256,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .editor: return "Editor"
         case .keybindings: return "Keybindings"
         case .worktrees: return "Worktrees"
+        case .security: return "Security"
         case .plugins: return "Plugins"
         case .github: return "GitHub"
         case .about: return "About"
@@ -281,6 +285,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .editor: return "text.cursor"
         case .keybindings: return "keyboard"
         case .worktrees: return "arrow.triangle.branch"
+        case .security: return "lock.shield"
         case .plugins: return "shippingbox"
         case .github: return "arrow.triangle.pull"
         case .about: return "info.circle"

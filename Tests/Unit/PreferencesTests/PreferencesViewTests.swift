@@ -11,7 +11,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasTwentyOneCases() {
+    func test_allSections_hasTwentyThreeCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -23,12 +23,13 @@ final class PreferencesSectionTests: XCTestCase {
         // brings it to 17; iCloud Sync opt-in settings bring it to 18;
         // Session Replay opt-in and consent settings bring it to 19;
         // GitHub pane settings bring it to 20; Spotlight privacy controls
-        // bring it to 21.
+        // bring it to 21; Updates brings it to 22; Security sandbox
+        // inspection brings it to 23.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 21)
+        XCTAssertEqual(PreferencesSection.allCases.count, 23)
     }
 
     @MainActor
@@ -61,6 +62,12 @@ final class PreferencesSectionTests: XCTestCase {
         XCTAssertEqual(section.iconName, "shippingbox")
     }
 
+    func test_securitySection_hasTitleAndIcon() {
+        let section = PreferencesSection.security
+        XCTAssertEqual(section.title, "Security")
+        XCTAssertEqual(section.iconName, "lock.shield")
+    }
+
     func test_worktreesSection_appearsBeforeAbout() {
         let allCases = PreferencesSection.allCases
         guard let worktreesIndex = allCases.firstIndex(of: .worktrees),
@@ -82,6 +89,18 @@ final class PreferencesSectionTests: XCTestCase {
         }
         XCTAssertLessThan(worktreesIndex, pluginsIndex)
         XCTAssertLessThan(pluginsIndex, aboutIndex)
+    }
+
+    func test_securitySection_appearsBetweenWorktreesAndPlugins() {
+        let allCases = PreferencesSection.allCases
+        guard let worktreesIndex = allCases.firstIndex(of: .worktrees),
+              let securityIndex = allCases.firstIndex(of: .security),
+              let pluginsIndex = allCases.firstIndex(of: .plugins) else {
+            XCTFail("worktrees, security, and plugins sections must exist")
+            return
+        }
+        XCTAssertLessThan(worktreesIndex, securityIndex)
+        XCTAssertLessThan(securityIndex, pluginsIndex)
     }
 
     func test_sectionIDs_areUnique() {
