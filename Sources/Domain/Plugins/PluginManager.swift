@@ -104,18 +104,26 @@ final class PluginManager: ObservableObject {
     private let pluginsDirectory: String
     private let stateFilePath: String
     private let sandbox: any PluginSandboxing
+    private let grantedCapabilitiesProvider: @Sendable (String) -> Set<PluginCapability>
 
     // MARK: - Initialization
 
     init(
         fileSystem: any PluginFileSystem = DiskPluginFileSystem(),
         pluginsDirectory: String = PluginManager.defaultPluginsDirectory(),
-        sandbox: any PluginSandboxing = PluginSandbox()
+        sandbox: any PluginSandboxing = PluginSandbox(),
+        grantedCapabilitiesProvider: (@Sendable (String) -> Set<PluginCapability>)? = nil
     ) {
         self.fileSystem = fileSystem
         self.pluginsDirectory = pluginsDirectory
         self.stateFilePath = "\(pluginsDirectory)/../plugins.json"
         self.sandbox = sandbox
+        self.grantedCapabilitiesProvider = grantedCapabilitiesProvider
+            ?? { pluginID in
+                let store = PluginCapabilityGrantStore()
+                let grants = (try? store.grants(for: pluginID)) ?? []
+                return Set(grants.map(\.capability))
+            }
     }
 
     nonisolated static func defaultPluginsDirectory(
@@ -243,6 +251,7 @@ final class PluginManager: ObservableObject {
                 pluginID: plugin.id,
                 pluginDirectory: plugin.manifest.directoryPath,
                 capabilities: plugin.manifest.capabilities
+                    .union(grantedCapabilitiesProvider(plugin.id))
             )
 
             // Update last triggered timestamp.

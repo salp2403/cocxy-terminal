@@ -351,6 +351,52 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manager.plugin(id: "run-plugin") == nil)
     }
 
+    @Test("plugin dispatch merges persisted sandbox grants with manifest capabilities")
+    @MainActor
+    func pluginDispatchMergesPersistedSandboxGrants() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("granted-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try """
+        name = "Granted Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        events = ["session-start"]
+        capabilities = ["environment-read"]
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo granted\n".write(
+            to: repo.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+        let receipt = try installer.install(from: repo)
+
+        let sandbox = RecordingPluginSandbox()
+        let manager = PluginManager(
+            pluginsDirectory: pluginsDirectory.path,
+            sandbox: sandbox,
+            grantedCapabilitiesProvider: { pluginID in
+                pluginID == "granted-plugin" ? [.networkClient] : []
+            }
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: receipt.pluginID)
+
+        manager.dispatchEvent(.sessionStart)
+
+        #expect(sandbox.executions.count == 1)
+        #expect(sandbox.executions[0].capabilities == [.environmentRead, .networkClient])
+    }
+
     @Test("rich input submit plugin event dispatches through sandbox")
     @MainActor
     func richInputSubmitPluginEventDispatchesThroughSandbox() throws {
@@ -569,7 +615,13 @@ struct PluginMarketplaceSwiftTestingTests {
         try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
 
         let longValue = String(repeating: "x", count: 9_000)
-        let plan = try PluginSandbox().makeExecutionPlan(
+        let sandbox = PluginSandbox(
+            sandboxExecutor: SandboxExecutor(
+                sandboxExecURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+                fileManager: StubPluginSandboxFileManager(executablePaths: ["/usr/bin/sandbox-exec"])
+            )
+        )
+        let plan = try sandbox.makeExecutionPlan(
             scriptPath: scriptURL.path,
             environment: [
                 "COCXY_EVENT": "session-start",
@@ -577,19 +629,103 @@ struct PluginMarketplaceSwiftTestingTests {
             ],
             pluginID: "safe-plugin",
             pluginDirectory: pluginDirectory.path,
-            capabilities: [.networkClient, .filesystemRead]
+            capabilities: [.networkClient, .filesystemRead, .filesystemWrite]
+        )
+
+        let resolvedScriptPath = scriptURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let profile = try #require(plan.kernelSandboxProfile)
+        #expect(plan.executableURL.path == "/usr/bin/sandbox-exec")
+        #expect(Array(plan.arguments.prefix(3)) == ["-p", profile, "/bin/sh"])
+        #expect(plan.arguments.dropFirst(3).first == resolvedScriptPath)
+        #expect(plan.currentDirectoryURL.path == pluginDirectory.resolvingSymlinksInPath().standardizedFileURL.path)
+        #expect(plan.environment["COCXY_EVENT"] == "session-start")
+        #expect(plan.environment["COCXY_PLUGIN_ID"] == "safe-plugin")
+        #expect(plan.environment["COCXY_SCRIPT_PATH"] == resolvedScriptPath)
+        #expect(plan.environment["COCXY_PLUGIN_CAPABILITIES"] == "filesystem-read,filesystem-write,network-client")
+        #expect(plan.environment["COCXY_PLUGIN_SANDBOX_MODE"] == "kernel")
+        #expect(plan.environment["PATH"] == "/usr/local/bin:/usr/bin:/bin")
+        #expect(plan.environment["HOME"] == NSHomeDirectory())
+        #expect(plan.environment["LONG_VALUE"]?.count == 8_192)
+        #expect(profile.contains("(deny default)"))
+        #expect(profile.contains("(allow network-outbound)"))
+        #expect(profile.contains(#"(allow file-read* "#))
+        #expect(profile.contains(#"(subpath "\#(pluginDirectory.resolvingSymlinksInPath().standardizedFileURL.path)")"#))
+        #expect(profile.contains(#"(allow file-write* "#))
+        #expect(profile.contains(#"(subpath "\#(pluginDirectory.appendingPathComponent("state", isDirectory: true).resolvingSymlinksInPath().standardizedFileURL.path)")"#))
+        #expect(profile.contains(#"(literal "/bin/sh")"#))
+        #expect(profile.contains(#"(literal "/bin/bash")"#))
+    }
+
+    @Test("sandbox falls back explicitly when sandbox-exec is unavailable")
+    func sandboxFallsBackWhenSandboxExecUnavailable() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        let sandbox = PluginSandbox(
+            sandboxExecutor: SandboxExecutor(
+                sandboxExecURL: URL(fileURLWithPath: "/missing/sandbox-exec"),
+                fileManager: StubPluginSandboxFileManager(executablePaths: [])
+            )
+        )
+        let plan = try sandbox.makeExecutionPlan(
+            scriptPath: scriptURL.path,
+            environment: ["COCXY_EVENT": "session-start"],
+            pluginID: "safe-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.environmentRead]
         )
 
         #expect(plan.executableURL.path == "/bin/sh")
         #expect(plan.arguments == [scriptURL.resolvingSymlinksInPath().standardizedFileURL.path])
-        #expect(plan.currentDirectoryURL.path == pluginDirectory.resolvingSymlinksInPath().standardizedFileURL.path)
-        #expect(plan.environment["COCXY_EVENT"] == "session-start")
-        #expect(plan.environment["COCXY_PLUGIN_ID"] == "safe-plugin")
-        #expect(plan.environment["COCXY_SCRIPT_PATH"] == scriptURL.resolvingSymlinksInPath().standardizedFileURL.path)
-        #expect(plan.environment["COCXY_PLUGIN_CAPABILITIES"] == "filesystem-read,network-client")
-        #expect(plan.environment["PATH"] == "/usr/local/bin:/usr/bin:/bin")
-        #expect(plan.environment["HOME"] == NSHomeDirectory())
-        #expect(plan.environment["LONG_VALUE"]?.count == 8_192)
+        #expect(plan.kernelSandboxProfile == nil)
+        #expect(plan.environment["COCXY_PLUGIN_SANDBOX_MODE"] == "legacy-unavailable")
+    }
+
+    @Test("sandbox profile keeps plugin writes scoped to state directory")
+    func sandboxProfileKeepsPluginWritesScopedToStateDirectory() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        let sandbox = PluginSandbox(
+            sandboxExecutor: SandboxExecutor(
+                sandboxExecURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+                fileManager: StubPluginSandboxFileManager(executablePaths: ["/usr/bin/sandbox-exec"])
+            )
+        )
+        let noWritePlan = try sandbox.makeExecutionPlan(
+            scriptPath: scriptURL.path,
+            environment: ["COCXY_EVENT": "session-start"],
+            pluginID: "safe-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.environmentRead]
+        )
+        let writePlan = try sandbox.makeExecutionPlan(
+            scriptPath: scriptURL.path,
+            environment: ["COCXY_EVENT": "session-start"],
+            pluginID: "safe-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.filesystemWrite]
+        )
+
+        #expect(noWritePlan.kernelSandboxProfile?.contains("file-write*") == false)
+        #expect(writePlan.kernelSandboxProfile?.contains("file-write*") == true)
+        #expect(writePlan.kernelSandboxProfile?.contains("/state") == true)
+        let parentPath = root
+            .deletingLastPathComponent()
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
+        #expect(writePlan.kernelSandboxProfile?.contains(#"(subpath "\#(parentPath)")"#) == false)
     }
 
     @Test("sandbox rejects unsafe environment keys before launch")
@@ -627,7 +763,7 @@ struct PluginMarketplaceSwiftTestingTests {
         printf "%s|%s|%s|%s" "$COCXY_PLUGIN_ID" "$COCXY_EVENT" "$COCXY_PLUGIN_CAPABILITIES" "$(pwd)" > "$MARKER_PATH"
         """.write(to: scriptURL, atomically: true, encoding: .utf8)
 
-        PluginSandbox(timeoutSeconds: 2).execute(
+        PluginSandbox(timeoutSeconds: 2, kernelSandboxEnabled: false).execute(
             scriptPath: scriptURL.path,
             environment: [
                 "COCXY_EVENT": "session-start",
@@ -686,5 +822,17 @@ private final class RecordingPluginSandbox: PluginSandboxing, @unchecked Sendabl
             pluginDirectory: pluginDirectory,
             capabilities: capabilities
         ))
+    }
+}
+
+private final class StubPluginSandboxFileManager: SandboxFileManaging {
+    private let executablePaths: Set<String>
+
+    init(executablePaths: Set<String>) {
+        self.executablePaths = executablePaths
+    }
+
+    func isExecutableFile(atPath path: String) -> Bool {
+        executablePaths.contains(path)
     }
 }

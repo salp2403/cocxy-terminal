@@ -38,7 +38,10 @@ struct SandboxProfileBuilder: Sendable {
         capabilities: Set<SandboxCapability>,
         readablePaths: [URL],
         writablePaths: [URL],
-        executablePaths: [URL]
+        executablePaths: [URL],
+        readableLiteralPaths: [URL] = [],
+        executableSubpaths: [URL] = [],
+        includeSystemReadBaseline: Bool = false
     ) -> String {
         var lines = [
             "(version 1)",
@@ -46,22 +49,37 @@ struct SandboxProfileBuilder: Sendable {
             "(allow process-fork)",
         ]
 
+        if includeSystemReadBaseline {
+            lines.append("(allow sysctl-read)")
+            lines.append(contentsOf: Self.schemeRules(
+                operation: "file-read*",
+                literals: Self.systemReadBaselineLiteralPaths,
+                subpaths: Self.systemReadBaselineSubpaths
+            ))
+        }
+
         if capabilities.contains(.processExec) {
-            for path in Self.sortedPaths(executablePaths) {
-                lines.append(#"(allow process-exec (literal "\#(Self.schemeString(path))"))"#)
-            }
+            lines.append(contentsOf: Self.schemeRules(
+                operation: "process-exec",
+                literals: Self.sortedPaths(executablePaths),
+                subpaths: Self.sortedPaths(executableSubpaths)
+            ))
         }
 
         if capabilities.contains(.filesystemRead) {
-            for path in Self.sortedPaths(readablePaths) {
-                lines.append(#"(allow file-read* (subpath "\#(Self.schemeString(path))"))"#)
-            }
+            lines.append(contentsOf: Self.schemeRules(
+                operation: "file-read*",
+                literals: Self.sortedPaths(readableLiteralPaths),
+                subpaths: Self.sortedPaths(readablePaths)
+            ))
         }
 
         if capabilities.contains(.filesystemWrite) {
-            for path in Self.sortedPaths(writablePaths) {
-                lines.append(#"(allow file-write* (subpath "\#(Self.schemeString(path))"))"#)
-            }
+            lines.append(contentsOf: Self.schemeRules(
+                operation: "file-write*",
+                literals: [],
+                subpaths: Self.sortedPaths(writablePaths)
+            ))
         }
 
         if capabilities.contains(.network) {
@@ -71,11 +89,68 @@ struct SandboxProfileBuilder: Sendable {
         return lines.joined(separator: "\n") + "\n"
     }
 
+    static func parentDirectoryLiterals(for url: URL) -> [URL] {
+        var paths: [String] = []
+        var current = url.resolvingSymlinksInPath().standardizedFileURL
+        if !current.hasDirectoryPath {
+            current.deleteLastPathComponent()
+        }
+
+        while true {
+            let path = current.path
+            paths.append(path)
+            if path == "/" { break }
+            current.deleteLastPathComponent()
+        }
+
+        return paths
+            .reversed()
+            .map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
     private static func sortedPaths(_ urls: [URL]) -> [String] {
         urls
             .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
             .sorted()
     }
+
+    private static func schemeRules(
+        operation: String,
+        literals: [String],
+        subpaths: [String]
+    ) -> [String] {
+        let literalRules = literals.map {
+            #"(allow \#(operation) (literal "\#(schemeString($0))"))"#
+        }
+        let subpathRules = subpaths.map {
+            #"(allow \#(operation) (subpath "\#(schemeString($0))"))"#
+        }
+        return literalRules + subpathRules
+    }
+
+    private static let systemReadBaselineLiteralPaths = [
+        "/",
+        "/bin",
+        "/usr",
+        "/System",
+        "/Library",
+        "/private",
+        "/private/var",
+        "/private/var/db",
+        "/private/var/select",
+        "/private/etc",
+        "/dev/null",
+    ]
+
+    private static let systemReadBaselineSubpaths = [
+        "/bin",
+        "/usr",
+        "/System",
+        "/Library",
+        "/private/var/db",
+        "/private/var/select",
+        "/private/etc",
+    ]
 
     private static func schemeString(_ value: String) -> String {
         value
