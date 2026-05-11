@@ -478,6 +478,26 @@ final class PreferencesViewModel: ObservableObject {
     /// CLI verb returns an actionable error pointing here.
     @Published var githubMergeEnabled: Bool
 
+    // MARK: - Git Assistant
+
+    /// Master toggle for local-first commit message and pull request drafts.
+    @Published var gitAssistantEnabled: Bool
+
+    /// Provider selected for Git Assistant calls.
+    @Published var gitAssistantDefaultProvider: AgentProviderKind
+
+    /// Maximum diff lines included in one prompt. Clamped on save.
+    @Published var gitAssistantMaxDiffLines: Int
+
+    /// Commit/PR wording style requested from the provider.
+    @Published var gitAssistantPromptStyle: GitAssistantPromptStyle
+
+    /// Whether the create-PR flow may pre-fill a draft automatically.
+    @Published var gitAssistantAutoGeneratePRBodyOnCreate: Bool
+
+    /// Whether staged changes may trigger commit message generation.
+    @Published var gitAssistantAutoGenerateCommitMessageOnStage: Bool
+
     // MARK: - Notes
 
     @Published var notesEnabled: Bool
@@ -611,6 +631,7 @@ final class PreferencesViewModel: ObservableObject {
             || showDockBadge != c.notifications.showDockBadge
             || worktreeHasUnsavedChanges(comparedTo: c.worktree)
             || githubHasUnsavedChanges(comparedTo: c.github)
+            || gitAssistantHasUnsavedChanges(comparedTo: c.gitAssistant)
             || notesHasUnsavedChanges(comparedTo: c.notes)
             || lspHasUnsavedChanges(comparedTo: c.lsp)
             || vimHasUnsavedChanges(comparedTo: c.vim)
@@ -763,6 +784,12 @@ final class PreferencesViewModel: ObservableObject {
         githubIncludeDrafts = c.github.includeDrafts
         githubDefaultState = c.github.defaultState
         githubMergeEnabled = c.github.mergeEnabled
+        gitAssistantEnabled = c.gitAssistant.enabled
+        gitAssistantDefaultProvider = c.gitAssistant.defaultProvider
+        gitAssistantMaxDiffLines = c.gitAssistant.maxDiffLines
+        gitAssistantPromptStyle = c.gitAssistant.promptStyle
+        gitAssistantAutoGeneratePRBodyOnCreate = c.gitAssistant.autoGeneratePRBodyOnCreate
+        gitAssistantAutoGenerateCommitMessageOnStage = c.gitAssistant.autoGenerateCommitMessageOnStage
         notesEnabled = c.notes.enabled
         notesFormat = c.notes.format.rawValue
         notesSearchEngine = c.notes.searchEngine.rawValue
@@ -1031,6 +1058,14 @@ final class PreferencesViewModel: ObservableObject {
         self.githubIncludeDrafts = config.github.includeDrafts
         self.githubDefaultState = config.github.defaultState
         self.githubMergeEnabled = config.github.mergeEnabled
+
+        // Git Assistant
+        self.gitAssistantEnabled = config.gitAssistant.enabled
+        self.gitAssistantDefaultProvider = config.gitAssistant.defaultProvider
+        self.gitAssistantMaxDiffLines = config.gitAssistant.maxDiffLines
+        self.gitAssistantPromptStyle = config.gitAssistant.promptStyle
+        self.gitAssistantAutoGeneratePRBodyOnCreate = config.gitAssistant.autoGeneratePRBodyOnCreate
+        self.gitAssistantAutoGenerateCommitMessageOnStage = config.gitAssistant.autoGenerateCommitMessageOnStage
 
         // Notes
         self.notesEnabled = config.notes.enabled
@@ -1702,6 +1737,7 @@ final class PreferencesViewModel: ObservableObject {
             sessions: savedConfig.sessions,
             worktree: buildWorktreeConfigFromViewModel(),
             github: buildGitHubConfigFromViewModel(),
+            gitAssistant: buildGitAssistantSettingsFromViewModel(),
             notes: notes,
             lsp: buildLSPConfigFromViewModel(),
             vim: buildVimConfigFromViewModel(),
@@ -1738,6 +1774,8 @@ final class PreferencesViewModel: ObservableObject {
         shortcutHintOffsetX = uxPolish.shortcutHintOffsetX
         shortcutHintOffsetY = uxPolish.shortcutHintOffsetY
         shortcutHintScale = uxPolish.shortcutHintScale
+        let gitAssistant = buildGitAssistantSettingsFromViewModel()
+        gitAssistantMaxDiffLines = gitAssistant.maxDiffLines
         commandCorrectionsEditDistanceThreshold = commandCorrections.editDistanceThreshold
         commandCorrectionsMaxSuggestionsShown = commandCorrections.maxSuggestionsShown
         pendingKeybindings = nil
@@ -2241,6 +2279,28 @@ final class PreferencesViewModel: ObservableObject {
             || githubMergeEnabled != config.mergeEnabled
     }
 
+    /// Builds the `[git-assistant]` settings from editable fields. The
+    /// initializer clamps the diff budget to its safe prompt range.
+    private func buildGitAssistantSettingsFromViewModel() -> GitAssistantSettings {
+        GitAssistantSettings(
+            enabled: gitAssistantEnabled,
+            defaultProvider: gitAssistantDefaultProvider,
+            maxDiffLines: gitAssistantMaxDiffLines,
+            promptStyle: gitAssistantPromptStyle,
+            autoGeneratePRBodyOnCreate: gitAssistantAutoGeneratePRBodyOnCreate,
+            autoGenerateCommitMessageOnStage: gitAssistantAutoGenerateCommitMessageOnStage
+        )
+    }
+
+    private func gitAssistantHasUnsavedChanges(comparedTo config: GitAssistantSettings) -> Bool {
+        gitAssistantEnabled != config.enabled
+            || gitAssistantDefaultProvider != config.defaultProvider
+            || gitAssistantMaxDiffLines != config.maxDiffLines
+            || gitAssistantPromptStyle != config.promptStyle
+            || gitAssistantAutoGeneratePRBodyOnCreate != config.autoGeneratePRBodyOnCreate
+            || gitAssistantAutoGenerateCommitMessageOnStage != config.autoGenerateCommitMessageOnStage
+    }
+
     /// Builds a `NotesConfig` value from the editable view-model fields.
     /// Enum-backed values are coerced to their safe defaults and the
     /// auto-save interval is clamped to match `ConfigService`.
@@ -2352,6 +2412,7 @@ final class PreferencesViewModel: ObservableObject {
         let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
+        let gitAssistant = buildGitAssistantSettingsFromViewModel()
         let windowPaddingXLine = defaults.appearance.windowPaddingX.map {
             "window-padding-x = \(Self.tomlNumber($0))\n"
         } ?? ""
@@ -2557,6 +2618,14 @@ final class PreferencesViewModel: ObservableObject {
         include-drafts = \(githubIncludeDrafts)
         default-state = "\(GitHubConfig.allowedDefaultStates.contains(githubDefaultState.lowercased()) ? githubDefaultState.lowercased() : defaults.github.defaultState)"
         merge-enabled = \(githubMergeEnabled)
+
+        [git-assistant]
+        enabled = \(gitAssistant.enabled)
+        default-provider = "\(gitAssistant.defaultProvider.rawValue)"
+        max-diff-lines = \(gitAssistant.maxDiffLines)
+        prompt-style = "\(gitAssistant.promptStyle.rawValue)"
+        auto-generate-pr-body-on-create = \(gitAssistant.autoGeneratePRBodyOnCreate)
+        auto-generate-commit-message-on-stage = \(gitAssistant.autoGenerateCommitMessageOnStage)
 
         [notes]
         enabled = \(notes.enabled)

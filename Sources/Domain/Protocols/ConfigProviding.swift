@@ -70,6 +70,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let sessions: SessionsConfig
     let worktree: WorktreeConfig
     let github: GitHubConfig
+    let gitAssistant: GitAssistantSettings
     let notes: NotesConfig
     let lsp: LSPConfig
     let vim: VimConfig
@@ -101,6 +102,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         sessions: SessionsConfig,
         worktree: WorktreeConfig = .defaults,
         github: GitHubConfig = .defaults,
+        gitAssistant: GitAssistantSettings = .defaults,
         notes: NotesConfig = .defaults,
         lsp: LSPConfig = .defaults,
         vim: VimConfig = .defaults,
@@ -131,6 +133,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.sessions = sessions
         self.worktree = worktree
         self.github = github
+        self.gitAssistant = gitAssistant
         self.notes = notes
         self.lsp = lsp
         self.vim = vim
@@ -169,6 +172,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             sessions: .defaults,
             worktree: .defaults,
             github: .defaults,
+            gitAssistant: .defaults,
             notes: .defaults,
             lsp: .defaults,
             vim: .defaults,
@@ -186,7 +190,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
         case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
-        case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
+        case notifications, quickTerminal, keybindings, sessions, worktree, github, gitAssistant, notes, lsp, vim
         case richInput
         case experimental
     }
@@ -232,6 +236,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.worktree = try container.decodeIfPresent(WorktreeConfig.self, forKey: .worktree)
             ?? .defaults
         self.github = try container.decodeIfPresent(GitHubConfig.self, forKey: .github)
+            ?? .defaults
+        self.gitAssistant = try container.decodeIfPresent(GitAssistantSettings.self, forKey: .gitAssistant)
             ?? .defaults
         self.notes = try container.decodeIfPresent(NotesConfig.self, forKey: .notes)
             ?? .defaults
@@ -376,6 +382,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             sessions: sessions,
             worktree: mergedWorktree,
             github: mergedGitHub,
+            // Git Assistant may send diff excerpts to the selected provider.
+            // Keep every provider/budget/automation knob global so a
+            // repository-local config cannot route local code through an LLM.
+            gitAssistant: gitAssistant,
             // Notes config is global by design (storage path, search
             // engine, shortcut, format, auto-save) — they are user-level
             // preferences, not project-level. Preserved verbatim through

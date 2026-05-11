@@ -597,6 +597,18 @@ final class ConfigService: ConfigProviding {
         # safety net; leave it on for normal operation.
         merge-enabled = \(defaults.github.mergeEnabled)
 
+        [git-assistant]
+        # Local-first Git Assistant for commit messages, pull request
+        # drafts and release-note summaries. It never runs automatically
+        # unless the explicit automation flags below are enabled. The
+        # default provider is Foundation Models on-device.
+        enabled = \(defaults.gitAssistant.enabled)
+        default-provider = "\(defaults.gitAssistant.defaultProvider.rawValue)"
+        max-diff-lines = \(defaults.gitAssistant.maxDiffLines)
+        prompt-style = "\(defaults.gitAssistant.promptStyle.rawValue)"
+        auto-generate-pr-body-on-create = \(defaults.gitAssistant.autoGeneratePRBodyOnCreate)
+        auto-generate-commit-message-on-stage = \(defaults.gitAssistant.autoGenerateCommitMessageOnStage)
+
         [notes]
         # Per-workspace notes feature. The notes overlay appears in the
         # sidebar and the editor opens with the configured shortcut.
@@ -706,6 +718,7 @@ final class ConfigService: ConfigProviding {
         let sessions = parseSessionsConfig(from: parsed)
         let worktree = parseWorktreeConfig(from: parsed)
         let github = parseGitHubConfig(from: parsed)
+        let gitAssistant = parseGitAssistantSettings(from: parsed)
         let notes = parseNotesConfig(from: parsed)
         let lsp = parseLSPConfig(from: parsed)
         let vim = parseVimConfig(from: parsed)
@@ -746,6 +759,7 @@ final class ConfigService: ConfigProviding {
             sessions: sessions,
             worktree: worktree,
             github: github,
+            gitAssistant: gitAssistant,
             notes: notes,
             lsp: lsp,
             vim: vim,
@@ -1470,6 +1484,34 @@ final class ConfigService: ConfigProviding {
             includeDrafts: boolValue(table["include-drafts"]) ?? defaults.includeDrafts,
             defaultState: validatedState,
             mergeEnabled: boolValue(table["merge-enabled"]) ?? defaults.mergeEnabled
+        )
+    }
+
+    /// Parses `[git-assistant]` with the same privacy posture as Agent
+    /// Mode: Foundation Models on-device is the default provider, no
+    /// automation runs without explicit opt-in, and oversized diff
+    /// budgets are clamped before any prompt can be built.
+    private func parseGitAssistantSettings(from parsed: [String: TOMLValue]) -> GitAssistantSettings {
+        let table = extractTable("git-assistant", from: parsed)
+        let defaults = GitAssistantSettings.defaults
+
+        let provider = stringValue(table["default-provider"])
+            .flatMap { AgentProviderKind(rawValue: $0) }
+            ?? defaults.defaultProvider
+        let promptStyle = stringValue(table["prompt-style"])
+            .flatMap { GitAssistantPromptStyle(rawValue: $0) }
+            ?? defaults.promptStyle
+        let rawMaxDiffLines = intValue(table["max-diff-lines"]) ?? defaults.maxDiffLines
+
+        return GitAssistantSettings(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            defaultProvider: provider,
+            maxDiffLines: rawMaxDiffLines,
+            promptStyle: promptStyle,
+            autoGeneratePRBodyOnCreate: boolValue(table["auto-generate-pr-body-on-create"])
+                ?? defaults.autoGeneratePRBodyOnCreate,
+            autoGenerateCommitMessageOnStage: boolValue(table["auto-generate-commit-message-on-stage"])
+                ?? defaults.autoGenerateCommitMessageOnStage
         )
     }
 

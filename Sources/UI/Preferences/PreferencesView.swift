@@ -3231,6 +3231,68 @@ struct GitHubPreferencesSection: View {
                 }
             }
 
+            Section(viewModel.localizedString("preferences.gitAssistant.section", fallback: "Git Assistant")) {
+                Toggle(
+                    viewModel.localizedString("preferences.gitAssistant.enable", fallback: "Enable Git Assistant"),
+                    isOn: $viewModel.gitAssistantEnabled
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.gitAssistant.caption",
+                        fallback: "Generates commit messages, pull request drafts and release-note summaries from local Git diffs. Diff text is redacted before prompting, and automatic generation stays opt-in."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Picker(
+                    viewModel.localizedString("preferences.gitAssistant.provider", fallback: "Default provider"),
+                    selection: $viewModel.gitAssistantDefaultProvider
+                ) {
+                    ForEach(AgentProviderKind.allCases, id: \.self) { provider in
+                        Text(gitAssistantProviderTitle(provider)).tag(provider)
+                    }
+                }
+
+                Picker(
+                    viewModel.localizedString("preferences.gitAssistant.promptStyle", fallback: "Prompt style"),
+                    selection: $viewModel.gitAssistantPromptStyle
+                ) {
+                    ForEach(GitAssistantPromptStyle.allCases, id: \.self) { style in
+                        Text(gitAssistantPromptStyleTitle(style)).tag(style)
+                    }
+                }
+
+                Stepper(
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.gitAssistant.maxDiffLines",
+                            fallback: "Max diff lines per prompt: %d"
+                        ),
+                        viewModel.gitAssistantMaxDiffLines
+                    ),
+                    value: $viewModel.gitAssistantMaxDiffLines,
+                    in: GitAssistantSettings.minMaxDiffLines...GitAssistantSettings.maxMaxDiffLines,
+                    step: 100
+                )
+
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.gitAssistant.autoPR",
+                        fallback: "Auto-generate PR draft on create"
+                    ),
+                    isOn: $viewModel.gitAssistantAutoGeneratePRBodyOnCreate
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.gitAssistant.autoCommit",
+                        fallback: "Auto-generate commit message after staging"
+                    ),
+                    isOn: $viewModel.gitAssistantAutoGenerateCommitMessageOnStage
+                )
+            }
+
             PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
         }
         .formStyle(.grouped)
@@ -3244,6 +3306,30 @@ struct GitHubPreferencesSection: View {
         }
         guard let url = URL(string: "https://cli.github.com/") else { return }
         NSWorkspace.shared.open(url)
+    }
+
+    private func gitAssistantProviderTitle(_ provider: AgentProviderKind) -> String {
+        switch provider {
+        case .foundationModelsOnDevice:
+            return "Foundation Models"
+        case .anthropic:
+            return "Anthropic"
+        case .openai:
+            return "OpenAI"
+        case .google:
+            return "Google"
+        }
+    }
+
+    private func gitAssistantPromptStyleTitle(_ style: GitAssistantPromptStyle) -> String {
+        switch style {
+        case .conventional:
+            return viewModel.localizedString("preferences.gitAssistant.style.conventional", fallback: "Conventional")
+        case .descriptive:
+            return viewModel.localizedString("preferences.gitAssistant.style.descriptive", fallback: "Descriptive")
+        case .minimal:
+            return viewModel.localizedString("preferences.gitAssistant.style.minimal", fallback: "Minimal")
+        }
     }
 }
 
