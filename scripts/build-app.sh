@@ -65,11 +65,6 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-if [ -n "${VERSION_OVERRIDE}" ] && ! [[ "${VERSION_OVERRIDE}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "ERROR: Invalid --version '${VERSION_OVERRIDE}' (expected semver X.Y.Z)"
-    exit 1
-fi
-
 case "${CHANNEL}" in
     stable)
         APP_BUNDLE_BASENAME="CocxyTerminal"
@@ -94,6 +89,28 @@ case "${CHANNEL}" in
         exit 1
         ;;
 esac
+
+if [ -n "${VERSION_OVERRIDE}" ]; then
+    case "${CHANNEL}" in
+        stable)
+            VERSION_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+$'
+            EXPECTED_VERSION="X.Y.Z"
+            ;;
+        preview)
+            VERSION_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$'
+            EXPECTED_VERSION="X.Y.Z-preview.N"
+            ;;
+        nightly)
+            VERSION_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+-nightly\.[0-9]{8}$'
+            EXPECTED_VERSION="X.Y.Z-nightly.YYYYMMDD"
+            ;;
+    esac
+
+    if ! [[ "${VERSION_OVERRIDE}" =~ ${VERSION_PATTERN} ]]; then
+        echo "ERROR: Invalid --version '${VERSION_OVERRIDE}' for ${CHANNEL} channel (expected ${EXPECTED_VERSION})"
+        exit 1
+    fi
+fi
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then

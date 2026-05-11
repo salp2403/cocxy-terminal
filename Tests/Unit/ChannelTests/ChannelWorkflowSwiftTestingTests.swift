@@ -38,6 +38,19 @@ struct ChannelWorkflowSwiftTestingTests {
         #expect(workflow.contains("build/appcast-nightly.xml"))
     }
 
+    @Test("build script validates channel-specific versions")
+    func buildScriptValidatesChannelSpecificVersions() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let script = try String(
+            contentsOf: root.appendingPathComponent("scripts/build-app.sh"),
+            encoding: .utf8
+        )
+
+        #expect(script.contains("EXPECTED_VERSION=\"X.Y.Z-preview.N\""))
+        #expect(script.contains("EXPECTED_VERSION=\"X.Y.Z-nightly.YYYYMMDD\""))
+        #expect(script.contains("Invalid --version '${VERSION_OVERRIDE}' for ${CHANNEL} channel"))
+    }
+
     private func workflowContents(_ name: String) throws -> String {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return try String(
