@@ -266,6 +266,7 @@ struct ProjectTemplateSwiftTestingTests {
 
         #expect(receipt.templateID == "custom-cli")
         #expect(receipt.template.source == .user)
+        #expect(receipt.signatureStatus == .unsignedAllowed)
         #expect(FileManager.default.fileExists(
             atPath: installRoot.appendingPathComponent("custom-cli/template.json").path
         ))
@@ -284,6 +285,96 @@ struct ProjectTemplateSwiftTestingTests {
             contentsOf: output.appendingPathComponent("README.md"),
             encoding: .utf8
         ) == "# InstalledDemo\n")
+    }
+
+    @Test("marketplace verifies signed template sidecars from trusted authors")
+    func marketplaceVerifiesSignedTemplateSidecarsFromTrustedAuthors() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceRoot = root.appendingPathComponent("source", isDirectory: true)
+        let installRoot = root.appendingPathComponent("installed", isDirectory: true)
+        try writeTemplate(
+            id: "signed-template",
+            name: "Signed Template",
+            summary: "Local signed template",
+            in: sourceRoot
+        )
+        let templateURL = sourceRoot.appendingPathComponent("signed-template", isDirectory: true)
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let payload = try Data(contentsOf: templateURL.appendingPathComponent("template.json"))
+        let artifact = try SignatureSigner().sign(
+            payload: payload,
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        try writeSidecar(artifact, to: templateURL)
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+
+        let receipt = try ProjectTemplateMarketplaceInstaller(
+            templatesDirectory: installRoot,
+            trustedAuthors: registry
+        ).install(from: templateURL)
+
+        #expect(receipt.templateID == "signed-template")
+        #expect(receipt.signatureStatus == .verified)
+    }
+
+    @Test("marketplace rejects template sidecars that fail verification")
+    func marketplaceRejectsTemplateSidecarsThatFailVerification() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceRoot = root.appendingPathComponent("source", isDirectory: true)
+        let installRoot = root.appendingPathComponent("installed", isDirectory: true)
+        try writeTemplate(
+            id: "tampered-template",
+            name: "Tampered Template",
+            summary: "Local signed template",
+            in: sourceRoot
+        )
+        let templateURL = sourceRoot.appendingPathComponent("tampered-template", isDirectory: true)
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let payload = try Data(contentsOf: templateURL.appendingPathComponent("template.json"))
+        let artifact = try SignatureSigner().sign(
+            payload: payload,
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        try writeSidecar(artifact, to: templateURL)
+        try #"{"id":"tampered-template","name":"Tampered","description":"Changed","variables":[]}"#
+            .write(to: templateURL.appendingPathComponent("template.json"), atomically: true, encoding: .utf8)
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+
+        #expect(throws: ProjectTemplateMarketplaceError.invalidSignature("tampered-template")) {
+            _ = try ProjectTemplateMarketplaceInstaller(
+                templatesDirectory: installRoot,
+                trustedAuthors: registry
+            ).install(from: templateURL)
+        }
+    }
+
+    @Test("strict template signature policy blocks unsigned marketplace templates")
+    func strictTemplateSignaturePolicyBlocksUnsignedMarketplaceTemplates() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceRoot = root.appendingPathComponent("source", isDirectory: true)
+        let installRoot = root.appendingPathComponent("installed", isDirectory: true)
+        try writeTemplate(
+            id: "unsigned-template",
+            name: "Unsigned Template",
+            summary: "Local unsigned template",
+            in: sourceRoot
+        )
+
+        #expect(throws: ProjectTemplateMarketplaceError.signatureRequired("unsigned-template")) {
+            _ = try ProjectTemplateMarketplaceInstaller(
+                templatesDirectory: installRoot,
+                requireSignedTemplates: true
+            ).install(from: sourceRoot.appendingPathComponent("unsigned-template", isDirectory: true))
+        }
     }
 
     @Test("marketplace source store deduplicates URLs and rejects unsupported schemes")
@@ -426,6 +517,16 @@ struct ProjectTemplateSwiftTestingTests {
             )
             try content.write(to: fileURL, atomically: true, encoding: .utf8)
         }
+    }
+
+    private func writeSidecar(_ artifact: SignedArtifact, to templateURL: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(artifact).write(
+            to: templateURL.appendingPathComponent(".cocxy-signature.json"),
+            options: [.atomic]
+        )
     }
 
     private func writeInvalidTemplateDirectory(

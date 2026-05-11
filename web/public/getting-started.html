@@ -520,6 +520,7 @@
       <a href="#sessions" class="sidebar-link">Sessions</a>
       <a href="#local-backups" class="sidebar-link">Local Backups</a>
       <a href="#input-classifier" class="sidebar-link">Input Classifier</a>
+      <a href="#command-signatures" class="sidebar-link">Command Signatures</a>
     </div>
     <div class="sidebar-group">
       <h3>Agent Integrations</h3>
@@ -719,6 +720,29 @@ locale-detection = true
 foundation-models-fallback = true</code></pre>
     </div>
     <p><code>auto-route-natural-language</code> defaults to <code>false</code>, so natural-language detection remains an explicit user choice instead of changing existing terminal behavior.</p>
+
+    <!-- Command Signatures -->
+    <h2 id="command-signatures">Command Signatures</h2>
+    <p>Cocxy can sign and verify shared templates, macros, plugins, notebooks, and files with local Ed25519 keys. The key material stays in the macOS Keychain, trusted public keys stay in the local trusted author registry, and verification runs on this Mac before install or playback decisions.</p>
+    <p>Unsigned templates, macros, and plugins keep working by default. If a signature is present and cannot be verified, Cocxy reports an invalid signature instead of silently trusting the artifact. Verified items can show <code>verified</code>, unsigned items can show <code>unsigned</code>, and broken sidecars are treated as <code>invalid signature</code>.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>[security]
+require-signed-templates = false
+require-signed-macros = false
+require-signed-plugins = false
+warn-on-unsigned = true
+trust-on-first-use = false</code></pre>
+    </div>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>cocxy keys generate --author "Your Name"
+cocxy keys export-public &lt;key-id&gt; --output author.cocxykey
+cocxy keys import author.cocxykey
+cocxy sign template ./my-template
+cocxy verify template ./my-template</code></pre>
+    </div>
+    <p>Strict signature requirements are opt-in through <code>[security]</code>. Leave <code>trust-on-first-use</code> disabled when sharing artifacts across teams so every trusted author key is imported deliberately.</p>
 
     <!-- Keyboard Shortcuts -->
     <h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2>

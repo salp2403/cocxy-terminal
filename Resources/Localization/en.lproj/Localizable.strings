@@ -2033,6 +2033,14 @@
 "plugins.status.noUpdates" = "No updates found.";
 "plugins.status.updatesFound.one" = "%d update found.";
 "plugins.status.updatesFound.many" = "%d updates found.";
+"plugins.signature.verified" = "Verified";
+"plugins.signature.unsigned" = "Unsigned";
+"plugins.signature.unverified" = "Unverified";
+"plugins.signature.invalid" = "Invalid signature";
+"plugins.signature.accessibility.verified" = "Plugin signature verified";
+"plugins.signature.accessibility.unsigned" = "Plugin is unsigned";
+"plugins.signature.accessibility.unverified" = "Plugin signature is present but unverified";
+"plugins.signature.accessibility.invalid" = "Plugin has an invalid signature";
 "sandboxInspector.grants.section" = "Capability Grants";
 "sandboxInspector.grants.empty" = "No active grants.";
 "sandboxInspector.audit.section" = "Audit Log";

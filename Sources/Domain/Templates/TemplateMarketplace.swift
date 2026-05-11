@@ -2,6 +2,7 @@
 // TemplateMarketplace.swift - Decentralized local template source and install domain.
 
 import Foundation
+import CocxyCommandSignatures
 
 struct ProjectTemplateMarketplaceSource: Identifiable, Codable, Equatable, Sendable {
     let id: String
@@ -71,6 +72,9 @@ enum ProjectTemplateMarketplaceError: Error, Equatable, Sendable {
     case templateAlreadyInstalled(String)
     case templateNotInstalled(String)
     case missingTemplateManifest(String)
+    case signatureRequired(String)
+    case untrustedSignature(String)
+    case invalidSignature(String)
     case gitCloneFailed(Int32)
 }
 
@@ -94,20 +98,33 @@ struct ProjectTemplateInstallReceipt: Equatable, Sendable {
     let templateID: String
     let installedURL: URL
     let template: ProjectTemplate
+    let signatureStatus: ProjectTemplateSignatureStatus
+}
+
+enum ProjectTemplateSignatureStatus: Equatable, Sendable {
+    case verified
+    case unsignedAllowed
+    case presentButUnverified
 }
 
 struct ProjectTemplateMarketplaceInstaller {
     let templatesDirectory: URL
+    let trustedAuthors: TrustedAuthorRegistry
+    let requireSignedTemplates: Bool
     private let fileManager: FileManager
     private let loader: ProjectTemplateLoader
 
     init(
         templatesDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/templates", isDirectory: true),
+        trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry(),
+        requireSignedTemplates: Bool = false,
         fileManager: FileManager = .default,
         loader: ProjectTemplateLoader = ProjectTemplateLoader()
     ) {
         self.templatesDirectory = templatesDirectory
+        self.trustedAuthors = trustedAuthors
+        self.requireSignedTemplates = requireSignedTemplates
         self.fileManager = fileManager
         self.loader = loader
     }
@@ -136,6 +153,7 @@ struct ProjectTemplateMarketplaceInstaller {
             throw ProjectTemplateMarketplaceError.missingTemplateManifest(stagedTemplate.path)
         }
         try ProjectTemplateMarketplaceValidator.validateTemplateID(template.id)
+        let signatureStatus = try validateSignature(for: stagedTemplate, templateID: template.id)
 
         let finalURL = templatesDirectory.appendingPathComponent(template.id, isDirectory: true)
         if fileManager.fileExists(atPath: finalURL.path) {
@@ -155,7 +173,8 @@ struct ProjectTemplateMarketplaceInstaller {
         return ProjectTemplateInstallReceipt(
             templateID: installedTemplate.id,
             installedURL: finalURL,
-            template: installedTemplate
+            template: installedTemplate,
+            signatureStatus: signatureStatus
         )
     }
 
@@ -181,6 +200,47 @@ struct ProjectTemplateMarketplaceInstaller {
         }
         try ProjectTemplateMarketplaceValidator.validateTemplateID(name)
         return name
+    }
+
+    private func validateSignature(
+        for templateURL: URL,
+        templateID: String
+    ) throws -> ProjectTemplateSignatureStatus {
+        let sidecarURL = templateURL.appendingPathComponent(".cocxy-signature.json")
+        guard fileManager.fileExists(atPath: sidecarURL.path) else {
+            if requireSignedTemplates {
+                throw ProjectTemplateMarketplaceError.signatureRequired(templateID)
+            }
+            return .unsignedAllowed
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let artifact: SignedArtifact
+        do {
+            artifact = try decoder.decode(SignedArtifact.self, from: Data(contentsOf: sidecarURL))
+        } catch {
+            throw ProjectTemplateMarketplaceError.invalidSignature(templateID)
+        }
+
+        guard let publicKey = trustedAuthors.publicKey(for: artifact.keyID) else {
+            if requireSignedTemplates {
+                throw ProjectTemplateMarketplaceError.untrustedSignature(templateID)
+            }
+            return .presentButUnverified
+        }
+
+        let payloadURL = templateURL.appendingPathComponent("template.json")
+        let verification = SignatureVerifier().verify(
+            payload: try Data(contentsOf: payloadURL),
+            artifact: artifact,
+            publicKey: publicKey
+        )
+        guard verification == .valid else {
+            throw ProjectTemplateMarketplaceError.invalidSignature(templateID)
+        }
+
+        return .verified
     }
 
     private func materialize(sourceURL: URL, at destination: URL) throws {

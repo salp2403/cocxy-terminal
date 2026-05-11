@@ -56,7 +56,31 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
 
         #expect(viewModel.plugins.count == 1)
         #expect(viewModel.plugins[0].id == "sample-plugin")
+        #expect(viewModel.signatureStatus(for: "sample-plugin") == .unsignedAllowed)
         #expect(viewModel.statusMessage == "Installed sample-plugin.")
+    }
+
+    @Test("plugin marketplace exposes signature badge labels")
+    @MainActor
+    func pluginMarketplaceExposesSignatureBadgeLabels() {
+        let localizer = AppLocalizer(languagePreference: .english)
+
+        #expect(PluginSignatureStatus.verified.localizedBadgeTitle(using: localizer) == "Verified")
+        #expect(PluginSignatureStatus.unsignedAllowed.localizedBadgeTitle(using: localizer) == "Unsigned")
+        #expect(PluginSignatureStatus.presentButUnverified.localizedBadgeTitle(using: localizer) == "Unverified")
+        #expect(PluginSignatureStatus.invalid.localizedBadgeTitle(using: localizer) == "Invalid signature")
+    }
+
+    @Test("Spanish localizer translates plugin signature badge labels")
+    @MainActor
+    func spanishLocalizerTranslatesPluginSignatureBadgeLabels() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(PluginSignatureStatus.verified.localizedBadgeTitle(using: spanish) == "Verificado")
+        #expect(PluginSignatureStatus.unsignedAllowed.localizedBadgeTitle(using: spanish) == "Sin firma")
+        #expect(PluginSignatureStatus.presentButUnverified.localizedBadgeTitle(using: spanish) == "Sin verificar")
+        #expect(PluginSignatureStatus.invalid.localizedBadgeTitle(using: spanish) == "Firma inválida")
     }
 
     @Test("install bundled plugin refreshes installed state")

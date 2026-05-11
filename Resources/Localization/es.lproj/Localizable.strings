@@ -2033,6 +2033,14 @@
 "plugins.status.noUpdates" = "No se encontraron actualizaciones.";
 "plugins.status.updatesFound.one" = "%d actualización encontrada.";
 "plugins.status.updatesFound.many" = "%d actualizaciones encontradas.";
+"plugins.signature.verified" = "Verificado";
+"plugins.signature.unsigned" = "Sin firma";
+"plugins.signature.unverified" = "Sin verificar";
+"plugins.signature.invalid" = "Firma inválida";
+"plugins.signature.accessibility.verified" = "Firma de plugin verificada";
+"plugins.signature.accessibility.unsigned" = "Plugin sin firma";
+"plugins.signature.accessibility.unverified" = "La firma del plugin existe pero no está verificada";
+"plugins.signature.accessibility.invalid" = "El plugin tiene una firma inválida";
 "sandboxInspector.grants.section" = "Permisos concedidos";
 "sandboxInspector.grants.empty" = "No hay permisos activos.";
 "sandboxInspector.audit.section" = "Registro de auditoría";

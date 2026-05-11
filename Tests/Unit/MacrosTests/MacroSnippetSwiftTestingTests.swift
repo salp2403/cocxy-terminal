@@ -54,11 +54,96 @@ struct MacroSnippetSwiftTestingTests {
         let plan = try MacroPlayer().playback(macro, repeatCount: 3)
 
         #expect(plan.macroID == "ship")
+        #expect(plan.signatureStatus == .unsignedAllowed)
         #expect(plan.events == [
             .command("git status"), .key("return"),
             .command("git status"), .key("return"),
             .command("git status"), .key("return"),
         ])
+    }
+
+    @Test("player verifies signed macros with trusted author keys")
+    func playerVerifiesSignedMacrosWithTrustedAuthorKeys() throws {
+        let unsignedMacro = TerminalMacro(
+            id: "trusted",
+            name: "Trusted",
+            events: [.command("git status")],
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let artifact = try SignatureSigner().sign(
+            payload: MacroSignaturePayload.data(for: unsignedMacro),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let signedMacro = TerminalMacro(
+            id: unsignedMacro.id,
+            name: unsignedMacro.name,
+            events: unsignedMacro.events,
+            createdAt: unsignedMacro.createdAt,
+            updatedAt: unsignedMacro.updatedAt,
+            signature: artifact
+        )
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+
+        let plan = try MacroPlayer(
+            signaturePolicy: MacroSignaturePolicy(trustedAuthors: registry)
+        ).playback(signedMacro)
+
+        #expect(plan.signatureStatus == .verified)
+        #expect(plan.events == [.command("git status")])
+    }
+
+    @Test("player rejects signed macros after payload tampering")
+    func playerRejectsSignedMacrosAfterPayloadTampering() throws {
+        let originalMacro = TerminalMacro(
+            id: "tampered",
+            name: "Tampered",
+            events: [.command("git status")],
+            createdAt: Date(timeIntervalSince1970: 100),
+            updatedAt: Date(timeIntervalSince1970: 200)
+        )
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let artifact = try SignatureSigner().sign(
+            payload: MacroSignaturePayload.data(for: originalMacro),
+            author: "Cocxy",
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        let tamperedMacro = TerminalMacro(
+            id: originalMacro.id,
+            name: originalMacro.name,
+            events: [.command("rm -rf /tmp/demo")],
+            createdAt: originalMacro.createdAt,
+            updatedAt: originalMacro.updatedAt,
+            signature: artifact
+        )
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+
+        #expect(throws: MacroPlayerError.invalidSignature("tampered")) {
+            _ = try MacroPlayer(
+                signaturePolicy: MacroSignaturePolicy(trustedAuthors: registry)
+            ).playback(tamperedMacro)
+        }
+    }
+
+    @Test("strict macro signature policy blocks unsigned macros")
+    func strictMacroSignaturePolicyBlocksUnsignedMacros() throws {
+        let macro = TerminalMacro(
+            id: "unsigned",
+            name: "Unsigned",
+            events: [.key("return")]
+        )
+
+        #expect(throws: MacroPlayerError.signatureRequired("unsigned")) {
+            _ = try MacroPlayer(
+                signaturePolicy: MacroSignaturePolicy(requireSignedMacros: true)
+            ).playback(macro)
+        }
     }
 
     @Test("terminal input replayer maps macro events to PTY text")

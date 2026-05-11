@@ -861,6 +861,49 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("natural-language"))
     }
 
+    @Test("public getting started docs document local command signatures in both locales")
+    func publicGettingStartedDocsDocumentLocalCommandSignaturesInBothLocales() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/getting-started.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains(#"<h2 id="command-signatures">Command Signatures</h2>"#))
+        #expect(english.contains(##"<a href="#command-signatures" class="sidebar-link">Command Signatures</a>"##))
+        #expect(english.contains("[security]"))
+        #expect(english.contains("require-signed-templates = false"))
+        #expect(english.contains("require-signed-macros = false"))
+        #expect(english.contains("require-signed-plugins = false"))
+        #expect(english.contains("warn-on-unsigned = true"))
+        #expect(english.contains("trust-on-first-use = false"))
+        #expect(english.contains("cocxy keys generate --author"))
+        #expect(english.contains("cocxy sign template"))
+        #expect(english.contains("cocxy verify template"))
+        #expect(english.contains("verified"))
+        #expect(english.contains("unsigned"))
+        #expect(english.contains("invalid signature"))
+
+        #expect(spanish.contains(#"id="command-signatures""#))
+        #expect(spanish.contains("firmas de comandos"))
+        #expect(spanish.contains("[security]"))
+        #expect(spanish.contains("require-signed-templates = false"))
+        #expect(spanish.contains("require-signed-macros = false"))
+        #expect(spanish.contains("require-signed-plugins = false"))
+        #expect(spanish.contains("warn-on-unsigned = true"))
+        #expect(spanish.contains("trust-on-first-use = false"))
+        #expect(spanish.contains("cocxy keys generate --author"))
+        #expect(spanish.contains("cocxy sign template"))
+        #expect(spanish.contains("cocxy verify template"))
+        #expect(spanish.contains("verificada"))
+        #expect(spanish.contains("sin firma"))
+        #expect(spanish.contains("firma inv&aacute;lida"))
+    }
+
     @Test("Spanish getting started docs cover the same core user guide surfaces")
     func spanishGettingStartedDocsCoverCoreUserGuideSurfaces() throws {
         let root = repositoryRoot()
@@ -892,6 +935,7 @@ struct CITestGateScriptSwiftTestingTests {
             "sessions",
             "local-backups",
             "input-classifier",
+            "command-signatures",
             "cli-companion",
             "themes",
             "agents-toml",

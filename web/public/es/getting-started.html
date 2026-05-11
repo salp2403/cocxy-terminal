@@ -233,6 +233,14 @@
           <p>La secci&oacute;n <code>[input-classifier]</code> usa <code>enabled = true</code>, <code>dangerous-command-warning = true</code>, <code>auto-route-natural-language = false</code>, <code>locale-detection = true</code> y <code>foundation-models-fallback = true</code>. El ruteo autom&aacute;tico de lenguaje natural queda apagado por defecto para no cambiar h&aacute;bitos existentes.</p>
         </details>
 
+        <details class="faq-item" id="command-signatures">
+          <summary><span>Firmas de comandos locales</span></summary>
+          <p>Las firmas de comandos permiten firmar y verificar plantillas, macros, plugins, notebooks y archivos compartidos con claves Ed25519 locales. El material privado queda en Keychain, las claves p&uacute;blicas confiables quedan en el registro local de autores y la verificaci&oacute;n se ejecuta en esta Mac antes de instalar o reproducir un artefacto.</p>
+          <p>Las plantillas, macros y plugins sin firma siguen funcionando por defecto. Si una firma existe y no se puede verificar, Cocxy reporta una firma inv&aacute;lida en vez de confiar silenciosamente en el artefacto. Los estados visibles son verificada, sin firma y firma inv&aacute;lida.</p>
+          <p>La secci&oacute;n <code>[security]</code> usa <code>require-signed-templates = false</code>, <code>require-signed-macros = false</code>, <code>require-signed-plugins = false</code>, <code>warn-on-unsigned = true</code> y <code>trust-on-first-use = false</code>. El modo estricto es opcional para no romper instalaciones existentes.</p>
+          <p>Flujo local: <code>cocxy keys generate --author "Tu Nombre"</code>, <code>cocxy keys export-public &lt;key-id&gt; --output autor.cocxykey</code>, <code>cocxy keys import autor.cocxykey</code>, <code>cocxy sign template ./mi-plantilla</code> y <code>cocxy verify template ./mi-plantilla</code>.</p>
+        </details>
+
         <details class="faq-item" id="cli-companion">
           <summary><span>CLI local</span></summary>
           <p>El binario <code>cocxy</code> controla pesta&ntilde;as, ventanas, divisiones, sesi&oacute;n, paneles, plugins, remoto, Markdown, historial, estado y diagn&oacute;sticos mediante un Unix Domain Socket local con permisos por usuario. Prueba <code>cocxy status</code>, <code>cocxy new-tab</code>, <code>cocxy list-tabs</code>, <code>cocxy review</code>, <code>cocxy setup-hooks</code> y <code>cocxy help</code>.</p>

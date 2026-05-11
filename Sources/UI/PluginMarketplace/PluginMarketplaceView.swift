@@ -36,6 +36,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
     @Published private(set) var plugins: [PluginState] = []
     @Published private(set) var availableUpdates: [PluginUpdateCandidate] = []
 
+    private var signatureStatusesByPluginID: [String: PluginSignatureStatus] = [:]
     private let sourceStore: PluginSourceStore
     private let installer: PluginInstaller
     private let pluginManager: PluginManager
@@ -105,6 +106,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
         let receipt = try installer.install(from: url, replaceExisting: replaceExisting)
         installURLText = ""
         refresh()
+        signatureStatusesByPluginID[receipt.pluginID] = receipt.signatureStatus
         setStatus(.installed(receipt.pluginID))
     }
 
@@ -117,11 +119,13 @@ final class PluginMarketplaceViewModel: ObservableObject {
             replaceExisting: replaceExisting
         )
         refresh()
+        signatureStatusesByPluginID[receipt.pluginID] = receipt.signatureStatus
         setStatus(.installed(receipt.pluginID))
     }
 
     func uninstallPlugin(id: String) throws {
         try installer.uninstall(id: id)
+        signatureStatusesByPluginID[id] = nil
         refresh()
         setStatus(.uninstalled(id))
     }
@@ -139,6 +143,14 @@ final class PluginMarketplaceViewModel: ObservableObject {
     func checkForPluginUpdates() {
         availableUpdates = updater.availableUpdates(for: pluginManager.plugins.map(\.manifest))
         setStatus(availableUpdates.isEmpty ? .noUpdates : .updatesFound(availableUpdates.count))
+    }
+
+    func signatureStatus(for pluginID: String) -> PluginSignatureStatus? {
+        signatureStatusesByPluginID[pluginID]
+    }
+
+    func displaySignatureStatus(for plugin: PluginState) -> PluginSignatureStatus {
+        signatureStatusesByPluginID[plugin.id] ?? .inferred(from: plugin.manifest)
     }
 
     func localizedErrorDescription(_ error: Error) -> String {
@@ -286,6 +298,7 @@ struct PluginMarketplaceView: View {
                                     subtitle: plugin.id,
                                     detail: Self.localizedPluginDescription(plugin, using: localizer),
                                     capabilities: plugin.capabilities,
+                                    localizer: localizer,
                                     primaryAction: PluginCardAction(
                                         title: localized("plugins.install", fallback: "Install"),
                                         systemImage: "square.and.arrow.down",
@@ -313,6 +326,8 @@ struct PluginMarketplaceView: View {
                                     subtitle: plugin.id,
                                     detail: Self.localizedPluginDescription(plugin.manifest, using: localizer),
                                     capabilities: plugin.manifest.capabilities,
+                                    signatureStatus: viewModel.displaySignatureStatus(for: plugin),
+                                    localizer: localizer,
                                     primaryAction: PluginCardAction(
                                         title: plugin.isEnabled
                                             ? localized("plugins.disable", fallback: "Disable")
