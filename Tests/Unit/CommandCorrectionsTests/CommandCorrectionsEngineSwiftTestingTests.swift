@@ -129,6 +129,41 @@ struct CommandCorrectionsEngineSwiftTestingTests {
         #expect(listener.suggestion(for: execution, enabled: false) == nil)
         #expect(listener.suggestion(for: execution, enabled: true)?.suggestion == "git status")
     }
+
+    @Test("heuristic command corrections stay under interactive latency budget")
+    func heuristicCommandCorrectionsStayUnderInteractiveLatencyBudget() {
+        let engine = CommandCorrectionEngine.localDefault(
+            foundationModelsEnabled: false,
+            agentFallback: false
+        )
+        let commands = [
+            "gti status",
+            "sl",
+            "pyhton -m venv .",
+            "kubctl get pods",
+            "swfit test",
+            "rgp CommandCorrection"
+        ]
+        let iterations = 500
+        let start = ContinuousClock.now
+
+        for index in 0..<iterations {
+            _ = engine.corrections(
+                for: CommandCorrectionContext(
+                    command: commands[index % commands.count],
+                    exitCode: 127,
+                    stderr: "zsh: command not found"
+                )
+            )
+        }
+
+        let elapsed = start.duration(to: .now)
+        let averageNanoseconds = Double(elapsed.components.seconds) * 1_000_000_000
+            + Double(elapsed.components.attoseconds) / 1_000_000_000
+        let averageMilliseconds = (averageNanoseconds / Double(iterations)) / 1_000_000
+
+        #expect(averageMilliseconds < 5)
+    }
 }
 
 private struct StaticCorrectionProvider: CommandCorrectionProvider {

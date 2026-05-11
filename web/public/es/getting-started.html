@@ -241,6 +241,13 @@
           <p>Flujo local: <code>cocxy keys generate --author "Tu Nombre"</code>, <code>cocxy keys export-public &lt;key-id&gt; --output autor.cocxykey</code>, <code>cocxy keys import autor.cocxykey</code>, <code>cocxy sign template ./mi-plantilla</code> y <code>cocxy verify template ./mi-plantilla</code>.</p>
         </details>
 
+        <details class="faq-item" id="command-corrections">
+          <summary><span>Correcciones de comandos</span></summary>
+          <p>Las correcciones de comandos sugieren arreglos locales despu&eacute;s de un comando fallido. Cocxy revisa errores comunes como <code>gti status</code>, alias como <code>sl</code>, distancia de edici&oacute;n, pistas del shell y rutas cercanas cuando un <code>cd</code> apunta a un directorio mal escrito.</p>
+          <p>Prueba <code>cocxy correct "gti status"</code> o <code>cocxy correct "pyhton -m venv ."</code> para ver sugerencias JSON sin abrir el socket de la app. Cuando aparece el overlay en la terminal, presiona <kbd>Tab</kbd> para aceptar la sugerencia o <kbd>Esc</kbd> para descartarla.</p>
+          <p>La secci&oacute;n <code>[command-corrections]</code> usa <code>enabled = true</code>, <code>edit-distance-threshold = 2</code>, <code>foundation-models-enabled = true</code>, <code>agent-fallback = false</code>, <code>auto-show-on-failure = true</code>, <code>show-confidence-badge = true</code> y <code>max-suggestions-shown = 3</code>. El fallback al agente activo es opcional.</p>
+        </details>
+
         <details class="faq-item" id="cli-companion">
           <summary><span>CLI local</span></summary>
           <p>El binario <code>cocxy</code> controla pesta&ntilde;as, ventanas, divisiones, sesi&oacute;n, paneles, plugins, remoto, Markdown, historial, estado y diagn&oacute;sticos mediante un Unix Domain Socket local con permisos por usuario. Prueba <code>cocxy status</code>, <code>cocxy new-tab</code>, <code>cocxy list-tabs</code>, <code>cocxy review</code>, <code>cocxy setup-hooks</code> y <code>cocxy help</code>.</p>

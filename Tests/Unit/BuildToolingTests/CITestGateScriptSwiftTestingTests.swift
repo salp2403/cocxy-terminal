@@ -904,6 +904,47 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(spanish.contains("firma inv&aacute;lida"))
     }
 
+    @Test("public getting started docs document command corrections in both locales")
+    func publicGettingStartedDocsDocumentCommandCorrectionsInBothLocales() throws {
+        let root = repositoryRoot()
+        let english = try String(
+            contentsOf: root.appendingPathComponent("web/public/getting-started.html"),
+            encoding: .utf8
+        )
+        let spanish = try String(
+            contentsOf: root.appendingPathComponent("web/public/es/getting-started.html"),
+            encoding: .utf8
+        )
+
+        #expect(english.contains(#"<h2 id="command-corrections">Command Corrections</h2>"#))
+        #expect(english.contains(##"<a href="#command-corrections" class="sidebar-link">Command Corrections</a>"##))
+        #expect(english.contains("[command-corrections]"))
+        #expect(english.contains("edit-distance-threshold = 2"))
+        #expect(english.contains("foundation-models-enabled = true"))
+        #expect(english.contains("agent-fallback = false"))
+        #expect(english.contains("auto-show-on-failure = true"))
+        #expect(english.contains("show-confidence-badge = true"))
+        #expect(english.contains("cocxy correct"))
+        #expect(english.contains("gti status"))
+        #expect(english.contains("pyhton -m venv ."))
+        #expect(english.contains("Tab"))
+        #expect(english.contains("Esc"))
+
+        #expect(spanish.contains(#"id="command-corrections""#))
+        #expect(spanish.contains("correcciones de comandos"))
+        #expect(spanish.contains("[command-corrections]"))
+        #expect(spanish.contains("edit-distance-threshold = 2"))
+        #expect(spanish.contains("foundation-models-enabled = true"))
+        #expect(spanish.contains("agent-fallback = false"))
+        #expect(spanish.contains("auto-show-on-failure = true"))
+        #expect(spanish.contains("show-confidence-badge = true"))
+        #expect(spanish.contains("cocxy correct"))
+        #expect(spanish.contains("gti status"))
+        #expect(spanish.contains("pyhton -m venv ."))
+        #expect(spanish.contains("Tab"))
+        #expect(spanish.contains("Esc"))
+    }
+
     @Test("Spanish getting started docs cover the same core user guide surfaces")
     func spanishGettingStartedDocsCoverCoreUserGuideSurfaces() throws {
         let root = repositoryRoot()
@@ -936,6 +977,7 @@ struct CITestGateScriptSwiftTestingTests {
             "local-backups",
             "input-classifier",
             "command-signatures",
+            "command-corrections",
             "cli-companion",
             "themes",
             "agents-toml",

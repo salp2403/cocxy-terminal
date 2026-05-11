@@ -521,6 +521,7 @@
       <a href="#local-backups" class="sidebar-link">Local Backups</a>
       <a href="#input-classifier" class="sidebar-link">Input Classifier</a>
       <a href="#command-signatures" class="sidebar-link">Command Signatures</a>
+      <a href="#command-corrections" class="sidebar-link">Command Corrections</a>
     </div>
     <div class="sidebar-group">
       <h3>Agent Integrations</h3>
@@ -743,6 +744,23 @@ cocxy sign template ./my-template
 cocxy verify template ./my-template</code></pre>
     </div>
     <p>Strict signature requirements are opt-in through <code>[security]</code>. Leave <code>trust-on-first-use</code> disabled when sharing artifacts across teams so every trusted author key is imported deliberately.</p>
+
+    <!-- Command Corrections -->
+    <h2 id="command-corrections">Command Corrections</h2>
+    <p>Cocxy can suggest local fixes after a failed shell command. It checks common typos such as <code>gti status</code>, aliases such as <code>sl</code>, command-name edit distance, shell hint text, and nearby filesystem paths such as a mistyped <code>cd</code> target. The instant heuristic path is local and designed for interactive latency.</p>
+    <p>Use <code>cocxy correct "gti status"</code> or <code>cocxy correct "pyhton -m venv ."</code> to inspect the JSON suggestions without opening the app socket. When the terminal overlay appears after a failed command, press <kbd>Tab</kbd> to accept the suggestion or <kbd>Esc</kbd> to dismiss it.</p>
+    <div class="code-wrap">
+      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <pre><code>[command-corrections]
+enabled = true
+edit-distance-threshold = 2
+foundation-models-enabled = true
+agent-fallback = false
+auto-show-on-failure = true
+show-confidence-badge = true
+max-suggestions-shown = 3</code></pre>
+    </div>
+    <p><code>agent-fallback</code> defaults to <code>false</code>. Turn it on only if you want the active, user-configured agent to participate in harder correction cases.</p>
 
     <!-- Keyboard Shortcuts -->
     <h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2>
