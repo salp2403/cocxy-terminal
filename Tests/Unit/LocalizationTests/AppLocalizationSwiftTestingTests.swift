@@ -589,6 +589,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(Design.AuroraSidebarView.localizedUpdateButton(using: spanish) == "Actualizar")
         #expect(Design.AuroraSidebarView.localizedUpdateTitle(update, using: spanish) == "Actualización crítica")
         #expect(Design.SessionNodeView.localizedRenameTab(using: spanish) == "Renombrar pestaña...")
+        #expect(Design.SessionNodeView.localizedRenameTabAccessibility("README.md", using: spanish) == "Renombrar README.md")
         #expect(Design.SessionNodeView.localizedCloseTabAccessibility("README.md", using: spanish) == "Cerrar README.md")
         #expect(RenameSheetController.localizedTitle(using: spanish) == "Renombrar")
         #expect(RenameSheetController.localizedDone(using: spanish) == "Listo")

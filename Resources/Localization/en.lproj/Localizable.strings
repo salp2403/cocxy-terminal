@@ -1081,6 +1081,7 @@
 "auroraSidebar.session.worktree.help" = "Attached to a cocxy-managed worktree";
 "auroraSidebar.session.close.help" = "Close tab";
 "auroraSidebar.session.close.accessibility" = "Close %@";
+"auroraSidebar.session.rename.accessibility" = "Rename %@";
 "auroraSidebar.tooltip.metric.live" = "live";
 "auroraSidebar.tooltip.metric.tools" = "tools";
 "auroraSidebar.tooltip.metric.errors" = "errors";

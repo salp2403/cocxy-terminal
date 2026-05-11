@@ -593,6 +593,23 @@ extension Design {
                     if !session.movablePanes.isEmpty {
                         PaneTransferHandleView(panes: session.movablePanes, localizer: localizer)
                     }
+                    if let onRename, layout.showsCloseButton {
+                        Button(action: onRename) {
+                            Image(systemName: "pencil")
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(palette.textLow.resolvedColor())
+                                .frame(width: 18, height: 18)
+                                .background(
+                                    Circle()
+                                        .fill(palette.glassHighlight.resolvedColor())
+                                )
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(Self.localizedRenameTab(using: localizer))
+                        .accessibilityLabel(Self.localizedRenameTabAccessibility(session.name, using: localizer))
+                        .opacity(isActive || isHovered ? 0.95 : 0.55)
+                    }
                     if let onClose, !session.isPinned, layout.showsCloseButton {
                         Button(action: onClose) {
                             Image(systemName: "xmark")
@@ -759,6 +776,16 @@ extension Design {
 
         static func localizedRenameTab(using localizer: AppLocalizer) -> String {
             localizer.string("tabbar.context.rename", fallback: "Rename Tab...")
+        }
+
+        static func localizedRenameTabAccessibility(_ name: String, using localizer: AppLocalizer) -> String {
+            String(
+                format: localizer.string(
+                    "auroraSidebar.session.rename.accessibility",
+                    fallback: "Rename %@"
+                ),
+                name
+            )
         }
 
         static func localizedCloseOtherTabs(using localizer: AppLocalizer) -> String {

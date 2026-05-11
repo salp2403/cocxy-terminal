@@ -1081,6 +1081,7 @@
 "auroraSidebar.session.worktree.help" = "Vinculada a un worktree administrado por Cocxy";
 "auroraSidebar.session.close.help" = "Cerrar pestaña";
 "auroraSidebar.session.close.accessibility" = "Cerrar %@";
+"auroraSidebar.session.rename.accessibility" = "Renombrar %@";
 "auroraSidebar.tooltip.metric.live" = "activos";
 "auroraSidebar.tooltip.metric.tools" = "herram.";
 "auroraSidebar.tooltip.metric.errors" = "errores";
