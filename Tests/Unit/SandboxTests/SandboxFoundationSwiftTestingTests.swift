@@ -2,6 +2,7 @@
 // SandboxFoundationSwiftTestingTests.swift - Shared sandbox foundation coverage.
 
 import Foundation
+import Darwin
 import Testing
 @testable import CocxyTerminal
 
@@ -168,6 +169,152 @@ struct SandboxFoundationSwiftTestingTests {
 
         #expect(try log.entries() == [entry])
     }
+
+    @Test("audit log rotates before it exceeds configured size")
+    func auditLogRotatesBeforeExceedingConfiguredSize() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-sandbox-audit-rotate-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let logURL = root.appendingPathComponent("sandbox-audit.jsonl")
+        let log = SandboxAuditLog(
+            fileURL: logURL,
+            maxSizeBytes: 240,
+            now: { Date(timeIntervalSince1970: 2_000) }
+        )
+
+        try log.append(sampleAuditEntry(detail: String(repeating: "a", count: 120)))
+        try log.append(sampleAuditEntry(detail: String(repeating: "b", count: 120)))
+
+        let archives = try FileManager.default.contentsOfDirectory(atPath: root.path)
+            .filter { $0.hasPrefix("sandbox-audit.jsonl.") }
+        #expect(archives.count == 1)
+        #expect(try log.entries().count == 1)
+    }
+
+    @Test("audit log prunes expired archives")
+    func auditLogPrunesExpiredArchives() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-sandbox-audit-prune-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let logURL = root.appendingPathComponent("sandbox-audit.jsonl")
+        let oldArchive = root.appendingPathComponent("sandbox-audit.jsonl.2026-01-01T00-00-00.000Z")
+        try Data("old\n".utf8).write(to: oldArchive)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 1)],
+            ofItemAtPath: oldArchive.path
+        )
+
+        let log = SandboxAuditLog(
+            fileURL: logURL,
+            maxSizeBytes: 10_000,
+            retentionDays: 30,
+            now: { Date(timeIntervalSince1970: 60 * 24 * 60 * 60) }
+        )
+        try log.append(sampleAuditEntry())
+
+        #expect(!FileManager.default.fileExists(atPath: oldArchive.path))
+    }
+
+    @Test("kernel sandbox denies network outbound when capability is absent")
+    func kernelSandboxDeniesNetworkOutboundWhenCapabilityIsAbsent() throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec"),
+              Self.pythonExecutableURL() != nil
+        else {
+            return
+        }
+
+        let server = try LocalTCPProbeServer()
+        defer { server.close() }
+
+        let allowedProbe = try runPythonSocketProbe(
+            port: server.port,
+            capabilities: [.filesystemRead, .processExec, .network]
+        )
+        let deniedProbe = try runPythonSocketProbe(
+            port: server.port,
+            capabilities: [.filesystemRead, .processExec]
+        )
+
+        #expect(allowedProbe.status == 0)
+        #expect(deniedProbe.status != 0)
+    }
+
+    private func sampleAuditEntry(detail: String = "ok") -> SandboxAuditEntry {
+        SandboxAuditEntry(
+            timestamp: Date(timeIntervalSince1970: 1_234),
+            subjectID: "plugin.local",
+            subjectKind: .plugin,
+            operation: "network connect",
+            capability: .network,
+            decision: .denied,
+            detail: detail
+        )
+    }
+
+    private func runPythonSocketProbe(
+        port: UInt16,
+        capabilities: Set<SandboxCapability>
+    ) throws -> (status: Int32, stderr: String) {
+        guard let pythonURL = Self.pythonExecutableURL() else {
+            throw POSIXError(.ENOENT)
+        }
+        let script = """
+        import socket
+        s = socket.create_connection(("127.0.0.1", \(port)), 1)
+        s.close()
+        """
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: capabilities,
+            readablePaths: [FileManager.default.temporaryDirectory],
+            writablePaths: [],
+            executablePaths: [pythonURL],
+            executableSubpaths: Self.pythonExecutableSubpaths,
+            includeSystemReadBaseline: true
+        )
+        let plan = try SandboxExecutor().launchPlan(
+            commandURL: pythonURL,
+            arguments: ["-c", script],
+            profile: profile,
+            environment: ["PATH": "/usr/bin:/bin"],
+            currentDirectoryURL: FileManager.default.temporaryDirectory
+        )
+
+        let process = Process()
+        process.executableURL = plan.executableURL
+        process.arguments = plan.arguments
+        process.environment = plan.environment
+        process.currentDirectoryURL = plan.currentDirectoryURL
+        process.standardOutput = Pipe()
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+        try process.run()
+        process.waitUntilExit()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        return (
+            process.terminationStatus,
+            String(data: stderrData, encoding: .utf8) ?? ""
+        )
+    }
+
+    private static func pythonExecutableURL() -> URL? {
+        [
+            "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/Current/bin/python3",
+            "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+            "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/Current/bin/python3",
+            "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+            "/usr/bin/python3",
+        ]
+            .map { URL(fileURLWithPath: $0) }
+            .first { FileManager.default.isExecutableFile(atPath: $0.path) }
+    }
+
+    private static var pythonExecutableSubpaths: [URL] {
+        [
+            "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework",
+            "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework",
+        ].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
 }
 
 private final class StubSandboxFileManager: SandboxFileManaging {
@@ -179,5 +326,75 @@ private final class StubSandboxFileManager: SandboxFileManaging {
 
     func isExecutableFile(atPath path: String) -> Bool {
         executablePaths.contains(path)
+    }
+}
+
+private final class LocalTCPProbeServer {
+    let fileDescriptor: Int32
+    let port: UInt16
+
+    init() throws {
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        guard fd >= 0 else {
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        var reuse: Int32 = 1
+        guard setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_REUSEADDR,
+            &reuse,
+            socklen_t(MemoryLayout<Int32>.size)
+        ) == 0 else {
+            Darwin.close(fd)
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        var address = sockaddr_in(
+            sin_len: UInt8(MemoryLayout<sockaddr_in>.size),
+            sin_family: sa_family_t(AF_INET),
+            sin_port: in_port_t(0).bigEndian,
+            sin_addr: in_addr(s_addr: inet_addr("127.0.0.1")),
+            sin_zero: (0, 0, 0, 0, 0, 0, 0, 0)
+        )
+
+        let bindResult = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                Darwin.bind(
+                    fd,
+                    sockaddrPointer,
+                    socklen_t(MemoryLayout<sockaddr_in>.size)
+                )
+            }
+        }
+        guard bindResult == 0 else {
+            Darwin.close(fd)
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        guard listen(fd, 2) == 0 else {
+            Darwin.close(fd)
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        var boundAddress = sockaddr_in()
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let nameResult = withUnsafeMutablePointer(to: &boundAddress) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPointer in
+                getsockname(fd, sockaddrPointer, &length)
+            }
+        }
+        guard nameResult == 0 else {
+            Darwin.close(fd)
+            throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
+        }
+
+        fileDescriptor = fd
+        port = UInt16(bigEndian: boundAddress.sin_port)
+    }
+
+    func close() {
+        Darwin.close(fileDescriptor)
     }
 }

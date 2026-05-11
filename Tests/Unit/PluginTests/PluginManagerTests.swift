@@ -272,4 +272,38 @@ struct PluginManagerTests {
         #expect(state.isEnabled == false)
         #expect(state.lastTriggeredAt == nil)
     }
+
+    @Test func legacyManifestWithoutCapabilitiesUsesCompatibilityGrants() {
+        let manifest = PluginManifest(
+            id: "legacy-plugin",
+            name: "Legacy",
+            description: "Existing plugin",
+            version: "1.0.0",
+            author: "Dev",
+            minCocxyVersion: nil,
+            events: [],
+            directoryPath: "/tmp/legacy",
+            manifestFileName: PluginManifest.legacyManifestFileName,
+            capabilities: []
+        )
+
+        #expect(manifest.usesLegacyCompatibilityCapabilities)
+    }
+
+    @Test func marketplaceManifestWithoutCapabilitiesDoesNotUseCompatibilityGrants() {
+        let manifest = PluginManifest(
+            id: "new-plugin",
+            name: "New",
+            description: "New plugin",
+            version: "1.0.0",
+            author: "Dev",
+            minCocxyVersion: nil,
+            events: [],
+            directoryPath: "/tmp/new",
+            manifestFileName: PluginManifest.marketplaceManifestFileName,
+            capabilities: []
+        )
+
+        #expect(!manifest.usesLegacyCompatibilityCapabilities)
+    }
 }

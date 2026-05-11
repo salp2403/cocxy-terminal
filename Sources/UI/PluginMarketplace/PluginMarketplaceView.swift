@@ -35,6 +35,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
     @Published private(set) var bundledPlugins: [PluginManifest] = []
     @Published private(set) var plugins: [PluginState] = []
     @Published private(set) var availableUpdates: [PluginUpdateCandidate] = []
+    @Published private(set) var pendingCapabilityRequest: PluginCapabilityApprovalRequest?
 
     private var signatureStatusesByPluginID: [String: PluginSignatureStatus] = [:]
     private let sourceStore: PluginSourceStore
@@ -42,6 +43,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
     private let pluginManager: PluginManager
     private let bundledCatalog: BundledPluginCatalog
     private let updater: PluginUpdater
+    private let grantStore: PluginCapabilityGrantStore
     private var localizer: AppLocalizer
     private var statusState: StatusState?
 
@@ -51,6 +53,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
         pluginManager: PluginManager? = nil,
         bundledCatalog: BundledPluginCatalog = BundledPluginCatalog(),
         updater: PluginUpdater = PluginUpdater(),
+        grantStore: PluginCapabilityGrantStore = PluginCapabilityGrantStore(),
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.sourceStore = sourceStore
@@ -58,6 +61,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
         self.pluginManager = pluginManager ?? PluginManager(pluginsDirectory: installer.pluginsDirectory.path)
         self.bundledCatalog = bundledCatalog
         self.updater = updater
+        self.grantStore = grantStore
         self.localizer = localizer
         refresh()
     }
@@ -132,12 +136,44 @@ final class PluginMarketplaceViewModel: ObservableObject {
 
     func setPlugin(_ id: String, enabled: Bool) throws {
         if enabled {
+            guard let plugin = pluginManager.plugin(id: id) else {
+                throw PluginManagerError.pluginNotFound(id)
+            }
+            let missing = missingCapabilities(for: plugin.manifest)
+            guard missing.isEmpty else {
+                pendingCapabilityRequest = PluginCapabilityApprovalRequest(
+                    pluginID: id,
+                    pluginName: plugin.manifest.name,
+                    capabilities: missing.sorted { $0.rawValue < $1.rawValue },
+                    reason: Self.localizedCapabilityRequestReason(localizer: localizer)
+                )
+                return
+            }
             try pluginManager.enablePlugin(id: id)
         } else {
             try pluginManager.disablePlugin(id: id)
         }
         refresh()
         setStatus(enabled ? .enabled(id) : .disabled(id))
+    }
+
+    func approvePendingCapabilityRequest() throws {
+        guard let request = pendingCapabilityRequest else { return }
+        for capability in request.capabilities {
+            try grantStore.grant(
+                capability,
+                for: request.pluginID,
+                reason: request.reason
+            )
+        }
+        pendingCapabilityRequest = nil
+        try pluginManager.enablePlugin(id: request.pluginID)
+        refresh()
+        setStatus(.enabled(request.pluginID))
+    }
+
+    func dismissPendingCapabilityRequest() {
+        pendingCapabilityRequest = nil
     }
 
     func checkForPluginUpdates() {
@@ -206,6 +242,29 @@ final class PluginMarketplaceViewModel: ObservableObject {
             )
         }
     }
+
+    private func missingCapabilities(for manifest: PluginManifest) -> [PluginCapability] {
+        guard !manifest.usesLegacyCompatibilityCapabilities else { return [] }
+        return manifest.capabilities.filter { capability in
+            !grantStore.isGrantedWithoutThrowing(capability, for: manifest.id)
+        }
+    }
+
+    private static func localizedCapabilityRequestReason(localizer: AppLocalizer) -> String {
+        localizer.string(
+            "plugins.capabilityRequest.reason",
+            fallback: "Approved while enabling the plugin."
+        )
+    }
+}
+
+struct PluginCapabilityApprovalRequest: Equatable, Identifiable {
+    let pluginID: String
+    let pluginName: String
+    let capabilities: [PluginCapability]
+    let reason: String
+
+    var id: String { pluginID }
 }
 
 struct PluginMarketplaceView: View {
@@ -400,6 +459,27 @@ struct PluginMarketplaceView: View {
             if let pendingUninstallID {
                 Text(pendingUninstallID)
             }
+        }
+        .sheet(
+            item: Binding(
+                get: { viewModel.pendingCapabilityRequest },
+                set: { newValue in
+                    if newValue == nil {
+                        viewModel.dismissPendingCapabilityRequest()
+                    }
+                }
+            )
+        ) { request in
+            CapabilityRequestDialogView(
+                request: request,
+                localizer: localizer,
+                onApprove: {
+                    perform { try viewModel.approvePendingCapabilityRequest() }
+                },
+                onCancel: {
+                    viewModel.dismissPendingCapabilityRequest()
+                }
+            )
         }
     }
 

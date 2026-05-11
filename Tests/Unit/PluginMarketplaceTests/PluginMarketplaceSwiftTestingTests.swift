@@ -331,7 +331,10 @@ struct PluginMarketplaceSwiftTestingTests {
         let sandbox = RecordingPluginSandbox()
         let manager = PluginManager(
             pluginsDirectory: pluginsDirectory.path,
-            sandbox: sandbox
+            sandbox: sandbox,
+            grantedCapabilitiesProvider: { pluginID in
+                pluginID == "run-plugin" ? [.environmentRead] : []
+            }
         )
         manager.scanPlugins()
         try manager.enablePlugin(id: receipt.pluginID)
@@ -351,9 +354,9 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manager.plugin(id: "run-plugin") == nil)
     }
 
-    @Test("plugin dispatch merges persisted sandbox grants with manifest capabilities")
+    @Test("plugin dispatch only uses approved manifest capabilities")
     @MainActor
-    func pluginDispatchMergesPersistedSandboxGrants() throws {
+    func pluginDispatchOnlyUsesApprovedManifestCapabilities() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
 
@@ -364,7 +367,7 @@ struct PluginMarketplaceSwiftTestingTests {
         version = "1.0.0"
         author = "Dev"
         events = ["session-start"]
-        capabilities = ["environment-read"]
+        capabilities = ["environment-read", "network-client"]
         """.write(
             to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
             atomically: true,
@@ -385,7 +388,7 @@ struct PluginMarketplaceSwiftTestingTests {
             pluginsDirectory: pluginsDirectory.path,
             sandbox: sandbox,
             grantedCapabilitiesProvider: { pluginID in
-                pluginID == "granted-plugin" ? [.networkClient] : []
+                pluginID == "granted-plugin" ? [.environmentRead, .networkClient, .processSpawn] : []
             }
         )
         manager.scanPlugins()
@@ -395,6 +398,52 @@ struct PluginMarketplaceSwiftTestingTests {
 
         #expect(sandbox.executions.count == 1)
         #expect(sandbox.executions[0].capabilities == [.environmentRead, .networkClient])
+    }
+
+    @Test("plugin dispatch drops revoked manifest capability")
+    @MainActor
+    func pluginDispatchDropsRevokedManifestCapability() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("revoked-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try """
+        name = "Revoked Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        events = ["session-start"]
+        capabilities = ["environment-read", "network-client"]
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo revoked\n".write(
+            to: repo.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+        let receipt = try installer.install(from: repo)
+
+        let sandbox = RecordingPluginSandbox()
+        let manager = PluginManager(
+            pluginsDirectory: pluginsDirectory.path,
+            sandbox: sandbox,
+            grantedCapabilitiesProvider: { pluginID in
+                pluginID == "revoked-plugin" ? [.environmentRead] : []
+            }
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: receipt.pluginID)
+
+        manager.dispatchEvent(.sessionStart)
+
+        #expect(sandbox.executions.count == 1)
+        #expect(sandbox.executions[0].capabilities == [.environmentRead])
     }
 
     @Test("rich input submit plugin event dispatches through sandbox")

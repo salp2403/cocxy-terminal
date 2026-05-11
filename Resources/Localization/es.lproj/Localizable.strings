@@ -2041,6 +2041,10 @@
 "plugins.signature.accessibility.unsigned" = "Plugin sin firma";
 "plugins.signature.accessibility.unverified" = "La firma del plugin existe pero no está verificada";
 "plugins.signature.accessibility.invalid" = "El plugin tiene una firma inválida";
+"plugins.capabilityRequest.title" = "Aprobar permisos del plugin";
+"plugins.capabilityRequest.message" = "%@ solicita permisos locales adicionales antes de poder activarse.";
+"plugins.capabilityRequest.approve" = "Aprobar y activar";
+"plugins.capabilityRequest.reason" = "Aprobado al activar el plugin.";
 "sandboxInspector.grants.section" = "Permisos concedidos";
 "sandboxInspector.grants.empty" = "No hay permisos activos.";
 "sandboxInspector.audit.section" = "Registro de auditoría";

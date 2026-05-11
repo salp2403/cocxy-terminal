@@ -2041,6 +2041,10 @@
 "plugins.signature.accessibility.unsigned" = "Plugin is unsigned";
 "plugins.signature.accessibility.unverified" = "Plugin signature is present but unverified";
 "plugins.signature.accessibility.invalid" = "Plugin has an invalid signature";
+"plugins.capabilityRequest.title" = "Approve Plugin Capabilities";
+"plugins.capabilityRequest.message" = "%@ requests additional local permissions before it can be enabled.";
+"plugins.capabilityRequest.approve" = "Approve and Enable";
+"plugins.capabilityRequest.reason" = "Approved while enabling the plugin.";
 "sandboxInspector.grants.section" = "Capability Grants";
 "sandboxInspector.grants.empty" = "No active grants.";
 "sandboxInspector.audit.section" = "Audit Log";

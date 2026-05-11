@@ -274,10 +274,21 @@ struct SandboxAuditEntry: Codable, Sendable, Equatable {
 
 final class SandboxAuditLog: @unchecked Sendable {
     private let fileURL: URL
+    private let maxSizeBytes: UInt64
+    private let retentionDays: TimeInterval
+    private let now: @Sendable () -> Date
     private let lock = NSLock()
 
-    init(fileURL: URL) {
+    init(
+        fileURL: URL,
+        maxSizeBytes: UInt64 = 100 * 1_024 * 1_024,
+        retentionDays: TimeInterval = 30,
+        now: @escaping @Sendable () -> Date = { Date() }
+    ) {
         self.fileURL = fileURL
+        self.maxSizeBytes = maxSizeBytes
+        self.retentionDays = retentionDays
+        self.now = now
     }
 
     func append(_ entry: SandboxAuditEntry) throws {
@@ -292,6 +303,8 @@ final class SandboxAuditLog: @unchecked Sendable {
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        try rotateIfNeeded(incomingByteCount: UInt64(data.count))
+        try pruneExpiredArchives()
 
         if FileManager.default.fileExists(atPath: fileURL.path) {
             let handle = try FileHandle(forWritingTo: fileURL)
@@ -319,6 +332,53 @@ final class SandboxAuditLog: @unchecked Sendable {
             .map { line in
                 try decoder.decode(SandboxAuditEntry.self, from: Data(line.utf8))
             }
+    }
+
+    private func rotateIfNeeded(incomingByteCount: UInt64) throws {
+        guard maxSizeBytes > 0,
+              FileManager.default.fileExists(atPath: fileURL.path)
+        else { return }
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
+        let currentSize = attributes[.size] as? UInt64 ?? 0
+        guard currentSize + incomingByteCount > maxSizeBytes else { return }
+
+        let archiveURL = fileURL.deletingLastPathComponent()
+            .appendingPathComponent("\(fileURL.lastPathComponent).\(Self.archiveStamp(from: now()))")
+        if FileManager.default.fileExists(atPath: archiveURL.path) {
+            try FileManager.default.removeItem(at: archiveURL)
+        }
+        try FileManager.default.moveItem(at: fileURL, to: archiveURL)
+    }
+
+    private func pruneExpiredArchives() throws {
+        guard retentionDays > 0 else { return }
+
+        let directory = fileURL.deletingLastPathComponent()
+        guard FileManager.default.fileExists(atPath: directory.path) else { return }
+
+        let cutoff = now().addingTimeInterval(-retentionDays * 24 * 60 * 60)
+        let archivePrefix = "\(fileURL.lastPathComponent)."
+        let archives = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.contentModificationDateKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        for archive in archives where archive.lastPathComponent.hasPrefix(archivePrefix) {
+            let values = try archive.resourceValues(forKeys: [.contentModificationDateKey])
+            guard let modifiedAt = values.contentModificationDate,
+                  modifiedAt < cutoff
+            else { continue }
+            try FileManager.default.removeItem(at: archive)
+        }
+    }
+
+    private static func archiveStamp(from date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+            .replacingOccurrences(of: ":", with: "-")
     }
 }
 

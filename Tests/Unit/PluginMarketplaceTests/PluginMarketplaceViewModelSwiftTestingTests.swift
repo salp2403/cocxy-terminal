@@ -122,6 +122,55 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         #expect(viewModel.statusMessage == "Installed cocxy-bundled.")
     }
 
+    @Test("enabling plugin with unapproved capabilities opens approval request")
+    @MainActor
+    func enablingPluginWithUnapprovedCapabilitiesOpensApprovalRequest() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let repo = root.appendingPathComponent("sandboxed-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try """
+        name = "Sandboxed Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        events = ["session-start"]
+        capabilities = ["environment-read", "network-client"]
+        """.write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let grantStore = PluginCapabilityGrantStore(backend: MemoryPluginCapabilityGrantBackingStore())
+        let manager = PluginManager(pluginsDirectory: pluginsDirectory.path) { pluginID in
+            Set(((try? grantStore.grants(for: pluginID)) ?? []).map(\.capability))
+        }
+        let viewModel = PluginMarketplaceViewModel(
+            sourceStore: PluginSourceStore(fileURL: root.appendingPathComponent("sources.json")),
+            installer: PluginInstaller(pluginsDirectory: pluginsDirectory),
+            pluginManager: manager,
+            bundledCatalog: BundledPluginCatalog(pluginsDirectory: nil),
+            grantStore: grantStore
+        )
+
+        viewModel.installURLText = repo.path
+        try viewModel.installPlugin(replaceExisting: false)
+        try viewModel.setPlugin("sandboxed-plugin", enabled: true)
+
+        #expect(viewModel.pendingCapabilityRequest?.pluginID == "sandboxed-plugin")
+        #expect(viewModel.pendingCapabilityRequest?.capabilities == [.environmentRead, .networkClient])
+        #expect(viewModel.plugins.first?.isEnabled == false)
+
+        try viewModel.approvePendingCapabilityRequest()
+
+        #expect(viewModel.pendingCapabilityRequest == nil)
+        #expect(viewModel.plugins.first?.isEnabled == true)
+        #expect(try grantStore.isGranted(.environmentRead, for: "sandboxed-plugin"))
+        #expect(try grantStore.isGranted(.networkClient, for: "sandboxed-plugin"))
+    }
+
     @Test("Spanish localizer updates plugin marketplace statuses")
     @MainActor
     func spanishLocalizerUpdatesPluginMarketplaceStatuses() throws {

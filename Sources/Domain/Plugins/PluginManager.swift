@@ -250,8 +250,7 @@ final class PluginManager: ObservableObject {
                 environment: environment,
                 pluginID: plugin.id,
                 pluginDirectory: plugin.manifest.directoryPath,
-                capabilities: plugin.manifest.capabilities
-                    .union(grantedCapabilitiesProvider(plugin.id))
+                capabilities: effectiveCapabilities(for: plugin.manifest)
             )
 
             // Update last triggered timestamp.
@@ -291,5 +290,20 @@ final class PluginManager: ObservableObject {
               let json = String(data: data, encoding: .utf8)
         else { return }
         try? fileSystem.writeFile(at: stateFilePath, contents: json)
+    }
+
+    private func effectiveCapabilities(for manifest: PluginManifest) -> Set<PluginCapability> {
+        if manifest.usesLegacyCompatibilityCapabilities {
+            return Set(PluginCapability.allCases)
+        }
+
+        let granted = grantedCapabilitiesProvider(manifest.id)
+        return manifest.capabilities.intersection(granted)
+    }
+}
+
+extension PluginManifest {
+    var usesLegacyCompatibilityCapabilities: Bool {
+        manifestFileName == Self.legacyManifestFileName && capabilities.isEmpty
     }
 }
