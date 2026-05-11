@@ -984,8 +984,22 @@ final class CocxyCoreView: NSView {
     }
 
     func submitRichInputPayload(_ text: String) {
+        submitRichInputPayload(
+            RichInputTerminalPayload(
+                text: text,
+                requiresRawControlSequences: false
+            )
+        )
+    }
+
+    func submitRichInputPayload(_ payload: RichInputTerminalPayload) {
         guard let bridge = bridge, let sid = surfaceID else { return }
-        sendClipboardText(text, bridge: bridge, surfaceID: sid)
+        guard !payload.isEmpty else { return }
+        if payload.requiresRawControlSequences {
+            sendRawTerminalPayload(payload.text, bridge: bridge, surfaceID: sid)
+        } else {
+            sendClipboardText(payload.text, bridge: bridge, surfaceID: sid)
+        }
     }
 
     private static func isLikelyRichInputImageURL(_ url: URL) -> Bool {
@@ -1051,6 +1065,35 @@ final class CocxyCoreView: NSView {
                   bridge.surfaceState(for: sid) != nil else { return }
             if usesBracketedPaste {
                 self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
+            }
+        }
+    }
+
+    private func sendRawTerminalPayload(
+        _ text: String,
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) {
+        let agentPacedPaste = prefersPacedPasteDelivery?() == true
+        let chunks = Self.terminalPasteChunks(
+            for: text,
+            agentPaced: agentPacedPaste
+        )
+        guard !chunks.isEmpty else { return }
+
+        closeActiveBracketedPasteIfNeeded(bridge: bridge)
+        pasteDeliveryTask?.cancel()
+        pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
+            guard let self, let bridge else { return }
+            self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+            for chunk in chunks {
+                guard !Task.isCancelled,
+                      bridge.surfaceState(for: sid) != nil else { return }
+                bridge.sendText(chunk, to: sid)
+                await Self.sleepBetweenPasteChunksIfNeeded(
+                    chunks.count,
+                    agentPaced: agentPacedPaste
+                )
             }
         }
     }

@@ -592,6 +592,38 @@ struct CocxyCoreViewTests {
         #expect(output.data.isEmpty)
     }
 
+    @Test("rich input raw payload preserves OSC 1337 control bytes")
+    func richInputRawPayloadPreservesOSC1337ControlBytes() async throws {
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-raw-rich-input-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let outputURL = rootDirectory.appendingPathComponent("stdin.bin", isDirectory: false)
+        let scriptURL = rootDirectory.appendingPathComponent("capture-stdin.sh", isDirectory: false)
+        try """
+        #!/bin/sh
+        cat > "\(outputURL.path)"
+        """.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: scriptURL.path
+        )
+        let harness = try makeViewHarness(command: scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let rawText = "\u{001B}]1337;File=name=aW1hZ2UucG5n;size=3;inline=1:AAA\u{0007}\n"
+        let payload = RichInputTerminalPayload(
+            text: rawText,
+            requiresRawControlSequences: true
+        )
+
+        harness.view.submitRichInputPayload(payload)
+
+        try await waitUntil {
+            (try? Data(contentsOf: outputURL)) == Data(rawText.utf8)
+        }
+        #expect(try Data(contentsOf: outputURL) == Data(rawText.utf8))
+    }
+
     @Test("active agent non-image file paste keeps direct terminal path behavior")
     func activeAgentNonImageFilePasteKeepsDirectTerminalPathBehavior() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")

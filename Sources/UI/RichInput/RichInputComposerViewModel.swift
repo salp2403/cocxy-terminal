@@ -84,6 +84,16 @@ final class RichInputComposerViewModel: ObservableObject {
         RichInputSubmitter.terminalPayload(text: text, attachments: attachments)
     }
 
+    func terminalPayload(
+        imageTransportMode: RichInputImageTransportMode
+    ) -> RichInputTerminalPayload {
+        RichInputSubmitter.terminalPayloadData(
+            text: text,
+            attachments: attachments,
+            imageTransportMode: imageTransportMode
+        )
+    }
+
     func expandSnippet(in text: String, selectedRange: NSRange) -> RichInputTextEdit? {
         snippetExpander.expandSnippet(in: text, selectedRange: selectedRange)
     }

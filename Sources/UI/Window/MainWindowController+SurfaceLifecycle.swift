@@ -4,12 +4,12 @@
 import AppKit
 import CocxyCommandCorrections
 
-private enum CocxyCoreSemanticState {
+enum CocxyCoreSemanticState {
     static let commandRunning: UInt8 = 3
     static let agentActive: UInt8 = 4
 }
 
-private enum CocxyCoreSemanticBlockType {
+enum CocxyCoreSemanticBlockType {
     static let commandInput: UInt8 = 1
 }
 

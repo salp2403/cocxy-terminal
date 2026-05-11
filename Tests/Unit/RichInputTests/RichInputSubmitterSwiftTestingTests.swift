@@ -60,6 +60,38 @@ struct RichInputSubmitterSwiftTestingTests {
         #expect(payload == "/tmp/a.png /tmp/b.png")
     }
 
+    @Test("image transport mode emits OSC 1337 inline file payload")
+    func imageTransportModeEmitsOSC1337InlineFilePayload() throws {
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-osc-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        let imageURL = rootDirectory.appendingPathComponent("Clipboard Image.png")
+        try Self.pngData.write(to: imageURL, options: [.atomic])
+        let attachment = AgentImageAttachment(
+            displayName: "Clipboard Image.png",
+            mimeType: "image/png",
+            filePath: imageURL.path,
+            byteCount: Self.pngData.count,
+            pixelWidth: 1,
+            pixelHeight: 1
+        )
+
+        let payload = RichInputSubmitter.terminalPayloadData(
+            text: "describe it",
+            attachments: [attachment],
+            imageTransportMode: .osc1337InlineFile
+        )
+
+        #expect(payload.requiresRawControlSequences)
+        #expect(payload.text.hasPrefix("\u{001B}]1337;File="))
+        #expect(payload.text.contains("name=Q2xpcGJvYXJkIEltYWdlLnBuZw=="))
+        #expect(payload.text.contains("size=\(Self.pngData.count)"))
+        #expect(payload.text.contains(";inline=1:"))
+        #expect(payload.text.contains(Self.pngData.base64EncodedString()))
+        #expect(payload.text.hasSuffix("\u{0007}\ndescribe it"))
+    }
+
     @MainActor
     @Test("composer view model stores and removes pasted image data")
     func composerViewModelStoresAndRemovesPastedImageData() throws {

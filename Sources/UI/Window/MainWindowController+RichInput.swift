@@ -97,7 +97,9 @@ extension MainWindowController {
             viewModel: viewModel,
             onSubmit: { [weak self, weak surfaceView, weak viewModel] in
                 guard let self, let surfaceView, let viewModel else { return }
-                let payload = viewModel.terminalPayload()
+                let payload = viewModel.terminalPayload(
+                    imageTransportMode: self.richInputImageTransportMode(for: surfaceView)
+                )
                 self.dismissRichInputComposer()
                 if let tabKey {
                     self.richInputDraftStore.delete(tabID: tabKey)
@@ -129,6 +131,52 @@ extension MainWindowController {
         richInputCancelHandler = cancelHandler
         window?.makeFirstResponder(hostingView)
         return true
+    }
+
+    private func richInputImageTransportMode(
+        for surfaceView: CocxyCoreView
+    ) -> RichInputImageTransportMode {
+        guard let surfaceID = surfaceView.terminalViewModel?.surfaceID,
+              richInputSurfaceSupportsInlineImages(surfaceID)
+        else {
+            return .filePaths
+        }
+        return .osc1337InlineFile
+    }
+
+    private func richInputSurfaceSupportsInlineImages(_ surfaceID: SurfaceID) -> Bool {
+        if let agentName = injectedPerSurfaceStore?.state(for: surfaceID).detectedAgent?.name,
+           Self.richInputAgentSupportsInlineImages(agentName) {
+            return true
+        }
+
+        guard let bridge = cocxyCoreBridge(forSurface: surfaceID),
+              bridge.semanticDiagnostics(for: surfaceID)?.state == CocxyCoreSemanticState.commandRunning,
+              let command = bridge.semanticBlocks(for: surfaceID, limit: 8)
+                .first(where: { $0.blockType == CocxyCoreSemanticBlockType.commandInput })?
+                .detail,
+              let agentName = AgentConfigService.agentIdentifier(
+                matchingLaunchLine: command,
+                compiledConfigs: Self.richInputAgentLaunchConfigs
+              )
+        else {
+            return false
+        }
+
+        return Self.richInputAgentSupportsInlineImages(agentName)
+    }
+
+    private static let richInputAgentLaunchConfigs = AgentConfigService
+        .defaultAgentConfigs()
+        .map(AgentConfigService.compile)
+
+    private static func richInputAgentSupportsInlineImages(_ agentName: String) -> Bool {
+        switch agentName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "claude", "claude-code", "claude code", "codex", "gemini", "gemini-cli":
+            return true
+        default:
+            return false
+        }
     }
 
     func cancelRichInputComposer() {
