@@ -164,6 +164,7 @@ struct CocxyCoreHostWiringTests {
             command: "/bin/cat"
         )
         defer { bridge.destroySurface(surfaceID) }
+        viewModel.markRunning(surfaceID: surfaceID)
         view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
 
         controller.wireSurfaceHandlers(
@@ -215,6 +216,7 @@ struct CocxyCoreHostWiringTests {
             command: "/bin/cat"
         )
         defer { bridge.destroySurface(surfaceID) }
+        viewModel.markRunning(surfaceID: surfaceID)
         view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
 
         controller.wireSurfaceHandlers(
@@ -250,6 +252,59 @@ struct CocxyCoreHostWiringTests {
 
         #expect(String(data: output.data, encoding: .utf8)?.contains("typed-ok") == true)
     }
+
+    @Test("known agent command input enables immediate inline image paste payload")
+    func knownAgentCommandInputEnablesImmediateInlineImagePastePayload() throws {
+        let bridge = try makeBridge()
+        let controller = MainWindowController(bridge: bridge)
+        let tabID = try #require(controller.tabManager.tabs.first?.id)
+        let viewModel = TerminalViewModel(engine: bridge)
+        let view = CocxyCoreView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        _ = view.layer
+
+        let surfaceID = try bridge.createSurface(
+            in: view,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        viewModel.markRunning(surfaceID: surfaceID)
+        view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+
+        controller.wireSurfaceHandlers(
+            for: surfaceID,
+            tabID: tabID,
+            in: view,
+            initialWorkingDirectory: nil
+        )
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        feed("\u{1B}]133;A\u{07}", into: state.terminal)
+        feed("\u{1B}]133;B\u{07}", into: state.terminal)
+        feed("\u{1B}]133;C;claude\u{07}", into: state.terminal)
+        feed("\u{1B}[?1049h\u{1B}[?1000h\u{1B}[?1006h", into: state.terminal)
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-host-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let imageURL = root.appendingPathComponent("paste.png")
+        try Self.pngData.write(to: imageURL)
+
+        let payload = try #require(controller.immediateRichInputPayload(
+            for: TerminalRichInputRequest(text: "", fileURLs: [imageURL]),
+            surfaceView: view
+        ))
+
+        #expect(payload.requiresRawControlSequences)
+        #expect(payload.text.contains("1337;File="))
+        #expect(payload.text.contains(";inline=1:"))
+    }
+
+    private static let pngData = Data(base64Encoded:
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+    )!
 }
 
 @MainActor

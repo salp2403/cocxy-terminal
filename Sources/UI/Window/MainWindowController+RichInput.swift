@@ -160,6 +160,10 @@ extension MainWindowController {
             return true
         }
 
+        if surfaceLooksLikeActiveAgent(surfaceID) {
+            return true
+        }
+
         guard let bridge = cocxyCoreBridge(forSurface: surfaceID),
               bridge.semanticDiagnostics(for: surfaceID)?.state == CocxyCoreSemanticState.commandRunning,
               let command = bridge.semanticBlocks(for: surfaceID, limit: 8)

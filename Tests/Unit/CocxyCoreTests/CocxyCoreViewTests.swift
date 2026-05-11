@@ -562,6 +562,30 @@ struct CocxyCoreViewTests {
         #expect(output.data.isEmpty)
     }
 
+    @Test("multiline paste opens rich input when auto composer is available")
+    func multilinePasteOpensRichInputWhenAutoComposerIsAvailable() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.view.clipboardService = RecordingClipboardService(readText: "notes line 1\nnotes line 2\n")
+        var requests: [TerminalRichInputRequest] = []
+        harness.view.onRichInputRequested = { request in
+            requests.append(request)
+            return true
+        }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        #expect(requests.count == 1)
+        #expect(requests.first?.text == "notes line 1\nnotes line 2\n")
+        #expect(requests.first?.fileURLs == [])
+        #expect(output.data.isEmpty)
+    }
+
     @Test("active agent image paste opens rich input with attachment")
     func activeAgentImagePasteOpensRichInputWithAttachment() throws {
         let harness = try makeViewHarness(command: "/bin/cat")

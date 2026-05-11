@@ -228,7 +228,7 @@ extension MainWindowController {
         }
     }
 
-    private func surfaceLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
+    func surfaceLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
         let surfaceState = injectedPerSurfaceStore?.state(for: surfaceID)
         let bridge = cocxyCoreBridge(forSurface: surfaceID)
         let semantic = bridge?.semanticDiagnostics(for: surfaceID)

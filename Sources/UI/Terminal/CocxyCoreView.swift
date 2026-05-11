@@ -998,8 +998,7 @@ final class CocxyCoreView: NSView {
         bridge: CocxyCoreBridge,
         surfaceID sid: SurfaceID
     ) -> Bool {
-        guard shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid),
-              let onRichInputRequested else {
+        guard let onRichInputRequested else {
             return false
         }
 
