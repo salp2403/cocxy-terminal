@@ -59,6 +59,9 @@ final class GitHubPaneViewModel: ObservableObject {
     /// metadata so the SwiftUI view can render the segmented picker
     /// without duplicating copy.
     enum Tab: String, CaseIterable, Identifiable, Sendable {
+        case branches
+        case commits
+        case diffs
         case pullRequests
         case issues
         case checks
@@ -67,6 +70,9 @@ final class GitHubPaneViewModel: ObservableObject {
         var id: String { rawValue }
         var displayName: String {
             switch self {
+            case .branches: return "Branches"
+            case .commits: return "Commits"
+            case .diffs: return "Diffs"
             case .pullRequests: return "Pull Requests"
             case .issues: return "Issues"
             case .checks: return "Checks"
@@ -75,6 +81,21 @@ final class GitHubPaneViewModel: ObservableObject {
         }
         func localizedTitle(using localizer: AppLocalizer) -> String {
             switch self {
+            case .branches:
+                return localizer.string(
+                    "github.pane.tab.branches",
+                    fallback: displayName
+                )
+            case .commits:
+                return localizer.string(
+                    "github.pane.tab.commits",
+                    fallback: displayName
+                )
+            case .diffs:
+                return localizer.string(
+                    "github.pane.tab.diffs",
+                    fallback: displayName
+                )
             case .pullRequests:
                 return localizer.string(
                     "github.pane.tab.pullRequests",
@@ -99,6 +120,9 @@ final class GitHubPaneViewModel: ObservableObject {
         }
         var systemImage: String {
             switch self {
+            case .branches: return "arrow.triangle.branch"
+            case .commits: return "clock.arrow.circlepath"
+            case .diffs: return "doc.text.magnifyingglass"
             case .pullRequests: return "arrow.triangle.pull"
             case .issues: return "exclamationmark.circle"
             case .checks: return "checkmark.circle"
@@ -118,6 +142,14 @@ final class GitHubPaneViewModel: ObservableObject {
 
     /// Latest `gh auth status`. `nil` before the first refresh.
     @Published private(set) var authStatus: GitHubAuthStatus?
+
+    @Published private(set) var branches: [GitBranch] = []
+    @Published private(set) var commits: [GitCommit] = []
+    @Published private(set) var currentDiffs: [FileDiff] = []
+    @Published private(set) var worktreeEntries: [WorktreeManifest.WorktreeEntry] = []
+    @Published private(set) var selectedBranchName: String?
+    @Published private(set) var selectedCommitHash: String?
+    @Published private(set) var sourceControlErrorMessage: String?
 
     @Published private(set) var pullRequests: [GitHubPullRequest] = []
     @Published private(set) var issues: [GitHubIssue] = []
@@ -242,6 +274,71 @@ final class GitHubPaneViewModel: ObservableObject {
     /// fragment so the user knows what happened.
     var closeWorktreeTabHandler: ((_ tabID: TabID) async -> Bool)?
 
+    // MARK: - Source Control providers
+
+    var branchListProvider: (URL, BranchListQuery) async throws -> [GitBranch] = { workingDirectory, query in
+        try await Task.detached(priority: .userInitiated) {
+            try BranchListProvider().listBranches(at: workingDirectory, query: query)
+        }.value
+    }
+
+    var commitHistoryProvider: (URL, CommitHistoryQuery) async throws -> [GitCommit] = { workingDirectory, query in
+        try await Task.detached(priority: .userInitiated) {
+            try CommitHistoryProvider().history(at: workingDirectory, query: query)
+        }.value
+    }
+
+    var pullRequestListProvider: (URL, PullRequestListQuery, TimeInterval) async throws -> [GitHubPullRequest] = {
+        workingDirectory,
+        query,
+        timeout in
+        try await PullRequestListProvider().listPullRequests(
+            at: workingDirectory,
+            query: query,
+            timeoutSeconds: timeout
+        )
+    }
+
+    var createBranchProvider: (String, URL, String?, Bool) async throws -> GitBranch = {
+        name,
+        workingDirectory,
+        startPoint,
+        checkout in
+        try await Task.detached(priority: .userInitiated) {
+            try BranchCreator().createBranch(
+                named: name,
+                at: workingDirectory,
+                startPoint: startPoint,
+                checkout: checkout
+            )
+        }.value
+    }
+
+    var createPullRequestProvider: (PullRequestCreateRequest, URL) async throws -> GitHubPullRequest = {
+        request,
+        workingDirectory in
+        try await PullRequestCreator().create(request, at: workingDirectory)
+    }
+
+    var diffListProvider: (URL) async throws -> [FileDiff] = { _ in [] }
+
+    var worktreeEntriesProvider: () async -> [WorktreeManifest.WorktreeEntry] = { [] }
+
+    var diffStagingProvider: (URL, FileDiff, DiffHunk, DiffStagingAction) async throws -> Void = {
+        workingDirectory,
+        fileDiff,
+        hunk,
+        action in
+        try await Task.detached(priority: .userInitiated) {
+            try DiffStager().perform(
+                action: action,
+                fileDiff: fileDiff,
+                hunk: hunk,
+                workingDirectory: workingDirectory
+            )
+        }.value
+    }
+
     // MARK: - Dependencies
 
     private let service: GitHubService
@@ -275,6 +372,29 @@ final class GitHubPaneViewModel: ObservableObject {
     ) {
         self.service = service
         self.localizer = localizer
+        self.pullRequestListProvider = { workingDirectory, query, timeout in
+            try await service.listPullRequests(
+                at: workingDirectory,
+                state: query.state.rawValue,
+                limit: query.limit,
+                includeDrafts: query.includeDrafts,
+                timeoutSeconds: timeout
+            )
+        }
+        self.createPullRequestProvider = { request, workingDirectory in
+            try await service.createPullRequest(
+                title: request.title,
+                body: request.body,
+                baseBranch: request.baseBranch,
+                draft: request.draft,
+                at: workingDirectory
+            )
+        }
+        self.diffListProvider = { workingDirectory in
+            try await Task.detached(priority: .userInitiated) {
+                try GitHubPaneViewModel.loadWorkingTreeDiffs(at: workingDirectory)
+            }.value
+        }
     }
 
     deinit {
@@ -529,10 +649,149 @@ final class GitHubPaneViewModel: ObservableObject {
         body: String? = nil,
         baseBranch: String? = nil
     ) async {
+        if onCreatePullRequest == nil {
+            await createPullRequest(
+                PullRequestCreateRequest(
+                    title: title,
+                    body: body,
+                    baseBranch: baseBranch
+                )
+            )
+            return
+        }
         await MainActor.run { self.isLoading = true }
         await onCreatePullRequest?(title, body, baseBranch)
         await MainActor.run { self.isLoading = false }
         refresh()
+    }
+
+    func selectBranch(_ branch: GitBranch) {
+        selectedBranchName = branch.name
+        selectedTab = .commits
+        refreshSourceControl()
+    }
+
+    func selectCommit(_ commit: GitCommit) {
+        selectedCommitHash = commit.hash
+    }
+
+    func refreshSourceControl() {
+        guard let workingDirectory = workingDirectoryProvider?() else {
+            clearSourceControlData()
+            sourceControlErrorMessage = localized(
+                "github.pane.sourceControl.openRepository",
+                fallback: "Open a git repository to see branches, commits, and diffs."
+            )
+            return
+        }
+        refreshGeneration &+= 1
+        let generation = refreshGeneration
+        Task { [weak self] in
+            await self?.refreshSourceControlState(
+                at: workingDirectory,
+                generation: generation
+            )
+        }
+    }
+
+    func createBranch(
+        named name: String,
+        startPoint: String? = nil,
+        checkout: Bool = true
+    ) async {
+        guard let workingDirectory = workingDirectoryProvider?() else {
+            lastErrorMessage = localized(
+                "github.pane.sourceControl.openRepository",
+                fallback: "Open a git repository to see branches, commits, and diffs."
+            )
+            return
+        }
+
+        isLoading = true
+        do {
+            let branch = try await createBranchProvider(name, workingDirectory, startPoint, checkout)
+            selectedBranchName = branch.name
+            selectedTab = .branches
+            lastErrorMessage = nil
+            sourceControlErrorMessage = nil
+            lastInfoMessage = String(
+                format: localized(
+                    "github.pane.sourceControl.branchCreated",
+                    fallback: "Created branch %@."
+                ),
+                branch.name
+            )
+            await refreshSourceControlState(
+                at: workingDirectory,
+                generation: refreshGeneration
+            )
+        } catch {
+            sourceControlErrorMessage = error.localizedDescription
+            lastErrorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+
+    func createPullRequest(_ request: PullRequestCreateRequest) async {
+        guard let workingDirectory = workingDirectoryProvider?() else {
+            lastErrorMessage = localized(
+                "github.pane.merge.reloadRequired",
+                fallback: "Reload the GitHub pane before merging this pull request."
+            )
+            return
+        }
+
+        isLoading = true
+        do {
+            let pullRequest = try await createPullRequestProvider(request, workingDirectory)
+            upsertPullRequest(pullRequest)
+            selectedPullRequestNumber = pullRequest.number
+            selectedTab = .pullRequests
+            pullRequestsWorkingDirectory = workingDirectory
+            pullRequestsTabID = tabIDProvider?()
+            lastErrorMessage = nil
+            lastInfoMessage = String(
+                format: localized(
+                    "github.pane.createPR.created",
+                    fallback: "Created pull request #%d."
+                ),
+                pullRequest.number
+            )
+            setupAction = nil
+        } catch let error as GitHubCLIError {
+            lastErrorMessage = Self.banner(for: error, using: localizer)
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+        isLoading = false
+    }
+
+    func stageDiffHunk(
+        fileDiff: FileDiff,
+        hunk: DiffHunk,
+        action: DiffStagingAction
+    ) {
+        guard let workingDirectory = workingDirectoryProvider?() else {
+            sourceControlErrorMessage = localized(
+                "github.pane.sourceControl.openRepository",
+                fallback: "Open a git repository to see branches, commits, and diffs."
+            )
+            return
+        }
+        Task { [weak self] in
+            do {
+                try await self?.diffStagingProvider(workingDirectory, fileDiff, hunk, action)
+                await self?.refreshSourceControlState(
+                    at: workingDirectory,
+                    generation: self?.refreshGeneration ?? 0
+                )
+            } catch {
+                await MainActor.run {
+                    self?.sourceControlErrorMessage = error.localizedDescription
+                    self?.lastErrorMessage = error.localizedDescription
+                }
+            }
+        }
     }
 
     // MARK: - Merge (v0.1.86)
@@ -891,6 +1150,100 @@ final class GitHubPaneViewModel: ObservableObject {
         autoRefreshCancellable = nil
     }
 
+    // MARK: - Source Control refresh
+
+    private struct SourceControlSnapshot: Sendable {
+        let branches: [GitBranch]
+        let commits: [GitCommit]
+        let diffs: [FileDiff]
+        let worktreeEntries: [WorktreeManifest.WorktreeEntry]
+    }
+
+    private func refreshSourceControlState(
+        at workingDirectory: URL,
+        generation: UInt64
+    ) async {
+        let branchRef = selectedBranchName
+        do {
+            let loadedBranches = try await branchListProvider(
+                workingDirectory,
+                BranchListQuery(includeRemotes: true, refreshRemotes: false)
+            )
+            let loadedCommits = try await commitHistoryProvider(
+                workingDirectory,
+                CommitHistoryQuery(ref: branchRef)
+            )
+            let loadedDiffs = try await diffListProvider(workingDirectory)
+            let loadedWorktreeEntries = await worktreeEntriesProvider()
+            let snapshot = SourceControlSnapshot(
+                branches: loadedBranches,
+                commits: loadedCommits,
+                diffs: loadedDiffs,
+                worktreeEntries: loadedWorktreeEntries
+            )
+            guard generation == refreshGeneration else { return }
+            applySourceControlSnapshot(snapshot)
+        } catch {
+            guard generation == refreshGeneration else { return }
+            clearSourceControlData()
+            sourceControlErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func applySourceControlSnapshot(_ snapshot: SourceControlSnapshot) {
+        branches = snapshot.branches
+        commits = snapshot.commits
+        currentDiffs = snapshot.diffs
+        worktreeEntries = snapshot.worktreeEntries
+        sourceControlErrorMessage = nil
+
+        if let selectedBranchName,
+           branches.contains(where: { $0.name == selectedBranchName }) == false {
+            self.selectedBranchName = nil
+        }
+        if selectedBranchName == nil {
+            selectedBranchName = branches.first(where: \.isCurrent)?.name ?? branches.first?.name
+        }
+
+        if let selectedCommitHash,
+           commits.contains(where: { $0.hash == selectedCommitHash }) == false {
+            self.selectedCommitHash = nil
+        }
+        if selectedCommitHash == nil {
+            selectedCommitHash = commits.first?.hash
+        }
+    }
+
+    private func clearSourceControlData() {
+        branches = []
+        commits = []
+        currentDiffs = []
+        worktreeEntries = []
+        selectedBranchName = nil
+        selectedCommitHash = nil
+        sourceControlErrorMessage = nil
+    }
+
+    private func upsertPullRequest(_ pullRequest: GitHubPullRequest) {
+        if let index = pullRequests.firstIndex(where: { $0.number == pullRequest.number }) {
+            pullRequests[index] = pullRequest
+        } else {
+            pullRequests.insert(pullRequest, at: 0)
+        }
+    }
+
+    nonisolated private static func loadWorkingTreeDiffs(at workingDirectory: URL) throws -> [FileDiff] {
+        let result = try CodeReviewGit.run(
+            workingDirectory: workingDirectory,
+            arguments: ["diff", "--no-color", "--no-ext-diff"]
+        )
+        guard result.terminationStatus == 0 else {
+            let stderr = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw HunkActionError.commandFailed(stderr.isEmpty ? "git diff failed." : stderr)
+        }
+        return DiffParser.parse(result.stdout)
+    }
+
     // MARK: - Orchestrator
 
     /// Runs the full refresh pipeline for the current generation.
@@ -912,6 +1265,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
                 pullRequestsTabID = nil
+                clearSourceControlData()
                 setupAction = nil
                 isLoading = false
             }
@@ -933,6 +1287,7 @@ final class GitHubPaneViewModel: ObservableObject {
                 selectedPullRequestNumber = nil
                 pullRequestsWorkingDirectory = nil
                 pullRequestsTabID = nil
+                clearSourceControlData()
                 setupAction = nil
                 isLoading = false
             }
@@ -945,6 +1300,9 @@ final class GitHubPaneViewModel: ObservableObject {
             lastInfoMessage = nil
             setupAction = nil
         }
+
+        await refreshSourceControlState(at: workingDirectory, generation: generation)
+        guard generation == refreshGeneration else { return }
 
         // Stage 1: authentication status. We fetch it every refresh so
         // the pane recovers immediately after `gh auth login` without
@@ -1068,11 +1426,19 @@ final class GitHubPaneViewModel: ObservableObject {
         // blanking the PR list.
         let ghConfig = configProvider()
         do {
-            let fetchedPRs = try await service.listPullRequests(
-                at: workingDirectory,
-                state: Self.clampedState(ghConfig.defaultState, allowed: ["open", "closed", "merged", "all"]),
-                limit: ghConfig.maxItems,
-                includeDrafts: ghConfig.includeDrafts
+            let fetchedPRs = try await pullRequestListProvider(
+                workingDirectory,
+                PullRequestListQuery(
+                    state: PullRequestListState(
+                        rawValue: Self.clampedState(
+                            ghConfig.defaultState,
+                            allowed: ["open", "closed", "merged", "all"]
+                        )
+                    ) ?? .open,
+                    includeDrafts: ghConfig.includeDrafts,
+                    limit: ghConfig.maxItems
+                ),
+                10.0
             )
             let fetchedIssues: [GitHubIssue]
             if resolvedRepo.hasIssuesEnabled {

@@ -84,7 +84,10 @@ struct GitHubPaneViewModelSwiftTestingTests {
 
     @Test("Tab cases expose stable id + icon for the segmented picker")
     func tab_casesExposeStableIdAndIcon() {
-        #expect(GitHubPaneViewModel.Tab.allCases.count == 4)
+        #expect(GitHubPaneViewModel.Tab.allCases.count == 7)
+        #expect(GitHubPaneViewModel.Tab.branches.id == "branches")
+        #expect(GitHubPaneViewModel.Tab.commits.id == "commits")
+        #expect(GitHubPaneViewModel.Tab.diffs.systemImage == "doc.text.magnifyingglass")
         #expect(GitHubPaneViewModel.Tab.pullRequests.id == "pullRequests")
         #expect(GitHubPaneViewModel.Tab.issues.systemImage == "exclamationmark.circle")
         #expect(GitHubPaneViewModel.Tab.reviewThreads.systemImage == "bubble.left.and.bubble.right")
@@ -102,6 +105,198 @@ struct GitHubPaneViewModelSwiftTestingTests {
     func clampedState_fallsBackToFirstAllowedValue() {
         #expect(GitHubPaneViewModel.clampedState("merged", allowed: ["open", "closed", "all"]) == "open")
         #expect(GitHubPaneViewModel.clampedState("", allowed: ["open"]) == "open")
+    }
+
+    // MARK: - Source Control
+
+    @Test("refresh loads local source control state beside GitHub data")
+    func refresh_loadsLocalSourceControlState() async throws {
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp/source-control") }
+        viewModel.branchListProvider = { _, _ in [
+            GitBranch(name: "main", isCurrent: true, isRemote: false, lastCommitHash: "abc1234"),
+            GitBranch(name: "origin/main", isCurrent: false, isRemote: true),
+        ] }
+        viewModel.commitHistoryProvider = { _, _ in [
+            GitCommit(
+                hash: "0123456789abcdef",
+                shortHash: "0123456",
+                subject: "Add source control",
+                authorName: "Said Arturo Lopez",
+                authorEmail: "dev@cocxy.dev",
+                authoredAt: Date(timeIntervalSince1970: 0)
+            ),
+        ] }
+        viewModel.diffListProvider = { _ in [
+            FileDiff(
+                filePath: "Sources/App.swift",
+                status: .modified,
+                hunks: [
+                    DiffHunk(
+                        header: "@@ -1 +1 @@",
+                        oldStart: 1,
+                        oldCount: 1,
+                        newStart: 1,
+                        newCount: 1,
+                        lines: [
+                            DiffLine(kind: .deletion, content: "old", oldLineNumber: 1, newLineNumber: nil),
+                            DiffLine(kind: .addition, content: "new", oldLineNumber: nil, newLineNumber: 1),
+                        ]
+                    ),
+                ]
+            ),
+        ] }
+        viewModel.worktreeEntriesProvider = {
+            [
+                WorktreeManifest.WorktreeEntry(
+                    id: "wt-1",
+                    branch: "feature/source-control",
+                    path: URL(fileURLWithPath: "/tmp/wt-1"),
+                    createdAt: Date(timeIntervalSince1970: 0),
+                    agent: nil,
+                    tabID: nil
+                ),
+            ]
+        }
+
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.branches.map(\.name) == ["main", "origin/main"])
+        #expect(viewModel.commits.map(\.shortHash) == ["0123456"])
+        #expect(viewModel.currentDiffs.map(\.filePath) == ["Sources/App.swift"])
+        #expect(viewModel.worktreeEntries.map(\.branch) == ["feature/source-control"])
+        #expect(viewModel.selectedBranchName == "main")
+        #expect(viewModel.selectedCommitHash == "0123456789abcdef")
+        #expect(viewModel.sourceControlErrorMessage == nil)
+    }
+
+    @Test("create branch uses provider then refreshes source control")
+    func createBranch_usesProviderThenRefreshes() async throws {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp/source-control") }
+        var created: (name: String, startPoint: String?)?
+        viewModel.createBranchProvider = { name, _, startPoint, checkout in
+            #expect(checkout)
+            created = (name, startPoint)
+            return GitBranch(name: name, isCurrent: true, isRemote: false)
+        }
+        viewModel.branchListProvider = { _, _ in [GitBranch(name: "feature/ui", isCurrent: true)] }
+        viewModel.commitHistoryProvider = { _, _ in [] }
+        viewModel.diffListProvider = { _ in [] }
+
+        await viewModel.createBranch(named: "feature/ui", startPoint: "main")
+
+        #expect(created?.name == "feature/ui")
+        #expect(created?.startPoint == "main")
+        #expect(viewModel.selectedBranchName == "feature/ui")
+        #expect(viewModel.branches.map(\.name) == ["feature/ui"])
+        #expect(viewModel.lastErrorMessage == nil)
+    }
+
+    @Test("create pull request uses provider and selects hydrated PR")
+    func createPullRequest_usesProviderAndSelectsHydratedPR() async throws {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp/source-control") }
+        var capturedRequest: PullRequestCreateRequest?
+        viewModel.createPullRequestProvider = { request, _ in
+            capturedRequest = request
+            return GitHubPullRequest(
+                number: 44,
+                title: request.title,
+                state: .open,
+                author: GitHubUser(login: "said"),
+                headRefName: "feature/source-control",
+                baseRefName: request.baseBranch ?? "main",
+                isDraft: request.draft,
+                url: URL(string: "https://github.com/u/r/pull/44")!,
+                updatedAt: Date()
+            )
+        }
+
+        await viewModel.createPullRequest(
+            PullRequestCreateRequest(
+                title: "Add source control",
+                body: "Body",
+                baseBranch: "main",
+                reviewers: ["reviewer"],
+                draft: true
+            )
+        )
+
+        #expect(capturedRequest?.title == "Add source control")
+        #expect(capturedRequest?.reviewers == ["reviewer"])
+        #expect(viewModel.pullRequests.map(\.number) == [44])
+        #expect(viewModel.selectedPullRequestNumber == 44)
+        #expect(viewModel.selectedTab == .pullRequests)
+        #expect(viewModel.lastInfoMessage?.contains("#44") == true)
+    }
+
+    @Test("stage diff hunk uses provider then refreshes source control")
+    func stageDiffHunk_usesProviderThenRefreshes() async throws {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp/source-control") }
+        let diff = FileDiff(filePath: "Sources/App.swift", status: .modified, hunks: [
+            DiffHunk(
+                header: "@@ -1 +1 @@",
+                oldStart: 1,
+                oldCount: 1,
+                newStart: 1,
+                newCount: 1,
+                lines: [
+                    DiffLine(kind: .deletion, content: "old", oldLineNumber: 1, newLineNumber: nil),
+                    DiffLine(kind: .addition, content: "new", oldLineNumber: nil, newLineNumber: 1),
+                ]
+            ),
+        ])
+        var stagedAction: DiffStagingAction?
+        viewModel.diffStagingProvider = { _, fileDiff, _, action in
+            #expect(fileDiff.filePath == "Sources/App.swift")
+            stagedAction = action
+        }
+        viewModel.branchListProvider = { _, _ in [] }
+        viewModel.commitHistoryProvider = { _, _ in [] }
+        viewModel.diffListProvider = { _ in [] }
+
+        viewModel.stageDiffHunk(fileDiff: diff, hunk: diff.hunks[0], action: .stage)
+        await flush()
+
+        #expect(stagedAction == .stage)
+        #expect(viewModel.sourceControlErrorMessage == nil)
     }
 
     // MARK: - banner copy

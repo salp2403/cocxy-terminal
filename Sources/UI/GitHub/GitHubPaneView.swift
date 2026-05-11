@@ -46,6 +46,16 @@ struct GitHubPaneView: View {
     var panelWidth: CGFloat = GitHubPaneView.defaultPanelWidth
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
+    @State private var branchSearchText = ""
+    @State private var commitSearchText = ""
+    @State private var pullRequestSearchText = ""
+    @State private var pullRequestState: PullRequestListState = .all
+    @State private var includeDraftPullRequests = true
+    @State private var diffViewerMode: DiffViewerMode = .unified
+    @State private var isCreateBranchSheetPresented = false
+    @State private var branchSheetStartPoint: String?
+    @State private var isCreatePullRequestSheetPresented = false
+
     // MARK: Body
 
     var body: some View {
@@ -62,6 +72,32 @@ struct GitHubPaneView: View {
         .frame(width: layout == .sidePanel ? panelWidth : nil)
         .frame(maxHeight: .infinity)
         .glassPanelBackground()
+        .sheet(isPresented: $isCreateBranchSheetPresented) {
+            CreateBranchSheet(
+                startPoint: branchSheetStartPoint,
+                onCancel: { isCreateBranchSheetPresented = false },
+                onCreate: { name, startPoint in
+                    isCreateBranchSheetPresented = false
+                    Task {
+                        await viewModel.createBranch(named: name, startPoint: startPoint)
+                    }
+                },
+                localizer: localizer
+            )
+        }
+        .sheet(isPresented: $isCreatePullRequestSheetPresented) {
+            CreatePullRequestSheet(
+                defaultBaseBranch: viewModel.repo?.defaultBranch,
+                onCancel: { isCreatePullRequestSheetPresented = false },
+                onCreate: { request in
+                    isCreatePullRequestSheetPresented = false
+                    Task {
+                        await viewModel.createPullRequest(request)
+                    }
+                },
+                localizer: localizer
+            )
+        }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("github.pane.accessibility", fallback: "GitHub pane"))
     }
@@ -188,6 +224,12 @@ struct GitHubPaneView: View {
     @ViewBuilder
     private var content: some View {
         switch viewModel.selectedTab {
+        case .branches:
+            branchesView
+        case .commits:
+            commitsView
+        case .diffs:
+            diffsView
         case .pullRequests:
             pullRequestsList
         case .issues:
@@ -199,90 +241,70 @@ struct GitHubPaneView: View {
         }
     }
 
-    private var pullRequestsList: some View {
-        Group {
-            if viewModel.pullRequests.isEmpty {
-                emptyState(
-                    title: localized(
-                        "github.pane.empty.pullRequests",
-                        fallback: "No pull requests"
-                    ),
-                    systemImage: "arrow.triangle.pull"
+    private var branchesView: some View {
+        BranchPickerView(
+            branches: viewModel.branches,
+            worktreeEntries: viewModel.worktreeEntries,
+            selectedBranchName: viewModel.selectedBranchName,
+            searchText: $branchSearchText,
+            sourceControlErrorMessage: viewModel.sourceControlErrorMessage,
+            onRefresh: { viewModel.refreshSourceControl() },
+            onSelect: { viewModel.selectBranch($0) },
+            onCreateBranch: {
+                branchSheetStartPoint = viewModel.selectedBranchName
+                isCreateBranchSheetPresented = true
+            },
+            localizer: localizer
+        )
+    }
+
+    private var commitsView: some View {
+        CommitHistoryView(
+            commits: viewModel.commits,
+            selectedCommitHash: viewModel.selectedCommitHash,
+            searchText: $commitSearchText,
+            sourceControlErrorMessage: viewModel.sourceControlErrorMessage,
+            onRefresh: { viewModel.refreshSourceControl() },
+            onSelect: { viewModel.selectCommit($0) },
+            onCreateBranch: { commit in
+                branchSheetStartPoint = commit?.hash ?? viewModel.selectedBranchName
+                isCreateBranchSheetPresented = true
+            },
+            localizer: localizer
+        )
+    }
+
+    private var diffsView: some View {
+        DiffViewerView(
+            diffs: viewModel.currentDiffs,
+            mode: $diffViewerMode,
+            onStage: { fileDiff, hunk, action in
+                viewModel.stageDiffHunk(
+                    fileDiff: fileDiff,
+                    hunk: hunk,
+                    action: action
                 )
-            } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(viewModel.pullRequests) { pr in
-                            Button(action: { didActivate(pr) }) {
-                                GitHubPullRequestRow(
-                                    pullRequest: pr,
-                                    isSelected: viewModel.selectedPullRequestNumber == pr.number,
-                                    localizer: localizer
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .contextMenu {
-                                Button(
-                                    localized(
-                                        "github.pane.context.openInBrowser",
-                                        fallback: "Open in Browser"
-                                    )
-                                ) {
-                                    viewModel.open(pr.url)
-                                }
-                                Button(localized("github.pane.context.copyURL", fallback: "Copy URL")) {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(
-                                        pr.url.absoluteString,
-                                        forType: .string
-                                    )
-                                }
-                                if viewModel.canOfferMerge(for: pr) {
-                                    Divider()
-                                    Button {
-                                        presentMergeActionSheet(for: pr)
-                                    } label: {
-                                        if viewModel.isMerging(pr.number) {
-                                            Label(
-                                                localized(
-                                                    "github.pane.merge.inProgress",
-                                                    fallback: "Merging..."
-                                                ),
-                                                systemImage: "hourglass"
-                                            )
-                                        } else {
-                                            Label(
-                                                localized(
-                                                    "github.pane.merge.action",
-                                                    fallback: "Merge Pull Request..."
-                                                ),
-                                                systemImage: "arrow.triangle.merge"
-                                            )
-                                        }
-                                    }
-                                    .disabled(viewModel.isMerging(pr.number))
-                                }
-                                Divider()
-                                Button {
-                                    viewModel.selectPullRequestForReviewThreads(pr)
-                                } label: {
-                                    Label(
-                                        localized(
-                                            "github.pane.context.reviewThreads",
-                                            fallback: "Show Review Threads"
-                                        ),
-                                        systemImage: "bubble.left.and.bubble.right"
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                }
-            }
-        }
-        .frame(maxHeight: .infinity)
+            },
+            localizer: localizer
+        )
+    }
+
+    private var pullRequestsList: some View {
+        PullRequestsListView(
+            pullRequests: viewModel.pullRequests,
+            selectedPullRequestNumber: viewModel.selectedPullRequestNumber,
+            searchText: $pullRequestSearchText,
+            state: $pullRequestState,
+            includeDrafts: $includeDraftPullRequests,
+            canOfferMerge: { viewModel.canOfferMerge(for: $0) },
+            isMerging: { viewModel.isMerging($0) },
+            onSelectChecks: { viewModel.selectPullRequestForChecks($0) },
+            onReviewThreads: { viewModel.selectPullRequestForReviewThreads($0) },
+            onOpen: { viewModel.open($0) },
+            onMerge: { presentMergeActionSheet(for: $0) },
+            onCreate: { isCreatePullRequestSheetPresented = true },
+            localizer: localizer
+        )
     }
 
     private var issuesList: some View {

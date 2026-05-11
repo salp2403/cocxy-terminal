@@ -185,4 +185,165 @@ struct GitHubPaneUISwiftTestingTests {
         _ = GitHubReviewThreadRow(thread: unresolved, localizer: localizer).body
         _ = GitHubReviewThreadRow(thread: resolved, localizer: localizer).body
     }
+
+    @Test("Source Control helper filters branches commits and PRs")
+    func sourceControlHelpers_filterRows() {
+        let branches = [
+            GitBranch(name: "main", isCurrent: true),
+            GitBranch(name: "feature/source-control", lastCommitSubject: "Diff UI"),
+        ]
+        #expect(BranchPickerView.filteredBranches(branches, searchText: "source").map(\.name) == ["feature/source-control"])
+
+        let commits = [
+            GitCommit(
+                hash: "0123456789abcdef",
+                shortHash: "0123456",
+                subject: "Add source control",
+                authorName: "Said Arturo Lopez",
+                authorEmail: "dev@cocxy.dev",
+                authoredAt: Date(timeIntervalSince1970: 0)
+            ),
+            GitCommit(
+                hash: "abcdef0123456789",
+                shortHash: "abcdef0",
+                subject: "Fix browser tabs",
+                authorName: "Said Arturo Lopez",
+                authorEmail: "dev@cocxy.dev",
+                authoredAt: Date(timeIntervalSince1970: 0)
+            ),
+        ]
+        #expect(CommitHistoryView.filteredCommits(commits, searchText: "browser").map(\.shortHash) == ["abcdef0"])
+
+        let pullRequests = [
+            samplePR(number: 1, title: "Add source control", state: .open, draft: false),
+            samplePR(number: 2, title: "Draft diff", state: .open, draft: true),
+            samplePR(number: 3, title: "Merged work", state: .merged, draft: false),
+        ]
+        #expect(PullRequestsListView.filteredPullRequests(
+            pullRequests,
+            state: .open,
+            includeDrafts: false,
+            searchText: ""
+        ).map(\.number) == [1])
+        #expect(PullRequestsListView.filteredPullRequests(
+            pullRequests,
+            state: .merged,
+            includeDrafts: true,
+            searchText: "work"
+        ).map(\.number) == [3])
+        #expect(CreatePullRequestSheet.reviewerList(from: "alice, bob\ncarol") == ["alice", "bob", "carol"])
+    }
+
+    @Test("Source Control views render basic state")
+    func sourceControlViews_renderBasicState() {
+        var branchSearch = ""
+        var commitSearch = ""
+        var prSearch = ""
+        var prState = PullRequestListState.all
+        var includeDrafts = true
+        var diffMode = DiffViewerMode.unified
+
+        let branches = [GitBranch(name: "main", isCurrent: true)]
+        let worktrees = [
+            WorktreeManifest.WorktreeEntry(
+                id: "wt-1",
+                branch: "main",
+                path: URL(fileURLWithPath: "/tmp/wt-1"),
+                createdAt: Date(timeIntervalSince1970: 0),
+                agent: nil,
+                tabID: nil
+            ),
+        ]
+        let commits = [
+            GitCommit(
+                hash: "0123456789abcdef",
+                shortHash: "0123456",
+                subject: "Add source control",
+                authorName: "Said Arturo Lopez",
+                authorEmail: "dev@cocxy.dev",
+                authoredAt: Date(timeIntervalSince1970: 0)
+            ),
+        ]
+        let pullRequests = [samplePR(number: 1, title: "Add source control", state: .open, draft: false)]
+        let diffs = [sampleDiff()]
+
+        _ = BranchPickerView(
+            branches: branches,
+            worktreeEntries: worktrees,
+            selectedBranchName: "main",
+            searchText: Binding(get: { branchSearch }, set: { branchSearch = $0 }),
+            onRefresh: {},
+            onSelect: { _ in },
+            onCreateBranch: {}
+        ).body
+        _ = WorktreeBranchPickerView(entries: worktrees, onSelect: { _ in }).body
+        _ = CommitHistoryView(
+            commits: commits,
+            selectedCommitHash: commits[0].hash,
+            searchText: Binding(get: { commitSearch }, set: { commitSearch = $0 }),
+            onRefresh: {},
+            onSelect: { _ in },
+            onCreateBranch: { _ in }
+        ).body
+        _ = PullRequestsListView(
+            pullRequests: pullRequests,
+            selectedPullRequestNumber: 1,
+            searchText: Binding(get: { prSearch }, set: { prSearch = $0 }),
+            state: Binding(get: { prState }, set: { prState = $0 }),
+            includeDrafts: Binding(get: { includeDrafts }, set: { includeDrafts = $0 }),
+            canOfferMerge: { _ in true },
+            isMerging: { _ in false },
+            onSelectChecks: { _ in },
+            onReviewThreads: { _ in },
+            onOpen: { _ in },
+            onMerge: { _ in },
+            onCreate: {}
+        ).body
+        _ = DiffViewerView(
+            diffs: diffs,
+            mode: Binding(get: { diffMode }, set: { diffMode = $0 }),
+            onStage: { _, _, _ in }
+        ).body
+        _ = CreateBranchSheet(startPoint: "main", onCancel: {}, onCreate: { _, _ in }).body
+        _ = CreatePullRequestSheet(defaultBaseBranch: "main", onCancel: {}, onCreate: { _ in }).body
+    }
+
+    private func samplePR(
+        number: Int,
+        title: String,
+        state: GitHubPullRequestState,
+        draft: Bool
+    ) -> GitHubPullRequest {
+        GitHubPullRequest(
+            number: number,
+            title: title,
+            state: state,
+            author: GitHubUser(login: "said"),
+            headRefName: "feature/\(number)",
+            baseRefName: "main",
+            isDraft: draft,
+            url: URL(string: "https://github.com/u/r/pull/\(number)")!,
+            updatedAt: Date(timeIntervalSince1970: TimeInterval(number))
+        )
+    }
+
+    private func sampleDiff() -> FileDiff {
+        FileDiff(
+            filePath: "Sources/App.swift",
+            status: .modified,
+            hunks: [
+                DiffHunk(
+                    header: "@@ -1 +1 @@",
+                    oldStart: 1,
+                    oldCount: 1,
+                    newStart: 1,
+                    newCount: 1,
+                    lines: [
+                        DiffLine(kind: .deletion, content: "old", oldLineNumber: 1, newLineNumber: nil),
+                        DiffLine(kind: .addition, content: "new", oldLineNumber: nil, newLineNumber: 1),
+                    ]
+                ),
+            ]
+        )
+    }
 }

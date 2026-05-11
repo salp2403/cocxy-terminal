@@ -174,6 +174,25 @@ extension MainWindowController {
         viewModel.tabIDProvider = { [weak self] in
             self?.visibleTabID ?? self?.tabManager.activeTabID
         }
+        viewModel.worktreeEntriesProvider = { [weak self] in
+            await MainActor.run {
+                guard let self else { return [] }
+                return self.tabManager.tabs.compactMap { tab in
+                    guard let worktreeID = tab.worktreeID,
+                          let worktreeRoot = tab.worktreeRoot else {
+                        return nil
+                    }
+                    return WorktreeManifest.WorktreeEntry(
+                        id: worktreeID,
+                        branch: tab.worktreeBranch ?? tab.gitBranch ?? worktreeID,
+                        path: worktreeRoot,
+                        createdAt: Date(),
+                        agent: nil,
+                        tabID: tab.id
+                    )
+                }
+            }
+        }
         viewModel.configProvider = { [weak self] in
             self?.currentGitHubPaneConfig() ?? .defaults
         }
