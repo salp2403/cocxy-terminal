@@ -782,6 +782,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     // Keep the opaque restore shield through crash-recovery prompt dismissal
     // and a short compositor settle window after the terminal's first frame.
     static let sessionRestoreShieldPostFrameDelay: TimeInterval = 0.35
+    static let sessionRestoreShieldRequiredPresentedFrames = 2
 
     /// The status bar hosting view at the bottom of the window.
     private(set) var statusBarHostingView: NSHostingView<StatusBarView>?
@@ -1120,20 +1121,54 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             self.sessionRestoreShieldView = nil
         }
 
-        activeTerminalSurfaceView?.onFramePresented = {
+        armSessionRestoreShieldRemoval(
+            shield: shield,
+            remainingPresentedFrames: Self.sessionRestoreShieldRequiredPresentedFrames,
+            removeShield: removeShield
+        )
+        activeTerminalSurfaceView?.requestImmediateRedraw()
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            MainActor.assumeIsolated {
+                removeShield()
+            }
+        }
+    }
+
+    private func armSessionRestoreShieldRemoval(
+        shield: NSView,
+        remainingPresentedFrames: Int,
+        removeShield: @escaping @MainActor () -> Void
+    ) {
+        let requiredFrames = max(1, remainingPresentedFrames)
+
+        activeTerminalSurfaceView?.onFramePresented = { [weak self, weak shield] in
+            guard let self, let shield, self.sessionRestoreShieldView === shield else { return }
+            let remainingFrames = requiredFrames - 1
+
+            guard remainingFrames <= 0 else {
+                self.armSessionRestoreShieldRemoval(
+                    shield: shield,
+                    remainingPresentedFrames: remainingFrames,
+                    removeShield: removeShield
+                )
+                DispatchQueue.main.async { [weak self, weak shield] in
+                    MainActor.assumeIsolated {
+                        guard let self,
+                              let shield,
+                              self.sessionRestoreShieldView === shield else { return }
+                        self.activeTerminalSurfaceView?.requestImmediateRedraw()
+                    }
+                }
+                return
+            }
+
             DispatchQueue.main.asyncAfter(
                 deadline: .now() + Self.sessionRestoreShieldPostFrameDelay
             ) {
                 MainActor.assumeIsolated {
                     removeShield()
                 }
-            }
-        }
-        activeTerminalSurfaceView?.requestImmediateRedraw()
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            MainActor.assumeIsolated {
-                removeShield()
             }
         }
     }

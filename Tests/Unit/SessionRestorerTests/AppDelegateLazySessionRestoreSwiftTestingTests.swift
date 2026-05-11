@@ -270,8 +270,8 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         try await waitForShieldRemoval(on: controller)
     }
 
-    @Test("restore shield removes after the active terminal presents a frame")
-    func restoreShieldRemovesAfterActiveTerminalFrame() async throws {
+    @Test("restore shield removes after the active terminal presents settled frames")
+    func restoreShieldRemovesAfterActiveTerminalSettledFrames() async throws {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         let hostView = FrameReportingTerminalHostView(frame: controller.terminalContainerView?.bounds ?? .zero)
         let tabID = try #require(controller.tabManager.activeTabID)
@@ -284,6 +284,7 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         controller.scheduleSessionRestoreShieldRemoval()
 
         #expect(hostView.onFramePresented != nil)
+        hostView.onFramePresented?()
         hostView.onFramePresented?()
 
         try await Task.sleep(nanoseconds: 430_000_000)
@@ -336,6 +337,34 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(shield.superview === controller.terminalContainerView)
 
         try await waitForShieldRemoval(on: controller)
+    }
+
+    @Test("restore shield remains visible until a second terminal frame settles")
+    func restoreShieldRemainsVisibleUntilSecondTerminalFrameSettles() async throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let hostView = FrameReportingTerminalHostView(frame: controller.terminalContainerView?.bounds ?? .zero)
+        let tabID = try #require(controller.tabManager.activeTabID)
+        controller.tabSurfaceViews[tabID] = hostView
+        controller.terminalSurfaceView = hostView
+        controller.terminalContainerView?.addSubview(hostView)
+
+        controller.installSessionRestoreShield()
+        let shield = try #require(controller.sessionRestoreShieldView)
+        controller.scheduleSessionRestoreShieldRemoval()
+
+        hostView.onFramePresented?()
+
+        try await Task.sleep(nanoseconds: 430_000_000)
+
+        #expect(controller.sessionRestoreShieldView === shield)
+        #expect(shield.superview === controller.terminalContainerView)
+
+        hostView.onFramePresented?()
+
+        try await Task.sleep(nanoseconds: 430_000_000)
+
+        #expect(controller.sessionRestoreShieldView == nil)
+        #expect(shield.superview == nil)
     }
 
     @Test(
