@@ -516,11 +516,14 @@ extension Design {
                     .buttonStyle(.plain)
                     .help(Self.localizedRenameWorkspace(using: localizer))
                     .accessibilityLabel(Self.localizedRenameWorkspaceAccessibility(workspace.name, using: localizer))
-                    .opacity(hoveredWorkspaceID == workspace.id ? 0.95 : 0.55)
+                    .opacity(hoveredWorkspaceID == workspace.id ? 0.95 : 0.82)
                 }
             }
             .onHover { hovering in
                 hoveredWorkspaceID = hovering ? workspace.id : nil
+            }
+            .onTapGesture(count: 2) {
+                onRequestRenameWorkspace?(workspace.id, workspace.name)
             }
             .contextMenu {
                 if let onRequestRenameWorkspace {
@@ -658,7 +661,7 @@ extension Design {
                         .buttonStyle(.plain)
                         .help(Self.localizedRenameTab(using: localizer))
                         .accessibilityLabel(Self.localizedRenameTabAccessibility(session.name, using: localizer))
-                        .opacity(isActive || isHovered ? 0.95 : 0.55)
+                        .opacity(isActive || isHovered ? 0.95 : 0.82)
                     }
                     if let onClose, !session.isPinned, layout.showsCloseButton {
                         Button(action: onClose) {
@@ -705,6 +708,9 @@ extension Design {
             }
             .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
                 handleSessionDrop(providers)
+            }
+            .onTapGesture(count: 2) {
+                onRename?()
             }
             .onTapGesture(perform: onActivate)
             .onHover { hovering in

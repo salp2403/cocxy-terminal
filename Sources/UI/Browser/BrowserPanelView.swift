@@ -89,6 +89,10 @@ struct BrowserPanelView: View {
     /// The network monitor polling the web view.
     @StateObject private var networkMonitor = BrowserNetworkMonitor()
 
+    /// Browser tab currently under the pointer. Used only for chrome
+    /// affordances so labels stay visible while close buttons stay quiet.
+    @State private var hoveredBrowserTabID: UUID?
+
     // MARK: - Body
 
     var body: some View {
@@ -232,28 +236,44 @@ struct BrowserPanelView: View {
     private func browserTabItem(_ tab: BrowserTab) -> some View {
         let isActive = tab.id == viewModel.activeTabID
         let showClose = viewModel.browserTabs.count > 1
+        let isHovered = hoveredBrowserTabID == tab.id
+        let closeVisible = showClose && (isActive || isHovered)
         let title = tab.displayTitle
 
         return HStack(spacing: 4) {
-            Image(systemName: "globe")
-                .font(.system(size: 10, weight: .medium))
-                .foregroundColor(
-                    isActive
-                        ? Color(nsColor: CocxyColors.subtext1)
-                        : Color(nsColor: CocxyColors.overlay1)
-                )
-                .frame(width: 12, height: 12)
+            Button(action: { viewModel.selectBrowserTab(tab.id) }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundColor(
+                            isActive
+                                ? Color(nsColor: CocxyColors.subtext1)
+                                : Color(nsColor: CocxyColors.overlay1)
+                        )
+                        .frame(width: 12, height: 12)
 
-            Text(title)
-                .font(.system(size: 11, weight: isActive ? .semibold : .regular))
-                .foregroundColor(
-                    isActive
-                        ? Color(nsColor: CocxyColors.text)
-                        : Color(nsColor: CocxyColors.subtext0)
+                    Text(title)
+                        .font(.system(size: 11, weight: isActive ? .semibold : .regular))
+                        .foregroundColor(
+                            isActive
+                                ? Color(nsColor: CocxyColors.text)
+                                : Color(nsColor: CocxyColors.subtext0)
+                        )
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .layoutPriority(1)
+                }
+                .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                String(
+                    format: localized("browser.panel.tab.accessibility", fallback: "Browser tab: %@"),
+                    title
                 )
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .frame(minWidth: 76, maxWidth: 150, alignment: .leading)
+            )
 
             if showClose {
                 Button(action: { viewModel.closeBrowserTab(tab.id) }) {
@@ -263,31 +283,39 @@ struct BrowserPanelView: View {
                 }
                 .buttonStyle(.plain)
                 .frame(width: 18, height: 18)
+                .opacity(closeVisible ? 1 : 0)
+                .disabled(!closeVisible)
                 .accessibilityLabel(localized("browser.panel.closeTab", fallback: "Close browser tab"))
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.leading, 10)
+        .padding(.trailing, showClose ? 6 : 10)
         .padding(.vertical, 6)
-        .frame(minWidth: 112, minHeight: 28, alignment: .leading)
+        .frame(width: showClose ? 158 : 132, height: 28, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 4)
                 .fill(isActive
                       ? Color(nsColor: CocxyColors.surface0)
+                      : isHovered
+                      ? Color(nsColor: CocxyColors.surface0.withAlphaComponent(0.45))
                       : Color.clear
                 )
         )
-        .contentShape(Rectangle())
-        .onTapGesture {
-            viewModel.selectBrowserTab(tab.id)
-        }
-        .help(tab.url.absoluteString)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            String(
-                format: localized("browser.panel.tab.accessibility", fallback: "Browser tab: %@"),
-                title
-            )
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(
+                    isActive || isHovered
+                        ? Color(nsColor: CocxyColors.overlay0.withAlphaComponent(0.55))
+                        : Color.clear,
+                    lineWidth: 1
+                )
         )
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            hoveredBrowserTabID = hovering ? tab.id : nil
+        }
+        .help("\(title) - \(tab.url.absoluteString)")
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: - Toolbar (URL bar + navigation)
