@@ -264,7 +264,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var injectedAgentPromptRunner: (any AgentPromptRunning)?
 
     var richInputViewModel: RichInputComposerViewModel?
-    var richInputHostingView: NSHostingView<RichInputComposerView>?
+    var richInputHostingView: FocusableHostingView<RichInputComposerView>?
+    var richInputCancelHandler: (() -> Void)?
     var richInputDraftStore = RichInputDraftStore()
 
     var voiceTriggerHandler: VoiceTriggerHandler?

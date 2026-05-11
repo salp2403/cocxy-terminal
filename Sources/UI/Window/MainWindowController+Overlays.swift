@@ -2441,6 +2441,8 @@ extension MainWindowController {
             dismissNotes()
         } else if isNotificationPanelVisible {
             dismissNotificationPanel()
+        } else if richInputHostingView != nil {
+            cancelRichInputComposer()
         } else if codeReviewSuggestionHostingView != nil {
             dismissCodeReviewSuggestion()
         } else if isCodeReviewVisible {

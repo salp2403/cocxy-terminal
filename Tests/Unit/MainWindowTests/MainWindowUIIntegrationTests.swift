@@ -438,6 +438,126 @@ final class SmartRoutingIntegrationTests: XCTestCase {
     }
 }
 
+// MARK: - Rich Input Integration Tests
+
+@MainActor
+final class RichInputIntegrationTests: XCTestCase {
+    func testDismissActiveOverlayCancelsRichInputAndPersistsDraft() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-ui-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        controller.richInputDraftStore = RichInputDraftStore(rootDirectory: rootDirectory)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+        let shown = controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: "line one\nline two"),
+            for: surfaceView,
+            tabID: tabID
+        )
+
+        XCTAssertTrue(shown)
+        XCTAssertNotNil(controller.richInputHostingView)
+
+        controller.dismissActiveOverlay(nil)
+
+        XCTAssertNil(
+            controller.richInputHostingView,
+            "Escape overlay command must dismiss Rich Input when it is active."
+        )
+
+        let draftKey = MainWindowController.richInputDraftTabKey(tabID)
+        let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
+        XCTAssertEqual(draft.text, "line one\nline two")
+    }
+
+    func testRichInputEscapeKeyEventCancelsAndPersistsDraft() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-key-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        controller.richInputDraftStore = RichInputDraftStore(rootDirectory: rootDirectory)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+        _ = controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: "draft from escape"),
+            for: surfaceView,
+            tabID: tabID
+        )
+        let hostingView = try XCTUnwrap(controller.richInputHostingView)
+
+        hostingView.keyDown(with: try XCTUnwrap(Self.escapeKeyEvent(window: controller.window)))
+
+        XCTAssertNil(controller.richInputHostingView)
+
+        let draftKey = MainWindowController.richInputDraftTabKey(tabID)
+        let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
+        XCTAssertEqual(draft.text, "draft from escape")
+    }
+
+    func testRichInputTextViewEscapeCancelsAndPersistsDraft() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-textview-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        controller.richInputDraftStore = RichInputDraftStore(rootDirectory: rootDirectory)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+        _ = controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: "text view draft"),
+            for: surfaceView,
+            tabID: tabID
+        )
+        let hostingView = try XCTUnwrap(controller.richInputHostingView)
+        hostingView.layoutSubtreeIfNeeded()
+        let textView = try XCTUnwrap(Self.firstDescendantTextView(in: hostingView))
+
+        textView.keyDown(with: try XCTUnwrap(Self.escapeKeyEvent(window: controller.window)))
+
+        XCTAssertNil(controller.richInputHostingView)
+
+        let draftKey = MainWindowController.richInputDraftTabKey(tabID)
+        let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
+        XCTAssertEqual(draft.text, "text view draft")
+    }
+
+    private static func escapeKeyEvent(window: NSWindow?) -> NSEvent? {
+        NSEvent.keyEvent(
+            with: .keyDown,
+            location: .zero,
+            modifierFlags: [],
+            timestamp: 0,
+            windowNumber: window?.windowNumber ?? 0,
+            context: nil,
+            characters: "\u{1B}",
+            charactersIgnoringModifiers: "\u{1B}",
+            isARepeat: false,
+            keyCode: 53
+        )
+    }
+
+    private static func firstDescendantTextView(in view: NSView) -> NSTextView? {
+        if let textView = view as? NSTextView {
+            return textView
+        }
+        for subview in view.subviews {
+            if let textView = firstDescendantTextView(in: subview) {
+                return textView
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - Timeline Integration Tests
 
 /// Tests that the Timeline view can be toggled on the main window.

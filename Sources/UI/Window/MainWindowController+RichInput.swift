@@ -28,6 +28,19 @@ extension MainWindowController {
         }
         viewModel.attachFiles(request.fileURLs)
 
+        let cancelHandler: () -> Void = { [weak self, weak viewModel] in
+            guard let self else { return }
+            if let tabKey, let viewModel {
+                let draft = viewModel.draft(tabID: tabKey, previous: restoredDraft)
+                if draft.isEmpty {
+                    self.richInputDraftStore.delete(tabID: tabKey)
+                } else {
+                    try? self.richInputDraftStore.save(draft)
+                }
+            }
+            self.dismissRichInputComposer()
+        }
+
         let localizer = appLocalizer()
         let frame = richInputFrame(in: overlayContainer.bounds)
         let richInputView = RichInputComposerView(
@@ -42,23 +55,13 @@ extension MainWindowController {
                 guard !payload.isEmpty else { return }
                 surfaceView.submitRichInputPayload(payload)
             },
-            onCancel: { [weak self, weak viewModel] in
-                guard let self else { return }
-                if let tabKey, let viewModel {
-                    let draft = viewModel.draft(tabID: tabKey, previous: restoredDraft)
-                    if draft.isEmpty {
-                        self.richInputDraftStore.delete(tabID: tabKey)
-                    } else {
-                        try? self.richInputDraftStore.save(draft)
-                    }
-                }
-                self.dismissRichInputComposer()
-            },
+            onCancel: cancelHandler,
             localizer: localizer,
             panelWidth: frame.width
         )
 
-        let hostingView = NSHostingView(rootView: richInputView)
+        let hostingView = FocusableHostingView(rootView: richInputView)
+        hostingView.onCancelOperation = cancelHandler
         hostingView.wantsLayer = true
         hostingView.frame = frame
         hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
@@ -66,14 +69,20 @@ extension MainWindowController {
         overlayContainer.addSubview(hostingView)
         richInputViewModel = viewModel
         richInputHostingView = hostingView
+        richInputCancelHandler = cancelHandler
         window?.makeFirstResponder(hostingView)
         return true
+    }
+
+    func cancelRichInputComposer() {
+        richInputCancelHandler?()
     }
 
     func dismissRichInputComposer() {
         richInputHostingView?.removeFromSuperview()
         richInputHostingView = nil
         richInputViewModel = nil
+        richInputCancelHandler = nil
     }
 
     static func richInputDraftTabKey(_ tabID: TabID) -> String {
