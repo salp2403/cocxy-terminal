@@ -606,6 +606,80 @@ struct MCPFoundationSwiftTestingTests {
         #expect(environment["PROJECT_API_PASSWORD"] == nil)
     }
 
+    @Test("stdio launcher wraps MCP server with kernel sandbox when available")
+    func stdioLauncherWrapsMCPServerWithKernelSandboxWhenAvailable() throws {
+        let root = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("cocxy-mcp-plan-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let inputURL = root.appendingPathComponent("mcp-input.json")
+        let outputURL = root.appendingPathComponent("mcp-output.json")
+        try Data("{}".utf8).write(to: inputURL)
+
+        let sandboxExecURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        let launcher = MCPStdioProcessLauncher(
+            sandboxPolicy: MCPStdioSandboxPolicy(inheritedEnvironment: [
+                "PATH": "/bin:/usr/bin",
+                "HOME": "/Users/dev",
+            ]),
+            sandboxExecutor: SandboxExecutor(
+                sandboxExecURL: sandboxExecURL,
+                fileManager: StubMCPExecutableFileManager(executablePaths: [sandboxExecURL.path])
+            ),
+            fileManager: StubMCPExecutableFileManager(executablePaths: ["/bin/cat"])
+        )
+        let server = MCPServer(
+            id: "local",
+            transport: .stdio(
+                command: "cat",
+                arguments: [inputURL.path, outputURL.path],
+                workingDirectory: root.path
+            )
+        )
+
+        let plan = try launcher.launchPlan(server: server)
+        let profile = try #require(plan.sandboxProfile)
+
+        #expect(plan.executableURL.path == sandboxExecURL.path)
+        #expect(plan.arguments.prefix(3) == ["-p", profile, "/bin/cat"])
+        #expect(plan.environment["COCXY_MCP_SANDBOX_MODE"] == "kernel")
+        #expect(plan.sandboxMode == .kernel)
+        #expect(plan.currentDirectoryURL.path == root.path)
+        #expect(profile.contains(#"(allow process-exec (literal "/bin/cat"))"#))
+        #expect(profile.contains(#"(allow file-read* (literal "\#(inputURL.path)"))"#))
+        #expect(profile.contains(#"(allow file-read* (literal "/private\#(inputURL.path)"))"#))
+        #expect(profile.contains(#"(allow file-write* (literal "\#(outputURL.path)"))"#))
+        #expect(profile.contains(#"(allow file-write* (literal "/private\#(outputURL.path)"))"#))
+        #expect(!profile.contains(#"(allow file-write* (literal "\#(inputURL.path)"))"#))
+    }
+
+    @Test("stdio launcher falls back explicitly when sandbox-exec is unavailable")
+    func stdioLauncherFallsBackWhenSandboxExecIsUnavailable() throws {
+        let launcher = MCPStdioProcessLauncher(
+            sandboxPolicy: MCPStdioSandboxPolicy(inheritedEnvironment: [
+                "PATH": "/bin:/usr/bin",
+                "HOME": "/Users/dev",
+            ]),
+            sandboxExecutor: SandboxExecutor(
+                sandboxExecURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
+                fileManager: StubMCPExecutableFileManager(executablePaths: [])
+            ),
+            fileManager: StubMCPExecutableFileManager(executablePaths: ["/bin/cat"])
+        )
+        let server = MCPServer(
+            id: "local",
+            transport: .stdio(command: "cat")
+        )
+
+        let plan = try launcher.launchPlan(server: server)
+
+        #expect(plan.executableURL.path == "/bin/cat")
+        #expect(plan.arguments.isEmpty)
+        #expect(plan.environment["COCXY_MCP_SANDBOX_MODE"] == "legacy-unavailable")
+        #expect(plan.sandboxMode == .legacyUnavailable)
+        #expect(plan.sandboxProfile != nil)
+    }
+
     @Test("stdio transport sends newline JSON and reconnects after process exit")
     func stdioTransportSendsNewlineJSONAndReconnectsAfterProcessExit() async throws {
         let launcher = ScriptedMCPStdioProcessLauncher(processes: [
@@ -974,6 +1048,18 @@ private final class ScriptedMCPStdioProcessLauncher: MCPStdioProcessLaunching, @
         let process = pendingProcesses.removeFirst()
         launchedStorage.append(process)
         return process
+    }
+}
+
+private final class StubMCPExecutableFileManager: SandboxFileManaging {
+    private let executablePaths: Set<String>
+
+    init(executablePaths: Set<String>) {
+        self.executablePaths = executablePaths
+    }
+
+    func isExecutableFile(atPath path: String) -> Bool {
+        executablePaths.contains(path)
     }
 }
 

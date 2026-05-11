@@ -40,6 +40,7 @@ struct SandboxProfileBuilder: Sendable {
         writablePaths: [URL],
         executablePaths: [URL],
         readableLiteralPaths: [URL] = [],
+        writableLiteralPaths: [URL] = [],
         executableSubpaths: [URL] = [],
         includeSystemReadBaseline: Bool = false
     ) -> String {
@@ -77,7 +78,7 @@ struct SandboxProfileBuilder: Sendable {
         if capabilities.contains(.filesystemWrite) {
             lines.append(contentsOf: Self.schemeRules(
                 operation: "file-write*",
-                literals: [],
+                literals: Self.sortedPaths(writableLiteralPaths),
                 subpaths: Self.sortedPaths(writablePaths)
             ))
         }
@@ -109,9 +110,28 @@ struct SandboxProfileBuilder: Sendable {
     }
 
     private static func sortedPaths(_ urls: [URL]) -> [String] {
-        urls
+        let paths = urls
             .map { $0.resolvingSymlinksInPath().standardizedFileURL.path }
+            .flatMap(pathAliases)
+        return Array(Set(paths))
             .sorted()
+    }
+
+    private static func pathAliases(for path: String) -> [String] {
+        var aliases = [path]
+        if path == "/var" || path.hasPrefix("/var/") {
+            aliases.append("/private\(path)")
+        }
+        if path == "/tmp" || path.hasPrefix("/tmp/") {
+            aliases.append("/private\(path)")
+        }
+        if path == "/private/var" || path.hasPrefix("/private/var/") {
+            aliases.append(String(path.dropFirst("/private".count)))
+        }
+        if path == "/private/tmp" || path.hasPrefix("/private/tmp/") {
+            aliases.append(String(path.dropFirst("/private".count)))
+        }
+        return aliases
     }
 
     private static func schemeRules(
@@ -134,12 +154,24 @@ struct SandboxProfileBuilder: Sendable {
         "/usr",
         "/System",
         "/Library",
+        "/Applications",
+        "/Applications/Xcode.app",
+        "/Applications/Xcode.app/Contents/Developer",
+        "/Library/Developer",
+        "/Library/Developer/CommandLineTools",
+        "/opt",
+        "/opt/homebrew",
         "/private",
+        "/private/tmp",
         "/private/var",
         "/private/var/db",
         "/private/var/select",
         "/private/etc",
+        "/etc",
+        "/tmp",
+        "/usr/local",
         "/dev/null",
+        "/dev/urandom",
     ]
 
     private static let systemReadBaselineSubpaths = [
@@ -147,9 +179,16 @@ struct SandboxProfileBuilder: Sendable {
         "/usr",
         "/System",
         "/Library",
+        "/Applications/Xcode.app/Contents/Developer",
+        "/Library/Developer/CommandLineTools",
+        "/opt/homebrew",
+        "/private/tmp",
         "/private/var/db",
         "/private/var/select",
         "/private/etc",
+        "/etc",
+        "/tmp",
+        "/usr/local",
     ]
 
     private static func schemeString(_ value: String) -> String {

@@ -63,6 +63,24 @@ struct SandboxFoundationSwiftTestingTests {
         #expect(profile.contains(#""/tmp/plugin \"quoted\"\\path""#))
     }
 
+    @Test("profile adds private aliases for macOS var and tmp firmlinks")
+    func profileAddsPrivateAliasesForVarAndTmpFirmlinks() {
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead],
+            readablePaths: [
+                URL(fileURLWithPath: "/tmp/cocxy-mcp", isDirectory: true),
+                URL(fileURLWithPath: "/var/folders/cocxy", isDirectory: true),
+            ],
+            writablePaths: [],
+            executablePaths: []
+        )
+
+        #expect(profile.contains(#"(allow file-read* (subpath "/tmp/cocxy-mcp"))"#))
+        #expect(profile.contains(#"(allow file-read* (subpath "/private/tmp/cocxy-mcp"))"#))
+        #expect(profile.contains(#"(allow file-read* (subpath "/var/folders/cocxy"))"#))
+        #expect(profile.contains(#"(allow file-read* (subpath "/private/var/folders/cocxy"))"#))
+    }
+
     @Test("executor launch plan wraps command with sandbox-exec when available")
     func executorLaunchPlanUsesSandboxExecWhenAvailable() throws {
         let executor = SandboxExecutor(

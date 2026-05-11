@@ -130,33 +130,58 @@ private struct MCPJSONRPCMessageProbe: Decodable {
     }
 }
 
+enum MCPStdioSandboxMode: String, Sendable, Equatable {
+    case kernel
+    case legacyDisabled = "legacy-disabled"
+    case legacyUnavailable = "legacy-unavailable"
+}
+
+struct MCPStdioLaunchPlan: Sendable, Equatable {
+    let executableURL: URL
+    let arguments: [String]
+    let environment: [String: String]
+    let currentDirectoryURL: URL
+    let sandboxMode: MCPStdioSandboxMode
+    let sandboxProfile: String?
+}
+
 struct MCPStdioProcessLauncher: MCPStdioProcessLaunching {
     private let sandboxPolicy: MCPStdioSandboxPolicy
+    private let sandboxExecutor: SandboxExecutor
+    private let fileManager: any SandboxFileManaging
+    private let isolateServers: Bool
+    private let auditLog: SandboxAuditLog?
 
-    init(sandboxPolicy: MCPStdioSandboxPolicy = MCPStdioSandboxPolicy()) {
+    init(
+        sandboxPolicy: MCPStdioSandboxPolicy = MCPStdioSandboxPolicy(),
+        sandboxExecutor: SandboxExecutor = SandboxExecutor(),
+        fileManager: any SandboxFileManaging = FileManager.default,
+        isolateServers: Bool = true,
+        auditLog: SandboxAuditLog? = nil
+    ) {
         self.sandboxPolicy = sandboxPolicy
+        self.sandboxExecutor = sandboxExecutor
+        self.fileManager = fileManager
+        self.isolateServers = isolateServers
+        self.auditLog = auditLog
     }
 
     func launch(server: MCPServer) throws -> any MCPStdioProcess {
-        guard case .stdio(let command, let arguments, let environment, let workingDirectory) = server.transport else {
-            throw MCPStdioTransportError.unsupportedServer(serverID: server.id)
-        }
+        let launchPlan = try launchPlan(server: server)
+        recordAudit(for: server, plan: launchPlan)
 
         let process = Process()
         let input = Pipe()
         let output = Pipe()
         let error = Pipe()
-        let commandURL = executableURL(for: command)
 
-        process.executableURL = commandURL.url
-        process.arguments = commandURL.argumentsPrefix + arguments
+        process.executableURL = launchPlan.executableURL
+        process.arguments = launchPlan.arguments
         process.standardInput = input
         process.standardOutput = output
         process.standardError = error
-        process.environment = try sandboxPolicy.resolvedEnvironment(overrides: environment)
-        if let workingDirectory {
-            process.currentDirectoryURL = directoryURL(for: workingDirectory)
-        }
+        process.environment = launchPlan.environment
+        process.currentDirectoryURL = launchPlan.currentDirectoryURL
 
         try process.run()
 
@@ -169,13 +194,117 @@ struct MCPStdioProcessLauncher: MCPStdioProcessLaunching {
         )
     }
 
-    private func executableURL(for command: String) -> (url: URL, argumentsPrefix: [String]) {
+    func launchPlan(server: MCPServer) throws -> MCPStdioLaunchPlan {
+        guard case .stdio(let command, let arguments, let environment, let workingDirectory) = server.transport else {
+            throw MCPStdioTransportError.unsupportedServer(serverID: server.id)
+        }
+
+        let resolvedEnvironment = try sandboxPolicy.resolvedEnvironment(overrides: environment)
+        let commandURL = executableURL(for: command, environment: resolvedEnvironment)
+        let currentDirectoryURL = workingDirectory
+            .map(directoryURL(for:))
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let baseArguments = commandURL.argumentsPrefix + arguments
+
+        guard isolateServers else {
+            var environment = resolvedEnvironment
+            environment["COCXY_MCP_SANDBOX_MODE"] = MCPStdioSandboxMode.legacyDisabled.rawValue
+            return MCPStdioLaunchPlan(
+                executableURL: commandURL.url,
+                arguments: baseArguments,
+                environment: environment,
+                currentDirectoryURL: currentDirectoryURL,
+                sandboxMode: .legacyDisabled,
+                sandboxProfile: nil
+            )
+        }
+
+        let profile = MCPServerSandboxProfile(server: server).profile(commandURL: commandURL.url)
+        do {
+            let plan = try sandboxExecutor.launchPlan(
+                commandURL: commandURL.url,
+                arguments: baseArguments,
+                profile: profile,
+                environment: resolvedEnvironment,
+                currentDirectoryURL: currentDirectoryURL
+            )
+            var environment = plan.environment
+            environment["COCXY_MCP_SANDBOX_MODE"] = MCPStdioSandboxMode.kernel.rawValue
+            return MCPStdioLaunchPlan(
+                executableURL: plan.executableURL,
+                arguments: plan.arguments,
+                environment: environment,
+                currentDirectoryURL: plan.currentDirectoryURL,
+                sandboxMode: .kernel,
+                sandboxProfile: profile
+            )
+        } catch SandboxExecutorError.sandboxExecUnavailable {
+            var environment = resolvedEnvironment
+            environment["COCXY_MCP_SANDBOX_MODE"] = MCPStdioSandboxMode.legacyUnavailable.rawValue
+            return MCPStdioLaunchPlan(
+                executableURL: commandURL.url,
+                arguments: baseArguments,
+                environment: environment,
+                currentDirectoryURL: currentDirectoryURL,
+                sandboxMode: .legacyUnavailable,
+                sandboxProfile: profile
+            )
+        }
+    }
+
+    private func recordAudit(for server: MCPServer, plan: MCPStdioLaunchPlan) {
+        guard let auditLog else { return }
+        let decision: SandboxAuditDecision = plan.sandboxMode == .kernel ? .granted : .denied
+        try? auditLog.append(SandboxAuditEntry(
+            timestamp: Date(),
+            subjectID: "mcp.\(server.id)",
+            subjectKind: .mcp,
+            operation: "launch stdio server",
+            capability: .processExec,
+            decision: decision,
+            detail: plan.sandboxMode.rawValue
+        ))
+    }
+
+    private func executableURL(
+        for command: String,
+        environment: [String: String]
+    ) -> (url: URL, argumentsPrefix: [String]) {
         let expanded = (command as NSString).expandingTildeInPath
         if expanded.contains("/") {
-            return (URL(fileURLWithPath: expanded), [])
+            return (canonicalExecutableURL(for: expanded), [])
+        }
+
+        for path in (environment["PATH"] ?? "").split(separator: ":").map(String.init) {
+            let candidate = URL(fileURLWithPath: path, isDirectory: true)
+                .appendingPathComponent(command)
+            if fileManager.isExecutableFile(atPath: candidate.path) {
+                return (candidate, [])
+            }
         }
 
         return (URL(fileURLWithPath: "/usr/bin/env"), [command])
+    }
+
+    private func canonicalExecutableURL(for path: String) -> URL {
+        guard path == "/usr/bin/python3",
+              let developerPythonURL = developerPythonURL()
+        else {
+            return URL(fileURLWithPath: path)
+        }
+        return developerPythonURL
+    }
+
+    private func developerPythonURL() -> URL? {
+        let candidates = [
+            "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/Current/bin/python3",
+            "/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+            "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/Current/bin/python3",
+            "/Applications/Xcode.app/Contents/Developer/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9",
+        ]
+        return candidates
+            .map { URL(fileURLWithPath: $0) }
+            .first { fileManager.isExecutableFile(atPath: $0.path) }
     }
 
     private func directoryURL(for path: String) -> URL {
