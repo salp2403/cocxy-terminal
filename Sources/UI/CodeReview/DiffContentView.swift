@@ -438,7 +438,7 @@ private final class DiffLineRowView: NSView {
     private let contentLabel = NSTextField(wrappingLabelWithString: "")
     private var filePath: String = ""
     private var lineNumber: Int?
-    private var lineKind: DiffLine.Kind = .context
+    private var lineKind: DiffLineKind = .context
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

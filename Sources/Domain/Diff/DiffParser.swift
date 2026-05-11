@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// DiffParser.swift - Unified diff parsing for the review panel.
+// DiffParser.swift - Shared unified diff parsing for code review and VCS surfaces.
 
 import Foundation
 
