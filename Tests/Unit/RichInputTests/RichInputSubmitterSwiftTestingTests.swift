@@ -188,6 +188,21 @@ struct RichInputSubmitterSwiftTestingTests {
         #expect(RichInputDraftStore.sanitizedTabID("../tab id") == "tab-id")
     }
 
+    @Test("tab model persists stable rich input draft identity")
+    func tabModelPersistsStableRichInputDraftIdentity() throws {
+        let draftID = UUID(uuidString: "00000000-0000-0000-0000-000000000333")!
+        let tab = Tab(
+            title: "Terminal",
+            workingDirectory: URL(fileURLWithPath: "/tmp/project", isDirectory: true),
+            richInputDraftID: draftID
+        )
+
+        let data = try JSONEncoder().encode(tab)
+        let decoded = try JSONDecoder().decode(Tab.self, from: data)
+
+        #expect(decoded.richInputDraftID == draftID)
+    }
+
     private static let pngData = Data(base64Encoded:
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
     )!

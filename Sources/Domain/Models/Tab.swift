@@ -145,6 +145,14 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
     /// launch. This field is optional so older session JSONs decode as-is.
     var terminalEnginePreference: TerminalEnginePreference?
 
+    /// Stable local identifier for the rich input draft attached to this tab.
+    ///
+    /// Kept on the tab so draft persistence survives session restore and does
+    /// not depend on UI-only surface ownership. Nil means no rich input draft
+    /// identity has been allocated yet; the composer lazily creates one the
+    /// first time draft preservation is needed.
+    var richInputDraftID: UUID?
+
     /// Whether a command is currently executing.
     var isCommandRunning: Bool {
         lastCommandStartedAt != nil && lastCommandDuration == nil
@@ -184,7 +192,8 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         worktreeRoot: URL? = nil,
         worktreeOriginRepo: URL? = nil,
         worktreeBranch: String? = nil,
-        terminalEnginePreference: TerminalEnginePreference? = nil
+        terminalEnginePreference: TerminalEnginePreference? = nil,
+        richInputDraftID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -206,6 +215,7 @@ struct Tab: Identifiable, Codable, Equatable, Sendable {
         self.worktreeOriginRepo = worktreeOriginRepo
         self.worktreeBranch = worktreeBranch
         self.terminalEnginePreference = terminalEnginePreference
+        self.richInputDraftID = richInputDraftID
     }
 }
 

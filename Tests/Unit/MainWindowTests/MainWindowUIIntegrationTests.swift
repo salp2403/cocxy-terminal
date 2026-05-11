@@ -509,9 +509,66 @@ final class RichInputIntegrationTests: XCTestCase {
             "Escape overlay command must dismiss Rich Input when it is active."
         )
 
-        let draftKey = MainWindowController.richInputDraftTabKey(tabID)
+        let draftKey = try Self.richInputDraftKey(for: tabID, controller: controller)
         let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
         XCTAssertEqual(draft.text, "line one\nline two")
+    }
+
+    func testRichInputComposerAllocatesStableDraftIdentityOnTab() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        XCTAssertNil(controller.tabManager.tab(for: tabID)?.richInputDraftID)
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+
+        XCTAssertTrue(controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: "stable draft"),
+            for: surfaceView,
+            tabID: tabID
+        ))
+
+        let firstDraftID = try XCTUnwrap(controller.tabManager.tab(for: tabID)?.richInputDraftID)
+        controller.dismissRichInputComposer()
+        XCTAssertTrue(controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: "stable draft again"),
+            for: surfaceView,
+            tabID: tabID
+        ))
+
+        XCTAssertEqual(controller.tabManager.tab(for: tabID)?.richInputDraftID, firstDraftID)
+    }
+
+    func testRichInputComposerMigratesLegacyTabKeyDraft() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-legacy-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        controller.richInputDraftStore = RichInputDraftStore(rootDirectory: rootDirectory)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let legacyKey = MainWindowController.richInputDraftTabKey(tabID)
+        try controller.richInputDraftStore.save(RichInputDraft(
+            id: UUID(uuidString: "00000000-0000-0000-0000-000000000444")!,
+            tabID: legacyKey,
+            text: "legacy draft",
+            attachments: [],
+            createdAt: Date(timeIntervalSince1970: 1_700_000_040),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_041)
+        ))
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+
+        XCTAssertTrue(controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: ""),
+            for: surfaceView,
+            tabID: tabID
+        ))
+
+        XCTAssertEqual(controller.tabManager.tab(for: tabID)?.richInputDraftID, tabID.rawValue)
+        XCTAssertEqual(controller.richInputViewModel?.text, "legacy draft")
     }
 
     func testRichInputEscapeKeyEventCancelsAndPersistsDraft() throws {
@@ -536,7 +593,7 @@ final class RichInputIntegrationTests: XCTestCase {
 
         XCTAssertNil(controller.richInputHostingView)
 
-        let draftKey = MainWindowController.richInputDraftTabKey(tabID)
+        let draftKey = try Self.richInputDraftKey(for: tabID, controller: controller)
         let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
         XCTAssertEqual(draft.text, "draft from escape")
     }
@@ -565,9 +622,17 @@ final class RichInputIntegrationTests: XCTestCase {
 
         XCTAssertNil(controller.richInputHostingView)
 
-        let draftKey = MainWindowController.richInputDraftTabKey(tabID)
+        let draftKey = try Self.richInputDraftKey(for: tabID, controller: controller)
         let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
         XCTAssertEqual(draft.text, "text view draft")
+    }
+
+    private static func richInputDraftKey(
+        for tabID: TabID,
+        controller: MainWindowController
+    ) throws -> String {
+        let draftID = try XCTUnwrap(controller.tabManager.tab(for: tabID)?.richInputDraftID)
+        return MainWindowController.richInputDraftKey(draftID)
     }
 
     private static func escapeKeyEvent(window: NSWindow?) -> NSEvent? {

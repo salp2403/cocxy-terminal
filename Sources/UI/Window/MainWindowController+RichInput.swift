@@ -55,7 +55,7 @@ extension MainWindowController {
 
         dismissRichInputComposer()
 
-        let tabKey = config.preserveDraftsPerTab ? tabID.map(Self.richInputDraftTabKey(_:)) : nil
+        let tabKey = config.preserveDraftsPerTab ? richInputDraftKey(for: tabID) : nil
         let restoredDraft = tabKey.flatMap { try? richInputDraftStore.load(tabID: $0) }
         let attachmentStore = RichInputAttachmentStore(
             ttlDays: config.attachmentsCacheTTLDays,
@@ -200,6 +200,29 @@ extension MainWindowController {
 
     static func richInputDraftTabKey(_ tabID: TabID) -> String {
         tabID.rawValue.uuidString.lowercased()
+    }
+
+    static func richInputDraftKey(_ draftID: UUID) -> String {
+        draftID.uuidString.lowercased()
+    }
+
+    private func richInputDraftKey(for tabID: TabID?) -> String? {
+        guard let tabID else { return nil }
+        if let draftID = tabManager.tab(for: tabID)?.richInputDraftID {
+            return Self.richInputDraftKey(draftID)
+        }
+
+        let legacyKey = Self.richInputDraftTabKey(tabID)
+        let draftID: UUID
+        if (try? richInputDraftStore.load(tabID: legacyKey)) != nil {
+            draftID = tabID.rawValue
+        } else {
+            draftID = UUID()
+        }
+        tabManager.updateTab(id: tabID) { tab in
+            tab.richInputDraftID = draftID
+        }
+        return Self.richInputDraftKey(draftID)
     }
 
     private func richInputFrame(in bounds: NSRect) -> NSRect {
