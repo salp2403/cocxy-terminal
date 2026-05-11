@@ -455,52 +455,13 @@ extension MainWindowController {
         requiredVariant: ThemeVariant,
         themeEngine: ThemeEngineImpl?
     ) -> String {
-        let candidates = [preferredName, fallbackName]
-        for candidate in candidates {
-            if let resolved = resolvedThemeName(
-                candidate,
-                requiredVariant: requiredVariant,
-                themeEngine: themeEngine
-            ) {
-                return resolved
-            }
-        }
-
-        if let firstMatchingTheme = themeEngine?.availableThemes.first(where: {
-            $0.variant == requiredVariant
-        }) {
-            return firstMatchingTheme.name
-        }
-
-        return fallbackName
+        ThemeSelectionResolver.resolvedVariantThemeName(
+            preferredName: preferredName,
+            fallbackName: fallbackName,
+            requiredVariant: requiredVariant,
+            themeEngine: themeEngine
+        )
     }
-
-    private static func resolvedThemeName(
-        _ name: String,
-        requiredVariant: ThemeVariant,
-        themeEngine: ThemeEngineImpl?
-    ) -> String? {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              !Self.systemThemeAliases.contains(trimmed.lowercased()) else {
-            return nil
-        }
-
-        guard let themeEngine else { return trimmed }
-        guard let theme = try? themeEngine.themeByName(trimmed),
-              theme.metadata.variant == requiredVariant else {
-            return nil
-        }
-        return theme.metadata.name
-    }
-
-    private static let systemThemeAliases: Set<String> = [
-        "system",
-        "auto",
-        "default",
-        "follow-system",
-        "followsystem",
-    ]
 
     /// Maps a theme variant to the Aurora design palette identity. The
     /// helper is shared so adjacent extensions (notably the Notes

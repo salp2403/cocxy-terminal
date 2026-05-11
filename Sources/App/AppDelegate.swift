@@ -638,6 +638,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             ?? AppearanceConfig.defaults.fontSize
         let theme = configService?.current.appearance.theme
             ?? AppearanceConfig.defaults.theme
+        let resolvedThemeName = concreteThemeName(for: theme, engine: themeEngine)
         let shell = configService?.current.general.shell
             ?? GeneralConfig.defaults.shell
 
@@ -648,7 +649,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // palette without applying it leaves that toggle stuck on the
         // previous variant.
         let resolvedPalette: ThemePalette?
-        if let engine = themeEngine, let resolved = try? engine.themeByName(theme) {
+        if let engine = themeEngine, let resolved = try? engine.themeByName(resolvedThemeName) {
             try? engine.apply(themeName: resolved.metadata.name)
             resolvedPalette = resolved.palette
         } else {
@@ -664,7 +665,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let config = TerminalEngineConfig(
             fontFamily: fontFamily,
             fontSize: fontSize,
-            themeName: theme,
+            themeName: resolvedThemeName,
             shell: shell,
             workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
             themePalette: resolvedPalette,
@@ -752,6 +753,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let themeName = overrideThemeName
             ?? configService?.current.appearance.theme
             ?? AppearanceConfig.defaults.theme
+        let resolvedThemeName = concreteThemeName(for: themeName, engine: themeEngine)
         let shell = configService?.current.general.shell
             ?? GeneralConfig.defaults.shell
         let paddingX = configService?.current.appearance.effectivePaddingX
@@ -762,7 +764,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let resolvedPalette: ThemePalette?
         if let overridePalette {
             resolvedPalette = overridePalette
-        } else if let engine = themeEngine, let resolved = try? engine.themeByName(themeName) {
+        } else if let engine = themeEngine, let resolved = try? engine.themeByName(resolvedThemeName) {
             resolvedPalette = resolved.palette
         } else {
             resolvedPalette = themeEngine?.activeTheme.palette
@@ -771,7 +773,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let engineConfig = TerminalEngineConfig(
             fontFamily: fontFamily,
             fontSize: fontSize,
-            themeName: themeName,
+            themeName: resolvedThemeName,
             shell: shell,
             workingDirectory: FileManager.default.homeDirectoryForCurrentUser,
             themePalette: resolvedPalette,
@@ -833,6 +835,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let workingDirectory: URL
     }
 
+    private struct AppearanceThemePair: Equatable {
+        let darkTheme: String
+        let lightTheme: String
+    }
+
     func switchTheme(to themeName: String) {
         guard let windowController = windowController else { return }
 
@@ -846,10 +853,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
 
+        let concreteThemeName = concreteThemeName(for: themeName, engine: engine)
         do {
-            try engine.apply(themeName: themeName)
+            try engine.apply(themeName: concreteThemeName)
         } catch {
-            NSLog("[AppDelegate] Theme not found: %@", themeName)
+            NSLog("[AppDelegate] Theme not found: %@", concreteThemeName)
             return
         }
         let theme = engine.activeTheme
@@ -880,17 +888,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         NSLog("[AppDelegate] Theme switched to: %@", theme.metadata.name)
     }
 
+    private func concreteThemeName(for requestedName: String, engine: ThemeEngineImpl?) -> String {
+        ThemeSelectionResolver.resolvedConfiguredThemeName(
+            requestedName,
+            isSystemDarkMode: SystemAppearanceProvider().isDarkMode,
+            themeEngine: engine
+        )
+    }
+
     func applyBridgeConfigurationChanges(from oldConfig: CocxyConfig?, to newConfig: CocxyConfig) {
         guard let cocxyBridge = bridge?.cocxyCoreBridge else { return }
 
-        let resolvedTheme = try? themeEngine?.themeByName(newConfig.appearance.theme)
+        let concreteAppearanceTheme = concreteThemeName(
+            for: newConfig.appearance.theme,
+            engine: themeEngine
+        )
+        let resolvedTheme = try? themeEngine?.themeByName(concreteAppearanceTheme)
         let imageDiskCacheDirectory = imageDiskCacheDirectoryURL(
             from: newConfig.terminal.imageDiskCacheDirectory
         )
         cocxyBridge.updateDefaults(
             fontFamily: newConfig.appearance.fontFamily,
             fontSize: newConfig.appearance.fontSize,
-            themeName: resolvedTheme?.metadata.name ?? newConfig.appearance.theme,
+            themeName: resolvedTheme?.metadata.name ?? concreteAppearanceTheme,
             themePalette: resolvedTheme?.palette,
             shell: newConfig.general.shell,
             windowPaddingX: newConfig.appearance.effectivePaddingX,
@@ -1772,6 +1792,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             lightTheme: lightTheme,
             autoSwitchEnabled: true
         )
+
+        let themePairPublisher = configService?.configChangedPublisher
+            .map { config in
+                AppearanceThemePair(
+                    darkTheme: config.appearance.theme,
+                    lightTheme: config.appearance.lightTheme
+                )
+            }
+
+        themePairPublisher?
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak observer] themePair in
+                observer?.updateThemePair(
+                    darkTheme: themePair.darkTheme,
+                    lightTheme: themePair.lightTheme
+                )
+            }
+            .store(in: &hookCancellables)
     }
 
     // MARK: - Plugin Initialization

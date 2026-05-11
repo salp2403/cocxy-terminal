@@ -52,10 +52,15 @@ extension MainWindowController {
     ///
     /// - Parameter config: The new configuration to apply.
     func applyConfig(_ config: CocxyConfig) {
-        let themeName = config.appearance.theme
+        let themeEngine = ThemeEngineImpl()
+        let themeName = ThemeSelectionResolver.resolvedConfiguredThemeName(
+            config.appearance.theme,
+            isSystemDarkMode: SystemAppearanceProvider().isDarkMode,
+            themeEngine: themeEngine
+        )
 
         let backgroundColor: NSColor
-        if let theme = try? ThemeEngineImpl().themeByName(themeName) {
+        if let theme = try? themeEngine.themeByName(themeName) {
             backgroundColor = CodableColor(hex: theme.palette.background).nsColor
         } else {
             backgroundColor = CocxyColors.base

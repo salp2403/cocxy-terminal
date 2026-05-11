@@ -103,6 +103,48 @@ final class AppearanceObserverTests: XCTestCase {
         observer.stopObserving()
     }
 
+    func testAutoSwitchResolvesSystemAliasToDefaultDarkTheme() throws {
+        let engine = ThemeEngineImpl()
+        try engine.apply(themeName: "Catppuccin Latte")
+
+        let provider = MockAppearanceProvider(isDarkMode: true)
+        let observer = AppearanceObserver(appearanceProvider: provider)
+
+        observer.startObserving(
+            themeEngine: engine,
+            darkTheme: "system",
+            lightTheme: "Catppuccin Latte",
+            autoSwitchEnabled: true
+        )
+
+        simulateAndWait(provider: provider, isDarkMode: true)
+
+        XCTAssertEqual(engine.activeTheme.metadata.name, "Catppuccin Mocha")
+
+        observer.stopObserving()
+    }
+
+    func testAutoSwitchCallbackReceivesResolvedThemeForSystemAlias() throws {
+        let engine = ThemeEngineImpl()
+        let provider = MockAppearanceProvider(isDarkMode: true)
+        let observer = AppearanceObserver(appearanceProvider: provider)
+        var requestedTheme: String?
+        observer.onThemeSwitchRequested = { requestedTheme = $0 }
+
+        observer.startObserving(
+            themeEngine: engine,
+            darkTheme: "system",
+            lightTheme: "Catppuccin Latte",
+            autoSwitchEnabled: true
+        )
+
+        simulateAndWait(provider: provider, isDarkMode: true)
+
+        XCTAssertEqual(requestedTheme, "Catppuccin Mocha")
+
+        observer.stopObserving()
+    }
+
     func testStopObservingCleansUpResources() {
         let provider = MockAppearanceProvider(isDarkMode: true)
         let observer = AppearanceObserver(appearanceProvider: provider)

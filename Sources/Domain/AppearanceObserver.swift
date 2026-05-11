@@ -172,11 +172,22 @@ final class AppearanceObserver {
     private func handleAppearanceChange(isDark: Bool) {
         guard autoSwitchEnabled else { return }
 
-        let targetThemeName = isDark ? darkThemeName : lightThemeName
+        let targetThemeName = resolvedThemeName(forDarkMode: isDark)
         if let callback = onThemeSwitchRequested {
             callback(targetThemeName)
         } else if let engine = themeEngine {
             try? engine.apply(themeName: targetThemeName)
         }
+    }
+
+    private func resolvedThemeName(forDarkMode isDark: Bool) -> String {
+        ThemeSelectionResolver.resolvedVariantThemeName(
+            preferredName: isDark ? darkThemeName : lightThemeName,
+            fallbackName: isDark
+                ? AppearanceConfig.defaults.theme
+                : AppearanceConfig.defaults.lightTheme,
+            requiredVariant: isDark ? .dark : .light,
+            themeEngine: themeEngine
+        )
     }
 }
