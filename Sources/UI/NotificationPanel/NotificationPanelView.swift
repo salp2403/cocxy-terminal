@@ -108,7 +108,7 @@ final class NotificationPanelViewModel: ObservableObject {
 ///
 /// ## Behavior
 ///
-/// - Toggle with Cmd+Shift+I.
+/// - Toggle with Cmd+Option+Shift+I.
 /// - Click a notification to focus its tab.
 /// - "Mark all read" clears badges.
 struct NotificationPanelView: View {

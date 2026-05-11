@@ -44,6 +44,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "navigation.splitUp",
             "navigation.splitDown",
             "search.toggle",
+            "terminal.richInput",
             "editor.zoomIn",
             "editor.zoomOut",
             "editor.resetZoom",

@@ -6,22 +6,57 @@ import SwiftUI
 
 @MainActor
 extension MainWindowController {
+    @discardableResult
+    func toggleRichInputComposer() -> Bool {
+        if richInputHostingView != nil {
+            cancelRichInputComposer()
+            return true
+        }
+
+        guard (configService?.current.richInput.enabled ?? RichInputConfig.defaults.enabled),
+              let surfaceView = activeTerminalSurfaceView as? CocxyCoreView else {
+            return false
+        }
+
+        return presentRichInputComposer(
+            TerminalRichInputRequest(text: ""),
+            for: surfaceView,
+            tabID: surfaceView.terminalViewModel?.surfaceID.flatMap(tabID(for:))
+        )
+    }
+
+    @objc func toggleRichInputComposerAction(_ sender: Any?) {
+        _ = toggleRichInputComposer()
+    }
+
     func presentRichInputComposer(
         _ request: TerminalRichInputRequest,
         for surfaceView: CocxyCoreView,
         tabID: TabID? = nil
     ) -> Bool {
         guard let overlayContainer = overlayContainerView else { return false }
+        let config = configService?.current.richInput ?? .defaults
+        guard config.enabled else { return false }
 
         dismissRichInputComposer()
 
-        let tabKey = tabID.map(Self.richInputDraftTabKey(_:))
+        let tabKey = config.preserveDraftsPerTab ? tabID.map(Self.richInputDraftTabKey(_:)) : nil
         let restoredDraft = tabKey.flatMap { try? richInputDraftStore.load(tabID: $0) }
+        let attachmentStore = RichInputAttachmentStore(
+            ttlDays: config.attachmentsCacheTTLDays,
+            maxSizeBytes: config.attachmentsMaxSizeMB * 1024 * 1024
+        )
         let viewModel: RichInputComposerViewModel
         if let restoredDraft {
-            viewModel = RichInputComposerViewModel(draft: restoredDraft)
+            viewModel = RichInputComposerViewModel(
+                draft: restoredDraft,
+                attachmentStore: attachmentStore
+            )
         } else {
-            viewModel = RichInputComposerViewModel(text: request.text)
+            viewModel = RichInputComposerViewModel(
+                text: request.text,
+                attachmentStore: attachmentStore
+            )
         }
         if !request.text.isEmpty {
             viewModel.text = request.text
@@ -83,6 +118,14 @@ extension MainWindowController {
         richInputHostingView = nil
         richInputViewModel = nil
         richInputCancelHandler = nil
+    }
+
+    func shouldAutoShowRichInput(for request: TerminalRichInputRequest) -> Bool {
+        let config = configService?.current.richInput ?? .defaults
+        guard config.enabled else { return false }
+        if !request.fileURLs.isEmpty { return config.autoShowOnMultilinePaste }
+        guard request.text.contains("\n") else { return false }
+        return config.autoShowOnMultilinePaste
     }
 
     static func richInputDraftTabKey(_ tabID: TabID) -> String {

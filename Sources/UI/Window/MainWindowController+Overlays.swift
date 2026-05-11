@@ -132,6 +132,7 @@ extension MainWindowController {
         "notes.toggle": KeybindingActionCatalog.windowNotes.id,
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
+        "terminal.richInput": KeybindingActionCatalog.richInputComposer.id,
         "editor.zoomIn": KeybindingActionCatalog.editorZoomIn.id,
         "editor.zoomOut": KeybindingActionCatalog.editorZoomOut.id,
         "editor.resetZoom": KeybindingActionCatalog.editorResetZoom.id,
@@ -455,6 +456,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleSearchBar() }
+                }
+            ),
+            CommandAction(
+                id: "terminal.richInput",
+                name: "Rich Input",
+                description: "Open the multiline composer for the active terminal",
+                shortcut: paletteShortcutLabel("terminal.richInput", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleRichInputComposer() }
                 }
             ),
             CommandAction(
@@ -1986,7 +1998,7 @@ extension MainWindowController {
         )
     }
 
-    // MARK: - Notification Panel (Cmd+Shift+I)
+    // MARK: - Notification Panel (Cmd+Option+Shift+I)
 
     func toggleNotificationPanel() {
         if isNotificationPanelVisible {

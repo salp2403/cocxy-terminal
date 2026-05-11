@@ -509,6 +509,14 @@ final class ConfigService: ConfigProviding {
         animation-duration = \(defaults.quickTerminal.animationDuration)
         screen = "\(defaults.quickTerminal.screen.rawValue)"
 
+        [rich-input]
+        enabled = \(defaults.richInput.enabled)
+        auto-show-on-multiline-paste = \(defaults.richInput.autoShowOnMultilinePaste)
+        default-shortcut = "\(defaults.richInput.defaultShortcut)"
+        attachments-cache-ttl-days = \(defaults.richInput.attachmentsCacheTTLDays)
+        attachments-max-size-mb = \(defaults.richInput.attachmentsMaxSizeMB)
+        preserve-drafts-per-tab = \(defaults.richInput.preserveDraftsPerTab)
+
         \(defaults.keybindings.tomlSection())
 
         [sessions]
@@ -691,11 +699,16 @@ final class ConfigService: ConfigProviding {
         let notes = parseNotesConfig(from: parsed)
         let lsp = parseLSPConfig(from: parsed)
         let vim = parseVimConfig(from: parsed)
+        let richInput = parseRichInputConfig(from: parsed)
         let experimental = parseExperimentalConfig(from: parsed)
         let keybindings = parseKeybindingsConfig(from: parsed)
             .applyingFallbackShortcut(
                 actionId: KeybindingActionCatalog.windowNotes.id,
                 shortcut: notes.shortcut
+            )
+            .applyingFallbackShortcut(
+                actionId: KeybindingActionCatalog.richInputComposer.id,
+                shortcut: richInput.defaultShortcut
             )
 
         return CocxyConfig(
@@ -726,6 +739,7 @@ final class ConfigService: ConfigProviding {
             notes: notes,
             lsp: lsp,
             vim: vim,
+            richInput: richInput,
             experimental: experimental
         )
     }
@@ -1489,6 +1503,49 @@ final class ConfigService: ConfigProviding {
         let table = extractTable("vim", from: parsed)
         let defaults = VimConfig.defaults
         return VimConfig(enabled: boolValue(table["enabled"]) ?? defaults.enabled)
+    }
+
+    /// Parses `[rich-input]` as a local-only command composer. Missing and
+    /// malformed values fall back to safe defaults, numeric cache knobs are
+    /// clamped, and invalid shortcuts revert to Cmd+Shift+I.
+    private func parseRichInputConfig(from parsed: [String: TOMLValue]) -> RichInputConfig {
+        let table = extractTable("rich-input", from: parsed)
+        let defaults = RichInputConfig.defaults
+
+        let rawTTL = intValue(table["attachments-cache-ttl-days"])
+            ?? defaults.attachmentsCacheTTLDays
+        let rawMaxSize = intValue(table["attachments-max-size-mb"])
+            ?? defaults.attachmentsMaxSizeMB
+
+        return RichInputConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            autoShowOnMultilinePaste: boolValue(table["auto-show-on-multiline-paste"])
+                ?? defaults.autoShowOnMultilinePaste,
+            defaultShortcut: normalizedRichInputShortcut(
+                stringValue(table["default-shortcut"]) ?? defaults.defaultShortcut
+            ),
+            attachmentsCacheTTLDays: clamp(
+                rawTTL,
+                min: RichInputConfig.minCacheTTLDays,
+                max: RichInputConfig.maxCacheTTLDays
+            ),
+            attachmentsMaxSizeMB: clamp(
+                rawMaxSize,
+                min: RichInputConfig.minAttachmentsMaxSizeMB,
+                max: RichInputConfig.maxAttachmentsMaxSizeMB
+            ),
+            preserveDraftsPerTab: boolValue(table["preserve-drafts-per-tab"])
+                ?? defaults.preserveDraftsPerTab
+        )
+    }
+
+    private func normalizedRichInputShortcut(_ rawShortcut: String) -> String {
+        guard let parsed = KeybindingShortcut.parse(rawShortcut),
+              parsed.isAssignableToMenuItem
+        else {
+            return RichInputConfig.defaults.defaultShortcut
+        }
+        return parsed.canonical
     }
 
     /// Parses `[experimental]` feature gates. Missing or malformed values

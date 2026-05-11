@@ -442,6 +442,35 @@ final class SmartRoutingIntegrationTests: XCTestCase {
 
 @MainActor
 final class RichInputIntegrationTests: XCTestCase {
+    func testRichInputMenuActionOpensComposer() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.toggleRichInputComposerAction(nil)
+
+        XCTAssertNotNil(controller.richInputHostingView)
+    }
+
+    func testRichInputDisabledConfigPreventsManualOpen() throws {
+        let provider = RichInputConfigProvider(content: """
+        [rich-input]
+        enabled = false
+        """)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: bridge,
+            configService: service
+        )
+        controller.showWindow(nil)
+
+        controller.toggleRichInputComposerAction(nil)
+
+        XCTAssertNil(controller.richInputHostingView)
+    }
+
     func testDismissActiveOverlayCancelsRichInputAndPersistsDraft() throws {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -555,6 +584,22 @@ final class RichInputIntegrationTests: XCTestCase {
             }
         }
         return nil
+    }
+
+    private final class RichInputConfigProvider: ConfigFileProviding, @unchecked Sendable {
+        var content: String?
+
+        init(content: String?) {
+            self.content = content
+        }
+
+        func readConfigFile() -> String? {
+            content
+        }
+
+        func writeConfigFile(_ content: String) throws {
+            self.content = content
+        }
     }
 }
 

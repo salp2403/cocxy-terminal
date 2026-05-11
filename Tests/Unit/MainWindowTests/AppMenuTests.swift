@@ -400,6 +400,21 @@ final class ViewMenuItemTests: XCTestCase {
             KeybindingActionCatalog.voiceInput.id
         )
     }
+
+    func testViewMenuHasRichInputItemWithDedicatedAction() {
+        guard let richInput = viewMenu.items.first(where: { $0.title == "Rich Input" }) else {
+            XCTFail("View menu must expose Rich Input")
+            return
+        }
+
+        XCTAssertEqual(richInput.action, #selector(MainWindowController.toggleRichInputComposerAction(_:)))
+        XCTAssertEqual(
+            MenuKeybindingsBinder.actionId(of: richInput),
+            KeybindingActionCatalog.richInputComposer.id
+        )
+        XCTAssertEqual(richInput.keyEquivalent, "i")
+        XCTAssertEqual(richInput.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask), [.command, .shift])
+    }
 }
 
 // MARK: - Window Menu Tests

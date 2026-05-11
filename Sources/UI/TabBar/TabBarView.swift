@@ -458,7 +458,7 @@ final class TabBarView: NSView {
         let notificationsTitle = localized("tabbar.notifications.title", fallback: "Notifications")
         notificationBellButton.toolTip = localized(
             "tabbar.notifications.tooltip",
-            fallback: "Notifications (Cmd+Shift+I)"
+            fallback: "Notifications (Cmd+Alt+Shift+I)"
         )
         notificationBellButton.setAccessibilityLabel(notificationsTitle)
 

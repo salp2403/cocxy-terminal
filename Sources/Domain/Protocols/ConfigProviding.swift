@@ -73,6 +73,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let notes: NotesConfig
     let lsp: LSPConfig
     let vim: VimConfig
+    let richInput: RichInputConfig
     let experimental: ExperimentalConfig
 
     init(
@@ -103,6 +104,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         notes: NotesConfig = .defaults,
         lsp: LSPConfig = .defaults,
         vim: VimConfig = .defaults,
+        richInput: RichInputConfig = .defaults,
         experimental: ExperimentalConfig = .defaults
     ) {
         self.general = general
@@ -132,6 +134,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.notes = notes
         self.lsp = lsp
         self.vim = vim
+        self.richInput = richInput
         self.experimental = experimental
     }
 
@@ -169,6 +172,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             notes: .defaults,
             lsp: .defaults,
             vim: .defaults,
+            richInput: .defaults,
             experimental: .defaults
         )
     }
@@ -183,6 +187,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, worktree, github, notes, lsp, vim
+        case richInput
         case experimental
     }
 
@@ -233,6 +238,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.lsp = try container.decodeIfPresent(LSPConfig.self, forKey: .lsp)
             ?? .defaults
         self.vim = try container.decodeIfPresent(VimConfig.self, forKey: .vim)
+            ?? .defaults
+        self.richInput = try container.decodeIfPresent(RichInputConfig.self, forKey: .richInput)
             ?? .defaults
         self.experimental = try container.decodeIfPresent(ExperimentalConfig.self, forKey: .experimental)
             ?? .defaults
@@ -383,6 +390,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // defaults can be added later, but terminal panes must never
             // infer Vim behavior from a repository file.
             vim: vim,
+            // Rich Input drafts and attachment cache are local user data.
+            // Repository config must not redirect or disable this global
+            // command-surface preference.
+            richInput: richInput,
             experimental: experimental
         )
     }
@@ -2115,6 +2126,87 @@ struct VimConfig: Codable, Sendable, Equatable {
         let defaults = VimConfig.defaults
         self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
             ?? defaults.enabled
+    }
+}
+
+// MARK: - Rich Input Config
+
+/// `[rich-input]` section of the configuration.
+///
+/// Rich Input is enabled by default because it is only a local composition
+/// surface: pasted text and attachments stay on disk locally and are sent to
+/// the active PTY only after the user confirms. Draft and cache locations are
+/// intentionally global user preferences, not project-overridable settings.
+struct RichInputConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let autoShowOnMultilinePaste: Bool
+    let defaultShortcut: String
+    let attachmentsCacheTTLDays: Int
+    let attachmentsMaxSizeMB: Int
+    let preserveDraftsPerTab: Bool
+
+    static let minCacheTTLDays = 1
+    static let maxCacheTTLDays = 365
+    static let minAttachmentsMaxSizeMB = 1
+    static let maxAttachmentsMaxSizeMB = 500
+
+    static let defaults = RichInputConfig(
+        enabled: true,
+        autoShowOnMultilinePaste: true,
+        defaultShortcut: "cmd+shift+i",
+        attachmentsCacheTTLDays: 7,
+        attachmentsMaxSizeMB: 25,
+        preserveDraftsPerTab: true
+    )
+
+    init(
+        enabled: Bool = true,
+        autoShowOnMultilinePaste: Bool = true,
+        defaultShortcut: String = "cmd+shift+i",
+        attachmentsCacheTTLDays: Int = 7,
+        attachmentsMaxSizeMB: Int = 25,
+        preserveDraftsPerTab: Bool = true
+    ) {
+        self.enabled = enabled
+        self.autoShowOnMultilinePaste = autoShowOnMultilinePaste
+        self.defaultShortcut = defaultShortcut
+        self.attachmentsCacheTTLDays = attachmentsCacheTTLDays
+        self.attachmentsMaxSizeMB = attachmentsMaxSizeMB
+        self.preserveDraftsPerTab = preserveDraftsPerTab
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case autoShowOnMultilinePaste
+        case defaultShortcut
+        case attachmentsCacheTTLDays
+        case attachmentsMaxSizeMB
+        case preserveDraftsPerTab
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = RichInputConfig.defaults
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? defaults.enabled
+        self.autoShowOnMultilinePaste = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .autoShowOnMultilinePaste
+        ) ?? defaults.autoShowOnMultilinePaste
+        self.defaultShortcut = try container.decodeIfPresent(String.self, forKey: .defaultShortcut)
+            ?? defaults.defaultShortcut
+        self.attachmentsCacheTTLDays = try container.decodeIfPresent(
+            Int.self,
+            forKey: .attachmentsCacheTTLDays
+        ) ?? defaults.attachmentsCacheTTLDays
+        self.attachmentsMaxSizeMB = try container.decodeIfPresent(
+            Int.self,
+            forKey: .attachmentsMaxSizeMB
+        ) ?? defaults.attachmentsMaxSizeMB
+        self.preserveDraftsPerTab = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .preserveDraftsPerTab
+        ) ?? defaults.preserveDraftsPerTab
     }
 }
 

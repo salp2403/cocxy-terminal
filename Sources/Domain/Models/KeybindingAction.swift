@@ -399,6 +399,14 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "space")
     )
 
+    static let richInputComposer = KeybindingAction(
+        id: "terminal.richInput",
+        displayName: "Rich Input",
+        summary: "Open the multiline rich input composer for the active terminal.",
+        category: .editor,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "i")
+    )
+
     static let editorZoomIn = KeybindingAction(
         id: "editor.zoomIn",
         displayName: "Zoom In",
@@ -462,7 +470,12 @@ enum KeybindingActionCatalog {
         displayName: "Toggle Notifications",
         summary: "Show or hide the notification panel.",
         category: .review,
-        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "i")
+        defaultShortcut: KeybindingShortcut(
+            requiresCommand: true,
+            requiresOption: true,
+            requiresShift: true,
+            baseKey: "i"
+        )
     )
 
     // MARK: - Markdown
@@ -522,6 +535,7 @@ enum KeybindingActionCatalog {
         // Editor
         editorFind,
         voiceInput,
+        richInputComposer,
         editorZoomIn,
         editorZoomOut,
         editorResetZoom,

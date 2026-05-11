@@ -354,6 +354,14 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(notificationPanelItem, with: KeybindingActionCatalog.reviewNotifications)
         viewMenu.addItem(notificationPanelItem)
 
+        let richInputItem = NSMenuItem(
+            title: menuString("menu.view.richInput", "Rich Input", localizer),
+            action: #selector(MainWindowController.toggleRichInputComposerAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(richInputItem, with: KeybindingActionCatalog.richInputComposer)
+        viewMenu.addItem(richInputItem)
+
         let browserItem = NSMenuItem(
             title: menuString("menu.view.browser", "Browser", localizer),
             action: #selector(MainWindowController.toggleBrowserAction(_:)),

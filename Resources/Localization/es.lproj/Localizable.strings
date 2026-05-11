@@ -374,6 +374,7 @@
 "menu.view.agentTimeline" = "Línea de tiempo de agentes";
 "menu.view.notifications" = "Notificaciones";
 "menu.view.browser" = "Navegador";
+"menu.view.richInput" = "Entrada enriquecida";
 "menu.view.focusLocation" = "Enfocar ubicación";
 "menu.view.openMarkdownPanel" = "Abrir panel Markdown";
 "menu.view.openTextEditorPanel" = "Abrir panel de editor";
@@ -480,6 +481,7 @@
 "keyboardShortcuts.panels.commandPalette" = "Paleta de comandos";
 "keyboardShortcuts.panels.agentDashboard" = "Panel de agentes";
 "keyboardShortcuts.panels.agentTimeline" = "Línea de tiempo de agentes";
+"keyboardShortcuts.panels.richInput" = "Entrada enriquecida";
 "keyboardShortcuts.panels.notifications" = "Notificaciones";
 "keyboardShortcuts.panels.browser" = "Panel del navegador";
 "keyboardShortcuts.panels.find" = "Buscar en terminal";
@@ -583,6 +585,8 @@
 "keybindings.action.editor.find.summary" = "Abrir la búsqueda de la terminal.";
 "keybindings.action.voice.input.name" = "Entrada por voz";
 "keybindings.action.voice.input.summary" = "Iniciar dictado local para la superficie de comando activa.";
+"keybindings.action.terminal.richInput.name" = "Entrada enriquecida";
+"keybindings.action.terminal.richInput.summary" = "Abrir el compositor de entrada enriquecida multilínea para la terminal activa.";
 "keybindings.action.editor.zoomIn.name" = "Acercar";
 "keybindings.action.editor.zoomIn.summary" = "Aumentar el tamaño de fuente.";
 "keybindings.action.editor.zoomOut.name" = "Alejar";
@@ -993,7 +997,7 @@
 "tabbar.workspaces" = "ESPACIOS";
 "tabbar.workspaces.compact" = "ESPACIOS";
 "tabbar.notifications.title" = "Notificaciones";
-"tabbar.notifications.tooltip" = "Notificaciones (Cmd+Shift+I)";
+"tabbar.notifications.tooltip" = "Notificaciones (Cmd+Alt+Shift+I)";
 "tabbar.commandPalette.title" = "Paleta de comandos";
 "tabbar.commandPalette.tooltip" = "Paleta de comandos (Cmd+Shift+P)";
 "tabbar.commandPalette.help" = "Abrir la paleta de comandos (Cmd+Shift+P)";
@@ -2295,6 +2299,8 @@
 "command.timeline.toggle.description" = "Mostrar u ocultar el panel de línea de tiempo del agente";
 "command.search.toggle.name" = "Buscar en terminal";
 "command.search.toggle.description" = "Buscar en el historial";
+"command.terminal.richInput.name" = "Entrada enriquecida";
+"command.terminal.richInput.description" = "Abrir el compositor multilínea para la terminal activa";
 "command.editor.zoomIn.name" = "Aumentar zoom";
 "command.editor.zoomIn.description" = "Aumentar el tamaño de fuente del terminal";
 "command.editor.zoomOut.name" = "Reducir zoom";

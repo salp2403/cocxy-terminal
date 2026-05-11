@@ -206,6 +206,7 @@ extension MainWindowController {
             }
             cocxyView.onRichInputRequested = { [weak self, weak cocxyView] request in
                 guard let self, let cocxyView else { return false }
+                guard self.shouldAutoShowRichInput(for: request) else { return false }
                 return self.presentRichInputComposer(
                     request,
                     for: cocxyView,

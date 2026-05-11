@@ -374,6 +374,7 @@
 "menu.view.agentTimeline" = "Agent Timeline";
 "menu.view.notifications" = "Notifications";
 "menu.view.browser" = "Browser";
+"menu.view.richInput" = "Rich Input";
 "menu.view.focusLocation" = "Focus Location";
 "menu.view.openMarkdownPanel" = "Open Markdown Panel";
 "menu.view.openTextEditorPanel" = "Open Text Editor Panel";
@@ -480,6 +481,7 @@
 "keyboardShortcuts.panels.commandPalette" = "Command palette";
 "keyboardShortcuts.panels.agentDashboard" = "Agent dashboard";
 "keyboardShortcuts.panels.agentTimeline" = "Agent timeline";
+"keyboardShortcuts.panels.richInput" = "Rich Input";
 "keyboardShortcuts.panels.notifications" = "Notifications";
 "keyboardShortcuts.panels.browser" = "Browser panel";
 "keyboardShortcuts.panels.find" = "Find in terminal";
@@ -583,6 +585,8 @@
 "keybindings.action.editor.find.summary" = "Open the terminal search bar.";
 "keybindings.action.voice.input.name" = "Voice Input";
 "keybindings.action.voice.input.summary" = "Start local voice dictation for the active command surface.";
+"keybindings.action.terminal.richInput.name" = "Rich Input";
+"keybindings.action.terminal.richInput.summary" = "Open the multiline rich input composer for the active terminal.";
 "keybindings.action.editor.zoomIn.name" = "Zoom In";
 "keybindings.action.editor.zoomIn.summary" = "Increase font size.";
 "keybindings.action.editor.zoomOut.name" = "Zoom Out";
@@ -993,7 +997,7 @@
 "tabbar.workspaces" = "WORKSPACES";
 "tabbar.workspaces.compact" = "SPACES";
 "tabbar.notifications.title" = "Notifications";
-"tabbar.notifications.tooltip" = "Notifications (Cmd+Shift+I)";
+"tabbar.notifications.tooltip" = "Notifications (Cmd+Alt+Shift+I)";
 "tabbar.commandPalette.title" = "Command Palette";
 "tabbar.commandPalette.tooltip" = "Command Palette (Cmd+Shift+P)";
 "tabbar.commandPalette.help" = "Open the command palette (Cmd+Shift+P)";
@@ -2295,6 +2299,8 @@
 "command.timeline.toggle.description" = "Show or hide the agent timeline panel";
 "command.search.toggle.name" = "Find in Terminal";
 "command.search.toggle.description" = "Search the scrollback buffer";
+"command.terminal.richInput.name" = "Rich Input";
+"command.terminal.richInput.description" = "Open the multiline composer for the active terminal";
 "command.editor.zoomIn.name" = "Zoom In";
 "command.editor.zoomIn.description" = "Increase the terminal font size";
 "command.editor.zoomOut.name" = "Zoom Out";

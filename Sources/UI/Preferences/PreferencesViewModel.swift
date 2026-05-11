@@ -2495,6 +2495,14 @@ final class PreferencesViewModel: ObservableObject {
         animation-duration = \(Self.tomlNumber(defaults.quickTerminal.animationDuration))
         screen = "\(defaults.quickTerminal.screen.rawValue)"
 
+        [rich-input]
+        enabled = \(savedConfig.richInput.enabled)
+        auto-show-on-multiline-paste = \(savedConfig.richInput.autoShowOnMultilinePaste)
+        default-shortcut = "\(savedConfig.richInput.defaultShortcut)"
+        attachments-cache-ttl-days = \(savedConfig.richInput.attachmentsCacheTTLDays)
+        attachments-max-size-mb = \(savedConfig.richInput.attachmentsMaxSizeMB)
+        preserve-drafts-per-tab = \(savedConfig.richInput.preserveDraftsPerTab)
+
         \(keybindings.tomlSection())
 
         [sessions]

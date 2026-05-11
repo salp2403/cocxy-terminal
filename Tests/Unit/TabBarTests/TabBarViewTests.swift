@@ -165,7 +165,7 @@ final class TabBarViewTests: XCTestCase {
         XCTAssertEqual(spanishTabBarView.accessibilityLabel(), "Pestañas de terminal")
 
         let notificationsButton = findButton(accessibilityLabel: "Notificaciones", in: spanishTabBarView)
-        XCTAssertEqual(notificationsButton?.toolTip, "Notificaciones (Cmd+Shift+I)")
+        XCTAssertEqual(notificationsButton?.toolTip, "Notificaciones (Cmd+Alt+Shift+I)")
 
         let commandPaletteButton = findButton(accessibilityLabel: "Paleta de comandos", in: spanishTabBarView)
         XCTAssertEqual(commandPaletteButton?.toolTip, "Paleta de comandos (Cmd+Shift+P)")
