@@ -115,6 +115,11 @@ public enum CLICommand: String, CaseIterable {
     case pluginInstall = "plugin-install"
     case pluginUninstall = "plugin-uninstall"
 
+    // MARK: - Sandbox Grants (v6)
+
+    case sandboxListGrants = "sandbox-list-grants"
+    case sandboxRevoke = "sandbox-revoke"
+
     // MARK: - Browser (v2)
 
     case browserNavigate = "browser-navigate"
@@ -325,6 +330,8 @@ public enum CLICommand: String, CaseIterable {
         case .pluginSourceAdd: return "Add a decentralized plugin source URL"
         case .pluginInstall: return "Install a plugin from a source URL or local repo"
         case .pluginUninstall: return "Uninstall a local plugin by ID"
+        case .sandboxListGrants: return "List sandbox capability grants for a plugin"
+        case .sandboxRevoke: return "Revoke a sandbox capability grant from a plugin"
 
         // Remote Workspace
         case .remoteList: return "List all saved remote connection profiles"
@@ -520,6 +527,8 @@ public enum CLICommand: String, CaseIterable {
         case .pluginSourceAdd: return "cocxy plugin-source-add <url>"
         case .pluginInstall: return "cocxy plugin-install <url-or-path>"
         case .pluginUninstall: return "cocxy plugin-uninstall <id>"
+        case .sandboxListGrants: return "cocxy sandbox list-grants <plugin-id>"
+        case .sandboxRevoke: return "cocxy sandbox revoke <plugin-id> <capability>"
 
         // Remote Workspace
         case .remoteList: return "cocxy remote-list [--group <group>]"

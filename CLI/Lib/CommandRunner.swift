@@ -1033,6 +1033,22 @@ public struct CommandRunner {
                 id: requestID, command: "plugin-uninstall", params: ["id": id]
             )
 
+        // MARK: Sandbox Grants (v6)
+
+        case .sandboxListGrants(let pluginID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "sandbox-list-grants",
+                params: ["plugin": pluginID]
+            )
+
+        case .sandboxRevoke(let pluginID, let capability):
+            return CLISocketRequest(
+                id: requestID,
+                command: "sandbox-revoke",
+                params: ["plugin": pluginID, "capability": capability]
+            )
+
         // MARK: Browser (exposed v3)
 
         case .browserNavigate(let url):

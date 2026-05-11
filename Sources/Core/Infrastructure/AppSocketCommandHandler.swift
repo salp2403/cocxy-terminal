@@ -242,6 +242,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Provides the installer for plugin install/uninstall commands.
     private let pluginInstallerProvider: () -> PluginInstaller
 
+    /// Provides persistent plugin sandbox capability grants.
+    private let pluginCapabilityGrantStoreProvider: () -> PluginCapabilityGrantStore
+
     /// Provides the local skill registry for `cocxy skill list`.
     private let skillRegistryProvider: (@Sendable () -> SkillRegistry)?
 
@@ -507,6 +510,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         pluginManagerProvider: (() -> PluginManager?)? = nil,
         pluginSourceStoreProvider: (() -> PluginSourceStore)? = nil,
         pluginInstallerProvider: (() -> PluginInstaller)? = nil,
+        pluginCapabilityGrantStoreProvider: (() -> PluginCapabilityGrantStore)? = nil,
         skillRegistryProvider: (@Sendable () -> SkillRegistry)? = nil,
         skillSourceStoreProvider: (() -> SkillSourceStore)? = nil,
         skillInstallerProvider: (() -> SkillMarketplaceInstaller)? = nil,
@@ -581,6 +585,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.pluginManagerProvider = pluginManagerProvider
         self.pluginSourceStoreProvider = pluginSourceStoreProvider ?? { PluginSourceStore() }
         self.pluginInstallerProvider = pluginInstallerProvider ?? { PluginInstaller() }
+        self.pluginCapabilityGrantStoreProvider = pluginCapabilityGrantStoreProvider
+            ?? { PluginCapabilityGrantStore() }
         self.skillRegistryProvider = skillRegistryProvider
         self.skillSourceStoreProvider = skillSourceStoreProvider ?? { SkillSourceStore() }
         self.skillInstallerProvider = skillInstallerProvider ?? { SkillMarketplaceInstaller() }
@@ -969,6 +975,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handlePluginInstall(request)
         case .pluginUninstall:
             return handlePluginUninstall(request)
+        case .sandboxListGrants:
+            return handleSandboxListGrants(request)
+        case .sandboxRevoke:
+            return handleSandboxRevoke(request)
         case .skillList:
             return handleSkillList(request)
         case .skillSourceList:
@@ -2386,6 +2396,65 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "uninstalled"])
         } catch {
             return .failure(id: request.id, error: "Failed to uninstall plugin: \(error)")
+        }
+    }
+
+    /// Lists persisted sandbox capability grants for one plugin.
+    private func handleSandboxListGrants(_ request: SocketRequest) -> SocketResponse {
+        guard let pluginID = request.params?["plugin"], !pluginID.isEmpty else {
+            return .failure(
+                id: request.id,
+                error: "Usage: sandbox-list-grants {\"plugin\": \"<plugin-id>\"}"
+            )
+        }
+
+        do {
+            let grants = try pluginCapabilityGrantStoreProvider().grants(for: pluginID)
+            let formatter = ISO8601DateFormatter()
+            var data: [String: String] = [
+                "plugin": pluginID,
+                "count": "\(grants.count)",
+            ]
+            for (index, grant) in grants.enumerated() {
+                data["grant_\(index)_capability"] = grant.capability.rawValue
+                data["grant_\(index)_granted_at"] = formatter.string(from: grant.grantedAt)
+                if let reason = grant.reason, !reason.isEmpty {
+                    data["grant_\(index)_reason"] = reason
+                }
+            }
+            return .ok(id: request.id, data: data)
+        } catch {
+            return .failure(id: request.id, error: "Failed to list sandbox grants: \(error)")
+        }
+    }
+
+    /// Revokes one persisted sandbox capability grant for a plugin.
+    private func handleSandboxRevoke(_ request: SocketRequest) -> SocketResponse {
+        guard let pluginID = request.params?["plugin"], !pluginID.isEmpty else {
+            return .failure(
+                id: request.id,
+                error: "Usage: sandbox-revoke {\"plugin\": \"<plugin-id>\", \"capability\": \"<capability>\"}"
+            )
+        }
+        guard let rawCapability = request.params?["capability"], !rawCapability.isEmpty else {
+            return .failure(
+                id: request.id,
+                error: "Usage: sandbox-revoke {\"plugin\": \"<plugin-id>\", \"capability\": \"<capability>\"}"
+            )
+        }
+        guard let capability = PluginCapability(rawValue: rawCapability) else {
+            return .failure(id: request.id, error: "Unknown plugin capability: \(rawCapability)")
+        }
+
+        do {
+            try pluginCapabilityGrantStoreProvider().revoke(capability, for: pluginID)
+            return .ok(id: request.id, data: [
+                "plugin": pluginID,
+                "capability": capability.rawValue,
+                "status": "revoked",
+            ])
+        } catch {
+            return .failure(id: request.id, error: "Failed to revoke sandbox grant: \(error)")
         }
     }
 

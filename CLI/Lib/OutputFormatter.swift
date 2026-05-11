@@ -245,6 +245,13 @@ public enum OutputFormatter {
         case .pluginUninstall:
             return "Plugin uninstalled."
 
+        // MARK: Sandbox Grants (v6)
+
+        case .sandboxListGrants:
+            return formatDataOrJSON(response: response)
+        case .sandboxRevoke:
+            return "Sandbox grant revoked."
+
         // MARK: Browser (exposed v3)
 
         case .browserNavigate:

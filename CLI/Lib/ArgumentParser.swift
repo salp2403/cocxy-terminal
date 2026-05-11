@@ -320,6 +320,14 @@ public enum ParsedCommand: Equatable {
     /// `cocxy plugin uninstall <id>`
     case pluginUninstall(id: String)
 
+    // MARK: - Sandbox Grants (v6)
+
+    /// `cocxy sandbox list-grants <plugin-id>`
+    case sandboxListGrants(pluginID: String)
+
+    /// `cocxy sandbox revoke <plugin-id> <capability>`
+    case sandboxRevoke(pluginID: String, capability: String)
+
     // MARK: - Browser (exposed v3)
 
     /// `cocxy browser navigate <url>`
@@ -812,6 +820,9 @@ public enum CLIArgumentParser {
             return try parsePlugin(arguments: ["install"] + Array(arguments.dropFirst()))
         case "plugin-uninstall":
             return try parsePlugin(arguments: ["uninstall"] + Array(arguments.dropFirst()))
+
+        case "sandbox":
+            return try parseSandbox(arguments: Array(arguments.dropFirst()))
 
         case "browser":
             return try parseBrowser(arguments: Array(arguments.dropFirst()))
@@ -2219,6 +2230,41 @@ public enum CLIArgumentParser {
                 command: "plugin source",
                 argument: subcommand,
                 reason: "Unknown subcommand. Use list or add."
+            )
+        }
+    }
+
+    /// Parses `cocxy sandbox <subcommand>`.
+    private static func parseSandbox(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "sandbox", argument: "subcommand")
+        }
+
+        let rest = Array(arguments.dropFirst())
+        switch subcommand {
+        case "list-grants":
+            guard let pluginID = rest.first, !pluginID.isEmpty else {
+                throw CLIError.missingArgument(command: "sandbox list-grants", argument: "plugin-id")
+            }
+            return .sandboxListGrants(pluginID: pluginID)
+        case "revoke":
+            guard rest.count >= 2 else {
+                throw CLIError.missingArgument(command: "sandbox revoke", argument: "plugin-id capability")
+            }
+            let pluginID = rest[0]
+            let capability = rest[1]
+            guard !pluginID.isEmpty else {
+                throw CLIError.missingArgument(command: "sandbox revoke", argument: "plugin-id")
+            }
+            guard !capability.isEmpty else {
+                throw CLIError.missingArgument(command: "sandbox revoke", argument: "capability")
+            }
+            return .sandboxRevoke(pluginID: pluginID, capability: capability)
+        default:
+            throw CLIError.invalidArgument(
+                command: "sandbox",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use list-grants or revoke."
             )
         }
     }

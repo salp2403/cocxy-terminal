@@ -291,6 +291,60 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ))
     }
 
+    func test_sandboxGrantCommands_listAndRevokeInjectedGrantStore() throws {
+        let store = PluginCapabilityGrantStore(backend: MemoryPluginCapabilityGrantBackingStore())
+        try store.grant(
+            .networkClient,
+            for: "sample-plugin",
+            reason: "approved during smoke",
+            grantedAt: Date(timeIntervalSince1970: 100)
+        )
+        try store.grant(
+            .filesystemRead,
+            for: "sample-plugin",
+            reason: "read resources",
+            grantedAt: Date(timeIntervalSince1970: 101)
+        )
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            pluginCapabilityGrantStoreProvider: { store }
+        )
+
+        let listResponse = handler.handleCommand(SocketRequest(
+            id: "sandbox-list-1",
+            command: "sandbox-list-grants",
+            params: ["plugin": "sample-plugin"]
+        ))
+        XCTAssertTrue(listResponse.success)
+        XCTAssertEqual(listResponse.data?["count"], "2")
+        XCTAssertEqual(listResponse.data?["grant_0_capability"], "filesystem-read")
+        XCTAssertEqual(listResponse.data?["grant_1_capability"], "network-client")
+
+        let revokeResponse = handler.handleCommand(SocketRequest(
+            id: "sandbox-revoke-1",
+            command: "sandbox-revoke",
+            params: ["plugin": "sample-plugin", "capability": "network-client"]
+        ))
+        XCTAssertTrue(revokeResponse.success)
+        XCTAssertEqual(revokeResponse.data?["status"], "revoked")
+        XCTAssertFalse(try store.isGranted(.networkClient, for: "sample-plugin"))
+        XCTAssertTrue(try store.isGranted(.filesystemRead, for: "sample-plugin"))
+    }
+
+    func test_sandboxRevokeRejectsUnknownCapability() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "sandbox-revoke-invalid",
+            command: "sandbox-revoke",
+            params: ["plugin": "sample-plugin", "capability": "unknown"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Unknown plugin capability: unknown")
+    }
+
     func test_reviewApprove_routesToGitHubProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
@@ -3380,6 +3434,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         case .pluginEnable, .pluginDisable, .pluginUninstall,
              .skillInstall, .skillUninstall:
             return ["id": "local"]
+        case .sandboxListGrants:
+            return ["plugin": "local"]
+        case .sandboxRevoke:
+            return ["plugin": "local", "capability": "network-client"]
         case .pluginSourceAdd, .pluginInstall,
              .skillSourceAdd:
             return ["url": "/tmp/local"]

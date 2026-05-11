@@ -210,6 +210,13 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// Uninstall a local plugin by ID.
     case pluginUninstall = "plugin-uninstall"
 
+    // MARK: - Sandbox Grants (v6)
+
+    /// List sandbox grants for a plugin.
+    case sandboxListGrants = "sandbox-list-grants"
+    /// Revoke one sandbox grant for a plugin.
+    case sandboxRevoke = "sandbox-revoke"
+
     // MARK: - Browser (v2)
 
     /// Navigate the embedded browser to a URL.

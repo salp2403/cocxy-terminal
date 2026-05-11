@@ -87,4 +87,27 @@ struct PluginMarketplaceCLIArgumentParserSwiftTestingTests {
         #expect(uninstallRequest.command == "plugin-uninstall")
         #expect(uninstallRequest.params?["id"] == "sample")
     }
+
+    @Test("sandbox grant commands parse and build socket requests")
+    func sandboxGrantCommandsParseAndBuildRequests() throws {
+        #expect(try CLIArgumentParser.parse([
+            "sandbox", "list-grants", "sample-plugin",
+        ]) == .sandboxListGrants(pluginID: "sample-plugin"))
+        #expect(try CLIArgumentParser.parse([
+            "sandbox", "revoke", "sample-plugin", "network-client",
+        ]) == .sandboxRevoke(pluginID: "sample-plugin", capability: "network-client"))
+
+        let listRequest = CommandRunner().buildRequest(
+            from: .sandboxListGrants(pluginID: "sample-plugin")
+        )
+        #expect(listRequest.command == "sandbox-list-grants")
+        #expect(listRequest.params?["plugin"] == "sample-plugin")
+
+        let revokeRequest = CommandRunner().buildRequest(
+            from: .sandboxRevoke(pluginID: "sample-plugin", capability: "network-client")
+        )
+        #expect(revokeRequest.command == "sandbox-revoke")
+        #expect(revokeRequest.params?["plugin"] == "sample-plugin")
+        #expect(revokeRequest.params?["capability"] == "network-client")
+    }
 }
