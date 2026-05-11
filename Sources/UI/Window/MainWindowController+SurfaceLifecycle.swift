@@ -213,6 +213,13 @@ extension MainWindowController {
                     tabID: capturedTabID
                 )
             }
+            cocxyView.onRichInputPayloadRequested = { [weak self, weak cocxyView] request in
+                guard let self, let cocxyView else { return nil }
+                return self.immediateRichInputPayload(
+                    for: request,
+                    surfaceView: cocxyView
+                )
+            }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,
                 surfaceID: capturedSurfaceID,

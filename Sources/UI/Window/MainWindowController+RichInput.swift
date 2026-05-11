@@ -212,6 +212,32 @@ extension MainWindowController {
         return config.autoShowOnMultilinePaste
     }
 
+    func immediateRichInputPayload(
+        for request: TerminalRichInputRequest,
+        surfaceView: CocxyCoreView
+    ) -> RichInputTerminalPayload? {
+        let config = configService?.current.richInput ?? .defaults
+        guard config.enabled,
+              request.fileURLs.isEmpty == false,
+              let surfaceID = surfaceView.terminalViewModel?.surfaceID,
+              richInputSurfaceSupportsInlineImages(surfaceID)
+        else {
+            return nil
+        }
+
+        let attachmentStore = RichInputAttachmentStore(
+            ttlDays: config.attachmentsCacheTTLDays,
+            maxSizeBytes: config.attachmentsMaxSizeMB * 1024 * 1024
+        )
+        let viewModel = RichInputComposerViewModel(
+            text: request.text,
+            attachmentStore: attachmentStore
+        )
+        viewModel.attachFiles(request.fileURLs)
+        let payload = viewModel.terminalPayload(imageTransportMode: .osc1337InlineFile)
+        return payload.isEmpty ? nil : payload
+    }
+
     static func richInputDraftTabKey(_ tabID: TabID) -> String {
         tabID.rawValue.uuidString.lowercased()
     }

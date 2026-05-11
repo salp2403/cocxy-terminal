@@ -91,6 +91,10 @@ final class CocxyCoreView: NSView {
     /// into the PTY.
     var onRichInputRequested: ((TerminalRichInputRequest) -> Bool)?
 
+    /// Gives the host a chance to build a terminal-native payload for pasted
+    /// attachments, such as an inline image sequence understood by agent TUIs.
+    var onRichInputPayloadRequested: ((TerminalRichInputRequest) -> RichInputTerminalPayload?)?
+
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
@@ -201,7 +205,7 @@ final class CocxyCoreView: NSView {
     private static let pasteChunkDelayNanoseconds: UInt64 = 6_000_000
     private static let agentPasteChunkDelayNanoseconds: UInt64 = 18_000_000
     private static let repeatedDeleteMinimumInterval: TimeInterval = 0.095
-    private static let agentRepeatedDeleteMinimumInterval: TimeInterval = 0.145
+    private static let agentRepeatedDeleteMinimumInterval: TimeInterval = 0.220
     private static let throttledDeleteKeyCodes: Set<UInt16> = [51, 117]
 
     private var contentPadding: (x: CGFloat, y: CGFloat) {
@@ -952,12 +956,30 @@ final class CocxyCoreView: NSView {
         switch clipboardService.readTerminalPastePayload() {
         case .text(let text):
             let normalizedText = Self.normalizedTerminalPasteText(text)
-            if requestRichInputIfNeeded(text: normalizedText, fileURLs: []) {
+            if requestRichInputIfNeeded(
+                text: normalizedText,
+                fileURLs: [],
+                bridge: bridge,
+                surfaceID: sid
+            ) {
                 return
             }
             sendClipboardText(text, bridge: bridge, surfaceID: sid)
         case .fileURLs(let urls):
-            if requestRichInputIfNeeded(text: "", fileURLs: urls) {
+            if submitImmediateRichInputPayloadIfNeeded(
+                text: "",
+                fileURLs: urls,
+                bridge: bridge,
+                surfaceID: sid
+            ) {
+                return
+            }
+            if requestRichInputIfNeeded(
+                text: "",
+                fileURLs: urls,
+                bridge: bridge,
+                surfaceID: sid
+            ) {
                 return
             }
             sendClipboardText(
@@ -970,8 +992,13 @@ final class CocxyCoreView: NSView {
         }
     }
 
-    private func requestRichInputIfNeeded(text: String, fileURLs: [URL]) -> Bool {
-        guard prefersPacedPasteDelivery?() == true,
+    private func requestRichInputIfNeeded(
+        text: String,
+        fileURLs: [URL],
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) -> Bool {
+        guard shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid),
               let onRichInputRequested else {
             return false
         }
@@ -981,6 +1008,25 @@ final class CocxyCoreView: NSView {
         guard hasMultilineText || hasAttachments else { return false }
 
         return onRichInputRequested(TerminalRichInputRequest(text: text, fileURLs: fileURLs))
+    }
+
+    private func submitImmediateRichInputPayloadIfNeeded(
+        text: String,
+        fileURLs: [URL],
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) -> Bool {
+        guard shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid),
+              fileURLs.contains(where: Self.isLikelyRichInputImageURL(_:)),
+              let payload = onRichInputPayloadRequested?(
+                TerminalRichInputRequest(text: text, fileURLs: fileURLs)
+              ),
+              !payload.isEmpty else {
+            return false
+        }
+
+        submitRichInputPayload(payload)
+        return true
     }
 
     func submitRichInputPayload(_ text: String) {
@@ -1012,6 +1058,20 @@ final class CocxyCoreView: NSView {
         }
     }
 
+    private func shouldUsePromptSafePasteDelivery(
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) -> Bool {
+        if prefersPacedPasteDelivery?() == true {
+            return true
+        }
+        guard let state = bridge.surfaceState(for: sid) else {
+            return false
+        }
+        return cocxycore_terminal_is_alt_screen(state.terminal)
+            || cocxycore_terminal_mode_mouse(state.terminal) > 0
+    }
+
     private func sendClipboardText(
         _ text: String,
         bridge: CocxyCoreBridge,
@@ -1021,7 +1081,7 @@ final class CocxyCoreView: NSView {
 
         let usesBracketedPaste = cocxycore_terminal_mode_bracketed_paste(state.terminal)
         let normalizedText = Self.normalizedTerminalPasteText(text)
-        let agentPacedPaste = prefersPacedPasteDelivery?() == true
+        let agentPacedPaste = shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid)
         let chunks = Self.terminalPasteChunks(
             for: normalizedText,
             agentPaced: agentPacedPaste
@@ -1074,7 +1134,7 @@ final class CocxyCoreView: NSView {
         bridge: CocxyCoreBridge,
         surfaceID sid: SurfaceID
     ) {
-        let agentPacedPaste = prefersPacedPasteDelivery?() == true
+        let agentPacedPaste = shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid)
         let chunks = Self.terminalPasteChunks(
             for: text,
             agentPaced: agentPacedPaste
@@ -1186,11 +1246,11 @@ final class CocxyCoreView: NSView {
               let state = bridge.surfaceState(for: sid) else {
             return false
         }
-        let shouldPaceRepeat = prefersPacedDeleteRepeat?() == true
-            || cocxycore_terminal_is_alt_screen(state.terminal)
-            || cocxycore_terminal_mode_mouse(state.terminal) > 0
+        let hasMouseTracking = cocxycore_terminal_mode_mouse(state.terminal) > 0
+        let promptSafeRepeat = prefersPacedDeleteRepeat?() == true || hasMouseTracking
+        let shouldPaceRepeat = promptSafeRepeat || cocxycore_terminal_is_alt_screen(state.terminal)
         guard shouldPaceRepeat else { return false }
-        let minimumInterval = prefersPacedDeleteRepeat?() == true
+        let minimumInterval = promptSafeRepeat
             ? Self.agentRepeatedDeleteMinimumInterval
             : Self.repeatedDeleteMinimumInterval
 
@@ -1302,8 +1362,33 @@ final class CocxyCoreView: NSView {
                 guard let bridge else { return }
                 switch self.clipboardService.readTerminalPastePayload() {
                 case .text(let text):
+                    let normalizedText = Self.normalizedTerminalPasteText(text)
+                    if self.requestRichInputIfNeeded(
+                        text: normalizedText,
+                        fileURLs: [],
+                        bridge: bridge,
+                        surfaceID: sid
+                    ) {
+                        return
+                    }
                     self.sendClipboardText(text, bridge: bridge, surfaceID: sid)
                 case .fileURLs(let urls):
+                    if self.submitImmediateRichInputPayloadIfNeeded(
+                        text: "",
+                        fileURLs: urls,
+                        bridge: bridge,
+                        surfaceID: sid
+                    ) {
+                        return
+                    }
+                    if self.requestRichInputIfNeeded(
+                        text: "",
+                        fileURLs: urls,
+                        bridge: bridge,
+                        surfaceID: sid
+                    ) {
+                        return
+                    }
                     self.sendClipboardText(
                         FileDropPathFormatter.format(urls),
                         bridge: bridge,
@@ -1386,7 +1471,24 @@ final class CocxyCoreView: NSView {
 
         if let handler = onFileDrop, handler(urls) { return true }
 
-        if requestRichInputIfNeeded(text: "", fileURLs: urls) { return true }
+        guard let bridge = bridge, let sid = surfaceID else { return false }
+
+        if submitImmediateRichInputPayloadIfNeeded(
+            text: "",
+            fileURLs: urls,
+            bridge: bridge,
+            surfaceID: sid
+        ) {
+            return true
+        }
+        if requestRichInputIfNeeded(
+            text: "",
+            fileURLs: urls,
+            bridge: bridge,
+            surfaceID: sid
+        ) {
+            return true
+        }
 
         // Default: paste each file path as shell-escaped text so
         // terminal-aware CLIs treat the drop as a single argument and
@@ -1395,7 +1497,6 @@ final class CocxyCoreView: NSView {
         // process sees the same bytes it receives from any other native
         // terminal on the platform.
         let paths = FileDropPathFormatter.format(urls)
-        guard let bridge = bridge, let sid = surfaceID else { return false }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         bridge.sendText(paths, to: sid)
         return true

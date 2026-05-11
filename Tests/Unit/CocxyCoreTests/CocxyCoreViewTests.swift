@@ -592,6 +592,69 @@ struct CocxyCoreViewTests {
         #expect(output.data.isEmpty)
     }
 
+    @Test("active agent image paste can submit an immediate inline payload")
+    func activeAgentImagePasteCanSubmitImmediateInlinePayload() async throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("Cocxy Clipboard Image.png")
+        harness.view.clipboardService = RecordingClipboardService(
+            readText: nil,
+            imageAttachment: ClipboardImageAttachment(fileURL: imageURL)
+        )
+        harness.view.prefersPacedPasteDelivery = { true }
+        var composerRequests: [TerminalRichInputRequest] = []
+        harness.view.onRichInputRequested = { request in
+            composerRequests.append(request)
+            return true
+        }
+        harness.view.onRichInputPayloadRequested = { request in
+            #expect(request.text == "")
+            #expect(request.fileURLs == [imageURL])
+            return RichInputTerminalPayload(
+                text: "\u{001B}]1337;File=name=SW1hZ2UucG5n;size=1;inline=1:AA==\u{0007}\n",
+                requiresRawControlSequences: true
+            )
+        }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        try await waitUntil {
+            String(data: output.data, encoding: .utf8)?.contains("1337;File=") == true
+        }
+        #expect(composerRequests.isEmpty)
+    }
+
+    @Test("mouse mode multiline paste opens rich input before agent detection")
+    func mouseModeMultilinePasteOpensRichInputBeforeAgentDetection() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1049h\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        harness.view.clipboardService = RecordingClipboardService(readText: "line 1\nline 2\n")
+        var requests: [TerminalRichInputRequest] = []
+        harness.view.onRichInputRequested = { request in
+            requests.append(request)
+            return true
+        }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.paste(nil)
+
+        #expect(requests.count == 1)
+        #expect(requests.first?.text == "line 1\nline 2\n")
+        #expect(output.data.isEmpty)
+    }
+
     @Test("rich input raw payload preserves OSC 1337 control bytes")
     func richInputRawPayloadPreservesOSC1337ControlBytes() async throws {
         let rootDirectory = FileManager.default.temporaryDirectory
@@ -887,13 +950,13 @@ struct CocxyCoreViewTests {
             characters: "\u{7F}",
             keyCode: 51,
             isARepeat: true,
-            timestamp: 10.120
+            timestamp: 10.240
         )
         let stillTooFastRepeat = makeKeyEvent(
             characters: "\u{7F}",
             keyCode: 51,
             isARepeat: true,
-            timestamp: 10.080
+            timestamp: 10.180
         )
 
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
@@ -924,13 +987,13 @@ struct CocxyCoreViewTests {
             characters: "\u{7F}",
             keyCode: 51,
             isARepeat: true,
-            timestamp: 20.170
+            timestamp: 20.240
         )
         let stillTooFastRepeat = makeKeyEvent(
             characters: "\u{7F}",
             keyCode: 51,
             isARepeat: true,
-            timestamp: 20.120
+            timestamp: 20.180
         )
 
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(initialDelete, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
