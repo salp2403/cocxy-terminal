@@ -55,6 +55,7 @@ extension MainWindowController {
 
         dismissRichInputComposer()
 
+        let contentFrame = richInputFrame(in: overlayContainer.bounds)
         let tabKey = config.preserveDraftsPerTab ? richInputDraftKey(for: tabID) : nil
         let restoredDraft = tabKey.flatMap { try? richInputDraftStore.load(tabID: $0) }
         let attachmentStore = RichInputAttachmentStore(
@@ -92,7 +93,6 @@ extension MainWindowController {
         }
 
         let localizer = appLocalizer()
-        let frame = richInputFrame(in: overlayContainer.bounds)
         let richInputView = RichInputComposerView(
             viewModel: viewModel,
             onSubmit: { [weak self, weak surfaceView, weak viewModel] in
@@ -116,20 +116,30 @@ extension MainWindowController {
             },
             onCancel: cancelHandler,
             localizer: localizer,
-            panelWidth: frame.width
+            panelWidth: contentFrame.width
         )
 
         let hostingView = FocusableHostingView(rootView: richInputView)
         hostingView.onCancelOperation = cancelHandler
         hostingView.wantsLayer = true
-        hostingView.frame = frame
-        hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
-
-        overlayContainer.addSubview(hostingView)
+        let panelFrame = richInputPanelFrame(
+            contentFrame,
+            in: overlayContainer,
+            parentWindow: window
+        )
+        let panel = RichInputPanel(
+            hostedView: hostingView,
+            frame: panelFrame,
+            localizer: localizer
+        )
+        panel.onClose = { [weak self] in
+            self?.richInputCancelHandler?()
+        }
         richInputViewModel = viewModel
         richInputHostingView = hostingView
+        richInputPanel = panel
         richInputCancelHandler = cancelHandler
-        window?.makeFirstResponder(hostingView)
+        panel.show(attachedTo: window)
         return true
     }
 
@@ -184,6 +194,10 @@ extension MainWindowController {
     }
 
     func dismissRichInputComposer() {
+        let panel = richInputPanel
+        richInputPanel = nil
+        panel?.onClose = nil
+        panel?.closeWithoutCallback()
         richInputHostingView?.removeFromSuperview()
         richInputHostingView = nil
         richInputViewModel = nil
@@ -236,5 +250,16 @@ extension MainWindowController {
             width: width,
             height: height
         )
+    }
+
+    private func richInputPanelFrame(
+        _ contentFrame: NSRect,
+        in overlayContainer: NSView,
+        parentWindow: NSWindow?
+    ) -> NSRect {
+        guard let parentWindow else { return contentFrame }
+        let windowFrame = overlayContainer.convert(contentFrame, to: nil)
+        let screenOrigin = parentWindow.convertPoint(toScreen: windowFrame.origin)
+        return NSRect(origin: screenOrigin, size: contentFrame.size)
     }
 }

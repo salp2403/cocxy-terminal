@@ -463,6 +463,46 @@ final class RichInputIntegrationTests: XCTestCase {
         XCTAssertNotNil(controller.richInputHostingView)
     }
 
+    func testRichInputComposerIsHostedInChildPanel() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        controller.toggleRichInputComposerAction(nil)
+
+        let panel = try XCTUnwrap(controller.richInputPanel)
+        XCTAssertTrue(panel.isFloatingPanel)
+        XCTAssertTrue(controller.window?.childWindows?.contains(panel) == true)
+        XCTAssertTrue(panel.contentView === controller.richInputHostingView)
+    }
+
+    func testRichInputPanelCloseCancelsAndPersistsDraft() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        let rootDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-rich-input-panel-close-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: rootDirectory) }
+        controller.richInputDraftStore = RichInputDraftStore(rootDirectory: rootDirectory)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+        XCTAssertTrue(controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: "panel close draft"),
+            for: surfaceView,
+            tabID: tabID
+        ))
+        let panel = try XCTUnwrap(controller.richInputPanel)
+
+        panel.close()
+
+        XCTAssertNil(controller.richInputPanel)
+        XCTAssertNil(controller.richInputHostingView)
+        let draftKey = try Self.richInputDraftKey(for: tabID, controller: controller)
+        let draft = try XCTUnwrap(controller.richInputDraftStore.load(tabID: draftKey))
+        XCTAssertEqual(draft.text, "panel close draft")
+    }
+
     func testRichInputDisabledConfigPreventsManualOpen() throws {
         let provider = RichInputConfigProvider(content: """
         [rich-input]

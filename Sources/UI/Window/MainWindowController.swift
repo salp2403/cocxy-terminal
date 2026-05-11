@@ -265,6 +265,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     var richInputViewModel: RichInputComposerViewModel?
     var richInputHostingView: FocusableHostingView<RichInputComposerView>?
+    var richInputPanel: RichInputPanel?
     var richInputCancelHandler: (() -> Void)?
     var richInputDraftStore = RichInputDraftStore()
 
