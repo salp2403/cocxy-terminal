@@ -337,22 +337,27 @@ if [ -d "${PROJECT_ROOT}/Resources/JS" ]; then
     cp -R "${PROJECT_ROOT}/Resources/JS" "${RESOURCES}/JS"
 fi
 
-# Step 6i: Copy bundled local skills.
+# Step 6i: Copy hook integration script templates.
+if [ -d "${PROJECT_ROOT}/Resources/HookScripts" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/HookScripts" "${RESOURCES}/HookScripts"
+fi
+
+# Step 6j: Copy bundled local skills.
 if [ -d "${PROJECT_ROOT}/Resources/Skills" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Skills" "${RESOURCES}/Skills"
 fi
 
-# Step 6j: Copy bundled project templates.
+# Step 6k: Copy bundled project templates.
 if [ -d "${PROJECT_ROOT}/Resources/Templates" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Templates" "${RESOURCES}/Templates"
 fi
 
-# Step 6k: Copy bundled plugin repos for the local marketplace.
+# Step 6l: Copy bundled plugin repos for the local marketplace.
 if [ -d "${PROJECT_ROOT}/Resources/Plugins" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Plugins" "${RESOURCES}/Plugins"
 fi
 
-# Step 6l: Copy bundled search helper. `Resources/rg` is produced by
+# Step 6m: Copy bundled search helper. `Resources/rg` is produced by
 # scripts/download-ripgrep.sh and signed with the rest of the app bundle.
 if [ -f "${PROJECT_ROOT}/Resources/rg" ]; then
     cp "${PROJECT_ROOT}/Resources/rg" "${RESOURCES}/rg"

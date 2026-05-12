@@ -971,4 +971,41 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(installed.exitCode == 0)
         #expect(installed.stdout.contains("project plugin OK"))
     }
+
+    @Test("OpenCode hook script resource matches installer template")
+    func openCodeHookScriptResourceMatchesInstallerTemplate() throws {
+        let resourceURL = repositoryRoot()
+            .appendingPathComponent("Resources/HookScripts/opencode-cocxy-session.js")
+        let resource = try String(contentsOf: resourceURL, encoding: .utf8)
+
+        #expect(
+            resource.trimmingCharacters(in: .newlines)
+                == OpenCodeProjectHooksManager.pluginSource.trimmingCharacters(in: .newlines)
+        )
+    }
+
+    @Test("app bundle scripts include hook script resources")
+    func appBundleScriptsIncludeHookScriptResources() throws {
+        let root = repositoryRoot()
+        let buildScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/build-app.sh"),
+            encoding: .utf8
+        )
+        let verifyScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/verify-app-bundle.sh"),
+            encoding: .utf8
+        )
+
+        #expect(buildScript.contains("Resources/HookScripts"))
+        #expect(buildScript.contains("\"${RESOURCES}/HookScripts\""))
+        #expect(verifyScript.contains("$RESOURCES/HookScripts/opencode-cocxy-session.js"))
+    }
+}
+
+private func repositoryRoot() -> URL {
+    URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
 }

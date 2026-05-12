@@ -320,7 +320,13 @@ echo "[Browser JS]"
 check_exists "$RESOURCES/JS" "Browser JS resources directory"
 check_exists "$RESOURCES/JS/dom-grab.js" "DOM grab JS"
 
-# 9c. Bundled skills for local Agent guidance.
+# 9c. Hook integration script templates.
+echo ""
+echo "[Hook Scripts]"
+check_exists "$RESOURCES/HookScripts" "Hook scripts resources directory"
+check_exists "$RESOURCES/HookScripts/opencode-cocxy-session.js" "OpenCode project bridge script"
+
+# 9d. Bundled skills for local Agent guidance.
 echo ""
 echo "[Skills]"
 check_exists "$RESOURCES/Skills" "Skills resources directory"
@@ -337,7 +343,7 @@ check_exists "$RESOURCES/Skills/security-review/SKILL.md" "security-review skill
 check_exists "$RESOURCES/Skills/triage-issue/SKILL.md" "triage-issue skill"
 check_exists "$RESOURCES/Skills/write-tests/SKILL.md" "write-tests skill"
 
-# 9d. Bundled local project templates.
+# 9e. Bundled local project templates.
 echo ""
 echo "[Templates]"
 check_exists "$RESOURCES/Templates" "Templates resources directory"
@@ -365,7 +371,7 @@ check_exists "$RESOURCES/Templates/docker-service/files/Dockerfile" "docker-serv
 check_exists "$RESOURCES/Templates/flutter-app/template.json" "flutter-app template manifest"
 check_exists "$RESOURCES/Templates/flutter-app/files/pubspec.yaml" "flutter-app pubspec"
 
-# 9e. Bundled plugin repos for the local marketplace.
+# 9f. Bundled plugin repos for the local marketplace.
 echo ""
 echo "[Plugins]"
 check_exists "$RESOURCES/Plugins" "Plugins resources directory"
