@@ -148,6 +148,8 @@ struct PreferencesView: View {
             EditableAgentDetectionSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .agentMode:
             AgentModePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .vault:
+            VaultPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .mcpServers:
             MCPServersPreferencesSection(viewModel: viewModel)
         case .voice:
@@ -208,6 +210,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case appearance
     case agentDetection
     case agentMode
+    case vault
     case mcpServers
     case voice
     case spotlight
@@ -242,6 +245,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .appearance: return "Appearance"
         case .agentDetection: return "Agent Detection"
         case .agentMode: return "Agent Mode"
+        case .vault: return "Vault"
         case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
         case .spotlight: return "Spotlight"
@@ -271,6 +275,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .appearance: return "paintbrush"
         case .agentDetection: return "brain.head.profile"
         case .agentMode: return "sparkles"
+        case .vault: return "lock.rectangle.stack"
         case .mcpServers: return "link"
         case .voice: return "mic"
         case .spotlight: return "magnifyingglass.circle"
@@ -1594,6 +1599,107 @@ struct AgentModePreferencesSection: View {
                 "preferences.agentMode.provider.detail.remote",
                 fallback: "Uses your provider API key from the macOS Keychain. Requests go directly from this Mac to the selected provider."
             )
+        }
+    }
+}
+
+// MARK: - External Agent Vault Section
+
+struct VaultPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section(viewModel.localizedString("preferences.vault.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.vault.enable", fallback: "Enable external-agent vault"),
+                    isOn: $viewModel.vaultEnabled
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.vault.feature.caption",
+                        fallback: "Stores detected external-agent session IDs locally in an encrypted file. Manual CLI resume is available; automatic resume stays off unless enabled here."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section(viewModel.localizedString("preferences.vault.resume.section", fallback: "Resume")) {
+                Toggle(
+                    viewModel.localizedString("preferences.vault.autoResumeOnLaunch", fallback: "Auto-resume on launch"),
+                    isOn: $viewModel.vaultAutoResumeOnLaunch
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.vault.autoResumeOnRestore", fallback: "Auto-resume during restore"),
+                    isOn: $viewModel.vaultAutoResumeOnRestore
+                )
+                Toggle(
+                    viewModel.localizedString("preferences.vault.confirmBeforeResume", fallback: "Confirm before resume"),
+                    isOn: $viewModel.vaultConfirmBeforeResume
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.vault.resume.caption",
+                        fallback: "Keep confirmation on when automatic resume is enabled so Cocxy does not relaunch external tools without a visible user decision."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section(viewModel.localizedString("preferences.vault.retention.section", fallback: "Retention")) {
+                Stepper(
+                    String(
+                        format: viewModel.localizedString(
+                            "preferences.vault.retentionDays",
+                            fallback: "Keep sessions for %d days"
+                        ),
+                        viewModel.vaultSessionRetentionDays
+                    ),
+                    value: $viewModel.vaultSessionRetentionDays,
+                    in: VaultConfig.minSessionRetentionDays...VaultConfig.maxSessionRetentionDays
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.vault.encryption.caption",
+                        fallback: "Vault storage is always encrypted locally and cannot be disabled from Preferences."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section(viewModel.localizedString("preferences.vault.agents.section", fallback: "Agents")) {
+                ForEach(viewModel.availableVaultAgentIDs, id: \.self) { agentID in
+                    VaultAgentToggleRow(viewModel: viewModel, agentID: agentID)
+                }
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle(viewModel.localizedString("preferences.section.vault", fallback: "Vault"))
+    }
+}
+
+private struct VaultAgentToggleRow: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    let agentID: String
+
+    var body: some View {
+        Toggle(
+            isOn: Binding(
+                get: { viewModel.vaultAgentEnabled(agentID) },
+                set: { viewModel.setVaultAgent(agentID, enabled: $0) }
+            )
+        ) {
+            Text(agentID)
+                .font(.body.monospaced())
         }
     }
 }

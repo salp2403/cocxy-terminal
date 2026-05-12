@@ -4,6 +4,7 @@
 "preferences.section.appearance" = "Apariencia";
 "preferences.section.agentDetection" = "Detección de agentes";
 "preferences.section.agentMode" = "Modo agente";
+"preferences.section.vault" = "Vault";
 "preferences.section.mcpServers" = "Servidores MCP";
 "preferences.section.voice" = "Voz";
 "preferences.section.spotlight" = "Spotlight";

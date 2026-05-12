@@ -56,6 +56,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let security: SecurityConfig
     let uxPolish: UXPolishConfig
     let agent: AgentModeConfig
+    let vault: VaultConfig
     let backup: BackupConfig
     let activity: ActivityConfig
     let sessionReplay: SessionReplayConfig
@@ -89,6 +90,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         security: SecurityConfig = .defaults,
         uxPolish: UXPolishConfig = .defaults,
         agent: AgentModeConfig = .defaults,
+        vault: VaultConfig = .defaults,
         backup: BackupConfig = .defaults,
         activity: ActivityConfig = .defaults,
         sessionReplay: SessionReplayConfig = .defaults,
@@ -121,6 +123,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.security = security
         self.uxPolish = uxPolish
         self.agent = agent
+        self.vault = vault
         self.backup = backup
         self.activity = activity
         self.sessionReplay = sessionReplay
@@ -161,6 +164,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             security: .defaults,
             uxPolish: .defaults,
             agent: .defaults,
+            vault: .defaults,
             backup: .defaults,
             activity: .defaults,
             sessionReplay: .defaults,
@@ -193,7 +197,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, vault, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, rateLimit, worktree, github, gitAssistant, notes, lsp, vim
         case richInput
         case experimental
@@ -216,6 +220,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.uxPolish = try container.decodeIfPresent(UXPolishConfig.self, forKey: .uxPolish)
             ?? .defaults
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
+            ?? .defaults
+        self.vault = try container.decodeIfPresent(VaultConfig.self, forKey: .vault)
             ?? .defaults
         self.backup = try container.decodeIfPresent(BackupConfig.self, forKey: .backup)
             ?? .defaults
@@ -355,6 +361,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // overrides must not enable an LLM provider or auto-mode from
             // repository-local config.
             agent: agent,
+            // External-agent Vault is a global local data-safety preference.
+            // Project config must never auto-enable process capture or
+            // relaunch external tools on behalf of the user.
+            vault: vault,
             // Local backups are global user data-safety preferences. Project
             // config must not enable, disable, redirect, or expand artifacts.
             backup: backup,
@@ -1344,6 +1354,187 @@ struct AgentModeConfig: Codable, Sendable, Equatable {
 
     private static func clampedMaxIterations(_ value: Int) -> Int {
         min(max(value, minMaxIterations), maxMaxIterations)
+    }
+}
+
+// MARK: - External Agent Vault Config
+
+/// Per-agent detection and resume settings for the encrypted external-agent
+/// session vault.
+struct VaultAgentConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let detectProcess: String?
+    let detectArgvContains: String?
+    let sessionIDSource: String?
+    let sessionIDArgvOption: String?
+    let resumeCommand: String?
+    let cwdPolicy: String?
+    let sessionDirectory: String?
+
+    init(
+        enabled: Bool = true,
+        detectProcess: String? = nil,
+        detectArgvContains: String? = nil,
+        sessionIDSource: String? = nil,
+        sessionIDArgvOption: String? = nil,
+        resumeCommand: String? = nil,
+        cwdPolicy: String? = nil,
+        sessionDirectory: String? = nil
+    ) {
+        self.enabled = enabled
+        self.detectProcess = Self.normalizedOptionalString(detectProcess)
+        self.detectArgvContains = Self.normalizedOptionalString(detectArgvContains)
+        self.sessionIDSource = Self.normalizedOptionalString(sessionIDSource)
+        self.sessionIDArgvOption = Self.normalizedOptionalString(sessionIDArgvOption)
+        self.resumeCommand = Self.normalizedOptionalString(resumeCommand)
+        self.cwdPolicy = Self.normalizedOptionalString(cwdPolicy)
+        self.sessionDirectory = Self.normalizedOptionalString(sessionDirectory)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case detectProcess
+        case detectArgvContains
+        case sessionIDSource
+        case sessionIDArgvOption
+        case resumeCommand
+        case cwdPolicy
+        case sessionDirectory
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true,
+            detectProcess: try container.decodeIfPresent(String.self, forKey: .detectProcess),
+            detectArgvContains: try container.decodeIfPresent(String.self, forKey: .detectArgvContains),
+            sessionIDSource: try container.decodeIfPresent(String.self, forKey: .sessionIDSource),
+            sessionIDArgvOption: try container.decodeIfPresent(String.self, forKey: .sessionIDArgvOption),
+            resumeCommand: try container.decodeIfPresent(String.self, forKey: .resumeCommand),
+            cwdPolicy: try container.decodeIfPresent(String.self, forKey: .cwdPolicy),
+            sessionDirectory: try container.decodeIfPresent(String.self, forKey: .sessionDirectory)
+        )
+    }
+
+    private static func normalizedOptionalString(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+}
+
+/// `[vault]` section for the local encrypted external-agent session vault.
+///
+/// The feature is deliberately inert by default: users can list/manual-resume
+/// through CLI commands, but no background capture or automatic relaunch is
+/// enabled unless an explicit user preference turns it on.
+struct VaultConfig: Codable, Sendable, Equatable {
+    static let minSessionRetentionDays = 1
+    static let maxSessionRetentionDays = 365
+    static let defaultSessionRetentionDays = 30
+
+    static let builtInAgentIDs: [String] = [
+        "claude",
+        "codex",
+        "opencode",
+        "pi",
+        "cursor",
+        "gemini",
+        "rovo",
+        "copilot",
+        "codebuddy",
+        "factory",
+        "qoder",
+    ]
+
+    let enabled: Bool
+    let autoResumeOnLaunch: Bool
+    let autoResumeOnRestore: Bool
+    let confirmBeforeResume: Bool
+    let encryptedStorage: Bool
+    let sessionRetentionDays: Int
+    let agents: [String: VaultAgentConfig]
+
+    static var defaults: VaultConfig {
+        VaultConfig(
+            enabled: false,
+            autoResumeOnLaunch: false,
+            autoResumeOnRestore: false,
+            confirmBeforeResume: true,
+            encryptedStorage: true,
+            sessionRetentionDays: defaultSessionRetentionDays,
+            agents: Dictionary(
+                uniqueKeysWithValues: builtInAgentIDs.map { ($0, VaultAgentConfig(enabled: true)) }
+            )
+        )
+    }
+
+    init(
+        enabled: Bool = false,
+        autoResumeOnLaunch: Bool = false,
+        autoResumeOnRestore: Bool = false,
+        confirmBeforeResume: Bool = true,
+        encryptedStorage: Bool = true,
+        sessionRetentionDays: Int = defaultSessionRetentionDays,
+        agents: [String: VaultAgentConfig] = [:]
+    ) {
+        self.enabled = enabled
+        self.autoResumeOnLaunch = autoResumeOnLaunch
+        self.autoResumeOnRestore = autoResumeOnRestore
+        self.confirmBeforeResume = confirmBeforeResume
+        // Storage encryption is a non-negotiable local data-safety invariant.
+        self.encryptedStorage = true
+        self.sessionRetentionDays = Self.clampedSessionRetentionDays(sessionRetentionDays)
+        self.agents = Self.normalizedAgents(agents)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case autoResumeOnLaunch
+        case autoResumeOnRestore
+        case confirmBeforeResume
+        case encryptedStorage
+        case sessionRetentionDays
+        case agents
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let defaults = Self.defaults
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled,
+            autoResumeOnLaunch: try container.decodeIfPresent(Bool.self, forKey: .autoResumeOnLaunch)
+                ?? defaults.autoResumeOnLaunch,
+            autoResumeOnRestore: try container.decodeIfPresent(Bool.self, forKey: .autoResumeOnRestore)
+                ?? defaults.autoResumeOnRestore,
+            confirmBeforeResume: try container.decodeIfPresent(Bool.self, forKey: .confirmBeforeResume)
+                ?? defaults.confirmBeforeResume,
+            encryptedStorage: true,
+            sessionRetentionDays: try container.decodeIfPresent(Int.self, forKey: .sessionRetentionDays)
+                ?? defaults.sessionRetentionDays,
+            agents: try container.decodeIfPresent([String: VaultAgentConfig].self, forKey: .agents)
+                ?? defaults.agents
+        )
+    }
+
+    static func clampedSessionRetentionDays(_ value: Int) -> Int {
+        min(max(value, minSessionRetentionDays), maxSessionRetentionDays)
+    }
+
+    static func normalizedAgentID(_ value: String) -> String? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private static func normalizedAgents(_ agents: [String: VaultAgentConfig]) -> [String: VaultAgentConfig] {
+        var merged = Dictionary(
+            uniqueKeysWithValues: builtInAgentIDs.map { ($0, VaultAgentConfig(enabled: true)) }
+        )
+        for (id, config) in agents {
+            guard let normalizedID = normalizedAgentID(id) else { continue }
+            merged[normalizedID] = config
+        }
+        return merged
     }
 }
 

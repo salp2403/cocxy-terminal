@@ -218,6 +218,26 @@ final class PreferencesViewModel: ObservableObject {
     /// Short status for the last conversation encryption secret action.
     @Published var agentConversationMasterPasswordStatus: String?
 
+    // MARK: - External Agent Vault
+
+    /// Master switch for local encrypted external-agent session vault capture.
+    @Published var vaultEnabled: Bool
+
+    /// Whether Cocxy may auto-resume vaulted external agents on launch.
+    @Published var vaultAutoResumeOnLaunch: Bool
+
+    /// Whether Cocxy may auto-resume vaulted external agents during session restore.
+    @Published var vaultAutoResumeOnRestore: Bool
+
+    /// Whether an explicit confirmation is required before resuming a vaulted session.
+    @Published var vaultConfirmBeforeResume: Bool
+
+    /// Local encrypted vault retention window in days.
+    @Published var vaultSessionRetentionDays: Int
+
+    /// Per-agent enablement and custom metadata for the local vault.
+    @Published private var vaultAgents: [String: VaultAgentConfig]
+
     // MARK: - MCP Servers
 
     /// Raw JSON for the user-managed MCP server config file.
@@ -622,6 +642,7 @@ final class PreferencesViewModel: ObservableObject {
             || timingHeuristics != c.agentDetection.timingHeuristics
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
+            || vaultHasUnsavedChanges(comparedTo: c.vault)
             || voiceHasUnsavedChanges(comparedTo: c.voice)
             || completionHasUnsavedChanges(comparedTo: c.completions)
             || spotlightHasUnsavedChanges(comparedTo: c.spotlight)
@@ -703,6 +724,35 @@ final class PreferencesViewModel: ObservableObject {
         RateLimitConfig.supportedProviderKinds.filter { rateLimitEnabledProviders.contains($0) }
     }
 
+    var availableVaultAgentIDs: [String] {
+        let extras = vaultAgents.keys
+            .filter { !VaultConfig.builtInAgentIDs.contains($0) }
+            .sorted()
+        return VaultConfig.builtInAgentIDs + extras
+    }
+
+    func vaultAgentEnabled(_ id: String) -> Bool {
+        guard let normalized = VaultConfig.normalizedAgentID(id) else { return false }
+        return vaultAgents[normalized]?.enabled ?? true
+    }
+
+    func setVaultAgent(_ id: String, enabled: Bool) {
+        guard let normalized = VaultConfig.normalizedAgentID(id) else { return }
+        let existing = vaultAgents[normalized] ?? VaultAgentConfig(enabled: true)
+        var updatedAgents = vaultAgents
+        updatedAgents[normalized] = VaultAgentConfig(
+            enabled: enabled,
+            detectProcess: existing.detectProcess,
+            detectArgvContains: existing.detectArgvContains,
+            sessionIDSource: existing.sessionIDSource,
+            sessionIDArgvOption: existing.sessionIDArgvOption,
+            resumeCommand: existing.resumeCommand,
+            cwdPolicy: existing.cwdPolicy,
+            sessionDirectory: existing.sessionDirectory
+        )
+        vaultAgents = updatedAgents
+    }
+
     /// Reverts all editable properties to the original config snapshot.
     func discardChanges() {
         let c = savedConfig
@@ -759,6 +809,12 @@ final class PreferencesViewModel: ObservableObject {
         agentMaxIterations = c.agent.maxIterations
         agentConversationStorageDir = c.agent.conversationStorageDir
         agentConversationEncryption = c.agent.conversationEncryption
+        vaultEnabled = c.vault.enabled
+        vaultAutoResumeOnLaunch = c.vault.autoResumeOnLaunch
+        vaultAutoResumeOnRestore = c.vault.autoResumeOnRestore
+        vaultConfirmBeforeResume = c.vault.confirmBeforeResume
+        vaultSessionRetentionDays = c.vault.sessionRetentionDays
+        vaultAgents = c.vault.agents
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
         completionInlineAIEnabled = c.completions.inlineAIEnabled
@@ -998,6 +1054,14 @@ final class PreferencesViewModel: ObservableObject {
         self.agentAPIKeyStatus = nil
         self.agentConversationMasterPasswordDraft = ""
         self.agentConversationMasterPasswordStatus = nil
+
+        // External Agent Vault
+        self.vaultEnabled = config.vault.enabled
+        self.vaultAutoResumeOnLaunch = config.vault.autoResumeOnLaunch
+        self.vaultAutoResumeOnRestore = config.vault.autoResumeOnRestore
+        self.vaultConfirmBeforeResume = config.vault.confirmBeforeResume
+        self.vaultSessionRetentionDays = config.vault.sessionRetentionDays
+        self.vaultAgents = config.vault.agents
 
         // Voice Input
         self.voiceEnabled = config.voice.enabled
@@ -1672,6 +1736,7 @@ final class PreferencesViewModel: ObservableObject {
         let normalizedImageDiskCacheDirectory = imageDiskCacheDirectory
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let agent = buildAgentModeConfigFromViewModel()
+        let vault = buildVaultConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
         let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
@@ -1743,6 +1808,7 @@ final class PreferencesViewModel: ObservableObject {
             security: savedConfig.security,
             uxPolish: uxPolish,
             agent: agent,
+            vault: vault,
             backup: backup,
             activity: activity,
             sessionReplay: sessionReplay,
@@ -1784,6 +1850,8 @@ final class PreferencesViewModel: ObservableObject {
         agentMaxIterations = agent.maxIterations
         agentConversationStorageDir = agent.conversationStorageDir
         agentConversationEncryption = agent.conversationEncryption
+        vaultSessionRetentionDays = vault.sessionRetentionDays
+        vaultAgents = vault.agents
         activityCostTrackingEnabled = activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = activity.outputCostMicrosPerMillionTokens
@@ -1846,6 +1914,22 @@ final class PreferencesViewModel: ObservableObject {
             || agentMaxIterations != config.maxIterations
             || agentConversationStorageDir != config.conversationStorageDir
             || agentConversationEncryption != config.conversationEncryption
+    }
+
+    private func buildVaultConfigFromViewModel() -> VaultConfig {
+        VaultConfig(
+            enabled: vaultEnabled,
+            autoResumeOnLaunch: vaultAutoResumeOnLaunch,
+            autoResumeOnRestore: vaultAutoResumeOnRestore,
+            confirmBeforeResume: vaultConfirmBeforeResume,
+            encryptedStorage: true,
+            sessionRetentionDays: vaultSessionRetentionDays,
+            agents: vaultAgents
+        )
+    }
+
+    private func vaultHasUnsavedChanges(comparedTo config: VaultConfig) -> Bool {
+        buildVaultConfigFromViewModel() != config
     }
 
     private func buildVoiceConfigFromViewModel() -> VoiceConfig {
@@ -2438,6 +2522,7 @@ final class PreferencesViewModel: ObservableObject {
         let keybindings = pendingKeybindings ?? defaults.keybindings
         let notes = buildNotesConfigFromViewModel()
         let agent = buildAgentModeConfigFromViewModel()
+        let vault = buildVaultConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
         let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
@@ -2556,6 +2641,16 @@ final class PreferencesViewModel: ObservableObject {
         max-iterations = \(agent.maxIterations)
         conversation-storage-dir = "\(agent.conversationStorageDir)"
         conversation-encryption = "\(agent.conversationEncryption.rawValue)"
+
+        [vault]
+        enabled = \(vault.enabled)
+        auto-resume-on-launch = \(vault.autoResumeOnLaunch)
+        auto-resume-on-restore = \(vault.autoResumeOnRestore)
+        confirm-before-resume = \(vault.confirmBeforeResume)
+        encrypted-storage = \(vault.encryptedStorage)
+        session-retention-days = \(vault.sessionRetentionDays)
+
+        \(Self.vaultAgentSectionsToml(vault.agents))
 
         [voice]
         enabled = \(voice.enabled)
@@ -2799,6 +2894,38 @@ final class PreferencesViewModel: ObservableObject {
             tomlString(value)
         }
         return "[\(items.joined(separator: ", "))]"
+    }
+
+    private static func vaultAgentSectionsToml(_ agents: [String: VaultAgentConfig]) -> String {
+        let customIDs = agents.keys
+            .filter { !VaultConfig.builtInAgentIDs.contains($0) }
+            .sorted()
+        let orderedIDs = VaultConfig.builtInAgentIDs + customIDs
+        var seen: Set<String> = []
+        return orderedIDs.compactMap { id in
+            guard seen.insert(id).inserted,
+                  let config = agents[id] else {
+                return nil
+            }
+            var lines = [
+                "[vault.agents.\(id)]",
+                "enabled = \(config.enabled)",
+            ]
+            appendOptionalTomlLine("detect-process", config.detectProcess, to: &lines)
+            appendOptionalTomlLine("detect-argv-contains", config.detectArgvContains, to: &lines)
+            appendOptionalTomlLine("session-id-source", config.sessionIDSource, to: &lines)
+            appendOptionalTomlLine("session-id-argv-option", config.sessionIDArgvOption, to: &lines)
+            appendOptionalTomlLine("resume-command", config.resumeCommand, to: &lines)
+            appendOptionalTomlLine("cwd-policy", config.cwdPolicy, to: &lines)
+            appendOptionalTomlLine("session-directory", config.sessionDirectory, to: &lines)
+            return lines.joined(separator: "\n")
+        }
+        .joined(separator: "\n\n")
+    }
+
+    private static func appendOptionalTomlLine(_ key: String, _ value: String?, to lines: inout [String]) {
+        guard let value else { return }
+        lines.append("\(key) = \(tomlString(value))")
     }
 
     private static func tomlString(_ value: String) -> String {

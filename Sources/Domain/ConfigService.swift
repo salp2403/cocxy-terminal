@@ -279,6 +279,7 @@ final class ConfigService: ConfigProviding {
     /// Used both for creating the initial config file and for tests.
     static func generateDefaultToml(updateChannel: ChannelKind = .stable) -> String {
         let defaults = CocxyConfig.defaults(updateChannel: updateChannel)
+        let vaultAgentsToml = vaultAgentSectionsToml(defaults.vault.agents)
         return """
         # Cocxy Terminal Configuration
         # Documentation: ~/.config/cocxy/
@@ -429,6 +430,19 @@ final class ConfigService: ConfigProviding {
         max-iterations = \(defaults.agent.maxIterations)
         conversation-storage-dir = "\(defaults.agent.conversationStorageDir)"
         conversation-encryption = "\(defaults.agent.conversationEncryption.rawValue)"
+
+        [vault]
+        # Local encrypted external-agent session vault. Disabled by
+        # default; manual CLI resume remains available without enabling
+        # background capture or automatic relaunch.
+        enabled = \(defaults.vault.enabled)
+        auto-resume-on-launch = \(defaults.vault.autoResumeOnLaunch)
+        auto-resume-on-restore = \(defaults.vault.autoResumeOnRestore)
+        confirm-before-resume = \(defaults.vault.confirmBeforeResume)
+        encrypted-storage = \(defaults.vault.encryptedStorage)
+        session-retention-days = \(defaults.vault.sessionRetentionDays)
+
+        \(vaultAgentsToml)
 
         [voice]
         # Local voice input. Disabled by default. "system" resolves to
@@ -687,6 +701,41 @@ final class ConfigService: ConfigProviding {
         return "[\(encoded.joined(separator: ", "))]"
     }
 
+    private static func vaultAgentSectionsToml(_ agents: [String: VaultAgentConfig]) -> String {
+        let customIDs = agents.keys
+            .filter { !VaultConfig.builtInAgentIDs.contains($0) }
+            .sorted()
+        let orderedIDs = VaultConfig.builtInAgentIDs + customIDs
+        var seen: Set<String> = []
+        return orderedIDs.compactMap { id in
+            guard seen.insert(id).inserted,
+                  let config = agents[id] else {
+                return nil
+            }
+            var lines = [
+                "[vault.agents.\(id)]",
+                "enabled = \(config.enabled)",
+            ]
+            appendOptionalTomlLine("detect-process", config.detectProcess, to: &lines)
+            appendOptionalTomlLine("detect-argv-contains", config.detectArgvContains, to: &lines)
+            appendOptionalTomlLine("session-id-source", config.sessionIDSource, to: &lines)
+            appendOptionalTomlLine("session-id-argv-option", config.sessionIDArgvOption, to: &lines)
+            appendOptionalTomlLine("resume-command", config.resumeCommand, to: &lines)
+            appendOptionalTomlLine("cwd-policy", config.cwdPolicy, to: &lines)
+            appendOptionalTomlLine("session-directory", config.sessionDirectory, to: &lines)
+            return lines.joined(separator: "\n")
+        }
+        .joined(separator: "\n\n")
+    }
+
+    private static func appendOptionalTomlLine(_ key: String, _ value: String?, to lines: inout [String]) {
+        guard let value else { return }
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        lines.append("\(key) = \"\(escaped)\"")
+    }
+
     // MARK: - Parsing and Validation
 
     /// Parses TOML content and validates all values, using defaults for missing
@@ -712,6 +761,7 @@ final class ConfigService: ConfigProviding {
         let security = parseSecurityConfig(from: parsed)
         let uxPolish = parseUXPolishConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
+        let vault = parseVaultConfig(from: parsed)
         let backup = parseBackupConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
         let sessionReplay = parseSessionReplayConfig(from: parsed)
@@ -753,6 +803,7 @@ final class ConfigService: ConfigProviding {
             security: security,
             uxPolish: uxPolish,
             agent: agent,
+            vault: vault,
             backup: backup,
             activity: activity,
             sessionReplay: sessionReplay,
@@ -1145,6 +1196,41 @@ final class ConfigService: ConfigProviding {
             conversationStorageDir: stringValue(table["conversation-storage-dir"])
                 ?? defaults.conversationStorageDir,
             conversationEncryption: conversationEncryption
+        )
+    }
+
+    private func parseVaultConfig(from parsed: [String: TOMLValue]) -> VaultConfig {
+        let table = extractTable("vault", from: parsed)
+        let defaults = VaultConfig.defaults
+        let rawRetention = intValue(table["session-retention-days"])
+            ?? defaults.sessionRetentionDays
+        var agents = defaults.agents
+
+        for (sectionName, value) in parsed where sectionName.hasPrefix("vault.agents.") {
+            guard case .table(let agentTable) = value else { continue }
+            let rawID = String(sectionName.dropFirst("vault.agents.".count))
+            guard let agentID = VaultConfig.normalizedAgentID(rawID) else { continue }
+            let inherited = agents[agentID] ?? VaultAgentConfig(enabled: true)
+            agents[agentID] = VaultAgentConfig(
+                enabled: boolValue(agentTable["enabled"]) ?? inherited.enabled,
+                detectProcess: stringValue(agentTable["detect-process"]) ?? inherited.detectProcess,
+                detectArgvContains: stringValue(agentTable["detect-argv-contains"]) ?? inherited.detectArgvContains,
+                sessionIDSource: stringValue(agentTable["session-id-source"]) ?? inherited.sessionIDSource,
+                sessionIDArgvOption: stringValue(agentTable["session-id-argv-option"]) ?? inherited.sessionIDArgvOption,
+                resumeCommand: stringValue(agentTable["resume-command"]) ?? inherited.resumeCommand,
+                cwdPolicy: stringValue(agentTable["cwd-policy"]) ?? inherited.cwdPolicy,
+                sessionDirectory: stringValue(agentTable["session-directory"]) ?? inherited.sessionDirectory
+            )
+        }
+
+        return VaultConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            autoResumeOnLaunch: boolValue(table["auto-resume-on-launch"]) ?? defaults.autoResumeOnLaunch,
+            autoResumeOnRestore: boolValue(table["auto-resume-on-restore"]) ?? defaults.autoResumeOnRestore,
+            confirmBeforeResume: boolValue(table["confirm-before-resume"]) ?? defaults.confirmBeforeResume,
+            encryptedStorage: true,
+            sessionRetentionDays: rawRetention,
+            agents: agents
         )
     }
 
