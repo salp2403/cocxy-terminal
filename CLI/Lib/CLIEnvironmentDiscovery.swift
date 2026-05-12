@@ -59,6 +59,7 @@ enum CLIEnvironmentDiscovery {
                 "plugins",
                 "command-signatures",
                 "top-cli",
+                "vault",
             ]
         )
     }
@@ -182,9 +183,9 @@ enum CLIEnvironmentDiscovery {
                 ),
                 CLIDiscoverableCapability(
                     id: "vault",
-                    supported: false,
+                    supported: true,
                     enabledByDefault: false,
-                    summary: "External agent session vault is not complete yet"
+                    summary: "Encrypted local external agent session vault with manual CLI resume"
                 ),
             ]
         )

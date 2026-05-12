@@ -38,6 +38,7 @@ struct CLIIdentityCapabilitiesSwiftTestingTests {
         #expect(enabledFeatures.contains("local-cli"))
         #expect(enabledFeatures.contains("app-socket"))
         #expect(enabledFeatures.contains("top-cli"))
+        #expect(enabledFeatures.contains("vault"))
     }
 
     @Test("capabilities returns supported feature JSON without requiring the app socket")
@@ -59,7 +60,11 @@ struct CLIIdentityCapabilitiesSwiftTestingTests {
                 && $0["supported"] as? Bool == true
         })
         #expect(capabilities.contains { $0["id"] as? String == "top-cli" && $0["supported"] as? Bool == true })
-        #expect(capabilities.contains { $0["id"] as? String == "vault" && $0["supported"] as? Bool == false })
+        #expect(capabilities.contains {
+            $0["id"] as? String == "vault"
+                && $0["supported"] as? Bool == true
+                && $0["enabledByDefault"] as? Bool == false
+        })
     }
 
     @Test("help advertises discovery commands")
@@ -68,6 +73,7 @@ struct CLIIdentityCapabilitiesSwiftTestingTests {
 
         #expect(help.contains("cocxy identify"))
         #expect(help.contains("cocxy capabilities"))
+        #expect(help.contains("cocxy vault list"))
     }
 
     private func jsonObject(from text: String) throws -> [String: Any] {

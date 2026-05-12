@@ -90,6 +90,9 @@ public enum CLICommand: String, CaseIterable {
     case identify
     case capabilities
     case top
+    case vaultList = "vault-list"
+    case vaultClear = "vault-clear"
+    case vaultResume = "vault-resume"
     case keysGenerate = "keys-generate"
     case keysList = "keys-list"
     case keysExportPublic = "keys-export-public"
@@ -321,6 +324,9 @@ public enum CLICommand: String, CaseIterable {
         case .identify: return "Describe this Cocxy CLI and owning app as JSON"
         case .capabilities: return "List discoverable local capabilities as JSON"
         case .top: return "Show a top-style live view of Cocxy tabs and active process state"
+        case .vaultList: return "List locally vaulted external agent sessions as JSON"
+        case .vaultClear: return "Clear locally vaulted external agent sessions"
+        case .vaultResume: return "Resume an external agent session without shell interpolation"
         case .keysGenerate: return "Generate a local signing key"
         case .keysList: return "List local signing keys"
         case .keysExportPublic: return "Export a signing public key"
@@ -523,6 +529,9 @@ public enum CLICommand: String, CaseIterable {
         case .identify: return "cocxy identify"
         case .capabilities: return "cocxy capabilities"
         case .top: return "cocxy top [--once|--json] [--interval <seconds>]"
+        case .vaultList: return "cocxy vault list"
+        case .vaultClear: return "cocxy vault clear"
+        case .vaultResume: return "cocxy vault resume <agent> <session-id> [--dry-run]"
         case .keysGenerate: return "cocxy keys generate --author <name>"
         case .keysList: return "cocxy keys list"
         case .keysExportPublic: return "cocxy keys export-public <key-id> [--output <path>]"

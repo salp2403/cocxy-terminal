@@ -6,6 +6,7 @@ import CocxyShared
 import CocxyInputClassifier
 import CocxyCommandSignatures
 import CocxyCommandCorrections
+import CocxyVault
 
 // MARK: - Command Runner
 
@@ -24,6 +25,7 @@ public struct CommandRunner {
     public let socketClient: SocketClient
     public let signatureKeyStore: SignatureKeychainStore
     public let trustedAuthorRegistryURL: URL
+    public let vaultStore: any VaultSessionStoring
 
     /// Creates a command runner with a socket client.
     ///
@@ -33,11 +35,13 @@ public struct CommandRunner {
         socketClient: SocketClient = SocketClient(),
         signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
         trustedAuthorRegistryURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cocxy/security/trusted-authors.json")
+            .appendingPathComponent(".cocxy/security/trusted-authors.json"),
+        vaultStore: any VaultSessionStoring = VaultSessionStore.defaultStore()
     ) {
         self.socketClient = socketClient
         self.signatureKeyStore = signatureKeyStore
         self.trustedAuthorRegistryURL = trustedAuthorRegistryURL
+        self.vaultStore = vaultStore
     }
 
     /// Runs the CLI with the given arguments.
@@ -101,6 +105,12 @@ public struct CommandRunner {
             return executeCapabilities()
         case .top(let mode):
             return CLITopCommand(socketClient: socketClient).run(mode: mode)
+        case .vaultList:
+            return executeVaultList()
+        case .vaultClear:
+            return executeVaultClear()
+        case .vaultResume(let agent, let sessionID, let dryRun):
+            return executeVaultResume(agent: agent, sessionID: sessionID, dryRun: dryRun)
         case .keysGenerate(let author):
             return executeKeysGenerate(author: author)
         case .keysList:
@@ -394,6 +404,78 @@ public struct CommandRunner {
         }
     }
 
+    // MARK: - Local Commands: External Agent Vault
+
+    private func executeVaultList() -> CLIResult {
+        do {
+            let formatter = ISO8601DateFormatter()
+            let sessions = try vaultStore.loadSessions().map { session -> [String: Any] in
+                var object: [String: Any] = [
+                    "id": session.id,
+                    "agentID": session.agentID.rawValue,
+                    "agentDisplayName": session.agentDisplayName,
+                    "sessionID": session.sessionID,
+                    "capturedAt": formatter.string(from: session.capturedAt),
+                    "lastSeenAt": formatter.string(from: session.lastSeenAt),
+                    "source": session.source.rawValue,
+                    "sanitizedArguments": session.sanitizedArguments,
+                ]
+                object["workingDirectory"] = session.workingDirectory ?? NSNull()
+                return object
+            }
+            return jsonResult(["sessions": sessions])
+        } catch {
+            return errorResult("Failed to list vault sessions", error)
+        }
+    }
+
+    private func executeVaultClear() -> CLIResult {
+        do {
+            try vaultStore.clear()
+            return CLIResult(exitCode: 0, stdout: "Vault cleared.", stderr: "")
+        } catch {
+            return errorResult("Failed to clear vault", error)
+        }
+    }
+
+    private func executeVaultResume(agent agentName: String, sessionID: String, dryRun: Bool) -> CLIResult {
+        do {
+            let registry = VaultAgentRegistry.builtIn
+            guard let agent = registry.agent(matching: agentName) else {
+                throw VaultError.unknownAgent(agentName)
+            }
+            let storedSession = try vaultStore.loadSessions().first {
+                $0.agentID == agent.id && $0.sessionID == sessionID
+            }
+            let session = storedSession ?? VaultSession(
+                id: "\(agent.id.rawValue):\(sessionID)",
+                agentID: agent.id,
+                agentDisplayName: agent.displayName,
+                sessionID: sessionID,
+                workingDirectory: nil,
+                capturedAt: Date(),
+                lastSeenAt: Date(),
+                source: .manual,
+                sanitizedArguments: []
+            )
+            let invocation = try VaultSessionResumer.plan(agent: agent, session: session)
+            if dryRun {
+                var object: [String: Any] = [
+                    "dryRun": true,
+                    "executable": invocation.executable,
+                    "arguments": invocation.arguments,
+                ]
+                object["workingDirectory"] = invocation.workingDirectory ?? NSNull()
+                return jsonResult(object)
+            }
+
+            let result = try VaultSessionResumer.run(invocation)
+            return CLIResult(exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr)
+        } catch {
+            return errorResult("Failed to resume vault session", error)
+        }
+    }
+
     // MARK: - Local Commands: Signatures
 
     private func executeKeysGenerate(author: String) -> CLIResult {
@@ -660,6 +742,7 @@ public struct CommandRunner {
 
         case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen,
              .classify, .correct, .identify, .capabilities, .top,
+             .vaultList, .vaultClear, .vaultResume,
              .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:
             // These are handled locally; should never reach socket request building.

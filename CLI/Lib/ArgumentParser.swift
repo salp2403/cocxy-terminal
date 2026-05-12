@@ -191,6 +191,15 @@ public enum ParsedCommand: Equatable {
     /// `cocxy top [--once|--json] [--interval <seconds>]`
     case top(mode: CLITopMode)
 
+    /// `cocxy vault list`
+    case vaultList
+
+    /// `cocxy vault clear`
+    case vaultClear
+
+    /// `cocxy vault resume <agent> <session-id> [--dry-run]`
+    case vaultResume(agent: String, sessionID: String, dryRun: Bool)
+
     /// `cocxy keys generate --author <name>`
     case keysGenerate(author: String)
 
@@ -783,6 +792,9 @@ public enum CLIArgumentParser {
 
         case "top":
             return try parseTop(arguments: Array(arguments.dropFirst()))
+
+        case "vault":
+            return try parseVault(arguments: Array(arguments.dropFirst()))
 
         case "keys":
             return try parseKeys(arguments: Array(arguments.dropFirst()))
@@ -1825,6 +1837,65 @@ public enum CLIArgumentParser {
         }
 
         return .top(mode: mode)
+    }
+
+    private static func parseVault(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "vault", argument: "subcommand")
+        }
+        if isOnlyHelpRequest(arguments) {
+            return .help
+        }
+
+        switch subcommand {
+        case "list":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "vault list",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "vault list does not accept extra arguments"
+                )
+            }
+            return .vaultList
+
+        case "clear":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "vault clear",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "vault clear does not accept extra arguments"
+                )
+            }
+            return .vaultClear
+
+        case "resume":
+            guard arguments.count >= 3 else {
+                throw CLIError.missingArgument(command: "vault resume", argument: "agent session-id")
+            }
+            let agent = arguments[1]
+            let sessionID = arguments[2]
+            var dryRun = false
+            for token in arguments.dropFirst(3) {
+                switch token {
+                case "--dry-run":
+                    dryRun = true
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "vault resume",
+                        argument: token,
+                        reason: "Supported option: --dry-run"
+                    )
+                }
+            }
+            return .vaultResume(agent: agent, sessionID: sessionID, dryRun: dryRun)
+
+        default:
+            throw CLIError.invalidArgument(
+                command: "vault",
+                argument: subcommand,
+                reason: "Expected list, clear, or resume"
+            )
+        }
     }
 
     /// Parses `cocxy keys <subcommand>`.
