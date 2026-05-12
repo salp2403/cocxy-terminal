@@ -65,7 +65,12 @@ struct GitHubPaneUISwiftTestingTests {
 
     @Test("GitHubPaneTabStripPresentation avoids clipped tab labels at narrow widths")
     func tabStripPresentation_usesCompactModesBeforeLabelsClip() {
-        #expect(GitHubPaneTabStripPresentation.resolve(width: 700).mode == .allLabels)
+        #expect(
+            GitHubPaneTabStripPresentation.resolve(
+                width: GitHubPaneView.maximumPanelWidth
+            ).mode == .selectedLabel
+        )
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 860).mode == .allLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 480).mode == .selectedLabel)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 280).mode == .iconsOnly)
     }

@@ -632,8 +632,8 @@ struct GitHubPaneTabStripPresentation: Equatable {
     }
 
     static let height: CGFloat = 30
-    private static let allLabelsMinimumWidth: CGFloat = 560
-    private static let selectedLabelMinimumWidth: CGFloat = 320
+    private static let allLabelsMinimumWidth: CGFloat = 840
+    private static let selectedLabelMinimumWidth: CGFloat = 340
 
     let mode: Mode
 
@@ -650,7 +650,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
     var itemSpacing: CGFloat {
         switch mode {
         case .allLabels: return 6
-        case .selectedLabel: return 5
+        case .selectedLabel: return 4
         case .iconsOnly: return 4
         }
     }
@@ -658,16 +658,16 @@ struct GitHubPaneTabStripPresentation: Equatable {
     var horizontalPadding: CGFloat {
         switch mode {
         case .allLabels: return 7
-        case .selectedLabel: return 8
-        case .iconsOnly: return 7
+        case .selectedLabel: return 5
+        case .iconsOnly: return 5
         }
     }
 
     var minimumButtonWidth: CGFloat {
         switch mode {
         case .allLabels: return 62
-        case .selectedLabel: return 32
-        case .iconsOnly: return 30
+        case .selectedLabel: return 26
+        case .iconsOnly: return 26
         }
     }
 
