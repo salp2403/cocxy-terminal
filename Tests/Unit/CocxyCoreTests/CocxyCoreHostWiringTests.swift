@@ -253,8 +253,8 @@ struct CocxyCoreHostWiringTests {
         #expect(String(data: output.data, encoding: .utf8)?.contains("typed-ok") == true)
     }
 
-    @Test("known agent command input enables immediate inline image paste payload")
-    func knownAgentCommandInputEnablesImmediateInlineImagePastePayload() throws {
+    @Test("known agent command input enables immediate image file handoff")
+    func knownAgentCommandInputEnablesImmediateImageFileHandoff() throws {
         let bridge = try makeBridge()
         let controller = MainWindowController(bridge: bridge)
         let tabID = try #require(controller.tabManager.tabs.first?.id)
@@ -297,9 +297,11 @@ struct CocxyCoreHostWiringTests {
             surfaceView: view
         ))
 
-        #expect(payload.requiresRawControlSequences)
-        #expect(payload.text.contains("1337;File="))
-        #expect(payload.text.contains(";inline=1:"))
+        #expect(payload.requiresRawControlSequences == false)
+        #expect(payload.text.hasSuffix(".png"))
+        #expect(payload.text.contains("RichInputAttachments"))
+        #expect(FileManager.default.fileExists(atPath: payload.text))
+        #expect(payload.text.contains("1337;File=") == false)
     }
 
     private static let pngData = Data(base64Encoded:

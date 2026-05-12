@@ -144,53 +144,14 @@ extension MainWindowController {
     }
 
     private func richInputImageTransportMode(
-        for surfaceView: CocxyCoreView
+        for _: CocxyCoreView
     ) -> RichInputImageTransportMode {
-        guard let surfaceID = surfaceView.terminalViewModel?.surfaceID,
-              richInputSurfaceSupportsInlineImages(surfaceID)
-        else {
-            return .filePaths
-        }
-        return .osc1337InlineFile
-    }
-
-    private func richInputSurfaceSupportsInlineImages(_ surfaceID: SurfaceID) -> Bool {
-        if let agentName = injectedPerSurfaceStore?.state(for: surfaceID).detectedAgent?.name,
-           Self.richInputAgentSupportsInlineImages(agentName) {
-            return true
-        }
-
-        if surfaceLooksLikeActiveAgent(surfaceID) {
-            return true
-        }
-
-        guard let bridge = cocxyCoreBridge(forSurface: surfaceID),
-              bridge.semanticDiagnostics(for: surfaceID)?.state == CocxyCoreSemanticState.commandRunning,
-              let command = bridge.semanticBlocks(for: surfaceID, limit: 8)
-                .first(where: { $0.blockType == CocxyCoreSemanticBlockType.commandInput })?
-                .detail,
-              let agentName = AgentConfigService.agentIdentifier(
-                matchingLaunchLine: command,
-                compiledConfigs: Self.richInputAgentLaunchConfigs
-              )
-        else {
-            return false
-        }
-
-        return Self.richInputAgentSupportsInlineImages(agentName)
-    }
-
-    private static let richInputAgentLaunchConfigs = AgentConfigService
-        .defaultAgentConfigs()
-        .map(AgentConfigService.compile)
-
-    private static func richInputAgentSupportsInlineImages(_ agentName: String) -> Bool {
-        switch agentName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "claude", "claude-code", "claude code", "codex", "gemini", "gemini-cli":
-            return true
-        default:
-            return false
-        }
+        // Clipboard image input is user input to the foreground TUI, not
+        // terminal output. Agent CLIs expect a local file handoff and then
+        // render their own prompt placeholder; injecting OSC image bytes into
+        // stdin leaks base64 text into tools that do not parse terminal output
+        // protocols on input.
+        return .filePaths
     }
 
     func cancelRichInputComposer() {
@@ -224,7 +185,7 @@ extension MainWindowController {
         guard config.enabled,
               request.fileURLs.isEmpty == false,
               let surfaceID = surfaceView.terminalViewModel?.surfaceID,
-              richInputSurfaceSupportsInlineImages(surfaceID)
+              surfaceLooksLikeActiveAgent(surfaceID)
         else {
             return nil
         }
@@ -238,7 +199,7 @@ extension MainWindowController {
             attachmentStore: attachmentStore
         )
         viewModel.attachFiles(request.fileURLs)
-        let payload = viewModel.terminalPayload(imageTransportMode: .osc1337InlineFile)
+        let payload = viewModel.terminalPayload(imageTransportMode: .filePaths)
         return payload.isEmpty ? nil : payload
     }
 

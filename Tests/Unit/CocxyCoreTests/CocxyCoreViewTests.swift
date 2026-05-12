@@ -616,8 +616,8 @@ struct CocxyCoreViewTests {
         #expect(output.data.isEmpty)
     }
 
-    @Test("active agent image paste can submit an immediate inline payload")
-    func activeAgentImagePasteCanSubmitImmediateInlinePayload() async throws {
+    @Test("active agent image paste can submit an immediate file path payload")
+    func activeAgentImagePasteCanSubmitImmediateFilePathPayload() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let imageURL = URL(fileURLWithPath: NSTemporaryDirectory())
@@ -636,8 +636,8 @@ struct CocxyCoreViewTests {
             #expect(request.text == "")
             #expect(request.fileURLs == [imageURL])
             return RichInputTerminalPayload(
-                text: "\u{001B}]1337;File=name=SW1hZ2UucG5n;size=1;inline=1:AA==\u{0007}\n",
-                requiresRawControlSequences: true
+                text: FileDropPathFormatter.format([imageURL]),
+                requiresRawControlSequences: false
             )
         }
 
@@ -649,8 +649,10 @@ struct CocxyCoreViewTests {
         harness.view.paste(nil)
 
         try await waitUntil {
-            String(data: output.data, encoding: .utf8)?.contains("1337;File=") == true
+            String(data: output.data, encoding: .utf8)?
+                .contains(FileDropPathFormatter.format([imageURL])) == true
         }
+        #expect(String(data: output.data, encoding: .utf8)?.contains("1337;File=") == false)
         #expect(composerRequests.isEmpty)
     }
 
