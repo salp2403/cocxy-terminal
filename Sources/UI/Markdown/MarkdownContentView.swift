@@ -111,6 +111,9 @@ final class MarkdownContentView: NSView {
     /// Below this width, the source editor needs the sidebar's space back.
     private static let minimumWidthForVisibleSidebar: CGFloat = 1_000
 
+    /// Smallest useful pane width inside source/preview split mode.
+    private static let minimumSplitPaneWidth: CGFloat = 160
+
     // MARK: - Init
 
     /// Image file extensions accepted for drag-and-drop insertion.
@@ -163,11 +166,13 @@ final class MarkdownContentView: NSView {
     override func layout() {
         super.layout()
         applyOutlineVisibility()
+        repairSplitDividerIfNeeded(force: false)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         applyOutlineVisibility()
+        repairSplitDividerIfNeeded(force: false)
     }
 
     private func tearDownTransientState() {
@@ -218,6 +223,10 @@ final class MarkdownContentView: NSView {
     internal var sourceViewForTesting: MarkdownSourceView { sourceView }
     internal var sidebarViewForTesting: MarkdownSidebarView { sidebar }
     internal var effectiveOutlineVisibleForTesting: Bool { effectiveOutlineVisible }
+    internal var splitPaneWidthsForTesting: [CGFloat] {
+        splitContainer.layoutSubtreeIfNeeded()
+        return splitContainer.arrangedSubviews.map(\.frame.width)
+    }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
@@ -382,6 +391,14 @@ final class MarkdownContentView: NSView {
         sidebar.outlineView.onSelect = { [weak self] entry in
             self?.scrollToOutlineEntry(entry)
         }
+        sidebar.outlineView.onHover = { [weak self] entry in
+            guard let self else { return }
+            guard let entry else {
+                self.previewView.highlightSourceLine(nil)
+                return
+            }
+            self.previewView.highlightSourceLine(self.document.sourceLine(forBodyLine: entry.sourceLine))
+        }
         sidebar.fileExplorer.onFileSelected = { [weak self] url in
             self?.loadFile(url)
         }
@@ -479,6 +496,7 @@ final class MarkdownContentView: NSView {
             splitContainer.addArrangedSubview(sourceView)
             splitContainer.addArrangedSubview(previewView)
             embed(splitContainer, in: contentContainer)
+            repairSplitDividerIfNeeded(force: true)
         }
     }
 
@@ -511,6 +529,31 @@ final class MarkdownContentView: NSView {
 
     private var allowsOutlineSidebarForCurrentWidth: Bool {
         bounds.width == 0 || bounds.width >= Self.minimumWidthForVisibleSidebar
+    }
+
+    private func repairSplitDividerIfNeeded(force: Bool) {
+        guard mode == .split,
+              splitContainer.superview != nil,
+              splitContainer.arrangedSubviews.count == 2
+        else {
+            return
+        }
+
+        splitContainer.layoutSubtreeIfNeeded()
+        let width = splitContainer.bounds.width
+        let divider = splitContainer.dividerThickness
+        let minimumWidth = Self.minimumSplitPaneWidth
+        guard width >= minimumWidth * 2 + divider else { return }
+
+        let sourceWidth = splitContainer.arrangedSubviews[0].frame.width
+        let previewWidth = splitContainer.arrangedSubviews[1].frame.width
+        let needsRepair = sourceWidth < minimumWidth
+            || previewWidth < minimumWidth
+            || sourceWidth > width - minimumWidth
+            || previewWidth > width - minimumWidth
+
+        guard force || needsRepair else { return }
+        splitContainer.setPosition((width - divider) / 2, ofDividerAt: 0)
     }
 
     // MARK: - Document Propagation
@@ -566,7 +609,11 @@ final class MarkdownContentView: NSView {
     }
 
     private func handleSourceEdited(_ source: String) {
+        let currentSourceLine = sourceView.selectedSourceLine
         document = MarkdownDocument.parse(source)
+        if mode == .split {
+            previewView.scrollToSourceLine(currentSourceLine)
+        }
         scheduleSave(for: source)
     }
 

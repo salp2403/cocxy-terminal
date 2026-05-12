@@ -43,6 +43,12 @@ extension MarkdownPreviewTemplate {
 
         #content > *:first-child { margin-top: 0; }
         [data-source-line] { scroll-margin-top: 20px; }
+        [data-source-line].source-sync-highlight {
+            border-radius: 6px;
+            background: rgba(137, 180, 250, 0.12);
+            box-shadow: 0 0 0 2px rgba(137, 180, 250, 0.55);
+            transition: background 120ms ease, box-shadow 120ms ease;
+        }
 
         h1, h2, h3, h4, h5, h6 {
             margin: 1.4em 0 0.6em;

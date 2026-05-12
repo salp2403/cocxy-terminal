@@ -42,6 +42,17 @@ struct MarkdownInteractiveTests {
         #expect(html.contains("copyCode"))
     }
 
+    @Test("preview template supports source-line click and highlight sync")
+    func previewTemplateSupportsSourceLineSync() {
+        let html = MarkdownPreviewTemplate.build(highlightJS: "window.hljs={};")
+
+        #expect(html.contains("function closestSourceLine"))
+        #expect(html.contains("function scrollToSourceLine"))
+        #expect(html.contains("function highlightSourceLine"))
+        #expect(html.contains("source-sync-highlight"))
+        #expect(html.contains("postPreviewMessage('clickToSource'"))
+    }
+
     @Test("preview template contains sortable table and TSV copy infrastructure")
     func previewTemplateContainsTableEnhancements() {
         let html = MarkdownPreviewTemplate.build(highlightJS: "window.hljs={};")
@@ -75,6 +86,35 @@ struct MarkdownInteractiveTests {
 
         #expect(view.mode == .split)
         #expect(view.sourceView.selectedSourceRange.location == 0)
+    }
+
+    @Test("source edit requests preview scroll to current source line")
+    func sourceEditRequestsPreviewScrollToCurrentLine() {
+        let url = createTempMarkdownFile(content: "# Hello\n\nBody")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        view.mode = .split
+
+        view.sourceViewForTesting.setSelectedSourceRange(NSRange(location: 2, length: 0))
+        view.sourceViewForTesting.replaceEntireSource(with: "# Edited\n\nBody")
+
+        #expect(view.previewView.lastSourceLineScrollRequestForTesting == 2)
+    }
+
+    @Test("outline hover requests preview highlight for matching heading")
+    func outlineHoverRequestsPreviewHighlight() {
+        let url = createTempMarkdownFile(content: "# Hello\n\n## Child")
+        defer { cleanup(url) }
+
+        let view = MarkdownContentView(filePath: url)
+        let entry = MarkdownOutlineEntry(level: 2, title: "Child", sourceLine: 2)
+
+        view.sidebarViewForTesting.outlineView.onHover?(entry)
+        #expect(view.previewView.lastHighlightedSourceLineForTesting == 2)
+
+        view.sidebarViewForTesting.outlineView.onHover?(nil)
+        #expect(view.previewView.lastHighlightedSourceLineForTesting == nil)
     }
 
     @Test("persist pasted image data falls back to temporary directory")

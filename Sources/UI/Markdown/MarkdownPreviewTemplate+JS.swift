@@ -209,6 +209,67 @@ extension MarkdownPreviewTemplate {
             return false;
         }
 
+        function closestSourceLine(node) {
+            while (node && node !== document.body) {
+                if (node.dataset && node.dataset.sourceLine !== undefined) {
+                    var sourceLine = parseInt(node.dataset.sourceLine, 10);
+                    return Number.isNaN(sourceLine) ? null : sourceLine;
+                }
+                node = node.parentElement;
+            }
+            return null;
+        }
+
+        function findSourceLineElement(sourceLine) {
+            var nodes = Array.from(document.querySelectorAll('#content [data-source-line]'));
+            if (nodes.length === 0) return null;
+
+            var fallback = null;
+            for (var i = 0; i < nodes.length; i++) {
+                var line = parseInt(nodes[i].dataset.sourceLine, 10);
+                if (Number.isNaN(line)) continue;
+                if (line === sourceLine) return nodes[i];
+                if (line < sourceLine) {
+                    fallback = nodes[i];
+                    continue;
+                }
+                return fallback || nodes[i];
+            }
+            return fallback || nodes[nodes.length - 1];
+        }
+
+        function clearSourceLineHighlight() {
+            document.querySelectorAll('.source-sync-highlight').forEach(function(node) {
+                node.classList.remove('source-sync-highlight');
+            });
+        }
+
+        function highlightSourceLine(sourceLine) {
+            clearSourceLineHighlight();
+            var node = findSourceLineElement(sourceLine);
+            if (!node) return false;
+            node.classList.add('source-sync-highlight');
+            return true;
+        }
+
+        function scrollToSourceLine(sourceLine, shouldHighlight) {
+            var node = findSourceLineElement(sourceLine);
+            if (!node) return false;
+            node.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            if (shouldHighlight !== false) {
+                highlightSourceLine(sourceLine);
+            }
+            return true;
+        }
+
+        function shouldSourceSyncClick(target) {
+            if (!target) return false;
+            if (target.closest('a, button, input, textarea, select, label, summary')) return false;
+            if (target.closest('#toc-toggle, #toc-panel, .table-tools, .code-header, .lightbox-overlay')) return false;
+            if (target.closest('th[data-sort-state]')) return false;
+            return true;
+        }
+
         function buildTOC() {
             var panel = document.getElementById('toc-panel');
             if (!panel) return;
@@ -356,12 +417,25 @@ extension MarkdownPreviewTemplate {
             var image = event.target.closest('#content img');
             if (image) {
                 event.preventDefault();
-                showLightbox(image.getAttribute('src'), image.getAttribute('alt'));
+                var imageSourceLine = closestSourceLine(image);
+                if (imageSourceLine !== null) {
+                    postPreviewMessage('clickToSource', { sourceLine: imageSourceLine });
+                } else {
+                    showLightbox(image.getAttribute('src'), image.getAttribute('alt'));
+                }
                 return;
             }
 
             if (event.target.id === 'lightbox-overlay') {
                 closeLightbox();
+                return;
+            }
+
+            if (shouldSourceSyncClick(event.target)) {
+                var sourceLine = closestSourceLine(event.target);
+                if (sourceLine !== null) {
+                    postPreviewMessage('clickToSource', { sourceLine: sourceLine });
+                }
             }
         });
 
@@ -377,16 +451,9 @@ extension MarkdownPreviewTemplate {
         });
 
         document.addEventListener('dblclick', function(event) {
-            var node = event.target;
-            while (node && node !== document.body) {
-                if (node.dataset && node.dataset.sourceLine !== undefined) {
-                    var sourceLine = parseInt(node.dataset.sourceLine, 10);
-                    if (!Number.isNaN(sourceLine)) {
-                        postPreviewMessage('clickToSource', { sourceLine: sourceLine });
-                    }
-                    return;
-                }
-                node = node.parentElement;
+            var sourceLine = closestSourceLine(event.target);
+            if (sourceLine !== null) {
+                postPreviewMessage('clickToSource', { sourceLine: sourceLine });
             }
         });
 

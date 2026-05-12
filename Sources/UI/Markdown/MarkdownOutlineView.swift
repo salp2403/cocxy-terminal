@@ -15,7 +15,7 @@ final class MarkdownOutlineView: NSView {
     // MARK: - Properties
 
     private let scrollView = NSScrollView()
-    private let outlineView = NSOutlineView()
+    private let outlineView = HoverTrackingOutlineView()
     private var dataSource: MarkdownOutlineDataSource?
     private var delegateObject: MarkdownOutlineDelegate?
     private var localizer: AppLocalizer
@@ -24,6 +24,10 @@ final class MarkdownOutlineView: NSView {
     /// source line (0-based, body-relative) plus its plain title so the
     /// host can decide whether to scroll source or preview.
     var onSelect: ((MarkdownOutlineEntry) -> Void)?
+
+    /// Invoked when the pointer moves over a heading row. Nil clears the
+    /// preview highlight when the pointer leaves the outline.
+    var onHover: ((MarkdownOutlineEntry?) -> Void)?
 
     /// Current document's outline. Setting triggers a reload.
     var outline: MarkdownOutline = .empty {
@@ -68,6 +72,17 @@ final class MarkdownOutlineView: NSView {
         outlineView.allowsEmptySelection = true
         outlineView.target = self
         outlineView.action = #selector(rowClicked)
+        outlineView.onHoveredRowChanged = { [weak self] row in
+            guard let self else { return }
+            guard let row,
+                  row >= 0,
+                  let node = self.outlineView.item(atRow: row) as? MarkdownOutlineNode
+            else {
+                self.onHover?(nil)
+                return
+            }
+            self.onHover?(node.entry)
+        }
 
         let ds = MarkdownOutlineDataSource(nodes: [])
         outlineView.dataSource = ds
@@ -102,6 +117,7 @@ final class MarkdownOutlineView: NSView {
         dataSource?.nodes = outline.tree()
         outlineView.reloadData()
         outlineView.expandItem(nil, expandChildren: true)
+        onHover?(nil)
     }
 
     // MARK: - Actions
@@ -112,6 +128,50 @@ final class MarkdownOutlineView: NSView {
         if let node = outlineView.item(atRow: row) as? MarkdownOutlineNode {
             onSelect?(node.entry)
         }
+    }
+}
+
+// MARK: - Hover Tracking
+
+@MainActor
+private final class HoverTrackingOutlineView: NSOutlineView {
+    var onHoveredRowChanged: ((Int?) -> Void)?
+    private var hoverTrackingArea: NSTrackingArea?
+    private var hoveredRow: Int?
+
+    override func updateTrackingAreas() {
+        if let hoverTrackingArea {
+            removeTrackingArea(hoverTrackingArea)
+        }
+
+        super.updateTrackingAreas()
+
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(area)
+        hoverTrackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let row = row(at: point)
+        updateHoveredRow(row >= 0 ? row : nil)
+        super.mouseMoved(with: event)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        updateHoveredRow(nil)
+        super.mouseExited(with: event)
+    }
+
+    private func updateHoveredRow(_ row: Int?) {
+        guard hoveredRow != row else { return }
+        hoveredRow = row
+        onHoveredRowChanged?(row)
     }
 }
 

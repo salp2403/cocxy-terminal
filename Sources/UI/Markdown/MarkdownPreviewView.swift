@@ -63,6 +63,9 @@ final class MarkdownPreviewView: NSView {
     var onClickToSource: ((Int) -> Void)?
     var onCopyToClipboard: ((String) -> Void)?
 
+    private(set) var lastSourceLineScrollRequestForTesting: Int?
+    private(set) var lastHighlightedSourceLineForTesting: Int?
+
     // MARK: - Init
 
     init(localizer: AppLocalizer = AppLocalizer(languagePreference: .system)) {
@@ -91,16 +94,31 @@ final class MarkdownPreviewView: NSView {
     /// Scrolls the preview to a heading matching the given title.
     func scrollToHeading(title: String) {
         let escaped = escapeJSString(title)
-        webView.evaluateJavaScript("scrollToHeading('\(escaped)')") { _, _ in }
+        evaluateWhenReady("scrollToHeading('\(escaped)')")
+    }
+
+    /// Scrolls to the nearest rendered block for the source line.
+    func scrollToSourceLine(_ sourceLine: Int) {
+        guard sourceLine >= 0 else { return }
+        lastSourceLineScrollRequestForTesting = sourceLine
+        evaluateWhenReady("scrollToSourceLine(\(sourceLine), true)")
+    }
+
+    /// Highlights the nearest rendered block for the source line without
+    /// changing scroll position. Passing nil clears the current highlight.
+    func highlightSourceLine(_ sourceLine: Int?) {
+        lastHighlightedSourceLineForTesting = sourceLine
+        if let sourceLine, sourceLine >= 0 {
+            evaluateWhenReady("highlightSourceLine(\(sourceLine))")
+        } else {
+            evaluateWhenReady("clearSourceLineHighlight()")
+        }
     }
 
     /// Scrolls the preview to a proportional position (0.0 = top, 1.0 = bottom).
     func scrollToFraction(_ fraction: CGFloat) {
-        guard isTemplateLoaded else { return }
         let clamped = min(1.0, max(0.0, fraction))
-        webView.evaluateJavaScript(
-            "window.scrollTo(0, (document.documentElement.scrollHeight - window.innerHeight) * \(clamped))"
-        ) { _, _ in }
+        evaluateWhenReady("scrollToFraction(\(clamped))")
     }
 
     /// Whether the preview template has finished loading and is ready for
@@ -262,13 +280,32 @@ final class MarkdownPreviewView: NSView {
         let generation = latestContentGeneration
         isContentUpdatePending = true
         let escaped = escapeJSString(html)
-        webView.evaluateJavaScript("updateContent('\(escaped)')") { _, error in
+        webView.evaluateJavaScript("(function(){ updateContent('\(escaped)'); return null; })()") { _, error in
             guard generation == self.latestContentGeneration else { return }
             self.isContentUpdatePending = false
             if let error {
                 NSLog("MarkdownPreviewView JS error: %@", String(describing: error))
             }
             self.flushPendingActionsIfReady()
+        }
+    }
+
+    private func evaluateWhenReady(_ script: String) {
+        guard isReady else {
+            pendingActions.append { [weak self] in
+                self?.evaluatePreviewScript(script)
+            }
+            return
+        }
+        evaluatePreviewScript(script)
+    }
+
+    private func evaluatePreviewScript(_ script: String) {
+        let wrappedScript = "(function(){ \(script); return null; })()"
+        webView.evaluateJavaScript(wrappedScript) { _, error in
+            if let error {
+                NSLog("MarkdownPreviewView JS error: %@", String(describing: error))
+            }
         }
     }
 

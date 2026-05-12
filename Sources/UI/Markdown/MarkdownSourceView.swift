@@ -203,6 +203,7 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
 
     internal var currentSource: String { textView.string }
     internal var selectedSourceRange: NSRange { textView.selectedRange() }
+    internal var selectedSourceLine: Int { sourceLine(containingUTF16Location: textView.selectedRange().location) }
     internal var editorTextView: NSTextView { textView }
 
     // MARK: - Init
@@ -638,6 +639,23 @@ final class MarkdownSourceView: NSView, NSTextViewDelegate {
         let maxAllowedLength = max(0, maxLength - clampedLocation)
         let clampedLength = max(0, min(range.length, maxAllowedLength))
         return NSRange(location: clampedLocation, length: clampedLength)
+    }
+
+    private func sourceLine(containingUTF16Location location: Int) -> Int {
+        let text = textView.string as NSString
+        let clampedLocation = max(0, min(location, text.length))
+        guard clampedLocation > 0 else { return 0 }
+
+        var line = 0
+        var index = 0
+        while index < clampedLocation {
+            let range = text.rangeOfComposedCharacterSequence(at: index)
+            if text.substring(with: range) == "\n" {
+                line += 1
+            }
+            index = NSMaxRange(range)
+        }
+        return line
     }
 
     // MARK: - NSTextViewDelegate

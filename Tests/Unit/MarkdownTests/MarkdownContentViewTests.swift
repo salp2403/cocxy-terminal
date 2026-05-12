@@ -132,6 +132,19 @@ struct MarkdownContentViewTests {
         #expect(view.mode == .split)
     }
 
+    @Test("split mode keeps source and preview panes visible after layout")
+    func splitModeKeepsBothPanesVisibleAfterLayout() {
+        let view = MarkdownContentView()
+        view.frame = NSRect(x: 0, y: 0, width: 1_200, height: 600)
+
+        view.mode = .split
+        view.layoutSubtreeIfNeeded()
+
+        let widths = view.splitPaneWidthsForTesting
+        #expect(widths.count == 2)
+        #expect(widths.allSatisfy { $0 >= 160 })
+    }
+
     @Test("Cmd+1 returns to source mode")
     func cmd1ReturnsToSource() {
         let view = MarkdownContentView()
