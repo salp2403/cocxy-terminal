@@ -13,6 +13,7 @@ public protocol VaultSessionStoring {
     func loadSessions() throws -> [VaultSession]
     func saveSessions(_ sessions: [VaultSession]) throws
     func upsert(_ session: VaultSession) throws
+    func pruneSessions(olderThan cutoff: Date) throws -> [VaultSession]
     func clear() throws
 }
 
@@ -150,6 +151,12 @@ public struct VaultSessionStore: VaultSessionStoring {
         var sessions = try loadSessions().filter { $0.id != session.id }
         sessions.append(session)
         try saveSessions(sessions)
+    }
+
+    public func pruneSessions(olderThan cutoff: Date) throws -> [VaultSession] {
+        let sessions = try loadSessions().filter { $0.lastSeenAt >= cutoff }
+        try saveSessions(sessions)
+        return sessions
     }
 
     public func clear() throws {

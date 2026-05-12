@@ -88,6 +88,44 @@ struct VaultCoreSwiftTestingTests {
         #expect(loaded == [session])
     }
 
+    @Test("store prunes sessions older than retention cutoff")
+    func storePrunesSessionsOlderThanRetentionCutoff() throws {
+        let directory = try temporaryDirectory()
+        let storageURL = directory.appendingPathComponent("vault.enc")
+        let store = VaultSessionStore(
+            storageURL: storageURL,
+            keyProvider: StaticVaultKeyProvider(keyData: Data(repeating: 9, count: 32))
+        )
+        let old = VaultSession(
+            id: "codex:old",
+            agentID: VaultAgentID("codex"),
+            agentDisplayName: "Codex",
+            sessionID: "old",
+            workingDirectory: nil,
+            capturedAt: Date(timeIntervalSince1970: 1_000),
+            lastSeenAt: Date(timeIntervalSince1970: 1_000),
+            source: .manual,
+            sanitizedArguments: []
+        )
+        let fresh = VaultSession(
+            id: "codex:fresh",
+            agentID: VaultAgentID("codex"),
+            agentDisplayName: "Codex",
+            sessionID: "fresh",
+            workingDirectory: nil,
+            capturedAt: Date(timeIntervalSince1970: 2_000),
+            lastSeenAt: Date(timeIntervalSince1970: 2_000),
+            source: .manual,
+            sanitizedArguments: []
+        )
+
+        try store.saveSessions([old, fresh])
+        let kept = try store.pruneSessions(olderThan: Date(timeIntervalSince1970: 1_500))
+
+        #expect(kept == [fresh])
+        #expect(try store.loadSessions() == [fresh])
+    }
+
     @Test("resumer plans argv without shell interpolation")
     func resumerPlansArgvWithoutShellInterpolation() throws {
         let registry = VaultAgentRegistry.builtIn
