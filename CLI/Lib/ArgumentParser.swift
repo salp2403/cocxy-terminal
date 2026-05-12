@@ -47,7 +47,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy hook-handler` (reads JSON from stdin)
     case hookHandler
 
-    /// `cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]`
+    /// `cocxy setup-hooks [--agent <supported-agent>|all] [--remove]`
     case setupHooks(agent: SetupHooksTarget?, remove: Bool)
 
     /// `cocxy review`
@@ -1076,11 +1076,11 @@ public enum CLIArgumentParser {
                 }
 
                 let rawAgent = arguments[index + 1].lowercased()
-                guard let parsedAgent = SetupHooksTarget(rawValue: rawAgent) else {
+                guard let parsedAgent = SetupHooksTarget.fromCLIArgument(rawAgent) else {
                     throw CLIError.invalidArgument(
                         command: "setup-hooks",
                         argument: rawAgent,
-                        reason: "Must be claude, codex, gemini, kiro, or all."
+                        reason: "Must be claude, codex, gemini, kiro, opencode, pi, cursor, rovo-dev, copilot, codebuddy, factory, qoder, or all."
                     )
                 }
 

@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// SetupHooksCommand.swift - Multi-agent hook setup for Claude, Codex, and Gemini.
+// SetupHooksCommand.swift - Multi-agent hook setup for supported agent CLIs.
 
 import Foundation
 
@@ -8,7 +8,48 @@ public enum SetupHooksTarget: String, CaseIterable, Equatable {
     case codex
     case gemini
     case kiro
+    case opencode
+    case pi
+    case cursor
+    case rovoDev = "rovo-dev"
+    case copilot
+    case codebuddy
+    case factory
+    case qoder
     case all
+
+    static func fromCLIArgument(_ rawValue: String) -> SetupHooksTarget? {
+        switch rawValue.lowercased() {
+        case "claude":
+            return .claude
+        case "codex":
+            return .codex
+        case "gemini":
+            return .gemini
+        case "kiro":
+            return .kiro
+        case "opencode":
+            return .opencode
+        case "pi":
+            return .pi
+        case "cursor":
+            return .cursor
+        case "rovo", "rovo-dev", "rovodev":
+            return .rovoDev
+        case "copilot":
+            return .copilot
+        case "codebuddy":
+            return .codebuddy
+        case "factory":
+            return .factory
+        case "qoder":
+            return .qoder
+        case "all":
+            return .all
+        default:
+            return nil
+        }
+    }
 
     var agentSource: AgentSource? {
         switch self {
@@ -20,6 +61,22 @@ public enum SetupHooksTarget: String, CaseIterable, Equatable {
             return .geminiCLI
         case .kiro:
             return .kiro
+        case .opencode:
+            return .opencode
+        case .pi:
+            return .pi
+        case .cursor:
+            return .cursor
+        case .rovoDev:
+            return .rovoDev
+        case .copilot:
+            return .copilot
+        case .codebuddy:
+            return .codebuddy
+        case .factory:
+            return .factory
+        case .qoder:
+            return .qoder
         case .all:
             return nil
         }
@@ -28,6 +85,21 @@ public enum SetupHooksTarget: String, CaseIterable, Equatable {
 
 enum SetupHooksCommand {
     typealias CommandExists = (String) -> Bool
+
+    private static let setupSources: [AgentSource] = [
+        .claudeCode,
+        .codex,
+        .geminiCLI,
+        .kiro,
+        .opencode,
+        .pi,
+        .cursor,
+        .rovoDev,
+        .copilot,
+        .codebuddy,
+        .factory,
+        .qoder
+    ]
 
     static func execute(
         target: SetupHooksTarget?,
@@ -48,11 +120,11 @@ enum SetupHooksCommand {
 
         for source in sources {
             switch source {
-            case .kiro:
+            case _ where !source.supportsAutomaticHookSetup:
                 lines.append(
-                    "Kiro: automatic setup skipped. Kiro stores hooks inside agent definitions, so Cocxy only supports manual Kiro hook wiring safely."
+                    "\(source.displayName): automatic setup not available yet. manual hook wiring is required for this agent."
                 )
-                if target == .kiro {
+                if target?.agentSource == source {
                     hadFailure = true
                 }
             case .unknown:
@@ -80,17 +152,10 @@ enum SetupHooksCommand {
     ) -> [AgentSource] {
         var agents: [AgentSource] = []
 
-        if AgentSource.claudeCode.executableCandidates.contains(where: commandExists) {
-            agents.append(.claudeCode)
-        }
-        if AgentSource.codex.executableCandidates.contains(where: commandExists) {
-            agents.append(.codex)
-        }
-        if AgentSource.geminiCLI.executableCandidates.contains(where: commandExists) {
-            agents.append(.geminiCLI)
-        }
-        if AgentSource.kiro.executableCandidates.contains(where: commandExists) {
-            agents.append(.kiro)
+        for source in setupSources {
+            if source.executableCandidates.contains(where: commandExists) {
+                agents.append(source)
+            }
         }
 
         return agents
@@ -107,14 +172,14 @@ enum SetupHooksCommand {
             }
 
             if remove {
-                return [.claudeCode, .codex, .geminiCLI, .kiro]
+                return setupSources
             }
 
             return detectInstalledAgents(commandExists: commandExists)
         }
 
         if remove {
-            return [.claudeCode, .codex, .geminiCLI, .kiro]
+            return setupSources
         }
 
         return detectInstalledAgents(commandExists: commandExists)
@@ -165,7 +230,7 @@ enum SetupHooksCommand {
             }
             return "\(source.displayName): hooks installed for \(result.hookEvents.joined(separator: ", "))."
 
-        case .kiro, .unknown:
+        case .kiro, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder, .unknown:
             return "\(source.displayName): manual setup required."
         }
     }

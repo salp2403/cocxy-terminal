@@ -13,6 +13,14 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(AgentSource.detect(environment: ["CODEX_THREAD_ID": "codex-1"]) == .codex)
         #expect(AgentSource.detect(environment: ["GEMINI_SESSION_ID": "gemini-1"]) == .geminiCLI)
         #expect(AgentSource.detect(environment: ["KIRO_SESSION_ID": "kiro-1"]) == .kiro)
+        #expect(AgentSource.detect(environment: ["OPENCODE_SESSION_ID": "opencode-1"]) == .opencode)
+        #expect(AgentSource.detect(environment: ["PI_SESSION_ID": "pi-1"]) == .pi)
+        #expect(AgentSource.detect(environment: ["CURSOR_SESSION_ID": "cursor-1"]) == .cursor)
+        #expect(AgentSource.detect(environment: ["ROVODEV_SESSION_ID": "rovo-1"]) == .rovoDev)
+        #expect(AgentSource.detect(environment: ["COPILOT_SESSION_ID": "copilot-1"]) == .copilot)
+        #expect(AgentSource.detect(environment: ["CODEBUDDY_SESSION_ID": "codebuddy-1"]) == .codebuddy)
+        #expect(AgentSource.detect(environment: ["FACTORY_SESSION_ID": "factory-1"]) == .factory)
+        #expect(AgentSource.detect(environment: ["QODER_SESSION_ID": "qoder-1"]) == .qoder)
         #expect(AgentSource.detect(environment: [:], payload: ["hook_event_name": "BeforeTool"]) == .geminiCLI)
         #expect(AgentSource.detect(environment: [:], payload: ["hook_event_name": "agentSpawn"]) == .kiro)
         #expect(AgentSource.detect(environment: [:], payload: [:]) == .unknown)
@@ -125,6 +133,15 @@ struct AgentHooksParitySwiftTestingTests {
             try CLIArgumentParser.parse(["setup-hooks", "--agent", "codex"]) == .setupHooks(agent: .codex, remove: false)
         )
         #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "opencode"]) == .setupHooks(agent: .opencode, remove: false)
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "qoder"]) == .setupHooks(agent: .qoder, remove: false)
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "rovo-dev"]) == .setupHooks(agent: .rovoDev, remove: false)
+        )
+        #expect(
             try CLIArgumentParser.parse(["setup-hooks", "--agent", "all", "--remove"]) == .setupHooks(agent: .all, remove: true)
         )
     }
@@ -132,9 +149,9 @@ struct AgentHooksParitySwiftTestingTests {
     @Test("setup-hooks detects installed agent binaries from commandExists")
     func detectsInstalledAgentsForSetup() {
         let detected = SetupHooksCommand.detectInstalledAgents { command in
-            ["claude", "codex", "kiro-cli"].contains(command)
+            ["claude", "codex", "opencode", "qodercli", "kiro-cli"].contains(command)
         }
-        #expect(detected == [.claudeCode, .codex, .kiro])
+        #expect(detected == [.claudeCode, .codex, .kiro, .opencode, .qoder])
     }
 
     @Test("ClaudeSettingsManager creates a backup before modifying settings")
@@ -505,6 +522,19 @@ struct AgentHooksParitySwiftTestingTests {
 
         #expect(result.exitCode == 1)
         #expect(result.stdout.contains("Kiro"))
+        #expect(result.stdout.contains("manual"))
+    }
+
+    @Test("setup-hooks reports manual wiring for expanded agents without managers")
+    func setupHooksReportsManualWiringForExpandedAgentsWithoutManagers() {
+        let result = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: false,
+            commandExists: { _ in true }
+        )
+
+        #expect(result.exitCode == 1)
+        #expect(result.stdout.contains("Qoder"))
         #expect(result.stdout.contains("manual"))
     }
 }

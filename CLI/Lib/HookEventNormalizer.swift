@@ -8,7 +8,7 @@ enum HookEventNormalizer {
 
     static func normalizeEventName(_ raw: String, source: AgentSource) -> String {
         switch source {
-        case .claudeCode, .codex:
+        case .claudeCode, .codex, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder:
             return raw
         case .geminiCLI:
             switch raw {

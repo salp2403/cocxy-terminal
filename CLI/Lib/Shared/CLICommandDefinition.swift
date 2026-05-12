@@ -472,7 +472,7 @@ public enum CLICommand: String, CaseIterable {
         case .hookEvent: return "cocxy hook-event '{\"type\":\"Stop\",...}'"
         case .hooks: return "cocxy hooks install|uninstall|status"
         case .hookHandler: return "cocxy hook-handler (reads JSON from stdin)"
-        case .setupHooks: return "cocxy setup-hooks [--agent claude|codex|gemini|kiro|all] [--remove]"
+        case .setupHooks: return "cocxy setup-hooks [--agent claude|codex|gemini|kiro|opencode|pi|cursor|rovo-dev|copilot|codebuddy|factory|qoder|all] [--remove]"
         case .review: return "cocxy review"
         case .reviewRefresh: return "cocxy review refresh"
         case .reviewSubmit: return "cocxy review submit"
