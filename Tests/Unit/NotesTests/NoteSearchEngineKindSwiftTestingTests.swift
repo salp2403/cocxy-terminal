@@ -14,6 +14,7 @@ struct NoteSearchEngineKindSwiftTestingTests {
     @Test("rawValues match the documented config strings so TOML keys stay stable across versions")
     func rawValuesMatchConfigStrings() {
         #expect(NoteSearchEngineKind.grep.rawValue == "grep")
+        #expect(NoteSearchEngineKind.ripgrep.rawValue == "ripgrep")
         #expect(NoteSearchEngineKind.fts5.rawValue == "fts5")
         #expect(NoteSearchEngineKind.spotlight.rawValue == "spotlight")
     }
@@ -26,13 +27,14 @@ struct NoteSearchEngineKindSwiftTestingTests {
     @Test("parse returns the matching case for known strings so explicit configuration honours user intent")
     func parseAcceptsKnownStrings() {
         #expect(NoteSearchEngineKind.parse("grep") == .grep)
+        #expect(NoteSearchEngineKind.parse("ripgrep") == .ripgrep)
         #expect(NoteSearchEngineKind.parse("fts5") == .fts5)
         #expect(NoteSearchEngineKind.parse("spotlight") == .spotlight)
     }
 
     @Test("parse falls back to default for unknown strings so a typo never blocks the load path")
     func parseFallsBackForUnknownStrings() {
-        #expect(NoteSearchEngineKind.parse("ripgrep") == .default)
+        #expect(NoteSearchEngineKind.parse("fastgrep") == .default)
         #expect(NoteSearchEngineKind.parse("FTS5") == .default) // case-sensitive on purpose
         #expect(NoteSearchEngineKind.parse("") == .default)
     }
@@ -44,7 +46,7 @@ struct NoteSearchEngineKindSwiftTestingTests {
 
     @Test("allCases lists every backend so adding a new engine forces this test to update")
     func allCasesCount() {
-        #expect(NoteSearchEngineKind.allCases.count == 3)
+        #expect(NoteSearchEngineKind.allCases.count == 4)
     }
 
     @Test("Codable round-trip preserves the case so persisted configs reload cleanly")

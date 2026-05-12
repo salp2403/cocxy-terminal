@@ -352,7 +352,19 @@ if [ -d "${PROJECT_ROOT}/Resources/Plugins" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Plugins" "${RESOURCES}/Plugins"
 fi
 
-# Step 6l: Build and embed the QuickLook extension.
+# Step 6l: Copy bundled search helper. `Resources/rg` is produced by
+# scripts/download-ripgrep.sh and signed with the rest of the app bundle.
+if [ -f "${PROJECT_ROOT}/Resources/rg" ]; then
+    cp "${PROJECT_ROOT}/Resources/rg" "${RESOURCES}/rg"
+    chmod 755 "${RESOURCES}/rg"
+    codesign --force --sign - "${RESOURCES}/rg" >/dev/null
+    echo "    ripgrep: ${RESOURCES}/rg"
+fi
+if [ -d "${PROJECT_ROOT}/Resources/Ripgrep" ]; then
+    cp -R "${PROJECT_ROOT}/Resources/Ripgrep" "${RESOURCES}/Ripgrep"
+fi
+
+# Step 6m: Build and embed the QuickLook extension.
 echo "==> Building QuickLook extension..."
 QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"
 cp -R "${QL_APPEX}" "${PLUGINS}/"

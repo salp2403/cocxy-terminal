@@ -2093,7 +2093,7 @@ struct NotesConfig: Codable, Sendable, Equatable {
     let format: NoteFormat
 
     /// Backend the search bar uses when the user types a query. See
-    /// `NoteSearchEngineKind` for the trade-offs between the three
+    /// `NoteSearchEngineKind` for the trade-offs between the available
     /// implementations.
     let searchEngine: NoteSearchEngineKind
 

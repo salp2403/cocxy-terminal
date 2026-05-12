@@ -7,11 +7,13 @@ import Foundation
 /// Closed enum of search backends the user can pick via
 /// `[notes].search-engine` in the TOML config.
 ///
-/// Three implementations ship out of the box:
+/// Four implementations ship out of the box:
 ///
 ///   * `.grep` — case-insensitive substring match in memory. Default
 ///     because it has zero dependencies, no index to maintain, and is
 ///     instant for hundreds of notes.
+///   * `.ripgrep` — bundled file search through the local `rg` helper.
+///     Falls back to `.grep` if the helper is unavailable.
 ///   * `.fts5` — SQLite FTS5 index persisted under
 ///     `~/.config/cocxy/notes/.search/`. Scales to thousands of notes
 ///     and supports proper ranking; requires the `sqlite3` CLI on the
@@ -25,6 +27,7 @@ import Foundation
 enum NoteSearchEngineKind: String, Sendable, Codable, Equatable, CaseIterable {
 
     case grep
+    case ripgrep
     case fts5
     case spotlight
 

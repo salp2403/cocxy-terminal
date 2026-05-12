@@ -172,10 +172,21 @@ struct NotesConfigRoundTripTests {
     }
 
     @Test
-    func invalidSearchEngineFallsBackToDefault() throws {
+    func ripgrepSearchEngineParsesAsExplicitUserChoice() throws {
         let toml = """
         [notes]
         search-engine = "ripgrep"
+        """
+        let config = try loadConfig(from: toml)
+
+        #expect(config.notes.searchEngine == .ripgrep)
+    }
+
+    @Test
+    func invalidSearchEngineFallsBackToDefault() throws {
+        let toml = """
+        [notes]
+        search-engine = "fastgrep"
         """
         let config = try loadConfig(from: toml)
 

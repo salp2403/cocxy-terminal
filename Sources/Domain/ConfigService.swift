@@ -630,6 +630,8 @@ final class ConfigService: ConfigProviding {
         # Search backend used by the notes search bar:
         #   * "grep"      — case-insensitive substring match in memory.
         #                   Default; zero dependencies.
+        #   * "ripgrep"   — bundled `rg` binary for fast file search;
+        #                   falls back to grep if unavailable.
         #   * "fts5"      — SQLite FTS5 in-memory index. Requires the
         #                   `sqlite3` CLI on the user's PATH.
         #   * "spotlight" — `mdfind` against the macOS Spotlight index.

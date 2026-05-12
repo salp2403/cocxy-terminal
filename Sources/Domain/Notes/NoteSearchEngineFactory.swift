@@ -32,6 +32,8 @@ enum NoteSearchEngineFactory {
         switch kind {
         case .grep:
             return NoteSearchGrep(store: store)
+        case .ripgrep:
+            return NoteSearchRipgrep(store: store)
         case .fts5:
             return NoteSearchFTS5(store: store)
         case .spotlight:

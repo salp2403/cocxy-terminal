@@ -36,6 +36,21 @@ struct NoteSearchEngineFactorySwiftTestingTests {
         #expect(engine is NoteSearchGrep)
     }
 
+    @Test("factory produces NoteSearchRipgrep for the .ripgrep kind so bundled file search is reachable")
+    func makeRipgrep() {
+        let (store, root) = makeStore()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let engine = NoteSearchEngineFactory.make(
+            kind: .ripgrep,
+            store: store,
+            storageRoot: root
+        )
+
+        #expect(engine.kind == .ripgrep)
+        #expect(engine is NoteSearchRipgrep)
+    }
+
     @Test("factory produces NoteSearchFTS5 for the .fts5 kind so power users get the SQL-backed search")
     func makeFTS5() {
         let (store, root) = makeStore()

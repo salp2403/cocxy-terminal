@@ -226,6 +226,35 @@ fi
 check_codesign_valid "$PTY_DAEMON_EXECUTABLE" "PTY daemon helper app executable signature"
 check_codesign_valid "$PTY_DAEMON_APP" "PTY daemon helper app signature"
 
+check_universal_binary() {
+    local path="$1"
+    local label="$2"
+    local archs
+    archs="$(lipo -archs "$path" 2>/dev/null || true)"
+    if [[ " ${archs} " == *" arm64 "* ]] && [[ " ${archs} " == *" x86_64 "* ]]; then
+        echo "  OK  $label"
+    else
+        echo "  FAIL  $label  (expected arm64+x86_64, got: ${archs:-<missing>})"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+echo ""
+echo "[Bundled Tools]"
+check_exists "$RESOURCES/rg" "Bundled ripgrep binary"
+if [ -x "$RESOURCES/rg" ]; then
+    if "$RESOURCES/rg" --version 2>/dev/null | head -1 | grep -q '^ripgrep '; then
+        echo "  OK  Bundled ripgrep version"
+    else
+        echo "  FAIL  Bundled ripgrep version"
+        ERRORS=$((ERRORS + 1))
+    fi
+    check_universal_binary "$RESOURCES/rg" "Bundled ripgrep universal binary"
+    check_codesign_valid "$RESOURCES/rg" "Bundled ripgrep signature"
+fi
+check_exists "$RESOURCES/Ripgrep/LICENSE-MIT" "ripgrep MIT license"
+check_exists "$RESOURCES/Ripgrep/UNLICENSE" "ripgrep Unlicense"
+
 # 7. App icon
 echo ""
 echo "[Assets]"
