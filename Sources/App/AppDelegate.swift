@@ -2644,6 +2644,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     kind: kind,
                     params: params
                 )
+            },
+            gitAssistantCLIProvider: { kind, params in
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleGitAssistantCLIRequest(
+                    kind: kind,
+                    params: params
+                )
             }
         )
 

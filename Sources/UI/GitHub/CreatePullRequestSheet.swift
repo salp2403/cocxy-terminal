@@ -7,6 +7,7 @@ struct CreatePullRequestSheet: View {
     let defaultBaseBranch: String?
     var onCancel: () -> Void
     var onCreate: (PullRequestCreateRequest) -> Void
+    var onGenerateDraft: ((String?) async throws -> GitAssistantPullRequestDraft)? = nil
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     @State private var step: Step = .title
@@ -15,6 +16,8 @@ struct CreatePullRequestSheet: View {
     @State private var reviewers = ""
     @State private var baseBranch = ""
     @State private var draft = false
+    @State private var isGeneratingDraft = false
+    @State private var generationError: String?
 
     enum Step: Int, CaseIterable, Identifiable {
         case title
@@ -99,12 +102,20 @@ struct CreatePullRequestSheet: View {
                 TextField(localizer.string("github.createPR.base", fallback: "Base branch"), text: $baseBranch)
                     .textFieldStyle(.roundedBorder)
                 Toggle(localizer.string("github.createPR.draft", fallback: "Draft"), isOn: $draft)
+                if onGenerateDraft != nil {
+                    generateDraftButton
+                }
             }
         case .body:
-            TextEditor(text: $bodyText)
-                .font(.system(size: 12, design: .monospaced))
-                .frame(height: 180)
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.25)))
+            VStack(alignment: .leading, spacing: 8) {
+                if onGenerateDraft != nil {
+                    generateDraftButton
+                }
+                TextEditor(text: $bodyText)
+                    .font(.system(size: 12, design: .monospaced))
+                    .frame(height: 180)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.25)))
+            }
         case .reviewers:
             TextField(
                 localizer.string("github.createPR.reviewers", fallback: "Reviewers"),
@@ -129,5 +140,43 @@ struct CreatePullRequestSheet: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private var generateDraftButton: some View {
+        Button {
+            Task { await generateDraft() }
+        } label: {
+            Label(
+                isGeneratingDraft
+                    ? localizer.string("github.createPR.generating", fallback: "Generating...")
+                    : localizer.string("github.createPR.generateWithAI", fallback: "Generate with AI"),
+                systemImage: "sparkles"
+            )
+        }
+        .disabled(isGeneratingDraft)
+        if let generationError {
+            Text(generationError)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    @MainActor
+    private func generateDraft() async {
+        guard let onGenerateDraft else { return }
+        isGeneratingDraft = true
+        generationError = nil
+        do {
+            let requestBase = baseBranch.isEmpty ? defaultBaseBranch : baseBranch
+            let generated = try await onGenerateDraft(requestBase)
+            title = generated.title
+            bodyText = generated.body
+            step = .body
+        } catch {
+            generationError = error.localizedDescription
+        }
+        isGeneratingDraft = false
     }
 }

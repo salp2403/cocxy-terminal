@@ -423,6 +423,15 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// verb resolves the PR from the current branch (same default as
     /// `gh pr merge` itself). Returns the merged PR JSON.
     case githubPRMerge = "github-pr-merge"
+
+    // MARK: - Git Assistant
+
+    /// `cocxy git-assistant commit-message` — generate a commit message
+    /// from the active tab's staged diff.
+    case gitAssistantCommitMessage = "git-assistant-commit-message"
+    /// `cocxy git-assistant pr-draft` — generate a PR title/body from
+    /// the active tab's branch diff.
+    case gitAssistantPRDraft = "git-assistant-pr-draft"
 }
 
 // MARK: - CLI Response

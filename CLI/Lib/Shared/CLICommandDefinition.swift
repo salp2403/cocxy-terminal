@@ -236,6 +236,11 @@ public enum CLICommand: String, CaseIterable {
 
     case githubPRMerge = "github-pr-merge"
 
+    // MARK: - Git Assistant
+
+    case gitAssistantCommitMessage = "git-assistant-commit-message"
+    case gitAssistantPRDraft = "git-assistant-pr-draft"
+
     /// Whether this command is internal (hidden from --help).
     public var isInternal: Bool {
         switch self {
@@ -438,6 +443,10 @@ public enum CLICommand: String, CaseIterable {
 
         // GitHub PR merge v0.1.86
         case .githubPRMerge: return "Merge a pull request via gh (squash, merge, or rebase)"
+
+        // Git Assistant
+        case .gitAssistantCommitMessage: return "Generate a commit message from the active tab's staged diff"
+        case .gitAssistantPRDraft: return "Generate a pull request title and body from the active tab's branch diff"
         }
     }
 
@@ -635,6 +644,10 @@ public enum CLICommand: String, CaseIterable {
 
         // GitHub PR merge v0.1.86
         case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--no-delete-branch] [--subject <text>] [--body <text>]"
+
+        // Git Assistant
+        case .gitAssistantCommitMessage: return "cocxy git-assistant commit-message"
+        case .gitAssistantPRDraft: return "cocxy git-assistant pr-draft [--base <branch>] [--head <branch>]"
         }
     }
 }

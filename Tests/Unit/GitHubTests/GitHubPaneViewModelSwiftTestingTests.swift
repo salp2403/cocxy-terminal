@@ -218,6 +218,95 @@ struct GitHubPaneViewModelSwiftTestingTests {
         #expect(viewModel.sourceControlErrorMessage == nil)
     }
 
+    @Test("generate pull request draft resolves base and current head branch")
+    func generatePullRequestDraft_resolvesBaseAndHeadBranch() async throws {
+        let service = makeService { spy in
+            spy.stub(matching: { $0.first == "auth" && $0.dropFirst().first == "status" }, result: GitHubCLIResult(
+                stdout: "",
+                stderr: "github.com\n  ✓ Logged in to github.com account octocat (keyring)",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("repo") && $0.contains("view") }, result: GitHubCLIResult(
+                stdout: #"""
+                {
+                  "defaultBranchRef": {"name": "main"},
+                  "description": "",
+                  "hasIssuesEnabled": true,
+                  "isEmpty": false,
+                  "isPrivate": false,
+                  "name": "r",
+                  "owner": {"login": "u"},
+                  "url": "https://github.com/u/r"
+                }
+                """#,
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("pr") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+            spy.stub(matching: { $0.contains("issue") && $0.contains("list") }, result: GitHubCLIResult(
+                stdout: "[]",
+                stderr: "",
+                terminationStatus: 0
+            ))
+        }
+
+        let viewModel = GitHubPaneViewModel(service: service)
+        let directory = URL(fileURLWithPath: "/tmp/git-assistant-pane")
+        let captured = LockedBox<(directory: URL?, base: String?, head: String?, settings: GitAssistantSettings?)>(
+            (nil, nil, nil, nil)
+        )
+        viewModel.workingDirectoryProvider = { directory }
+        viewModel.branchListProvider = { _, _ in [
+            GitBranch(name: "main", isCurrent: false, isRemote: false),
+            GitBranch(name: "feature/git-assistant", isCurrent: true, isRemote: false),
+        ] }
+        viewModel.gitAssistantConfigProvider = {
+            GitAssistantSettings(enabled: true, maxDiffLines: 240)
+        }
+        viewModel.generatePullRequestDraftProvider = { directory, base, head, settings in
+            captured.withValue { value in
+                value = (directory, base, head, settings)
+            }
+            return GitAssistantPullRequestDraft(title: "Improve source control", body: "Summary")
+        }
+
+        viewModel.refresh()
+        await flush()
+
+        #expect(viewModel.canGeneratePullRequestDraft())
+        let draft = try await viewModel.generatePullRequestDraft(baseBranch: nil)
+        let snapshot = captured.withValue { $0 }
+
+        #expect(draft.title == "Improve source control")
+        #expect(snapshot.directory == directory)
+        #expect(snapshot.base == "main")
+        #expect(snapshot.head == "feature/git-assistant")
+        #expect(snapshot.settings?.maxDiffLines == 240)
+    }
+
+    @Test("generate pull request draft is gated when Git Assistant is disabled")
+    func generatePullRequestDraft_requiresEnabledSettings() async throws {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        viewModel.workingDirectoryProvider = { URL(fileURLWithPath: "/tmp/git-assistant-disabled") }
+        viewModel.gitAssistantConfigProvider = { GitAssistantSettings(enabled: false) }
+        viewModel.generatePullRequestDraftProvider = { _, _, _, _ in
+            Issue.record("Provider must not run while Git Assistant is disabled")
+            return GitAssistantPullRequestDraft(title: "", body: "")
+        }
+
+        #expect(!viewModel.canGeneratePullRequestDraft())
+        do {
+            _ = try await viewModel.generatePullRequestDraft(baseBranch: nil)
+            Issue.record("Expected disabled Git Assistant to throw")
+        } catch {
+            #expect(error.localizedDescription.contains("disabled"))
+        }
+    }
+
     @Test("create branch uses provider then refreshes source control")
     func createBranch_usesProviderThenRefreshes() async throws {
         let viewModel = GitHubPaneViewModel(service: makeService { _ in })

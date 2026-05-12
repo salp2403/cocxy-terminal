@@ -196,6 +196,39 @@ extension MainWindowController {
         viewModel.configProvider = { [weak self] in
             self?.currentGitHubPaneConfig() ?? .defaults
         }
+        viewModel.gitAssistantConfigProvider = { [weak self] in
+            self?.configService?.current.gitAssistant ?? .defaults
+        }
+        viewModel.generatePullRequestDraftProvider = { workingDirectory, baseBranch, headBranch, settings in
+            let client = try AgentProviderClientFactory().makeClient(
+                configuration: AgentModeConfig(
+                    enabled: true,
+                    preferredProvider: settings.defaultProvider,
+                    foundationModelsFallback: .requireExplicitChoice,
+                    autoMode: false,
+                    computerUseConfirm: true,
+                    maxIterations: 1
+                )
+            )
+            let diff = try AppDelegate.gitOutput(
+                at: workingDirectory,
+                arguments: ["diff", "--no-color", "--no-ext-diff", "\(baseBranch)...\(headBranch)"]
+            )
+            guard !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw GitAssistantGitError.commandFailed(
+                    command: "git diff \(baseBranch)...\(headBranch)",
+                    stderr: "No branch diff found.",
+                    exitCode: 0
+                )
+            }
+            return try await DefaultGitAssistantService(client: client)
+                .generatePullRequestDraft(
+                    baseBranch: baseBranch,
+                    headBranch: headBranch,
+                    diff: diff,
+                    settings: settings
+                )
+        }
         viewModel.onOpenURL = { url in
             NSWorkspace.shared.open(url)
         }

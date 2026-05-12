@@ -18,6 +18,7 @@ import CocxyCommandCorrections
 public struct CommandRunner {
     static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
     static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 65
+    public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
 
     /// The socket client to use for communication.
     public let socketClient: SocketClient
@@ -1368,6 +1369,23 @@ public struct CommandRunner {
                 command: "github-pr-merge",
                 params: params
             )
+
+        case .gitAssistantCommitMessage:
+            return CLISocketRequest(
+                id: requestID,
+                command: "git-assistant-commit-message",
+                params: nil
+            )
+
+        case .gitAssistantPRDraft(let baseBranch, let headBranch):
+            var params: [String: String] = [:]
+            if let baseBranch { params["base"] = baseBranch }
+            if let headBranch { params["head"] = headBranch }
+            return CLISocketRequest(
+                id: requestID,
+                command: "git-assistant-pr-draft",
+                params: params.isEmpty ? nil : params
+            )
         }
     }
 
@@ -1395,6 +1413,9 @@ public struct CommandRunner {
             return extendedGitHubReadSocketTimeoutSeconds
         case .githubPRMerge:
             return extendedGitHubMutationSocketTimeoutSeconds
+        case .gitAssistantCommitMessage,
+             .gitAssistantPRDraft:
+            return extendedGitAssistantSocketTimeoutSeconds
         default:
             return SocketClient.defaultTimeoutSeconds
         }

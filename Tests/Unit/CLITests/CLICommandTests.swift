@@ -1728,7 +1728,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 146)
+        XCTAssertEqual(CLICommand.allCases.count, 148)
     }
 
     // MARK: - 39. Raw values match server protocol

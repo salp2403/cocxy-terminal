@@ -375,6 +375,37 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["summary"], "Review approved for PR #42.")
     }
 
+    func test_gitAssistantPRDraft_routesToProvider() {
+        let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            gitAssistantCLIProvider: { kind, params in
+                captured.withValue { value in
+                    value = (kind, params)
+                }
+                return (
+                    success: true,
+                    data: ["title": "Improve source control", "body": "Summary"]
+                )
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "git-assistant-pr-1",
+            command: "git-assistant-pr-draft",
+            params: ["base": "main", "head": "feature/git"]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.kind, "pr-draft")
+        XCTAssertEqual(snapshot.params?["base"], "main")
+        XCTAssertEqual(snapshot.params?["head"], "feature/git")
+        XCTAssertEqual(response.data?["title"], "Improve source control")
+        XCTAssertEqual(response.data?["body"], "Summary")
+    }
+
     func test_tabConfigSave_routesNameCommandThemeAndEnvToProvider() {
         let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
             (nil, nil, nil, [:])

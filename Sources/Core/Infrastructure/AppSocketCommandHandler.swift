@@ -381,6 +381,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// provider so both CLI surfaces share one mental model.
     let githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Routes `cocxy git-assistant-*` verbs through the AppDelegate-side
+    /// bridge so generation can use app config, Keychain-backed provider
+    /// secrets, and the active tab's repository.
+    let gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Starts a web terminal on the focused surface and returns status fields.
     let webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)?
 
@@ -575,7 +580,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
         worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
-        githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
+        githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.configProvider = configProvider
         self.statusDetailsProvider = statusDetailsProvider
@@ -656,6 +662,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.imageClearProvider = imageClearProvider
         self.worktreeCLIProvider = worktreeCLIProvider
         self.githubCLIProvider = githubCLIProvider
+        self.gitAssistantCLIProvider = gitAssistantCLIProvider
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -1140,6 +1147,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleGitHubCLI(kind: "refresh", request: request)
         case .githubPRMerge:
             return handleGitHubCLI(kind: "pr-merge", request: request)
+
+        // Git Assistant
+        case .gitAssistantCommitMessage:
+            return handleGitAssistantCLI(kind: "commit-message", request: request)
+        case .gitAssistantPRDraft:
+            return handleGitAssistantCLI(kind: "pr-draft", request: request)
 
         // Web terminal (v5)
         case .webStart:
@@ -3902,6 +3915,25 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
         let message = result.data["error"]
             ?? "GitHub \(kind) failed"
+        return .failure(id: request.id, error: message)
+    }
+
+    /// Shared dispatch used by every `git-assistant-*` verb. The
+    /// AppDelegate-side bridge owns provider construction and Git diff
+    /// collection so the socket handler remains a pure router.
+    func handleGitAssistantCLI(kind: String, request: SocketRequest) -> SocketResponse {
+        guard let provider = gitAssistantCLIProvider else {
+            return .failure(
+                id: request.id,
+                error: "Git Assistant CLI is not yet wired in this build."
+            )
+        }
+        let result = provider(kind, request.params ?? [:])
+        if result.success {
+            return .ok(id: request.id, data: result.data)
+        }
+        let message = result.data["error"]
+            ?? "Git Assistant \(kind) failed"
         return .failure(id: request.id, error: message)
     }
 }

@@ -750,7 +750,7 @@ final class EnumParityTests: XCTestCase {
         // Local-only commands such as `cocxy open` intentionally stay
         // out of the socket protocol. Socket-facing additions must keep
         // this catalog count, help, and formatter coverage in sync.
-        XCTAssertEqual(CLICommand.allCases.count, 146)
+        XCTAssertEqual(CLICommand.allCases.count, 148)
     }
 
     // MARK: - 35. All CLICommand cases have non-empty helpDescription

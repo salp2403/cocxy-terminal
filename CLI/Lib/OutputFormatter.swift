@@ -385,6 +385,20 @@ public enum OutputFormatter {
                 return merged
             }
             return "Pull request merged."
+        case .gitAssistantCommitMessage:
+            let subject = response.data?["subject"] ?? ""
+            let body = response.data?["body"] ?? ""
+            if subject.isEmpty {
+                return formatDataOrJSON(response: response)
+            }
+            return body.isEmpty ? subject : "\(subject)\n\n\(body)"
+        case .gitAssistantPRDraft:
+            let title = response.data?["title"] ?? ""
+            let body = response.data?["body"] ?? ""
+            if title.isEmpty {
+                return formatDataOrJSON(response: response)
+            }
+            return body.isEmpty ? "Title: \(title)" : "Title: \(title)\n\n\(body)"
         }
     }
 

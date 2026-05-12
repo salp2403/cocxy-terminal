@@ -336,6 +336,15 @@ final class GitHubPaneViewModel: ObservableObject {
         try await PullRequestCreator().create(request, at: workingDirectory)
     }
 
+    var gitAssistantConfigProvider: () -> GitAssistantSettings = { .defaults }
+
+    var generatePullRequestDraftProvider: ((
+        _ workingDirectory: URL,
+        _ baseBranch: String,
+        _ headBranch: String,
+        _ settings: GitAssistantSettings
+    ) async throws -> GitAssistantPullRequestDraft)?
+
     var diffListProvider: (URL) async throws -> [FileDiff] = { _ in [] }
 
     var worktreeEntriesProvider: () async -> [WorktreeManifest.WorktreeEntry] = { [] }
@@ -782,6 +791,31 @@ final class GitHubPaneViewModel: ObservableObject {
         isLoading = false
     }
 
+    func canGeneratePullRequestDraft() -> Bool {
+        gitAssistantConfigProvider().enabled
+            && generatePullRequestDraftProvider != nil
+            && workingDirectoryProvider?() != nil
+    }
+
+    func generatePullRequestDraft(baseBranch: String?) async throws -> GitAssistantPullRequestDraft {
+        let settings = gitAssistantConfigProvider()
+        guard settings.enabled else {
+            throw GitAssistantPaneError.disabled
+        }
+        guard let provider = generatePullRequestDraftProvider else {
+            throw GitAssistantPaneError.unavailable
+        }
+        guard let workingDirectory = workingDirectoryProvider?() else {
+            throw GitAssistantPaneError.noRepository
+        }
+        let resolvedBase = (baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines))
+            .flatMap { $0.isEmpty ? nil : $0 }
+            ?? repo?.defaultBranch
+            ?? "main"
+        let resolvedHead = try await currentHeadBranchName(at: workingDirectory)
+        return try await provider(workingDirectory, resolvedBase, resolvedHead, settings)
+    }
+
     func stageDiffHunk(
         fileDiff: FileDiff,
         hunk: DiffHunk,
@@ -1204,6 +1238,29 @@ final class GitHubPaneViewModel: ObservableObject {
             clearSourceControlData()
             sourceControlErrorMessage = error.localizedDescription
         }
+    }
+
+    private func currentHeadBranchName(at workingDirectory: URL) async throws -> String {
+        if let current = branches.first(where: \.isCurrent)?.name,
+           !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return current
+        }
+        let loadedBranches = try await branchListProvider(
+            workingDirectory,
+            BranchListQuery(includeRemotes: true, refreshRemotes: false)
+        )
+        if !loadedBranches.isEmpty {
+            branches = loadedBranches
+            if selectedBranchName == nil {
+                selectedBranchName = loadedBranches.first(where: \.isCurrent)?.name
+                    ?? loadedBranches.first?.name
+            }
+        }
+        if let current = loadedBranches.first(where: \.isCurrent)?.name,
+           !current.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return current
+        }
+        return "HEAD"
     }
 
     private func applySourceControlSnapshot(_ snapshot: SourceControlSnapshot) {
@@ -1823,4 +1880,21 @@ private enum ReviewThreadSuggestionApplyError: Error, Sendable {
     case conflicts([PRSuggestionConflict])
     case unsafePath(String)
     case unreadableFile(String)
+}
+
+private enum GitAssistantPaneError: LocalizedError {
+    case disabled
+    case unavailable
+    case noRepository
+
+    var errorDescription: String? {
+        switch self {
+        case .disabled:
+            return "Git Assistant is disabled in Preferences > GitHub."
+        case .unavailable:
+            return "Git Assistant is not available for this pane yet."
+        case .noRepository:
+            return "Open a git repository before generating a pull request draft."
+        }
+    }
 }

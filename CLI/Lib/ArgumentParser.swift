@@ -529,6 +529,14 @@ public enum ParsedCommand: Equatable {
         subject: String?,
         body: String?
     )
+
+    /// `cocxy git-assistant commit-message`
+    /// — generates a commit message from the active tab's staged diff.
+    case gitAssistantCommitMessage
+
+    /// `cocxy git-assistant pr-draft [--base <branch>] [--head <branch>]`
+    /// — generates a pull request title and body from a branch diff.
+    case gitAssistantPRDraft(baseBranch: String?, headBranch: String?)
 }
 
 /// Mirror of `GitHubMergeMethod` exposed at the CLI client. Lives in
@@ -867,6 +875,9 @@ public enum CLIArgumentParser {
 
         case "github":
             return try parseGitHub(arguments: Array(arguments.dropFirst()))
+
+        case "git-assistant":
+            return try parseGitAssistant(arguments: Array(arguments.dropFirst()))
 
         default:
             throw CLIError.unknownCommand(firstArg)
@@ -3488,6 +3499,77 @@ public enum CLIArgumentParser {
             }
         }
         return (state, limit)
+    }
+
+    /// Parses `cocxy git-assistant <subcommand> [...]`.
+    private static func parseGitAssistant(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(
+                command: "git-assistant",
+                argument: "commit-message|pr-draft"
+            )
+        }
+        if isHelpToken(subcommand) {
+            return .help
+        }
+        let rest = Array(arguments.dropFirst())
+        if isOnlyHelpRequest(rest) {
+            return .help
+        }
+
+        switch subcommand {
+        case "commit-message":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "git-assistant commit-message",
+                    argument: rest.first ?? "",
+                    reason: "`git-assistant commit-message` takes no arguments."
+                )
+            }
+            return .gitAssistantCommitMessage
+
+        case "pr-draft":
+            var baseBranch: String?
+            var headBranch: String?
+            var index = 0
+            while index < rest.count {
+                let token = rest[index]
+                switch token {
+                case "--base":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(
+                            command: "git-assistant pr-draft",
+                            argument: "value for --base"
+                        )
+                    }
+                    baseBranch = rest[index + 1]
+                    index += 2
+                case "--head":
+                    guard index + 1 < rest.count else {
+                        throw CLIError.missingArgument(
+                            command: "git-assistant pr-draft",
+                            argument: "value for --head"
+                        )
+                    }
+                    headBranch = rest[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "git-assistant pr-draft",
+                        argument: token,
+                        reason: "Unknown flag. Use --base and --head."
+                    )
+                }
+            }
+            return .gitAssistantPRDraft(baseBranch: baseBranch, headBranch: headBranch)
+
+        default:
+            throw CLIError.invalidArgument(
+                command: "git-assistant",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use commit-message or pr-draft."
+            )
+        }
     }
 
     // MARK: - Help Text

@@ -95,6 +95,11 @@ struct GitHubPaneView: View {
                         await viewModel.createPullRequest(request)
                     }
                 },
+                onGenerateDraft: viewModel.canGeneratePullRequestDraft()
+                    ? { baseBranch in
+                        try await viewModel.generatePullRequestDraft(baseBranch: baseBranch)
+                    }
+                    : nil,
                 localizer: localizer
             )
         }
