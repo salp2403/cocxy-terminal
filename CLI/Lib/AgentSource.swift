@@ -144,9 +144,9 @@ enum AgentSource: String, CaseIterable, Sendable {
 
     var supportsAutomaticHookSetup: Bool {
         switch self {
-        case .claudeCode, .codex, .geminiCLI:
+        case .claudeCode, .codex, .geminiCLI, .cursor, .copilot, .codebuddy, .factory, .qoder:
             return true
-        case .kiro, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder, .unknown:
+        case .kiro, .opencode, .pi, .rovoDev, .unknown:
             return false
         }
     }
@@ -160,7 +160,17 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.codex/hooks.json"
         case .geminiCLI:
             return "\(home)/.gemini/settings.json"
-        case .kiro, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder, .unknown:
+        case .cursor:
+            return "\(home)/.cursor/hooks.json"
+        case .copilot:
+            return "\(home)/.copilot/config.json"
+        case .codebuddy:
+            return "\(home)/.codebuddy/settings.json"
+        case .factory:
+            return "\(home)/.factory/settings.json"
+        case .qoder:
+            return "\(home)/.qoder/settings.json"
+        case .kiro, .opencode, .pi, .rovoDev, .unknown:
             return nil
         }
     }
@@ -175,7 +185,9 @@ enum AgentSource: String, CaseIterable, Sendable {
             return ["BeforeTool", "AfterTool", "SessionStart", "SessionEnd"]
         case .kiro:
             return ["agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop"]
-        case .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder, .unknown:
+        case .cursor, .copilot, .codebuddy, .factory, .qoder:
+            return ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit"]
+        case .opencode, .pi, .rovoDev, .unknown:
             return []
         }
     }

@@ -104,7 +104,8 @@ enum SetupHooksCommand {
     static func execute(
         target: SetupHooksTarget?,
         remove: Bool,
-        commandExists: @escaping CommandExists = commandExists
+        commandExists: @escaping CommandExists = commandExists,
+        settingsFilePathResolver: @escaping (AgentSource) -> String? = { $0.hookSettingsFilePath }
     ) -> CLIResult {
         let sources = resolveSources(target: target, remove: remove, commandExists: commandExists)
         guard !sources.isEmpty else {
@@ -131,7 +132,11 @@ enum SetupHooksCommand {
                 continue
             default:
                 do {
-                    let line = try performSetup(for: source, remove: remove)
+                    let line = try performSetup(
+                        for: source,
+                        remove: remove,
+                        settingsFilePathResolver: settingsFilePathResolver
+                    )
                     lines.append(line)
                 } catch {
                     hadFailure = true
@@ -187,7 +192,8 @@ enum SetupHooksCommand {
 
     private static func performSetup(
         for source: AgentSource,
-        remove: Bool
+        remove: Bool,
+        settingsFilePathResolver: (AgentSource) -> String? = { $0.hookSettingsFilePath }
     ) throws -> String {
         switch source {
         case .claudeCode:
@@ -206,8 +212,8 @@ enum SetupHooksCommand {
             }
             return "Claude Code: hooks installed for \(result.hookEvents.joined(separator: ", "))."
 
-        case .codex, .geminiCLI:
-            guard let path = source.hookSettingsFilePath else {
+        case .codex, .geminiCLI, .cursor, .copilot, .codebuddy, .factory, .qoder:
+            guard let path = settingsFilePathResolver(source) else {
                 throw HooksError.fileSystemError(reason: "Missing settings path")
             }
             let manager = GroupedHooksSettingsManager(
@@ -230,7 +236,7 @@ enum SetupHooksCommand {
             }
             return "\(source.displayName): hooks installed for \(result.hookEvents.joined(separator: ", "))."
 
-        case .kiro, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder, .unknown:
+        case .kiro, .opencode, .pi, .rovoDev, .unknown:
             return "\(source.displayName): manual setup required."
         }
     }

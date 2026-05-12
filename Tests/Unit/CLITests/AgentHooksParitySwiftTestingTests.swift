@@ -525,16 +525,128 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(result.stdout.contains("manual"))
     }
 
-    @Test("setup-hooks reports manual wiring for expanded agents without managers")
-    func setupHooksReportsManualWiringForExpandedAgentsWithoutManagers() {
+    @Test("setup-hooks reports manual wiring for expanded agents without JSON managers")
+    func setupHooksReportsManualWiringForExpandedAgentsWithoutJSONManagers() {
         let result = SetupHooksCommand.execute(
-            target: .qoder,
+            target: .opencode,
             remove: false,
             commandExists: { _ in true }
         )
 
         #expect(result.exitCode == 1)
-        #expect(result.stdout.contains("Qoder"))
+        #expect(result.stdout.contains("OpenCode"))
         #expect(result.stdout.contains("manual"))
+    }
+
+    @Test("setup-hooks installs JSON hook agents with forced agent marker and preserves user hooks")
+    func setupHooksInstallsJSONHookAgentWithForcedMarker() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("settings.json").path
+        let initialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "user",
+                "hooks": [
+                  { "type": "command", "command": "echo keep-user-hook" }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try initialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let result = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: false,
+            commandExists: { _ in true },
+            settingsFilePathResolver: { source in
+                source == .qoder ? settingsPath : source.hookSettingsFilePath
+            }
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("Qoder"))
+        #expect(result.stdout.contains("hooks installed"))
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let sessionStartEntries = try #require(hooks["SessionStart"] as? [[String: Any]])
+        #expect(sessionStartEntries.count == 2)
+        let commands = sessionStartEntries.compactMap { entry -> String? in
+            guard let hookCommands = entry["hooks"] as? [[String: Any]] else { return nil }
+            return hookCommands.first?["command"] as? String
+        }
+        #expect(commands.contains("echo keep-user-hook"))
+        #expect(commands.contains(where: { $0.contains("COCXY_HOOK_AGENT=qoder") }))
+        #expect(FileManager.default.fileExists(atPath: settingsPath + ".cocxy-backup"))
+    }
+
+    @Test("setup-hooks removes JSON hook agents without deleting user hooks")
+    func setupHooksRemovesJSONHookAgentWithoutDeletingUserHooks() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("settings.json").path
+        let initialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "user",
+                "hooks": [
+                  { "type": "command", "command": "echo keep-user-hook" }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try initialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let resolver: (AgentSource) -> String? = { source in
+            source == .qoder ? settingsPath : source.hookSettingsFilePath
+        }
+
+        _ = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: false,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+
+        let result = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("Qoder"))
+        #expect(result.stdout.contains("hooks removed"))
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let sessionStartEntries = try #require(hooks["SessionStart"] as? [[String: Any]])
+        #expect(sessionStartEntries.count == 1)
+        let commands = sessionStartEntries.compactMap { entry -> String? in
+            guard let hookCommands = entry["hooks"] as? [[String: Any]] else { return nil }
+            return hookCommands.first?["command"] as? String
+        }
+        #expect(commands == ["echo keep-user-hook"])
+        #expect(commands.allSatisfy { !$0.contains("COCXY_HOOK_AGENT=qoder") })
     }
 }
