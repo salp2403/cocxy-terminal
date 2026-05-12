@@ -406,6 +406,36 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["body"], "Summary")
     }
 
+    func test_gitAssistantReleaseNotes_routesToProvider() {
+        let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            gitAssistantCLIProvider: { kind, params in
+                captured.withValue { value in
+                    value = (kind, params)
+                }
+                return (
+                    success: true,
+                    data: ["markdown": "## Features\n- Improve source control"]
+                )
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "git-assistant-release-1",
+            command: "git-assistant-release-notes",
+            params: ["base": "v1.0.0", "head": "HEAD"]
+        ))
+
+        XCTAssertTrue(response.success)
+        let snapshot = captured.withValue { $0 }
+        XCTAssertEqual(snapshot.kind, "release-notes")
+        XCTAssertEqual(snapshot.params?["base"], "v1.0.0")
+        XCTAssertEqual(snapshot.params?["head"], "HEAD")
+        XCTAssertEqual(response.data?["markdown"], "## Features\n- Improve source control")
+    }
+
     func test_tabConfigSave_routesNameCommandThemeAndEnvToProvider() {
         let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
             (nil, nil, nil, [:])

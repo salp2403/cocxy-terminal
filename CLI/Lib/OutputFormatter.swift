@@ -399,6 +399,9 @@ public enum OutputFormatter {
                 return formatDataOrJSON(response: response)
             }
             return body.isEmpty ? "Title: \(title)" : "Title: \(title)\n\n\(body)"
+        case .gitAssistantReleaseNotes:
+            let markdown = response.data?["markdown"] ?? ""
+            return markdown.isEmpty ? formatDataOrJSON(response: response) : markdown
         }
     }
 

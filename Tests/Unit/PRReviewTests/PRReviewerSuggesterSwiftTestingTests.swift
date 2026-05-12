@@ -101,9 +101,73 @@ struct PRReviewerSuggesterSwiftTestingTests {
         #expect(suggestions[0].email == nil)
         #expect(suggestions[0].lineCount == 1)
     }
+
+    @Test("AI suggestions rerank local reviewer candidates without inventing people")
+    func aiSuggestionsRerankLocalCandidates() async throws {
+        let root = URL(fileURLWithPath: "/tmp/repo", isDirectory: true)
+        let client = RecordingReviewerClient(response: """
+        bob@example.com
+        missing@example.com
+        Alice Rivera
+        """)
+        let suggester = PRReviewerSuggester(blameProvider: { _, filePath in
+            switch filePath {
+            case "Sources/App.swift":
+                return """
+                aaaaaaaa 1 1 1
+                author Alice Rivera
+                author-mail <alice@example.com>
+                \tlet first = true
+                bbbbbbbb 2 2 1
+                author Bob Stone
+                author-mail <bob@example.com>
+                \tlet second = true
+                """
+            case "Sources/Feature.swift":
+                return """
+                cccccccc 1 1 1
+                author Alice Rivera
+                author-mail <alice@example.com>
+                \tlet feature = true
+                """
+            default:
+                return ""
+            }
+        })
+
+        let suggestions = try await suggester.aiSuggestions(
+            root: root,
+            changedFilePaths: ["Sources/App.swift", "Sources/Feature.swift"],
+            diff: """
+            diff --git a/Sources/App.swift b/Sources/App.swift
+            +let token = "sk-live-secret"
+            """,
+            settings: GitAssistantSettings(maxDiffLines: 80),
+            client: client,
+            limit: 2
+        )
+
+        #expect(suggestions.map(\.email) == ["bob@example.com", "alice@example.com"])
+        #expect(client.messages.last?.content.contains("[redacted-secret]") == true)
+        #expect(client.messages.last?.content.contains("sk-live-secret") == false)
+    }
 }
 
 private struct TestBlameError: Error {}
+
+private final class RecordingReviewerClient: AgentLLMClient, @unchecked Sendable {
+    private let response: String
+    private(set) var messages: [AgentMessage] = []
+
+    init(response: String) {
+        self.response = response
+    }
+
+    func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        self.messages = messages
+        return AgentLLMResponse(content: response)
+    }
+}
 
 private final class LockedStringArray: @unchecked Sendable {
     private let lock = NSLock()

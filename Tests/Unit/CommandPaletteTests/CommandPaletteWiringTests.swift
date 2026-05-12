@@ -56,6 +56,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "activity.toggle",
             "agent.mode",
             "agent.review",
+            "gitAssistant.commitMessage",
             "timeline.toggle",
             "notifications.toggle",
             "browser.toggle",

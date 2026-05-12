@@ -537,6 +537,10 @@ public enum ParsedCommand: Equatable {
     /// `cocxy git-assistant pr-draft [--base <branch>] [--head <branch>]`
     /// — generates a pull request title and body from a branch diff.
     case gitAssistantPRDraft(baseBranch: String?, headBranch: String?)
+
+    /// `cocxy git-assistant release-notes [--base <ref>] [--head <ref>]`
+    /// — generates markdown release notes from a local commit range.
+    case gitAssistantReleaseNotes(baseBranch: String?, headBranch: String?)
 }
 
 /// Mirror of `GitHubMergeMethod` exposed at the CLI client. Lives in
@@ -3506,7 +3510,7 @@ public enum CLIArgumentParser {
         guard let subcommand = arguments.first else {
             throw CLIError.missingArgument(
                 command: "git-assistant",
-                argument: "commit-message|pr-draft"
+                argument: "commit-message|pr-draft|release-notes"
             )
         }
         if isHelpToken(subcommand) {
@@ -3529,47 +3533,65 @@ public enum CLIArgumentParser {
             return .gitAssistantCommitMessage
 
         case "pr-draft":
-            var baseBranch: String?
-            var headBranch: String?
-            var index = 0
-            while index < rest.count {
-                let token = rest[index]
-                switch token {
-                case "--base":
-                    guard index + 1 < rest.count else {
-                        throw CLIError.missingArgument(
-                            command: "git-assistant pr-draft",
-                            argument: "value for --base"
-                        )
-                    }
-                    baseBranch = rest[index + 1]
-                    index += 2
-                case "--head":
-                    guard index + 1 < rest.count else {
-                        throw CLIError.missingArgument(
-                            command: "git-assistant pr-draft",
-                            argument: "value for --head"
-                        )
-                    }
-                    headBranch = rest[index + 1]
-                    index += 2
-                default:
-                    throw CLIError.invalidArgument(
-                        command: "git-assistant pr-draft",
-                        argument: token,
-                        reason: "Unknown flag. Use --base and --head."
-                    )
-                }
-            }
+            let (baseBranch, headBranch) = try parseGitAssistantBranchRange(
+                arguments: rest,
+                command: "git-assistant pr-draft"
+            )
             return .gitAssistantPRDraft(baseBranch: baseBranch, headBranch: headBranch)
+
+        case "release-notes":
+            let (baseBranch, headBranch) = try parseGitAssistantBranchRange(
+                arguments: rest,
+                command: "git-assistant release-notes"
+            )
+            return .gitAssistantReleaseNotes(baseBranch: baseBranch, headBranch: headBranch)
 
         default:
             throw CLIError.invalidArgument(
                 command: "git-assistant",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use commit-message or pr-draft."
+                reason: "Unknown subcommand. Use commit-message, pr-draft, or release-notes."
             )
         }
+    }
+
+    private static func parseGitAssistantBranchRange(
+        arguments: [String],
+        command: String
+    ) throws -> (baseBranch: String?, headBranch: String?) {
+        var baseBranch: String?
+        var headBranch: String?
+        var index = 0
+        while index < arguments.count {
+            let token = arguments[index]
+            switch token {
+            case "--base":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(
+                        command: command,
+                        argument: "value for --base"
+                    )
+                }
+                baseBranch = arguments[index + 1]
+                index += 2
+            case "--head":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(
+                        command: command,
+                        argument: "value for --head"
+                    )
+                }
+                headBranch = arguments[index + 1]
+                index += 2
+            default:
+                throw CLIError.invalidArgument(
+                    command: command,
+                    argument: token,
+                    reason: "Unknown flag. Use --base and --head."
+                )
+            }
+        }
+        return (baseBranch, headBranch)
     }
 
     // MARK: - Help Text

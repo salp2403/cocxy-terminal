@@ -61,6 +61,51 @@ struct PRReviewerSuggester: Sendable {
             .map { $0 }
     }
 
+    func aiSuggestions(
+        root: URL,
+        changedFilePaths: [String],
+        diff: String,
+        settings: GitAssistantSettings,
+        client: any AgentLLMClient,
+        excludingEmails: Set<String> = [],
+        limit: Int = 5
+    ) async throws -> [PRReviewerCandidate] {
+        guard limit > 0 else { return [] }
+        let localCandidates = suggestions(
+            root: root,
+            changedFilePaths: changedFilePaths,
+            excludingEmails: excludingEmails,
+            limit: max(limit * 3, limit)
+        )
+        guard !localCandidates.isEmpty else { return [] }
+
+        let summary = DiffSummarizer(maxLines: min(settings.maxDiffLines, 800))
+            .summarize(rawDiff: diff)
+        let response = try await client.nextResponse(for: [
+            AgentMessage(
+                id: "system-git-assistant-reviewers",
+                role: .system,
+                content: GitAssistantPrompts.systemPrompt(settings: settings)
+            ),
+            AgentMessage(
+                id: "user-reviewer-suggestions",
+                role: .user,
+                content: Self.aiReviewerPrompt(
+                    candidates: localCandidates,
+                    summary: summary,
+                    limit: limit
+                )
+            ),
+        ])
+
+        let ranked = Self.rankCandidates(
+            localCandidates,
+            using: response.content,
+            limit: limit
+        )
+        return ranked.isEmpty ? Array(localCandidates.prefix(limit)) : ranked
+    }
+
     private func safeRelativePaths(from paths: [String], root: URL) -> [String] {
         var seen = Set<String>()
         return paths.compactMap { rawPath in
@@ -94,6 +139,78 @@ struct PRReviewerSuggester: Sendable {
             return nil
         }
         return relative
+    }
+
+    private static func aiReviewerPrompt(
+        candidates: [PRReviewerCandidate],
+        summary: GitAssistantDiffSummary,
+        limit: Int
+    ) -> String {
+        let candidateLines = candidates.map { candidate in
+            let email = candidate.email.map { " <\($0)>" } ?? ""
+            return "- \(candidate.displayName)\(email): \(candidate.lineCount) blamed lines across \(candidate.fileCount) files"
+        }.joined(separator: "\n")
+        return """
+        Rank up to \(limit) reviewers for this pull request.
+
+        Return only reviewer names or emails, one per line, from the candidate list.
+        Do not invent reviewers.
+
+        Candidates:
+        \(candidateLines)
+
+        Redacted diff summary:
+        \(summary.text)
+        """
+    }
+
+    private static func rankCandidates(
+        _ candidates: [PRReviewerCandidate],
+        using rawResponse: String,
+        limit: Int
+    ) -> [PRReviewerCandidate] {
+        var lookup: [String: PRReviewerCandidate] = [:]
+        for candidate in candidates {
+            lookup[normalizedLookup(candidate.id)] = candidate
+            lookup[normalizedLookup(candidate.displayName)] = candidate
+            if let email = candidate.email {
+                lookup[normalizedLookup(email)] = candidate
+            }
+        }
+
+        var seen = Set<String>()
+        var ranked: [PRReviewerCandidate] = []
+        for token in reviewerTokens(from: rawResponse) {
+            guard let candidate = lookup[normalizedLookup(token)] else { continue }
+            guard seen.insert(candidate.id).inserted else { continue }
+            ranked.append(candidate)
+            if ranked.count == limit { return ranked }
+        }
+
+        for candidate in candidates where ranked.count < limit {
+            guard seen.insert(candidate.id).inserted else { continue }
+            ranked.append(candidate)
+        }
+        return ranked
+    }
+
+    private static func reviewerTokens(from rawResponse: String) -> [String] {
+        rawResponse
+            .split(whereSeparator: { $0 == "\n" || $0 == "," || $0 == ";" })
+            .map {
+                String($0)
+                    .replacingOccurrences(of: #"^\s*[-*\d.)]+\s*"#, with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "<>`"))
+            }
+            .filter { !$0.isEmpty }
+    }
+
+    private static func normalizedLookup(_ raw: String) -> String {
+        raw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "<>`"))
+            .lowercased()
     }
 
     private static func parseBlameAuthors(_ output: String) -> [BlameAuthor] {

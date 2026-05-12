@@ -240,6 +240,7 @@ public enum CLICommand: String, CaseIterable {
 
     case gitAssistantCommitMessage = "git-assistant-commit-message"
     case gitAssistantPRDraft = "git-assistant-pr-draft"
+    case gitAssistantReleaseNotes = "git-assistant-release-notes"
 
     /// Whether this command is internal (hidden from --help).
     public var isInternal: Bool {
@@ -447,6 +448,7 @@ public enum CLICommand: String, CaseIterable {
         // Git Assistant
         case .gitAssistantCommitMessage: return "Generate a commit message from the active tab's staged diff"
         case .gitAssistantPRDraft: return "Generate a pull request title and body from the active tab's branch diff"
+        case .gitAssistantReleaseNotes: return "Generate release notes from the active tab's commit range"
         }
     }
 
@@ -648,6 +650,7 @@ public enum CLICommand: String, CaseIterable {
         // Git Assistant
         case .gitAssistantCommitMessage: return "cocxy git-assistant commit-message"
         case .gitAssistantPRDraft: return "cocxy git-assistant pr-draft [--base <branch>] [--head <branch>]"
+        case .gitAssistantReleaseNotes: return "cocxy git-assistant release-notes [--base <ref>] [--head <ref>]"
         }
     }
 }

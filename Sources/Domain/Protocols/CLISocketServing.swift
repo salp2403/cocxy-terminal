@@ -432,6 +432,9 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// `cocxy git-assistant pr-draft` — generate a PR title/body from
     /// the active tab's branch diff.
     case gitAssistantPRDraft = "git-assistant-pr-draft"
+    /// `cocxy git-assistant release-notes` — generate markdown release
+    /// notes from the active tab's local commit range.
+    case gitAssistantReleaseNotes = "git-assistant-release-notes"
 }
 
 // MARK: - CLI Response

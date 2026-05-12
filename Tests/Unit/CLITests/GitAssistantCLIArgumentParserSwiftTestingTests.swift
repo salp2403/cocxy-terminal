@@ -29,6 +29,19 @@ struct GitAssistantCLIArgumentParserSwiftTestingTests {
         #expect(request.params?["head"] == "feature/git")
     }
 
+    @Test("release-notes parses optional base and head refs")
+    func releaseNotesParsesOptions() throws {
+        let command = try CLIArgumentParser.parse([
+            "git-assistant", "release-notes", "--base", "v1.0.0", "--head", "HEAD",
+        ])
+        #expect(command == .gitAssistantReleaseNotes(baseBranch: "v1.0.0", headBranch: "HEAD"))
+
+        let request = CommandRunner().buildRequest(from: command)
+        #expect(request.command == "git-assistant-release-notes")
+        #expect(request.params?["base"] == "v1.0.0")
+        #expect(request.params?["head"] == "HEAD")
+    }
+
     @Test("git-assistant commands use extended socket timeout")
     func commandsUseExtendedTimeout() {
         let runner = CommandRunner(socketClient: SocketClient(
@@ -37,9 +50,13 @@ struct GitAssistantCLIArgumentParserSwiftTestingTests {
         ))
 
         let client = runner.socketClient(for: .gitAssistantCommitMessage)
+        let releaseNotesClient = runner.socketClient(
+            for: .gitAssistantReleaseNotes(baseBranch: nil, headBranch: nil)
+        )
 
         #expect(client.socketPath == "/tmp/cocxy-git-assistant.sock")
         #expect(client.timeoutSeconds == CommandRunner.extendedGitAssistantSocketTimeoutSeconds)
+        #expect(releaseNotesClient.timeoutSeconds == CommandRunner.extendedGitAssistantSocketTimeoutSeconds)
     }
 
     @Test("formatter prints generated drafts")
@@ -62,8 +79,18 @@ struct GitAssistantCLIArgumentParserSwiftTestingTests {
                 error: nil
             )
         )
+        let releaseNotesOutput = OutputFormatter.formatSuccess(
+            command: .gitAssistantReleaseNotes(baseBranch: nil, headBranch: nil),
+            response: CLISocketResponse(
+                id: "notes",
+                success: true,
+                data: ["markdown": "## Features\n- Add source control"],
+                error: nil
+            )
+        )
 
         #expect(commitOutput == "feat: add draft\n\nBody line")
         #expect(prOutput == "Title: Add draft\n\nSummary:\n- Change")
+        #expect(releaseNotesOutput == "## Features\n- Add source control")
     }
 }

@@ -1153,6 +1153,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleGitAssistantCLI(kind: "commit-message", request: request)
         case .gitAssistantPRDraft:
             return handleGitAssistantCLI(kind: "pr-draft", request: request)
+        case .gitAssistantReleaseNotes:
+            return handleGitAssistantCLI(kind: "release-notes", request: request)
 
         // Web terminal (v5)
         case .webStart:

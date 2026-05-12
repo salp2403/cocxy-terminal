@@ -1386,6 +1386,16 @@ public struct CommandRunner {
                 command: "git-assistant-pr-draft",
                 params: params.isEmpty ? nil : params
             )
+
+        case .gitAssistantReleaseNotes(let baseBranch, let headBranch):
+            var params: [String: String] = [:]
+            if let baseBranch { params["base"] = baseBranch }
+            if let headBranch { params["head"] = headBranch }
+            return CLISocketRequest(
+                id: requestID,
+                command: "git-assistant-release-notes",
+                params: params.isEmpty ? nil : params
+            )
         }
     }
 
@@ -1414,7 +1424,8 @@ public struct CommandRunner {
         case .githubPRMerge:
             return extendedGitHubMutationSocketTimeoutSeconds
         case .gitAssistantCommitMessage,
-             .gitAssistantPRDraft:
+             .gitAssistantPRDraft,
+             .gitAssistantReleaseNotes:
             return extendedGitAssistantSocketTimeoutSeconds
         default:
             return SocketClient.defaultTimeoutSeconds

@@ -89,6 +89,25 @@ extension AppDelegate {
                 )
                 return (true, ["title": draft.title, "body": draft.body])
 
+            case "release-notes":
+                let base = try Self.nonEmptyParam(params["base"])
+                    ?? Self.defaultBaseBranch(at: context.workingDirectory)
+                let head = try Self.nonEmptyParam(params["head"])
+                    ?? Self.currentBranch(at: context.workingDirectory)
+                let commits = try Self.gitLogCommits(
+                    at: context.workingDirectory,
+                    base: base,
+                    head: head
+                )
+                guard !commits.isEmpty else {
+                    return (false, ["error": "No commits found between \(base) and \(head)."])
+                }
+                let draft = try await service.generateReleaseNotes(
+                    commits: commits,
+                    settings: context.settings
+                )
+                return (true, ["markdown": draft.markdown])
+
             default:
                 return (false, ["error": "Unknown Git Assistant subcommand: \(kind)"])
             }
@@ -155,6 +174,27 @@ extension AppDelegate {
             if !value.isEmpty { return value }
         }
         return "main"
+    }
+
+    nonisolated static func gitLogCommits(
+        at directory: URL,
+        base: String,
+        head: String
+    ) throws -> [GitAssistantCommit] {
+        let output = try gitOutput(
+            at: directory,
+            arguments: ["log", "--format=%H%x00%s", "\(base)..\(head)"]
+        )
+        return output
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .compactMap { line -> GitAssistantCommit? in
+                let parts = line.split(separator: "\u{0}", maxSplits: 1, omittingEmptySubsequences: false)
+                guard parts.count == 2 else { return nil }
+                let hash = String(parts[0]).trimmingCharacters(in: .whitespacesAndNewlines)
+                let subject = String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !hash.isEmpty, !subject.isEmpty else { return nil }
+                return GitAssistantCommit(hash: hash, subject: subject)
+            }
     }
 
     nonisolated static func gitOutput(at directory: URL, arguments: [String]) throws -> String {

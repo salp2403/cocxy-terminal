@@ -426,6 +426,19 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "gitAssistant.commitMessage",
+                name: "Generate Commit Message",
+                description: "Generate a commit message from staged changes and copy it",
+                shortcut: nil,
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        await self?.generateGitAssistantCommitMessageFromPalette()
+                    }
+                }
+            ),
+            CommandAction(
                 id: "notes.toggle",
                 name: "Toggle Notes",
                 description: "Show or hide per-workspace notes",
