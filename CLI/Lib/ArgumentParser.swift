@@ -47,8 +47,8 @@ public enum ParsedCommand: Equatable {
     /// `cocxy hook-handler` (reads JSON from stdin)
     case hookHandler
 
-    /// `cocxy setup-hooks [--agent <supported-agent>|all] [--remove] [--dry-run|--check]`
-    case setupHooks(agent: SetupHooksTarget?, remove: Bool, dryRun: Bool, check: Bool)
+    /// `cocxy setup-hooks [--agent <supported-agent>|all] [--remove] [--dry-run|--check] [--opencode-project]`
+    case setupHooks(agent: SetupHooksTarget?, remove: Bool, dryRun: Bool, check: Bool, opencodeProject: Bool)
 
     /// `cocxy review`
     case review
@@ -1058,12 +1058,13 @@ public enum CLIArgumentParser {
         }
     }
 
-    /// Parses `cocxy setup-hooks [--agent <name>] [--remove] [--dry-run|--check]`.
+    /// Parses `cocxy setup-hooks [--agent <name>] [--remove] [--dry-run|--check] [--opencode-project]`.
     private static func parseSetupHooks(arguments: [String]) throws -> ParsedCommand {
         var selectedAgent: SetupHooksTarget?
         var remove = false
         var dryRun = false
         var check = false
+        var opencodeProject = false
         var index = 0
 
         while index < arguments.count {
@@ -1078,6 +1079,10 @@ public enum CLIArgumentParser {
 
             case "--check":
                 check = true
+                index += 1
+
+            case "--opencode-project":
+                opencodeProject = true
                 index += 1
 
             case "--agent":
@@ -1101,7 +1106,7 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "setup-hooks",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --agent <name>, --remove, --dry-run, or --check."
+                    reason: "Unknown flag. Use --agent <name>, --remove, --dry-run, --check, or --opencode-project."
                 )
             }
         }
@@ -1114,7 +1119,23 @@ public enum CLIArgumentParser {
             )
         }
 
-        return .setupHooks(agent: selectedAgent, remove: remove, dryRun: dryRun, check: check)
+        if opencodeProject,
+           let selectedAgent,
+           selectedAgent != .opencode {
+            throw CLIError.invalidArgument(
+                command: "setup-hooks",
+                argument: "--opencode-project",
+                reason: "--opencode-project can only be used without --agent or with --agent opencode."
+            )
+        }
+
+        return .setupHooks(
+            agent: selectedAgent,
+            remove: remove,
+            dryRun: dryRun,
+            check: check,
+            opencodeProject: opencodeProject
+        )
     }
 
     private static func parseReview(arguments: [String]) throws -> ParsedCommand {

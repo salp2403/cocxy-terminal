@@ -131,7 +131,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: nil,
                 remove: false,
                 dryRun: false,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -139,7 +140,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .codex,
                 remove: false,
                 dryRun: false,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -147,7 +149,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .opencode,
                 remove: false,
                 dryRun: false,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -155,7 +158,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .qoder,
                 remove: false,
                 dryRun: false,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -163,7 +167,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .rovoDev,
                 remove: false,
                 dryRun: false,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -171,7 +176,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .all,
                 remove: true,
                 dryRun: false,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -179,7 +185,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .qoder,
                 remove: false,
                 dryRun: true,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -187,7 +194,8 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .qoder,
                 remove: true,
                 dryRun: true,
-                check: false
+                check: false,
+                opencodeProject: false
             )
         )
         #expect(
@@ -195,7 +203,17 @@ struct AgentHooksParitySwiftTestingTests {
                 agent: .qoder,
                 remove: false,
                 dryRun: false,
-                check: true
+                check: true,
+                opencodeProject: false
+            )
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--opencode-project"]) == .setupHooks(
+                agent: nil,
+                remove: false,
+                dryRun: false,
+                check: false,
+                opencodeProject: true
             )
         )
     }
@@ -867,5 +885,90 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(result.stdout.contains("would install"))
         #expect(!result.stdout.contains("third-party-session-tool"))
         #expect(try String(contentsOf: settingsURL, encoding: .utf8) == initialJSON)
+    }
+
+    @Test("setup-hooks installs OpenCode project bridge plugin")
+    func setupHooksInstallsOpenCodeProjectBridgePlugin() throws {
+        let projectDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: projectDirectory) }
+
+        let result = SetupHooksCommand.execute(
+            target: nil,
+            remove: false,
+            opencodeProject: true,
+            projectDirectory: projectDirectory,
+            commandExists: { _ in true }
+        )
+
+        let pluginURL = projectDirectory.appendingPathComponent(".opencode/plugins/cocxy-session.js")
+        let plugin = try String(contentsOf: pluginURL, encoding: .utf8)
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("OpenCode"))
+        #expect(result.stdout.contains("project plugin installed"))
+        #expect(plugin.contains("Cocxy managed OpenCode session bridge"))
+        #expect(plugin.contains("hook-handler"))
+        #expect(plugin.contains("shell.env"))
+        #expect(plugin.contains("tool.execute.before"))
+        #expect(plugin.contains("tool.execute.after"))
+    }
+
+    @Test("setup-hooks dry-run previews OpenCode project bridge without writing")
+    func setupHooksDryRunPreviewsOpenCodeProjectBridgeWithoutWriting() throws {
+        let projectDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: projectDirectory) }
+
+        let result = SetupHooksCommand.execute(
+            target: nil,
+            remove: false,
+            dryRun: true,
+            opencodeProject: true,
+            projectDirectory: projectDirectory,
+            commandExists: { _ in true }
+        )
+
+        let pluginURL = projectDirectory.appendingPathComponent(".opencode/plugins/cocxy-session.js")
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("Dry run"))
+        #expect(result.stdout.contains(pluginURL.path))
+        #expect(!FileManager.default.fileExists(atPath: pluginURL.path))
+    }
+
+    @Test("setup-hooks check verifies OpenCode project bridge plugin")
+    func setupHooksCheckVerifiesOpenCodeProjectBridgePlugin() throws {
+        let projectDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: projectDirectory) }
+
+        let missing = SetupHooksCommand.execute(
+            target: nil,
+            remove: false,
+            check: true,
+            opencodeProject: true,
+            projectDirectory: projectDirectory,
+            commandExists: { _ in true }
+        )
+        #expect(missing.exitCode == 1)
+        #expect(missing.stdout.contains("project plugin missing"))
+
+        _ = SetupHooksCommand.execute(
+            target: nil,
+            remove: false,
+            opencodeProject: true,
+            projectDirectory: projectDirectory,
+            commandExists: { _ in true }
+        )
+
+        let installed = SetupHooksCommand.execute(
+            target: nil,
+            remove: false,
+            check: true,
+            opencodeProject: true,
+            projectDirectory: projectDirectory,
+            commandExists: { _ in true }
+        )
+        #expect(installed.exitCode == 0)
+        #expect(installed.stdout.contains("project plugin OK"))
     }
 }

@@ -106,9 +106,20 @@ enum SetupHooksCommand {
         remove: Bool,
         dryRun: Bool = false,
         check: Bool = false,
+        opencodeProject: Bool = false,
+        projectDirectory: URL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath),
         commandExists: @escaping CommandExists = commandExists,
         settingsFilePathResolver: @escaping (AgentSource) -> String? = { $0.hookSettingsFilePath }
     ) -> CLIResult {
+        if opencodeProject {
+            return executeOpenCodeProject(
+                remove: remove,
+                dryRun: dryRun,
+                check: check,
+                projectDirectory: projectDirectory
+            )
+        }
+
         let sources = resolveSources(target: target, remove: remove, commandExists: commandExists)
         guard !sources.isEmpty else {
             return CLIResult(
@@ -252,6 +263,43 @@ enum SetupHooksCommand {
             stdout: lines.joined(separator: "\n"),
             stderr: ""
         )
+    }
+
+    private static func executeOpenCodeProject(
+        remove: Bool,
+        dryRun: Bool,
+        check: Bool,
+        projectDirectory: URL
+    ) -> CLIResult {
+        let manager = OpenCodeProjectHooksManager(projectDirectory: projectDirectory)
+
+        do {
+            if check {
+                let result = try manager.check()
+                return CLIResult(
+                    exitCode: result.failed ? 1 : 0,
+                    stdout: result.line,
+                    stderr: ""
+                )
+            }
+
+            if dryRun {
+                return CLIResult(
+                    exitCode: 0,
+                    stdout: manager.dryRun(remove: remove),
+                    stderr: ""
+                )
+            }
+
+            let line = try remove ? manager.remove() : manager.install()
+            return CLIResult(exitCode: 0, stdout: line, stderr: "")
+        } catch {
+            return CLIResult(
+                exitCode: 1,
+                stdout: "",
+                stderr: "OpenCode: failed to update project plugin (\(error.localizedDescription))."
+            )
+        }
     }
 
     static func detectInstalledAgents(
