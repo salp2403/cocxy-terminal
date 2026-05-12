@@ -46,7 +46,8 @@ struct BranchPickerView: View {
                             Button(action: { onSelect(branch) }) {
                                 BranchPickerRow(
                                     branch: branch,
-                                    isSelected: selectedBranchName == branch.name
+                                    isSelected: selectedBranchName == branch.name,
+                                    localizer: localizer
                                 )
                             }
                             .buttonStyle(.plain)
@@ -102,6 +103,7 @@ struct BranchPickerView: View {
 private struct BranchPickerRow: View {
     let branch: GitBranch
     let isSelected: Bool
+    let localizer: AppLocalizer
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
@@ -117,7 +119,7 @@ private struct BranchPickerRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                     if branch.isRemote {
-                        Text("remote")
+                        Text(localizer.string("github.branches.remote", fallback: "remote"))
                             .font(.system(size: 10, weight: .semibold))
                             .foregroundColor(.secondary)
                     }

@@ -130,7 +130,7 @@ final class GitHubPaneViewModel: ObservableObject {
             case .reviewThreads:
                 return localizer.string(
                     "github.pane.tab.reviewThreads.compact",
-                    fallback: "Threads"
+                    fallback: "Reviews"
                 )
             }
         }

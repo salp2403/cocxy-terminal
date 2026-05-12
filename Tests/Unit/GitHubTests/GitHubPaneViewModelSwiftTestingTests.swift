@@ -98,7 +98,7 @@ struct GitHubPaneViewModelSwiftTestingTests {
         let localizer = AppLocalizer(languagePreference: .english)
 
         #expect(GitHubPaneViewModel.Tab.pullRequests.compactLocalizedTitle(using: localizer) == "PRs")
-        #expect(GitHubPaneViewModel.Tab.reviewThreads.compactLocalizedTitle(using: localizer) == "Threads")
+        #expect(GitHubPaneViewModel.Tab.reviewThreads.compactLocalizedTitle(using: localizer) == "Reviews")
         #expect(
             GitHubPaneViewModel.Tab.allCases
                 .map { $0.compactLocalizedTitle(using: localizer) }

@@ -616,7 +616,7 @@ struct GitHubPaneTabStrip: View {
                     .frame(width: 14, height: 14)
 
                 if showsTitle {
-                    Text(tab.compactLocalizedTitle(using: localizer))
+                    Text(presentation.title(for: tab, using: localizer))
                         .lineLimit(1)
                         .minimumScaleFactor(0.82)
                 }
@@ -637,12 +637,14 @@ struct GitHubPaneTabStrip: View {
 struct GitHubPaneTabStripPresentation: Equatable {
     enum Mode: Equatable {
         case allLabels
+        case compactLabels
         case selectedLabel
         case iconsOnly
     }
 
     static let height: CGFloat = 30
-    private static let allLabelsMinimumWidth: CGFloat = 840
+    private static let allLabelsMinimumWidth: CGFloat = 1040
+    private static let compactLabelsMinimumWidth: CGFloat = 560
     private static let selectedLabelMinimumWidth: CGFloat = 340
 
     let mode: Mode
@@ -672,6 +674,9 @@ struct GitHubPaneTabStripPresentation: Equatable {
         if width >= allLabelsMinimumWidth {
             return GitHubPaneTabStripPresentation(mode: .allLabels)
         }
+        if width >= compactLabelsMinimumWidth {
+            return GitHubPaneTabStripPresentation(mode: .compactLabels)
+        }
         if width >= selectedLabelMinimumWidth {
             return GitHubPaneTabStripPresentation(mode: .selectedLabel)
         }
@@ -681,6 +686,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
     var itemSpacing: CGFloat {
         switch mode {
         case .allLabels: return 6
+        case .compactLabels: return 4
         case .selectedLabel: return 4
         case .iconsOnly: return 4
         }
@@ -689,6 +695,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
     var horizontalPadding: CGFloat {
         switch mode {
         case .allLabels: return 7
+        case .compactLabels: return 5
         case .selectedLabel: return 5
         case .iconsOnly: return 5
         }
@@ -697,13 +704,14 @@ struct GitHubPaneTabStripPresentation: Equatable {
     var minimumButtonWidth: CGFloat {
         switch mode {
         case .allLabels: return 62
+        case .compactLabels: return 42
         case .selectedLabel: return 26
         case .iconsOnly: return 26
         }
     }
 
     var usesFlexibleButtons: Bool {
-        mode == .allLabels
+        mode == .allLabels || mode == .compactLabels
     }
 
     func showsTitle(
@@ -711,12 +719,24 @@ struct GitHubPaneTabStripPresentation: Equatable {
         selectedTab: GitHubPaneViewModel.Tab
     ) -> Bool {
         switch mode {
-        case .allLabels:
+        case .allLabels, .compactLabels:
             return true
         case .selectedLabel:
             return tab == selectedTab
         case .iconsOnly:
             return false
+        }
+    }
+
+    func title(
+        for tab: GitHubPaneViewModel.Tab,
+        using localizer: AppLocalizer
+    ) -> String {
+        switch mode {
+        case .allLabels:
+            return tab.localizedTitle(using: localizer)
+        case .compactLabels, .selectedLabel, .iconsOnly:
+            return tab.compactLocalizedTitle(using: localizer)
         }
     }
 }

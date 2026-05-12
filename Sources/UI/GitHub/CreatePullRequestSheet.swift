@@ -37,10 +37,10 @@ struct CreatePullRequestSheet: View {
                 .font(.system(size: 15, weight: .semibold))
 
             Picker("", selection: $step) {
-                Text("Title").tag(Step.title)
-                Text("Body").tag(Step.body)
-                Text("Reviewers").tag(Step.reviewers)
-                Text("Confirm").tag(Step.confirm)
+                Text(localizedStepTitle(.title)).tag(Step.title)
+                Text(localizedStepTitle(.body)).tag(Step.body)
+                Text(localizedStepTitle(.reviewers)).tag(Step.reviewers)
+                Text(localizedStepTitle(.confirm)).tag(Step.confirm)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -150,11 +150,27 @@ struct CreatePullRequestSheet: View {
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     .lineLimit(6)
-                Text("base: \(request.baseBranch ?? "main")")
+                Text(
+                    String(
+                        format: localizer.string(
+                            "github.createPR.confirm.base",
+                            fallback: "base: %@"
+                        ),
+                        request.baseBranch ?? "main"
+                    )
+                )
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundColor(.secondary)
                 if !request.reviewers.isEmpty {
-                    Text("reviewers: \(request.reviewers.joined(separator: ", "))")
+                    Text(
+                        String(
+                            format: localizer.string(
+                                "github.createPR.confirm.reviewers",
+                                fallback: "reviewers: %@"
+                            ),
+                            request.reviewers.joined(separator: ", ")
+                        )
+                    )
                         .font(.system(size: 11))
                         .foregroundColor(.secondary)
                 }
@@ -201,6 +217,19 @@ struct CreatePullRequestSheet: View {
                 .font(.caption)
                 .foregroundStyle(.red)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func localizedStepTitle(_ step: Step) -> String {
+        switch step {
+        case .title:
+            return localizer.string("github.createPR.step.title", fallback: "Title")
+        case .body:
+            return localizer.string("github.createPR.step.body", fallback: "Body")
+        case .reviewers:
+            return localizer.string("github.createPR.step.reviewers", fallback: "Reviewers")
+        case .confirm:
+            return localizer.string("github.createPR.step.confirm", fallback: "Confirm")
         }
     }
 

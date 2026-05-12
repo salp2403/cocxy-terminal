@@ -87,6 +87,7 @@ struct ThemePickerView: View {
     @ObservedObject var viewModel: ThemeBrowserViewModel
     var onImportRequested: () -> Void
     var onClose: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(spacing: 0) {
@@ -107,7 +108,7 @@ struct ThemePickerView: View {
             Image(systemName: "paintpalette")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.accentColor)
-            Text("Themes")
+            Text(localized("theme.browser.title", fallback: "Themes"))
                 .font(.system(size: 14, weight: .semibold))
             Spacer()
             Button {
@@ -116,8 +117,8 @@ struct ThemePickerView: View {
                 Image(systemName: "xmark")
             }
             .buttonStyle(.borderless)
-            .help("Close")
-            .accessibilityLabel("Close")
+            .help(localized("common.close", fallback: "Close"))
+            .accessibilityLabel(localized("common.close", fallback: "Close"))
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -125,12 +126,12 @@ struct ThemePickerView: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
-            TextField("Search themes", text: $viewModel.searchText)
+            TextField(localized("theme.browser.search", fallback: "Search themes"), text: $viewModel.searchText)
                 .textFieldStyle(.roundedBorder)
                 .frame(minWidth: 240)
 
             ForEach(ThemeBrowserFilter.allCases) { filter in
-                Button(filter.displayName) {
+                Button(localizedFilterTitle(filter)) {
                     viewModel.filter = filter
                 }
                 .buttonStyle(ThemeFilterChipStyle(isSelected: viewModel.filter == filter))
@@ -141,7 +142,7 @@ struct ThemePickerView: View {
             Button {
                 onImportRequested()
             } label: {
-                Label("Import", systemImage: "square.and.arrow.down")
+                Label(localized("theme.browser.import", fallback: "Import"), systemImage: "square.and.arrow.down")
             }
         }
         .padding(.horizontal, 16)
@@ -156,7 +157,8 @@ struct ThemePickerView: View {
                         ThemeRowView(
                             item: item,
                             isSelected: viewModel.selectedItem?.id == item.id,
-                            isActive: viewModel.activeThemeName == item.name
+                            isActive: viewModel.activeThemeName == item.name,
+                            localizer: localizer
                         ) {
                             viewModel.preview(item)
                         }
@@ -168,7 +170,7 @@ struct ThemePickerView: View {
 
             Divider().opacity(0.35)
 
-            ThemePreviewPaneView(item: viewModel.selectedItem)
+            ThemePreviewPaneView(item: viewModel.selectedItem, localizer: localizer)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(16)
         }
@@ -183,11 +185,11 @@ struct ThemePickerView: View {
                     .lineLimit(1)
             }
             Spacer()
-            Button("Cancel") {
+            Button(localized("common.cancel", fallback: "Cancel")) {
                 viewModel.restorePreviewIfNeeded()
                 onClose()
             }
-            Button("Apply") {
+            Button(localized("theme.browser.apply", fallback: "Apply")) {
                 viewModel.applySelectedTheme()
             }
             .keyboardShortcut(.defaultAction)
@@ -196,12 +198,32 @@ struct ThemePickerView: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
     }
+
+    private func localizedFilterTitle(_ filter: ThemeBrowserFilter) -> String {
+        switch filter {
+        case .all:
+            return localized("theme.browser.filter.all", fallback: filter.displayName)
+        case .dark:
+            return localized("theme.browser.filter.dark", fallback: filter.displayName)
+        case .light:
+            return localized("theme.browser.filter.light", fallback: filter.displayName)
+        case .builtIn:
+            return localized("theme.browser.filter.builtIn", fallback: filter.displayName)
+        case .custom:
+            return localized("theme.browser.filter.custom", fallback: filter.displayName)
+        }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
 }
 
 private struct ThemeRowView: View {
     let item: ThemeBrowserItem
     let isSelected: Bool
     let isActive: Bool
+    let localizer: AppLocalizer
     let onSelect: () -> Void
 
     var body: some View {
@@ -215,7 +237,7 @@ private struct ThemeRowView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .lineLimit(1)
                         if isActive {
-                            Text("Active")
+                            Text(localizer.string("theme.browser.active", fallback: "Active"))
                                 .font(.system(size: 10, weight: .semibold))
                                 .padding(.horizontal, 5)
                                 .padding(.vertical, 2)
@@ -252,6 +274,7 @@ private struct ThemeRowView: View {
 
 private struct ThemePreviewPaneView: View {
     let item: ThemeBrowserItem?
+    let localizer: AppLocalizer
 
     var body: some View {
         if let item {
@@ -283,23 +306,31 @@ private struct ThemePreviewPaneView: View {
                 Spacer()
             }
         } else {
-            ContentUnavailableView("No Theme", systemImage: "paintpalette")
+            ContentUnavailableView(
+                localizer.string("theme.browser.noTheme", fallback: "No Theme"),
+                systemImage: "paintpalette"
+            )
         }
     }
 
     private func terminalPreview(_ palette: ThemePalette) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("cocxy theme preview")
+            Text(localizer.string("theme.browser.preview.title", fallback: "cocxy theme preview"))
                 .foregroundColor(swiftUIColor(palette.foreground))
             HStack(spacing: 6) {
-                Text("local")
+                Text(localizer.string("theme.browser.preview.local", fallback: "local"))
                     .foregroundColor(swiftUIColor(palette.ansiColors[safe: 2] ?? palette.foreground))
-                Text("main")
+                Text(localizer.string("theme.browser.preview.main", fallback: "main"))
                     .foregroundColor(swiftUIColor(palette.ansiColors[safe: 4] ?? palette.foreground))
                 Text("$")
                     .foregroundColor(swiftUIColor(palette.foreground))
             }
-            Text("selection and cursor colors stay readable")
+            Text(
+                localizer.string(
+                    "theme.browser.preview.selection",
+                    fallback: "selection and cursor colors stay readable"
+                )
+            )
                 .foregroundColor(swiftUIColor(palette.selectionForeground))
                 .padding(.horizontal, 6)
                 .padding(.vertical, 4)

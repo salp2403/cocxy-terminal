@@ -59,8 +59,10 @@ struct DiffViewerView: View {
     private var toolbar: some View {
         HStack(spacing: 8) {
             Picker("", selection: $mode) {
-                Text("Unified").tag(DiffViewerMode.unified)
-                Text("Split").tag(DiffViewerMode.split)
+                Text(localizer.string("diff.viewer.mode.unified", fallback: "Unified"))
+                    .tag(DiffViewerMode.unified)
+                Text(localizer.string("diff.viewer.mode.split", fallback: "Split"))
+                    .tag(DiffViewerMode.split)
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -183,9 +185,10 @@ struct DiffHunkView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 Spacer()
-                DiffStagingControls { action in
-                    onStage(fileDiff, hunk, action)
-                }
+                DiffStagingControls(
+                    onAction: { action in onStage(fileDiff, hunk, action) },
+                    localizer: localizer
+                )
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
@@ -239,6 +242,7 @@ struct DiffHunkView: View {
 
 struct DiffStagingControls: View {
     var onAction: (DiffStagingAction) -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     var body: some View {
         HStack(spacing: 6) {
@@ -246,19 +250,19 @@ struct DiffStagingControls: View {
                 Image(systemName: "plus.square")
             }
             .buttonStyle(.borderless)
-            .help("Stage hunk")
+            .help(localizer.string("diff.viewer.stageHunk", fallback: "Stage hunk"))
 
             Button(action: { onAction(.unstage) }) {
                 Image(systemName: "minus.square")
             }
             .buttonStyle(.borderless)
-            .help("Unstage hunk")
+            .help(localizer.string("diff.viewer.unstageHunk", fallback: "Unstage hunk"))
 
             Button(action: { onAction(.discard) }) {
                 Image(systemName: "trash")
             }
             .buttonStyle(.borderless)
-            .help("Discard hunk")
+            .help(localizer.string("diff.viewer.discardHunk", fallback: "Discard hunk"))
         }
     }
 }

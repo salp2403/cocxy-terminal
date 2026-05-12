@@ -68,9 +68,10 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(
             GitHubPaneTabStripPresentation.resolve(
                 width: GitHubPaneView.maximumPanelWidth
-            ).mode == .selectedLabel
+            ).mode == .compactLabels
         )
-        #expect(GitHubPaneTabStripPresentation.resolve(width: 860).mode == .allLabels)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 1080).mode == .allLabels)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 900).mode == .compactLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 480).mode == .selectedLabel)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 280).mode == .iconsOnly)
     }
@@ -114,6 +115,22 @@ struct GitHubPaneUISwiftTestingTests {
                 selectedTab: .pullRequests
             ) == false
         )
+    }
+
+    @Test("GitHubPaneTabStripPresentation labels every tab with compact titles at medium widths")
+    func tabStripPresentation_labelsEveryTabWithCompactTitlesAtMediumWidths() {
+        let presentation = GitHubPaneTabStripPresentation.resolve(width: 720)
+        let localizer = AppLocalizer(languagePreference: .english)
+
+        #expect(presentation.mode == .compactLabels)
+        #expect(
+            presentation.showsTitle(
+                for: .reviewThreads,
+                selectedTab: .pullRequests
+            )
+        )
+        #expect(presentation.title(for: .pullRequests, using: localizer) == "PRs")
+        #expect(presentation.title(for: .reviewThreads, using: localizer) == "Reviews")
     }
 
     @Test("Pull request filter controls switch to compact menu before segmented control clips")
