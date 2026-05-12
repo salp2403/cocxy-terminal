@@ -151,6 +151,42 @@ struct PRReviewerSuggesterSwiftTestingTests {
         #expect(client.messages.last?.content.contains("[redacted-secret]") == true)
         #expect(client.messages.last?.content.contains("sk-live-secret") == false)
     }
+
+    @Test("reviewer candidates infer editable GitHub handles when possible")
+    func reviewerCandidatesInferEditableGitHubHandles() {
+        let candidates = [
+            PRReviewerCandidate(
+                id: "noreply",
+                displayName: "Said",
+                email: "12345+salp2403@users.noreply.github.com",
+                lineCount: 4,
+                fileCount: 2
+            ),
+            PRReviewerCandidate(
+                id: "simple",
+                displayName: "Alice",
+                email: "alice@example.com",
+                lineCount: 3,
+                fileCount: 1
+            ),
+            PRReviewerCandidate(
+                id: "duplicate",
+                displayName: "ALICE",
+                email: nil,
+                lineCount: 2,
+                fileCount: 1
+            ),
+            PRReviewerCandidate(
+                id: "invalid",
+                displayName: "Dana Lee",
+                email: "dana.lee@example.com",
+                lineCount: 1,
+                fileCount: 1
+            ),
+        ]
+
+        #expect(PRReviewerCandidate.reviewerIdentifiers(from: candidates) == ["salp2403", "alice"])
+    }
 }
 
 private struct TestBlameError: Error {}

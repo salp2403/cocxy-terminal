@@ -8,6 +8,7 @@ struct CreatePullRequestSheet: View {
     var onCancel: () -> Void
     var onCreate: (PullRequestCreateRequest) -> Void
     var onGenerateDraft: ((String?) async throws -> GitAssistantPullRequestDraft)? = nil
+    var onSuggestReviewers: ((String?) async throws -> [String])? = nil
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
 
     @State private var step: Step = .title
@@ -18,6 +19,8 @@ struct CreatePullRequestSheet: View {
     @State private var draft = false
     @State private var isGeneratingDraft = false
     @State private var generationError: String?
+    @State private var isSuggestingReviewers = false
+    @State private var reviewerSuggestionError: String?
 
     enum Step: Int, CaseIterable, Identifiable {
         case title
@@ -78,6 +81,18 @@ struct CreatePullRequestSheet: View {
             .filter { !$0.isEmpty }
     }
 
+    static func mergedReviewerList(existingRaw: String, suggestions: [String]) -> String {
+        var merged = reviewerList(from: existingRaw)
+        var seen = Set(merged.map { $0.lowercased() })
+        for suggestion in suggestions {
+            let normalized = suggestion.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty else { continue }
+            guard seen.insert(normalized.lowercased()).inserted else { continue }
+            merged.append(normalized)
+        }
+        return merged.joined(separator: ", ")
+    }
+
     private var request: PullRequestCreateRequest {
         PullRequestCreateRequest(
             title: title,
@@ -117,11 +132,16 @@ struct CreatePullRequestSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.25)))
             }
         case .reviewers:
-            TextField(
-                localizer.string("github.createPR.reviewers", fallback: "Reviewers"),
-                text: $reviewers
-            )
-            .textFieldStyle(.roundedBorder)
+            VStack(alignment: .leading, spacing: 8) {
+                TextField(
+                    localizer.string("github.createPR.reviewers", fallback: "Reviewers"),
+                    text: $reviewers
+                )
+                .textFieldStyle(.roundedBorder)
+                if onSuggestReviewers != nil {
+                    suggestReviewersButton
+                }
+            }
         case .confirm:
             VStack(alignment: .leading, spacing: 8) {
                 Text(title)
@@ -163,6 +183,27 @@ struct CreatePullRequestSheet: View {
         }
     }
 
+    @ViewBuilder
+    private var suggestReviewersButton: some View {
+        Button {
+            Task { await suggestReviewers() }
+        } label: {
+            Label(
+                isSuggestingReviewers
+                    ? localizer.string("github.createPR.suggestingReviewers", fallback: "Suggesting...")
+                    : localizer.string("github.createPR.suggestReviewers", fallback: "Suggest reviewers"),
+                systemImage: "person.2"
+            )
+        }
+        .disabled(isSuggestingReviewers)
+        if let reviewerSuggestionError {
+            Text(reviewerSuggestionError)
+                .font(.caption)
+                .foregroundStyle(.red)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
     @MainActor
     private func generateDraft() async {
         guard let onGenerateDraft else { return }
@@ -178,5 +219,30 @@ struct CreatePullRequestSheet: View {
             generationError = error.localizedDescription
         }
         isGeneratingDraft = false
+    }
+
+    @MainActor
+    private func suggestReviewers() async {
+        guard let onSuggestReviewers else { return }
+        isSuggestingReviewers = true
+        reviewerSuggestionError = nil
+        do {
+            let requestBase = baseBranch.isEmpty ? defaultBaseBranch : baseBranch
+            let suggested = try await onSuggestReviewers(requestBase)
+            if suggested.isEmpty {
+                reviewerSuggestionError = localizer.string(
+                    "github.createPR.noReviewerSuggestions",
+                    fallback: "No reviewer handles could be inferred from this branch."
+                )
+            } else {
+                reviewers = Self.mergedReviewerList(
+                    existingRaw: reviewers,
+                    suggestions: suggested
+                )
+            }
+        } catch {
+            reviewerSuggestionError = error.localizedDescription
+        }
+        isSuggestingReviewers = false
     }
 }

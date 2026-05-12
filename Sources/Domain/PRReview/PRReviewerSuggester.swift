@@ -9,6 +9,55 @@ struct PRReviewerCandidate: Identifiable, Equatable, Sendable {
     let email: String?
     let lineCount: Int
     let fileCount: Int
+
+    var reviewerIdentifier: String? {
+        Self.reviewerIdentifier(displayName: displayName, email: email)
+    }
+
+    static func reviewerIdentifiers(from candidates: [PRReviewerCandidate]) -> [String] {
+        var seen = Set<String>()
+        return candidates.compactMap { candidate in
+            guard let identifier = candidate.reviewerIdentifier else { return nil }
+            let key = identifier.lowercased()
+            guard seen.insert(key).inserted else { return nil }
+            return identifier
+        }
+    }
+
+    private static func reviewerIdentifier(displayName: String, email: String?) -> String? {
+        if let email {
+            let parts = email.split(separator: "@", maxSplits: 1).map(String.init)
+            if parts.count == 2 {
+                let localPart = parts[0]
+                let domain = parts[1].lowercased()
+                if domain == "users.noreply.github.com" {
+                    let handle = localPart.split(separator: "+", maxSplits: 1).last.map(String.init) ?? localPart
+                    if isLikelyGitHubHandle(handle) {
+                        return handle
+                    }
+                }
+
+                let handle = localPart.split(separator: "+", maxSplits: 1).first.map(String.init) ?? localPart
+                if isLikelyGitHubHandle(handle) {
+                    return handle
+                }
+            }
+        }
+
+        let compactName = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !compactName.contains(" "), isLikelyGitHubHandle(compactName) {
+            return compactName
+        }
+        return nil
+    }
+
+    private static func isLikelyGitHubHandle(_ raw: String) -> Bool {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard (1...39).contains(value.count) else { return false }
+        guard !value.hasPrefix("-"), !value.hasSuffix("-") else { return false }
+        let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
+        return value.rangeOfCharacter(from: allowed.inverted) == nil
+    }
 }
 
 struct PRReviewerSuggester: Sendable {

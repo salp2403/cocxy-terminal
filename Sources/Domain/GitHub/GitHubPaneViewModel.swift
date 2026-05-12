@@ -345,6 +345,13 @@ final class GitHubPaneViewModel: ObservableObject {
         _ settings: GitAssistantSettings
     ) async throws -> GitAssistantPullRequestDraft)?
 
+    var suggestReviewersProvider: ((
+        _ workingDirectory: URL,
+        _ baseBranch: String,
+        _ headBranch: String,
+        _ settings: GitAssistantSettings
+    ) async throws -> [String])?
+
     var diffListProvider: (URL) async throws -> [FileDiff] = { _ in [] }
 
     var worktreeEntriesProvider: () async -> [WorktreeManifest.WorktreeEntry] = { [] }
@@ -808,6 +815,27 @@ final class GitHubPaneViewModel: ObservableObject {
         guard let workingDirectory = workingDirectoryProvider?() else {
             throw GitAssistantPaneError.noRepository
         }
+        let resolvedBase = (baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines))
+            .flatMap { $0.isEmpty ? nil : $0 }
+            ?? repo?.defaultBranch
+            ?? "main"
+        let resolvedHead = try await currentHeadBranchName(at: workingDirectory)
+        return try await provider(workingDirectory, resolvedBase, resolvedHead, settings)
+    }
+
+    func canSuggestPullRequestReviewers() -> Bool {
+        suggestReviewersProvider != nil
+            && workingDirectoryProvider?() != nil
+    }
+
+    func suggestPullRequestReviewers(baseBranch: String?) async throws -> [String] {
+        guard let provider = suggestReviewersProvider else {
+            throw GitAssistantPaneError.unavailable
+        }
+        guard let workingDirectory = workingDirectoryProvider?() else {
+            throw GitAssistantPaneError.noRepository
+        }
+        let settings = gitAssistantConfigProvider()
         let resolvedBase = (baseBranch?.trimmingCharacters(in: .whitespacesAndNewlines))
             .flatMap { $0.isEmpty ? nil : $0 }
             ?? repo?.defaultBranch

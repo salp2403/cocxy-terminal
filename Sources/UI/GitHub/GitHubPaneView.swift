@@ -100,6 +100,11 @@ struct GitHubPaneView: View {
                         try await viewModel.generatePullRequestDraft(baseBranch: baseBranch)
                     }
                     : nil,
+                onSuggestReviewers: viewModel.canSuggestPullRequestReviewers()
+                    ? { baseBranch in
+                        try await viewModel.suggestPullRequestReviewers(baseBranch: baseBranch)
+                    }
+                    : nil,
                 localizer: localizer
             )
         }

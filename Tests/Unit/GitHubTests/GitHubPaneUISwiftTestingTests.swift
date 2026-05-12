@@ -270,6 +270,12 @@ struct GitHubPaneUISwiftTestingTests {
             searchText: "work"
         ).map(\.number) == [3])
         #expect(CreatePullRequestSheet.reviewerList(from: "alice, bob\ncarol") == ["alice", "bob", "carol"])
+        #expect(
+            CreatePullRequestSheet.mergedReviewerList(
+                existingRaw: "alice, bob",
+                suggestions: ["bob", "carol", " "]
+            ) == "alice, bob, carol"
+        )
     }
 
     @Test("Source Control views render basic state")

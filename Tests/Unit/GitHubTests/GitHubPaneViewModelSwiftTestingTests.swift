@@ -307,6 +307,39 @@ struct GitHubPaneViewModelSwiftTestingTests {
         }
     }
 
+    @Test("suggest reviewers resolves base and current head branch")
+    func suggestReviewers_resolvesBaseAndHeadBranch() async throws {
+        let viewModel = GitHubPaneViewModel(service: makeService { _ in })
+        let directory = URL(fileURLWithPath: "/tmp/git-reviewer-suggestions")
+        let captured = LockedBox<(directory: URL?, base: String?, head: String?, settings: GitAssistantSettings?)>(
+            (nil, nil, nil, nil)
+        )
+        viewModel.workingDirectoryProvider = { directory }
+        viewModel.branchListProvider = { _, _ in [
+            GitBranch(name: "main", isCurrent: false, isRemote: false),
+            GitBranch(name: "feature/reviewers", isCurrent: true, isRemote: false),
+        ] }
+        viewModel.gitAssistantConfigProvider = {
+            GitAssistantSettings(enabled: false, maxDiffLines: 120)
+        }
+        viewModel.suggestReviewersProvider = { directory, base, head, settings in
+            captured.withValue { value in
+                value = (directory, base, head, settings)
+            }
+            return ["alice", "bob"]
+        }
+
+        #expect(viewModel.canSuggestPullRequestReviewers())
+        let reviewers = try await viewModel.suggestPullRequestReviewers(baseBranch: nil)
+        let snapshot = captured.withValue { $0 }
+
+        #expect(reviewers == ["alice", "bob"])
+        #expect(snapshot.directory == directory)
+        #expect(snapshot.base == "main")
+        #expect(snapshot.head == "feature/reviewers")
+        #expect(snapshot.settings?.maxDiffLines == 120)
+    }
+
     @Test("create branch uses provider then refreshes source control")
     func createBranch_usesProviderThenRefreshes() async throws {
         let viewModel = GitHubPaneViewModel(service: makeService { _ in })

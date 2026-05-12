@@ -229,6 +229,60 @@ extension MainWindowController {
                     settings: settings
                 )
         }
+        viewModel.suggestReviewersProvider = { workingDirectory, baseBranch, headBranch, settings in
+            let changedFilesOutput = try AppDelegate.gitOutput(
+                at: workingDirectory,
+                arguments: ["diff", "--name-only", "\(baseBranch)...\(headBranch)"]
+            )
+            let changedFilePaths = changedFilesOutput
+                .split(separator: "\n")
+                .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            guard !changedFilePaths.isEmpty else { return [] }
+
+            let suggester = PRReviewerSuggester()
+            var candidates = suggester.suggestions(
+                root: workingDirectory,
+                changedFilePaths: changedFilePaths,
+                limit: 5
+            )
+
+            if settings.enabled {
+                do {
+                    let client = try AgentProviderClientFactory().makeClient(
+                        configuration: AgentModeConfig(
+                            enabled: true,
+                            preferredProvider: settings.defaultProvider,
+                            foundationModelsFallback: .requireExplicitChoice,
+                            autoMode: false,
+                            computerUseConfirm: true,
+                            maxIterations: 1
+                        )
+                    )
+                    let diff = try AppDelegate.gitOutput(
+                        at: workingDirectory,
+                        arguments: ["diff", "--no-color", "--no-ext-diff", "\(baseBranch)...\(headBranch)"]
+                    )
+                    let aiRanked = try await suggester.aiSuggestions(
+                        root: workingDirectory,
+                        changedFilePaths: changedFilePaths,
+                        diff: diff,
+                        settings: settings,
+                        client: client,
+                        limit: 5
+                    )
+                    if !aiRanked.isEmpty {
+                        candidates = aiRanked
+                    }
+                } catch {
+                    // Reviewer suggestions are assistive. If the user's
+                    // model provider is unavailable, keep the local blame
+                    // suggestions instead of blocking PR creation.
+                }
+            }
+
+            return PRReviewerCandidate.reviewerIdentifiers(from: candidates)
+        }
         viewModel.onOpenURL = { url in
             NSWorkspace.shared.open(url)
         }
