@@ -792,4 +792,80 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(result.stdout.contains("OpenCode"))
         #expect(result.stdout.contains("integrity check is not available"))
     }
+
+    @Test("hook conflict detector reports existing non-Cocxy command hooks without exposing commands")
+    func hookConflictDetectorReportsExistingNonCocxyCommandHooksWithoutExposingCommands() throws {
+        let settings: [String: Any] = [
+            "hooks": [
+                "SessionStart": [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": "third-party-session-tool sync"],
+                            ["type": "command", "command": "COCXY_HOOK_AGENT=qoder cocxy hook-handler"]
+                        ]
+                    ]
+                ],
+                "Stop": [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": "external-stop-hook"]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        let conflicts = HooksConflictDetector.detect(in: settings, limitedTo: ["SessionStart", "Stop"])
+        #expect(conflicts.count == 2)
+        #expect(conflicts.map(\.eventType).sorted() == ["SessionStart", "Stop"])
+
+        let warning = try #require(HooksConflictDetector.warning(for: conflicts))
+        #expect(warning.contains("existing non-Cocxy hooks"))
+        #expect(warning.contains("SessionStart"))
+        #expect(warning.contains("Stop"))
+        #expect(!warning.contains("third-party-session-tool"))
+        #expect(!warning.contains("external-stop-hook"))
+    }
+
+    @Test("setup-hooks dry-run warns about existing non-Cocxy hooks and preserves the file")
+    func setupHooksDryRunWarnsAboutExistingNonCocxyHooksAndPreservesFile() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsURL = tempDirectory.appendingPathComponent("settings.json")
+        let initialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "",
+                "hooks": [
+                  { "type": "command", "command": "third-party-session-tool sync" }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try initialJSON.write(to: settingsURL, atomically: true, encoding: .utf8)
+
+        let result = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: false,
+            dryRun: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: { source in
+                source == .qoder ? settingsURL.path : source.hookSettingsFilePath
+            }
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("existing non-Cocxy hooks"))
+        #expect(result.stdout.contains("would install"))
+        #expect(!result.stdout.contains("third-party-session-tool"))
+        #expect(try String(contentsOf: settingsURL, encoding: .utf8) == initialJSON)
+    }
 }

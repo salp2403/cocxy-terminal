@@ -194,6 +194,9 @@ enum SetupHooksCommand {
             default:
                 do {
                     let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+                    if let warning = try hookConflictWarning(for: source, settingsFilePath: path) {
+                        lines.append("\(source.displayName): \(warning)")
+                    }
                     lines.append(HooksDryRunFormatter.line(
                         for: source,
                         settingsFilePath: path,
@@ -320,20 +323,31 @@ enum SetupHooksCommand {
                 hookEvents: source.hookEventNames,
                 hookCommand: ClaudeSettingsManager.hookCommand(for: source)
             )
+            let warning = try HooksConflictDetector.warning(for: manager.hookConflicts()).map {
+                "\(source.displayName): \($0)"
+            }
 
             if remove {
                 let result = try manager.uninstallHooks()
                 if result.nothingToRemove {
-                    return "\(source.displayName): no Cocxy hooks found."
+                    return [warning, "\(source.displayName): no Cocxy hooks found."]
+                        .compactMap { $0 }
+                        .joined(separator: "\n")
                 }
-                return "\(source.displayName): hooks removed for \(result.removedEvents.joined(separator: ", "))."
+                return [warning, "\(source.displayName): hooks removed for \(result.removedEvents.joined(separator: ", "))."]
+                    .compactMap { $0 }
+                    .joined(separator: "\n")
             }
 
             let result = try manager.installHooks()
             if result.alreadyInstalled {
-                return "\(source.displayName): hooks already installed."
+                return [warning, "\(source.displayName): hooks already installed."]
+                    .compactMap { $0 }
+                    .joined(separator: "\n")
             }
-            return "\(source.displayName): hooks installed for \(result.hookEvents.joined(separator: ", "))."
+            return [warning, "\(source.displayName): hooks installed for \(result.hookEvents.joined(separator: ", "))."]
+                .compactMap { $0 }
+                .joined(separator: "\n")
 
         case .kiro, .opencode, .pi, .rovoDev, .unknown:
             return "\(source.displayName): manual setup required."
@@ -395,6 +409,23 @@ enum SetupHooksCommand {
                 throw HooksError.fileSystemError(reason: "Missing settings path")
             }
             return path
+        }
+    }
+
+    private static func hookConflictWarning(
+        for source: AgentSource,
+        settingsFilePath: String
+    ) throws -> String? {
+        switch source {
+        case .codex, .geminiCLI, .cursor, .copilot, .codebuddy, .factory, .qoder:
+            let manager = GroupedHooksSettingsManager(
+                settingsFilePath: settingsFilePath,
+                hookEvents: source.hookEventNames,
+                hookCommand: ClaudeSettingsManager.hookCommand(for: source)
+            )
+            return HooksConflictDetector.warning(for: try manager.hookConflicts())
+        default:
+            return nil
         }
     }
 

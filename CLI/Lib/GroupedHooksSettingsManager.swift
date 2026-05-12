@@ -143,6 +143,17 @@ struct GroupedHooksSettingsManager {
         )
     }
 
+    func hookConflicts() throws -> [HookConfigurationConflict] {
+        guard FileManager.default.fileExists(atPath: settingsFilePath) else {
+            return []
+        }
+
+        return HooksConflictDetector.detect(
+            in: try readSettings(),
+            limitedTo: hookEvents
+        )
+    }
+
     private func readOrCreateSettings() throws -> [String: Any] {
         guard FileManager.default.fileExists(atPath: settingsFilePath) else {
             return [:]
