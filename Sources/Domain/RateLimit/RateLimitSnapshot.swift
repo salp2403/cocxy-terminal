@@ -59,11 +59,19 @@ struct RateLimitSnapshot: Sendable, Equatable {
     // MARK: - Nested types
 
     /// Agent the sample belongs to.
-    enum AgentKind: String, Sendable, Equatable, CaseIterable {
+    enum AgentKind: String, Sendable, Equatable, Hashable, Codable, CaseIterable {
         case claude
         case codex
         case gemini
         case aider
+        case cursor
+        case copilot
+        case opencode
+        case amp
+        case factory
+        case kimi
+        case minimax
+        case zai
     }
 
     /// Unit the `usedAmount` / `limitAmount` numbers express.

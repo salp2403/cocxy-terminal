@@ -756,6 +756,53 @@ struct EditableAppearanceSection: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Toggle(
+                        viewModel.localizedString(
+                            "preferences.rateLimit.autoDetect",
+                            fallback: "Auto-detect active providers"
+                        ),
+                        isOn: $viewModel.rateLimitAutoDetect
+                    )
+                    .help(
+                        viewModel.localizedString(
+                            "preferences.rateLimit.autoDetect.help",
+                            fallback: "Only shows usage indicators for providers currently detected in the active terminal."
+                        )
+                    )
+
+                    Stepper(
+                        value: $viewModel.rateLimitOAuthRefreshIntervalMinutes,
+                        in: 5...1440,
+                        step: 5
+                    ) {
+                        Text(
+                            viewModel.localizedString(
+                                "preferences.rateLimit.oauthRefreshInterval",
+                                fallback: "OAuth refresh interval: \(viewModel.rateLimitOAuthRefreshIntervalMinutes) min"
+                            )
+                        )
+                    }
+
+                    LazyVGrid(
+                        columns: [
+                            GridItem(.adaptive(minimum: 132), spacing: 8)
+                        ],
+                        alignment: .leading,
+                        spacing: 6
+                    ) {
+                        ForEach(RateLimitConfig.supportedProviderKinds, id: \.self) { provider in
+                            Toggle(
+                                RateLimitIndicatorFormatting.agentDisplayName(provider),
+                                isOn: Binding(
+                                    get: { viewModel.rateLimitProviderEnabled(provider) },
+                                    set: { viewModel.setRateLimitProvider(provider, enabled: $0) }
+                                )
+                            )
+                        }
+                    }
+                }
             }
 
             Section(viewModel.localizedString("preferences.appearance.shortcutHints.section", fallback: "Shortcut hints")) {

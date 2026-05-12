@@ -98,6 +98,9 @@ final class PreferencesViewModel: ObservableObject {
     /// regardless of the agent or its provider's snapshot. Hot-reloads
     /// through the standard config publisher pipeline.
     @Published var rateLimitIndicatorEnabled: Bool
+    @Published var rateLimitEnabledProviders: Set<RateLimitSnapshot.AgentKind>
+    @Published var rateLimitAutoDetect: Bool
+    @Published var rateLimitOAuthRefreshIntervalMinutes: Int
 
     /// QuickSwitch behavior for the go-to-attention shortcut.
     @Published var quickSwitchMode: QuickSwitchMode
@@ -599,6 +602,9 @@ final class PreferencesViewModel: ObservableObject {
             || auroraSidebarDisplayMode != c.appearance.auroraSidebarDisplayMode
             || auroraSidebarPrimaryInfo != c.appearance.auroraSidebarPrimaryInfo
             || rateLimitIndicatorEnabled != c.appearance.rateLimitIndicatorEnabled
+            || rateLimitEnabledProviders != Set(c.rateLimit.enabledProviders)
+            || rateLimitAutoDetect != c.rateLimit.autoDetect
+            || rateLimitOAuthRefreshIntervalMinutes != c.rateLimit.oauthRefreshIntervalMinutes
             || quickSwitchMode != c.appearance.quickSwitchMode
             || appLanguage != c.appearance.appLanguage
             || uxPolishHasUnsavedChanges(comparedTo: c.uxPolish)
@@ -680,6 +686,23 @@ final class PreferencesViewModel: ObservableObject {
         mcpConfigURL.path
     }
 
+    func rateLimitProviderEnabled(_ provider: RateLimitSnapshot.AgentKind) -> Bool {
+        rateLimitEnabledProviders.contains(provider)
+    }
+
+    func setRateLimitProvider(_ provider: RateLimitSnapshot.AgentKind, enabled: Bool) {
+        guard RateLimitConfig.supportedProviderKinds.contains(provider) else { return }
+        if enabled {
+            rateLimitEnabledProviders.insert(provider)
+        } else {
+            rateLimitEnabledProviders.remove(provider)
+        }
+    }
+
+    private func orderedRateLimitProviders() -> [RateLimitSnapshot.AgentKind] {
+        RateLimitConfig.supportedProviderKinds.filter { rateLimitEnabledProviders.contains($0) }
+    }
+
     /// Reverts all editable properties to the original config snapshot.
     func discardChanges() {
         let c = savedConfig
@@ -700,6 +723,9 @@ final class PreferencesViewModel: ObservableObject {
         auroraSidebarDisplayMode = c.appearance.auroraSidebarDisplayMode
         auroraSidebarPrimaryInfo = c.appearance.auroraSidebarPrimaryInfo
         rateLimitIndicatorEnabled = c.appearance.rateLimitIndicatorEnabled
+        rateLimitEnabledProviders = Set(c.rateLimit.enabledProviders)
+        rateLimitAutoDetect = c.rateLimit.autoDetect
+        rateLimitOAuthRefreshIntervalMinutes = c.rateLimit.oauthRefreshIntervalMinutes
         quickSwitchMode = c.appearance.quickSwitchMode
         appLanguage = c.appearance.appLanguage
         alwaysShowShortcutHints = c.uxPolish.alwaysShowShortcutHints
@@ -935,6 +961,9 @@ final class PreferencesViewModel: ObservableObject {
         self.auroraSidebarDisplayMode = config.appearance.auroraSidebarDisplayMode
         self.auroraSidebarPrimaryInfo = config.appearance.auroraSidebarPrimaryInfo
         self.rateLimitIndicatorEnabled = config.appearance.rateLimitIndicatorEnabled
+        self.rateLimitEnabledProviders = Set(config.rateLimit.enabledProviders)
+        self.rateLimitAutoDetect = config.rateLimit.autoDetect
+        self.rateLimitOAuthRefreshIntervalMinutes = config.rateLimit.oauthRefreshIntervalMinutes
         self.quickSwitchMode = config.appearance.quickSwitchMode
         self.appLanguage = config.appearance.appLanguage
         self.alwaysShowShortcutHints = config.uxPolish.alwaysShowShortcutHints
@@ -1735,6 +1764,11 @@ final class PreferencesViewModel: ObservableObject {
             quickTerminal: savedConfig.quickTerminal,
             keybindings: keybindings,
             sessions: savedConfig.sessions,
+            rateLimit: RateLimitConfig(
+                enabledProviders: orderedRateLimitProviders(),
+                autoDetect: rateLimitAutoDetect,
+                oauthRefreshIntervalMinutes: rateLimitOAuthRefreshIntervalMinutes
+            ),
             worktree: buildWorktreeConfigFromViewModel(),
             github: buildGitHubConfigFromViewModel(),
             gitAssistant: buildGitAssistantSettingsFromViewModel(),
@@ -1743,6 +1777,9 @@ final class PreferencesViewModel: ObservableObject {
             vim: buildVimConfigFromViewModel(),
             experimental: savedConfig.experimental
         )
+        rateLimitEnabledProviders = Set(savedConfig.rateLimit.enabledProviders)
+        rateLimitAutoDetect = savedConfig.rateLimit.autoDetect
+        rateLimitOAuthRefreshIntervalMinutes = savedConfig.rateLimit.oauthRefreshIntervalMinutes
         agentComputerUseConfirm = agent.computerUseConfirm
         agentMaxIterations = agent.maxIterations
         agentConversationStorageDir = agent.conversationStorageDir
@@ -2450,6 +2487,11 @@ final class PreferencesViewModel: ObservableObject {
         aurora-sidebar-primary-info = "\(auroraSidebarPrimaryInfo.rawValue)"
         rate-limit-indicator-enabled = \(rateLimitIndicatorEnabled)
         quickswitch-mode = "\(quickSwitchMode.rawValue)"
+
+        [rate-limit]
+        enabled-providers = \(Self.tomlStringArray(orderedRateLimitProviders().map(\.rawValue)))
+        auto-detect = \(rateLimitAutoDetect)
+        oauth-refresh-interval-minutes = \(RateLimitConfig.clampedRefreshInterval(rateLimitOAuthRefreshIntervalMinutes))
 
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)

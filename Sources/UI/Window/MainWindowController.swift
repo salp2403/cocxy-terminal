@@ -592,6 +592,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         providers: [
             .claude: ClaudeUsageProvider(),
             .codex: CodexUsageProvider(),
+            .cursor: CursorUsageProvider(),
+            .copilot: CopilotUsageProvider(),
+            .opencode: OpenCodeUsageProvider(),
+            .amp: AmpUsageProvider(),
+            .factory: FactoryUsageProvider(),
+            .kimi: KimiUsageProvider(),
+            .minimax: MiniMaxUsageProvider(),
+            .zai: ZaiUsageProvider(),
         ]
     )
 

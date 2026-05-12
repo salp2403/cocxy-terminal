@@ -68,6 +68,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let quickTerminal: QuickTerminalConfig
     let keybindings: KeybindingsConfig
     let sessions: SessionsConfig
+    let rateLimit: RateLimitConfig
     let worktree: WorktreeConfig
     let github: GitHubConfig
     let gitAssistant: GitAssistantSettings
@@ -100,6 +101,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         quickTerminal: QuickTerminalConfig,
         keybindings: KeybindingsConfig,
         sessions: SessionsConfig,
+        rateLimit: RateLimitConfig = .defaults,
         worktree: WorktreeConfig = .defaults,
         github: GitHubConfig = .defaults,
         gitAssistant: GitAssistantSettings = .defaults,
@@ -131,6 +133,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.quickTerminal = quickTerminal
         self.keybindings = keybindings
         self.sessions = sessions
+        self.rateLimit = rateLimit
         self.worktree = worktree
         self.github = github
         self.gitAssistant = gitAssistant
@@ -170,6 +173,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             quickTerminal: .defaults,
             keybindings: .defaults,
             sessions: .defaults,
+            rateLimit: .defaults,
             worktree: .defaults,
             github: .defaults,
             gitAssistant: .defaults,
@@ -190,7 +194,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
         case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
-        case notifications, quickTerminal, keybindings, sessions, worktree, github, gitAssistant, notes, lsp, vim
+        case notifications, quickTerminal, keybindings, sessions, rateLimit, worktree, github, gitAssistant, notes, lsp, vim
         case richInput
         case experimental
     }
@@ -233,6 +237,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.quickTerminal = try container.decode(QuickTerminalConfig.self, forKey: .quickTerminal)
         self.keybindings = try container.decode(KeybindingsConfig.self, forKey: .keybindings)
         self.sessions = try container.decode(SessionsConfig.self, forKey: .sessions)
+        self.rateLimit = try container.decodeIfPresent(RateLimitConfig.self, forKey: .rateLimit)
+            ?? .defaults
         self.worktree = try container.decodeIfPresent(WorktreeConfig.self, forKey: .worktree)
             ?? .defaults
         self.github = try container.decodeIfPresent(GitHubConfig.self, forKey: .github)
@@ -380,6 +386,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             quickTerminal: quickTerminal,
             keybindings: mergedKeybindings,
             sessions: sessions,
+            rateLimit: rateLimit,
             worktree: mergedWorktree,
             github: mergedGitHub,
             // Git Assistant may send diff excerpts to the selected provider.
@@ -722,6 +729,60 @@ struct AppearanceConfig: Codable, Sendable, Equatable {
 enum QuickSwitchMode: String, Codable, Sendable, Equatable, CaseIterable {
     case unified
     case tabsOnly = "tabs-only"
+}
+
+// MARK: - Rate Limit Config
+
+/// `[rate-limit]` section for local-only usage indicators.
+struct RateLimitConfig: Codable, Sendable, Equatable {
+    static let supportedProviderKinds: [RateLimitSnapshot.AgentKind] = [
+        .claude,
+        .codex,
+        .cursor,
+        .copilot,
+        .opencode,
+        .amp,
+        .factory,
+        .kimi,
+        .minimax,
+        .zai,
+    ]
+
+    let enabledProviders: [RateLimitSnapshot.AgentKind]
+    let autoDetect: Bool
+    let oauthRefreshIntervalMinutes: Int
+
+    init(
+        enabledProviders: [RateLimitSnapshot.AgentKind] = Self.supportedProviderKinds,
+        autoDetect: Bool = true,
+        oauthRefreshIntervalMinutes: Int = 50
+    ) {
+        self.enabledProviders = Self.normalizedProviders(enabledProviders)
+        self.autoDetect = autoDetect
+        self.oauthRefreshIntervalMinutes = Self.clampedRefreshInterval(oauthRefreshIntervalMinutes)
+    }
+
+    static var defaults: RateLimitConfig { RateLimitConfig() }
+
+    func isProviderEnabled(_ provider: RateLimitSnapshot.AgentKind) -> Bool {
+        enabledProviders.contains(provider)
+    }
+
+    static func normalizedProviders(_ providers: [RateLimitSnapshot.AgentKind]) -> [RateLimitSnapshot.AgentKind] {
+        var seen: Set<RateLimitSnapshot.AgentKind> = []
+        let supported = Set(supportedProviderKinds)
+        return providers.compactMap { provider in
+            guard supported.contains(provider),
+                  seen.insert(provider).inserted else {
+                return nil
+            }
+            return provider
+        }
+    }
+
+    static func clampedRefreshInterval(_ minutes: Int) -> Int {
+        min(max(minutes, 5), 24 * 60)
+    }
 }
 
 /// Forced appearance for translucent chrome (sidebar, tab strip, status bar)

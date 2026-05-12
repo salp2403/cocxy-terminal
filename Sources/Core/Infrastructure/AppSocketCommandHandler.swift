@@ -1764,6 +1764,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "appearance.app-language":
             return config.appearance.appLanguage.rawValue
 
+        // Rate limit
+        case "rate-limit.enabled-providers":
+            return config.rateLimit.enabledProviders.map(\.rawValue).joined(separator: ",")
+        case "rate-limit.auto-detect":
+            return "\(config.rateLimit.autoDetect)"
+        case "rate-limit.oauth-refresh-interval-minutes":
+            return "\(config.rateLimit.oauthRefreshIntervalMinutes)"
+
         // UX polish
         case "ux-polish.always-show-shortcut-hints":
             return "\(config.uxPolish.alwaysShowShortcutHints)"
@@ -1996,6 +2004,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 enabledLanguageIDs: parsedStringListConfigValue(rawValue)
             ).enabledLanguageIDs
             return AppSocketConfigTOMLUpdater.renderedStringArrayValue(normalized)
+        case "rate-limit.enabled-providers":
+            let providers = parsedStringListConfigValue(rawValue)
+                .compactMap { RateLimitSnapshot.AgentKind(rawValue: $0) }
+            let normalized = RateLimitConfig.normalizedProviders(providers)
+            guard !normalized.isEmpty else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedStringArrayValue(normalized.map(\.rawValue))
+        case "rate-limit.auto-detect":
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
+        case "rate-limit.oauth-refresh-interval-minutes":
+            guard let value = Int(rawValue),
+                  value == RateLimitConfig.clampedRefreshInterval(value) else {
+                return nil
+            }
+            return "\(value)"
         default:
             return AppSocketConfigTOMLUpdater.renderedScalarValue(rawValue)
         }
@@ -3421,6 +3444,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "appearance.background-opacity", "appearance.background-blur-radius",
             "appearance.aurora-enabled", "appearance.rate-limit-indicator-enabled",
             "appearance.quickswitch-mode", "appearance.app-language",
+            "rate-limit.enabled-providers", "rate-limit.auto-detect",
+            "rate-limit.oauth-refresh-interval-minutes",
             "ux-polish.always-show-shortcut-hints", "ux-polish.shortcut-hint-debug-overlay",
             "ux-polish.shortcut-hint-offset-x", "ux-polish.shortcut-hint-offset-y",
             "ux-polish.shortcut-hint-scale",

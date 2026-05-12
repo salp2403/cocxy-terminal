@@ -1154,6 +1154,23 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], "\(AppearanceConfig.defaults.rateLimitIndicatorEnabled)")
     }
 
+    func test_configGet_rateLimitProvidersKey_returnsDefaults() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-rate-limit-providers",
+            command: "config-get",
+            params: ["key": "rate-limit.enabled-providers"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "rate-limit.enabled-providers")
+        XCTAssertEqual(
+            response.data?["value"],
+            RateLimitConfig.defaults.enabledProviders.map(\.rawValue).joined(separator: ",")
+        )
+    }
+
     func test_configGet_auroraEnabledKey_returnsDefault() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
@@ -1221,6 +1238,15 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(
             response.data?["appearance.rate-limit-indicator-enabled"],
             "\(AppearanceConfig.defaults.rateLimitIndicatorEnabled)"
+        )
+        XCTAssertEqual(
+            response.data?["rate-limit.enabled-providers"],
+            RateLimitConfig.defaults.enabledProviders.map(\.rawValue).joined(separator: ",")
+        )
+        XCTAssertEqual(response.data?["rate-limit.auto-detect"], "\(RateLimitConfig.defaults.autoDetect)")
+        XCTAssertEqual(
+            response.data?["rate-limit.oauth-refresh-interval-minutes"],
+            "\(RateLimitConfig.defaults.oauthRefreshIntervalMinutes)"
         )
         XCTAssertEqual(
             response.data?["appearance.quickswitch-mode"],
@@ -1384,6 +1410,9 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 ("command-corrections.max-suggestions-shown", "5"),
                 ("completions.provider", "foundation-models-on-device"),
                 ("completions.enabled-languages", "[\"swift\", python, \"markdown\"]"),
+                ("rate-limit.enabled-providers", "[\"cursor\", copilot, \"cursor\"]"),
+                ("rate-limit.auto-detect", "FALSE"),
+                ("rate-limit.oauth-refresh-interval-minutes", "15"),
             ]
 
             for (index, testCase) in cases.enumerated() {

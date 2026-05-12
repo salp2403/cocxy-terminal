@@ -37,6 +37,14 @@ enum RateLimitIndicatorFormatting {
         case .codex:  return "Codex"
         case .gemini: return "Gemini"
         case .aider:  return "Aider"
+        case .cursor: return "Cursor"
+        case .copilot: return "Copilot"
+        case .opencode: return "OpenCode"
+        case .amp: return "Amp"
+        case .factory: return "Factory"
+        case .kimi: return "Kimi"
+        case .minimax: return "MiniMax"
+        case .zai: return "Z.ai"
         }
     }
 
@@ -101,7 +109,7 @@ enum RateLimitIndicatorFormatting {
         switch agent {
         case .codex:
             return "Codex CLI's local ledger reports inflated token totals (openai/codex#18498). Treat as a relative activity signal, not absolute usage."
-        case .claude, .gemini, .aider:
+        case .claude, .gemini, .aider, .cursor, .copilot, .opencode, .amp, .factory, .kimi, .minimax, .zai:
             return nil
         }
     }

@@ -335,6 +335,11 @@ final class ConfigService: ConfigProviding {
         # rotation path for rollback.
         quickswitch-mode = "\(defaults.appearance.quickSwitchMode.rawValue)"
 
+        [rate-limit]
+        enabled-providers = \(Self.tomlStringArray(defaults.rateLimit.enabledProviders.map(\.rawValue)))
+        auto-detect = \(defaults.rateLimit.autoDetect)
+        oauth-refresh-interval-minutes = \(defaults.rateLimit.oauthRefreshIntervalMinutes)
+
         [terminal]
         scrollback-lines = \(defaults.terminal.scrollbackLines)
         cursor-style = "\(defaults.terminal.cursorStyle.rawValue)"
@@ -724,6 +729,7 @@ final class ConfigService: ConfigProviding {
         let vim = parseVimConfig(from: parsed)
         let richInput = parseRichInputConfig(from: parsed)
         let experimental = parseExperimentalConfig(from: parsed)
+        let rateLimit = parseRateLimitConfig(from: parsed)
         let keybindings = parseKeybindingsConfig(from: parsed)
             .applyingFallbackShortcut(
                 actionId: KeybindingActionCatalog.windowNotes.id,
@@ -757,6 +763,7 @@ final class ConfigService: ConfigProviding {
             quickTerminal: quickTerminal,
             keybindings: keybindings,
             sessions: sessions,
+            rateLimit: rateLimit,
             worktree: worktree,
             github: github,
             gitAssistant: gitAssistant,
@@ -927,6 +934,26 @@ final class ConfigService: ConfigProviding {
         }
         NSLog("[ConfigService] quickswitch-mode must be a string; falling back to unified.")
         return .unified
+    }
+
+    private func parseRateLimitConfig(from parsed: [String: TOMLValue]) -> RateLimitConfig {
+        let table = extractTable("rate-limit", from: parsed)
+        guard !table.isEmpty else { return .defaults }
+        guard let providerStrings = strictStringArrayValue(table["enabled-providers"]) else {
+            return .defaults
+        }
+        let providers = providerStrings.compactMap { RateLimitSnapshot.AgentKind(rawValue: $0) }
+        guard !providers.isEmpty,
+              let autoDetect = boolValue(table["auto-detect"]) else {
+            return .defaults
+        }
+        let interval = intValue(table["oauth-refresh-interval-minutes"])
+            ?? RateLimitConfig.defaults.oauthRefreshIntervalMinutes
+        return RateLimitConfig(
+            enabledProviders: providers,
+            autoDetect: autoDetect,
+            oauthRefreshIntervalMinutes: interval
+        )
     }
 
     /// Parses the `[terminal]` section with validation.

@@ -28,6 +28,14 @@ enum RateLimitAgentResolver {
         if candidates.contains(where: { $0.contains("codex") }) { return .codex }
         if candidates.contains(where: { $0.contains("gemini") }) { return .gemini }
         if candidates.contains(where: { $0.contains("aider") }) { return .aider }
+        if candidates.contains(where: { $0.contains("cursor") }) { return .cursor }
+        if candidates.contains(where: { $0.contains("copilot") }) { return .copilot }
+        if candidates.contains(where: { $0.contains("opencode") }) { return .opencode }
+        if candidates.contains(where: { $0 == "amp" || $0.contains("ampcli") }) { return .amp }
+        if candidates.contains(where: { $0.contains("factory") }) { return .factory }
+        if candidates.contains(where: { $0.contains("kimi") }) { return .kimi }
+        if candidates.contains(where: { $0.contains("minimax") }) { return .minimax }
+        if candidates.contains(where: { $0 == "zai" || $0.contains("zai") }) { return .zai }
         return nil
     }
 

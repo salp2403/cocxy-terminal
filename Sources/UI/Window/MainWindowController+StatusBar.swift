@@ -138,8 +138,14 @@ extension MainWindowController {
     /// same surface priority as the primary status-bar agent pill so
     /// the usage indicator follows the agent the user is looking at.
     func activeRateLimitAgentKind(for tab: Tab) -> RateLimitSnapshot.AgentKind? {
+        let rateLimit = configService?.current.rateLimit ?? .defaults
+        guard rateLimit.autoDetect else { return nil }
         let resolved = resolveSurfaceAgentState(for: tab.id)
         guard resolved.isActive || resolved.hasAgent else { return nil }
-        return RateLimitAgentResolver.kind(for: resolved.detectedAgent)
+        guard let provider = RateLimitAgentResolver.kind(for: resolved.detectedAgent),
+              rateLimit.isProviderEnabled(provider) else {
+            return nil
+        }
+        return provider
     }
 }
