@@ -144,9 +144,9 @@ enum AgentSource: String, CaseIterable, Sendable {
 
     var supportsAutomaticHookSetup: Bool {
         switch self {
-        case .claudeCode, .codex, .geminiCLI, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder:
+        case .claudeCode, .codex, .geminiCLI, .kiro, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder:
             return true
-        case .kiro, .unknown:
+        case .unknown:
             return false
         }
     }
@@ -160,6 +160,8 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.codex/hooks.json"
         case .geminiCLI:
             return "\(home)/.gemini/settings.json"
+        case .kiro:
+            return "\(home)/.kiro/settings/cli.json"
         case .opencode:
             return "\(home)/.config/opencode/plugins"
         case .pi:
@@ -176,7 +178,7 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.factory/settings.json"
         case .qoder:
             return "\(home)/.qoder/settings.json"
-        case .kiro, .unknown:
+        case .unknown:
             return nil
         }
     }

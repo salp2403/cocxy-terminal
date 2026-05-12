@@ -397,6 +397,23 @@ enum SetupHooksCommand {
                 .compactMap { $0 }
                 .joined(separator: "\n")
 
+        case .kiro:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            let manager = KiroHooksSettingsManager(settingsFilePath: path)
+            if remove {
+                let result = try manager.uninstallHooks()
+                if result.nothingToRemove {
+                    return "Kiro: no Cocxy hooks found."
+                }
+                return "Kiro: hooks removed for \(result.removedEvents.joined(separator: ", "))."
+            }
+
+            let result = try manager.installHooks()
+            if result.alreadyInstalled {
+                return "Kiro: hooks already installed."
+            }
+            return "Kiro: hooks installed for \(result.hookEvents.joined(separator: ", "))."
+
         case .opencode:
             let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
             let manager = OpenCodeHooksSettingsManager(
@@ -451,7 +468,7 @@ enum SetupHooksCommand {
             }
             return "Rovo Dev: hooks installed for \(result.hookEvents.joined(separator: ", "))."
 
-        case .kiro, .unknown:
+        case .unknown:
             return "\(source.displayName): manual setup required."
         }
     }
@@ -474,6 +491,9 @@ enum SetupHooksCommand {
                 hookCommand: ClaudeSettingsManager.hookCommand(for: source)
             )
             status = try manager.hooksStatus()
+        case .kiro:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            status = try KiroHooksSettingsManager(settingsFilePath: path).hooksStatus()
         case .opencode:
             let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
             status = try OpenCodeHooksSettingsManager(
@@ -486,7 +506,7 @@ enum SetupHooksCommand {
         case .rovoDev:
             let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
             status = try RovoDevHooksSettingsManager(configFilePath: path).hooksStatus()
-        case .kiro, .unknown:
+        case .unknown:
             return ("\(source.displayName): automatic hook integrity check is not available yet.", true)
         }
 

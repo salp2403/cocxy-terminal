@@ -584,17 +584,83 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(survivingPreToolHooks.count == 1)
     }
 
-    @Test("setup-hooks reports Kiro manual wiring requirement")
-    func setupHooksReportsKiroManualRequirement() {
-        let result = SetupHooksCommand.execute(
+    @Test("setup-hooks installs and removes Kiro hooks")
+    func setupHooksInstallsAndRemovesKiroHooks() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent(".kiro/settings/cli.json").path
+        let initialJSON = """
+        {
+          "hooks": {
+            "preToolUse": [
+              {
+                "matcher": "bash",
+                "command": "echo keep-user-hook"
+              }
+            ]
+          }
+        }
+        """
+        try FileManager.default.createDirectory(
+            at: URL(fileURLWithPath: settingsPath).deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try initialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let resolver: (AgentSource) -> String? = { source in
+            source == .kiro ? settingsPath : source.hookSettingsFilePath
+        }
+
+        let install = SetupHooksCommand.execute(
             target: .kiro,
             remove: false,
-            commandExists: { _ in true }
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
         )
 
-        #expect(result.exitCode == 1)
-        #expect(result.stdout.contains("Kiro"))
-        #expect(result.stdout.contains("manual"))
+        #expect(install.exitCode == 0)
+        #expect(install.stdout.contains("Kiro"))
+        #expect(install.stdout.contains("hooks installed"))
+
+        let data = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let preToolEntries = try #require(hooks["preToolUse"] as? [[String: Any]])
+        #expect(preToolEntries.count == 2)
+        #expect(preToolEntries.contains { $0["command"] as? String == "echo keep-user-hook" })
+        #expect(preToolEntries.contains { ($0["command"] as? String)?.contains("COCXY_HOOK_AGENT=kiro") == true })
+
+        let check = SetupHooksCommand.execute(
+            target: .kiro,
+            remove: false,
+            check: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(check.exitCode == 0)
+        #expect(check.stdout.contains("hooks OK"))
+
+        let remove = SetupHooksCommand.execute(
+            target: .kiro,
+            remove: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(remove.exitCode == 0)
+        #expect(remove.stdout.contains("hooks removed"))
+
+        let postRemoveData = try Data(contentsOf: URL(fileURLWithPath: settingsPath))
+        let postRemoveSettings = try #require(
+            try JSONSerialization.jsonObject(with: postRemoveData) as? [String: Any]
+        )
+        let postRemoveHooks = try #require(postRemoveSettings["hooks"] as? [String: Any])
+        let survivingPreToolEntries = try #require(postRemoveHooks["preToolUse"] as? [[String: Any]])
+        #expect(survivingPreToolEntries.count == 1)
+        #expect(survivingPreToolEntries.first?["command"] as? String == "echo keep-user-hook")
     }
 
     @Test("setup-hooks installs JSON hook agents with forced agent marker and preserves user hooks")
@@ -782,20 +848,6 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(result.stdout.contains("Qoder"))
         #expect(result.stdout.contains("missing"))
         #expect(result.stdout.contains("SessionEnd"))
-    }
-
-    @Test("setup-hooks check fails when an agent cannot be verified automatically")
-    func setupHooksCheckFailsWhenAgentCannotBeVerifiedAutomatically() {
-        let result = SetupHooksCommand.execute(
-            target: .kiro,
-            remove: false,
-            check: true,
-            commandExists: { _ in true }
-        )
-
-        #expect(result.exitCode == 1)
-        #expect(result.stdout.contains("Kiro"))
-        #expect(result.stdout.contains("integrity check is not available"))
     }
 
     @Test("hook conflict detector reports existing non-Cocxy command hooks without exposing commands")
