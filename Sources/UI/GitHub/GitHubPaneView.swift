@@ -643,7 +643,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
     }
 
     static let height: CGFloat = 30
-    private static let allLabelsMinimumWidth: CGFloat = 1040
+    private static let allLabelsMinimumWidth: CGFloat = 1280
     private static let compactLabelsMinimumWidth: CGFloat = 560
     private static let selectedLabelMinimumWidth: CGFloat = 340
 

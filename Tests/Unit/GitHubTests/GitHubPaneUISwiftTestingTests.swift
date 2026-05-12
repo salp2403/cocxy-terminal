@@ -70,7 +70,8 @@ struct GitHubPaneUISwiftTestingTests {
                 width: GitHubPaneView.maximumPanelWidth
             ).mode == .compactLabels
         )
-        #expect(GitHubPaneTabStripPresentation.resolve(width: 1080).mode == .allLabels)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 1320).mode == .allLabels)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 1080).mode == .compactLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 900).mode == .compactLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 480).mode == .selectedLabel)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 280).mode == .iconsOnly)
