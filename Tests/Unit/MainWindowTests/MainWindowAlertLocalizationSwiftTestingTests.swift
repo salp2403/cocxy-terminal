@@ -44,7 +44,7 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         )
         #expect(
             MainWindowController.localizedStuckPaneNotificationBody(reason: .ptyWriteFailed, localizer: localizer) ==
-                "El shell de este panel no acepta pulsaciones. Ciérralo con Cmd+Shift+W y abre un split nuevo."
+                "El shell de este panel no acepta pulsaciones. Ciérralo con Cmd+Shift+W y abre un panel dividido nuevo."
         )
         #expect(MainWindowController.localizedNewTabActivitySummary(localizer: localizer) == "Nueva pestaña")
         #expect(
