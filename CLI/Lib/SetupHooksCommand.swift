@@ -104,6 +104,8 @@ enum SetupHooksCommand {
     static func execute(
         target: SetupHooksTarget?,
         remove: Bool,
+        dryRun: Bool = false,
+        check: Bool = false,
         commandExists: @escaping CommandExists = commandExists,
         settingsFilePathResolver: @escaping (AgentSource) -> String? = { $0.hookSettingsFilePath }
     ) -> CLIResult {
@@ -113,6 +115,23 @@ enum SetupHooksCommand {
                 exitCode: 0,
                 stdout: "No supported agent CLIs detected for hook setup.",
                 stderr: ""
+            )
+        }
+
+        if check {
+            return executeCheck(
+                sources: sources,
+                target: target,
+                settingsFilePathResolver: settingsFilePathResolver
+            )
+        }
+
+        if dryRun {
+            return executeDryRun(
+                sources: sources,
+                target: target,
+                remove: remove,
+                settingsFilePathResolver: settingsFilePathResolver
             )
         }
 
@@ -141,6 +160,86 @@ enum SetupHooksCommand {
                 } catch {
                     hadFailure = true
                     lines.append("\(source.displayName): failed to update hooks (\(error.localizedDescription)).")
+                }
+            }
+        }
+
+        return CLIResult(
+            exitCode: hadFailure ? 1 : 0,
+            stdout: lines.joined(separator: "\n"),
+            stderr: ""
+        )
+    }
+
+    private static func executeDryRun(
+        sources: [AgentSource],
+        target: SetupHooksTarget?,
+        remove: Bool,
+        settingsFilePathResolver: (AgentSource) -> String?
+    ) -> CLIResult {
+        var lines: [String] = [HooksDryRunFormatter.header()]
+        var hadFailure = false
+
+        for source in sources {
+            switch source {
+            case _ where !source.supportsAutomaticHookSetup:
+                lines.append(
+                    "\(source.displayName): automatic setup not available yet. manual hook wiring is required for this agent."
+                )
+                if target?.agentSource == source {
+                    hadFailure = true
+                }
+            case .unknown:
+                continue
+            default:
+                do {
+                    let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+                    lines.append(HooksDryRunFormatter.line(
+                        for: source,
+                        settingsFilePath: path,
+                        hookEvents: expectedHookEvents(for: source),
+                        remove: remove
+                    ))
+                } catch {
+                    hadFailure = true
+                    lines.append("\(source.displayName): failed to prepare dry run (\(error.localizedDescription)).")
+                }
+            }
+        }
+
+        return CLIResult(
+            exitCode: hadFailure ? 1 : 0,
+            stdout: lines.joined(separator: "\n"),
+            stderr: ""
+        )
+    }
+
+    private static func executeCheck(
+        sources: [AgentSource],
+        target: SetupHooksTarget?,
+        settingsFilePathResolver: (AgentSource) -> String?
+    ) -> CLIResult {
+        var lines: [String] = []
+        var hadFailure = false
+
+        for source in sources {
+            switch source {
+            case _ where !source.supportsAutomaticHookSetup:
+                lines.append("\(source.displayName): automatic hook integrity check is not available yet.")
+                hadFailure = true
+            case .unknown:
+                continue
+            default:
+                do {
+                    let result = try checkHooks(
+                        for: source,
+                        settingsFilePathResolver: settingsFilePathResolver
+                    )
+                    lines.append(result.line)
+                    hadFailure = hadFailure || result.failed
+                } catch {
+                    hadFailure = true
+                    lines.append("\(source.displayName): failed to check hooks (\(error.localizedDescription)).")
                 }
             }
         }
@@ -238,6 +337,64 @@ enum SetupHooksCommand {
 
         case .kiro, .opencode, .pi, .rovoDev, .unknown:
             return "\(source.displayName): manual setup required."
+        }
+    }
+
+    private static func checkHooks(
+        for source: AgentSource,
+        settingsFilePathResolver: (AgentSource) -> String?
+    ) throws -> (line: String, failed: Bool) {
+        let expectedEvents = expectedHookEvents(for: source)
+        let status: HooksStatusResult
+
+        switch source {
+        case .claudeCode:
+            status = try ClaudeSettingsManager().hooksStatus()
+        case .codex, .geminiCLI, .cursor, .copilot, .codebuddy, .factory, .qoder:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            let manager = GroupedHooksSettingsManager(
+                settingsFilePath: path,
+                hookEvents: source.hookEventNames,
+                hookCommand: ClaudeSettingsManager.hookCommand(for: source)
+            )
+            status = try manager.hooksStatus()
+        case .kiro, .opencode, .pi, .rovoDev, .unknown:
+            return ("\(source.displayName): automatic hook integrity check is not available yet.", true)
+        }
+
+        let installed = Set(status.installedEvents)
+        let missing = expectedEvents.filter { !installed.contains($0) }
+        guard missing.isEmpty else {
+            if installed.isEmpty {
+                return ("\(source.displayName): hooks missing for \(missing.joined(separator: ", ")).", true)
+            }
+            return ("\(source.displayName): hooks incomplete; missing \(missing.joined(separator: ", ")).", true)
+        }
+
+        return ("\(source.displayName): hooks OK for \(expectedEvents.joined(separator: ", ")).", false)
+    }
+
+    private static func expectedHookEvents(for source: AgentSource) -> [String] {
+        switch source {
+        case .claudeCode:
+            return ClaudeSettingsManager.hookedEventTypes
+        default:
+            return source.hookEventNames
+        }
+    }
+
+    private static func settingsFilePath(
+        for source: AgentSource,
+        resolver: (AgentSource) -> String?
+    ) throws -> String {
+        switch source {
+        case .claudeCode:
+            return ClaudeSettingsManager.defaultSettingsFilePath
+        default:
+            guard let path = resolver(source) else {
+                throw HooksError.fileSystemError(reason: "Missing settings path")
+            }
+            return path
         }
     }
 

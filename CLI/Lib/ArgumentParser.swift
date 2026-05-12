@@ -47,8 +47,8 @@ public enum ParsedCommand: Equatable {
     /// `cocxy hook-handler` (reads JSON from stdin)
     case hookHandler
 
-    /// `cocxy setup-hooks [--agent <supported-agent>|all] [--remove]`
-    case setupHooks(agent: SetupHooksTarget?, remove: Bool)
+    /// `cocxy setup-hooks [--agent <supported-agent>|all] [--remove] [--dry-run|--check]`
+    case setupHooks(agent: SetupHooksTarget?, remove: Bool, dryRun: Bool, check: Bool)
 
     /// `cocxy review`
     case review
@@ -1058,16 +1058,26 @@ public enum CLIArgumentParser {
         }
     }
 
-    /// Parses `cocxy setup-hooks [--agent <name>] [--remove]`.
+    /// Parses `cocxy setup-hooks [--agent <name>] [--remove] [--dry-run|--check]`.
     private static func parseSetupHooks(arguments: [String]) throws -> ParsedCommand {
         var selectedAgent: SetupHooksTarget?
         var remove = false
+        var dryRun = false
+        var check = false
         var index = 0
 
         while index < arguments.count {
             switch arguments[index] {
             case "--remove":
                 remove = true
+                index += 1
+
+            case "--dry-run":
+                dryRun = true
+                index += 1
+
+            case "--check":
+                check = true
                 index += 1
 
             case "--agent":
@@ -1091,12 +1101,20 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "setup-hooks",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --agent <name> and/or --remove."
+                    reason: "Unknown flag. Use --agent <name>, --remove, --dry-run, or --check."
                 )
             }
         }
 
-        return .setupHooks(agent: selectedAgent, remove: remove)
+        if check && (remove || dryRun) {
+            throw CLIError.invalidArgument(
+                command: "setup-hooks",
+                argument: "--check",
+                reason: "--check cannot be combined with --remove or --dry-run."
+            )
+        }
+
+        return .setupHooks(agent: selectedAgent, remove: remove, dryRun: dryRun, check: check)
     }
 
     private static func parseReview(arguments: [String]) throws -> ParsedCommand {

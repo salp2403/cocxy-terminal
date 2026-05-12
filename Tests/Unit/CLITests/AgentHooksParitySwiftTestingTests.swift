@@ -127,22 +127,76 @@ struct AgentHooksParitySwiftTestingTests {
     @Test("setup-hooks parser accepts agent filters and remove flag")
     func parsesSetupHooksCommand() throws {
         #expect(
-            try CLIArgumentParser.parse(["setup-hooks"]) == .setupHooks(agent: nil, remove: false)
+            try CLIArgumentParser.parse(["setup-hooks"]) == .setupHooks(
+                agent: nil,
+                remove: false,
+                dryRun: false,
+                check: false
+            )
         )
         #expect(
-            try CLIArgumentParser.parse(["setup-hooks", "--agent", "codex"]) == .setupHooks(agent: .codex, remove: false)
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "codex"]) == .setupHooks(
+                agent: .codex,
+                remove: false,
+                dryRun: false,
+                check: false
+            )
         )
         #expect(
-            try CLIArgumentParser.parse(["setup-hooks", "--agent", "opencode"]) == .setupHooks(agent: .opencode, remove: false)
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "opencode"]) == .setupHooks(
+                agent: .opencode,
+                remove: false,
+                dryRun: false,
+                check: false
+            )
         )
         #expect(
-            try CLIArgumentParser.parse(["setup-hooks", "--agent", "qoder"]) == .setupHooks(agent: .qoder, remove: false)
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "qoder"]) == .setupHooks(
+                agent: .qoder,
+                remove: false,
+                dryRun: false,
+                check: false
+            )
         )
         #expect(
-            try CLIArgumentParser.parse(["setup-hooks", "--agent", "rovo-dev"]) == .setupHooks(agent: .rovoDev, remove: false)
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "rovo-dev"]) == .setupHooks(
+                agent: .rovoDev,
+                remove: false,
+                dryRun: false,
+                check: false
+            )
         )
         #expect(
-            try CLIArgumentParser.parse(["setup-hooks", "--agent", "all", "--remove"]) == .setupHooks(agent: .all, remove: true)
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "all", "--remove"]) == .setupHooks(
+                agent: .all,
+                remove: true,
+                dryRun: false,
+                check: false
+            )
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "qoder", "--dry-run"]) == .setupHooks(
+                agent: .qoder,
+                remove: false,
+                dryRun: true,
+                check: false
+            )
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "qoder", "--remove", "--dry-run"]) == .setupHooks(
+                agent: .qoder,
+                remove: true,
+                dryRun: true,
+                check: false
+            )
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "qoder", "--check"]) == .setupHooks(
+                agent: .qoder,
+                remove: false,
+                dryRun: false,
+                check: true
+            )
         )
     }
 
@@ -648,5 +702,94 @@ struct AgentHooksParitySwiftTestingTests {
         }
         #expect(commands == ["echo keep-user-hook"])
         #expect(commands.allSatisfy { !$0.contains("COCXY_HOOK_AGENT=qoder") })
+    }
+
+    @Test("setup-hooks dry-run previews JSON hook changes without writing files")
+    func setupHooksDryRunPreviewsJSONHookChangesWithoutWritingFiles() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsURL = tempDirectory.appendingPathComponent("settings.json")
+        let initialJSON = """
+        {
+          "hooks": {}
+        }
+        """
+        try initialJSON.write(to: settingsURL, atomically: true, encoding: .utf8)
+
+        let result = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: false,
+            dryRun: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: { source in
+                source == .qoder ? settingsURL.path : source.hookSettingsFilePath
+            }
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.contains("Dry run"))
+        #expect(result.stdout.contains("Qoder"))
+        #expect(result.stdout.contains("would install"))
+        #expect(result.stdout.contains(settingsURL.path))
+        #expect(try String(contentsOf: settingsURL, encoding: .utf8) == initialJSON)
+        #expect(!FileManager.default.fileExists(atPath: settingsURL.path + ".cocxy-backup"))
+    }
+
+    @Test("setup-hooks check reports missing JSON hook events")
+    func setupHooksCheckReportsMissingJSONHookEvents() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let settingsPath = tempDirectory.appendingPathComponent("settings.json").path
+        let partialJSON = """
+        {
+          "hooks": {
+            "SessionStart": [
+              {
+                "matcher": "",
+                "hooks": [
+                  {
+                    "type": "command",
+                    "command": "COCXY_HOOK_AGENT=qoder /Applications/Cocxy Terminal.app/Contents/Resources/cocxy hook-handler"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+        """
+        try partialJSON.write(toFile: settingsPath, atomically: true, encoding: .utf8)
+
+        let result = SetupHooksCommand.execute(
+            target: .qoder,
+            remove: false,
+            check: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: { source in
+                source == .qoder ? settingsPath : source.hookSettingsFilePath
+            }
+        )
+
+        #expect(result.exitCode == 1)
+        #expect(result.stdout.contains("Qoder"))
+        #expect(result.stdout.contains("missing"))
+        #expect(result.stdout.contains("SessionEnd"))
+    }
+
+    @Test("setup-hooks check fails when an agent cannot be verified automatically")
+    func setupHooksCheckFailsWhenAgentCannotBeVerifiedAutomatically() {
+        let result = SetupHooksCommand.execute(
+            target: .opencode,
+            remove: false,
+            check: true,
+            commandExists: { _ in true }
+        )
+
+        #expect(result.exitCode == 1)
+        #expect(result.stdout.contains("OpenCode"))
+        #expect(result.stdout.contains("integrity check is not available"))
     }
 }

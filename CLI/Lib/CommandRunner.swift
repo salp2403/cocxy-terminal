@@ -91,8 +91,13 @@ public struct CommandRunner {
             return executeHooksStatus()
         case .hookHandler:
             return HookHandlerCommand.execute(socketClient: socketClient)
-        case .setupHooks(let agent, let remove):
-            return SetupHooksCommand.execute(target: agent, remove: remove)
+        case .setupHooks(let agent, let remove, let dryRun, let check):
+            return SetupHooksCommand.execute(
+                target: agent,
+                remove: remove,
+                dryRun: dryRun,
+                check: check
+            )
         case .editorOpen(let path, let editor, let line, let column):
             return executeEditorOpen(path: path, editor: editor, line: line, column: column)
         case .classify(let input):
