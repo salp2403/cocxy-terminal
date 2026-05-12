@@ -325,6 +325,7 @@ echo ""
 echo "[Hook Scripts]"
 check_exists "$RESOURCES/HookScripts" "Hook scripts resources directory"
 check_exists "$RESOURCES/HookScripts/opencode-cocxy-session.js" "OpenCode project bridge script"
+check_exists "$RESOURCES/HookScripts/opencode-cocxy-feed.js" "OpenCode feed bridge script"
 check_exists "$RESOURCES/HookScripts/pi-cocxy-session.ts" "Pi extension bridge script"
 check_exists "$RESOURCES/HookScripts/rovo-event-hooks.yml.template" "Rovo Dev event hook template"
 

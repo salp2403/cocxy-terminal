@@ -144,9 +144,9 @@ enum AgentSource: String, CaseIterable, Sendable {
 
     var supportsAutomaticHookSetup: Bool {
         switch self {
-        case .claudeCode, .codex, .geminiCLI, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder:
+        case .claudeCode, .codex, .geminiCLI, .opencode, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder:
             return true
-        case .kiro, .opencode, .unknown:
+        case .kiro, .unknown:
             return false
         }
     }
@@ -160,6 +160,8 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.codex/hooks.json"
         case .geminiCLI:
             return "\(home)/.gemini/settings.json"
+        case .opencode:
+            return "\(home)/.config/opencode/plugins"
         case .pi:
             return "\(home)/.pi/agent/extensions/cocxy-session.ts"
         case .cursor:
@@ -174,7 +176,7 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.factory/settings.json"
         case .qoder:
             return "\(home)/.qoder/settings.json"
-        case .kiro, .opencode, .unknown:
+        case .kiro, .unknown:
             return nil
         }
     }
@@ -189,13 +191,15 @@ enum AgentSource: String, CaseIterable, Sendable {
             return ["BeforeTool", "AfterTool", "SessionStart", "SessionEnd"]
         case .kiro:
             return ["agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop"]
+        case .opencode:
+            return OpenCodeHooksSettingsManager.hookEvents
         case .pi:
             return ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
         case .rovoDev:
             return ["TaskCompleted", "Stop", "PreToolUse"]
         case .cursor, .copilot, .codebuddy, .factory, .qoder:
             return ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit"]
-        case .opencode, .unknown:
+        case .unknown:
             return []
         }
     }

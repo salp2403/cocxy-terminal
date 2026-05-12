@@ -1,4 +1,4 @@
-// Cocxy managed OpenCode session bridge
+// Cocxy managed OpenCode feed bridge
 const COCXY_CLI = process.env.COCXY_CLI || "/Applications/Cocxy Terminal.app/Contents/Resources/cocxy";
 
 function sessionID(event) {
@@ -15,6 +15,7 @@ async function sendToCocxy(eventName, event, cwd) {
     agent_type: "opencode",
     cwd,
     source_event_type: event?.type || eventName,
+    input: event?.input || event?.text || event?.command || "",
   };
   const proc = Bun.spawn([COCXY_CLI, "hook-handler"], {
     stdin: "pipe",
@@ -32,38 +33,24 @@ async function sendToCocxy(eventName, event, cwd) {
   await proc.exited;
 }
 
-export const CocxySessionBridge = async ({ directory, worktree }) => {
+export const CocxyFeedBridge = async ({ directory, worktree }) => {
   const cwd = worktree || directory || process.cwd();
   return {
-    "shell.env": async (_input, output) => {
-      output.env = {
-        ...(output.env || {}),
-        COCXY_CLAUDE_HOOKS: "1",
-        COCXY_HOOK_AGENT: "opencode",
-      };
+    "tui.prompt.append": async (input) => {
+      await sendToCocxy("UserPromptSubmit", { type: "tui.prompt.append", input }, cwd);
+    },
+    "tui.command.execute": async (input) => {
+      await sendToCocxy("UserPromptSubmit", { type: "tui.command.execute", command: input?.command }, cwd);
     },
     event: async ({ event }) => {
       switch (event?.type) {
-        case "session.created":
-          await sendToCocxy("SessionStart", event, cwd);
-          break;
-        case "session.idle":
-        case "session.deleted":
-          await sendToCocxy("Stop", event, cwd);
-          break;
-        case "session.updated":
-        case "message.updated":
-          await sendToCocxy("UserPromptSubmit", event, cwd);
+        case "notification.created":
+        case "permission.requested":
+          await sendToCocxy("Notification", event, cwd);
           break;
         default:
           break;
       }
-    },
-    "tool.execute.before": async (input) => {
-      await sendToCocxy("PreToolUse", { type: "tool.execute.before", tool: input?.tool }, cwd);
-    },
-    "tool.execute.after": async (input) => {
-      await sendToCocxy("PostToolUse", { type: "tool.execute.after", tool: input?.tool }, cwd);
     },
   };
 };

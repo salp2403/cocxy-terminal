@@ -597,19 +597,6 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(result.stdout.contains("manual"))
     }
 
-    @Test("setup-hooks reports manual wiring for expanded agents without JSON managers")
-    func setupHooksReportsManualWiringForExpandedAgentsWithoutJSONManagers() {
-        let result = SetupHooksCommand.execute(
-            target: .opencode,
-            remove: false,
-            commandExists: { _ in true }
-        )
-
-        #expect(result.exitCode == 1)
-        #expect(result.stdout.contains("OpenCode"))
-        #expect(result.stdout.contains("manual"))
-    }
-
     @Test("setup-hooks installs JSON hook agents with forced agent marker and preserves user hooks")
     func setupHooksInstallsJSONHookAgentWithForcedMarker() throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -800,14 +787,14 @@ struct AgentHooksParitySwiftTestingTests {
     @Test("setup-hooks check fails when an agent cannot be verified automatically")
     func setupHooksCheckFailsWhenAgentCannotBeVerifiedAutomatically() {
         let result = SetupHooksCommand.execute(
-            target: .opencode,
+            target: .kiro,
             remove: false,
             check: true,
             commandExists: { _ in true }
         )
 
         #expect(result.exitCode == 1)
-        #expect(result.stdout.contains("OpenCode"))
+        #expect(result.stdout.contains("Kiro"))
         #expect(result.stdout.contains("integrity check is not available"))
     }
 
@@ -887,8 +874,61 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(try String(contentsOf: settingsURL, encoding: .utf8) == initialJSON)
     }
 
-    @Test("setup-hooks installs OpenCode project bridge plugin")
-    func setupHooksInstallsOpenCodeProjectBridgePlugin() throws {
+    @Test("setup-hooks installs OpenCode global bridge plugins")
+    func setupHooksInstallsOpenCodeGlobalBridgePlugins() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let pluginsDirectory = tempDirectory.appendingPathComponent(".config/opencode/plugins")
+        let resolver: (AgentSource) -> String? = { source in
+            source == .opencode ? pluginsDirectory.path : source.hookSettingsFilePath
+        }
+
+        let install = SetupHooksCommand.execute(
+            target: .opencode,
+            remove: false,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+
+        let sessionURL = pluginsDirectory.appendingPathComponent("cocxy-session.js")
+        let feedURL = pluginsDirectory.appendingPathComponent("cocxy-feed.js")
+        let session = try String(contentsOf: sessionURL, encoding: .utf8)
+        let feed = try String(contentsOf: feedURL, encoding: .utf8)
+
+        #expect(install.exitCode == 0)
+        #expect(install.stdout.contains("OpenCode"))
+        #expect(install.stdout.contains("hooks installed"))
+        #expect(session.contains("Cocxy managed OpenCode session bridge"))
+        #expect(session.contains("shell.env"))
+        #expect(feed.contains("Cocxy managed OpenCode feed bridge"))
+        #expect(feed.contains("tui.prompt.append"))
+
+        let check = SetupHooksCommand.execute(
+            target: .opencode,
+            remove: false,
+            check: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(check.exitCode == 0)
+        #expect(check.stdout.contains("hooks OK"))
+
+        let remove = SetupHooksCommand.execute(
+            target: .opencode,
+            remove: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(remove.exitCode == 0)
+        #expect(remove.stdout.contains("hooks removed"))
+        #expect(!FileManager.default.fileExists(atPath: sessionURL.path))
+        #expect(!FileManager.default.fileExists(atPath: feedURL.path))
+    }
+
+    @Test("setup-hooks installs OpenCode project bridge plugins")
+    func setupHooksInstallsOpenCodeProjectBridgePlugins() throws {
         let projectDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: projectDirectory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: projectDirectory) }
@@ -901,16 +941,20 @@ struct AgentHooksParitySwiftTestingTests {
             commandExists: { _ in true }
         )
 
-        let pluginURL = projectDirectory.appendingPathComponent(".opencode/plugins/cocxy-session.js")
-        let plugin = try String(contentsOf: pluginURL, encoding: .utf8)
+        let sessionURL = projectDirectory.appendingPathComponent(".opencode/plugins/cocxy-session.js")
+        let feedURL = projectDirectory.appendingPathComponent(".opencode/plugins/cocxy-feed.js")
+        let session = try String(contentsOf: sessionURL, encoding: .utf8)
+        let feed = try String(contentsOf: feedURL, encoding: .utf8)
         #expect(result.exitCode == 0)
         #expect(result.stdout.contains("OpenCode"))
-        #expect(result.stdout.contains("project plugin installed"))
-        #expect(plugin.contains("Cocxy managed OpenCode session bridge"))
-        #expect(plugin.contains("hook-handler"))
-        #expect(plugin.contains("shell.env"))
-        #expect(plugin.contains("tool.execute.before"))
-        #expect(plugin.contains("tool.execute.after"))
+        #expect(result.stdout.contains("project plugins installed"))
+        #expect(session.contains("Cocxy managed OpenCode session bridge"))
+        #expect(session.contains("hook-handler"))
+        #expect(session.contains("shell.env"))
+        #expect(session.contains("tool.execute.before"))
+        #expect(session.contains("tool.execute.after"))
+        #expect(feed.contains("Cocxy managed OpenCode feed bridge"))
+        #expect(feed.contains("tui.prompt.append"))
     }
 
     @Test("setup-hooks dry-run previews OpenCode project bridge without writing")
@@ -928,11 +972,11 @@ struct AgentHooksParitySwiftTestingTests {
             commandExists: { _ in true }
         )
 
-        let pluginURL = projectDirectory.appendingPathComponent(".opencode/plugins/cocxy-session.js")
+        let pluginsDirectory = projectDirectory.appendingPathComponent(".opencode/plugins")
         #expect(result.exitCode == 0)
         #expect(result.stdout.contains("Dry run"))
-        #expect(result.stdout.contains(pluginURL.path))
-        #expect(!FileManager.default.fileExists(atPath: pluginURL.path))
+        #expect(result.stdout.contains(pluginsDirectory.path))
+        #expect(!FileManager.default.fileExists(atPath: pluginsDirectory.path))
     }
 
     @Test("setup-hooks check verifies OpenCode project bridge plugin")
@@ -950,7 +994,7 @@ struct AgentHooksParitySwiftTestingTests {
             commandExists: { _ in true }
         )
         #expect(missing.exitCode == 1)
-        #expect(missing.stdout.contains("project plugin missing"))
+        #expect(missing.stdout.contains("project plugin check failed"))
 
         _ = SetupHooksCommand.execute(
             target: nil,
@@ -969,7 +1013,7 @@ struct AgentHooksParitySwiftTestingTests {
             commandExists: { _ in true }
         )
         #expect(installed.exitCode == 0)
-        #expect(installed.stdout.contains("project plugin OK"))
+        #expect(installed.stdout.contains("project plugins OK"))
     }
 
     @Test("setup-hooks installs and removes Pi extension hooks")
@@ -1123,7 +1167,19 @@ struct AgentHooksParitySwiftTestingTests {
 
         #expect(
             resource.trimmingCharacters(in: .newlines)
-                == OpenCodeProjectHooksManager.pluginSource.trimmingCharacters(in: .newlines)
+                == OpenCodeHooksSettingsManager.sessionPluginSource.trimmingCharacters(in: .newlines)
+        )
+    }
+
+    @Test("OpenCode feed script resource matches installer template")
+    func openCodeFeedScriptResourceMatchesInstallerTemplate() throws {
+        let resourceURL = repositoryRoot()
+            .appendingPathComponent("Resources/HookScripts/opencode-cocxy-feed.js")
+        let resource = try String(contentsOf: resourceURL, encoding: .utf8)
+
+        #expect(
+            resource.trimmingCharacters(in: .newlines)
+                == OpenCodeHooksSettingsManager.feedPluginSource.trimmingCharacters(in: .newlines)
         )
     }
 
@@ -1154,6 +1210,7 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(buildScript.contains("Resources/HookScripts"))
         #expect(buildScript.contains("\"${RESOURCES}/HookScripts\""))
         #expect(verifyScript.contains("$RESOURCES/HookScripts/opencode-cocxy-session.js"))
+        #expect(verifyScript.contains("$RESOURCES/HookScripts/opencode-cocxy-feed.js"))
         #expect(verifyScript.contains("$RESOURCES/HookScripts/pi-cocxy-session.ts"))
         #expect(verifyScript.contains("$RESOURCES/HookScripts/rovo-event-hooks.yml.template"))
     }
