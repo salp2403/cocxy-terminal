@@ -72,6 +72,7 @@ let package = Package(
             path: "Sources/Domain/Vault",
             linkerSettings: [
                 .linkedFramework("Security"),
+                .linkedLibrary("sqlite3"),
             ]
         ),
         // MARK: - Main App

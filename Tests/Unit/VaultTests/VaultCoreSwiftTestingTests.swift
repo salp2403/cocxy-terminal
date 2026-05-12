@@ -2,6 +2,7 @@
 // VaultCoreSwiftTestingTests.swift - External agent session vault coverage.
 
 import Foundation
+import SQLite3
 import Testing
 @testable import CocxyVault
 
@@ -108,6 +109,46 @@ struct VaultCoreSwiftTestingTests {
         #expect(invocation.executable == "codex")
         #expect(invocation.arguments == ["resume", "sess-123; rm -rf /"])
         #expect(invocation.workingDirectory == "/tmp/workspace")
+    }
+
+    @Test("file extractor reads the newest JSONL session id")
+    func fileExtractorReadsNewestJSONLSessionID() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("session_index.jsonl")
+        try """
+        {"session_id":"sess-old","updated_at":1}
+        {"sessionId":"sess-new","updated_at":2}
+        """.write(to: url, atomically: true, encoding: .utf8)
+
+        #expect(VaultFileExtractor.extractSessionID(fromFileAt: url) == "sess-new")
+    }
+
+    @Test("file extractor reads YAML-style session ids")
+    func fileExtractorReadsYAMLStyleSessionIDs() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("settings.yml")
+        try """
+        agent:
+          name: qoder
+        current_session: qoder-session-42
+        """.write(to: url, atomically: true, encoding: .utf8)
+
+        #expect(VaultFileExtractor.extractSessionID(fromFileAt: url) == "qoder-session-42")
+    }
+
+    @Test("file extractor reads SQLite session ids from tolerant schema")
+    func fileExtractorReadsSQLiteSessionIDs() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("state_5.sqlite")
+        var database: OpaquePointer?
+        #expect(sqlite3_open(url.path, &database) == SQLITE_OK)
+        defer { sqlite3_close(database) }
+
+        #expect(sqlite3_exec(database, "CREATE TABLE conversations (session_id TEXT, updated_at INTEGER)", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "INSERT INTO conversations VALUES ('codex-old', 1)", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "INSERT INTO conversations VALUES ('codex-new', 2)", nil, nil, nil) == SQLITE_OK)
+
+        #expect(VaultFileExtractor.extractSessionID(fromFileAt: url) == "codex-new")
     }
 
     private func temporaryDirectory() throws -> URL {
