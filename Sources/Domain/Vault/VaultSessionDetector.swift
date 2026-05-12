@@ -36,4 +36,28 @@ public struct VaultSessionDetector: Sendable {
             sanitizedArguments: VaultArgvExtractor.sanitizedArguments(from: snapshot.arguments)
         )
     }
+
+    public func detect(
+        agentID: VaultAgentID,
+        fileURL: URL,
+        workingDirectory: String?
+    ) -> VaultSession? {
+        guard let agent = registry.agent(matching: agentID.rawValue),
+              let sessionID = VaultFileExtractor.extractSessionID(fromFileAt: fileURL) else {
+            return nil
+        }
+
+        let now = clock()
+        return VaultSession(
+            id: "\(agent.id.rawValue):\(sessionID)",
+            agentID: agent.id,
+            agentDisplayName: agent.displayName,
+            sessionID: sessionID,
+            workingDirectory: workingDirectory,
+            capturedAt: now,
+            lastSeenAt: now,
+            source: .fileSnapshot,
+            sanitizedArguments: []
+        )
+    }
 }

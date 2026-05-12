@@ -59,6 +59,32 @@ struct VaultCoreSwiftTestingTests {
         #expect(session.sanitizedArguments.contains("<redacted>"))
     }
 
+    @Test("detector creates file snapshot sessions from agent state files")
+    func detectorCreatesFileSnapshotSessionsFromAgentStateFiles() throws {
+        let directory = try temporaryDirectory()
+        let url = directory.appendingPathComponent("state.jsonl")
+        try #"{"session_id":"sess-file-1"}"#.write(to: url, atomically: true, encoding: .utf8)
+        let detector = VaultSessionDetector(
+            registry: .builtIn,
+            clock: { Date(timeIntervalSince1970: 1_789_000_000) }
+        )
+
+        let session = try #require(
+            detector.detect(
+                agentID: VaultAgentID("codex"),
+                fileURL: url,
+                workingDirectory: "/tmp/workspace"
+            )
+        )
+
+        #expect(session.id == "codex:sess-file-1")
+        #expect(session.agentID.rawValue == "codex")
+        #expect(session.sessionID == "sess-file-1")
+        #expect(session.workingDirectory == "/tmp/workspace")
+        #expect(session.source == .fileSnapshot)
+        #expect(session.sanitizedArguments.isEmpty)
+    }
+
     @Test("store persists encrypted sessions without clear text leakage")
     func storePersistsEncryptedSessionsWithoutClearTextLeakage() throws {
         let directory = try temporaryDirectory()
