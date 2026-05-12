@@ -957,6 +957,13 @@
 "preferences.about.createdBy" = "Created by Said Arturo Lopez";
 "preferences.about.license" = "MIT License";
 "preferences.about.zeroTelemetry" = "Zero telemetry. Zero tracking.";
+"preferences.about.localDiagnostics" = "Local Diagnostics";
+"preferences.about.refreshDiagnostics" = "Refresh diagnostics";
+"preferences.about.memoryResident" = "Resident memory";
+"preferences.about.memoryFootprint" = "Physical footprint";
+"preferences.about.memoryVirtual" = "Virtual address space";
+"preferences.about.unavailable" = "Unavailable";
+"preferences.about.localOnlyDiagnostics" = "Displayed locally only. Never uploaded.";
 "preferences.about.updates" = "Updates";
 "preferences.about.checkForUpdates" = "Check for Updates";
 "preferences.about.autoUpdates" = "Cocxy checks for updates automatically.";

@@ -957,6 +957,13 @@
 "preferences.about.createdBy" = "Creado por Said Arturo Lopez";
 "preferences.about.license" = "Licencia MIT";
 "preferences.about.zeroTelemetry" = "Cero telemetría. Cero rastreo.";
+"preferences.about.localDiagnostics" = "Diagnóstico local";
+"preferences.about.refreshDiagnostics" = "Actualizar diagnóstico";
+"preferences.about.memoryResident" = "Memoria residente";
+"preferences.about.memoryFootprint" = "Huella física";
+"preferences.about.memoryVirtual" = "Espacio virtual";
+"preferences.about.unavailable" = "No disponible";
+"preferences.about.localOnlyDiagnostics" = "Se muestra solo localmente. Nunca se sube.";
 "preferences.about.updates" = "Actualizaciones";
 "preferences.about.checkForUpdates" = "Buscar actualizaciones";
 "preferences.about.autoUpdates" = "Cocxy busca actualizaciones automáticamente.";

@@ -3385,9 +3385,10 @@ struct GitHubPreferencesSection: View {
 /// Displays application info: version, license, author.
 struct AboutPreferencesSection: View {
     @ObservedObject var viewModel: PreferencesViewModel
+    @State private var memorySnapshot = MemoryDiagnostics.current()
 
     var body: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 18) {
             Spacer()
 
             Text("Cocxy Terminal")
@@ -3430,6 +3431,48 @@ struct AboutPreferencesSection: View {
             Divider()
                 .padding(.vertical, 8)
 
+            VStack(spacing: 10) {
+                HStack {
+                    Text(viewModel.localizedString("preferences.about.localDiagnostics", fallback: "Local Diagnostics"))
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        memorySnapshot = MemoryDiagnostics.current()
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                    .buttonStyle(.borderless)
+                    .help(viewModel.localizedString("preferences.about.refreshDiagnostics", fallback: "Refresh diagnostics"))
+                }
+
+                VStack(spacing: 6) {
+                    MemoryDiagnosticRow(
+                        title: viewModel.localizedString("preferences.about.memoryResident", fallback: "Resident memory"),
+                        value: memorySnapshot.formattedResident
+                    )
+                    MemoryDiagnosticRow(
+                        title: viewModel.localizedString("preferences.about.memoryFootprint", fallback: "Physical footprint"),
+                        value: memorySnapshot.physicalFootprintBytes.map(MemoryDiagnostics.formatBytes)
+                            ?? viewModel.localizedString("preferences.about.unavailable", fallback: "Unavailable")
+                    )
+                    MemoryDiagnosticRow(
+                        title: viewModel.localizedString(
+                            "preferences.about.memoryVirtual",
+                            fallback: "Virtual address space"
+                        ),
+                        value: memorySnapshot.formattedVirtual
+                    )
+                }
+
+                Text(viewModel.localizedString("preferences.about.localOnlyDiagnostics", fallback: "Displayed locally only. Never uploaded."))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+            }
+            .frame(width: 300)
+
+            Divider()
+                .padding(.vertical, 4)
+
             VStack(spacing: 8) {
                 Text(viewModel.localizedString("preferences.about.updates", fallback: "Updates"))
                     .font(.headline)
@@ -3455,6 +3498,24 @@ struct AboutPreferencesSection: View {
         }
         .frame(maxWidth: .infinity)
         .navigationTitle(viewModel.localizedString("preferences.section.about", fallback: "About"))
+    }
+}
+
+private struct MemoryDiagnosticRow: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        HStack {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 12)
+            Text(value)
+                .font(.system(.caption, design: .monospaced))
+                .foregroundStyle(.primary)
+        }
+        .font(.caption)
+        .lineLimit(1)
     }
 }
 
