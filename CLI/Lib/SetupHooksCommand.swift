@@ -397,7 +397,41 @@ enum SetupHooksCommand {
                 .compactMap { $0 }
                 .joined(separator: "\n")
 
-        case .kiro, .opencode, .pi, .rovoDev, .unknown:
+        case .pi:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            let manager = PiExtensionHooksManager(extensionFilePath: path)
+            if remove {
+                let result = try manager.uninstallHooks()
+                if result.nothingToRemove {
+                    return "Pi: no Cocxy hooks found."
+                }
+                return "Pi: hooks removed for \(result.removedEvents.joined(separator: ", "))."
+            }
+
+            let result = try manager.installHooks()
+            if result.alreadyInstalled {
+                return "Pi: hooks already installed."
+            }
+            return "Pi: hooks installed for \(result.hookEvents.joined(separator: ", "))."
+
+        case .rovoDev:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            let manager = RovoDevHooksSettingsManager(configFilePath: path)
+            if remove {
+                let result = try manager.uninstallHooks()
+                if result.nothingToRemove {
+                    return "Rovo Dev: no Cocxy hooks found."
+                }
+                return "Rovo Dev: hooks removed for \(result.removedEvents.joined(separator: ", "))."
+            }
+
+            let result = try manager.installHooks()
+            if result.alreadyInstalled {
+                return "Rovo Dev: hooks already installed."
+            }
+            return "Rovo Dev: hooks installed for \(result.hookEvents.joined(separator: ", "))."
+
+        case .kiro, .opencode, .unknown:
             return "\(source.displayName): manual setup required."
         }
     }
@@ -420,7 +454,13 @@ enum SetupHooksCommand {
                 hookCommand: ClaudeSettingsManager.hookCommand(for: source)
             )
             status = try manager.hooksStatus()
-        case .kiro, .opencode, .pi, .rovoDev, .unknown:
+        case .pi:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            status = try PiExtensionHooksManager(extensionFilePath: path).hooksStatus()
+        case .rovoDev:
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            status = try RovoDevHooksSettingsManager(configFilePath: path).hooksStatus()
+        case .kiro, .opencode, .unknown:
             return ("\(source.displayName): automatic hook integrity check is not available yet.", true)
         }
 

@@ -26,4 +26,26 @@ struct HookHandlerCommandSwiftTestingTests {
             "TERM_PROGRAM": "Apple_Terminal"
         ]))
     }
+
+    @Test("forwarding honors global and per-agent disable variables")
+    func forwardingHonorsHookDisableVariables() {
+        #expect(!HookHandlerCommand.shouldForwardHook(environment: [
+            "COCXY_CLAUDE_HOOKS": "1",
+            "COCXY_HOOKS_DISABLED": "1"
+        ]))
+        #expect(!HookHandlerCommand.shouldForwardHook(environment: [
+            "COCXY_CLAUDE_HOOKS": "1",
+            "PI_SESSION_ID": "pi-session",
+            "COCXY_PI_HOOKS_DISABLED": "1"
+        ]))
+        #expect(!HookHandlerCommand.shouldForwardHook(environment: [
+            "COCXY_CLAUDE_HOOKS": "1",
+            "ROVODEV_SESSION_ID": "rovo-session",
+            "COCXY_ROVODEV_HOOKS_DISABLED": "1"
+        ]))
+        #expect(HookHandlerCommand.shouldForwardHook(environment: [
+            "COCXY_CLAUDE_HOOKS": "1",
+            "PI_SESSION_ID": "pi-session"
+        ]))
+    }
 }

@@ -972,6 +972,149 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(installed.stdout.contains("project plugin OK"))
     }
 
+    @Test("setup-hooks installs and removes Pi extension hooks")
+    func setupHooksInstallsAndRemovesPiExtensionHooks() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let extensionPath = tempDirectory.appendingPathComponent(".pi/agent/extensions/cocxy-session.ts").path
+        let resolver: (AgentSource) -> String? = { source in
+            source == .pi ? extensionPath : source.hookSettingsFilePath
+        }
+
+        let install = SetupHooksCommand.execute(
+            target: .pi,
+            remove: false,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+
+        #expect(install.exitCode == 0)
+        #expect(install.stdout.contains("Pi"))
+        #expect(install.stdout.contains("hooks installed"))
+
+        let extensionSource = try String(contentsOfFile: extensionPath, encoding: .utf8)
+        #expect(extensionSource.contains("Cocxy managed Pi session bridge"))
+        #expect(extensionSource.contains("session_start"))
+        #expect(extensionSource.contains("tool_call"))
+        #expect(extensionSource.contains("session_shutdown"))
+        #expect(extensionSource.contains("COCXY_PI_HOOKS_DISABLED"))
+        #expect(extensionSource.contains("hook-handler"))
+
+        let check = SetupHooksCommand.execute(
+            target: .pi,
+            remove: false,
+            check: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(check.exitCode == 0)
+        #expect(check.stdout.contains("hooks OK"))
+
+        let remove = SetupHooksCommand.execute(
+            target: .pi,
+            remove: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(remove.exitCode == 0)
+        #expect(remove.stdout.contains("hooks removed"))
+        #expect(!FileManager.default.fileExists(atPath: extensionPath))
+    }
+
+    @Test("setup-hooks refuses to overwrite non-Cocxy Pi extension")
+    func setupHooksRefusesToOverwriteNonCocxyPiExtension() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let extensionURL = tempDirectory.appendingPathComponent(".pi/agent/extensions/cocxy-session.ts")
+        try FileManager.default.createDirectory(at: extensionURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "export default function () {}\n".write(to: extensionURL, atomically: true, encoding: .utf8)
+
+        let result = SetupHooksCommand.execute(
+            target: .pi,
+            remove: false,
+            commandExists: { _ in true },
+            settingsFilePathResolver: { source in
+                source == .pi ? extensionURL.path : source.hookSettingsFilePath
+            }
+        )
+
+        #expect(result.exitCode == 1)
+        #expect(result.stdout.contains("Pi"))
+        #expect(result.stdout.contains("failed to update hooks"))
+        #expect(try String(contentsOf: extensionURL, encoding: .utf8) == "export default function () {}\n")
+    }
+
+    @Test("setup-hooks merges and removes Rovo Dev event hooks without deleting user config")
+    func setupHooksMergesAndRemovesRovoDevEventHooks() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let configURL = tempDirectory.appendingPathComponent(".rovodev/config.yml")
+        try FileManager.default.createDirectory(at: configURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let initialConfig = """
+        theme: dark
+        eventHooks:
+          events:
+            - name: custom
+              commands:
+                - command: "echo keep-user-hook"
+        """
+        try initialConfig.write(to: configURL, atomically: true, encoding: .utf8)
+
+        let resolver: (AgentSource) -> String? = { source in
+            source == .rovoDev ? configURL.path : source.hookSettingsFilePath
+        }
+
+        let install = SetupHooksCommand.execute(
+            target: .rovoDev,
+            remove: false,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+
+        #expect(install.exitCode == 0)
+        #expect(install.stdout.contains("Rovo Dev"))
+        #expect(install.stdout.contains("hooks installed"))
+
+        let installedConfig = try String(contentsOf: configURL, encoding: .utf8)
+        #expect(installedConfig.contains("echo keep-user-hook"))
+        #expect(installedConfig.contains("Cocxy managed Rovo Dev hooks begin"))
+        #expect(installedConfig.contains("on_complete"))
+        #expect(installedConfig.contains("on_error"))
+        #expect(installedConfig.contains("on_tool_permission"))
+        #expect(installedConfig.contains("COCXY_HOOK_AGENT=rovo"))
+        #expect(FileManager.default.fileExists(atPath: configURL.path + ".cocxy-backup"))
+
+        let check = SetupHooksCommand.execute(
+            target: .rovoDev,
+            remove: false,
+            check: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(check.exitCode == 0)
+        #expect(check.stdout.contains("hooks OK"))
+
+        let remove = SetupHooksCommand.execute(
+            target: .rovoDev,
+            remove: true,
+            commandExists: { _ in true },
+            settingsFilePathResolver: resolver
+        )
+        #expect(remove.exitCode == 0)
+        #expect(remove.stdout.contains("hooks removed"))
+
+        let removedConfig = try String(contentsOf: configURL, encoding: .utf8)
+        #expect(removedConfig.contains("echo keep-user-hook"))
+        #expect(!removedConfig.contains("Cocxy managed Rovo Dev hooks begin"))
+        #expect(!removedConfig.contains("COCXY_HOOK_AGENT=rovo"))
+    }
+
     @Test("OpenCode hook script resource matches installer template")
     func openCodeHookScriptResourceMatchesInstallerTemplate() throws {
         let resourceURL = repositoryRoot()
@@ -981,6 +1124,18 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(
             resource.trimmingCharacters(in: .newlines)
                 == OpenCodeProjectHooksManager.pluginSource.trimmingCharacters(in: .newlines)
+        )
+    }
+
+    @Test("Pi hook script resource matches installer template")
+    func piHookScriptResourceMatchesInstallerTemplate() throws {
+        let resourceURL = repositoryRoot()
+            .appendingPathComponent("Resources/HookScripts/pi-cocxy-session.ts")
+        let resource = try String(contentsOf: resourceURL, encoding: .utf8)
+
+        #expect(
+            resource.trimmingCharacters(in: .newlines)
+                == PiExtensionHooksManager.extensionSource.trimmingCharacters(in: .newlines)
         )
     }
 
@@ -999,6 +1154,8 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(buildScript.contains("Resources/HookScripts"))
         #expect(buildScript.contains("\"${RESOURCES}/HookScripts\""))
         #expect(verifyScript.contains("$RESOURCES/HookScripts/opencode-cocxy-session.js"))
+        #expect(verifyScript.contains("$RESOURCES/HookScripts/pi-cocxy-session.ts"))
+        #expect(verifyScript.contains("$RESOURCES/HookScripts/rovo-event-hooks.yml.template"))
     }
 }
 

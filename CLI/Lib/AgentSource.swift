@@ -144,9 +144,9 @@ enum AgentSource: String, CaseIterable, Sendable {
 
     var supportsAutomaticHookSetup: Bool {
         switch self {
-        case .claudeCode, .codex, .geminiCLI, .cursor, .copilot, .codebuddy, .factory, .qoder:
+        case .claudeCode, .codex, .geminiCLI, .pi, .cursor, .rovoDev, .copilot, .codebuddy, .factory, .qoder:
             return true
-        case .kiro, .opencode, .pi, .rovoDev, .unknown:
+        case .kiro, .opencode, .unknown:
             return false
         }
     }
@@ -160,8 +160,12 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.codex/hooks.json"
         case .geminiCLI:
             return "\(home)/.gemini/settings.json"
+        case .pi:
+            return "\(home)/.pi/agent/extensions/cocxy-session.ts"
         case .cursor:
             return "\(home)/.cursor/hooks.json"
+        case .rovoDev:
+            return "\(home)/.rovodev/config.yml"
         case .copilot:
             return "\(home)/.copilot/config.json"
         case .codebuddy:
@@ -170,7 +174,7 @@ enum AgentSource: String, CaseIterable, Sendable {
             return "\(home)/.factory/settings.json"
         case .qoder:
             return "\(home)/.qoder/settings.json"
-        case .kiro, .opencode, .pi, .rovoDev, .unknown:
+        case .kiro, .opencode, .unknown:
             return nil
         }
     }
@@ -185,10 +189,45 @@ enum AgentSource: String, CaseIterable, Sendable {
             return ["BeforeTool", "AfterTool", "SessionStart", "SessionEnd"]
         case .kiro:
             return ["agentSpawn", "userPromptSubmit", "preToolUse", "postToolUse", "stop"]
+        case .pi:
+            return ["SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]
+        case .rovoDev:
+            return ["TaskCompleted", "Stop", "PreToolUse"]
         case .cursor, .copilot, .codebuddy, .factory, .qoder:
             return ["SessionStart", "SessionEnd", "PreToolUse", "PostToolUse", "Stop", "UserPromptSubmit"]
-        case .opencode, .pi, .rovoDev, .unknown:
+        case .opencode, .unknown:
             return []
+        }
+    }
+
+    var hooksDisabledEnvironmentKey: String? {
+        switch self {
+        case .claudeCode:
+            return "COCXY_CLAUDE_HOOKS_DISABLED"
+        case .codex:
+            return "COCXY_CODEX_HOOKS_DISABLED"
+        case .geminiCLI:
+            return "COCXY_GEMINI_HOOKS_DISABLED"
+        case .kiro:
+            return "COCXY_KIRO_HOOKS_DISABLED"
+        case .opencode:
+            return "COCXY_OPENCODE_HOOKS_DISABLED"
+        case .pi:
+            return "COCXY_PI_HOOKS_DISABLED"
+        case .cursor:
+            return "COCXY_CURSOR_HOOKS_DISABLED"
+        case .rovoDev:
+            return "COCXY_ROVODEV_HOOKS_DISABLED"
+        case .copilot:
+            return "COCXY_COPILOT_HOOKS_DISABLED"
+        case .codebuddy:
+            return "COCXY_CODEBUDDY_HOOKS_DISABLED"
+        case .factory:
+            return "COCXY_FACTORY_HOOKS_DISABLED"
+        case .qoder:
+            return "COCXY_QODER_HOOKS_DISABLED"
+        case .unknown:
+            return nil
         }
     }
 

@@ -1,0 +1,13 @@
+eventHooks:
+  events:
+    # Cocxy managed Rovo Dev hooks begin
+    - name: on_complete
+      commands:
+        - command: "printf %s '{\"hook_event_name\":\"TaskCompleted\",\"agent_type\":\"rovo-dev\"}' | COCXY_CLAUDE_HOOKS=1 COCXY_HOOK_AGENT=rovo '/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+    - name: on_error
+      commands:
+        - command: "printf %s '{\"hook_event_name\":\"Stop\",\"agent_type\":\"rovo-dev\"}' | COCXY_CLAUDE_HOOKS=1 COCXY_HOOK_AGENT=rovo '/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+    - name: on_tool_permission
+      commands:
+        - command: "printf %s '{\"hook_event_name\":\"PreToolUse\",\"agent_type\":\"rovo-dev\"}' | COCXY_CLAUDE_HOOKS=1 COCXY_HOOK_AGENT=rovo '/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+    # Cocxy managed Rovo Dev hooks end

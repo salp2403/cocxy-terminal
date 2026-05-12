@@ -27,6 +27,16 @@ public enum HookHandlerCommand {
     static func shouldForwardHook(
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
+        if environment["COCXY_HOOKS_DISABLED"] == "1" {
+            return false
+        }
+
+        let source = AgentSource.detect(environment: environment)
+        if let disabledKey = source.hooksDisabledEnvironmentKey,
+           environment[disabledKey] == "1" {
+            return false
+        }
+
         if environment[cocxyHookEnvironmentKey] == "1" {
             return true
         }
