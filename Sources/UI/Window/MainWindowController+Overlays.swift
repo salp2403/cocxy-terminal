@@ -593,6 +593,17 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "theme.browse",
+                name: "Browse Themes",
+                description: "Search, preview and import local terminal themes",
+                shortcut: nil,
+                category: .theme,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.showThemeBrowser() }
+                }
+            ),
+            CommandAction(
                 id: "theme.cycle",
                 name: "Cycle Color Scheme",
                 description: "Switch between Mocha, One Dark, Dracula, Solarized",

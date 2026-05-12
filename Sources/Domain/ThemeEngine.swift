@@ -120,6 +120,20 @@ final class ThemeEngineImpl: ThemeProviding {
         throw ThemeError.themeNotFound(name: name)
     }
 
+    /// Registers or replaces a theme loaded at runtime.
+    ///
+    /// Used by the theme browser import flow after it persists a local TOML
+    /// file. The imported theme becomes immediately selectable without
+    /// rebuilding the app delegate's theme engine.
+    func registerImportedTheme(_ theme: Theme) {
+        themesByName[theme.metadata.name] = theme
+        availableThemes.removeAll { $0.name == theme.metadata.name }
+        availableThemes.append(theme.metadata)
+        availableThemes.sort {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
     /// Normalizes a theme name for fuzzy comparison.
     ///
     /// Strips hyphens, underscores, and spaces, then lowercases the result.

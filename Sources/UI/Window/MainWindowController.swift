@@ -357,6 +357,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// preload a pane view model with a stubbed service.
     var injectedGitHubPaneViewModel: GitHubPaneViewModel?
 
+    // MARK: - Theme Browser State
+
+    /// Floating theme browser controller, retained while the picker is open.
+    var themeBrowserWindowController: NSWindowController?
+
+    /// Delegate retained alongside `themeBrowserWindowController` so closing
+    /// the floating picker can restore unapplied theme previews.
+    var themeBrowserWindowDelegate: ThemeBrowserWindowDelegate?
+
     // MARK: - Notes Overlay State
 
     var notesViewModel: NotesViewModel?

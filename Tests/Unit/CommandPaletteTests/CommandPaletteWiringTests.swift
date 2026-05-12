@@ -74,6 +74,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "remote.toggle",
             "browser.history",
             "browser.bookmarks",
+            "theme.browse",
             "theme.cycle",
             "sidebar.transparency",
             "navigation.quickswitch",
