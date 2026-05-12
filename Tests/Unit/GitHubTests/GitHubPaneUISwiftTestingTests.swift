@@ -63,6 +63,31 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(GitHubPaneViewModel.Tab.allCases.count == 7)
     }
 
+    @Test("GitHubPaneTabStripPresentation avoids clipped tab labels at narrow widths")
+    func tabStripPresentation_usesCompactModesBeforeLabelsClip() {
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 700).mode == .allLabels)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 480).mode == .selectedLabel)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 280).mode == .iconsOnly)
+    }
+
+    @Test("GitHubPaneTabStripPresentation only labels selected tab in constrained panes")
+    func tabStripPresentation_labelsOnlySelectedTabWhenConstrained() {
+        let presentation = GitHubPaneTabStripPresentation.resolve(width: 480)
+
+        #expect(
+            presentation.showsTitle(
+                for: .pullRequests,
+                selectedTab: .pullRequests
+            )
+        )
+        #expect(
+            presentation.showsTitle(
+                for: .reviewThreads,
+                selectedTab: .pullRequests
+            ) == false
+        )
+    }
+
     // MARK: - Banner view factory
 
     @Test("GitHubPaneBanner accepts optional action title + handler")

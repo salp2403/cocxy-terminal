@@ -567,47 +567,138 @@ struct GitHubPaneTabStrip: View {
     @Binding var selection: GitHubPaneViewModel.Tab
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 82, maximum: 128), spacing: 6, alignment: .leading),
-    ]
-
     var body: some View {
-        LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-            ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
-                let fullTitle = tab.localizedTitle(using: localizer)
-                Button {
-                    selection = tab
-                } label: {
-                    Label {
-                        Text(tab.compactLocalizedTitle(using: localizer))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.78)
-                    } icon: {
-                        Image(systemName: tab.systemImage)
-                            .imageScale(.small)
-                    }
+        GeometryReader { proxy in
+            let presentation = GitHubPaneTabStripPresentation.resolve(width: proxy.size.width)
+
+            HStack(spacing: presentation.itemSpacing) {
+                ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
+                    tabButton(tab, presentation: presentation)
                 }
-                .buttonStyle(GitHubPaneTabButtonStyle(isSelected: selection == tab))
-                .accessibilityLabel(fullTitle)
-                .accessibilityValue(selection == tab ? "Selected" : "")
-                .help(fullTitle)
+
+                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
+        .frame(height: GitHubPaneTabStripPresentation.height)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localizer.string("github.pane.view", fallback: "GitHub view"))
+    }
+
+    private func tabButton(
+        _ tab: GitHubPaneViewModel.Tab,
+        presentation: GitHubPaneTabStripPresentation
+    ) -> some View {
+        let fullTitle = tab.localizedTitle(using: localizer)
+        let showsTitle = presentation.showsTitle(for: tab, selectedTab: selection)
+
+        return Button {
+            selection = tab
+        } label: {
+            HStack(spacing: showsTitle ? 5 : 0) {
+                Image(systemName: tab.systemImage)
+                    .imageScale(.small)
+                    .frame(width: 14, height: 14)
+
+                if showsTitle {
+                    Text(tab.compactLocalizedTitle(using: localizer))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.82)
+                }
+            }
+        }
+        .buttonStyle(
+            GitHubPaneTabButtonStyle(
+                isSelected: selection == tab,
+                presentation: presentation
+            )
+        )
+        .accessibilityLabel(fullTitle)
+        .accessibilityValue(selection == tab ? "Selected" : "")
+        .help(fullTitle)
+    }
+}
+
+struct GitHubPaneTabStripPresentation: Equatable {
+    enum Mode: Equatable {
+        case allLabels
+        case selectedLabel
+        case iconsOnly
+    }
+
+    static let height: CGFloat = 30
+    private static let allLabelsMinimumWidth: CGFloat = 560
+    private static let selectedLabelMinimumWidth: CGFloat = 320
+
+    let mode: Mode
+
+    static func resolve(width: CGFloat) -> GitHubPaneTabStripPresentation {
+        if width >= allLabelsMinimumWidth {
+            return GitHubPaneTabStripPresentation(mode: .allLabels)
+        }
+        if width >= selectedLabelMinimumWidth {
+            return GitHubPaneTabStripPresentation(mode: .selectedLabel)
+        }
+        return GitHubPaneTabStripPresentation(mode: .iconsOnly)
+    }
+
+    var itemSpacing: CGFloat {
+        switch mode {
+        case .allLabels: return 6
+        case .selectedLabel: return 5
+        case .iconsOnly: return 4
+        }
+    }
+
+    var horizontalPadding: CGFloat {
+        switch mode {
+        case .allLabels: return 7
+        case .selectedLabel: return 8
+        case .iconsOnly: return 7
+        }
+    }
+
+    var minimumButtonWidth: CGFloat {
+        switch mode {
+        case .allLabels: return 62
+        case .selectedLabel: return 32
+        case .iconsOnly: return 30
+        }
+    }
+
+    var usesFlexibleButtons: Bool {
+        mode == .allLabels
+    }
+
+    func showsTitle(
+        for tab: GitHubPaneViewModel.Tab,
+        selectedTab: GitHubPaneViewModel.Tab
+    ) -> Bool {
+        switch mode {
+        case .allLabels:
+            return true
+        case .selectedLabel:
+            return tab == selectedTab
+        case .iconsOnly:
+            return false
+        }
     }
 }
 
 struct GitHubPaneTabButtonStyle: ButtonStyle {
     let isSelected: Bool
+    let presentation: GitHubPaneTabStripPresentation
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: isSelected ? .semibold : .medium))
             .foregroundColor(isSelected ? .primary : .secondary)
-            .labelStyle(.titleAndIcon)
-            .frame(maxWidth: .infinity, minHeight: 28)
-            .padding(.horizontal, 7)
+            .frame(
+                minWidth: presentation.minimumButtonWidth,
+                maxWidth: presentation.usesFlexibleButtons ? .infinity : nil,
+                minHeight: 28
+            )
+            .padding(.horizontal, presentation.horizontalPadding)
             .background(background(isPressed: configuration.isPressed))
             .overlay(
                 RoundedRectangle(cornerRadius: 7, style: .continuous)
