@@ -180,6 +180,12 @@ struct GitHubPaneView: View {
     private var tabPicker: some View {
         GitHubPaneTabStrip(
             selection: $viewModel.selectedTab,
+            constrainedWidth: layout == .sidePanel
+                ? GitHubPaneTabStripPresentation.contentWidth(
+                    forPanelWidth: panelWidth,
+                    horizontalInset: 20
+                )
+                : nil,
             localizer: localizer
         )
         .padding(.horizontal, 10)
@@ -570,11 +576,15 @@ struct GitHubPaneView: View {
 
 struct GitHubPaneTabStrip: View {
     @Binding var selection: GitHubPaneViewModel.Tab
+    var constrainedWidth: CGFloat? = nil
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         GeometryReader { proxy in
-            let presentation = GitHubPaneTabStripPresentation.resolve(width: proxy.size.width)
+            let presentation = GitHubPaneTabStripPresentation.resolve(
+                measuredWidth: proxy.size.width,
+                constrainedWidth: constrainedWidth
+            )
 
             HStack(spacing: presentation.itemSpacing) {
                 ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
@@ -636,6 +646,27 @@ struct GitHubPaneTabStripPresentation: Equatable {
     private static let selectedLabelMinimumWidth: CGFloat = 340
 
     let mode: Mode
+
+    static func contentWidth(forPanelWidth panelWidth: CGFloat, horizontalInset: CGFloat) -> CGFloat {
+        max(0, panelWidth - horizontalInset)
+    }
+
+    static func effectiveWidth(measuredWidth: CGFloat, constrainedWidth: CGFloat?) -> CGFloat {
+        guard let constrainedWidth, constrainedWidth > 0 else { return measuredWidth }
+        return min(measuredWidth, constrainedWidth)
+    }
+
+    static func resolve(
+        measuredWidth: CGFloat,
+        constrainedWidth: CGFloat?
+    ) -> GitHubPaneTabStripPresentation {
+        resolve(
+            width: effectiveWidth(
+                measuredWidth: measuredWidth,
+                constrainedWidth: constrainedWidth
+            )
+        )
+    }
 
     static func resolve(width: CGFloat) -> GitHubPaneTabStripPresentation {
         if width >= allLabelsMinimumWidth {

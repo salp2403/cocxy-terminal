@@ -561,6 +561,38 @@ final class TabSurfaceMappingTests: XCTestCase {
         }
     }
 
+    func testGitHubPaneRootTracksFittedWidthWhenWindowIsNarrow() {
+        withIsolatedGitHubPanePanelWidthPreference {
+            let controller = MainWindowController(bridge: MockTerminalEngine())
+            controller.injectedGitHubPaneViewModel = GitHubPaneViewModel(
+                service: GitHubService(runner: layoutTestGitHubRunner)
+            )
+            controller.showWindow(nil)
+            controller.window?.setContentSize(NSSize(width: 300, height: 760))
+            controller.windowDidResize(Notification(name: NSWindow.didResizeNotification))
+
+            controller.showGitHubPanePanel()
+            controller.layoutRightDockedAgentPanels()
+
+            guard let panel = controller.gitHubPaneHostingView else {
+                XCTFail("Expected the GitHub pane to be visible")
+                return
+            }
+
+            XCTAssertLessThan(
+                panel.frame.width,
+                GitHubPaneView.minimumPanelWidth,
+                "The frame can be fitted below the preferred minimum in a very narrow host"
+            )
+            XCTAssertEqual(
+                panel.rootView.panelWidth,
+                panel.frame.width,
+                accuracy: 0.5,
+                "The SwiftUI root must receive the fitted width so internal controls resolve compact layouts"
+            )
+        }
+    }
+
     func testRightDockedAgentPanelReservesTerminalWidth() {
         let controller = MainWindowController(bridge: MockTerminalEngine())
         controller.injectedAgentPromptRunner = LayoutTestAgentPromptRunner()

@@ -1866,7 +1866,15 @@ extension MainWindowController {
             isActivityDashboardVisible ? DockedPanel(width: ActivityDashboardView.panelWidth, view: activityDashboardHostingView!, avoidsStatusBar: true) : nil,
             isAgentModeVisible ? DockedPanel(width: AgentPanelView.panelWidth, view: agentModeHostingView!, avoidsStatusBar: true) : nil,
             isCodeReviewVisible ? DockedPanel(width: codeReviewPanelWidth, view: codeReviewHostingView!, avoidsStatusBar: true) : nil,
-            isGitHubPaneVisible ? DockedPanel(width: gitHubPanePanelWidth, view: gitHubPaneHostingView!, avoidsStatusBar: true) : nil,
+            isGitHubPaneVisible ? DockedPanel(
+                width: gitHubPanePanelWidth,
+                view: gitHubPaneHostingView!,
+                avoidsStatusBar: true,
+                applyFittedWidth: { [weak self] width in
+                    self?.gitHubPanePanelWidth = width
+                    self?.syncGitHubPaneRootView(panelWidth: width)
+                }
+            ) : nil,
             isNotesVisible ? DockedPanel(
                 width: clampedNotesPanelWidth(containerWidth: overlayContainer.bounds.width),
                 view: notesHostingView!,

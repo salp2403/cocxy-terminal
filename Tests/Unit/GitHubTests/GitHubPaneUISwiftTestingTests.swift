@@ -75,6 +75,29 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(GitHubPaneTabStripPresentation.resolve(width: 280).mode == .iconsOnly)
     }
 
+    @Test("GitHubPaneTabStripPresentation resolves against side panel content width")
+    func tabStripPresentation_usesConstrainedPanelWidthBeforeWindowWidth() {
+        let measuredWindowWidth: CGFloat = 960
+        let sidePanelContentWidth = GitHubPaneTabStripPresentation.contentWidth(
+            forPanelWidth: GitHubPaneView.defaultPanelWidth,
+            horizontalInset: 20
+        )
+
+        #expect(sidePanelContentWidth == 460)
+        #expect(
+            GitHubPaneTabStripPresentation.effectiveWidth(
+                measuredWidth: measuredWindowWidth,
+                constrainedWidth: sidePanelContentWidth
+            ) == sidePanelContentWidth
+        )
+        #expect(
+            GitHubPaneTabStripPresentation.resolve(
+                measuredWidth: measuredWindowWidth,
+                constrainedWidth: sidePanelContentWidth
+            ).mode == .selectedLabel
+        )
+    }
+
     @Test("GitHubPaneTabStripPresentation only labels selected tab in constrained panes")
     func tabStripPresentation_labelsOnlySelectedTabWhenConstrained() {
         let presentation = GitHubPaneTabStripPresentation.resolve(width: 480)
@@ -91,6 +114,12 @@ struct GitHubPaneUISwiftTestingTests {
                 selectedTab: .pullRequests
             ) == false
         )
+    }
+
+    @Test("Pull request filter controls switch to compact menu before segmented control clips")
+    func pullRequestFilterControls_useCompactMenuInNarrowPane() {
+        #expect(PullRequestFilterControlsLayout.resolve(width: 300) == .compactMenu)
+        #expect(PullRequestFilterControlsLayout.resolve(width: 360) == .segmented)
     }
 
     // MARK: - Banner view factory

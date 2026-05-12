@@ -4,6 +4,17 @@
 import SwiftUI
 import AppKit
 
+enum PullRequestFilterControlsLayout: Equatable {
+    case segmented
+    case compactMenu
+
+    private static let compactMenuMaximumWidth: CGFloat = 340
+
+    static func resolve(width: CGFloat) -> PullRequestFilterControlsLayout {
+        width <= compactMenuMaximumWidth ? .compactMenu : .segmented
+    }
+}
+
 struct PullRequestsListView: View {
     let pullRequests: [GitHubPullRequest]
     let selectedPullRequestNumber: Int?
@@ -154,20 +165,67 @@ struct PullRequestsListView: View {
                 .help(localizer.string("github.prs.create", fallback: "Create pull request"))
             }
 
-            HStack(spacing: 8) {
-                Picker("", selection: $state) {
-                    ForEach(PullRequestListState.allCases, id: \.self) { state in
-                        Text(state.rawValue.capitalized).tag(state)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-
-                Toggle(localizer.string("github.prs.drafts", fallback: "Drafts"), isOn: $includeDrafts)
-                    .toggleStyle(.checkbox)
-            }
+            filterControls
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var filterControls: some View {
+        GeometryReader { proxy in
+            switch PullRequestFilterControlsLayout.resolve(width: proxy.size.width) {
+            case .segmented:
+                regularFilterControls
+            case .compactMenu:
+                compactFilterControls
+            }
+        }
+        .frame(height: 28)
+    }
+
+    private var regularFilterControls: some View {
+        HStack(spacing: 8) {
+            segmentedStatePicker
+                .layoutPriority(1)
+            includeDraftsToggle
+        }
+    }
+
+    private var compactFilterControls: some View {
+        HStack(spacing: 8) {
+            compactStatePicker
+                .layoutPriority(1)
+            includeDraftsToggle
+        }
+    }
+
+    private var segmentedStatePicker: some View {
+        Picker("", selection: $state) {
+            ForEach(PullRequestListState.allCases, id: \.self) { state in
+                Text(state.rawValue.capitalized).tag(state)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    private var compactStatePicker: some View {
+        Picker(
+            localizer.string("github.prs.state", fallback: "State"),
+            selection: $state
+        ) {
+            ForEach(PullRequestListState.allCases, id: \.self) { state in
+                Text(state.rawValue.capitalized).tag(state)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var includeDraftsToggle: some View {
+        Toggle(localizer.string("github.prs.drafts", fallback: "Drafts"), isOn: $includeDrafts)
+            .toggleStyle(.checkbox)
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
