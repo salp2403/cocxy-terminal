@@ -31,17 +31,13 @@ extension TransparencyChromeTheme {
 /// configuration change application.
 extension MainWindowController {
 
-    /// Cycles through terminal color schemes in place.
+    /// Toggles between the configured dark and light theme pair in place.
     ///
-    /// CocxyCore applies theme updates without tearing down live surfaces, so
-    /// PTYs and scrollback remain intact while the palette changes.
+    /// The toolbar's mode button and command-palette action must share the
+    /// same behavior. Older builds cycled through a dark-only theme list here,
+    /// which made the command path disagree with the visible light/dark button.
     func toggleTheme() {
-        guard let appDelegate = NSApp.delegate as? AppDelegate else { return }
-
-        activeThemeIndex = (activeThemeIndex + 1) % Self.themeNames.count
-        let targetName = Self.themeNames[activeThemeIndex]
-
-        appDelegate.switchTheme(to: targetName)
+        toggleAuroraThemeMode()
     }
 
     /// Applies configuration changes to the window.

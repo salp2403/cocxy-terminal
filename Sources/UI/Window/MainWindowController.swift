@@ -607,19 +607,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// publishes a new snapshot.
     private var rateLimitProbeCancellable: AnyCancellable?
 
-    // MARK: - Theme State
-
-    /// Index of the currently active terminal color scheme.
-    var activeThemeIndex = 0
-
-    /// Available terminal color schemes for cycling.
-    static let themeNames = [
-        "Catppuccin Mocha",
-        "One Dark",
-        "Dracula",
-        "Solarized Dark",
-    ]
-
     // MARK: - Split State
 
     /// Maximum number of panes allowed per tab (2 levels of split).
