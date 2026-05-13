@@ -1738,7 +1738,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 158)
+        XCTAssertEqual(CLICommand.allCases.count, 160)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1792,6 +1792,8 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.browserFill.usageExample, "cocxy browser fill <ref> <text>")
         XCTAssertEqual(CLICommand.browserScreenshot.usageExample, "cocxy browser screenshot [--output <path>]")
         XCTAssertEqual(CLICommand.browserConsole.usageExample, "cocxy browser console")
+        XCTAssertEqual(CLICommand.browserImportPreview.usageExample, "cocxy browser import preview --source <browser>")
+        XCTAssertEqual(CLICommand.browserImportRun.usageExample, "cocxy browser import run --source <browser>")
 
         guard case .browserNavigate(let url) = try CLIArgumentParser.parse(["browser", "navigate", "https://example.com"]) else {
             return XCTFail("browser navigate should parse through the public CLI shape")
@@ -1824,6 +1826,36 @@ final class CLICommandDefinitionTests: XCTestCase {
             .browserScreenshot(outputPath: "/tmp/page.png")
         )
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "console"]))
+
+        guard case .browserImportPreview(let previewOptions) = try CLIArgumentParser.parse([
+            "browser", "import", "preview",
+            "--source", "chrome",
+            "--history", "/tmp/History",
+            "--cookies", "/tmp/Cookies",
+            "--domain", "example.com",
+            "--no-bookmarks",
+        ]) else {
+            return XCTFail("browser import preview should parse import options")
+        }
+        XCTAssertEqual(previewOptions.source, "chrome")
+        XCTAssertEqual(previewOptions.historyPath, "/tmp/History")
+        XCTAssertEqual(previewOptions.cookiesPath, "/tmp/Cookies")
+        XCTAssertEqual(previewOptions.domainWhitelist, ["example.com"])
+        XCTAssertFalse(previewOptions.importBookmarks)
+
+        guard case .browserImportRun(let runOptions) = try CLIArgumentParser.parse([
+            "browser", "import", "run",
+            "--source", "firefox",
+            "--profile", "00000000-0000-0000-0000-000000000001",
+            "--max-history-days", "7",
+            "--exclude-domain", "blocked.example",
+        ]) else {
+            return XCTFail("browser import run should parse import options")
+        }
+        XCTAssertEqual(runOptions.source, "firefox")
+        XCTAssertEqual(runOptions.profileID, "00000000-0000-0000-0000-000000000001")
+        XCTAssertEqual(runOptions.maxHistoryDays, 7)
+        XCTAssertEqual(runOptions.domainBlacklist, ["blocked.example"])
     }
 
     func testWorktreeFocusUsageMatchesPublicParserShape() throws {

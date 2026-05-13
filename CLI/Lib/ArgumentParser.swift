@@ -6,6 +6,67 @@ import CocxyShared
 
 // MARK: - Parsed Command
 
+public struct BrowserImportCLIOptions: Equatable {
+    public let source: String
+    public let profileID: String?
+    public let historyPath: String?
+    public let cookiesPath: String?
+    public let bookmarksPath: String?
+    public let importHistory: Bool
+    public let importCookies: Bool
+    public let importBookmarks: Bool
+    public let maxHistoryDays: Int?
+    public let domainWhitelist: [String]
+    public let domainBlacklist: [String]
+
+    public init(
+        source: String,
+        profileID: String? = nil,
+        historyPath: String? = nil,
+        cookiesPath: String? = nil,
+        bookmarksPath: String? = nil,
+        importHistory: Bool = true,
+        importCookies: Bool = true,
+        importBookmarks: Bool = true,
+        maxHistoryDays: Int? = nil,
+        domainWhitelist: [String] = [],
+        domainBlacklist: [String] = []
+    ) {
+        self.source = source
+        self.profileID = profileID
+        self.historyPath = historyPath
+        self.cookiesPath = cookiesPath
+        self.bookmarksPath = bookmarksPath
+        self.importHistory = importHistory
+        self.importCookies = importCookies
+        self.importBookmarks = importBookmarks
+        self.maxHistoryDays = maxHistoryDays
+        self.domainWhitelist = domainWhitelist
+        self.domainBlacklist = domainBlacklist
+    }
+
+    var socketParams: [String: String] {
+        var params: [String: String] = [
+            "source": source,
+            "import-history": "\(importHistory)",
+            "import-cookies": "\(importCookies)",
+            "import-bookmarks": "\(importBookmarks)",
+        ]
+        if let profileID { params["profile"] = profileID }
+        if let historyPath { params["history"] = historyPath }
+        if let cookiesPath { params["cookies"] = cookiesPath }
+        if let bookmarksPath { params["bookmarks"] = bookmarksPath }
+        if let maxHistoryDays { params["max-history-days"] = "\(maxHistoryDays)" }
+        if !domainWhitelist.isEmpty {
+            params["domain-whitelist"] = domainWhitelist.joined(separator: ",")
+        }
+        if !domainBlacklist.isEmpty {
+            params["domain-blacklist"] = domainBlacklist.joined(separator: ",")
+        }
+        return params
+    }
+}
+
 /// The result of parsing CLI arguments into a concrete command and its parameters.
 ///
 /// This type decouples argument parsing from socket communication,
@@ -377,6 +438,12 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy browser console`
     case browserConsole
+
+    /// `cocxy browser import preview --source <browser> [options]`
+    case browserImportPreview(BrowserImportCLIOptions)
+
+    /// `cocxy browser import run --source <browser> [options]`
+    case browserImportRun(BrowserImportCLIOptions)
 
     // MARK: - SSH (v4)
 
@@ -2612,13 +2679,127 @@ public enum CLIArgumentParser {
             return .browserScreenshot(outputPath: rest[1])
         case "console":
             return .browserConsole
+        case "import":
+            return try parseBrowserImport(arguments: Array(arguments.dropFirst()))
         default:
             throw CLIError.invalidArgument(
                 command: "browser",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, tabs, snapshot, click, fill, screenshot, or console."
+                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, tabs, snapshot, click, fill, screenshot, console, or import."
             )
         }
+    }
+
+    private static func parseBrowserImport(arguments: [String]) throws -> ParsedCommand {
+        guard let action = arguments.first else {
+            throw CLIError.missingArgument(command: "browser import", argument: "preview|run")
+        }
+        guard action == "preview" || action == "run" else {
+            throw CLIError.invalidArgument(
+                command: "browser import",
+                argument: action,
+                reason: "Use preview or run."
+            )
+        }
+
+        let options = try parseBrowserImportOptions(arguments: Array(arguments.dropFirst()))
+        return action == "preview"
+            ? .browserImportPreview(options)
+            : .browserImportRun(options)
+    }
+
+    private static func parseBrowserImportOptions(arguments: [String]) throws -> BrowserImportCLIOptions {
+        var source: String?
+        var profileID: String?
+        var historyPath: String?
+        var cookiesPath: String?
+        var bookmarksPath: String?
+        var importHistory = true
+        var importCookies = true
+        var importBookmarks = true
+        var maxHistoryDays: Int?
+        var whitelist: [String] = []
+        var blacklist: [String] = []
+
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--source":
+                source = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--profile":
+                profileID = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--history":
+                historyPath = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--cookies":
+                cookiesPath = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--bookmarks":
+                bookmarksPath = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--no-history":
+                importHistory = false
+            case "--no-cookies":
+                importCookies = false
+            case "--no-bookmarks":
+                importBookmarks = false
+            case "--max-history-days":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser import")
+                guard let days = Int(rawValue), days >= 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "browser import",
+                        argument: rawValue,
+                        reason: "--max-history-days must be a non-negative integer."
+                    )
+                }
+                maxHistoryDays = days
+            case "--domain":
+                whitelist.append(try value(after: argument, in: arguments, at: &index, command: "browser import"))
+            case "--exclude-domain":
+                blacklist.append(try value(after: argument, in: arguments, at: &index, command: "browser import"))
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser import",
+                    argument: argument,
+                    reason: "Use --source, --profile, --history, --cookies, --bookmarks, --domain, --exclude-domain, --max-history-days, --no-history, --no-cookies, or --no-bookmarks."
+                )
+            }
+            index += 1
+        }
+
+        guard let source, !source.isEmpty else {
+            throw CLIError.missingArgument(command: "browser import", argument: "--source <browser>")
+        }
+
+        return BrowserImportCLIOptions(
+            source: source,
+            profileID: profileID,
+            historyPath: historyPath,
+            cookiesPath: cookiesPath,
+            bookmarksPath: bookmarksPath,
+            importHistory: importHistory,
+            importCookies: importCookies,
+            importBookmarks: importBookmarks,
+            maxHistoryDays: maxHistoryDays,
+            domainWhitelist: whitelist,
+            domainBlacklist: blacklist
+        )
+    }
+
+    private static func value(
+        after flag: String,
+        in arguments: [String],
+        at index: inout Int,
+        command: String
+    ) throws -> String {
+        let valueIndex = index + 1
+        guard valueIndex < arguments.count else {
+            throw CLIError.missingArgument(command: command, argument: "\(flag) value")
+        }
+        let value = arguments[valueIndex]
+        guard !value.isEmpty, !value.hasPrefix("--") else {
+            throw CLIError.missingArgument(command: command, argument: "\(flag) value")
+        }
+        index = valueIndex
+        return value
     }
 
     // MARK: - SSH Parser

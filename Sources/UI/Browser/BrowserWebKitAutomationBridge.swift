@@ -20,6 +20,14 @@ enum BrowserWebKitAutomationBridge {
             }
             return captureScreenshot(outputPath: outputPath, in: webView, timeout: timeout)
         }
+        viewModel.cookieImporter = { cookie, profileID, timeout in
+            BrowserWebKitCookieImportStore.importCookie(
+                cookie,
+                profileID: profileID,
+                timeout: timeout
+            )
+        }
+        installPendingCookies(on: webView, profileID: viewModel.activeProfileID)
     }
 
     private static func evaluate(
@@ -127,5 +135,164 @@ enum BrowserWebKitAutomationBridge {
             return nil
         }
         return bitmap.representation(using: .png, properties: [:])
+    }
+
+    private static func installPendingCookies(on webView: WKWebView, profileID: UUID?) {
+        guard let profileID else { return }
+        let pendingCookies = BrowserPendingCookieImportStore.shared.drain(profileID: profileID)
+        guard !pendingCookies.isEmpty else { return }
+
+        let store = webView.configuration.websiteDataStore.httpCookieStore
+        for imported in pendingCookies {
+            guard let cookie = BrowserWebKitCookieImportStore.httpCookie(from: imported) else { continue }
+            store.setCookie(cookie) { [weak webView] in
+                guard let webView, webView.url != nil else { return }
+                webView.reload()
+            }
+        }
+    }
+}
+
+enum BrowserWebKitCookieImportError: LocalizedError {
+    case missingValue
+    case invalidCookie
+    case timedOut
+    case failed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingValue:
+            return "Imported cookie has no readable value"
+        case .invalidCookie:
+            return "Imported cookie could not be converted to HTTPCookie"
+        case .timedOut:
+            return "Timed out while importing cookie into WebKit storage"
+        case .failed(let message):
+            return message
+        }
+    }
+}
+
+final class BrowserWebKitCookieImportStore: BrowserImportedCookieStoring, @unchecked Sendable {
+    private let viewModelProvider: @Sendable () -> BrowserViewModel?
+    private let timeout: TimeInterval
+
+    init(
+        viewModelProvider: @escaping @Sendable () -> BrowserViewModel? = { nil },
+        timeout: TimeInterval = 3
+    ) {
+        self.viewModelProvider = viewModelProvider
+        self.timeout = timeout
+    }
+
+    func saveImportedCookie(_ cookie: BrowserImportedCookie, profileID: UUID) throws {
+        if let result = viewModelProvider()?.automationBridge.importCookie(
+            cookie,
+            profileID: profileID,
+            timeout: timeout
+        ) {
+            switch result {
+            case .success:
+                return
+            case .failure(let message):
+                throw BrowserWebKitCookieImportError.failed(message)
+            }
+        }
+
+        switch Self.importCookie(cookie, profileID: profileID, timeout: timeout) {
+        case .success:
+            BrowserPendingCookieImportStore.shared.save(cookie, profileID: profileID)
+            return
+        case .failure(let message):
+            throw BrowserWebKitCookieImportError.failed(message)
+        }
+    }
+
+    static func importCookie(
+        _ imported: BrowserImportedCookie,
+        profileID: UUID,
+        timeout: TimeInterval
+    ) -> BrowserCookieImportResult {
+        guard !Thread.isMainThread else {
+            return .failure("Synchronous browser cookie import cannot run on the main thread")
+        }
+        guard let cookie = httpCookie(from: imported) else {
+            return .failure(BrowserWebKitCookieImportError.invalidCookie.localizedDescription)
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        final class Box: @unchecked Sendable {
+            var completed = false
+            var webView: WKWebView?
+        }
+        let box = Box()
+
+        DispatchQueue.main.async {
+            let configuration = WKWebViewConfiguration()
+            configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
+            let webView = WKWebView(frame: .zero, configuration: configuration)
+            box.webView = webView
+            let store = webView.configuration.websiteDataStore.httpCookieStore
+            store.setCookie(cookie) {
+                box.completed = true
+                box.webView = nil
+                semaphore.signal()
+            }
+        }
+
+        guard semaphore.wait(timeout: .now() + timeout) == .success,
+              box.completed else {
+            return .failure(BrowserWebKitCookieImportError.timedOut.localizedDescription)
+        }
+        return .success
+    }
+
+    fileprivate static func httpCookie(from imported: BrowserImportedCookie) -> HTTPCookie? {
+        guard let value = imported.value else { return nil }
+        let normalizedDomain = imported.domain.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        let scheme = imported.isSecure ? "https" : "http"
+        var properties: [HTTPCookiePropertyKey: Any] = [
+            .domain: imported.domain,
+            .path: imported.path.isEmpty ? "/" : imported.path,
+            .name: imported.name,
+            .value: value,
+        ]
+        if !normalizedDomain.isEmpty,
+           let originURL = URL(string: "\(scheme)://\(normalizedDomain)") {
+            properties[.originURL] = originURL
+        }
+        if let expiresAt = imported.expiresAt {
+            properties[.expires] = expiresAt
+        }
+        if imported.isSecure {
+            properties[.secure] = "TRUE"
+        }
+        if imported.isHTTPOnly {
+            properties[HTTPCookiePropertyKey("HttpOnly")] = "TRUE"
+        }
+        return HTTPCookie(properties: properties)
+    }
+}
+
+final class BrowserPendingCookieImportStore: @unchecked Sendable {
+    static let shared = BrowserPendingCookieImportStore()
+
+    private let lock = NSLock()
+    private var cookiesByProfile: [UUID: [BrowserImportedCookie]] = [:]
+
+    private init() {}
+
+    func save(_ cookie: BrowserImportedCookie, profileID: UUID) {
+        lock.lock()
+        cookiesByProfile[profileID, default: []].append(cookie)
+        lock.unlock()
+    }
+
+    func drain(profileID: UUID) -> [BrowserImportedCookie] {
+        lock.lock()
+        defer { lock.unlock() }
+        let cookies = cookiesByProfile[profileID] ?? []
+        cookiesByProfile[profileID] = nil
+        return cookies
     }
 }

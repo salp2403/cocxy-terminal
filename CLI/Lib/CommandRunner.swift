@@ -1196,6 +1196,20 @@ public struct CommandRunner {
         case .browserConsole:
             return CLISocketRequest(id: requestID, command: "browser-console", params: nil)
 
+        case .browserImportPreview(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-import-preview",
+                params: options.socketParams
+            )
+
+        case .browserImportRun(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-import-run",
+                params: options.socketParams
+            )
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):

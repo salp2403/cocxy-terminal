@@ -218,6 +218,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that provides or opens a browser view model for external navigation.
     /// Unlike the read-only provider above, this may create UI for `browser navigate`.
     private let browserNavigationViewModelProvider: @Sendable () -> BrowserViewModel?
+    /// Routes browser import preview/run requests to the app-owned importer.
+    private let browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
     /// Closure that returns the current live configuration snapshot.
     /// Falls back to defaults when ConfigService is unavailable.
@@ -484,6 +486,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         browserViewModel: BrowserViewModel? = nil,
         browserViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
         browserNavigationViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         tabCountProviderOverride: (@Sendable () -> Int)? = nil,
         tabInfoProviderOverride: (@Sendable () -> [(id: String, title: String, isActive: Bool)])? = nil,
         tabFocusProviderOverride: (@Sendable (String) -> Bool)? = nil,
@@ -687,6 +690,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.browserViewModelProvider = resolvedBrowserViewModelProvider
         self.browserNavigationViewModelProvider = browserNavigationViewModelProviderOverride
             ?? resolvedBrowserViewModelProvider
+        self.browserImportProvider = browserImportProvider
 
         // -- Tab count provider (read-only) --
         if let tabCountProviderOverride {
@@ -964,6 +968,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserScreenshot(request)
         case .browserConsole:
             return handleBrowserConsole(request)
+        case .browserImportPreview:
+            return handleBrowserImport(kind: "preview", request: request)
+        case .browserImportRun:
+            return handleBrowserImport(kind: "run", request: request)
 
         // Remote workspace commands
         case .remoteList:
@@ -2360,6 +2368,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             data["entry_\(index)_timestamp"] = ISO8601DateFormatter().string(from: entry.timestamp)
         }
         return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserImport(kind: String, request: SocketRequest) -> SocketResponse {
+        guard let provider = browserImportProvider else {
+            return .failure(id: request.id, error: "Browser import is not available in this build.")
+        }
+        let result = provider(kind, request.params ?? [:])
+        if result.success {
+            return .ok(id: request.id, data: result.data)
+        }
+        return .failure(
+            id: request.id,
+            error: result.data["error"] ?? "Browser import \(kind) failed"
+        )
     }
 
     private func browserScriptResult(

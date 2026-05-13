@@ -139,6 +139,8 @@ public enum CLICommand: String, CaseIterable {
     case browserFill = "browser-fill"
     case browserScreenshot = "browser-screenshot"
     case browserConsole = "browser-console"
+    case browserImportPreview = "browser-import-preview"
+    case browserImportRun = "browser-import-run"
 
     // MARK: - Window Management (v3)
 
@@ -373,6 +375,8 @@ public enum CLICommand: String, CaseIterable {
         case .browserFill: return "Fill a scriptable browser input by ref"
         case .browserScreenshot: return "Capture a PNG screenshot from the active browser tab"
         case .browserConsole: return "List captured browser console entries"
+        case .browserImportPreview: return "Preview browser history, cookie, and bookmark import counts"
+        case .browserImportRun: return "Import browser history, cookies, and bookmarks into the active profile"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -584,6 +588,8 @@ public enum CLICommand: String, CaseIterable {
         case .browserFill: return "cocxy browser fill <ref> <text>"
         case .browserScreenshot: return "cocxy browser screenshot [--output <path>]"
         case .browserConsole: return "cocxy browser console"
+        case .browserImportPreview: return "cocxy browser import preview --source <browser>"
+        case .browserImportRun: return "cocxy browser import run --source <browser>"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"

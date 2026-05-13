@@ -25,6 +25,11 @@ enum BrowserScreenshotCaptureResult: Equatable, Sendable {
     case failure(String)
 }
 
+enum BrowserCookieImportResult: Equatable, Sendable {
+    case success
+    case failure(String)
+}
+
 struct BrowserConsoleSnapshotEntry: Equatable, Sendable {
     let level: String
     let message: String
@@ -34,10 +39,12 @@ struct BrowserConsoleSnapshotEntry: Equatable, Sendable {
 final class BrowserAutomationBridgeStore: @unchecked Sendable {
     typealias ScriptEvaluator = (String, TimeInterval) -> BrowserScriptEvaluationResult
     typealias ScreenshotCapturer = (String?, TimeInterval) -> BrowserScreenshotCaptureResult
+    typealias CookieImporter = (BrowserImportedCookie, UUID, TimeInterval) -> BrowserCookieImportResult
 
     private let lock = NSLock()
     private var evaluator: ScriptEvaluator?
     private var capturer: ScreenshotCapturer?
+    private var cookieImporterValue: CookieImporter?
 
     var scriptEvaluator: ScriptEvaluator? {
         get {
@@ -65,6 +72,19 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         }
     }
 
+    var cookieImporter: CookieImporter? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return cookieImporterValue
+        }
+        set {
+            lock.lock()
+            cookieImporterValue = newValue
+            lock.unlock()
+        }
+    }
+
     func evaluate(
         script: String,
         timeout: TimeInterval
@@ -79,6 +99,15 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
     ) -> BrowserScreenshotCaptureResult? {
         guard let screenshotCapturer else { return nil }
         return screenshotCapturer(outputPath, timeout)
+    }
+
+    func importCookie(
+        _ cookie: BrowserImportedCookie,
+        profileID: UUID,
+        timeout: TimeInterval
+    ) -> BrowserCookieImportResult? {
+        guard let cookieImporter else { return nil }
+        return cookieImporter(cookie, profileID, timeout)
     }
 }
 
@@ -193,6 +222,12 @@ final class BrowserViewModel: ObservableObject {
     var screenshotCapturer: BrowserAutomationBridgeStore.ScreenshotCapturer? {
         get { automationBridge.screenshotCapturer }
         set { automationBridge.screenshotCapturer = newValue }
+    }
+
+    /// Native cookie import bridge installed by the active WebKit host.
+    var cookieImporter: BrowserAutomationBridgeStore.CookieImporter? {
+        get { automationBridge.cookieImporter }
+        set { automationBridge.cookieImporter = newValue }
     }
 
     private(set) var consoleSnapshotEntries: [BrowserConsoleSnapshotEntry] = []
@@ -442,7 +477,8 @@ final class BrowserViewModel: ObservableObject {
             "canGoBack": "\(canGoBack)",
             "canGoForward": "\(canGoForward)",
             "tabCount": "\(browserTabs.count)",
-            "activeTabID": activeTabID?.uuidString ?? ""
+            "activeTabID": activeTabID?.uuidString ?? "",
+            "profileID": activeProfileID?.uuidString ?? ""
         ]
     }
 

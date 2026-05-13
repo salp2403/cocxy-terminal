@@ -1864,6 +1864,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     delegateRef.value?.browserViewModelForExternalNavigationCLI()
                 }
             },
+            browserImportProvider: { kind, params in
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleBrowserImportCLIRequest(kind: kind, params: params)
+            },
             tabCountProviderOverride: {
                 syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {
                     delegateRef.value?.allWindowControllers.reduce(0) { partial, controller in

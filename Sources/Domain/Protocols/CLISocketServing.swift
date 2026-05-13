@@ -245,6 +245,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserScreenshot = "browser-screenshot"
     /// List captured browser console entries.
     case browserConsole = "browser-console"
+    /// Preview browser history/cookie/bookmark import counts.
+    case browserImportPreview = "browser-import-preview"
+    /// Import browser history/cookies/bookmarks into a profile.
+    case browserImportRun = "browser-import-run"
 
     // MARK: - Window Management (v3)
 

@@ -42,7 +42,9 @@ final class BrowserScriptableTests: XCTestCase {
             "browser-click",
             "browser-fill",
             "browser-screenshot",
-            "browser-console"
+            "browser-console",
+            "browser-import-preview",
+            "browser-import-run"
         ]
         for command in expectedCommands {
             XCTAssertNotNil(
@@ -62,6 +64,8 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertTrue(allRawValues.contains("browser-fill"))
         XCTAssertTrue(allRawValues.contains("browser-screenshot"))
         XCTAssertTrue(allRawValues.contains("browser-console"))
+        XCTAssertTrue(allRawValues.contains("browser-import-preview"))
+        XCTAssertTrue(allRawValues.contains("browser-import-run"))
     }
 
     // MARK: - BrowserViewModel.getState
@@ -571,6 +575,54 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertEqual(response.data?["count"], "2")
         XCTAssertEqual(response.data?["entry_0_level"], "log")
         XCTAssertEqual(response.data?["entry_1_message"], "failed")
+    }
+
+    func test_browserImportPreview_routesToImportProvider() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserImportProvider: { kind, params in
+                XCTAssertEqual(kind, "preview")
+                XCTAssertEqual(params["source"], "chrome")
+                XCTAssertEqual(params["domain-whitelist"], "example.com")
+                return (true, ["status": "previewed", "cookies": "2"])
+            }
+        )
+        let request = SocketRequest(
+            id: "bip-1",
+            command: "browser-import-preview",
+            params: ["source": "chrome", "domain-whitelist": "example.com"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "previewed")
+        XCTAssertEqual(response.data?["cookies"], "2")
+    }
+
+    func test_browserImportRun_routesToImportProvider() {
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserImportProvider: { kind, params in
+                XCTAssertEqual(kind, "run")
+                XCTAssertEqual(params["source"], "firefox")
+                return (true, ["status": "imported", "history": "3", "cookies": "1"])
+            }
+        )
+        let request = SocketRequest(
+            id: "bir-1",
+            command: "browser-import-run",
+            params: ["source": "firefox"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "imported")
+        XCTAssertEqual(response.data?["history"], "3")
+        XCTAssertEqual(response.data?["cookies"], "1")
     }
 
     // MARK: - Browser Navigation Actions Emitted by Handler

@@ -158,6 +158,36 @@ struct BrowserImportSwiftTestingTests {
         #expect(cookieStore.cookies.first?.domain == ".example.com")
         #expect(auditLogger.entries.count == 1)
     }
+
+    @Test("WebKit cookie store forwards imported cookies to active profile storage")
+    @MainActor
+    func webKitCookieStoreForwardsCookiesToActiveProfileStorage() throws {
+        let profileID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        let viewModel = BrowserViewModel()
+        viewModel.activeProfileID = profileID
+        let imported = BrowserImportedCookie(
+            domain: "example.com",
+            name: "session",
+            path: "/",
+            value: "abc",
+            expiresAt: nil,
+            isSecure: false,
+            isHTTPOnly: true
+        )
+        var capturedCookie: BrowserImportedCookie?
+        var capturedProfileID: UUID?
+        viewModel.cookieImporter = { cookie, profile, _ in
+            capturedCookie = cookie
+            capturedProfileID = profile
+            return .success
+        }
+        let store = BrowserWebKitCookieImportStore(viewModelProvider: { viewModel })
+
+        try store.saveImportedCookie(imported, profileID: profileID)
+
+        #expect(capturedCookie == imported)
+        #expect(capturedProfileID == profileID)
+    }
 }
 
 private enum BrowserImportFixture {
