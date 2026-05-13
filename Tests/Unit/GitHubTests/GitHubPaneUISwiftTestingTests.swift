@@ -68,13 +68,14 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(
             GitHubPaneTabStripPresentation.resolve(
                 width: GitHubPaneView.maximumPanelWidth
-            ).mode == .selectedLabel
+            ).mode == .twoRows
         )
         #expect(GitHubPaneTabStripPresentation.resolve(width: 1320).mode == .allLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 1080).mode == .compactLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 900).mode == .compactLabels)
-        #expect(GitHubPaneTabStripPresentation.resolve(width: 480).mode == .selectedLabel)
-        #expect(GitHubPaneTabStripPresentation.resolve(width: 280).mode == .iconsOnly)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 480).mode == .twoRows)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 300).mode == .selectedLabel)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: 260).mode == .iconsOnly)
     }
 
     @Test("GitHubPaneTabStripPresentation resolves against side panel content width")
@@ -96,25 +97,27 @@ struct GitHubPaneUISwiftTestingTests {
             GitHubPaneTabStripPresentation.resolve(
                 measuredWidth: measuredWindowWidth,
                 constrainedWidth: sidePanelContentWidth
-            ).mode == .selectedLabel
+            ).mode == .twoRows
         )
     }
 
-    @Test("GitHubPaneTabStripPresentation keeps side panels in selected-label mode")
-    func tabStripPresentation_usesSelectedLabelAtMaximumSidePanelWidth() {
+    @Test("GitHubPaneTabStripPresentation keeps side panels in deterministic two-row mode")
+    func tabStripPresentation_usesTwoRowsAtMaximumSidePanelWidth() {
         let sidePanelContentWidth = GitHubPaneTabStripPresentation.contentWidth(
             forPanelWidth: GitHubPaneView.maximumPanelWidth,
             horizontalInset: 20
         )
 
         #expect(sidePanelContentWidth == 700)
-        #expect(GitHubPaneTabStripPresentation.resolve(width: sidePanelContentWidth).mode == .selectedLabel)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: sidePanelContentWidth).mode == .twoRows)
     }
 
-    @Test("GitHubPaneTabStripPresentation only labels selected tab in constrained panes")
-    func tabStripPresentation_labelsOnlySelectedTabWhenConstrained() {
+    @Test("GitHubPaneTabStripPresentation labels every tab in side-panel two-row mode")
+    func tabStripPresentation_labelsEveryTabWhenUsingTwoRows() {
         let presentation = GitHubPaneTabStripPresentation.resolve(width: 480)
+        let localizer = AppLocalizer(languagePreference: .english)
 
+        #expect(presentation.mode == .twoRows)
         #expect(
             presentation.showsTitle(
                 for: .pullRequests,
@@ -125,8 +128,10 @@ struct GitHubPaneUISwiftTestingTests {
             presentation.showsTitle(
                 for: .reviewThreads,
                 selectedTab: .pullRequests
-            ) == false
+            )
         )
+        #expect(presentation.title(for: .pullRequests, using: localizer) == "PRs")
+        #expect(presentation.title(for: .reviewThreads, using: localizer) == "Reviews")
     }
 
     @Test("GitHubPaneTabStripPresentation labels every tab with compact titles at medium widths")
@@ -143,6 +148,21 @@ struct GitHubPaneUISwiftTestingTests {
         )
         #expect(presentation.title(for: .pullRequests, using: localizer) == "PRs")
         #expect(presentation.title(for: .reviewThreads, using: localizer) == "Reviews")
+    }
+
+    @Test("GitHubPaneTabStripPresentation splits all tabs across two balanced rows")
+    func tabStripPresentation_twoRowsExposeAllTabsOnce() {
+        let presentation = GitHubPaneTabStripPresentation.resolve(width: 480)
+        let rows = presentation.rowGroups
+        let flattened = rows.flatMap { $0 }
+
+        #expect(presentation.mode == .twoRows)
+        #expect(rows.count == 2)
+        #expect(rows.first == [.branches, .commits, .diffs, .pullRequests])
+        #expect(rows.last == [.issues, .checks, .reviewThreads])
+        #expect(flattened == GitHubPaneViewModel.Tab.allCases)
+        #expect(Set(flattened.map(\.id)).count == GitHubPaneViewModel.Tab.allCases.count)
+        #expect(GitHubPaneTabStripPresentation.maximumHeight >= GitHubPaneTabStripPresentation.twoRowsHeight)
     }
 
     @Test("Pull request filter controls switch to compact menu before segmented control clips")

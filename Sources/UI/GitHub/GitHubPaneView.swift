@@ -586,47 +586,39 @@ struct GitHubPaneTabStrip: View {
                 constrainedWidth: constrainedWidth
             )
 
-            adaptiveRows(startingAt: presentation)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            tabRows(presentation)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         }
-        .frame(height: GitHubPaneTabStripPresentation.height)
+        .frame(height: GitHubPaneTabStripPresentation.maximumHeight)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localizer.string("github.pane.view", fallback: "GitHub view"))
     }
 
     @ViewBuilder
-    private func adaptiveRows(startingAt presentation: GitHubPaneTabStripPresentation) -> some View {
+    private func tabRows(_ presentation: GitHubPaneTabStripPresentation) -> some View {
         switch presentation.mode {
-        case .allLabels:
-            ViewThatFits(in: .horizontal) {
-                tabRow(presentation)
-                tabRow(.init(mode: .compactLabels))
-                tabRow(.init(mode: .selectedLabel))
-                tabRow(.init(mode: .iconsOnly))
+        case .twoRows:
+            VStack(spacing: presentation.rowSpacing) {
+                ForEach(Array(presentation.rowGroups.enumerated()), id: \.offset) { _, rowTabs in
+                    tabRow(rowTabs, presentation: presentation)
+                }
             }
-        case .compactLabels:
-            ViewThatFits(in: .horizontal) {
-                tabRow(presentation)
-                tabRow(.init(mode: .selectedLabel))
-                tabRow(.init(mode: .iconsOnly))
-            }
-        case .selectedLabel:
-            ViewThatFits(in: .horizontal) {
-                tabRow(presentation)
-                tabRow(.init(mode: .iconsOnly))
-            }
-        case .iconsOnly:
-            tabRow(presentation)
+        case .allLabels, .compactLabels, .selectedLabel, .iconsOnly:
+            tabRow(GitHubPaneViewModel.Tab.allCases, presentation: presentation)
         }
     }
 
-    private func tabRow(_ presentation: GitHubPaneTabStripPresentation) -> some View {
+    private func tabRow(
+        _ tabs: [GitHubPaneViewModel.Tab],
+        presentation: GitHubPaneTabStripPresentation
+    ) -> some View {
         HStack(spacing: presentation.itemSpacing) {
-            ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
+            ForEach(tabs) { tab in
                 tabButton(tab, presentation: presentation)
             }
         }
-        .fixedSize(horizontal: true, vertical: false)
+        .frame(maxWidth: presentation.usesFlexibleButtons ? .infinity : nil, alignment: .leading)
+        .fixedSize(horizontal: !presentation.usesFlexibleButtons, vertical: false)
     }
 
     private func tabButton(
@@ -667,14 +659,18 @@ struct GitHubPaneTabStripPresentation: Equatable {
     enum Mode: Equatable {
         case allLabels
         case compactLabels
+        case twoRows
         case selectedLabel
         case iconsOnly
     }
 
-    static let height: CGFloat = 30
+    static let oneRowHeight: CGFloat = 30
+    static let twoRowsHeight: CGFloat = 64
+    static let maximumHeight: CGFloat = twoRowsHeight
     private static let allLabelsMinimumWidth: CGFloat = 1280
     private static let compactLabelsMinimumWidth: CGFloat = 760
-    private static let selectedLabelMinimumWidth: CGFloat = 340
+    private static let twoRowsMinimumWidth: CGFloat = 340
+    private static let selectedLabelMinimumWidth: CGFloat = 280
 
     let mode: Mode
 
@@ -706,6 +702,9 @@ struct GitHubPaneTabStripPresentation: Equatable {
         if width >= compactLabelsMinimumWidth {
             return GitHubPaneTabStripPresentation(mode: .compactLabels)
         }
+        if width >= twoRowsMinimumWidth {
+            return GitHubPaneTabStripPresentation(mode: .twoRows)
+        }
         if width >= selectedLabelMinimumWidth {
             return GitHubPaneTabStripPresentation(mode: .selectedLabel)
         }
@@ -716,15 +715,21 @@ struct GitHubPaneTabStripPresentation: Equatable {
         switch mode {
         case .allLabels: return 6
         case .compactLabels: return 4
+        case .twoRows: return 5
         case .selectedLabel: return 4
         case .iconsOnly: return 4
         }
+    }
+
+    var rowSpacing: CGFloat {
+        mode == .twoRows ? 5 : 0
     }
 
     var horizontalPadding: CGFloat {
         switch mode {
         case .allLabels: return 7
         case .compactLabels: return 5
+        case .twoRows: return 6
         case .selectedLabel: return 5
         case .iconsOnly: return 5
         }
@@ -734,13 +739,26 @@ struct GitHubPaneTabStripPresentation: Equatable {
         switch mode {
         case .allLabels: return 62
         case .compactLabels: return 42
+        case .twoRows: return 52
         case .selectedLabel: return 26
         case .iconsOnly: return 26
         }
     }
 
     var usesFlexibleButtons: Bool {
-        false
+        mode == .twoRows
+    }
+
+    var rowGroups: [[GitHubPaneViewModel.Tab]] {
+        switch mode {
+        case .twoRows:
+            return [
+                [.branches, .commits, .diffs, .pullRequests],
+                [.issues, .checks, .reviewThreads]
+            ]
+        case .allLabels, .compactLabels, .selectedLabel, .iconsOnly:
+            return [GitHubPaneViewModel.Tab.allCases]
+        }
     }
 
     func showsTitle(
@@ -749,6 +767,8 @@ struct GitHubPaneTabStripPresentation: Equatable {
     ) -> Bool {
         switch mode {
         case .allLabels, .compactLabels:
+            return true
+        case .twoRows:
             return true
         case .selectedLabel:
             return tab == selectedTab
@@ -764,7 +784,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
         switch mode {
         case .allLabels:
             return tab.localizedTitle(using: localizer)
-        case .compactLabels, .selectedLabel, .iconsOnly:
+        case .compactLabels, .twoRows, .selectedLabel, .iconsOnly:
             return tab.compactLocalizedTitle(using: localizer)
         }
     }
