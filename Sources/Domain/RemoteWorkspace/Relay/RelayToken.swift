@@ -49,12 +49,13 @@ struct RelayToken: Codable, Sendable {
     ///   - signature: The HMAC signature to verify.
     /// - Returns: `true` if the signature is valid for the given payload.
     func validate(payload: Data, signature: Data) -> Bool {
-        let key = SymmetricKey(data: secret)
-        return HMAC<SHA256>.isValidAuthenticationCode(
-            signature,
-            authenticating: payload,
-            using: key
-        )
+        let expected = sign(payload)
+        guard expected.count == signature.count else { return false }
+        var diff: UInt8 = 0
+        for (lhs, rhs) in zip(expected, signature) {
+            diff |= lhs ^ rhs
+        }
+        return diff == 0
     }
 
     /// Creates a new token with a fresh secret, invalidating this one.

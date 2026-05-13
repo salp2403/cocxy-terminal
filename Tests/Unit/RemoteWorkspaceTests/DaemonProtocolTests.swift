@@ -105,7 +105,7 @@ struct DaemonProtocolTests {
     @Test("All daemon commands are defined")
     func allCommands() {
         let commands = DaemonCommand.allCases
-        #expect(commands.count == 15)
+        #expect(commands.count == 24)
     }
 
     @Test("Command raw values are correct")
@@ -116,7 +116,16 @@ struct DaemonProtocolTests {
         #expect(DaemonCommand.sessionDetach.rawValue == "session.detach")
         #expect(DaemonCommand.sessionInput.rawValue == "session.input")
         #expect(DaemonCommand.sessionOutput.rawValue == "session.output")
+        #expect(DaemonCommand.sessionOpen.rawValue == "session.open")
+        #expect(DaemonCommand.sessionResize.rawValue == "session.resize")
+        #expect(DaemonCommand.sessionWrite.rawValue == "session.write")
+        #expect(DaemonCommand.sessionClose.rawValue == "session.close")
         #expect(DaemonCommand.sessionKill.rawValue == "session.kill")
+        #expect(DaemonCommand.proxyOpen.rawValue == "proxy.open")
+        #expect(DaemonCommand.proxyClose.rawValue == "proxy.close")
+        #expect(DaemonCommand.proxyWrite.rawValue == "proxy.write")
+        #expect(DaemonCommand.proxyStreamSubscribe.rawValue == "proxy.stream.subscribe")
+        #expect(DaemonCommand.cliRelayRequest.rawValue == "cli-relay.request")
         #expect(DaemonCommand.forwardList.rawValue == "forward.list")
         #expect(DaemonCommand.forwardAdd.rawValue == "forward.add")
         #expect(DaemonCommand.forwardRemove.rawValue == "forward.remove")

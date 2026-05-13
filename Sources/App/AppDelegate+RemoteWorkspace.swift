@@ -60,6 +60,13 @@ extension AppDelegate {
         let daemonDeployer = DaemonDeployer(executor: deployAdapter)
         let daemonManager = DaemonManagerImpl(deployer: daemonDeployer)
         connectionManager.daemonManager = daemonManager
+        let remoteUploader = CocxyDRemoteUploader(executor: deployAdapter)
+        let remoteBootstrapper = CocxyDRemoteSSHBootstrapper(
+            profileStore: profileStore,
+            connectionManager: connectionManager,
+            platformDetector: daemonDeployer,
+            uploader: remoteUploader
+        )
 
         let keyFileSystem = DiskSSHKeyFileSystem()
         let keyExecutor = SystemSSHKeyExecutor()
@@ -79,6 +86,8 @@ extension AppDelegate {
         self.remotePortScanner = portScanner
         self.tunnelManager = tunnelManager
         self.sshKeyManager = keyManager
+        self.daemonDeployAdapter = deployAdapter
+        self.cocxydRemoteSSHBootstrapper = remoteBootstrapper
 
         for controller in allWindowControllers {
             controller.remoteConnectionManager = connectionManager

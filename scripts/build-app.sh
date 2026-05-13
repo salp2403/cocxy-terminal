@@ -369,6 +369,33 @@ if [ -d "${PROJECT_ROOT}/Resources/Ripgrep" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Ripgrep" "${RESOURCES}/Ripgrep"
 fi
 
+# Step 6n: Build and copy cocxyd-remote binaries for verified SSH daemon
+# auto-deploy. The CocxyCore checkout is expected next to this repo locally;
+# CI can override with COCXYCORE_DIR.
+COCXYCORE_DIR="${COCXYCORE_DIR:-$(cd "${PROJECT_ROOT}/.." && pwd)/cocxycore}"
+REMOTE_DAEMON_SRC="${COCXYCORE_DIR}/zig-out/bin"
+if [ ! -x "${COCXYCORE_DIR}/scripts/build.sh" ]; then
+    echo "ERROR: CocxyCore checkout not found at ${COCXYCORE_DIR}; set COCXYCORE_DIR"
+    exit 1
+fi
+echo "==> Building remote daemon binaries..."
+"${COCXYCORE_DIR}/scripts/build.sh" build >/dev/null
+mkdir -p "${RESOURCES}/RemoteDaemon"
+for remote_binary in \
+    cocxyd-remote-macos-arm64 \
+    cocxyd-remote-linux-x86_64 \
+    cocxyd-remote-linux-arm64
+do
+    if [ ! -f "${REMOTE_DAEMON_SRC}/${remote_binary}" ]; then
+        echo "ERROR: Missing remote daemon binary: ${REMOTE_DAEMON_SRC}/${remote_binary}"
+        exit 1
+    fi
+    cp "${REMOTE_DAEMON_SRC}/${remote_binary}" "${RESOURCES}/RemoteDaemon/${remote_binary}"
+    chmod 755 "${RESOURCES}/RemoteDaemon/${remote_binary}"
+done
+codesign --force --sign - "${RESOURCES}/RemoteDaemon/cocxyd-remote-macos-arm64" >/dev/null
+echo "    remote daemon: ${RESOURCES}/RemoteDaemon"
+
 # Step 6m: Build and embed the QuickLook extension.
 echo "==> Building QuickLook extension..."
 QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"

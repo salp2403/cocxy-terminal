@@ -255,6 +255,14 @@ fi
 check_exists "$RESOURCES/Ripgrep/LICENSE-MIT" "ripgrep MIT license"
 check_exists "$RESOURCES/Ripgrep/UNLICENSE" "ripgrep Unlicense"
 
+echo ""
+echo "[Remote Daemon]"
+check_exists "$RESOURCES/RemoteDaemon" "Remote daemon resources directory"
+check_exists "$RESOURCES/RemoteDaemon/cocxyd-remote-macos-arm64" "Remote daemon macOS arm64 binary"
+check_exists "$RESOURCES/RemoteDaemon/cocxyd-remote-linux-x86_64" "Remote daemon Linux x86_64 binary"
+check_exists "$RESOURCES/RemoteDaemon/cocxyd-remote-linux-arm64" "Remote daemon Linux arm64 binary"
+check_codesign_valid "$RESOURCES/RemoteDaemon/cocxyd-remote-macos-arm64" "Remote daemon macOS binary signature"
+
 # 7. App icon
 echo ""
 echo "[Assets]"

@@ -239,6 +239,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
     var sshKeyManager: SSHKeyManager?
 
+    /// Retains the daemon deploy adapter used by daemon deployers and uploaders.
+    /// The deploy protocols are weakly held to avoid retain cycles, so the app
+    /// delegate owns the production adapter for the remote workspace lifetime.
+    var daemonDeployAdapter: DaemonDeployAdapter?
+
+    /// Prepares SHA-256 verified cocxyd-remote binaries for `cocxy ssh`.
+    var cocxydRemoteSSHBootstrapper: CocxyDRemoteSSHBootstrapper?
+
     // MARK: - Plugin Properties
 
     /// Plugin manager for plugin lifecycle operations.
@@ -428,6 +436,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pluginManager = nil
         remotePortScanner?.stopScanning()
         remotePortScanner = nil
+        cocxydRemoteSSHBootstrapper = nil
+        daemonDeployAdapter = nil
         remoteConnectionManager = nil
         remoteProfileStore = nil
         browserProfileManager = nil
@@ -2469,11 +2479,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             sshProvider: { destination, port, identityFile in
                 syncOnMainActor {
                     guard let wc = focusedControllerProvider() else { return nil }
-                    var sshArgs = ["ssh"]
-                    if let port = port { sshArgs += ["-p", "\(port)"] }
-                    if let identity = identityFile { sshArgs += ["-i", identity] }
-                    sshArgs.append(destination)
-                    let sshCommand = sshArgs.joined(separator: " ")
+                    let fallbackCommand = CocxyDRemoteSSHBootstrapper.directSSHCommand(
+                        destination: destination,
+                        port: port,
+                        identityFile: identityFile
+                    )
+                    let bootstrapper = delegateRef.value?.cocxydRemoteSSHBootstrapper
 
                     let newTab = wc.tabManager.addTab(
                         workingDirectory: FileManager.default.homeDirectoryForCurrentUser
@@ -2484,6 +2495,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let targetTabID = newTab.id
                     Task { @MainActor [weak wc] in
                         try? await Task.sleep(for: .milliseconds(500))
+                        let bootstrapResult = await bootstrapper?.bootstrap(
+                            destination: destination,
+                            port: port,
+                            identityFile: identityFile
+                        )
+                        let sshCommand = bootstrapResult?.directSSHCommand ?? fallbackCommand
                         guard let wc = wc,
                               wc.tabManager.activeTabID == targetTabID else { return }
                         let surfaceID = wc.activeTerminalSurfaceView?.terminalViewModel?.surfaceID

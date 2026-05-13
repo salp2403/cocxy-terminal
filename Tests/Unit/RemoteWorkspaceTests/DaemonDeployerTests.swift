@@ -12,11 +12,17 @@ final class MockDeployExecutor: DaemonDeployExecuting {
     var commands: [String] = []
     var uploads: [(local: String, remote: String)] = []
     var responses: [String: String] = [:]
+    var responseQueues: [String: [String]] = [:]
     var shouldThrow = false
 
     func executeRemote(_ command: String, profileID: UUID) async throws -> String {
         if shouldThrow { throw DaemonProtocolError.connectionLost }
         commands.append(command)
+        if var queued = responseQueues[command], !queued.isEmpty {
+            let next = queued.removeFirst()
+            responseQueues[command] = queued
+            return next
+        }
         return responses[command] ?? ""
     }
 
