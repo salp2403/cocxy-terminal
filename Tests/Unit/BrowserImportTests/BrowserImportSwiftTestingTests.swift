@@ -13,13 +13,53 @@ struct BrowserImportSwiftTestingTests {
     func supportedSourcesExposeDefaultLocations() {
         let sources = BrowserImportSource.allCases
 
-        #expect(sources.count >= 8)
+        #expect(sources.count >= 20)
         #expect(sources.contains(.chrome))
         #expect(sources.contains(.firefox))
         #expect(sources.contains(.safari))
         #expect(BrowserImportSource.arc.defaultLocations(homeDirectory: URL(fileURLWithPath: "/Users/me")).contains {
             $0.historyPath.path.contains("Arc")
         })
+    }
+
+    @Test("expanded browser source catalog keeps CLI aliases and importer families stable")
+    func expandedBrowserSourceCatalogKeepsAliasesAndImporterFamiliesStable() {
+        let sourcesByRawValue = Dictionary(uniqueKeysWithValues: BrowserImportSource.allCases.map {
+            ($0.rawValue, $0)
+        })
+
+        let expectedRawValues = [
+            "chrome", "chrome-canary", "chromium",
+            "edge", "edge-beta", "edge-dev",
+            "brave", "brave-beta", "brave-nightly",
+            "opera", "opera-gx",
+            "vivaldi", "vivaldi-snapshot",
+            "arc", "arc-beta",
+            "firefox", "firefox-developer-edition", "firefox-nightly",
+            "librewolf", "waterfox", "floorp", "zen",
+            "safari", "orion",
+        ]
+
+        for rawValue in expectedRawValues {
+            #expect(sourcesByRawValue[rawValue] != nil, "Missing browser import source: \(rawValue)")
+        }
+
+        let home = URL(fileURLWithPath: "/Users/me")
+        #expect(BrowserImportSource.chromeCanary.defaultLocations(homeDirectory: home).contains {
+            $0.historyPath.path.contains("Google/Chrome Canary")
+        })
+        #expect(BrowserImportSource.librewolf.defaultLocations(homeDirectory: home).contains {
+            $0.historyPath.path.contains("LibreWolf/Profiles")
+        })
+        #expect(BrowserImportSource.orion.defaultLocations(homeDirectory: home).contains {
+            $0.historyPath.path.contains("Orion")
+        })
+
+        #expect(BrowserImportSource.braveNightly.isChromiumBased)
+        #expect(!BrowserImportSource.firefoxNightly.isChromiumBased)
+        #expect(type(of: BrowserSourceImporterFactory.importer(for: .edgeDev)) == ChromiumBrowserImporter.self)
+        #expect(type(of: BrowserSourceImporterFactory.importer(for: .floorp)) == FirefoxBrowserImporter.self)
+        #expect(type(of: BrowserSourceImporterFactory.importer(for: .orion)) == SafariBrowserImporter.self)
     }
 
     @Test("plan applies whitelist and blacklist before importing URLs")

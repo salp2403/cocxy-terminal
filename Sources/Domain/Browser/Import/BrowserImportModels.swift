@@ -5,32 +5,71 @@ import Foundation
 
 enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
     case chrome
+    case chromeCanary = "chrome-canary"
+    case chromium
     case edge
+    case edgeBeta = "edge-beta"
+    case edgeDev = "edge-dev"
     case brave
+    case braveBeta = "brave-beta"
+    case braveNightly = "brave-nightly"
     case opera
+    case operaGX = "opera-gx"
     case vivaldi
+    case vivaldiSnapshot = "vivaldi-snapshot"
     case arc
+    case arcBeta = "arc-beta"
     case firefox
+    case firefoxDeveloperEdition = "firefox-developer-edition"
+    case firefoxNightly = "firefox-nightly"
+    case librewolf
+    case waterfox
+    case floorp
+    case zen
     case safari
+    case orion
 
     var displayName: String {
         switch self {
         case .chrome: return "Chrome"
+        case .chromeCanary: return "Chrome Canary"
+        case .chromium: return "Chromium"
         case .edge: return "Edge"
+        case .edgeBeta: return "Edge Beta"
+        case .edgeDev: return "Edge Dev"
         case .brave: return "Brave"
+        case .braveBeta: return "Brave Beta"
+        case .braveNightly: return "Brave Nightly"
         case .opera: return "Opera"
+        case .operaGX: return "Opera GX"
         case .vivaldi: return "Vivaldi"
+        case .vivaldiSnapshot: return "Vivaldi Snapshot"
         case .arc: return "Arc"
+        case .arcBeta: return "Arc Beta"
         case .firefox: return "Firefox"
+        case .firefoxDeveloperEdition: return "Firefox Developer Edition"
+        case .firefoxNightly: return "Firefox Nightly"
+        case .librewolf: return "LibreWolf"
+        case .waterfox: return "Waterfox"
+        case .floorp: return "Floorp"
+        case .zen: return "Zen"
         case .safari: return "Safari"
+        case .orion: return "Orion"
         }
     }
 
     var isChromiumBased: Bool {
         switch self {
-        case .chrome, .edge, .brave, .opera, .vivaldi, .arc:
+        case .chrome, .chromeCanary, .chromium,
+             .edge, .edgeBeta, .edgeDev,
+             .brave, .braveBeta, .braveNightly,
+             .opera, .operaGX,
+             .vivaldi, .vivaldiSnapshot,
+             .arc, .arcBeta:
             return true
-        case .firefox, .safari:
+        case .firefox, .firefoxDeveloperEdition, .firefoxNightly,
+             .librewolf, .waterfox, .floorp, .zen,
+             .safari, .orion:
             return false
         }
     }
@@ -40,35 +79,48 @@ enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
         switch self {
         case .chrome:
             return chromiumLocations(root: support.appendingPathComponent("Google/Chrome"), source: self)
+        case .chromeCanary:
+            return chromiumLocations(root: support.appendingPathComponent("Google/Chrome Canary"), source: self)
+        case .chromium:
+            return chromiumLocations(root: support.appendingPathComponent("Chromium"), source: self)
         case .edge:
             return chromiumLocations(root: support.appendingPathComponent("Microsoft Edge"), source: self)
+        case .edgeBeta:
+            return chromiumLocations(root: support.appendingPathComponent("Microsoft Edge Beta"), source: self)
+        case .edgeDev:
+            return chromiumLocations(root: support.appendingPathComponent("Microsoft Edge Dev"), source: self)
         case .brave:
             return chromiumLocations(root: support.appendingPathComponent("BraveSoftware/Brave-Browser"), source: self)
+        case .braveBeta:
+            return chromiumLocations(root: support.appendingPathComponent("BraveSoftware/Brave-Browser-Beta"), source: self)
+        case .braveNightly:
+            return chromiumLocations(root: support.appendingPathComponent("BraveSoftware/Brave-Browser-Nightly"), source: self)
         case .opera:
-            return [
-                BrowserImportLocation(
-                    source: self,
-                    profileName: "Default",
-                    historyPath: support.appendingPathComponent("com.operasoftware.Opera/History"),
-                    cookiesPath: support.appendingPathComponent("com.operasoftware.Opera/Cookies"),
-                    bookmarksPath: support.appendingPathComponent("com.operasoftware.Opera/Bookmarks")
-                ),
-            ]
+            return operaLocations(root: support.appendingPathComponent("com.operasoftware.Opera"), source: self)
+        case .operaGX:
+            return operaLocations(root: support.appendingPathComponent("com.operasoftware.OperaGX"), source: self)
         case .vivaldi:
             return chromiumLocations(root: support.appendingPathComponent("Vivaldi"), source: self)
+        case .vivaldiSnapshot:
+            return chromiumLocations(root: support.appendingPathComponent("Vivaldi Snapshot"), source: self)
         case .arc:
             return chromiumLocations(root: support.appendingPathComponent("Arc/User Data"), source: self)
+        case .arcBeta:
+            return chromiumLocations(root: support.appendingPathComponent("Arc Beta/User Data"), source: self)
         case .firefox:
-            let profile = support.appendingPathComponent("Firefox/Profiles/default-release")
-            return [
-                BrowserImportLocation(
-                    source: self,
-                    profileName: "default-release",
-                    historyPath: profile.appendingPathComponent("places.sqlite"),
-                    cookiesPath: profile.appendingPathComponent("cookies.sqlite"),
-                    bookmarksPath: nil
-                ),
-            ]
+            return firefoxLocations(root: support.appendingPathComponent("Firefox/Profiles"), profileName: "default-release", source: self)
+        case .firefoxDeveloperEdition:
+            return firefoxLocations(root: support.appendingPathComponent("Firefox/Profiles"), profileName: "dev-edition-default", source: self)
+        case .firefoxNightly:
+            return firefoxLocations(root: support.appendingPathComponent("Firefox/Profiles"), profileName: "nightly", source: self)
+        case .librewolf:
+            return firefoxLocations(root: support.appendingPathComponent("LibreWolf/Profiles"), profileName: "default-release", source: self)
+        case .waterfox:
+            return firefoxLocations(root: support.appendingPathComponent("Waterfox/Profiles"), profileName: "default-release", source: self)
+        case .floorp:
+            return firefoxLocations(root: support.appendingPathComponent("Floorp/Profiles"), profileName: "default-release", source: self)
+        case .zen:
+            return firefoxLocations(root: support.appendingPathComponent("Zen/Profiles"), profileName: "default-release", source: self)
         case .safari:
             return [
                 BrowserImportLocation(
@@ -77,6 +129,16 @@ enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
                     historyPath: homeDirectory.appendingPathComponent("Library/Safari/History.db"),
                     cookiesPath: homeDirectory.appendingPathComponent("Library/Cookies/Cookies.binarycookies"),
                     bookmarksPath: homeDirectory.appendingPathComponent("Library/Safari/Bookmarks.plist")
+                ),
+            ]
+        case .orion:
+            return [
+                BrowserImportLocation(
+                    source: self,
+                    profileName: "Default",
+                    historyPath: support.appendingPathComponent("Orion/History.db"),
+                    cookiesPath: homeDirectory.appendingPathComponent("Library/Cookies/Cookies.binarycookies"),
+                    bookmarksPath: support.appendingPathComponent("Orion/Bookmarks.plist")
                 ),
             ]
         }
@@ -93,6 +155,31 @@ enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
                 bookmarksPath: profile.appendingPathComponent("Bookmarks")
             )
         }
+    }
+
+    private func operaLocations(root: URL, source: BrowserImportSource) -> [BrowserImportLocation] {
+        [
+            BrowserImportLocation(
+                source: source,
+                profileName: "Default",
+                historyPath: root.appendingPathComponent("History"),
+                cookiesPath: root.appendingPathComponent("Cookies"),
+                bookmarksPath: root.appendingPathComponent("Bookmarks")
+            ),
+        ]
+    }
+
+    private func firefoxLocations(root: URL, profileName: String, source: BrowserImportSource) -> [BrowserImportLocation] {
+        let profile = root.appendingPathComponent(profileName)
+        return [
+            BrowserImportLocation(
+                source: source,
+                profileName: profileName,
+                historyPath: profile.appendingPathComponent("places.sqlite"),
+                cookiesPath: profile.appendingPathComponent("cookies.sqlite"),
+                bookmarksPath: nil
+            ),
+        ]
     }
 }
 

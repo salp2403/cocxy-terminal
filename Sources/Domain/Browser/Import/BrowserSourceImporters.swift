@@ -266,11 +266,17 @@ enum BrowserSourceImporterFactory {
             return ChromiumBrowserImporter()
         }
         switch source {
-        case .firefox:
+        case .firefox, .firefoxDeveloperEdition, .firefoxNightly,
+             .librewolf, .waterfox, .floorp, .zen:
             return FirefoxBrowserImporter()
-        case .safari:
+        case .safari, .orion:
             return SafariBrowserImporter()
-        case .chrome, .edge, .brave, .opera, .vivaldi, .arc:
+        case .chrome, .chromeCanary, .chromium,
+             .edge, .edgeBeta, .edgeDev,
+             .brave, .braveBeta, .braveNightly,
+             .opera, .operaGX,
+             .vivaldi, .vivaldiSnapshot,
+             .arc, .arcBeta:
             return ChromiumBrowserImporter()
         }
     }
