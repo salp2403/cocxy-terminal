@@ -1,0 +1,33 @@
+name: README Translations
+
+on:
+  pull_request:
+    paths:
+      - README.md
+      - README.*.md
+      - scripts/translate-readme.sh
+      - scripts/verify-readme-translations.sh
+      - .github/workflows/translations-stale.yml
+  push:
+    branches:
+      - main
+    paths:
+      - README.md
+      - README.*.md
+      - scripts/translate-readme.sh
+      - scripts/verify-readme-translations.sh
+      - .github/workflows/translations-stale.yml
+
+permissions:
+  contents: read
+
+jobs:
+  verify-readme-translations:
+    name: Verify README translations
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check localized README freshness
+        run: scripts/verify-readme-translations.sh
