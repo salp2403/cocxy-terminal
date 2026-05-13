@@ -586,18 +586,47 @@ struct GitHubPaneTabStrip: View {
                 constrainedWidth: constrainedWidth
             )
 
-            HStack(spacing: presentation.itemSpacing) {
-                ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
-                    tabButton(tab, presentation: presentation)
-                }
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            adaptiveRows(startingAt: presentation)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         }
         .frame(height: GitHubPaneTabStripPresentation.height)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localizer.string("github.pane.view", fallback: "GitHub view"))
+    }
+
+    @ViewBuilder
+    private func adaptiveRows(startingAt presentation: GitHubPaneTabStripPresentation) -> some View {
+        switch presentation.mode {
+        case .allLabels:
+            ViewThatFits(in: .horizontal) {
+                tabRow(presentation)
+                tabRow(.init(mode: .compactLabels))
+                tabRow(.init(mode: .selectedLabel))
+                tabRow(.init(mode: .iconsOnly))
+            }
+        case .compactLabels:
+            ViewThatFits(in: .horizontal) {
+                tabRow(presentation)
+                tabRow(.init(mode: .selectedLabel))
+                tabRow(.init(mode: .iconsOnly))
+            }
+        case .selectedLabel:
+            ViewThatFits(in: .horizontal) {
+                tabRow(presentation)
+                tabRow(.init(mode: .iconsOnly))
+            }
+        case .iconsOnly:
+            tabRow(presentation)
+        }
+    }
+
+    private func tabRow(_ presentation: GitHubPaneTabStripPresentation) -> some View {
+        HStack(spacing: presentation.itemSpacing) {
+            ForEach(GitHubPaneViewModel.Tab.allCases) { tab in
+                tabButton(tab, presentation: presentation)
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     private func tabButton(
@@ -644,7 +673,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
 
     static let height: CGFloat = 30
     private static let allLabelsMinimumWidth: CGFloat = 1280
-    private static let compactLabelsMinimumWidth: CGFloat = 560
+    private static let compactLabelsMinimumWidth: CGFloat = 760
     private static let selectedLabelMinimumWidth: CGFloat = 340
 
     let mode: Mode
@@ -711,7 +740,7 @@ struct GitHubPaneTabStripPresentation: Equatable {
     }
 
     var usesFlexibleButtons: Bool {
-        mode == .allLabels || mode == .compactLabels
+        false
     }
 
     func showsTitle(

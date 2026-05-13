@@ -68,7 +68,7 @@ struct GitHubPaneUISwiftTestingTests {
         #expect(
             GitHubPaneTabStripPresentation.resolve(
                 width: GitHubPaneView.maximumPanelWidth
-            ).mode == .compactLabels
+            ).mode == .selectedLabel
         )
         #expect(GitHubPaneTabStripPresentation.resolve(width: 1320).mode == .allLabels)
         #expect(GitHubPaneTabStripPresentation.resolve(width: 1080).mode == .compactLabels)
@@ -100,6 +100,17 @@ struct GitHubPaneUISwiftTestingTests {
         )
     }
 
+    @Test("GitHubPaneTabStripPresentation keeps side panels in selected-label mode")
+    func tabStripPresentation_usesSelectedLabelAtMaximumSidePanelWidth() {
+        let sidePanelContentWidth = GitHubPaneTabStripPresentation.contentWidth(
+            forPanelWidth: GitHubPaneView.maximumPanelWidth,
+            horizontalInset: 20
+        )
+
+        #expect(sidePanelContentWidth == 700)
+        #expect(GitHubPaneTabStripPresentation.resolve(width: sidePanelContentWidth).mode == .selectedLabel)
+    }
+
     @Test("GitHubPaneTabStripPresentation only labels selected tab in constrained panes")
     func tabStripPresentation_labelsOnlySelectedTabWhenConstrained() {
         let presentation = GitHubPaneTabStripPresentation.resolve(width: 480)
@@ -120,7 +131,7 @@ struct GitHubPaneUISwiftTestingTests {
 
     @Test("GitHubPaneTabStripPresentation labels every tab with compact titles at medium widths")
     func tabStripPresentation_labelsEveryTabWithCompactTitlesAtMediumWidths() {
-        let presentation = GitHubPaneTabStripPresentation.resolve(width: 720)
+        let presentation = GitHubPaneTabStripPresentation.resolve(width: 900)
         let localizer = AppLocalizer(languagePreference: .english)
 
         #expect(presentation.mode == .compactLabels)
