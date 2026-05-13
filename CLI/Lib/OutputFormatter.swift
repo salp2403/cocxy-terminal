@@ -272,6 +272,16 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .browserListTabs:
             return formatDataOrJSON(response: response)
+        case .browserSnapshot:
+            return formatDataOrJSON(response: response)
+        case .browserClick:
+            return formatDataOrJSON(response: response)
+        case .browserFill:
+            return formatDataOrJSON(response: response)
+        case .browserScreenshot:
+            return formatDataOrJSON(response: response)
+        case .browserConsole:
+            return formatDataOrJSON(response: response)
 
         // SSH (v4)
         case .ssh:

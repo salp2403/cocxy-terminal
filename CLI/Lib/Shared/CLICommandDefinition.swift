@@ -133,6 +133,11 @@ public enum CLICommand: String, CaseIterable {
     case browserEval = "browser-eval"
     case browserGetText = "browser-get-text"
     case browserListTabs = "browser-list-tabs"
+    case browserSnapshot = "browser-snapshot"
+    case browserClick = "browser-click"
+    case browserFill = "browser-fill"
+    case browserScreenshot = "browser-screenshot"
+    case browserConsole = "browser-console"
 
     // MARK: - Window Management (v3)
 
@@ -361,6 +366,11 @@ public enum CLICommand: String, CaseIterable {
         case .browserEval: return "Evaluate JavaScript in the active browser tab"
         case .browserGetText: return "Get the text content of the current page"
         case .browserListTabs: return "List all open browser tabs"
+        case .browserSnapshot: return "Capture a scriptable element tree with stable refs"
+        case .browserClick: return "Click a scriptable browser element by ref"
+        case .browserFill: return "Fill a scriptable browser input by ref"
+        case .browserScreenshot: return "Capture a PNG screenshot from the active browser tab"
+        case .browserConsole: return "List captured browser console entries"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -566,6 +576,11 @@ public enum CLICommand: String, CaseIterable {
         case .browserEval: return "cocxy browser eval <script>"
         case .browserGetText: return "cocxy browser text"
         case .browserListTabs: return "cocxy browser tabs"
+        case .browserSnapshot: return "cocxy browser snapshot"
+        case .browserClick: return "cocxy browser click <ref>"
+        case .browserFill: return "cocxy browser fill <ref> <text>"
+        case .browserScreenshot: return "cocxy browser screenshot [--output <path>]"
+        case .browserConsole: return "cocxy browser console"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"

@@ -235,6 +235,16 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserGetText = "browser-get-text"
     /// List all open browser tabs.
     case browserListTabs = "browser-list-tabs"
+    /// Capture a scriptable browser element tree with stable refs.
+    case browserSnapshot = "browser-snapshot"
+    /// Click a scriptable browser element by ref.
+    case browserClick = "browser-click"
+    /// Fill a scriptable browser input by ref.
+    case browserFill = "browser-fill"
+    /// Capture a PNG screenshot from the active browser tab.
+    case browserScreenshot = "browser-screenshot"
+    /// List captured browser console entries.
+    case browserConsole = "browser-console"
 
     // MARK: - Window Management (v3)
 

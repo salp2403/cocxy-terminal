@@ -1169,6 +1169,33 @@ public struct CommandRunner {
         case .browserListTabs:
             return CLISocketRequest(id: requestID, command: "browser-list-tabs", params: nil)
 
+        case .browserSnapshot:
+            return CLISocketRequest(id: requestID, command: "browser-snapshot", params: nil)
+
+        case .browserClick(let ref):
+            return CLISocketRequest(id: requestID, command: "browser-click", params: ["ref": ref])
+
+        case .browserFill(let ref, let text):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-fill",
+                params: ["ref": ref, "text": text]
+            )
+
+        case .browserScreenshot(let outputPath):
+            var params: [String: String] = [:]
+            if let outputPath {
+                params["output"] = outputPath
+            }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-screenshot",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .browserConsole:
+            return CLISocketRequest(id: requestID, command: "browser-console", params: nil)
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):

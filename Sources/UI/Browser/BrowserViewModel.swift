@@ -4,6 +4,84 @@
 import Foundation
 import Combine
 
+// MARK: - Scriptable Browser Results
+
+struct BrowserScriptEvaluationResult: Equatable, Sendable {
+    let value: String?
+    let error: String?
+
+    static func success(_ value: String) -> BrowserScriptEvaluationResult {
+        BrowserScriptEvaluationResult(value: value, error: nil)
+    }
+
+    static func failure(_ error: String) -> BrowserScriptEvaluationResult {
+        BrowserScriptEvaluationResult(value: nil, error: error)
+    }
+}
+
+enum BrowserScreenshotCaptureResult: Equatable, Sendable {
+    case dataURL(String, byteCount: Int)
+    case file(path: String, byteCount: Int)
+    case failure(String)
+}
+
+struct BrowserConsoleSnapshotEntry: Equatable, Sendable {
+    let level: String
+    let message: String
+    let timestamp: Date
+}
+
+final class BrowserAutomationBridgeStore: @unchecked Sendable {
+    typealias ScriptEvaluator = (String, TimeInterval) -> BrowserScriptEvaluationResult
+    typealias ScreenshotCapturer = (String?, TimeInterval) -> BrowserScreenshotCaptureResult
+
+    private let lock = NSLock()
+    private var evaluator: ScriptEvaluator?
+    private var capturer: ScreenshotCapturer?
+
+    var scriptEvaluator: ScriptEvaluator? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return evaluator
+        }
+        set {
+            lock.lock()
+            evaluator = newValue
+            lock.unlock()
+        }
+    }
+
+    var screenshotCapturer: ScreenshotCapturer? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return capturer
+        }
+        set {
+            lock.lock()
+            capturer = newValue
+            lock.unlock()
+        }
+    }
+
+    func evaluate(
+        script: String,
+        timeout: TimeInterval
+    ) -> BrowserScriptEvaluationResult? {
+        guard let scriptEvaluator else { return nil }
+        return scriptEvaluator(script, timeout)
+    }
+
+    func captureScreenshot(
+        outputPath: String?,
+        timeout: TimeInterval
+    ) -> BrowserScreenshotCaptureResult? {
+        guard let screenshotCapturer else { return nil }
+        return screenshotCapturer(outputPath, timeout)
+    }
+}
+
 // MARK: - Browser View Model
 
 /// Presentation logic for the in-app browser panel.
@@ -98,6 +176,26 @@ final class BrowserViewModel: ObservableObject {
 
     /// Callback invoked when the WebKit DOM-grab bridge captures an element.
     var onDOMGrabPayload: ((BrowserDOMGrabPayload) -> Void)?
+
+    /// Synchronous bridge used by the local socket API for browser automation.
+    ///
+    /// WKWebView is owned by the UI layer, so the view model keeps only this
+    /// injected closure. Existing fire-and-forget JavaScript still goes through
+    /// `navigationActionSubject` when this bridge is not installed.
+    nonisolated let automationBridge = BrowserAutomationBridgeStore()
+
+    var scriptEvaluator: BrowserAutomationBridgeStore.ScriptEvaluator? {
+        get { automationBridge.scriptEvaluator }
+        set { automationBridge.scriptEvaluator = newValue }
+    }
+
+    /// Native screenshot bridge installed by the active WebKit host.
+    var screenshotCapturer: BrowserAutomationBridgeStore.ScreenshotCapturer? {
+        get { automationBridge.screenshotCapturer }
+        set { automationBridge.screenshotCapturer = newValue }
+    }
+
+    private(set) var consoleSnapshotEntries: [BrowserConsoleSnapshotEntry] = []
 
     /// The active browser profile ID, used to associate visits and WebKit
     /// storage with a profile. Published so active browser hosts can rebuild
@@ -272,6 +370,39 @@ final class BrowserViewModel: ObservableObject {
     /// - Parameter script: The JavaScript code to evaluate.
     func evaluateJavaScript(_ script: String) {
         navigationActionSubject.send(.evaluateJS(script))
+    }
+
+    func evaluateJavaScriptForResult(
+        _ script: String,
+        timeout: TimeInterval = 3,
+        requiresBridge: Bool = false
+    ) -> BrowserScriptEvaluationResult {
+        guard let scriptEvaluator else {
+            navigationActionSubject.send(.evaluateJS(script))
+            return requiresBridge
+                ? .failure("Browser page is not ready for synchronous automation")
+                : .success("")
+        }
+        return scriptEvaluator(script, timeout)
+    }
+
+    func captureScreenshot(
+        outputPath: String?,
+        timeout: TimeInterval = 3
+    ) -> BrowserScreenshotCaptureResult {
+        guard let screenshotCapturer else {
+            return .failure("Browser page is not ready for screenshot capture")
+        }
+        return screenshotCapturer(outputPath, timeout)
+    }
+
+    func recordConsoleEntry(level: String, message: String, timestamp: Date = Date()) {
+        consoleSnapshotEntries.append(
+            BrowserConsoleSnapshotEntry(level: level, message: message, timestamp: timestamp)
+        )
+        if consoleSnapshotEntries.count > 200 {
+            consoleSnapshotEntries.removeFirst(consoleSnapshotEntries.count - 200)
+        }
     }
 
     // MARK: - DOM Grab

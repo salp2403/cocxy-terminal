@@ -367,6 +367,7 @@ final class BrowserContentView: NSView {
         BrowserWebViewAppearance.configure(wv)
         addSubview(wv, positioned: .below, relativeTo: toolbarContainer)
         webView = wv
+        BrowserWebKitAutomationBridge.install(on: viewModel, webView: wv)
 
         let topAnchor = findBarHostingView?.bottomAnchor ?? toolbarContainer?.bottomAnchor ?? self.topAnchor
         let bottomAnchor = devToolsHostingView?.topAnchor ?? downloadsHostingView?.topAnchor ?? self.bottomAnchor
@@ -513,6 +514,11 @@ final class BrowserContentView: NSView {
         capture.onNewEntry = { [weak self] entry in
             Task { @MainActor in
                 self?.consoleEntries.append(entry)
+                self?.viewModel.recordConsoleEntry(
+                    level: entry.level.rawValue,
+                    message: entry.message,
+                    timestamp: entry.timestamp
+                )
             }
         }
         self.consoleCapture = capture

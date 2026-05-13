@@ -37,7 +37,12 @@ final class BrowserScriptableTests: XCTestCase {
             "browser-get-state",
             "browser-eval",
             "browser-get-text",
-            "browser-list-tabs"
+            "browser-list-tabs",
+            "browser-snapshot",
+            "browser-click",
+            "browser-fill",
+            "browser-screenshot",
+            "browser-console"
         ]
         for command in expectedCommands {
             XCTAssertNotNil(
@@ -52,6 +57,11 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertTrue(allRawValues.contains("browser-navigate"))
         XCTAssertTrue(allRawValues.contains("browser-eval"))
         XCTAssertTrue(allRawValues.contains("browser-list-tabs"))
+        XCTAssertTrue(allRawValues.contains("browser-snapshot"))
+        XCTAssertTrue(allRawValues.contains("browser-click"))
+        XCTAssertTrue(allRawValues.contains("browser-fill"))
+        XCTAssertTrue(allRawValues.contains("browser-screenshot"))
+        XCTAssertTrue(allRawValues.contains("browser-console"))
     }
 
     // MARK: - BrowserViewModel.getState
@@ -330,6 +340,9 @@ final class BrowserScriptableTests: XCTestCase {
     }
 
     func test_browserEval_withScript_returnsSuccess() {
+        viewModel.scriptEvaluator = { script, _ in
+            BrowserScriptEvaluationResult.success("eval:\(script)")
+        }
         let handler = AppSocketCommandHandler(
             tabManager: nil,
             hookEventReceiver: nil,
@@ -344,6 +357,7 @@ final class BrowserScriptableTests: XCTestCase {
 
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "evaluated")
+        XCTAssertEqual(response.data?["result"], "eval:document.title")
     }
 
     func test_browserEval_withMissingScript_returnsError() {
@@ -399,6 +413,9 @@ final class BrowserScriptableTests: XCTestCase {
     }
 
     func test_browserGetText_returnsSuccess() {
+        viewModel.scriptEvaluator = { script, _ in
+            BrowserScriptEvaluationResult.success(script.contains("innerText") ? "page text" : "")
+        }
         let handler = AppSocketCommandHandler(
             tabManager: nil,
             hookEventReceiver: nil,
@@ -409,6 +426,7 @@ final class BrowserScriptableTests: XCTestCase {
 
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "evaluated")
+        XCTAssertEqual(response.data?["text"], "page text")
     }
 
     func test_browserGetText_withNilBrowserVM_returnsError() {
@@ -452,6 +470,107 @@ final class BrowserScriptableTests: XCTestCase {
 
         XCTAssertFalse(response.success)
         XCTAssertTrue(response.error?.contains("not available") == true)
+    }
+
+    func test_browserSnapshot_returnsAccessibilityTreeJSON() {
+        viewModel.scriptEvaluator = { script, _ in
+            XCTAssertTrue(script.contains("cocxyRef"))
+            return .success(#"[{"ref":"b1","role":"button","name":"Save"}]"#)
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(id: "bs-1", command: "browser-snapshot", params: nil)
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "captured")
+        XCTAssertEqual(response.data?["snapshot"], #"[{"ref":"b1","role":"button","name":"Save"}]"#)
+    }
+
+    func test_browserClick_dispatchesElementRefClickScript() {
+        viewModel.scriptEvaluator = { script, _ in
+            XCTAssertTrue(script.contains(#"data-cocxy-ref="b1""#))
+            XCTAssertTrue(script.contains(".click()"))
+            return .success("clicked")
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(id: "bc-1", command: "browser-click", params: ["ref": "b1"])
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "clicked")
+        XCTAssertEqual(response.data?["ref"], "b1")
+    }
+
+    func test_browserFill_dispatchesInputScriptWithEscapedText() {
+        viewModel.scriptEvaluator = { script, _ in
+            XCTAssertTrue(script.contains(#"data-cocxy-ref="i1""#))
+            XCTAssertTrue(script.contains("hello"))
+            XCTAssertTrue(script.contains("InputEvent"))
+            return .success("filled")
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(
+            id: "bf-3",
+            command: "browser-fill",
+            params: ["ref": "i1", "text": "hello"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "filled")
+        XCTAssertEqual(response.data?["ref"], "i1")
+    }
+
+    func test_browserScreenshot_returnsDataURLOrOutputPath() {
+        viewModel.screenshotCapturer = { outputPath, _ in
+            XCTAssertNil(outputPath)
+            return .dataURL("data:image/png;base64,AAA=", byteCount: 3)
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(id: "bss-1", command: "browser-screenshot", params: nil)
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "captured")
+        XCTAssertEqual(response.data?["dataURL"], "data:image/png;base64,AAA=")
+    }
+
+    func test_browserConsole_returnsBufferedConsoleEntries() {
+        viewModel.recordConsoleEntry(level: "log", message: "ready")
+        viewModel.recordConsoleEntry(level: "error", message: "failed")
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(id: "bcns-1", command: "browser-console", params: nil)
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "2")
+        XCTAssertEqual(response.data?["entry_0_level"], "log")
+        XCTAssertEqual(response.data?["entry_1_message"], "failed")
     }
 
     // MARK: - Browser Navigation Actions Emitted by Handler

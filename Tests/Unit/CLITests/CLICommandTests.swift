@@ -1728,7 +1728,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 149)
+        XCTAssertEqual(CLICommand.allCases.count, 157)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1776,6 +1776,11 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.browserEval.usageExample, "cocxy browser eval <script>")
         XCTAssertEqual(CLICommand.browserGetText.usageExample, "cocxy browser text")
         XCTAssertEqual(CLICommand.browserListTabs.usageExample, "cocxy browser tabs")
+        XCTAssertEqual(CLICommand.browserSnapshot.usageExample, "cocxy browser snapshot")
+        XCTAssertEqual(CLICommand.browserClick.usageExample, "cocxy browser click <ref>")
+        XCTAssertEqual(CLICommand.browserFill.usageExample, "cocxy browser fill <ref> <text>")
+        XCTAssertEqual(CLICommand.browserScreenshot.usageExample, "cocxy browser screenshot [--output <path>]")
+        XCTAssertEqual(CLICommand.browserConsole.usageExample, "cocxy browser console")
 
         guard case .browserNavigate(let url) = try CLIArgumentParser.parse(["browser", "navigate", "https://example.com"]) else {
             return XCTFail("browser navigate should parse through the public CLI shape")
@@ -1790,6 +1795,24 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "state"]))
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "tabs"]))
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "text"]))
+        XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "snapshot"]))
+
+        guard case .browserClick(let ref) = try CLIArgumentParser.parse(["browser", "click", "b1"]) else {
+            return XCTFail("browser click should parse an element ref")
+        }
+        XCTAssertEqual(ref, "b1")
+
+        guard case .browserFill(let ref, let text) = try CLIArgumentParser.parse(["browser", "fill", "i1", "hello", "world"]) else {
+            return XCTFail("browser fill should parse an element ref and text")
+        }
+        XCTAssertEqual(ref, "i1")
+        XCTAssertEqual(text, "hello world")
+
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "screenshot", "--output", "/tmp/page.png"]),
+            .browserScreenshot(outputPath: "/tmp/page.png")
+        )
+        XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "console"]))
     }
 
     func testWorktreeFocusUsageMatchesPublicParserShape() throws {

@@ -954,6 +954,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserGetText(request)
         case .browserListTabs:
             return handleBrowserListTabs(request)
+        case .browserSnapshot:
+            return handleBrowserSnapshot(request)
+        case .browserClick:
+            return handleBrowserClick(request)
+        case .browserFill:
+            return handleBrowserFill(request)
+        case .browserScreenshot:
+            return handleBrowserScreenshot(request)
+        case .browserConsole:
+            return handleBrowserConsole(request)
 
         // Remote workspace commands
         case .remoteList:
@@ -2177,19 +2187,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        if Thread.isMainThread {
-            MainActor.assumeIsolated {
-                viewModel.evaluateJavaScript(script)
-            }
-        } else {
-            DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    viewModel.evaluateJavaScript(script)
-                }
-            }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: script,
+            requiresBridge: false
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
         }
 
-        return .ok(id: request.id, data: ["status": "evaluated"])
+        var data = ["status": "evaluated"]
+        if let value = result.value, !value.isEmpty {
+            data["result"] = value
+        }
+        return .ok(id: request.id, data: data)
     }
 
     /// Gets the text content of the current page via `document.body.innerText`.
@@ -2201,19 +2212,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        if Thread.isMainThread {
-            MainActor.assumeIsolated {
-                viewModel.evaluateJavaScript("document.body.innerText")
-            }
-        } else {
-            DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    viewModel.evaluateJavaScript("document.body.innerText")
-                }
-            }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: "document.body.innerText",
+            requiresBridge: false
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
         }
 
-        return .ok(id: request.id, data: ["status": "evaluated"])
+        var data = ["status": "evaluated"]
+        if let value = result.value, !value.isEmpty {
+            data["text"] = value
+        }
+        return .ok(id: request.id, data: data)
     }
 
     /// Lists all open browser tabs.
@@ -2243,6 +2255,231 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             data["tab_\(index)_active"] = tab["isActive"] ?? "false"
         }
         return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserSnapshot(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: Self.browserSnapshotScript,
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: [
+            "status": "captured",
+            "snapshot": result.value ?? "[]"
+        ])
+    }
+
+    private func handleBrowserClick(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], Self.isValidBrowserRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: Self.browserClickScript(ref: ref),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        let status = result.value == "not-found" ? "not-found" : "clicked"
+        return .ok(id: request.id, data: ["status": status, "ref": ref])
+    }
+
+    private func handleBrowserFill(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], Self.isValidBrowserRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let text = request.params?["text"] else {
+            return .failure(id: request.id, error: "Missing required param: text")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: Self.browserFillScript(ref: ref, text: text),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        let status = result.value == "not-found" ? "not-found" : "filled"
+        return .ok(id: request.id, data: ["status": status, "ref": ref])
+    }
+
+    private func handleBrowserScreenshot(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let outputPath = request.params?["output"]
+        let result = viewModel.automationBridge.captureScreenshot(outputPath: outputPath, timeout: 3)
+            ?? .failure("Browser page is not ready for screenshot capture")
+        switch result {
+        case .dataURL(let dataURL, let byteCount):
+            return .ok(id: request.id, data: [
+                "status": "captured",
+                "dataURL": dataURL,
+                "bytes": "\(byteCount)"
+            ])
+        case .file(let path, let byteCount):
+            return .ok(id: request.id, data: [
+                "status": "captured",
+                "path": path,
+                "bytes": "\(byteCount)"
+            ])
+        case .failure(let error):
+            return .failure(id: request.id, error: error)
+        }
+    }
+
+    private func handleBrowserConsole(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let entries: [BrowserConsoleSnapshotEntry]
+        if Thread.isMainThread {
+            entries = MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
+        } else {
+            entries = DispatchQueue.main.sync {
+                MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
+            }
+        }
+        var data: [String: String] = ["count": "\(entries.count)"]
+        for (index, entry) in entries.enumerated() {
+            data["entry_\(index)_level"] = entry.level
+            data["entry_\(index)_message"] = entry.message
+            data["entry_\(index)_timestamp"] = ISO8601DateFormatter().string(from: entry.timestamp)
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func browserScriptResult(
+        viewModel: BrowserViewModel,
+        script: String,
+        requiresBridge: Bool
+    ) -> BrowserScriptEvaluationResult {
+        if let result = viewModel.automationBridge.evaluate(script: script, timeout: 3) {
+            return result
+        }
+        guard !requiresBridge else {
+            return .failure("Browser page is not ready for synchronous automation")
+        }
+        if Thread.isMainThread {
+            MainActor.assumeIsolated {
+                viewModel.evaluateJavaScript(script)
+            }
+        } else {
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    viewModel.evaluateJavaScript(script)
+                }
+            }
+        }
+        return .success("")
+    }
+
+    private static func isValidBrowserRef(_ ref: String) -> Bool {
+        guard !ref.isEmpty, ref.count <= 64 else { return false }
+        return ref.allSatisfy { character in
+            character.isLetter || character.isNumber || character == "-" || character == "_"
+        }
+    }
+
+    private static func browserClickScript(ref: String) -> String {
+        """
+        (function() {
+            const element = document.querySelector('[data-cocxy-ref=\"\(ref)\"]');
+            if (!element) { return 'not-found'; }
+            element.scrollIntoView({block: 'center', inline: 'center'});
+            element.click();
+            return 'clicked';
+        })();
+        """
+    }
+
+    private static func browserFillScript(ref: String, text: String) -> String {
+        let escapedText = javaScriptStringLiteral(text)
+        return """
+        (function() {
+            const element = document.querySelector('[data-cocxy-ref=\"\(ref)\"]');
+            if (!element) { return 'not-found'; }
+            element.scrollIntoView({block: 'center', inline: 'center'});
+            if (element.isContentEditable) {
+                element.textContent = \(escapedText);
+            } else {
+                element.value = \(escapedText);
+            }
+            element.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: \(escapedText)}));
+            element.dispatchEvent(new Event('change', {bubbles: true}));
+            return 'filled';
+        })();
+        """
+    }
+
+    private static var browserSnapshotScript: String {
+        """
+        (function() {
+            const selector = [
+                'a[href]',
+                'button',
+                'input',
+                'textarea',
+                'select',
+                '[role]',
+                '[tabindex]',
+                '[contenteditable="true"]'
+            ].join(',');
+            const visible = (element) => {
+                const rect = element.getBoundingClientRect();
+                const style = window.getComputedStyle(element);
+                return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
+            };
+            const textFor = (element) => {
+                return (
+                    element.getAttribute('aria-label') ||
+                    element.getAttribute('title') ||
+                    element.innerText ||
+                    element.value ||
+                    element.getAttribute('placeholder') ||
+                    ''
+                ).trim().slice(0, 160);
+            };
+            const nodes = Array.from(document.querySelectorAll(selector)).filter(visible).slice(0, 500);
+            return JSON.stringify(nodes.map((element, index) => {
+                const cocxyRef = element.getAttribute('data-cocxy-ref') || `e${index + 1}`;
+                element.setAttribute('data-cocxy-ref', cocxyRef);
+                const rect = element.getBoundingClientRect();
+                return {
+                    ref: cocxyRef,
+                    role: element.getAttribute('role') || element.tagName.toLowerCase(),
+                    name: textFor(element),
+                    x: Math.round(rect.x),
+                    y: Math.round(rect.y),
+                    width: Math.round(rect.width),
+                    height: Math.round(rect.height)
+                };
+            }));
+        })();
+        """
+    }
+
+    private static func javaScriptStringLiteral(_ value: String) -> String {
+        let data = try? JSONSerialization.data(withJSONObject: [value], options: [])
+        guard let data,
+              let encoded = String(data: data, encoding: .utf8),
+              encoded.count >= 2 else {
+            return "''"
+        }
+        return String(encoded.dropFirst().dropLast())
     }
 
     // MARK: - Plugin Handlers

@@ -507,6 +507,11 @@ struct BrowserPanelView: View {
                     onConsoleEntry: { entry in
                         Task { @MainActor in
                             consoleEntries.append(entry)
+                            viewModel.recordConsoleEntry(
+                                level: entry.level.rawValue,
+                                message: entry.message,
+                                timestamp: entry.timestamp
+                            )
                         }
                     }
                 )
@@ -743,6 +748,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         }
 
         context.coordinator.webView = webView
+        BrowserWebKitAutomationBridge.install(on: viewModel, webView: webView)
         context.coordinator.subscribeToNavigationActions()
 
         // Load directly on creation as well as through the action publisher.

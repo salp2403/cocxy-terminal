@@ -363,6 +363,21 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser tabs`
     case browserListTabs
 
+    /// `cocxy browser snapshot`
+    case browserSnapshot
+
+    /// `cocxy browser click <ref>`
+    case browserClick(ref: String)
+
+    /// `cocxy browser fill <ref> <text>`
+    case browserFill(ref: String, text: String)
+
+    /// `cocxy browser screenshot [--output <path>]`
+    case browserScreenshot(outputPath: String?)
+
+    /// `cocxy browser console`
+    case browserConsole
+
     // MARK: - SSH (v4)
 
     /// `cocxy ssh user@host [-p port] [-i identity]`
@@ -2425,11 +2440,44 @@ public enum CLIArgumentParser {
             return .browserGetText
         case "tabs":
             return .browserListTabs
+        case "snapshot":
+            return .browserSnapshot
+        case "click":
+            let rest = Array(arguments.dropFirst())
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser click", argument: "ref")
+            }
+            return .browserClick(ref: ref)
+        case "fill":
+            let rest = Array(arguments.dropFirst())
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser fill", argument: "ref")
+            }
+            let textParts = Array(rest.dropFirst())
+            guard !textParts.isEmpty else {
+                throw CLIError.missingArgument(command: "browser fill", argument: "text")
+            }
+            return .browserFill(ref: ref, text: textParts.joined(separator: " "))
+        case "screenshot":
+            let rest = Array(arguments.dropFirst())
+            if rest.isEmpty {
+                return .browserScreenshot(outputPath: nil)
+            }
+            guard rest.count == 2, rest[0] == "--output", !rest[1].isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "browser screenshot",
+                    argument: rest.joined(separator: " "),
+                    reason: "Use --output <path> or omit it to return a data URL."
+                )
+            }
+            return .browserScreenshot(outputPath: rest[1])
+        case "console":
+            return .browserConsole
         default:
             throw CLIError.invalidArgument(
                 command: "browser",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, or tabs."
+                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, tabs, snapshot, click, fill, screenshot, or console."
             )
         }
     }
