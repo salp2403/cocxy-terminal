@@ -625,6 +625,16 @@ final class CLIArgumentParserTests: XCTestCase {
         )
     }
 
+    func testTmuxCompatParsesCommonAliases() throws {
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "new", "-s", "work"]), .newTab(directory: nil, engine: nil))
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "split-window", "-h"]), .split(direction: .horizontal))
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "split-window", "-v"]), .split(direction: .vertical))
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "list-sessions"]), .splitList)
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "attach", "-t", "abc"]), .focusTab(id: "abc"))
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "kill-session", "-t", "abc"]), .closeTab(id: "abc"))
+        XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "send-keys", "echo hello", "Enter"]), .send(text: "echo hello\n"))
+    }
+
     func testParseWindowNewWithEnginePreference() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse(["window", "new", "--engine", "daemon"]),
@@ -1728,7 +1738,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 157)
+        XCTAssertEqual(CLICommand.allCases.count, 158)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1743,6 +1753,7 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.status.rawValue, "status")
         XCTAssertEqual(CLICommand.identify.rawValue, "identify")
         XCTAssertEqual(CLICommand.capabilities.rawValue, "capabilities")
+        XCTAssertEqual(CLICommand.tmux.rawValue, "tmux")
     }
 
     // MARK: - 40. All commands have non-empty help descriptions

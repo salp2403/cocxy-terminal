@@ -90,6 +90,7 @@ public enum CLICommand: String, CaseIterable {
     case identify
     case capabilities
     case top
+    case tmux
     case vaultList = "vault-list"
     case vaultClear = "vault-clear"
     case vaultResume = "vault-resume"
@@ -329,6 +330,7 @@ public enum CLICommand: String, CaseIterable {
         case .identify: return "Describe this Cocxy CLI and owning app as JSON"
         case .capabilities: return "List discoverable local capabilities as JSON"
         case .top: return "Show a top-style live view of Cocxy tabs and active process state"
+        case .tmux: return "Run common tmux-compatible aliases on Cocxy sessions and panes"
         case .vaultList: return "List locally vaulted external agent sessions as JSON"
         case .vaultClear: return "Clear locally vaulted external agent sessions"
         case .vaultResume: return "Resume an external agent session without shell interpolation"
@@ -539,6 +541,7 @@ public enum CLICommand: String, CaseIterable {
         case .identify: return "cocxy identify"
         case .capabilities: return "cocxy capabilities"
         case .top: return "cocxy top [--once|--json] [--interval <seconds>]"
+        case .tmux: return "cocxy tmux new|split-window|send-keys|list-sessions|attach|kill-session"
         case .vaultList: return "cocxy vault list"
         case .vaultClear: return "cocxy vault clear"
         case .vaultResume: return "cocxy vault resume <agent> <session-id> [--dry-run]"

@@ -808,6 +808,9 @@ public enum CLIArgumentParser {
         case "top":
             return try parseTop(arguments: Array(arguments.dropFirst()))
 
+        case "tmux":
+            return try parseTmux(arguments: Array(arguments.dropFirst()))
+
         case "vault":
             return try parseVault(arguments: Array(arguments.dropFirst()))
 
@@ -1818,6 +1821,142 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "send-key", argument: "key")
         }
         return .sendKey(key: key)
+    }
+
+    /// Parses a small tmux-compatible command layer onto existing Cocxy CLI commands.
+    private static func parseTmux(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "tmux", argument: "subcommand")
+        }
+        let rest = Array(arguments.dropFirst())
+
+        switch subcommand {
+        case "new", "new-session":
+            return try parseTmuxNew(arguments: rest)
+        case "split-window", "splitw":
+            return try parseTmuxSplitWindow(arguments: rest)
+        case "send-keys", "send":
+            return try parseTmuxSendKeys(arguments: rest)
+        case "list-sessions", "ls":
+            return .splitList
+        case "attach", "attach-session":
+            return .focusTab(id: try parseTmuxTarget(arguments: rest, command: "tmux attach"))
+        case "kill-session":
+            return .closeTab(id: try parseTmuxTarget(arguments: rest, command: "tmux kill-session"))
+        default:
+            throw CLIError.invalidArgument(
+                command: "tmux",
+                argument: subcommand,
+                reason: "Supported: new, split-window, send-keys, list-sessions, attach, kill-session."
+            )
+        }
+    }
+
+    private static func parseTmuxNew(arguments: [String]) throws -> ParsedCommand {
+        var directory: String?
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "-s", "--session", "-t":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tmux new", argument: "session")
+                }
+                index += 2
+            case "-c":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tmux new", argument: "directory")
+                }
+                directory = arguments[index + 1]
+                index += 2
+            case "-d":
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: "tmux new",
+                    argument: arguments[index],
+                    reason: "Supported flags: -s <name>, -c <dir>, -d."
+                )
+            }
+        }
+        return .newTab(directory: directory, engine: nil)
+    }
+
+    private static func parseTmuxSplitWindow(arguments: [String]) throws -> ParsedCommand {
+        var direction: SplitDirection?
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "-h":
+                direction = .horizontal
+                index += 1
+            case "-v":
+                direction = .vertical
+                index += 1
+            case "-c", "-t":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tmux split-window", argument: arguments[index])
+                }
+                index += 2
+            default:
+                throw CLIError.invalidArgument(
+                    command: "tmux split-window",
+                    argument: arguments[index],
+                    reason: "Supported flags: -h, -v, -c <dir>, -t <target>."
+                )
+            }
+        }
+        return .split(direction: direction)
+    }
+
+    private static func parseTmuxSendKeys(arguments: [String]) throws -> ParsedCommand {
+        guard !arguments.isEmpty else {
+            throw CLIError.missingArgument(command: "tmux send-keys", argument: "keys")
+        }
+        var text = ""
+        var index = 0
+        while index < arguments.count {
+            let token = arguments[index]
+            if token == "-t" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "tmux send-keys", argument: "target")
+                }
+                index += 2
+                continue
+            }
+            appendTmuxKey(token, to: &text)
+            index += 1
+        }
+        guard !text.isEmpty else {
+            throw CLIError.missingArgument(command: "tmux send-keys", argument: "keys")
+        }
+        return .send(text: text)
+    }
+
+    private static func appendTmuxKey(_ token: String, to text: inout String) {
+        switch token {
+        case "Enter", "C-m":
+            text.append("\n")
+        case "Space":
+            text.append(" ")
+        default:
+            if !text.isEmpty, !text.hasSuffix("\n"), !text.hasSuffix(" ") {
+                text.append(" ")
+            }
+            text.append(token)
+        }
+    }
+
+    private static func parseTmuxTarget(arguments: [String], command: String) throws -> String {
+        if arguments.first == "-t" {
+            guard arguments.count >= 2, !arguments[1].isEmpty else {
+                throw CLIError.missingArgument(command: command, argument: "target")
+            }
+            return arguments[1]
+        }
+        guard let target = arguments.first, !target.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "target")
+        }
+        return target
     }
 
     /// Parses `cocxy classify <input>`.
