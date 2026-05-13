@@ -102,11 +102,7 @@ extension MainWindowController {
             lspDiagnosticsProvider: MainActorAgentLSPDiagnosticsProvider { [weak self] limit in
                 self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
             },
-            mcpManager: MCPConfiguredManager(
-                transportFactory: .localDefault(
-                    securitySandbox: configService?.current.security.sandbox ?? .defaults
-                )
-            ),
+            mcpManager: agentModeMCPManager(),
             usageRecorder: { [weak self] usage in
                 await self?.recordCurrentAgentModeTokenUsage(usage)
             },
@@ -124,6 +120,57 @@ extension MainWindowController {
         )
         agentPanelViewModel = viewModel
         return viewModel
+    }
+
+    private func agentModeMCPManager() -> any MCPManaging {
+        MCPCompositeManager(managers: [
+            BrowserMCPToolManager(provider: BrowserMCPToolProvider(executor: browserMCPCommandExecutor())),
+            MCPConfiguredManager(
+                transportFactory: .localDefault(
+                    securitySandbox: configService?.current.security.sandbox ?? .defaults
+                )
+            ),
+        ])
+    }
+
+    private func browserMCPCommandExecutor() -> some BrowserMCPCommandExecuting {
+        let controllerRef = WeakReference(self)
+        return ClosureBrowserMCPCommandExecutor { command in
+            try await MainActor.run {
+                guard let controller = controllerRef.value else {
+                    throw BrowserMCPCommandExecutionError.failed("Browser window is no longer available")
+                }
+                return try controller.handleBrowserMCPCommand(command)
+            }
+        }
+    }
+
+    private func handleBrowserMCPCommand(_ command: BrowserMCPCommand) throws -> [String: String] {
+        let controllerRef = WeakReference(self)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModelProviderOverride: {
+                syncOnMainActor {
+                    controllerRef.value?.browserViewModelForExternalNavigation()
+                }
+            },
+            browserNavigationViewModelProviderOverride: {
+                syncOnMainActor {
+                    controllerRef.value?.browserViewModelForExternalNavigation()
+                }
+            }
+        )
+        let request = SocketRequest(
+            id: "browser-mcp-\(UUID().uuidString)",
+            command: command.socketCommand.rawValue,
+            params: command.params.isEmpty ? nil : command.params
+        )
+        let response = handler.handleCommand(request)
+        guard response.success else {
+            throw BrowserMCPCommandExecutionError.failed(response.error ?? "Browser MCP command failed")
+        }
+        return response.data ?? [:]
     }
 
     func currentAgentModeSkillRegistry() -> SkillRegistry {

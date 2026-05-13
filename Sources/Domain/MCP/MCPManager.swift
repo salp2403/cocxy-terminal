@@ -8,6 +8,37 @@ protocol MCPManaging: Sendable {
     func executeTool(agentToolID: String, arguments: [String: AgentJSONValue]) async throws -> AgentJSONValue
 }
 
+actor MCPCompositeManager: MCPManaging {
+    private let managers: [any MCPManaging]
+
+    init(managers: [any MCPManaging]) {
+        self.managers = managers
+    }
+
+    func listToolDescriptors() async throws -> [AgentToolDescriptor] {
+        var descriptors: [AgentToolDescriptor] = []
+        for manager in managers {
+            descriptors.append(contentsOf: try await manager.listToolDescriptors())
+        }
+        return descriptors.sorted { $0.id < $1.id }
+    }
+
+    func executeTool(
+        agentToolID: String,
+        arguments: [String: AgentJSONValue]
+    ) async throws -> AgentJSONValue {
+        let normalizedToolID = AgentToolDescriptor.normalizedID(agentToolID)
+        for manager in managers {
+            let descriptors = try await manager.listToolDescriptors()
+            guard descriptors.contains(where: { $0.id == normalizedToolID }) else {
+                continue
+            }
+            return try await manager.executeTool(agentToolID: normalizedToolID, arguments: arguments)
+        }
+        throw MCPManagerError.unknownTool(agentToolID)
+    }
+}
+
 enum MCPManagerError: Error, Sendable, Equatable {
     case unknownTool(String)
     case serverUnavailable(String)
