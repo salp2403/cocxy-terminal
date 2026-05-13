@@ -765,6 +765,19 @@ final class CocxyCoreView: NSView {
         bridge.sendText(seq, to: sid)
     }
 
+    private func sendDeleteControlSequence(_ seq: String, keyCode: UInt16) {
+        guard let bridge = bridge, let sid = surfaceID else { return }
+        if shouldThrottleResponderDeleteRepeat(
+            keyCode: keyCode,
+            bridge: bridge,
+            surfaceID: sid
+        ) {
+            return
+        }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        bridge.sendText(seq, to: sid)
+    }
+
     private func sendArrowKeys(_ arrows: [ArrowDirection]) {
         guard !arrows.isEmpty, let bridge, let sid = surfaceID else { return }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
@@ -818,8 +831,12 @@ final class CocxyCoreView: NSView {
         }
     }
 
-    override func deleteBackward(_ sender: Any?) { sendControlSequence("\u{7F}") }
-    override func deleteForward(_ sender: Any?) { sendControlSequence("\u{1B}[3~") }
+    override func deleteBackward(_ sender: Any?) {
+        sendDeleteControlSequence("\u{7F}", keyCode: 51)
+    }
+    override func deleteForward(_ sender: Any?) {
+        sendDeleteControlSequence("\u{1B}[3~", keyCode: 117)
+    }
     override func moveUp(_ sender: Any?) { sendControlSequence("\u{1B}[A") }
     override func moveDown(_ sender: Any?) { sendControlSequence("\u{1B}[B") }
     override func moveRight(_ sender: Any?) {
@@ -1265,6 +1282,33 @@ final class CocxyCoreView: NSView {
               timestamp >= lastTimestamp,
               timestamp - lastTimestamp < minimumInterval else {
             repeatedDeleteDispatchTimestamps[event.keyCode] = timestamp
+            return false
+        }
+        return true
+    }
+
+    internal func shouldThrottleResponderDeleteRepeat(
+        keyCode: UInt16,
+        bridge: CocxyCoreBridge,
+        surfaceID sid: SurfaceID
+    ) -> Bool {
+        guard Self.throttledDeleteKeyCodes.contains(keyCode),
+              let state = bridge.surfaceState(for: sid) else {
+            return false
+        }
+        let hasMouseTracking = cocxycore_terminal_mode_mouse(state.terminal) > 0
+        let promptSafeRepeat = prefersPacedDeleteRepeat?() == true || hasMouseTracking
+        let shouldPaceRepeat = promptSafeRepeat || cocxycore_terminal_is_alt_screen(state.terminal)
+        guard shouldPaceRepeat else { return false }
+        let minimumInterval = promptSafeRepeat
+            ? Self.agentRepeatedDeleteMinimumInterval
+            : Self.repeatedDeleteMinimumInterval
+
+        let timestamp = ProcessInfo.processInfo.systemUptime
+        guard let lastTimestamp = repeatedDeleteDispatchTimestamps[keyCode],
+              timestamp >= lastTimestamp,
+              timestamp - lastTimestamp < minimumInterval else {
+            repeatedDeleteDispatchTimestamps[keyCode] = timestamp
             return false
         }
         return true

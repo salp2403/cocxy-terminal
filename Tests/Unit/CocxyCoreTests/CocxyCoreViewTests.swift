@@ -1028,6 +1028,23 @@ struct CocxyCoreViewTests {
         #expect(harness.view.shouldThrottleTerminalDeleteRepeat(pacedRepeat, bridge: harness.bridge, surfaceID: harness.surfaceID) == false)
     }
 
+    @Test("agent responder delete repeat is throttled")
+    func agentResponderDeleteRepeatIsThrottled() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.view.prefersPacedDeleteRepeat = { true }
+        var deliveredInputCount = 0
+        harness.bridge.inputDeliveryObserver = { surfaceID, event in
+            guard surfaceID == harness.surfaceID, event == .delivered else { return }
+            deliveredInputCount += 1
+        }
+
+        harness.view.deleteBackward(nil)
+        harness.view.deleteBackward(nil)
+
+        #expect(deliveredInputCount == 1)
+    }
+
     @Test("pending command correction uses Tab to accept and Escape to dismiss")
     func pendingCommandCorrectionUsesTabToAcceptAndEscapeToDismiss() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")

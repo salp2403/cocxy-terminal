@@ -50,7 +50,10 @@ final class SystemClipboardService: ClipboardServiceProtocol {
         let hasImageData = containsInlineImageData(in: pasteboard)
         let hasRichTextPayload = containsRichTextPayload(in: pasteboard)
 
-        if let text, !text.isEmpty, hasRichTextPayload || !hasImageData {
+        if let text,
+           !text.isEmpty,
+           !Self.isAttachmentPlaceholderText(text),
+           hasRichTextPayload || !hasImageData {
             return .text(text)
         }
 
@@ -107,6 +110,13 @@ final class SystemClipboardService: ClipboardServiceProtocol {
 
     private func containsRichTextPayload(in pasteboard: NSPasteboard) -> Bool {
         pasteboard.availableType(from: [.rtf, .html]) != nil
+    }
+
+    private static func isAttachmentPlaceholderText(_ text: String) -> Bool {
+        text
+            .replacingOccurrences(of: "\u{FFFC}", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 
     private func convertImageDataToPNG(_ data: Data) -> Data? {

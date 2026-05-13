@@ -100,6 +100,29 @@ final class ClipboardServiceTests: XCTestCase {
         XCTAssertEqual(urls[0].pathExtension, "png")
     }
 
+    func testSystemClipboardTerminalPasteTreatsRichAttachmentPlaceholderAsImage() throws {
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name("cocxy-clipboard-rich-placeholder-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setString("\u{FFFC}", forType: .string)
+        pasteboard.setData(Data("<img src=\"cid:clipboard-image\">".utf8), forType: .html)
+        pasteboard.setData(Self.pngData, forType: .png)
+        let imageDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: imageDirectory) }
+        let clipboard = SystemClipboardService(
+            pasteboard: pasteboard,
+            clipboardImageDirectory: imageDirectory
+        )
+
+        let payload = try XCTUnwrap(clipboard.readTerminalPastePayload())
+        guard case .fileURLs(let urls) = payload else {
+            return XCTFail("Expected rich image placeholder paste to produce file URLs")
+        }
+
+        XCTAssertEqual(urls.count, 1)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: urls[0].path))
+        XCTAssertEqual(urls[0].pathExtension, "png")
+    }
+
     func testSystemClipboardTerminalPastePrefersImageFileURLOverCompanionText() throws {
         let imageURL = try makeTemporaryDirectory()
             .appendingPathComponent("Pasted Image.png", isDirectory: false)
