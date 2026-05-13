@@ -203,6 +203,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentDashboardViewModel: AgentDashboardViewModel?
 
+    /// Active local agent-team coordinators keyed by team ID.
+    var activeAgentTeamCoordinators: [String: AgentTeamCoordinator] = [:]
+
     /// The agent config service for agents.toml hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigService: AgentConfigService?
@@ -2671,6 +2674,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     kind: kind,
                     params: params
                 )
+            },
+            agentTeamCLIProvider: { kind, params in
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleAgentTeamCLIRequest(kind: kind, params: params)
             }
         )
 

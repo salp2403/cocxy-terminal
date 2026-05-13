@@ -1251,6 +1251,23 @@ public struct CommandRunner {
                 params: options.socketParams
             )
 
+        case .agentTeamLaunch(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "agent-team-launch",
+                params: options.socketParams
+            )
+
+        case .agentTeamList:
+            return CLISocketRequest(id: requestID, command: "agent-team-list", params: nil)
+
+        case .agentTeamStop(let teamID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "agent-team-stop",
+                params: ["team-id": teamID]
+            )
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):

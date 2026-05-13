@@ -296,6 +296,12 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .browserImportRun:
             return formatDataOrJSON(response: response)
+        case .agentTeamLaunch:
+            return formatDataOrJSON(response: response)
+        case .agentTeamList:
+            return formatDataOrJSON(response: response)
+        case .agentTeamStop:
+            return formatDataOrJSON(response: response)
 
         // SSH (v4)
         case .ssh:

@@ -388,6 +388,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// secrets, and the active tab's repository.
     let gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Routes local agent-team CLI verbs through AppDelegate so the handler
+    /// can create panes on the focused window without owning UI state.
+    let agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Starts a web terminal on the focused surface and returns status fields.
     let webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)?
 
@@ -584,7 +588,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
         worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
-        gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
+        gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.configProvider = configProvider
         self.statusDetailsProvider = statusDetailsProvider
@@ -666,6 +671,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.worktreeCLIProvider = worktreeCLIProvider
         self.githubCLIProvider = githubCLIProvider
         self.gitAssistantCLIProvider = gitAssistantCLIProvider
+        self.agentTeamCLIProvider = agentTeamCLIProvider
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -982,6 +988,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserImport(kind: "preview", request: request)
         case .browserImportRun:
             return handleBrowserImport(kind: "run", request: request)
+        case .agentTeamLaunch:
+            return handleAgentTeam(kind: "launch", request: request)
+        case .agentTeamList:
+            return handleAgentTeam(kind: "list", request: request)
+        case .agentTeamStop:
+            return handleAgentTeam(kind: "stop", request: request)
 
         // Remote workspace commands
         case .remoteList:

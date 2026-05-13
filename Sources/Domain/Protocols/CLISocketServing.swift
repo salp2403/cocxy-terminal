@@ -259,6 +259,12 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserImportPreview = "browser-import-preview"
     /// Import browser history/cookies/bookmarks into a profile.
     case browserImportRun = "browser-import-run"
+    /// Launch a local agent team with one native pane per teammate.
+    case agentTeamLaunch = "agent-team-launch"
+    /// List active local agent teams.
+    case agentTeamList = "agent-team-list"
+    /// Stop a local agent team and close its panes.
+    case agentTeamStop = "agent-team-stop"
 
     // MARK: - Window Management (v3)
 

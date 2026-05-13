@@ -67,6 +67,28 @@ public struct BrowserImportCLIOptions: Equatable {
     }
 }
 
+public struct AgentTeamCLIOptions: Equatable {
+    public let teammates: String
+    public let teamID: String?
+    public let configPath: String?
+
+    public init(teammates: String, teamID: String? = nil, configPath: String? = nil) {
+        self.teammates = teammates
+        self.teamID = teamID
+        self.configPath = configPath
+    }
+
+    var socketParams: [String: String] {
+        var params: [String: String] = [
+            "provider": "claude-code",
+            "teammates": teammates,
+        ]
+        if let teamID { params["team-id"] = teamID }
+        if let configPath { params["config"] = configPath }
+        return params
+    }
+}
+
 public struct BrowserCookieSetCLIOptions: Equatable {
     public let name: String
     public let value: String
@@ -500,6 +522,15 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy browser import run --source <browser> [options]`
     case browserImportRun(BrowserImportCLIOptions)
+
+    /// `cocxy claude-teams --teammates "A,B,C" [--team-id <id>] [--config <path>]`
+    case agentTeamLaunch(AgentTeamCLIOptions)
+
+    /// `cocxy claude-teams list`
+    case agentTeamList
+
+    /// `cocxy claude-teams stop <team-id>`
+    case agentTeamStop(teamID: String)
 
     // MARK: - SSH (v4)
 
@@ -991,6 +1022,9 @@ public enum CLIArgumentParser {
 
         case "browser":
             return try parseBrowser(arguments: Array(arguments.dropFirst()))
+
+        case "claude-teams":
+            return try parseAgentTeams(arguments: Array(arguments.dropFirst()))
 
         case "web":
             return try parseWeb(arguments: Array(arguments.dropFirst()))
@@ -3039,6 +3073,74 @@ public enum CLIArgumentParser {
             domainWhitelist: whitelist,
             domainBlacklist: blacklist
         )
+    }
+
+    private static func parseAgentTeams(arguments: [String]) throws -> ParsedCommand {
+        if let action = arguments.first {
+            switch action {
+            case "list":
+                guard arguments.count == 1 else {
+                    throw CLIError.invalidArgument(
+                        command: "claude-teams list",
+                        argument: Array(arguments.dropFirst()).joined(separator: " "),
+                        reason: "List does not accept additional arguments."
+                    )
+                }
+                return .agentTeamList
+            case "stop":
+                guard arguments.count >= 2, !arguments[1].isEmpty else {
+                    throw CLIError.missingArgument(command: "claude-teams stop", argument: "team-id")
+                }
+                guard arguments.count == 2 else {
+                    throw CLIError.invalidArgument(
+                        command: "claude-teams stop",
+                        argument: Array(arguments.dropFirst(2)).joined(separator: " "),
+                        reason: "Use exactly one team-id."
+                    )
+                }
+                return .agentTeamStop(teamID: arguments[1])
+            case "launch":
+                return try parseAgentTeamLaunch(arguments: Array(arguments.dropFirst()))
+            default:
+                break
+            }
+        }
+        return try parseAgentTeamLaunch(arguments: arguments)
+    }
+
+    private static func parseAgentTeamLaunch(arguments: [String]) throws -> ParsedCommand {
+        var teammates: String?
+        var teamID: String?
+        var configPath: String?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--teammates":
+                teammates = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
+            case "--team-id":
+                teamID = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
+            case "--config":
+                configPath = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
+            default:
+                throw CLIError.invalidArgument(
+                    command: "claude-teams",
+                    argument: argument,
+                    reason: "Use --teammates <name,name>, --team-id <id>, --config <path>, list, or stop."
+                )
+            }
+            index += 1
+        }
+
+        guard let teammates, !teammates.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.missingArgument(command: "claude-teams", argument: "--teammates <name,name>")
+        }
+
+        return .agentTeamLaunch(AgentTeamCLIOptions(
+            teammates: teammates,
+            teamID: teamID,
+            configPath: configPath
+        ))
     }
 
     private static func value(

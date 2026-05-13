@@ -147,6 +147,12 @@ public enum CLICommand: String, CaseIterable {
     case browserImportPreview = "browser-import-preview"
     case browserImportRun = "browser-import-run"
 
+    // MARK: - Agent Teams
+
+    case agentTeamLaunch = "agent-team-launch"
+    case agentTeamList = "agent-team-list"
+    case agentTeamStop = "agent-team-stop"
+
     // MARK: - Window Management (v3)
 
     case windowNew = "window-new"
@@ -387,6 +393,9 @@ public enum CLICommand: String, CaseIterable {
         case .browserNetwork: return "List recent browser resource timing entries"
         case .browserImportPreview: return "Preview browser history, cookie, and bookmark import counts"
         case .browserImportRun: return "Import browser history, cookies, and bookmarks into the active profile"
+        case .agentTeamLaunch: return "Launch a local agent team in native panes"
+        case .agentTeamList: return "List active local agent teams"
+        case .agentTeamStop: return "Stop a local agent team and close its panes"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -605,6 +614,9 @@ public enum CLICommand: String, CaseIterable {
         case .browserNetwork: return "cocxy browser network [--filter <text>] [--tail <n>]"
         case .browserImportPreview: return "cocxy browser import preview --source <browser>"
         case .browserImportRun: return "cocxy browser import run --source <browser>"
+        case .agentTeamLaunch: return "cocxy claude-teams --teammates <name,name>"
+        case .agentTeamList: return "cocxy claude-teams list"
+        case .agentTeamStop: return "cocxy claude-teams stop <team-id>"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"
