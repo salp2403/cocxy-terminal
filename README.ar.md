@@ -1,43 +1,43 @@
 # Cocxy Terminal
 
-<!-- cocxy-readme-source-sha256: c0ca6c8413e844e7656e6e3e63e587930d1af0ef397aa8611a7b7fb5f18180e0 -->
+<!-- cocxy-readme-source-sha256: 6421358cb8f505dbc80aa46424f78cf429367902b1d4a843df4acd82caca0b50 -->
 <!-- cocxy-readme-locale: ar -->
 
 [English](README.md) | [العربية](README.ar.md) | [Bosanski](README.bs.md) | [Dansk](README.da.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [日本語](README.ja.md) | [ភាសាខ្មែរ](README.km.md) | [한국어](README.ko.md) | [Norsk](README.no.md) | [Polski](README.pl.md) | [Português do Brasil](README.pt-BR.md) | [Русский](README.ru.md) | [ไทย](README.th.md) | [Türkçe](README.tr.md) | [Українська](README.uk.md) | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
 
-> 此本地化 README 由標準英文 README.md 產生。修改來源後請執行 `scripts/translate-readme.sh` 以更新 hash。
+> يتم إنشاء هذا README المحلي من README.md الإنجليزي الأساسي. حافظ على سطر hash محدثا بتشغيل `scripts/translate-readme.sh` بعد أي تغيير في المصدر.
 
-## 概覽
+## نظرة عامة
 
-Cocxy Terminal 是理解 coding agent 工作階段的 native macOS terminal。它結合 Metal GPU rendering、多層 agent detection、內建 code review、native Markdown workspace、本機 notebooks、內建 browser，以及 zero telemetry 的持久 SSH sessions。
+Cocxy Terminal هو terminal أصلي لنظام macOS يفهم جلسات agent البرمجية. يجمع بين GPU rendering عبر Metal، كشف agent متعدد الطبقات، مراجعة تغييرات مدمجة، مساحة Markdown أصلية، notebooks محلية، browser مدمج، وجلسات SSH مستمرة مع zero telemetry.
 
-## 安裝
+## التثبيت
 
 ```bash
 brew tap salp2403/tap && brew install --cask cocxy
 ```
 
-更新:
+للتحديث:
 
 ```bash
 brew update && brew upgrade --cask cocxy
 ```
 
-## 核心能力
+## القدرات الأساسية
 
-- 透過 hooks、OSC、pattern matching 與 timing 進行 agent detection，並為每個 session 提供 Dashboard 與 Timeline。
-- Local-first Agent Mode，包含 MCP servers、codebase indexing、skills、inline completions、sandboxed Computer Use 與加密對話。
-- Markdown workspace、Jupyter import/export、workflows、browser profiles、DevTools 與完整 CLI companion。
-- CocxyCore 提供以 Zig 與 Metal 建構的 terminal engine，支援 ligatures、inline images、search 與 Protocol v2。
-- Remote Workspaces 涵蓋 SSH multiplexing、tmux/screen fallback、SFTP、proxy、relay 與 local daemon。
+- كشف agent عبر hooks و OSC و pattern matching و timing، مع Dashboard و Timeline لكل جلسة.
+- Agent Mode محلي أولا مع MCP servers، codebase indexing، skills، inline completions، Computer Use sandboxed، ومحادثات مشفرة.
+- Markdown workspace، Jupyter import/export، workflows، browser profiles، DevTools، و CLI companion غني.
+- CocxyCore يقدم terminal engine مبنيا بـ Zig و Metal مع ligatures، inline images، search، و Protocol v2.
+- Remote Workspaces تشمل SSH multiplexing، tmux/screen fallback، SFTP، proxy، relay، و daemon محلي.
 
-## 隱私與安全
+## الخصوصية والأمان
 
-Cocxy 沒有 analytics SDK、沒有自動 crash upload，也沒有用於 terminal activity 的 backend。網路只用於簽章更新或使用者明確啟動的動作。
+Cocxy لا يحتوي على analytics SDK، ولا مُرسِل تشخيصات تلقائي، ولا backend للبيانات الطرفية. الشبكة تستخدم فقط للتحديثات الموقعة أو للأوامر التي يختارها المستخدم صراحة.
 
-## 從 source 建置
+## البناء من المصدر
 
-需要 macOS 14+、Xcode 16+、Swift 5.10+ 與 Zig 0.15+。執行 `swift build`、`swift test`，或使用 `./scripts/build-app.sh release` 建置本機 app。
+يتطلب macOS 14+ و Xcode 16+ و Swift 5.10+ و Zig 0.15+. شغل `swift build`، ثم `swift test`، أو أنشئ app محلي باستخدام `./scripts/build-app.sh release`.
 
 
 Technical terms intentionally preserved: terminal, agent, MCP, CocxyCore, Homebrew, Swift, Metal, AppKit, SwiftUI, Zig, macOS, GitHub, SSH, SFTP, tmux, screen, PTY, GPU, CLI, Markdown, Jupyter, WebKit, Foundation Models.

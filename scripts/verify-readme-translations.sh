@@ -51,6 +51,32 @@ require_contains() {
   fi
 }
 
+locale_body_marker() {
+  case "$1" in
+    ar) printf '## الخصوصية والأمان' ;;
+    bs) printf '## Privatnost i sigurnost' ;;
+    da) printf '## Privatliv og sikkerhed' ;;
+    de) printf '## Datenschutz und Sicherheit' ;;
+    es) printf '## Privacidad y seguridad' ;;
+    fr) printf '## Confidentialité et sécurité' ;;
+    it) printf '## Privacy e sicurezza' ;;
+    ja) printf '## プライバシーとセキュリティ' ;;
+    km) printf '## ឯកជនភាព និងសុវត្ថិភាព' ;;
+    ko) printf '## 개인정보와 보안' ;;
+    no) printf '## Personvern og sikkerhet' ;;
+    pl) printf '## Prywatność i bezpieczeństwo' ;;
+    pt-BR) printf '## Privacidade e segurança' ;;
+    ru) printf '## Приватность и безопасность' ;;
+    th) printf '## ความเป็นส่วนตัวและความปลอดภัย' ;;
+    tr) printf '## Gizlilik ve güvenlik' ;;
+    uk) printf '## Приватність і безпека' ;;
+    vi) printf '## Quyền riêng tư và bảo mật' ;;
+    zh-CN) printf '## 隐私与安全' ;;
+    zh-TW) printf '## 隱私與安全' ;;
+    *) printf '## Privacy and security' ;;
+  esac
+}
+
 for locale in "${LOCALES[@]}"; do
   file="$ROOT_DIR/README.$locale.md"
   if [[ ! -f "$file" ]]; then
@@ -60,6 +86,7 @@ for locale in "${LOCALES[@]}"; do
 
   require_contains "$file" "<!-- cocxy-readme-source-sha256: $expected_hash -->" "stale source hash"
   require_contains "$file" "<!-- cocxy-readme-locale: $locale -->" "locale marker"
+  require_contains "$file" "$(locale_body_marker "$locale")" "localized body marker"
   require_contains "$file" "[English](README.md)" "language header"
   for other in "${LOCALES[@]}"; do
     require_contains "$file" "(README.$other.md)" "language header"

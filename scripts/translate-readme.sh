@@ -41,9 +41,10 @@ language_name() {
 }
 
 language_links() {
+  local link_locale
   printf '[English](README.md)'
-  for locale in "${LOCALES[@]}"; do
-    printf ' | [%s](README.%s.md)' "$(language_name "$locale")" "$locale"
+  for link_locale in "${LOCALES[@]}"; do
+    printf ' | [%s](README.%s.md)' "$(language_name "$link_locale")" "$link_locale"
   done
   printf '\n'
 }
@@ -86,7 +87,7 @@ brew update && brew upgrade --cask cocxy
 
 ## الخصوصية والأمان
 
-Cocxy لا يحتوي على analytics SDK، ولا crash upload تلقائي، ولا backend للبيانات الطرفية. الشبكة تستخدم فقط للتحديثات الموقعة أو للأوامر التي يختارها المستخدم صراحة.
+Cocxy لا يحتوي على analytics SDK، ولا مُرسِل تشخيصات تلقائي، ولا backend للبيانات الطرفية. الشبكة تستخدم فقط للتحديثات الموقعة أو للأوامر التي يختارها المستخدم صراحة.
 
 ## البناء من المصدر
 
@@ -123,7 +124,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Privatnost i sigurnost
 
-Cocxy nema analytics SDK, automatski crash upload ni backend za terminal aktivnost. Mreža se koristi samo za potpisana ažuriranja ili za eksplicitne korisničke akcije.
+Cocxy nema analytics SDK, automatski pošiljalac dijagnostike ni backend za terminal aktivnost. Mreža se koristi samo za potpisana ažuriranja ili za eksplicitne korisničke akcije.
 
 ## Build iz izvora
 
@@ -160,7 +161,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Privatliv og sikkerhed
 
-Cocxy har ingen analytics SDK, ingen automatisk crash upload og ingen backend til terminalaktivitet. Netværk bruges kun til signerede opdateringer eller eksplicitte brugerhandlinger.
+Cocxy har ingen analytics SDK, ingen automatisk diagnostikafsender og ingen backend til terminalaktivitet. Netværk bruges kun til signerede opdateringer eller eksplicitte brugerhandlinger.
 
 ## Byg fra source
 
@@ -197,7 +198,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Datenschutz und Sicherheit
 
-Cocxy enthält kein analytics SDK, keinen automatischen crash upload und kein backend für terminal activity. Netzwerkzugriff passiert nur für signierte Updates oder explizite Benutzeraktionen.
+Cocxy enthält kein analytics SDK, keinen automatischen Diagnosedienst und kein backend für terminal activity. Netzwerkzugriff passiert nur für signierte Updates oder explizite Benutzeraktionen.
 
 ## Aus dem Quellcode bauen
 
@@ -234,7 +235,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Privacidad y seguridad
 
-Cocxy no tiene analytics SDK, crash upload automático ni backend para actividad de terminal. La red solo se usa para actualizaciones firmadas o acciones explícitas del usuario.
+Cocxy no tiene analytics SDK, envío automático de diagnósticos ni backend para actividad de terminal. La red solo se usa para actualizaciones firmadas o acciones explícitas del usuario.
 
 ## Build desde código fuente
 
@@ -271,7 +272,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Confidentialité et sécurité
 
-Cocxy n'a pas d'analytics SDK, pas de crash upload automatique et pas de backend pour l'activité du terminal. Le réseau sert uniquement aux mises à jour signées ou aux actions explicites de l'utilisateur.
+Cocxy n'a pas d'analytics SDK, pas d'envoi automatique de diagnostics et pas de backend pour l'activité du terminal. Le réseau sert uniquement aux mises à jour signées ou aux actions explicites de l'utilisateur.
 
 ## Construire depuis la source
 
@@ -308,7 +309,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Privacy e sicurezza
 
-Cocxy non include analytics SDK, crash upload automatico o backend per l'attività del terminal. La rete viene usata solo per aggiornamenti firmati o azioni esplicite dell'utente.
+Cocxy non include analytics SDK, invio automatico di diagnostica o backend per l'attività del terminal. La rete viene usata solo per aggiornamenti firmati o azioni esplicite dell'utente.
 
 ## Build da sorgente
 
@@ -345,7 +346,7 @@ brew update && brew upgrade --cask cocxy
 
 ## プライバシーとセキュリティ
 
-Cocxy には analytics SDK、自動 crash upload、terminal activity 用 backend はありません。ネットワークは署名済み更新またはユーザーが明示した操作だけに使われます。
+Cocxy には analytics SDK、自動診断送信、terminal activity 用 backend はありません。ネットワークは署名済み更新またはユーザーが明示した操作だけに使われます。
 
 ## ソースからビルド
 
@@ -382,7 +383,7 @@ brew update && brew upgrade --cask cocxy
 
 ## ឯកជនភាព និងសុវត្ថិភាព
 
-Cocxy មិនមាន analytics SDK, crash upload ស្វ័យប្រវត្តិ ឬ backend សម្រាប់ terminal activity ទេ។ បណ្តាញត្រូវបានប្រើតែសម្រាប់ signed updates ឬសកម្មភាពដែលអ្នកប្រើជ្រើសរើសច្បាស់លាស់។
+Cocxy មិនមាន analytics SDK, automatic diagnostic sender ឬ backend សម្រាប់ terminal activity ទេ។ បណ្តាញត្រូវបានប្រើតែសម្រាប់ signed updates ឬសកម្មភាពដែលអ្នកប្រើជ្រើសរើសច្បាស់លាស់។
 
 ## Build ពី source
 
@@ -419,7 +420,7 @@ brew update && brew upgrade --cask cocxy
 
 ## 개인정보와 보안
 
-Cocxy에는 analytics SDK, 자동 crash upload, terminal activity backend가 없습니다. 네트워크는 서명된 업데이트나 사용자가 명시적으로 실행한 작업에만 사용됩니다.
+Cocxy에는 analytics SDK, 자동 진단 전송, terminal activity backend가 없습니다. 네트워크는 서명된 업데이트나 사용자가 명시적으로 실행한 작업에만 사용됩니다.
 
 ## source에서 빌드
 
@@ -456,7 +457,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Personvern og sikkerhet
 
-Cocxy har ingen analytics SDK, ingen automatisk crash upload og ingen backend for terminal activity. Nettverk brukes bare til signerte oppdateringer eller eksplisitte brukerhandlinger.
+Cocxy har ingen analytics SDK, ingen automatisk diagnostikksender og ingen backend for terminal activity. Nettverk brukes bare til signerte oppdateringer eller eksplisitte brukerhandlinger.
 
 ## Bygg fra kilde
 
@@ -493,7 +494,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Prywatność i bezpieczeństwo
 
-Cocxy nie ma analytics SDK, automatycznego crash upload ani backendu dla terminal activity. Sieć jest używana tylko do podpisanych aktualizacji lub jawnych działań użytkownika.
+Cocxy nie ma analytics SDK, automatycznego wysyłania diagnostyki ani backendu dla terminal activity. Sieć jest używana tylko do podpisanych aktualizacji lub jawnych działań użytkownika.
 
 ## Budowanie ze źródeł
 
@@ -530,7 +531,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Privacidade e segurança
 
-Cocxy não possui analytics SDK, crash upload automático nem backend para terminal activity. A rede é usada apenas para atualizações assinadas ou ações explícitas do usuário.
+Cocxy não possui analytics SDK, envio automático de diagnósticos nem backend para terminal activity. A rede é usada apenas para atualizações assinadas ou ações explícitas do usuário.
 
 ## Build a partir do código-fonte
 
@@ -567,7 +568,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Приватность и безопасность
 
-Cocxy не содержит analytics SDK, автоматического crash upload или backend для terminal activity. Сеть используется только для подписанных обновлений или явных действий пользователя.
+Cocxy не содержит analytics SDK, автоматической отправки диагностики или backend для terminal activity. Сеть используется только для подписанных обновлений или явных действий пользователя.
 
 ## Сборка из исходного кода
 
@@ -604,7 +605,7 @@ brew update && brew upgrade --cask cocxy
 
 ## ความเป็นส่วนตัวและความปลอดภัย
 
-Cocxy ไม่มี analytics SDK, ไม่มี crash upload อัตโนมัติ และไม่มี backend สำหรับ terminal activity เครือข่ายใช้เฉพาะ signed updates หรือการกระทำที่ผู้ใช้สั่งชัดเจน
+Cocxy ไม่มี analytics SDK, ไม่มีการส่ง diagnostics อัตโนมัติ และไม่มี backend สำหรับ terminal activity เครือข่ายใช้เฉพาะ signed updates หรือการกระทำที่ผู้ใช้สั่งชัดเจน
 
 ## Build จาก source
 
@@ -641,7 +642,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Gizlilik ve güvenlik
 
-Cocxy'de analytics SDK, otomatik crash upload veya terminal activity backend yoktur. Ağ yalnızca imzalı güncellemeler veya kullanıcının açıkça başlattığı işlemler için kullanılır.
+Cocxy'de analytics SDK, otomatik tanılama gönderimi veya terminal activity backend yoktur. Ağ yalnızca imzalı güncellemeler veya kullanıcının açıkça başlattığı işlemler için kullanılır.
 
 ## Kaynaktan build
 
@@ -678,7 +679,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Приватність і безпека
 
-Cocxy не має analytics SDK, автоматичного crash upload або backend для terminal activity. Мережа використовується лише для підписаних оновлень або явних дій користувача.
+Cocxy не має analytics SDK, автоматичного надсилання діагностики або backend для terminal activity. Мережа використовується лише для підписаних оновлень або явних дій користувача.
 
 ## Build із source
 
@@ -715,7 +716,7 @@ brew update && brew upgrade --cask cocxy
 
 ## Quyền riêng tư và bảo mật
 
-Cocxy không có analytics SDK, không tự động crash upload và không có backend cho terminal activity. Mạng chỉ dùng cho signed updates hoặc hành động rõ ràng của người dùng.
+Cocxy không có analytics SDK, không tự động gửi chẩn đoán và không có backend cho terminal activity. Mạng chỉ dùng cho signed updates hoặc hành động rõ ràng của người dùng.
 
 ## Build từ source
 
@@ -752,7 +753,7 @@ brew update && brew upgrade --cask cocxy
 
 ## 隐私与安全
 
-Cocxy 没有 analytics SDK、没有自动 crash upload，也没有用于 terminal activity 的 backend。网络只用于签名更新或用户明确发起的操作。
+Cocxy 没有 analytics SDK、没有自动诊断发送，也没有用于 terminal activity 的 backend。网络只用于签名更新或用户明确发起的操作。
 
 ## 从 source 构建
 
@@ -789,7 +790,7 @@ brew update && brew upgrade --cask cocxy
 
 ## 隱私與安全
 
-Cocxy 沒有 analytics SDK、沒有自動 crash upload，也沒有用於 terminal activity 的 backend。網路只用於簽章更新或使用者明確啟動的動作。
+Cocxy 沒有 analytics SDK、沒有自動診斷傳送，也沒有用於 terminal activity 的 backend。網路只用於簽章更新或使用者明確啟動的動作。
 
 ## 從 source 建置
 

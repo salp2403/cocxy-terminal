@@ -327,7 +327,7 @@ Shipped in English and Spanish out of the box (2,651+ strings each, kept symmetr
 
 ### Zero Telemetry
 
-Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists only for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. Verify with any network monitor.
+Cocxy has no telemetry pipeline, no analytics SDK, no automatic diagnostic sender, and no tracking. Network use exists only for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. Verify with any network monitor.
 
 ## Keyboard Shortcuts
 

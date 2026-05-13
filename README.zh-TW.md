@@ -1,6 +1,6 @@
 # Cocxy Terminal
 
-<!-- cocxy-readme-source-sha256: c0ca6c8413e844e7656e6e3e63e587930d1af0ef397aa8611a7b7fb5f18180e0 -->
+<!-- cocxy-readme-source-sha256: 6421358cb8f505dbc80aa46424f78cf429367902b1d4a843df4acd82caca0b50 -->
 <!-- cocxy-readme-locale: zh-TW -->
 
 [English](README.md) | [العربية](README.ar.md) | [Bosanski](README.bs.md) | [Dansk](README.da.md) | [Deutsch](README.de.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [日本語](README.ja.md) | [ភាសាខ្មែរ](README.km.md) | [한국어](README.ko.md) | [Norsk](README.no.md) | [Polski](README.pl.md) | [Português do Brasil](README.pt-BR.md) | [Русский](README.ru.md) | [ไทย](README.th.md) | [Türkçe](README.tr.md) | [Українська](README.uk.md) | [Tiếng Việt](README.vi.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-TW.md)
@@ -33,7 +33,7 @@ brew update && brew upgrade --cask cocxy
 
 ## 隱私與安全
 
-Cocxy 沒有 analytics SDK、沒有自動 crash upload，也沒有用於 terminal activity 的 backend。網路只用於簽章更新或使用者明確啟動的動作。
+Cocxy 沒有 analytics SDK、沒有自動診斷傳送，也沒有用於 terminal activity 的 backend。網路只用於簽章更新或使用者明確啟動的動作。
 
 ## 從 source 建置
 
