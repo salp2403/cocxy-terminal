@@ -2637,6 +2637,7 @@ final class CocxyCoreBridge: TerminalEngine {
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
         appLanguage: AppLanguage? = nil,
+        hookIntegration: HookIntegrationConfig? = nil,
         ligaturesEnabled: Bool? = nil,
         fontThickenEnabled: Bool? = nil,
         imageMemoryLimitBytes: UInt64? = nil,
@@ -2659,6 +2660,7 @@ final class CocxyCoreBridge: TerminalEngine {
             windowPaddingY: windowPaddingY,
             clipboardReadAccess: clipboardReadAccess,
             appLanguage: appLanguage,
+            hookIntegration: hookIntegration,
             ligaturesEnabled: ligaturesEnabled,
             fontThickenEnabled: fontThickenEnabled,
             imageMemoryLimitBytes: imageMemoryLimitBytes,
@@ -2907,7 +2909,10 @@ final class CocxyCoreBridge: TerminalEngine {
         // fork time. Scope those mutations carefully and restore them
         // immediately after spawn so other modules/windows do not observe them.
         let previousCwd = FileManager.default.currentDirectoryPath
-        let envVars = buildShellIntegrationEnvVars(forShell: shell)
+        let envVars = buildShellIntegrationEnvVars(
+            forShell: shell,
+            hookIntegration: config?.hookIntegration ?? .defaults
+        )
         let envKeysToUnset = Self.terminalEnvironmentKeysToUnset.subtracting(envVars.keys)
         var previousEnv = envVars.reduce(into: [String: String?]()) { result, entry in
             result[entry.key] = Self.environmentValue(for: entry.key)
@@ -2947,13 +2952,15 @@ final class CocxyCoreBridge: TerminalEngine {
     func buildShellIntegrationEnvVars(
         forShell shell: String,
         environment: [String: String] = ProcessInfo.processInfo.environment,
-        resourcesPath: String? = nil
+        resourcesPath: String? = nil,
+        hookIntegration: HookIntegrationConfig = .defaults
     ) -> [String: String] {
         let resolvedResourcesPath = resourcesPath ?? resolveResourcesPath()
         return Self.makeShellIntegrationEnvVars(
             forShell: shell,
             environment: environment,
-            resourcesPath: resolvedResourcesPath
+            resourcesPath: resolvedResourcesPath,
+            hookIntegration: hookIntegration
         )
     }
 
@@ -2983,7 +2990,8 @@ final class CocxyCoreBridge: TerminalEngine {
     private static func makeShellIntegrationEnvVars(
         forShell shell: String,
         environment: [String: String],
-        resourcesPath: String?
+        resourcesPath: String?,
+        hookIntegration: HookIntegrationConfig
     ) -> [String: String] {
         var env: [String: String] = [:]
 
@@ -3025,7 +3033,9 @@ final class CocxyCoreBridge: TerminalEngine {
         env["COCXY_RESOURCES_DIR"] = resourcesPath
         env["COCXY_SHELL_INTEGRATION_DIR"] = shellIntegrationRoot.path
         env["COCXY_SHELL_FEATURES"] = "marks,cwd,title"
-        env["COCXY_CLAUDE_HOOKS"] = "1"
+        for (key, value) in hookIntegration.disablingEnvironment() {
+            env[key] = value
+        }
         if let browserOpener = ensureBrowserOpenerScript(resourcesPath: resourcesPath) {
             if let originalBrowser = environment["BROWSER"], !originalBrowser.isEmpty {
                 env["COCXY_ORIG_BROWSER"] = originalBrowser

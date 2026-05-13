@@ -150,6 +150,8 @@ struct PreferencesView: View {
             AgentModePreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .vault:
             VaultPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
+        case .hooks:
+            HookIntegrationPreferencesSection(viewModel: viewModel, saveStatus: $saveStatus)
         case .mcpServers:
             MCPServersPreferencesSection(viewModel: viewModel)
         case .voice:
@@ -211,6 +213,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
     case agentDetection
     case agentMode
     case vault
+    case hooks
     case mcpServers
     case voice
     case spotlight
@@ -246,6 +249,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .agentDetection: return "Agent Detection"
         case .agentMode: return "Agent Mode"
         case .vault: return "Vault"
+        case .hooks: return "Hooks"
         case .mcpServers: return "MCP Servers"
         case .voice: return "Voice"
         case .spotlight: return "Spotlight"
@@ -276,6 +280,7 @@ enum PreferencesSection: String, CaseIterable, Identifiable {
         case .agentDetection: return "brain.head.profile"
         case .agentMode: return "sparkles"
         case .vault: return "lock.rectangle.stack"
+        case .hooks: return "point.3.connected.trianglepath.dotted"
         case .mcpServers: return "link"
         case .voice: return "mic"
         case .spotlight: return "magnifyingglass.circle"
@@ -1700,6 +1705,78 @@ private struct VaultAgentToggleRow: View {
         ) {
             Text(agentID)
                 .font(.body.monospaced())
+        }
+    }
+}
+
+// MARK: - Hook Integration Section
+
+struct HookIntegrationPreferencesSection: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    @Binding var saveStatus: String?
+
+    var body: some View {
+        Form {
+            Section(viewModel.localizedString("preferences.hooks.feature.section", fallback: "Feature")) {
+                Toggle(
+                    viewModel.localizedString("preferences.hooks.enable", fallback: "Enable hook forwarding"),
+                    isOn: $viewModel.hooksIntegrationEnabled
+                )
+                Text(
+                    viewModel.localizedString(
+                        "preferences.hooks.feature.caption",
+                        fallback: "Controls the environment inherited by new shells. Installed bridges stay on disk, but disabled agents receive COCXY_*_HOOKS_DISABLED=1 so their events do not forward into Cocxy."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section(viewModel.localizedString("preferences.hooks.agents.section", fallback: "Agents")) {
+                ForEach(viewModel.availableHookAgents) { agent in
+                    HookAgentToggleRow(viewModel: viewModel, agent: agent)
+                }
+            }
+
+            Section(viewModel.localizedString("preferences.hooks.install.section", fallback: "Install")) {
+                Text(
+                    viewModel.localizedString(
+                        "preferences.hooks.install.caption",
+                        fallback: "Use `cocxy setup-hooks --check` to inspect installed bridges, `--dry-run` to preview changes, and `--remove` to uninstall managed bridge entries."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            PreferencesSaveButton(viewModel: viewModel, saveStatus: $saveStatus)
+        }
+        .formStyle(.grouped)
+        .navigationTitle(viewModel.localizedString("preferences.section.hooks", fallback: "Hooks"))
+    }
+}
+
+private struct HookAgentToggleRow: View {
+    @ObservedObject var viewModel: PreferencesViewModel
+    let agent: HookIntegrationAgent
+
+    var body: some View {
+        Toggle(
+            isOn: Binding(
+                get: { viewModel.hookAgentEnabled(agent) },
+                set: { viewModel.setHookAgent(agent, enabled: $0) }
+            )
+        ) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(agent.displayName)
+                Text(agent.disabledEnvironmentKey)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
         }
     }
 }

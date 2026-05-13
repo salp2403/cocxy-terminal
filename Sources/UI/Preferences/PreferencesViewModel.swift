@@ -238,6 +238,14 @@ final class PreferencesViewModel: ObservableObject {
     /// Per-agent enablement and custom metadata for the local vault.
     @Published private var vaultAgents: [String: VaultAgentConfig]
 
+    // MARK: - Hook Integration
+
+    /// Master switch for external-agent hook forwarding from Cocxy-launched shells.
+    @Published var hooksIntegrationEnabled: Bool
+
+    /// Per-agent forwarding enablement for hook bridges.
+    @Published private var hookAgents: [HookIntegrationAgent: HookIntegrationAgentConfig]
+
     // MARK: - MCP Servers
 
     /// Raw JSON for the user-managed MCP server config file.
@@ -643,6 +651,7 @@ final class PreferencesViewModel: ObservableObject {
             || idleTimeoutSeconds != c.agentDetection.idleTimeoutSeconds
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || vaultHasUnsavedChanges(comparedTo: c.vault)
+            || hooksHasUnsavedChanges(comparedTo: c.hooks)
             || voiceHasUnsavedChanges(comparedTo: c.voice)
             || completionHasUnsavedChanges(comparedTo: c.completions)
             || spotlightHasUnsavedChanges(comparedTo: c.spotlight)
@@ -753,6 +762,20 @@ final class PreferencesViewModel: ObservableObject {
         vaultAgents = updatedAgents
     }
 
+    var availableHookAgents: [HookIntegrationAgent] {
+        HookIntegrationConfig.builtInAgents
+    }
+
+    func hookAgentEnabled(_ agent: HookIntegrationAgent) -> Bool {
+        hookAgents[agent]?.enabled ?? true
+    }
+
+    func setHookAgent(_ agent: HookIntegrationAgent, enabled: Bool) {
+        var updatedAgents = hookAgents
+        updatedAgents[agent] = HookIntegrationAgentConfig(enabled: enabled)
+        hookAgents = updatedAgents
+    }
+
     /// Reverts all editable properties to the original config snapshot.
     func discardChanges() {
         let c = savedConfig
@@ -815,6 +838,8 @@ final class PreferencesViewModel: ObservableObject {
         vaultConfirmBeforeResume = c.vault.confirmBeforeResume
         vaultSessionRetentionDays = c.vault.sessionRetentionDays
         vaultAgents = c.vault.agents
+        hooksIntegrationEnabled = c.hooks.enabled
+        hookAgents = c.hooks.agents
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
         completionInlineAIEnabled = c.completions.inlineAIEnabled
@@ -1062,6 +1087,10 @@ final class PreferencesViewModel: ObservableObject {
         self.vaultConfirmBeforeResume = config.vault.confirmBeforeResume
         self.vaultSessionRetentionDays = config.vault.sessionRetentionDays
         self.vaultAgents = config.vault.agents
+
+        // Hook Integration
+        self.hooksIntegrationEnabled = config.hooks.enabled
+        self.hookAgents = config.hooks.agents
 
         // Voice Input
         self.voiceEnabled = config.voice.enabled
@@ -1737,6 +1766,7 @@ final class PreferencesViewModel: ObservableObject {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         let agent = buildAgentModeConfigFromViewModel()
         let vault = buildVaultConfigFromViewModel()
+        let hooks = buildHookIntegrationConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
         let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
@@ -1809,6 +1839,7 @@ final class PreferencesViewModel: ObservableObject {
             uxPolish: uxPolish,
             agent: agent,
             vault: vault,
+            hooks: hooks,
             backup: backup,
             activity: activity,
             sessionReplay: sessionReplay,
@@ -1852,6 +1883,8 @@ final class PreferencesViewModel: ObservableObject {
         agentConversationEncryption = agent.conversationEncryption
         vaultSessionRetentionDays = vault.sessionRetentionDays
         vaultAgents = vault.agents
+        hooksIntegrationEnabled = hooks.enabled
+        hookAgents = hooks.agents
         activityCostTrackingEnabled = activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
         activityOutputCostMicrosPerMillionTokens = activity.outputCostMicrosPerMillionTokens
@@ -1930,6 +1963,17 @@ final class PreferencesViewModel: ObservableObject {
 
     private func vaultHasUnsavedChanges(comparedTo config: VaultConfig) -> Bool {
         buildVaultConfigFromViewModel() != config
+    }
+
+    private func buildHookIntegrationConfigFromViewModel() -> HookIntegrationConfig {
+        HookIntegrationConfig(
+            enabled: hooksIntegrationEnabled,
+            agents: hookAgents
+        )
+    }
+
+    private func hooksHasUnsavedChanges(comparedTo config: HookIntegrationConfig) -> Bool {
+        buildHookIntegrationConfigFromViewModel() != config
     }
 
     private func buildVoiceConfigFromViewModel() -> VoiceConfig {
@@ -2523,6 +2567,7 @@ final class PreferencesViewModel: ObservableObject {
         let notes = buildNotesConfigFromViewModel()
         let agent = buildAgentModeConfigFromViewModel()
         let vault = buildVaultConfigFromViewModel()
+        let hooks = buildHookIntegrationConfigFromViewModel()
         let activity = buildActivityConfigFromViewModel()
         let sessionReplay = buildSessionReplayConfigFromViewModel()
         let iCloudSync = buildICloudSyncConfigFromViewModel()
@@ -2651,6 +2696,11 @@ final class PreferencesViewModel: ObservableObject {
         session-retention-days = \(vault.sessionRetentionDays)
 
         \(Self.vaultAgentSectionsToml(vault.agents))
+
+        [hooks]
+        enabled = \(hooks.enabled)
+
+        \(Self.hookAgentSectionsToml(hooks.agents))
 
         [voice]
         enabled = \(voice.enabled)
@@ -2919,6 +2969,19 @@ final class PreferencesViewModel: ObservableObject {
             appendOptionalTomlLine("cwd-policy", config.cwdPolicy, to: &lines)
             appendOptionalTomlLine("session-directory", config.sessionDirectory, to: &lines)
             return lines.joined(separator: "\n")
+        }
+        .joined(separator: "\n\n")
+    }
+
+    private static func hookAgentSectionsToml(
+        _ agents: [HookIntegrationAgent: HookIntegrationAgentConfig]
+    ) -> String {
+        HookIntegrationConfig.builtInAgents.compactMap { agent in
+            guard let config = agents[agent] else { return nil }
+            return [
+                "[hooks.agents.\(agent.rawValue)]",
+                "enabled = \(config.enabled)",
+            ].joined(separator: "\n")
         }
         .joined(separator: "\n\n")
     }

@@ -331,6 +331,8 @@ struct TerminalEngineConfig: Sendable {
     let clipboardReadAccess: ClipboardReadAccess
     /// App language used for terminal-engine-owned UI prompts.
     let appLanguage: AppLanguage
+    /// Hook forwarding environment inherited by new shells.
+    let hookIntegration: HookIntegrationConfig
     /// Whether typographic ligatures should be enabled.
     let ligaturesEnabled: Bool
     /// Whether font thickening is enabled (maps to font-thicken / CGContextSetShouldSmoothFonts).
@@ -361,6 +363,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingY: Double = 4,
         clipboardReadAccess: ClipboardReadAccess = .prompt,
         appLanguage: AppLanguage = .system,
+        hookIntegration: HookIntegrationConfig = .defaults,
         ligaturesEnabled: Bool = true,
         fontThickenEnabled: Bool = false,
         imageMemoryLimitBytes: UInt64 = 256 * 1024 * 1024,
@@ -381,6 +384,7 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingY = windowPaddingY
         self.clipboardReadAccess = clipboardReadAccess
         self.appLanguage = appLanguage
+        self.hookIntegration = hookIntegration
         self.ligaturesEnabled = ligaturesEnabled
         self.fontThickenEnabled = fontThickenEnabled
         self.imageMemoryLimitBytes = imageMemoryLimitBytes
@@ -403,6 +407,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
         appLanguage: AppLanguage? = nil,
+        hookIntegration: HookIntegrationConfig? = nil,
         ligaturesEnabled: Bool? = nil,
         fontThickenEnabled: Bool? = nil,
         imageMemoryLimitBytes: UInt64? = nil,
@@ -425,6 +430,7 @@ struct TerminalEngineConfig: Sendable {
             windowPaddingY: windowPaddingY ?? self.windowPaddingY,
             clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess,
             appLanguage: appLanguage ?? self.appLanguage,
+            hookIntegration: hookIntegration ?? self.hookIntegration,
             ligaturesEnabled: ligaturesEnabled ?? self.ligaturesEnabled,
             fontThickenEnabled: fontThickenEnabled ?? self.fontThickenEnabled,
             imageMemoryLimitBytes: imageMemoryLimitBytes ?? self.imageMemoryLimitBytes,

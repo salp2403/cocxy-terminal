@@ -14,5 +14,20 @@ import Foundation
 /// before spawning so the host inheritance stays transparent to the user.
 public enum TerminalSpawnEnvironment {
     /// Keys that must be unset in the child PTY environment.
-    public static let keysToUnset: Set<String> = ["NO_COLOR"]
+    public static let keysToUnset: Set<String> = [
+        "NO_COLOR",
+        "COCXY_HOOKS_DISABLED",
+        "COCXY_CLAUDE_HOOKS_DISABLED",
+        "COCXY_CODEX_HOOKS_DISABLED",
+        "COCXY_GEMINI_HOOKS_DISABLED",
+        "COCXY_KIRO_HOOKS_DISABLED",
+        "COCXY_OPENCODE_HOOKS_DISABLED",
+        "COCXY_PI_HOOKS_DISABLED",
+        "COCXY_CURSOR_HOOKS_DISABLED",
+        "COCXY_ROVODEV_HOOKS_DISABLED",
+        "COCXY_COPILOT_HOOKS_DISABLED",
+        "COCXY_CODEBUDDY_HOOKS_DISABLED",
+        "COCXY_FACTORY_HOOKS_DISABLED",
+        "COCXY_QODER_HOOKS_DISABLED",
+    ]
 }

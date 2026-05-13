@@ -280,6 +280,7 @@ final class ConfigService: ConfigProviding {
     static func generateDefaultToml(updateChannel: ChannelKind = .stable) -> String {
         let defaults = CocxyConfig.defaults(updateChannel: updateChannel)
         let vaultAgentsToml = vaultAgentSectionsToml(defaults.vault.agents)
+        let hookAgentsToml = hookAgentSectionsToml(defaults.hooks.agents)
         return """
         # Cocxy Terminal Configuration
         # Documentation: ~/.config/cocxy/
@@ -443,6 +444,14 @@ final class ConfigService: ConfigProviding {
         session-retention-days = \(defaults.vault.sessionRetentionDays)
 
         \(vaultAgentsToml)
+
+        [hooks]
+        # Local external-agent hook forwarding. Enabled by default so
+        # installed bridges keep working; turn off the global switch or a
+        # per-agent switch to inject COCXY_*_HOOKS_DISABLED into new shells.
+        enabled = \(defaults.hooks.enabled)
+
+        \(hookAgentsToml)
 
         [voice]
         # Local voice input. Disabled by default. "system" resolves to
@@ -728,6 +737,19 @@ final class ConfigService: ConfigProviding {
         .joined(separator: "\n\n")
     }
 
+    private static func hookAgentSectionsToml(
+        _ agents: [HookIntegrationAgent: HookIntegrationAgentConfig]
+    ) -> String {
+        HookIntegrationConfig.builtInAgents.compactMap { agent in
+            guard let config = agents[agent] else { return nil }
+            return [
+                "[hooks.agents.\(agent.rawValue)]",
+                "enabled = \(config.enabled)",
+            ].joined(separator: "\n")
+        }
+        .joined(separator: "\n\n")
+    }
+
     private static func appendOptionalTomlLine(_ key: String, _ value: String?, to lines: inout [String]) {
         guard let value else { return }
         let escaped = value
@@ -762,6 +784,7 @@ final class ConfigService: ConfigProviding {
         let uxPolish = parseUXPolishConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
         let vault = parseVaultConfig(from: parsed)
+        let hooks = parseHookIntegrationConfig(from: parsed)
         let backup = parseBackupConfig(from: parsed)
         let activity = parseActivityConfig(from: parsed)
         let sessionReplay = parseSessionReplayConfig(from: parsed)
@@ -804,6 +827,7 @@ final class ConfigService: ConfigProviding {
             uxPolish: uxPolish,
             agent: agent,
             vault: vault,
+            hooks: hooks,
             backup: backup,
             activity: activity,
             sessionReplay: sessionReplay,
@@ -1230,6 +1254,27 @@ final class ConfigService: ConfigProviding {
             confirmBeforeResume: boolValue(table["confirm-before-resume"]) ?? defaults.confirmBeforeResume,
             encryptedStorage: true,
             sessionRetentionDays: rawRetention,
+            agents: agents
+        )
+    }
+
+    private func parseHookIntegrationConfig(from parsed: [String: TOMLValue]) -> HookIntegrationConfig {
+        let table = extractTable("hooks", from: parsed)
+        let defaults = HookIntegrationConfig.defaults
+        var agents = defaults.agents
+
+        for (sectionName, value) in parsed where sectionName.hasPrefix("hooks.agents.") {
+            guard case .table(let agentTable) = value else { continue }
+            let rawID = String(sectionName.dropFirst("hooks.agents.".count))
+            guard let agent = HookIntegrationAgent.normalized(rawID) else { continue }
+            let inherited = agents[agent] ?? HookIntegrationAgentConfig(enabled: true)
+            agents[agent] = HookIntegrationAgentConfig(
+                enabled: boolValue(agentTable["enabled"]) ?? inherited.enabled
+            )
+        }
+
+        return HookIntegrationConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
             agents: agents
         )
     }

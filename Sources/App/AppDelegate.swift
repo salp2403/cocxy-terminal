@@ -675,6 +675,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ?? TerminalConfig.defaults.clipboardReadAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
+            hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
             ligaturesEnabled: configService?.current.appearance.ligatures
                 ?? AppearanceConfig.defaults.ligatures,
             fontThickenEnabled: configService?.current.appearance.fontThicken
@@ -783,6 +784,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ?? TerminalConfig.defaults.clipboardReadAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
+            hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
             ligaturesEnabled: configService?.current.appearance.ligatures
                 ?? AppearanceConfig.defaults.ligatures,
             fontThickenEnabled: configService?.current.appearance.fontThicken
@@ -917,6 +919,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: newConfig.appearance.effectivePaddingY,
             clipboardReadAccess: newConfig.terminal.clipboardReadAccess,
             appLanguage: newConfig.appearance.appLanguage,
+            hookIntegration: newConfig.hooks,
             ligaturesEnabled: newConfig.appearance.ligatures,
             fontThickenEnabled: newConfig.appearance.fontThicken,
             imageMemoryLimitBytes: bytesFromMiB(newConfig.terminal.imageMemoryLimitMB),
@@ -1037,6 +1040,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 ?? TerminalConfig.defaults.clipboardReadAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
+            hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
             ligaturesEnabled: configService?.current.appearance.ligatures
                 ?? AppearanceConfig.defaults.ligatures,
             fontThickenEnabled: configService?.current.appearance.fontThicken

@@ -980,6 +980,34 @@ struct CocxyCoreBridgeTests {
         #expect(env["COCXY_ZSH_ORIG_ZDOTDIR"] == "/Users/test/.config/zsh")
     }
 
+    @Test("shell integration env reflects hook integration disable switches")
+    func shellIntegrationEnvReflectsHookIntegrationDisableSwitches() throws {
+        let bridge = try makeBridge()
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let zshDir = root.appendingPathComponent("shell-integration/zsh", isDirectory: true)
+        try FileManager.default.createDirectory(at: zshDir, withIntermediateDirectories: true)
+
+        let env = bridge.buildShellIntegrationEnvVars(
+            forShell: "/bin/zsh",
+            environment: [:],
+            resourcesPath: root.path,
+            hookIntegration: HookIntegrationConfig(
+                enabled: false,
+                agents: [
+                    .codex: HookIntegrationAgentConfig(enabled: false),
+                    .opencode: HookIntegrationAgentConfig(enabled: false),
+                ]
+            )
+        )
+
+        #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
+        #expect(env["COCXY_HOOKS_DISABLED"] == "1")
+        #expect(env["COCXY_CODEX_HOOKS_DISABLED"] == "1")
+        #expect(env["COCXY_OPENCODE_HOOKS_DISABLED"] == "1")
+        #expect(env["COCXY_PI_HOOKS_DISABLED"] == nil)
+    }
+
     @Test("shell integration scripts encode command text in OSC 133 C")
     func shellIntegrationScriptsEncodeCommandTextInOSC133C() throws {
         let packageRoot = URL(fileURLWithPath: #filePath)
@@ -1118,6 +1146,8 @@ struct CocxyCoreBridgeTests {
     @Test("terminal PTYs strip host NO_COLOR so agent TUIs can render their brand accents")
     func terminalPTYsStripHostNoColor() throws {
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("NO_COLOR"))
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOKS_DISABLED"))
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_OPENCODE_HOOKS_DISABLED"))
     }
 }
 

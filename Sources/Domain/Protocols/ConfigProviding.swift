@@ -57,6 +57,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let uxPolish: UXPolishConfig
     let agent: AgentModeConfig
     let vault: VaultConfig
+    let hooks: HookIntegrationConfig
     let backup: BackupConfig
     let activity: ActivityConfig
     let sessionReplay: SessionReplayConfig
@@ -91,6 +92,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         uxPolish: UXPolishConfig = .defaults,
         agent: AgentModeConfig = .defaults,
         vault: VaultConfig = .defaults,
+        hooks: HookIntegrationConfig = .defaults,
         backup: BackupConfig = .defaults,
         activity: ActivityConfig = .defaults,
         sessionReplay: SessionReplayConfig = .defaults,
@@ -124,6 +126,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.uxPolish = uxPolish
         self.agent = agent
         self.vault = vault
+        self.hooks = hooks
         self.backup = backup
         self.activity = activity
         self.sessionReplay = sessionReplay
@@ -165,6 +168,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             uxPolish: .defaults,
             agent: .defaults,
             vault: .defaults,
+            hooks: .defaults,
             backup: .defaults,
             activity: .defaults,
             sessionReplay: .defaults,
@@ -197,7 +201,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, vault, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, vault, hooks, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, rateLimit, worktree, github, gitAssistant, notes, lsp, vim
         case richInput
         case experimental
@@ -222,6 +226,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agent = try container.decodeIfPresent(AgentModeConfig.self, forKey: .agent)
             ?? .defaults
         self.vault = try container.decodeIfPresent(VaultConfig.self, forKey: .vault)
+            ?? .defaults
+        self.hooks = try container.decodeIfPresent(HookIntegrationConfig.self, forKey: .hooks)
             ?? .defaults
         self.backup = try container.decodeIfPresent(BackupConfig.self, forKey: .backup)
             ?? .defaults
@@ -365,6 +371,10 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             // Project config must never auto-enable process capture or
             // relaunch external tools on behalf of the user.
             vault: vault,
+            // Hook forwarding is global because shell environment inheritance
+            // is user/session-level. A repository-local config must not enable
+            // or disable outbound hook events for every launched tool.
+            hooks: hooks,
             // Local backups are global user data-safety preferences. Project
             // config must not enable, disable, redirect, or expand artifacts.
             backup: backup,
@@ -1535,6 +1545,217 @@ struct VaultConfig: Codable, Sendable, Equatable {
             merged[normalizedID] = config
         }
         return merged
+    }
+}
+
+// MARK: - Hook Integration Config
+
+/// Built-in external agents that can forward local hook events into Cocxy.
+///
+/// Raw values are the TOML table identifiers under `[hooks.agents.<id>]`.
+/// Display names are user-facing only; disabled environment keys mirror the
+/// hook-handler guard so Preferences can disable forwarding by environment
+/// inheritance without editing third-party config files.
+enum HookIntegrationAgent: String, Codable, Sendable, Equatable, CaseIterable, Identifiable {
+    case claude
+    case codex
+    case gemini
+    case kiro
+    case opencode
+    case pi
+    case cursor
+    case rovoDev = "rovo-dev"
+    case copilot
+    case codebuddy
+    case factory
+    case qoder
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .claude: return "Claude"
+        case .codex: return "Codex CLI"
+        case .gemini: return "Gemini CLI"
+        case .kiro: return "Kiro"
+        case .opencode: return "OpenCode"
+        case .pi: return "Pi"
+        case .cursor: return "Cursor"
+        case .rovoDev: return "Rovo Dev"
+        case .copilot: return "Copilot"
+        case .codebuddy: return "CodeBuddy"
+        case .factory: return "Factory"
+        case .qoder: return "Qoder"
+        }
+    }
+
+    var disabledEnvironmentKey: String {
+        switch self {
+        case .claude: return "COCXY_CLAUDE_HOOKS_DISABLED"
+        case .codex: return "COCXY_CODEX_HOOKS_DISABLED"
+        case .gemini: return "COCXY_GEMINI_HOOKS_DISABLED"
+        case .kiro: return "COCXY_KIRO_HOOKS_DISABLED"
+        case .opencode: return "COCXY_OPENCODE_HOOKS_DISABLED"
+        case .pi: return "COCXY_PI_HOOKS_DISABLED"
+        case .cursor: return "COCXY_CURSOR_HOOKS_DISABLED"
+        case .rovoDev: return "COCXY_ROVODEV_HOOKS_DISABLED"
+        case .copilot: return "COCXY_COPILOT_HOOKS_DISABLED"
+        case .codebuddy: return "COCXY_CODEBUDDY_HOOKS_DISABLED"
+        case .factory: return "COCXY_FACTORY_HOOKS_DISABLED"
+        case .qoder: return "COCXY_QODER_HOOKS_DISABLED"
+        }
+    }
+
+    static func normalized(_ value: String) -> HookIntegrationAgent? {
+        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        switch normalized {
+        case "claude", "claude-code":
+            return .claude
+        case "codex", "codex-cli":
+            return .codex
+        case "gemini", "gemini-cli":
+            return .gemini
+        case "kiro":
+            return .kiro
+        case "opencode", "open-code":
+            return .opencode
+        case "pi":
+            return .pi
+        case "cursor":
+            return .cursor
+        case "rovo", "rovo-dev", "rovodev":
+            return .rovoDev
+        case "copilot":
+            return .copilot
+        case "codebuddy":
+            return .codebuddy
+        case "factory":
+            return .factory
+        case "qoder":
+            return .qoder
+        default:
+            return nil
+        }
+    }
+}
+
+/// Per-agent hook forwarding preference.
+struct HookIntegrationAgentConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+
+    init(enabled: Bool = true) {
+        self.enabled = enabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+    }
+}
+
+/// `[hooks]` section for local external-agent hook forwarding.
+///
+/// Hooks are enabled by default to preserve already-installed bridges. The
+/// setting only controls local environment variables inherited by processes
+/// launched inside Cocxy; it does not edit external config files, perform
+/// telemetry, or contact a backend.
+struct HookIntegrationConfig: Codable, Sendable, Equatable {
+    static let globalDisabledEnvironmentKey = "COCXY_HOOKS_DISABLED"
+    static let legacyEnabledEnvironmentKey = "COCXY_CLAUDE_HOOKS"
+    static let builtInAgents = HookIntegrationAgent.allCases
+
+    let enabled: Bool
+    let agents: [HookIntegrationAgent: HookIntegrationAgentConfig]
+
+    static var defaults: HookIntegrationConfig {
+        HookIntegrationConfig(
+            enabled: true,
+            agents: Dictionary(
+                uniqueKeysWithValues: builtInAgents.map { ($0, HookIntegrationAgentConfig(enabled: true)) }
+            )
+        )
+    }
+
+    init(
+        enabled: Bool = true,
+        agents: [HookIntegrationAgent: HookIntegrationAgentConfig] = [:]
+    ) {
+        self.enabled = enabled
+        self.agents = Self.normalizedAgents(agents)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case agents
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let decodedAgents = try container.decodeIfPresent(
+            [String: HookIntegrationAgentConfig].self,
+            forKey: .agents
+        )
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled)
+                ?? Self.defaults.enabled,
+            agents: decodedAgents.map(Self.agentConfigsByIdentifier) ?? Self.defaults.agents
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(enabled, forKey: .enabled)
+        let keyedAgents = Dictionary(
+            uniqueKeysWithValues: Self.builtInAgents.map { agent in
+                (agent.rawValue, agents[agent] ?? HookIntegrationAgentConfig(enabled: true))
+            }
+        )
+        try container.encode(keyedAgents, forKey: .agents)
+    }
+
+    func isAgentEnabled(_ agent: HookIntegrationAgent) -> Bool {
+        agents[agent]?.enabled ?? true
+    }
+
+    func disablingEnvironment() -> [String: String] {
+        var environment: [String: String] = [
+            Self.legacyEnabledEnvironmentKey: "1",
+        ]
+        if !enabled {
+            environment[Self.globalDisabledEnvironmentKey] = "1"
+        }
+        for agent in Self.builtInAgents where !isAgentEnabled(agent) {
+            environment[agent.disabledEnvironmentKey] = "1"
+        }
+        return environment
+    }
+
+    private static func normalizedAgents(
+        _ agents: [HookIntegrationAgent: HookIntegrationAgentConfig]
+    ) -> [HookIntegrationAgent: HookIntegrationAgentConfig] {
+        var merged = Dictionary(
+            uniqueKeysWithValues: builtInAgents.map { ($0, HookIntegrationAgentConfig(enabled: true)) }
+        )
+        for (agent, config) in agents {
+            merged[agent] = config
+        }
+        return merged
+    }
+
+    private static func agentConfigsByIdentifier(
+        _ agents: [String: HookIntegrationAgentConfig]
+    ) -> [HookIntegrationAgent: HookIntegrationAgentConfig] {
+        var mapped: [HookIntegrationAgent: HookIntegrationAgentConfig] = [:]
+        for (identifier, config) in agents {
+            guard let agent = HookIntegrationAgent.normalized(identifier) else { continue }
+            mapped[agent] = config
+        }
+        return mapped
     }
 }
 

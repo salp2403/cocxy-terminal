@@ -11,7 +11,7 @@ final class PreferencesSectionTests: XCTestCase {
 
     // MARK: - PreferencesSection Enum
 
-    func test_allSections_hasTwentyFourCases() {
+    func test_allSections_hasTwentyFiveCases() {
         // v0.1.81 introduced the Worktrees section bringing the total
         // from 7 to 8; v0.1.84 added the GitHub section for the new
         // inline pane, bringing it to 9; v0.1.87 surfaces the existing
@@ -24,12 +24,13 @@ final class PreferencesSectionTests: XCTestCase {
         // Session Replay opt-in and consent settings bring it to 19;
         // GitHub pane settings bring it to 20; Spotlight privacy controls
         // bring it to 21; Updates brings it to 22; Security sandbox
-        // inspection brings it to 23; the local Vault settings bring it to 24.
+        // inspection brings it to 23; the local Vault settings bring it to 24;
+        // Hook Integration controls bring it to 25.
         // Keeping the test explicit about the number pins the invariant:
         // adding a section without an accompanying UI breaks this assertion and forces
         // the author to review every sidebar list that relies on
         // `allCases`.
-        XCTAssertEqual(PreferencesSection.allCases.count, 24)
+        XCTAssertEqual(PreferencesSection.allCases.count, 25)
     }
 
     @MainActor
@@ -66,6 +67,12 @@ final class PreferencesSectionTests: XCTestCase {
         let section = PreferencesSection.security
         XCTAssertEqual(section.title, "Security")
         XCTAssertEqual(section.iconName, "lock.shield")
+    }
+
+    func test_hooksSection_hasTitleAndIcon() {
+        let section = PreferencesSection.hooks
+        XCTAssertEqual(section.title, "Hooks")
+        XCTAssertEqual(section.iconName, "point.3.connected.trianglepath.dotted")
     }
 
     func test_worktreesSection_appearsBeforeAbout() {
