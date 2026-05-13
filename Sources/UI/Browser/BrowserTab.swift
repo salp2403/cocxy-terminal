@@ -42,7 +42,9 @@ struct BrowserTab: Identifiable, Equatable {
     static let defaultURL = URL(string: "http://localhost:3000")!
 
     private static let placeholderTitles: Set<String> = [
+        "about:blank",
         "new tab",
+        "untitled",
     ]
 
     /// Creates a new browser tab.

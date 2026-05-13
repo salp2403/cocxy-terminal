@@ -59,6 +59,43 @@ struct BrowserErrorPageSwiftTestingTests {
         #expect(loader.baseURL == nil)
     }
 
+    @Test("renderer ignores internal about blank failed URL")
+    func rendererIgnoresInternalAboutBlankFailedURL() {
+        let error = NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorCannotConnectToHost,
+            userInfo: [NSLocalizedDescriptionKey: "Connection refused"]
+        )
+
+        let displayURL = BrowserErrorPageRenderer.userFacingURLString(
+            error: error,
+            failedURL: URL(string: "about:blank"),
+            fallbackURLString: "http://localhost:3000/"
+        )
+
+        #expect(displayURL == "http://localhost:3000/")
+    }
+
+    @Test("renderer prefers explicit failing web URL from error")
+    func rendererPrefersExplicitFailingWebURLFromError() {
+        let error = NSError(
+            domain: NSURLErrorDomain,
+            code: NSURLErrorCannotConnectToHost,
+            userInfo: [
+                NSLocalizedDescriptionKey: "Connection refused",
+                NSURLErrorFailingURLStringErrorKey: "http://localhost:5173/"
+            ]
+        )
+
+        let displayURL = BrowserErrorPageRenderer.userFacingURLString(
+            error: error,
+            failedURL: URL(string: "about:blank"),
+            fallbackURLString: "http://localhost:3000/"
+        )
+
+        #expect(displayURL == "http://localhost:5173/")
+    }
+
     @MainActor
     @Test("shared web view appearance disables the default white background")
     func sharedWebViewAppearanceDisablesDefaultWhiteBackground() {

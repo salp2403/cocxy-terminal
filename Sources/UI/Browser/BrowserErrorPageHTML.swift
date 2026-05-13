@@ -36,7 +36,11 @@ enum BrowserErrorPageRenderer {
         localizer: AppLocalizer,
         into loader: BrowserErrorPageLoading
     ) {
-        let urlDisplay = failedURL?.absoluteString ?? fallbackURLString
+        let urlDisplay = userFacingURLString(
+            error: error,
+            failedURL: failedURL,
+            fallbackURLString: fallbackURLString
+        )
         loader.loadBrowserErrorHTML(
             BrowserErrorPageHTML.make(
                 error: error,
@@ -45,6 +49,43 @@ enum BrowserErrorPageRenderer {
             ),
             baseURL: nil
         )
+    }
+
+    static func userFacingURLString(
+        error: Error,
+        failedURL: URL?,
+        fallbackURLString: String
+    ) -> String {
+        let nsError = error as NSError
+        if let url = nsError.userInfo[NSURLErrorFailingURLErrorKey] as? URL,
+           isWebURL(url) {
+            return url.absoluteString
+        }
+        if let string = nsError.userInfo[NSURLErrorFailingURLStringErrorKey] as? String,
+           let webURLString = webURLString(string) {
+            return webURLString
+        }
+        if let failedURL, isWebURL(failedURL) {
+            return failedURL.absoluteString
+        }
+
+        let trimmedFallback = fallbackURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedFallback.isEmpty {
+            return trimmedFallback
+        }
+
+        return failedURL?.absoluteString ?? ""
+    }
+
+    private static func isWebURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "http" || scheme == "https"
+    }
+
+    private static func webURLString(_ string: String) -> String? {
+        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: trimmed), isWebURL(url) else { return nil }
+        return trimmed
     }
 }
 
