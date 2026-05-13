@@ -282,6 +282,16 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .browserConsole:
             return formatDataOrJSON(response: response)
+        case .browserWait:
+            return formatDataOrJSON(response: response)
+        case .browserCookiesList:
+            return formatDataOrJSON(response: response)
+        case .browserCookiesSet:
+            return formatDataOrJSON(response: response)
+        case .browserCookiesDelete:
+            return formatDataOrJSON(response: response)
+        case .browserNetwork:
+            return formatDataOrJSON(response: response)
         case .browserImportPreview:
             return formatDataOrJSON(response: response)
         case .browserImportRun:

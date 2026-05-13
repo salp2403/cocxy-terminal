@@ -1196,6 +1196,47 @@ public struct CommandRunner {
         case .browserConsole:
             return CLISocketRequest(id: requestID, command: "browser-console", params: nil)
 
+        case .browserWait(let selector, let timeoutMilliseconds):
+            var params: [String: String] = ["selector": selector]
+            if let timeoutMilliseconds {
+                params["timeout"] = "\(timeoutMilliseconds)"
+            }
+            return CLISocketRequest(id: requestID, command: "browser-wait", params: params)
+
+        case .browserCookiesList(let domain):
+            var params: [String: String] = [:]
+            if let domain {
+                params["domain"] = domain
+            }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-cookies-list",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .browserCookiesSet(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-cookies-set",
+                params: options.socketParams
+            )
+
+        case .browserCookiesDelete(let name, let path, let domain):
+            var params: [String: String] = ["name": name]
+            if let path { params["path"] = path }
+            if let domain { params["domain"] = domain }
+            return CLISocketRequest(id: requestID, command: "browser-cookies-delete", params: params)
+
+        case .browserNetwork(let filter, let tail):
+            var params: [String: String] = [:]
+            if let filter { params["filter"] = filter }
+            if let tail { params["tail"] = "\(tail)" }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-network",
+                params: params.isEmpty ? nil : params
+            )
+
         case .browserImportPreview(let options):
             return CLISocketRequest(
                 id: requestID,

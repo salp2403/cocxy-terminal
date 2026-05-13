@@ -43,6 +43,11 @@ final class BrowserScriptableTests: XCTestCase {
             "browser-fill",
             "browser-screenshot",
             "browser-console",
+            "browser-wait",
+            "browser-cookies-list",
+            "browser-cookies-set",
+            "browser-cookies-delete",
+            "browser-network",
             "browser-import-preview",
             "browser-import-run"
         ]
@@ -64,6 +69,11 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertTrue(allRawValues.contains("browser-fill"))
         XCTAssertTrue(allRawValues.contains("browser-screenshot"))
         XCTAssertTrue(allRawValues.contains("browser-console"))
+        XCTAssertTrue(allRawValues.contains("browser-wait"))
+        XCTAssertTrue(allRawValues.contains("browser-cookies-list"))
+        XCTAssertTrue(allRawValues.contains("browser-cookies-set"))
+        XCTAssertTrue(allRawValues.contains("browser-cookies-delete"))
+        XCTAssertTrue(allRawValues.contains("browser-network"))
         XCTAssertTrue(allRawValues.contains("browser-import-preview"))
         XCTAssertTrue(allRawValues.contains("browser-import-run"))
     }
@@ -575,6 +585,108 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertEqual(response.data?["count"], "2")
         XCTAssertEqual(response.data?["entry_0_level"], "log")
         XCTAssertEqual(response.data?["entry_1_message"], "failed")
+    }
+
+    func test_browserWait_returnsFoundWhenSelectorAppears() {
+        viewModel.scriptEvaluator = { script, _ in
+            XCTAssertTrue(script.contains("querySelector"))
+            XCTAssertTrue(script.contains("#ready"))
+            return .success("found")
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(
+            id: "bwait-1",
+            command: "browser-wait",
+            params: ["selector": "#ready", "timeout": "100"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "found")
+        XCTAssertEqual(response.data?["selector"], "#ready")
+    }
+
+    func test_browserCookiesList_parsesDocumentCookiePairs() {
+        viewModel.scriptEvaluator = { _, _ in .success("sid=abc; theme=dark") }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(id: "bcl-1", command: "browser-cookies-list", params: nil)
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "2")
+        XCTAssertEqual(response.data?["cookie_0_name"], "sid")
+        XCTAssertEqual(response.data?["cookie_0_value"], "abc")
+        XCTAssertEqual(response.data?["cookie_1_name"], "theme")
+    }
+
+    func test_browserCookiesSet_andDeleteWriteDocumentCookie() {
+        var scripts: [String] = []
+        viewModel.scriptEvaluator = { script, _ in
+            scripts.append(script)
+            return .success("ok")
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+
+        let setResponse = handler.handleCommand(SocketRequest(
+            id: "bcs-1",
+            command: "browser-cookies-set",
+            params: ["name": "sid", "value": "abc", "path": "/", "same-site": "Lax"]
+        ))
+        let deleteResponse = handler.handleCommand(SocketRequest(
+            id: "bcd-1",
+            command: "browser-cookies-delete",
+            params: ["name": "sid", "path": "/"]
+        ))
+
+        XCTAssertTrue(setResponse.success)
+        XCTAssertEqual(setResponse.data?["status"], "set")
+        XCTAssertTrue(deleteResponse.success)
+        XCTAssertEqual(deleteResponse.data?["status"], "deleted")
+        XCTAssertTrue(scripts.first?.contains("sid=abc") == true)
+        XCTAssertTrue(scripts.last?.contains("Max-Age=0") == true)
+    }
+
+    func test_browserNetwork_filtersAndTailsPerformanceEntries() {
+        viewModel.scriptEvaluator = { _, _ in
+            .success("""
+            [
+              {"url":"https://example.com/style.css","method":"GET","initiatorType":"link","duration":4.5,"transferSize":100},
+              {"url":"https://example.com/api/users","method":"XHR","initiatorType":"fetch","duration":12.25,"transferSize":2048}
+            ]
+            """)
+        }
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+        let request = SocketRequest(
+            id: "bnw-1",
+            command: "browser-network",
+            params: ["filter": "api", "tail": "1"]
+        )
+
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "1")
+        XCTAssertEqual(response.data?["entry_0_url"], "https://example.com/api/users")
+        XCTAssertEqual(response.data?["entry_0_method"], "XHR")
+        XCTAssertEqual(response.data?["entry_0_transferSize"], "2048")
     }
 
     func test_browserImportPreview_routesToImportProvider() {

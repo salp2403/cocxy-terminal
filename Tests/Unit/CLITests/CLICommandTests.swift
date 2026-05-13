@@ -1738,7 +1738,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 160)
+        XCTAssertEqual(CLICommand.allCases.count, 165)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -1792,6 +1792,11 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.browserFill.usageExample, "cocxy browser fill <ref> <text>")
         XCTAssertEqual(CLICommand.browserScreenshot.usageExample, "cocxy browser screenshot [--output <path>]")
         XCTAssertEqual(CLICommand.browserConsole.usageExample, "cocxy browser console")
+        XCTAssertEqual(CLICommand.browserWait.usageExample, "cocxy browser wait <selector> [--timeout <ms>]")
+        XCTAssertEqual(CLICommand.browserCookiesList.usageExample, "cocxy browser cookies list")
+        XCTAssertEqual(CLICommand.browserCookiesSet.usageExample, "cocxy browser cookies set <name> <value>")
+        XCTAssertEqual(CLICommand.browserCookiesDelete.usageExample, "cocxy browser cookies delete <name>")
+        XCTAssertEqual(CLICommand.browserNetwork.usageExample, "cocxy browser network [--filter <text>] [--tail <n>]")
         XCTAssertEqual(CLICommand.browserImportPreview.usageExample, "cocxy browser import preview --source <browser>")
         XCTAssertEqual(CLICommand.browserImportRun.usageExample, "cocxy browser import run --source <browser>")
 
@@ -1826,6 +1831,38 @@ final class CLICommandDefinitionTests: XCTestCase {
             .browserScreenshot(outputPath: "/tmp/page.png")
         )
         XCTAssertNoThrow(try CLIArgumentParser.parse(["browser", "console"]))
+
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "wait", "#ready", "--timeout", "1500"]),
+            .browserWait(selector: "#ready", timeoutMilliseconds: 1500)
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "cookies", "list", "--domain", "example.com"]),
+            .browserCookiesList(domain: "example.com")
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "browser", "cookies", "set", "sid", "abc",
+                "--path", "/",
+                "--same-site", "Lax",
+                "--max-age", "3600",
+            ]),
+            .browserCookiesSet(BrowserCookieSetCLIOptions(
+                name: "sid",
+                value: "abc",
+                path: "/",
+                sameSite: "Lax",
+                maxAgeSeconds: 3600
+            ))
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "cookies", "delete", "sid", "--path", "/"]),
+            .browserCookiesDelete(name: "sid", path: "/", domain: nil)
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "network", "--filter", "api", "--tail", "10"]),
+            .browserNetwork(filter: "api", tail: 10)
+        )
 
         guard case .browserImportPreview(let previewOptions) = try CLIArgumentParser.parse([
             "browser", "import", "preview",

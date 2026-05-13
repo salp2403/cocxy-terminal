@@ -245,6 +245,16 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserScreenshot = "browser-screenshot"
     /// List captured browser console entries.
     case browserConsole = "browser-console"
+    /// Wait for a CSS selector in the active browser tab.
+    case browserWait = "browser-wait"
+    /// List script-visible cookies for the current browser page.
+    case browserCookiesList = "browser-cookies-list"
+    /// Set a script-visible cookie in the current browser page.
+    case browserCookiesSet = "browser-cookies-set"
+    /// Delete a script-visible cookie in the current browser page.
+    case browserCookiesDelete = "browser-cookies-delete"
+    /// List recent browser resource timing entries.
+    case browserNetwork = "browser-network"
     /// Preview browser history/cookie/bookmark import counts.
     case browserImportPreview = "browser-import-preview"
     /// Import browser history/cookies/bookmarks into a profile.

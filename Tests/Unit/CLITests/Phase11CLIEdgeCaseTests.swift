@@ -116,8 +116,8 @@ final class Phase11CLIEdgeCaseTests: XCTestCase {
         // Every command must be self-documenting.
         let allCases = CLICommand.allCases
 
-        XCTAssertEqual(allCases.count, 160,
-                       "EC-12: CLICommand must have exactly 160 catalog commands")
+        XCTAssertEqual(allCases.count, 165,
+                       "EC-12: CLICommand must have exactly 165 catalog commands")
 
         for command in allCases {
             XCTAssertFalse(

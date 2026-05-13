@@ -968,6 +968,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserScreenshot(request)
         case .browserConsole:
             return handleBrowserConsole(request)
+        case .browserWait:
+            return handleBrowserWait(request)
+        case .browserCookiesList:
+            return handleBrowserCookiesList(request)
+        case .browserCookiesSet:
+            return handleBrowserCookiesSet(request)
+        case .browserCookiesDelete:
+            return handleBrowserCookiesDelete(request)
+        case .browserNetwork:
+            return handleBrowserNetwork(request)
         case .browserImportPreview:
             return handleBrowserImport(kind: "preview", request: request)
         case .browserImportRun:
@@ -2370,6 +2380,153 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         return .ok(id: request.id, data: data)
     }
 
+    private func handleBrowserWait(_ request: SocketRequest) -> SocketResponse {
+        guard let selector = request.params?["selector"], !selector.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: selector")
+        }
+        guard selector.count <= 1_024 else {
+            return .failure(id: request.id, error: "Selector exceeds maximum 1024 characters")
+        }
+        let timeoutMilliseconds = min(max(Int(request.params?["timeout"] ?? "") ?? 5_000, 0), 30_000)
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let deadline = Date().addingTimeInterval(TimeInterval(timeoutMilliseconds) / 1_000)
+        let script = Self.browserWaitScript(selector: selector)
+        repeat {
+            let result = browserScriptResult(
+                viewModel: viewModel,
+                script: script,
+                requiresBridge: true,
+                timeout: 1
+            )
+            if let error = result.error {
+                return .failure(id: request.id, error: error)
+            }
+            if result.value == "found" {
+                return .ok(id: request.id, data: ["status": "found", "selector": selector])
+            }
+            if timeoutMilliseconds == 0 { break }
+            Thread.sleep(forTimeInterval: 0.1)
+        } while Date() < deadline
+
+        return .ok(id: request.id, data: ["status": "timeout", "selector": selector])
+    }
+
+    private func handleBrowserCookiesList(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: "document.cookie",
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+
+        let domainFilter = request.params?["domain"]?.lowercased()
+        let pairs = Self.cookiePairs(from: result.value ?? "")
+        var data: [String: String] = ["count": "\(pairs.count)"]
+        if let domainFilter, !domainFilter.isEmpty {
+            data["domain"] = domainFilter
+        }
+        for (index, pair) in pairs.enumerated() {
+            data["cookie_\(index)_name"] = pair.name
+            data["cookie_\(index)_value"] = pair.value
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserCookiesSet(_ request: SocketRequest) -> SocketResponse {
+        guard let name = request.params?["name"], !name.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard let value = request.params?["value"] else {
+            return .failure(id: request.id, error: "Missing required param: value")
+        }
+        guard Self.isSafeCookieName(name) else {
+            return .failure(id: request.id, error: "Invalid cookie name")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: Self.browserSetCookieScript(
+                name: name,
+                value: value,
+                path: request.params?["path"],
+                domain: request.params?["domain"],
+                secure: request.params?["secure"] == "true",
+                sameSite: request.params?["same-site"],
+                maxAge: request.params?["max-age"].flatMap(Int.init)
+            ),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: ["status": "set", "name": name])
+    }
+
+    private func handleBrowserCookiesDelete(_ request: SocketRequest) -> SocketResponse {
+        guard let name = request.params?["name"], !name.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard Self.isSafeCookieName(name) else {
+            return .failure(id: request.id, error: "Invalid cookie name")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: Self.browserDeleteCookieScript(
+                name: name,
+                path: request.params?["path"],
+                domain: request.params?["domain"]
+            ),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: ["status": "deleted", "name": name])
+    }
+
+    private func handleBrowserNetwork(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: Self.browserNetworkScript,
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        let entries = Self.browserNetworkEntries(
+            from: result.value ?? "[]",
+            filter: request.params?["filter"],
+            tail: request.params?["tail"].flatMap(Int.init)
+        )
+        var data: [String: String] = ["count": "\(entries.count)"]
+        for (index, entry) in entries.enumerated() {
+            data["entry_\(index)_url"] = entry.url
+            data["entry_\(index)_method"] = entry.method
+            data["entry_\(index)_initiatorType"] = entry.initiatorType
+            data["entry_\(index)_duration"] = Self.browserNumberString(entry.duration)
+            data["entry_\(index)_transferSize"] = "\(entry.transferSize)"
+        }
+        return .ok(id: request.id, data: data)
+    }
+
     private func handleBrowserImport(kind: String, request: SocketRequest) -> SocketResponse {
         guard let provider = browserImportProvider else {
             return .failure(id: request.id, error: "Browser import is not available in this build.")
@@ -2387,9 +2544,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private func browserScriptResult(
         viewModel: BrowserViewModel,
         script: String,
-        requiresBridge: Bool
+        requiresBridge: Bool,
+        timeout: TimeInterval = 3
     ) -> BrowserScriptEvaluationResult {
-        if let result = viewModel.automationBridge.evaluate(script: script, timeout: 3) {
+        if let result = viewModel.automationBridge.evaluate(script: script, timeout: timeout) {
             return result
         }
         guard !requiresBridge else {
@@ -2445,6 +2603,178 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return 'filled';
         })();
         """
+    }
+
+    private static func browserWaitScript(selector: String) -> String {
+        let escapedSelector = javaScriptStringLiteral(selector)
+        return """
+        (function() {
+            try {
+                return document.querySelector(\(escapedSelector)) ? 'found' : 'missing';
+            } catch (error) {
+                return 'missing';
+            }
+        })();
+        """
+    }
+
+    private static func browserSetCookieScript(
+        name: String,
+        value: String,
+        path: String?,
+        domain: String?,
+        secure: Bool,
+        sameSite: String?,
+        maxAge: Int?
+    ) -> String {
+        let cookie = cookieAssignment(
+            name: name,
+            value: value,
+            path: path,
+            domain: domain,
+            secure: secure,
+            sameSite: sameSite,
+            maxAge: maxAge
+        )
+        return """
+        (function() {
+            document.cookie = \(javaScriptStringLiteral(cookie));
+            return 'ok';
+        })();
+        """
+    }
+
+    private static func browserDeleteCookieScript(name: String, path: String?, domain: String?) -> String {
+        let cookie = cookieAssignment(
+            name: name,
+            value: "",
+            path: path,
+            domain: domain,
+            secure: false,
+            sameSite: nil,
+            maxAge: 0
+        )
+        return """
+        (function() {
+            document.cookie = \(javaScriptStringLiteral(cookie));
+            return 'ok';
+        })();
+        """
+    }
+
+    private static func cookieAssignment(
+        name: String,
+        value: String,
+        path: String?,
+        domain: String?,
+        secure: Bool,
+        sameSite: String?,
+        maxAge: Int?
+    ) -> String {
+        var parts = ["\(name)=\(value)"]
+        if let path, !path.isEmpty { parts.append("Path=\(path)") }
+        if let domain, !domain.isEmpty { parts.append("Domain=\(domain)") }
+        if let maxAge { parts.append("Max-Age=\(maxAge)") }
+        if secure { parts.append("Secure") }
+        if let sameSite, !sameSite.isEmpty { parts.append("SameSite=\(sameSite)") }
+        return parts.joined(separator: "; ")
+    }
+
+    private static func isSafeCookieName(_ name: String) -> Bool {
+        guard !name.isEmpty, name.count <= 256 else { return false }
+        return !name.contains { character in
+            character == "=" || character == ";" || character.isWhitespace || character.isNewline
+        }
+    }
+
+    private static func cookiePairs(from cookieString: String) -> [(name: String, value: String)] {
+        cookieString
+            .split(separator: ";", omittingEmptySubsequences: true)
+            .compactMap { rawPair -> (name: String, value: String)? in
+                let pair = rawPair.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let separator = pair.firstIndex(of: "=") else { return nil }
+                let name = String(pair[..<separator])
+                let value = String(pair[pair.index(after: separator)...])
+                guard !name.isEmpty else { return nil }
+                return (name, value)
+            }
+    }
+
+    private struct BrowserNetworkEntry {
+        let url: String
+        let method: String
+        let initiatorType: String
+        let duration: Double
+        let transferSize: Int
+    }
+
+    private static var browserNetworkScript: String {
+        """
+        (function() {
+            const entries = performance.getEntriesByType('resource').map(function(entry) {
+                const initiatorType = entry.initiatorType || 'other';
+                return {
+                    url: entry.name || '',
+                    method: (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest') ? 'XHR' : 'GET',
+                    initiatorType: initiatorType,
+                    duration: entry.duration || 0,
+                    transferSize: entry.transferSize || 0
+                };
+            });
+            return JSON.stringify(entries);
+        })();
+        """
+    }
+
+    private static func browserNetworkEntries(
+        from jsonString: String,
+        filter: String?,
+        tail: Int?
+    ) -> [BrowserNetworkEntry] {
+        guard let data = jsonString.data(using: .utf8),
+              let rawEntries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+            return []
+        }
+        let normalizedFilter = filter?.lowercased()
+        var entries = rawEntries.compactMap { raw -> BrowserNetworkEntry? in
+            let url = (raw["url"] ?? raw["name"]) as? String ?? ""
+            guard !url.isEmpty else { return nil }
+            let method = raw["method"] as? String
+                ?? (((raw["initiatorType"] as? String) == "fetch"
+                    || (raw["initiatorType"] as? String) == "xmlhttprequest") ? "XHR" : "GET")
+            let initiatorType = raw["initiatorType"] as? String ?? "other"
+            let duration = raw["duration"] as? Double
+                ?? (raw["duration"] as? Int).map(Double.init)
+                ?? 0
+            let transferSize = raw["transferSize"] as? Int
+                ?? (raw["transferSize"] as? Double).map(Int.init)
+                ?? 0
+            return BrowserNetworkEntry(
+                url: url,
+                method: method,
+                initiatorType: initiatorType,
+                duration: duration,
+                transferSize: transferSize
+            )
+        }
+        if let normalizedFilter, !normalizedFilter.isEmpty {
+            entries = entries.filter {
+                $0.url.lowercased().contains(normalizedFilter)
+                    || $0.method.lowercased().contains(normalizedFilter)
+                    || $0.initiatorType.lowercased().contains(normalizedFilter)
+            }
+        }
+        if let tail, tail > 0, entries.count > tail {
+            entries = Array(entries.suffix(tail))
+        }
+        return entries
+    }
+
+    private static func browserNumberString(_ value: Double) -> String {
+        if value.rounded() == value {
+            return "\(Int(value))"
+        }
+        return String(format: "%.3f", value)
     }
 
     private static var browserSnapshotScript: String {

@@ -67,6 +67,47 @@ public struct BrowserImportCLIOptions: Equatable {
     }
 }
 
+public struct BrowserCookieSetCLIOptions: Equatable {
+    public let name: String
+    public let value: String
+    public let path: String?
+    public let domain: String?
+    public let secure: Bool
+    public let sameSite: String?
+    public let maxAgeSeconds: Int?
+
+    public init(
+        name: String,
+        value: String,
+        path: String? = nil,
+        domain: String? = nil,
+        secure: Bool = false,
+        sameSite: String? = nil,
+        maxAgeSeconds: Int? = nil
+    ) {
+        self.name = name
+        self.value = value
+        self.path = path
+        self.domain = domain
+        self.secure = secure
+        self.sameSite = sameSite
+        self.maxAgeSeconds = maxAgeSeconds
+    }
+
+    var socketParams: [String: String] {
+        var params: [String: String] = [
+            "name": name,
+            "value": value,
+            "secure": "\(secure)",
+        ]
+        if let path { params["path"] = path }
+        if let domain { params["domain"] = domain }
+        if let sameSite { params["same-site"] = sameSite }
+        if let maxAgeSeconds { params["max-age"] = "\(maxAgeSeconds)" }
+        return params
+    }
+}
+
 /// The result of parsing CLI arguments into a concrete command and its parameters.
 ///
 /// This type decouples argument parsing from socket communication,
@@ -438,6 +479,21 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy browser console`
     case browserConsole
+
+    /// `cocxy browser wait <selector> [--timeout <ms>]`
+    case browserWait(selector: String, timeoutMilliseconds: Int?)
+
+    /// `cocxy browser cookies list [--domain <domain>]`
+    case browserCookiesList(domain: String?)
+
+    /// `cocxy browser cookies set <name> <value> [options]`
+    case browserCookiesSet(BrowserCookieSetCLIOptions)
+
+    /// `cocxy browser cookies delete <name> [--path <path>] [--domain <domain>]`
+    case browserCookiesDelete(name: String, path: String?, domain: String?)
+
+    /// `cocxy browser network [--filter <text>] [--tail <n>]`
+    case browserNetwork(filter: String?, tail: Int?)
 
     /// `cocxy browser import preview --source <browser> [options]`
     case browserImportPreview(BrowserImportCLIOptions)
@@ -2679,15 +2735,216 @@ public enum CLIArgumentParser {
             return .browserScreenshot(outputPath: rest[1])
         case "console":
             return .browserConsole
+        case "wait":
+            return try parseBrowserWait(arguments: Array(arguments.dropFirst()))
+        case "cookies":
+            return try parseBrowserCookies(arguments: Array(arguments.dropFirst()))
+        case "network":
+            return try parseBrowserNetwork(arguments: Array(arguments.dropFirst()))
         case "import":
             return try parseBrowserImport(arguments: Array(arguments.dropFirst()))
         default:
             throw CLIError.invalidArgument(
                 command: "browser",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, tabs, snapshot, click, fill, screenshot, console, or import."
+                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, tabs, snapshot, click, fill, screenshot, console, wait, cookies, network, or import."
             )
         }
+    }
+
+    private static func parseBrowserWait(arguments: [String]) throws -> ParsedCommand {
+        guard let selector = arguments.first, !selector.isEmpty else {
+            throw CLIError.missingArgument(command: "browser wait", argument: "selector")
+        }
+        var timeoutMilliseconds: Int?
+        var index = 1
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--timeout":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser wait")
+                guard let parsed = Int(rawValue), parsed >= 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "browser wait",
+                        argument: rawValue,
+                        reason: "--timeout must be a non-negative integer in milliseconds."
+                    )
+                }
+                timeoutMilliseconds = parsed
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser wait",
+                    argument: argument,
+                    reason: "Use --timeout <ms> or omit it."
+                )
+            }
+            index += 1
+        }
+        return .browserWait(selector: selector, timeoutMilliseconds: timeoutMilliseconds)
+    }
+
+    private static func parseBrowserCookies(arguments: [String]) throws -> ParsedCommand {
+        guard let action = arguments.first else {
+            throw CLIError.missingArgument(command: "browser cookies", argument: "list|set|delete")
+        }
+        let rest = Array(arguments.dropFirst())
+        switch action {
+        case "list":
+            return try parseBrowserCookiesList(arguments: rest)
+        case "set":
+            return try parseBrowserCookiesSet(arguments: rest)
+        case "delete":
+            return try parseBrowserCookiesDelete(arguments: rest)
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser cookies",
+                argument: action,
+                reason: "Use list, set, or delete."
+            )
+        }
+    }
+
+    private static func parseBrowserCookiesList(arguments: [String]) throws -> ParsedCommand {
+        var domain: String?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--domain":
+                domain = try value(after: argument, in: arguments, at: &index, command: "browser cookies list")
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser cookies list",
+                    argument: argument,
+                    reason: "Use --domain <domain> or omit it."
+                )
+            }
+            index += 1
+        }
+        return .browserCookiesList(domain: domain)
+    }
+
+    private static func parseBrowserCookiesSet(arguments: [String]) throws -> ParsedCommand {
+        guard arguments.count >= 2 else {
+            throw CLIError.missingArgument(command: "browser cookies set", argument: "name value")
+        }
+        let name = arguments[0]
+        let cookieValue = arguments[1]
+        guard !name.isEmpty else {
+            throw CLIError.missingArgument(command: "browser cookies set", argument: "name")
+        }
+        var path: String?
+        var domain: String?
+        var secure = false
+        var sameSite: String?
+        var maxAgeSeconds: Int?
+
+        var index = 2
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--path":
+                path = try value(after: argument, in: arguments, at: &index, command: "browser cookies set")
+            case "--domain":
+                domain = try value(after: argument, in: arguments, at: &index, command: "browser cookies set")
+            case "--secure":
+                secure = true
+            case "--same-site":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser cookies set")
+                guard ["Strict", "Lax", "None"].contains(rawValue) else {
+                    throw CLIError.invalidArgument(
+                        command: "browser cookies set",
+                        argument: rawValue,
+                        reason: "--same-site must be Strict, Lax, or None."
+                    )
+                }
+                sameSite = rawValue
+            case "--max-age":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser cookies set")
+                guard let parsed = Int(rawValue), parsed >= 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "browser cookies set",
+                        argument: rawValue,
+                        reason: "--max-age must be a non-negative integer in seconds."
+                    )
+                }
+                maxAgeSeconds = parsed
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser cookies set",
+                    argument: argument,
+                    reason: "Use --path, --domain, --secure, --same-site, or --max-age."
+                )
+            }
+            index += 1
+        }
+
+        return .browserCookiesSet(BrowserCookieSetCLIOptions(
+            name: name,
+            value: cookieValue,
+            path: path,
+            domain: domain,
+            secure: secure,
+            sameSite: sameSite,
+            maxAgeSeconds: maxAgeSeconds
+        ))
+    }
+
+    private static func parseBrowserCookiesDelete(arguments: [String]) throws -> ParsedCommand {
+        guard let name = arguments.first, !name.isEmpty else {
+            throw CLIError.missingArgument(command: "browser cookies delete", argument: "name")
+        }
+        var path: String?
+        var domain: String?
+        var index = 1
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--path":
+                path = try value(after: argument, in: arguments, at: &index, command: "browser cookies delete")
+            case "--domain":
+                domain = try value(after: argument, in: arguments, at: &index, command: "browser cookies delete")
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser cookies delete",
+                    argument: argument,
+                    reason: "Use --path <path>, --domain <domain>, or omit them."
+                )
+            }
+            index += 1
+        }
+        return .browserCookiesDelete(name: name, path: path, domain: domain)
+    }
+
+    private static func parseBrowserNetwork(arguments: [String]) throws -> ParsedCommand {
+        var filter: String?
+        var tail: Int?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--filter":
+                filter = try value(after: argument, in: arguments, at: &index, command: "browser network")
+            case "--tail":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser network")
+                guard let parsed = Int(rawValue), parsed > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "browser network",
+                        argument: rawValue,
+                        reason: "--tail must be a positive integer."
+                    )
+                }
+                tail = parsed
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser network",
+                    argument: argument,
+                    reason: "Use --filter <text>, --tail <n>, or omit them."
+                )
+            }
+            index += 1
+        }
+        return .browserNetwork(filter: filter, tail: tail)
     }
 
     private static func parseBrowserImport(arguments: [String]) throws -> ParsedCommand {
