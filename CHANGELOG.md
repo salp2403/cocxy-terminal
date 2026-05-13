@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Expanded local agent workflows with team-oriented pane launching, isolated
+  teammate state, socket commands for launch/list/stop, and owner-only
+  persistence for team definitions.
+- Added a SHA-256 verified remote daemon foundation for SSH workspaces,
+  including bundled `cocxyd-remote` binaries, manifest validation,
+  session/proxy/CLI relay RPC wrappers, image-drop packetization, and app
+  bundle verification for the remote daemon payload.
+- Expanded browser import support across Chromium, Gecko, WebKit, and
+  privacy-focused browser profiles while keeping importers local and
+  profile-scoped.
+- Added richer browser automation commands, local browser MCP tools, and
+  improved browser tab/error affordances for failed or unnamed pages.
+- Added source-control and pull-request assistant foundations, including
+  branch/commit providers, diff parsing, reviewer suggestions, merge flows,
+  and responsive pane layouts.
+- Added local command correction, input classification, rich input composer,
+  image attachment handling, and CJK IME regression coverage.
+- Added plugin sandboxing, component sandbox profiles, capability grants,
+  signed artifact verification, and sandbox inspection controls.
+- Added encrypted local session vault foundations, local memory diagnostics,
+  searchable theme browsing, multi-channel update metadata, and bundled local
+  search helpers.
+
+### Changed
+- SSH launch wiring now prepares the remote daemon through the remote
+  workspace stack when services are available, while preserving direct SSH as
+  the fallback path.
+- Remote relay request signing now uses a canonical length-prefixed payload
+  before HMAC signing, avoiding signature drift from non-canonical
+  serialization.
+- App bundle construction now builds and embeds remote daemon binaries from
+  CocxyCore, then verifies their presence and macOS code signature during
+  bundle validation.
+- Theme, browser, sidebar, tab naming, and GitHub pane controls have been
+  tightened for narrow panes, empty states, and user-renamed surfaces.
+
+### Fixed
+- Large and complex agent pastes, image paste handoff, and held delete repeat
+  behavior were hardened so full-screen agent sessions stay responsive.
+- Restore and startup visuals now keep terminal shields and terminal width
+  stable while recovered panes settle.
+- Browser tabs remain selectable and identifiable when pages fail to load or
+  have not produced a title yet.
+- Sidebar session and workspace rename actions are exposed without depending
+  on hidden state.
+
+### Tests
+- Added focused coverage for expanded browser imports, agent teams, remote
+  daemon manifest/upload/session/proxy/relay/image-drop behavior, SSH daemon
+  bootstrap fallback, and bundled remote daemon protocol handling.
+
 ## [1.0.5] - 2026-05-09
 
 ### Fixed
