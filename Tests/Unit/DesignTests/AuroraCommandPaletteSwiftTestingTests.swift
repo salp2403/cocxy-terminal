@@ -63,6 +63,22 @@ struct AuroraCommandPaletteFilterTests {
         #expect(result.map(\.id) == ["theme.cycle"])
     }
 
+    @Test("Matches multi-word query across a single action label")
+    func matchesMultiWordQueryAcrossLabel() {
+        let actions = [
+            Design.AuroraPaletteAction(
+                id: "theme.cycle",
+                label: "Toggle Light/Dark Theme",
+                category: "Theme",
+                subtitle: "Switch between the configured light and dark themes"
+            ),
+            Design.AuroraPaletteAction(id: "tab.new", label: "New tab", category: "Tabs"),
+        ]
+
+        let result = Design.AuroraPaletteFilter.filter(actions, by: "toggle theme")
+        #expect(result.map(\.id) == ["theme.cycle"])
+    }
+
     @Test("Matches the localized Preferences row with the Spanish user term")
     func matchesLocalizedPreferencesRow() {
         let actions = [

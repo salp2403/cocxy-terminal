@@ -66,11 +66,18 @@ extension Design {
             guard !trimmed.isEmpty else { return actions }
             let needle = trimmed.lowercased()
             return actions.filter { action in
-                if action.label.lowercased().contains(needle) { return true }
-                if action.category.lowercased().contains(needle) { return true }
-                if let subtitle = action.subtitle,
-                   subtitle.lowercased().contains(needle) { return true }
-                return false
+                let haystack = [
+                    action.label,
+                    action.category,
+                    action.subtitle ?? "",
+                ]
+                .joined(separator: " ")
+                .lowercased()
+
+                if haystack.contains(needle) { return true }
+
+                let tokens = needle.split(whereSeparator: \.isWhitespace)
+                return !tokens.isEmpty && tokens.allSatisfy { haystack.contains($0) }
             }
         }
     }

@@ -605,8 +605,8 @@ extension MainWindowController {
             ),
             CommandAction(
                 id: "theme.cycle",
-                name: "Cycle Color Scheme",
-                description: "Switch between Mocha, One Dark, Dracula, Solarized",
+                name: "Toggle Light/Dark Theme",
+                description: "Switch between the configured light and dark themes",
                 shortcut: nil,
                 category: .theme,
                 handler: { [weak self] in

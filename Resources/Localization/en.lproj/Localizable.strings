@@ -2466,8 +2466,8 @@
 "command.browser.toggle.description" = "Show or hide the in-app browser";
 "command.theme.browse.name" = "Browse Themes";
 "command.theme.browse.description" = "Open the local theme browser";
-"command.theme.cycle.name" = "Cycle Color Scheme";
-"command.theme.cycle.description" = "Switch between Mocha, One Dark, Dracula, Solarized";
+"command.theme.cycle.name" = "Toggle Light/Dark Theme";
+"command.theme.cycle.description" = "Switch between the configured light and dark themes";
 "command.sidebar.transparency.name" = "Toggle Sidebar Transparency";
 "command.sidebar.transparency.description" = "Switch between transparent and solid sidebar background";
 

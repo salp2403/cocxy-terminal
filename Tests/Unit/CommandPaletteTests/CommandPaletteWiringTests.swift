@@ -91,6 +91,18 @@ final class CommandPaletteWiringTests: XCTestCase {
             .config,
             "The Preferences command must be grouped with settings/configuration actions, not navigation."
         )
+        XCTAssertEqual(actionsByID["theme.cycle"]?.name, "Toggle Light/Dark Theme")
+        XCTAssertEqual(
+            actionsByID["theme.cycle"]?.localized(
+                using: AppLocalizer(languagePreference: .english)
+            ).name,
+            "Toggle Light/Dark Theme"
+        )
+        XCTAssertEqual(
+            engine.search(query: "toggle theme").first?.id,
+            "theme.cycle",
+            "The light/dark theme action must be discoverable by the user-facing toggle wording."
+        )
     }
 
     func testPictureInPictureActionDescriptionTracksLiveConfigReload() throws {

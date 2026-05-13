@@ -2466,8 +2466,8 @@
 "command.browser.toggle.description" = "Mostrar u ocultar el navegador integrado";
 "command.theme.browse.name" = "Explorar temas";
 "command.theme.browse.description" = "Abrir el explorador local de temas";
-"command.theme.cycle.name" = "Cambiar esquema de color";
-"command.theme.cycle.description" = "Cambiar entre Mocha, One Dark, Dracula y Solarized";
+"command.theme.cycle.name" = "Cambiar tema claro/oscuro";
+"command.theme.cycle.description" = "Cambiar entre los temas claro y oscuro configurados";
 "command.sidebar.transparency.name" = "Alternar transparencia lateral";
 "command.sidebar.transparency.description" = "Cambiar entre fondo lateral transparente y sólido";
 
