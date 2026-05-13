@@ -1261,7 +1261,6 @@ extension MainWindowController {
             "subagent",
             "generic",
             "general",
-            "general-purpose",
             "unknown",
         ]
         if genericAgentTypes.contains(lowercasedAgentType) {

@@ -1289,6 +1289,24 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testSpawnSubagentPanelAllowsGeneralPurposeSubagentType() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        controller.spawnSubagentPanel(
+            subagentId: "sub-general",
+            sessionId: "sess-1",
+            agentType: "general-purpose"
+        )
+
+        XCTAssertTrue(
+            controller.panelContentViews.values.contains { $0 is SubagentContentView },
+            "Default typed subagents must auto-open a live activity panel"
+        )
+    }
+
     func testSpawnSubagentPanelUsesControllerDashboardViewModelWhenInjectionAbsent() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
