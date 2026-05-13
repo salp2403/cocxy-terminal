@@ -148,9 +148,9 @@ final class ThemeEngineImpl: ThemeProviding {
 
     // MARK: - Built-In Theme Loading
 
-    /// Loads all 11 built-in themes.
+    /// Loads all built-in themes.
     private static func loadBuiltInThemes() -> [Theme] {
-        [
+        let curatedThemes = [
             catppuccinMocha(),
             catppuccinLatte(),
             catppuccinFrappe(),
@@ -163,6 +163,115 @@ final class ThemeEngineImpl: ThemeProviding {
             gruvboxDark(),
             tokyoNight()
         ]
+        return curatedThemes + generatedSpectrumThemes(count: 200)
+    }
+
+    private static func generatedSpectrumThemes(count: Int) -> [Theme] {
+        (1...count).map { index in
+            let variant: ThemeVariant = index.isMultiple(of: 2) ? .light : .dark
+            let hue = Double((index * 47) % 360)
+            let accent = hslHex(hue: hue, saturation: 0.66, lightness: variant == .dark ? 0.62 : 0.42)
+            let accentSoft = hslHex(hue: hue, saturation: 0.40, lightness: variant == .dark ? 0.24 : 0.86)
+            let background = hslHex(
+                hue: hue,
+                saturation: variant == .dark ? 0.24 : 0.18,
+                lightness: variant == .dark ? 0.11 : 0.96
+            )
+            let foreground = variant == .dark ? "#e8edf4" : "#17202a"
+            let inactiveBackground = hslHex(
+                hue: hue,
+                saturation: variant == .dark ? 0.22 : 0.16,
+                lightness: variant == .dark ? 0.08 : 0.91
+            )
+            let inactiveForeground = variant == .dark ? "#9aa7b7" : "#687386"
+            let ansiColors = generatedANSIColors(baseHue: hue, variant: variant)
+            return Theme(
+                metadata: ThemeMetadata(
+                    name: String(format: "Cocxy Spectrum %03d", index),
+                    variant: variant,
+                    author: "Cocxy",
+                    source: .builtIn
+                ),
+                palette: ThemePalette(
+                    background: background,
+                    foreground: foreground,
+                    cursor: accent,
+                    selectionBackground: accentSoft,
+                    selectionForeground: foreground,
+                    tabActiveBackground: background,
+                    tabActiveForeground: foreground,
+                    tabInactiveBackground: inactiveBackground,
+                    tabInactiveForeground: inactiveForeground,
+                    badgeAttention: ansiColors[3],
+                    badgeCompleted: ansiColors[2],
+                    badgeError: ansiColors[1],
+                    badgeWorking: ansiColors[4],
+                    ansiColors: ansiColors
+                )
+            )
+        }
+    }
+
+    private static func generatedANSIColors(baseHue: Double, variant: ThemeVariant) -> [String] {
+        let normalLightness = variant == .dark ? 0.54 : 0.38
+        let brightLightness = variant == .dark ? 0.68 : 0.50
+        let saturation = variant == .dark ? 0.58 : 0.62
+        let hueOffsets: [Double] = [0, 12, 132, 58, 218, 292, 178, 0]
+        let normal = hueOffsets.enumerated().map { index, offset in
+            if index == 0 {
+                return variant == .dark ? "#111827" : "#dce3ed"
+            }
+            if index == 7 {
+                return variant == .dark ? "#cbd5e1" : "#2f3847"
+            }
+            return hslHex(
+                hue: baseHue + offset,
+                saturation: saturation,
+                lightness: normalLightness
+            )
+        }
+        let bright = hueOffsets.enumerated().map { index, offset in
+            if index == 0 {
+                return variant == .dark ? "#334155" : "#b6c1cf"
+            }
+            if index == 7 {
+                return variant == .dark ? "#f8fafc" : "#0f172a"
+            }
+            return hslHex(
+                hue: baseHue + offset,
+                saturation: min(saturation + 0.12, 0.88),
+                lightness: brightLightness
+            )
+        }
+        return normal + bright
+    }
+
+    private static func hslHex(hue: Double, saturation: Double, lightness: Double) -> String {
+        let normalizedHue = (hue.truncatingRemainder(dividingBy: 360) + 360)
+            .truncatingRemainder(dividingBy: 360) / 360
+        let q = lightness < 0.5
+            ? lightness * (1 + saturation)
+            : lightness + saturation - lightness * saturation
+        let p = 2 * lightness - q
+        let r = hueToRGB(p: p, q: q, t: normalizedHue + 1 / 3)
+        let g = hueToRGB(p: p, q: q, t: normalizedHue)
+        let b = hueToRGB(p: p, q: q, t: normalizedHue - 1 / 3)
+        return String(
+            format: "#%02x%02x%02x",
+            Int((r * 255).rounded()),
+            Int((g * 255).rounded()),
+            Int((b * 255).rounded())
+        )
+    }
+
+    private static func hueToRGB(p: Double, q: Double, t rawT: Double) -> Double {
+        var t = rawT
+        if t < 0 { t += 1 }
+        if t > 1 { t -= 1 }
+        if t < 1 / 6 { return p + (q - p) * 6 * t }
+        if t < 1 / 2 { return q }
+        if t < 2 / 3 { return p + (q - p) * (2 / 3 - t) * 6 }
+        return p
     }
 
     // MARK: - Custom Theme Loading

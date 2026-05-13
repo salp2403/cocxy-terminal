@@ -251,25 +251,25 @@ struct TokyoNightThemeTests {
     }
 }
 
-@Suite("ThemeEngine loads all 11 built-in themes")
+@Suite("ThemeEngine loads curated and expanded built-in themes")
 @MainActor
 struct ThemeEngineNewCountTests {
 
-    @Test func engineHas11BuiltInThemes() {
+    @Test func engineHasExpandedBuiltInThemes() {
         let engine = ThemeEngineImpl()
         let builtInCount = engine.availableThemes.filter {
             if case .builtIn = $0.source { return true }
             return false
         }.count
-        #expect(builtInCount == 11)
+        #expect(builtInCount >= 211)
     }
 
-    @Test func engineHas9DarkAnd2LightThemes() {
+    @Test func engineHasBalancedDarkAndLightExpandedThemes() {
         let engine = ThemeEngineImpl()
         let dark = engine.availableThemes.filter { $0.variant == .dark }.count
         let light = engine.availableThemes.filter { $0.variant == .light }.count
-        #expect(dark == 9)
-        #expect(light == 2)
+        #expect(dark >= 100)
+        #expect(light >= 100)
     }
 
     @Test func allNewThemesResolvableByName() throws {

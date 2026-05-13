@@ -108,6 +108,19 @@ struct ThemeBrowserSwiftTestingTests {
         #expect(viewModel.items.count >= 11)
     }
 
+    @Test("ThemeBrowserCatalog exposes at least 200 searchable built-in themes")
+    func catalogExposesLargeSearchableBuiltInSet() throws {
+        let engine = ThemeEngineImpl()
+        let catalog = ThemeBrowserCatalog(themeEngine: engine)
+
+        #expect(catalog.items.count >= 200)
+        #expect(catalog.filteredItems(query: "spectrum 042", filter: .all).contains {
+            $0.name == "Cocxy Spectrum 042"
+        })
+        #expect(catalog.filteredItems(query: "spectrum", filter: .dark).count >= 80)
+        #expect(catalog.filteredItems(query: "spectrum", filter: .light).count >= 80)
+    }
+
     private func externalThemeFixture(name: String) -> String {
         """
         name = \(name)
