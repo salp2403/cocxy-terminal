@@ -2877,3 +2877,8 @@
 "richInput.placeholder" = "Write or paste a long prompt...";
 "richInput.send" = "Send";
 "richInput.cancel" = "Cancel";
+
+"agentTeams.panel.title" = "Agent Team";
+"agentTeams.creator.title" = "Agent Team";
+"agentTeams.creator.placeholder" = "Design, Build, Review";
+"agentTeams.creator.launch" = "Launch";

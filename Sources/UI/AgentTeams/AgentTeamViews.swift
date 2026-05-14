@@ -62,11 +62,12 @@ struct AgentTeammateRowView: View {
 
 struct AgentTeamPanelView: View {
     let coordinator: AgentTeamCoordinator
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Agent Team")
+                Text(localizer.string("agentTeams.panel.title", fallback: "Agent Team"))
                     .font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Text("\(coordinator.config.teammates.count)")
@@ -87,16 +88,23 @@ struct AgentTeamPanelView: View {
 struct AgentTeamCreatorSheet: View {
     @Binding var teammates: String
     let onLaunch: () -> Void
+    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Agent Team")
+            Text(localizer.string("agentTeams.creator.title", fallback: "Agent Team"))
                 .font(.headline)
-            TextField("Design, Build, Review", text: $teammates)
+            TextField(
+                localizer.string("agentTeams.creator.placeholder", fallback: "Design, Build, Review"),
+                text: $teammates
+            )
                 .textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
-                Button("Launch", action: onLaunch)
+                Button(
+                    localizer.string("agentTeams.creator.launch", fallback: "Launch"),
+                    action: onLaunch
+                )
                     .keyboardShortcut(.defaultAction)
             }
         }
