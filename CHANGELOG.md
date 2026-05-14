@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-05-13
+
+### Fixed
+- CI, nightly, performance, preview and release workflows now check out the
+  private `cocxycore` repository through an SSH deploy key so the
+  `cocxyd-remote` binaries are built and embedded under
+  `Contents/Resources/RemoteDaemon` during every signed bundle build.
+
 ## [1.10.0] - 2026-05-13
 
 ### Added
