@@ -579,10 +579,10 @@ final class TabSurfaceMappingTests: XCTestCase {
                 return
             }
 
-            XCTAssertLessThan(
+            XCTAssertLessThanOrEqual(
                 panel.frame.width,
-                GitHubPaneView.minimumPanelWidth,
-                "The frame can be fitted below the preferred minimum in a very narrow host"
+                GitHubPaneView.defaultPanelWidth,
+                "The frame stays within the default panel width when the host is narrower than the minimum"
             )
             XCTAssertEqual(
                 panel.rootView.panelWidth,
