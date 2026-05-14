@@ -765,7 +765,7 @@ public enum CLIArgumentParser {
     /// Last-resort fallback. It mirrors `Resources/Info.plist` and is only
     /// used when neither the enclosing `.app` nor a SwiftPM checkout can be
     /// resolved.
-    internal static let fallbackVersion = "1.10.2"
+    internal static let fallbackVersion = "1.10.3"
     internal static let fallbackBundleIdentifier = "dev.cocxy.terminal"
 
     /// Resolves the CLI version by preferring the enclosing app bundle's

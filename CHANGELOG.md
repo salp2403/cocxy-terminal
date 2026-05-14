@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.3] - 2026-05-14
+
+### Fixed
+- Command palette no longer surfaces the local Codex account display
+  name or email; the switcher now renders generic `Codex Account N`
+  labels so screenshots and demos do not leak personal account info.
+- Local scroll now also treats the tab foreground process name as an
+  active-agent signal, so the live-tail behaviour is preserved when
+  the semantic state has not propagated yet.
+- Rich Input panel pins font, color, insertion point, container size
+  and frame on both creation and updates, and re-focuses the
+  underlying NSTextView so long pasted prompts render readable text
+  and remain editable.
+- Code Review automation is now armed when the window finishes
+  configuring instead of only on first panel open, and the
+  `shouldAutoShow` reset is dispatched asynchronously to avoid
+  Combine re-entrancy during the suggestion handoff.
+
 ## [1.10.2] - 2026-05-13
 
 ### Fixed
