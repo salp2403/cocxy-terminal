@@ -125,8 +125,12 @@ struct GlassSurfaceCoverageSwiftTestingTests {
             "Child AppKit status strip inside MarkdownContentView; parent installs the shared glass backing.",
         "Sources/UI/QuickTerminal/QuickTerminalPanel.swift":
             "NSPanel shell owns terminal contrast/performance background outside the SwiftUI glass primitive.",
+        "Sources/UI/RichInput/RichInputPanel.swift":
+            "NSPanel shell owns its translucent backgroundColor outside the SwiftUI glass primitive; the hosted RichInputComposerView renders the composer chrome.",
         "Sources/UI/Terminal/Block/TerminalBlockOverlayView.swift":
             "Transparent AppKit overlay drawn on top of terminal cells; per-row rails/buttons are not standalone panels.",
+        "Sources/UI/UXPolish/ShortcutHintsOverlayView.swift":
+            "Non-interactive shortcut-hint overlay that draws per-chip thin material pills; it is decorative (allowsHitTesting=false, accessibilityHidden) rather than a standalone panel surface.",
     ]
 
     private static let legacyFullPanelBackgroundMarkers = [
