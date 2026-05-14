@@ -27,6 +27,18 @@ jobs:
         with:
           lfs: true
 
+      - name: Checkout cocxycore for cocxyd-remote build
+        uses: actions/checkout@v4
+        with:
+          repository: salp2403/cocxycore
+          path: cocxycore-source
+          ref: main
+
+      - name: Install Zig 0.15.2 for cocxyd-remote build
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
       - name: Resolve preview version
         id: version
         run: |
@@ -70,6 +82,8 @@ jobs:
         run: brew install xcodegen
 
       - name: Create app bundle (preview)
+        env:
+          COCXYCORE_DIR: ${{ github.workspace }}/cocxycore-source
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           APP_DIR="build/Cocxy Terminal Preview.app"

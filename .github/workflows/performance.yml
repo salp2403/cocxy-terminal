@@ -20,10 +20,24 @@ jobs:
         with:
           lfs: true
 
+      - name: Checkout cocxycore for cocxyd-remote build
+        uses: actions/checkout@v4
+        with:
+          repository: salp2403/cocxycore
+          path: cocxycore-source
+          ref: main
+
+      - name: Install Zig 0.15.2 for cocxyd-remote build
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
       - name: Install xcodegen
         run: brew install xcodegen
 
       - name: Build app bundle
+        env:
+          COCXYCORE_DIR: ${{ github.workspace }}/cocxycore-source
         run: ./scripts/build-app.sh debug
 
       - name: Measure cold start

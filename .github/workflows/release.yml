@@ -22,6 +22,18 @@ jobs:
         with:
           lfs: true
 
+      - name: Checkout cocxycore for cocxyd-remote build
+        uses: actions/checkout@v4
+        with:
+          repository: salp2403/cocxycore
+          path: cocxycore-source
+          ref: main
+
+      - name: Install Zig 0.15.2 for cocxyd-remote build
+        uses: goto-bus-stop/setup-zig@v2
+        with:
+          version: 0.15.2
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -51,6 +63,8 @@ jobs:
         run: brew install xcodegen
 
       - name: Build app bundle
+        env:
+          COCXYCORE_DIR: ${{ github.workspace }}/cocxycore-source
         run: |
           VERSION="${{ steps.version.outputs.VERSION }}"
           ./scripts/build-app.sh release --version "$VERSION"
