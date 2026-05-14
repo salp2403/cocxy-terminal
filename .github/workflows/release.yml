@@ -146,6 +146,23 @@ jobs:
                 --sign "$SIGNING_IDENTITY" "$dylib"
             done
 
+          # Sign bundled ripgrep helper. Apple notarization rejects the
+          # ad-hoc signature that build-app.sh applies locally, so re-sign
+          # with Developer ID + hardened runtime + secure timestamp.
+          [ -f "$APP_DIR/Contents/Resources/rg" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/rg"
+
+          # Sign bundled cocxyd-remote macOS binary. The Linux binaries
+          # are never executed on macOS so they do not require Developer
+          # ID signing, but the macOS binary lives inside the notarized
+          # bundle and must carry a Developer ID signature.
+          [ -f "$APP_DIR/Contents/Resources/RemoteDaemon/cocxyd-remote-macos-arm64" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/RemoteDaemon/cocxyd-remote-macos-arm64"
+
           # Sign QuickLook extension
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
             codesign --force --options runtime --timestamp \

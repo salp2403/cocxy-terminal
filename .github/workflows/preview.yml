@@ -152,6 +152,17 @@ jobs:
                 --sign "$SIGNING_IDENTITY" "$dylib"
             done
 
+          # Sign bundled ripgrep helper and cocxyd-remote macOS binary so
+          # preview bundles pass notarization.
+          [ -f "$APP_DIR/Contents/Resources/rg" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/rg"
+          [ -f "$APP_DIR/Contents/Resources/RemoteDaemon/cocxyd-remote-macos-arm64" ] && \
+            codesign --force --options runtime --timestamp \
+              --sign "$SIGNING_IDENTITY" \
+              "$APP_DIR/Contents/Resources/RemoteDaemon/cocxyd-remote-macos-arm64"
+
           [ -d "$APP_DIR/Contents/PlugIns/CocxyQuickLook.appex" ] && \
             codesign --force --options runtime --timestamp \
               --sign "$SIGNING_IDENTITY" \
