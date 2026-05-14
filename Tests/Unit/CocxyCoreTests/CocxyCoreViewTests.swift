@@ -807,7 +807,9 @@ struct CocxyCoreViewTests {
 
     @Test("canceling bracketed paste closes the previous paste before the next payload")
     func cancelingBracketedPasteClosesPreviousPasteBeforeNextPayload() async throws {
-        let harness = try makeViewHarness(command: "/bin/cat")
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         feed("\u{001B}[?2004h", into: state.terminal)
@@ -1539,6 +1541,23 @@ private func makeViewHarness(command: String = "/bin/cat") throws -> ViewHarness
         view: view,
         surfaceID: surfaceID
     )
+}
+
+private func makeRawCatScript() throws -> (rootDirectory: URL, scriptURL: URL) {
+    let rootDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("cocxy-raw-cat-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
+    let scriptURL = rootDirectory.appendingPathComponent("raw-cat.sh", isDirectory: false)
+    try """
+    #!/bin/sh
+    stty raw -echo
+    exec /bin/cat
+    """.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: scriptURL.path
+    )
+    return (rootDirectory, scriptURL)
 }
 
 private func makeKeyEvent(

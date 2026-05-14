@@ -1117,18 +1117,24 @@ final class CocxyCoreView: NSView {
             }
             guard !Task.isCancelled else { return }
 
+            let remainingChunks: ArraySlice<String>
             if usesBracketedPaste {
-                bridge.sendText("\u{1B}[200~", to: sid)
+                guard let firstChunk = chunks.first else { return }
                 self.activeBracketedPasteSurfaceID = sid
                 self.activeBracketedPasteSessionID = pasteSessionID
+                bridge.sendText("\u{1B}[200~" + firstChunk, to: sid)
+                remainingChunks = chunks.dropFirst()
                 await Self.sleepBetweenPasteChunksIfNeeded(
                     chunks.count,
                     agentPaced: agentPacedPaste
                 )
+            } else {
+                remainingChunks = chunks[...]
             }
 
-            for chunk in chunks {
+            for chunk in remainingChunks {
                 guard !Task.isCancelled,
+                      !usesBracketedPaste || self.activeBracketedPasteSessionID == pasteSessionID,
                       bridge.surfaceState(for: sid) != nil else { return }
                 bridge.sendText(chunk, to: sid)
                 await Self.sleepBetweenPasteChunksIfNeeded(
