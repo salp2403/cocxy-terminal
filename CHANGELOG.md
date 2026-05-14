@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-05-13
+
+### Fixed
+- Bundled ripgrep helper (`Resources/rg`) and the cocxyd-remote macOS
+  binary are now re-signed with Developer ID, hardened runtime, and a
+  secure timestamp inside the release, nightly, and preview workflows
+  so Apple notarization accepts the DMG.
+- Catalog-count and wire-protocol parity tests were realigned with the
+  current CLI command catalog (168 entries) and now treat `tmux` and
+  the `vault-*` commands as local-only commands.
+- The GitHub pane fitted-width regression test now asserts against the
+  default panel width because the layout falls back to it when the host
+  window is narrower than the preferred minimum.
+
 ## [1.10.1] - 2026-05-13
 
 ### Fixed
