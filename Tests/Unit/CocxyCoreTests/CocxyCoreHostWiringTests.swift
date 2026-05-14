@@ -253,6 +253,50 @@ struct CocxyCoreHostWiringTests {
         #expect(String(data: output.data, encoding: .utf8)?.contains("typed-ok") == true)
     }
 
+    @Test("foreground agent process keeps local scroll when semantic state is unavailable")
+    func foregroundAgentProcessKeepsLocalScrollWhenSemanticStateIsUnavailable() throws {
+        let bridge = try makeBridge()
+        let controller = MainWindowController(bridge: bridge)
+        let tabID = try #require(controller.tabManager.tabs.first?.id)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.processName = "claude"
+        }
+        let viewModel = TerminalViewModel(engine: bridge)
+        let view = CocxyCoreView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        _ = view.layer
+
+        let surfaceID = try bridge.createSurface(
+            in: view,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        viewModel.markRunning(surfaceID: surfaceID)
+        view.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
+        controller.tabSurfaceMap[tabID] = surfaceID
+
+        controller.wireSurfaceHandlers(
+            for: surfaceID,
+            tabID: tabID,
+            in: view,
+            initialWorkingDirectory: nil
+        )
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        feed("\u{1B}[?1049h\u{1B}[?1000h\u{1B}[?1006h", into: state.terminal)
+        feed(numberedTerminalLines(100), into: state.terminal)
+
+        let before = try #require(bridge.historyVisibleStart(for: surfaceID))
+        #expect(before == cocxycore_terminal_history_max_visible_start(state.terminal))
+        #expect(view.prefersLocalScrollInMouseTrackingMode?() == true)
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        let after = try #require(bridge.historyVisibleStart(for: surfaceID))
+        #expect(after < before)
+    }
+
     @Test("known agent command input enables immediate image file handoff")
     func knownAgentCommandInputEnablesImmediateImageFileHandoff() throws {
         let bridge = try makeBridge()

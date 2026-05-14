@@ -24,13 +24,26 @@ struct AgentPromptComposerTextView: NSViewRepresentable {
     func makeNSView(context: Context) -> NSScrollView {
         let textView = AgentPromptNSTextView()
         textView.delegate = context.coordinator
-        textView.font = .systemFont(ofSize: 13)
+        let font = NSFont.systemFont(ofSize: 13)
+        textView.font = font
+        textView.textColor = .labelColor
+        textView.insertionPointColor = .labelColor
+        textView.typingAttributes = [
+            .font: font,
+            .foregroundColor: NSColor.labelColor
+        ]
         textView.textContainerInset = NSSize(width: 6, height: 6)
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(
-            width: CGFloat.greatestFiniteMagnitude,
+            width: 400,
             height: CGFloat.greatestFiniteMagnitude
         )
+        textView.minSize = NSSize(width: 0, height: 104)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.frame = NSRect(x: 0, y: 0, width: 400, height: 120)
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
@@ -62,6 +75,20 @@ struct AgentPromptComposerTextView: NSViewRepresentable {
         textView.isEditable = isEnabled
         textView.isSelectable = isEnabled
         textView.textColor = isEnabled ? .labelColor : .secondaryLabelColor
+        textView.insertionPointColor = isEnabled ? .labelColor : .secondaryLabelColor
+        textView.typingAttributes[.foregroundColor] = textView.textColor
+        let contentWidth = max(1, scrollView.contentSize.width)
+        if abs(textView.frame.width - contentWidth) > 0.5 {
+            textView.setFrameSize(NSSize(
+                width: contentWidth,
+                height: max(textView.frame.height, scrollView.contentSize.height)
+            ))
+        }
+        textView.textContainer?.containerSize = NSSize(
+            width: contentWidth,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
 
         if textView.string != text {
             context.coordinator.isApplyingExternalUpdate = true
@@ -73,11 +100,20 @@ struct AgentPromptComposerTextView: NSViewRepresentable {
             ))
             context.coordinator.isApplyingExternalUpdate = false
         }
+
+        if isEnabled, context.coordinator.didRequestInitialFocus == false {
+            context.coordinator.didRequestInitialFocus = true
+            DispatchQueue.main.async { [weak textView] in
+                guard let textView else { return }
+                textView.window?.makeFirstResponder(textView)
+            }
+        }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var parent: AgentPromptComposerTextView
         var isApplyingExternalUpdate = false
+        var didRequestInitialFocus = false
 
         init(parent: AgentPromptComposerTextView) {
             self.parent = parent

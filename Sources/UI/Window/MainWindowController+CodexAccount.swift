@@ -13,12 +13,13 @@ extension MainWindowController {
 
         let selectedID = CodexAccountSelectionStore.load(from: selectionURL).selectedAccountID
 
-        return accounts.map { account in
+        return accounts.enumerated().map { index, account in
             let suffix = account.id == selectedID ? " (Active)" : ""
+            let accountLabel = "Codex Account \(index + 1)"
             return CommandAction(
                 id: "codex.account.switch.\(account.id)",
-                name: "Switch Codex Account: \(account.displayName ?? account.email)\(suffix)",
-                description: "Remember \(account.email) as the active local Codex account for Cocxy integrations",
+                name: "Switch Codex Account: \(accountLabel)\(suffix)",
+                description: "Use this local Codex account for Cocxy integrations",
                 shortcut: nil,
                 category: .agent,
                 handler: { [weak self, accountID = account.id, selectionURL] in

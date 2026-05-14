@@ -11,6 +11,8 @@ final class RichInputPanel: NSPanel, NSWindowDelegate {
     private weak var hostWindow: NSWindow?
     private var suppressCloseCallback = false
 
+    override var canBecomeKey: Bool { true }
+
     init(
         hostedView: FocusableHostingView<RichInputComposerView>,
         frame: NSRect,
@@ -54,6 +56,19 @@ final class RichInputPanel: NSPanel, NSWindowDelegate {
         }
         makeKeyAndOrderFront(nil)
         makeFirstResponder(hostedView)
+        focusTextEditorIfPresent()
+        DispatchQueue.main.async { [weak self] in
+            self?.focusTextEditorIfPresent()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.focusTextEditorIfPresent()
+        }
+    }
+
+    private func focusTextEditorIfPresent() {
+        guard let textView = hostedView.firstDescendantTextView() else { return }
+        textView.window?.makeFirstResponder(textView)
+        textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
     }
 
     func closeWithoutCallback() {
@@ -70,5 +85,19 @@ final class RichInputPanel: NSPanel, NSWindowDelegate {
 
         guard !suppressCloseCallback else { return }
         onClose?()
+    }
+}
+
+private extension NSView {
+    func firstDescendantTextView() -> NSTextView? {
+        if let textView = self as? NSTextView {
+            return textView
+        }
+        for subview in subviews {
+            if let textView = subview.firstDescendantTextView() {
+                return textView
+            }
+        }
+        return nil
     }
 }

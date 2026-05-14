@@ -1152,6 +1152,10 @@ extension MainWindowController {
         layoutRightDockedAgentPanels()
     }
 
+    func startCodeReviewAutomationIfNeeded() {
+        _ = resolveCodeReviewViewModel()
+    }
+
     func showCodeReviewSuggestion(for viewModel: CodeReviewPanelViewModel) {
         guard let overlayContainer = overlayContainerView else { return }
         guard !isCodeReviewVisible else { return }
@@ -1398,7 +1402,9 @@ extension MainWindowController {
                 .sink { [weak self, weak viewModel] _ in
                     guard let self, let viewModel else { return }
                     self.showCodeReviewSuggestion(for: viewModel)
-                    viewModel.shouldAutoShow = false
+                    DispatchQueue.main.async { [weak viewModel] in
+                        viewModel?.shouldAutoShow = false
+                    }
                 }
                 .store(in: &codeReviewCancellables)
         }

@@ -17,7 +17,7 @@ struct CommandPaletteCodexAccountSwiftTestingTests {
         #expect(controller.commandPaletteCodexAccountActions(accounts: []).isEmpty)
     }
 
-    @Test("account actions expose active marker and persist the chosen account")
+    @Test("account actions hide personal identity and persist the chosen account")
     func accountActionsPersistSelection() throws {
         let root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -38,8 +38,12 @@ struct CommandPaletteCodexAccountSwiftTestingTests {
         )
 
         #expect(actions.map(\.id) == ["codex.account.switch.acct_1", "codex.account.switch.acct_2"])
-        #expect(actions[0].name == "Switch Codex Account: One (Active)")
-        #expect(actions[1].name == "Switch Codex Account: two@example.com")
+        #expect(actions[0].name == "Switch Codex Account: Codex Account 1 (Active)")
+        #expect(actions[1].name == "Switch Codex Account: Codex Account 2")
+        #expect(actions[0].description == "Use this local Codex account for Cocxy integrations")
+        #expect(actions[1].description == "Use this local Codex account for Cocxy integrations")
+        #expect(actions.map(\.name).contains { $0.contains("example.com") || $0.contains("One") } == false)
+        #expect(actions.map(\.description).contains { $0.contains("example.com") || $0.contains("One") } == false)
         #expect(actions.allSatisfy { $0.category == .agent })
 
         actions[1].handler()

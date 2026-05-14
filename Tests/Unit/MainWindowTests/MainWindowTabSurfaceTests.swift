@@ -328,6 +328,41 @@ final class TabSurfaceMappingTests: XCTestCase {
         XCTAssertNotEqual(bridge.sentTexts.last?.surface, surfaceB)
     }
 
+    func testSharedServicesPrimeCodeReviewAutomationWithoutOpeningPanel() {
+        let appDelegate = AppDelegate()
+        appDelegate.sessionDiffTracker = SessionDiffTrackerImpl()
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+
+        XCTAssertNil(controller.codeReviewViewModel)
+
+        appDelegate.configureSharedServices(for: controller, registerWindow: false)
+
+        XCTAssertNotNil(controller.codeReviewViewModel)
+        XCTAssertFalse(controller.isCodeReviewVisible)
+        XCTAssertNil(controller.codeReviewHostingView)
+    }
+
+    func testCodeReviewAutomationShowsSuggestionWhenSessionRequestsAutoShow() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: SessionDiffTrackerImpl(),
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in [] }
+        )
+        controller.injectedCodeReviewViewModel = viewModel
+
+        controller.startCodeReviewAutomationIfNeeded()
+
+        XCTAssertNil(controller.codeReviewSuggestionHostingView)
+        viewModel.shouldAutoShow = true
+        MainActorTestSupport.waitForMainDispatch(delay: 0.05)
+
+        XCTAssertNotNil(controller.codeReviewSuggestionHostingView)
+        XCTAssertFalse(controller.isCodeReviewVisible)
+    }
+
     func testCodeReviewPanelCanGrowWiderThanDefaultWidth() {
         withIsolatedCodeReviewPanelWidthPreference {
             let bridge = MockTerminalEngine()

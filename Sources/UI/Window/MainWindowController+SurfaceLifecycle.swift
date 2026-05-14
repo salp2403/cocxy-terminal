@@ -235,11 +235,20 @@ extension MainWindowController {
         return surfaceState?.isActive == true
             || surfaceState?.hasAgent == true
             || semantic?.state == CocxyCoreSemanticState.agentActive
+            || foregroundProcessLooksLikeActiveAgent(surfaceID)
             || semanticCommandInputLooksLikeActiveAgent(
                 bridge: bridge,
                 surfaceID: surfaceID,
                 semantic: semantic
             )
+    }
+
+    private func foregroundProcessLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
+        guard let tabID = tabID(for: surfaceID),
+              let processName = tabManager.tab(for: tabID)?.processName else {
+            return false
+        }
+        return AgentScrollFallback.commandInputLaunchesKnownAgent(processName)
     }
 
     private func semanticCommandInputLooksLikeActiveAgent(

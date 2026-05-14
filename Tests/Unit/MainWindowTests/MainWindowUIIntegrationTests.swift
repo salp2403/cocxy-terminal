@@ -667,6 +667,39 @@ final class RichInputIntegrationTests: XCTestCase {
         XCTAssertEqual(draft.text, "text view draft")
     }
 
+    func testRichInputComposerFocusesEditableTextViewAndShowsInitialText() throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        let surfaceView = try XCTUnwrap(controller.activeTerminalSurfaceView as? CocxyCoreView)
+        let longText = (0..<18)
+            .map { "line-\($0) pasted from notes" }
+            .joined(separator: "\n")
+
+        XCTAssertTrue(controller.presentRichInputComposer(
+            TerminalRichInputRequest(text: longText),
+            for: surfaceView,
+            tabID: tabID
+        ))
+
+        let panel = try XCTUnwrap(controller.richInputPanel)
+        let hostingView = try XCTUnwrap(controller.richInputHostingView)
+        hostingView.layoutSubtreeIfNeeded()
+        MainActorTestSupport.waitForMainDispatch(delay: 0.05)
+        hostingView.layoutSubtreeIfNeeded()
+        let textView = try XCTUnwrap(Self.firstDescendantTextView(in: hostingView))
+
+        XCTAssertEqual(textView.string, longText)
+        XCTAssertTrue(textView.isEditable)
+        XCTAssertTrue(textView.isSelectable)
+        XCTAssertGreaterThan(textView.frame.width, 100)
+        XCTAssertTrue(textView.acceptsFirstResponder)
+        XCTAssertTrue(textView.window === panel)
+        XCTAssertTrue(panel.canBecomeKey)
+    }
+
     private static func richInputDraftKey(
         for tabID: TabID,
         controller: MainWindowController

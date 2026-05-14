@@ -1500,6 +1500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         controller.timelineDispatcher.navigator = makeTimelineNavigator()
+        controller.startCodeReviewAutomationIfNeeded()
 
         // The Aurora chrome integration depends on the per-surface store
         // the block above injected. With every service in place we can
