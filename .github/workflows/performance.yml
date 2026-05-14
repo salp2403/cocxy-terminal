@@ -26,6 +26,7 @@ jobs:
           repository: salp2403/cocxycore
           path: cocxycore-source
           ref: main
+          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
 
       - name: Install Zig 0.15.2 for cocxyd-remote build
         uses: goto-bus-stop/setup-zig@v2
