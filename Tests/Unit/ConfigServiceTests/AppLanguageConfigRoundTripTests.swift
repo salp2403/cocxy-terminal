@@ -48,9 +48,24 @@ struct AppLanguageConfigRoundTripTests {
         [appearance]
         app-language = "en-US"
         """)
+        let french = try loadConfig(from: """
+        [appearance]
+        app-language = "fr-FR"
+        """)
+        let portugueseBrazil = try loadConfig(from: """
+        [appearance]
+        app-language = "pt_BR"
+        """)
+        let chineseSimplified = try loadConfig(from: """
+        [appearance]
+        app-language = "zh-Hans"
+        """)
 
         #expect(spanish.appearance.appLanguage == .spanish)
         #expect(english.appearance.appLanguage == .english)
+        #expect(french.appearance.appLanguage.rawValue == "fr")
+        #expect(portugueseBrazil.appearance.appLanguage.rawValue == "pt-BR")
+        #expect(chineseSimplified.appearance.appLanguage.rawValue == "zh-CN")
     }
 
     @Test
@@ -61,7 +76,7 @@ struct AppLanguageConfigRoundTripTests {
         """)
         let invalid = try loadConfig(from: """
         [appearance]
-        app-language = "fr"
+        app-language = "xx-ZZ"
         """)
         let wrongType = try loadConfig(from: """
         [appearance]

@@ -220,6 +220,9 @@ extension MainWindowController {
                     surfaceView: cocxyView
                 )
             }
+            cocxyView.onVaultSessionDrop = { [weak self] payload in
+                self?.handleVaultSessionDrop(payload, surfaceID: capturedSurfaceID) ?? false
+            }
             configureCommandBlockOverlayIntegration(
                 for: capturedTabID,
                 surfaceID: capturedSurfaceID,

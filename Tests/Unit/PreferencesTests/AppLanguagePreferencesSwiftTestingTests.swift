@@ -66,9 +66,14 @@ struct AppLanguagePreferencesSwiftTestingTests {
     @Test
     func loadReflectsConfigValueAndAvailableLanguages() {
         let (vm, _) = makeViewModel(appLanguage: .spanish)
+        let expectedLanguageValues = [
+            "system", "en", "es", "ar", "bs", "da", "de", "fr", "it", "ja",
+            "km", "ko", "no", "pl", "pt-BR", "ru", "th", "tr", "uk", "vi",
+            "zh-CN", "zh-TW",
+        ]
 
         #expect(vm.appLanguage == .spanish)
-        #expect(vm.availableAppLanguages == [.system, .english, .spanish])
+        #expect(vm.availableAppLanguages.map(\.rawValue) == expectedLanguageValues)
     }
 
     @Test
@@ -86,13 +91,13 @@ struct AppLanguagePreferencesSwiftTestingTests {
     }
 
     @Test
-    func generatedTomlContainsCurrentLanguage() {
+    func generatedTomlContainsCurrentLanguage() throws {
         let (vm, _) = makeViewModel(appLanguage: .system)
-        vm.appLanguage = .spanish
+        vm.appLanguage = try #require(AppLanguage.normalized("pt_BR"))
 
         let toml = vm.generateToml()
 
-        #expect(toml.contains("app-language = \"es\""))
+        #expect(toml.contains("app-language = \"pt-BR\""))
     }
 
     @Test

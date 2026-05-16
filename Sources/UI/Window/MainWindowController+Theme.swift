@@ -90,6 +90,7 @@ extension MainWindowController {
         updateStatusBarLocalizer(localizer)
         updateTerminalHostLocalizers(localizer)
         gitHubPaneViewModel?.updateLocalizer(localizer)
+        syncVaultSidebarRootView()
         updateRemoteWorkspacePanelLocalizer(localizer)
         refreshTabStrip(syncFromFirstResponder: false)
         refreshShortcutHintsOverlay(config: config.uxPolish, keybindings: config.keybindings)

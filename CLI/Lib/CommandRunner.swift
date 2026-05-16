@@ -26,6 +26,8 @@ public struct CommandRunner {
     public let signatureKeyStore: SignatureKeychainStore
     public let trustedAuthorRegistryURL: URL
     public let vaultStore: any VaultSessionStoring
+    public let vaultUserStateStore: VaultUserStateStore
+    public let vaultSearchIndexFactory: () throws -> VaultSearchIndex
 
     /// Creates a command runner with a socket client.
     ///
@@ -36,12 +38,16 @@ public struct CommandRunner {
         signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
         trustedAuthorRegistryURL: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/security/trusted-authors.json"),
-        vaultStore: any VaultSessionStoring = VaultSessionStore.defaultStore()
+        vaultStore: any VaultSessionStoring = VaultSessionStore.defaultStore(),
+        vaultUserStateStore: VaultUserStateStore = VaultUserStateStore(),
+        vaultSearchIndexFactory: @escaping () throws -> VaultSearchIndex = { try VaultSearchIndex() }
     ) {
         self.socketClient = socketClient
         self.signatureKeyStore = signatureKeyStore
         self.trustedAuthorRegistryURL = trustedAuthorRegistryURL
         self.vaultStore = vaultStore
+        self.vaultUserStateStore = vaultUserStateStore
+        self.vaultSearchIndexFactory = vaultSearchIndexFactory
     }
 
     /// Runs the CLI with the given arguments.
@@ -115,6 +121,25 @@ public struct CommandRunner {
             return executeVaultList()
         case .vaultClear:
             return executeVaultClear()
+        case .vaultSearch(let query, let agent, let pinned, let workspace):
+            return executeVaultSearch(
+                query: query,
+                agent: agent,
+                pinnedOnly: pinned,
+                workspace: workspace
+            )
+        case .vaultPin(let agent, let sessionID):
+            return executeVaultPin(agent: agent, sessionID: sessionID, pinned: true)
+        case .vaultUnpin(let agent, let sessionID):
+            return executeVaultPin(agent: agent, sessionID: sessionID, pinned: false)
+        case .vaultExport(let agent, let sessionID, let format, let outputPath, let force):
+            return executeVaultExport(
+                agent: agent,
+                sessionID: sessionID,
+                format: format,
+                outputPath: outputPath,
+                force: force
+            )
         case .vaultResume(let agent, let sessionID, let dryRun):
             return executeVaultResume(agent: agent, sessionID: sessionID, dryRun: dryRun)
         case .keysGenerate(let author):
@@ -414,20 +439,9 @@ public struct CommandRunner {
 
     private func executeVaultList() -> CLIResult {
         do {
-            let formatter = ISO8601DateFormatter()
-            let sessions = try vaultStore.loadSessions().map { session -> [String: Any] in
-                var object: [String: Any] = [
-                    "id": session.id,
-                    "agentID": session.agentID.rawValue,
-                    "agentDisplayName": session.agentDisplayName,
-                    "sessionID": session.sessionID,
-                    "capturedAt": formatter.string(from: session.capturedAt),
-                    "lastSeenAt": formatter.string(from: session.lastSeenAt),
-                    "source": session.source.rawValue,
-                    "sanitizedArguments": session.sanitizedArguments,
-                ]
-                object["workingDirectory"] = session.workingDirectory ?? NSNull()
-                return object
+            let pinnedIDs = vaultUserStateStore.pinnedSessionIDs
+            let sessions = try vaultStore.loadSessions().map {
+                vaultSessionJSON($0, pinnedIDs: pinnedIDs)
             }
             return jsonResult(["sessions": sessions])
         } catch {
@@ -441,6 +455,97 @@ public struct CommandRunner {
             return CLIResult(exitCode: 0, stdout: "Vault cleared.", stderr: "")
         } catch {
             return errorResult("Failed to clear vault", error)
+        }
+    }
+
+    private func executeVaultSearch(
+        query: String,
+        agent: String?,
+        pinnedOnly: Bool,
+        workspace: String?
+    ) -> CLIResult {
+        do {
+            let sessions = try vaultStore.loadSessions()
+            let index = try vaultSearchIndexFactory()
+            try index.rebuild(sessions: sessions)
+            let pinnedIDs = vaultUserStateStore.pinnedSessionIDs
+            var agentIDs: Set<VaultAgentID> = []
+            if let agent, !agent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                agentIDs.insert(VaultAgentID(agent))
+            }
+            let results = try index.search(
+                query: query,
+                filters: VaultSearchFilters(
+                    agentIDs: agentIDs,
+                    pinnedOnly: pinnedOnly,
+                    pinnedSessionIDs: pinnedIDs,
+                    workspacePath: workspace
+                )
+            ).map { result -> [String: Any] in
+                var object = vaultSessionJSON(result.session, pinnedIDs: pinnedIDs)
+                object["relevanceScore"] = result.relevanceScore
+                object["highlights"] = result.highlights.map { highlight in
+                    [
+                        "field": highlight.field,
+                        "snippet": highlight.snippet,
+                        "offset": highlight.offset,
+                        "length": highlight.length,
+                    ] as [String: Any]
+                }
+                return object
+            }
+            return jsonResult(["sessions": results])
+        } catch {
+            return errorResult("Failed to search vault sessions", error)
+        }
+    }
+
+    private func executeVaultPin(agent agentName: String, sessionID: String, pinned: Bool) -> CLIResult {
+        do {
+            let session = try resolveVaultSession(agentName: agentName, sessionID: sessionID)
+            vaultUserStateStore.setPinned(pinned, sessionID: session.id)
+            return jsonResult([
+                "id": session.id,
+                "agentID": session.agentID.rawValue,
+                "sessionID": session.sessionID,
+                "pinned": pinned,
+            ])
+        } catch {
+            return errorResult(pinned ? "Failed to pin vault session" : "Failed to unpin vault session", error)
+        }
+    }
+
+    private func executeVaultExport(
+        agent agentName: String,
+        sessionID: String,
+        format: VaultSessionExportFormat,
+        outputPath: String,
+        force: Bool
+    ) -> CLIResult {
+        do {
+            let session = try resolveVaultSession(agentName: agentName, sessionID: sessionID)
+            let outputURL = URL(fileURLWithPath: outputPath).standardizedFileURL
+            if FileManager.default.fileExists(atPath: outputURL.path), !force {
+                return CLIResult(
+                    exitCode: 1,
+                    stdout: "",
+                    stderr: "Error: Output file already exists. Pass --force to overwrite."
+                )
+            }
+            try FileManager.default.createDirectory(
+                at: outputURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try VaultSessionExportFormatter.data(for: session, format: format)
+            try data.write(to: outputURL, options: [.atomic])
+            return jsonResult([
+                "status": "exported",
+                "path": outputURL.path,
+                "format": format.rawValue,
+                "id": session.id,
+            ])
+        } catch {
+            return errorResult("Failed to export vault session", error)
         }
     }
 
@@ -480,6 +585,25 @@ public struct CommandRunner {
         } catch {
             return errorResult("Failed to resume vault session", error)
         }
+    }
+
+    private func resolveVaultSession(agentName: String, sessionID: String) throws -> VaultSession {
+        let normalizedAgent = VaultAgentID(agentName)
+        if let session = try vaultStore.loadSessions().first(where: {
+            $0.agentID == normalizedAgent && ($0.sessionID == sessionID || $0.id == sessionID)
+        }) {
+            return session
+        }
+        throw VaultError.sessionNotFound(agent: agentName, sessionID: sessionID)
+    }
+
+    private func vaultSessionJSON(
+        _ session: VaultSession,
+        pinnedIDs: Set<String>
+    ) -> [String: Any] {
+        var object = VaultSessionExportFormatter.jsonObject(for: session)
+        object["pinned"] = pinnedIDs.contains(session.id)
+        return object
     }
 
     // MARK: - Local Commands: Signatures
@@ -748,11 +872,14 @@ public struct CommandRunner {
 
         case .hooksInstall, .hooksUninstall, .hooksStatus, .hookHandler, .setupHooks, .editorOpen,
              .classify, .correct, .identify, .capabilities, .top,
-             .vaultList, .vaultClear, .vaultResume,
+             .vaultList, .vaultClear, .vaultSearch, .vaultPin, .vaultUnpin, .vaultExport, .vaultResume,
              .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:
             // These are handled locally; should never reach socket request building.
             return CLISocketRequest(id: requestID, command: "status", params: nil)
+
+        case .vaultOpen:
+            return CLISocketRequest(id: requestID, command: "vault-open", params: nil)
 
         case .review:
             return CLISocketRequest(id: requestID, command: "review", params: nil)

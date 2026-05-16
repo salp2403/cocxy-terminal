@@ -361,6 +361,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Sends a named key event to the active terminal.
     let sendKeyProvider: (@Sendable (String) -> Bool)?
 
+    /// Opens the visual Vault sidebar in the focused window.
+    let vaultOpenProvider: (@Sendable () -> [String: String]?)?
+
     /// Opens an SSH session in a new tab. Params: (destination, port?, identityFile?).
     let sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)?
 
@@ -559,6 +562,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         searchProvider: (@Sendable (String, Bool, Bool, String?) -> SearchCommandResult?)? = nil,
         sendTextProvider: (@Sendable (String) -> Bool)? = nil,
         sendKeyProvider: (@Sendable (String) -> Bool)? = nil,
+        vaultOpenProvider: (@Sendable () -> [String: String]?)? = nil,
         sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)? = nil,
         webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)? = nil,
         webStopProvider: (@Sendable () -> Bool)? = nil,
@@ -641,6 +645,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.searchProvider = searchProvider
         self.sendTextProvider = sendTextProvider
         self.sendKeyProvider = sendKeyProvider
+        self.vaultOpenProvider = vaultOpenProvider
         self.sshProvider = sshProvider
         self.webStartProvider = webStartProvider
         self.webStopProvider = webStopProvider
@@ -1144,6 +1149,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleSend(request)
         case .sendKey:
             return handleSendKey(request)
+        case .vaultOpen:
+            return handleVaultOpen(request)
 
         // Hook management (v4)
         case .hooks:

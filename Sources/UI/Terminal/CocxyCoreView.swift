@@ -98,6 +98,9 @@ final class CocxyCoreView: NSView {
     /// Closure called when files are dropped onto the terminal.
     var onFileDrop: (([URL]) -> Bool)?
 
+    /// Closure called when a Vault session card is dropped onto the terminal.
+    var onVaultSessionDrop: ((VaultSessionDragPayload) -> Bool)?
+
     /// Optional output buffer provider retained for controller integrations
     /// such as Smart Copy. Selection content still has priority, but this
     /// hook preserves feature wiring for host-driven actions.
@@ -224,7 +227,10 @@ final class CocxyCoreView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         applyTerminalBackingBackground()
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([
+            .fileURL,
+            NSPasteboard.PasteboardType(VaultSessionDragPayload.pasteboardType),
+        ])
     }
 
     @available(*, unavailable)
@@ -1505,6 +1511,12 @@ final class CocxyCoreView: NSView {
     // MARK: - Drag and Drop
 
     override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if sender.draggingPasteboard.availableType(
+            from: [NSPasteboard.PasteboardType(VaultSessionDragPayload.pasteboardType)]
+        ) != nil {
+            showNotificationRing(color: CocxyColors.teal)
+            return .copy
+        }
         guard sender.draggingPasteboard.canReadObject(
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]
@@ -1512,7 +1524,18 @@ final class CocxyCoreView: NSView {
         return .copy
     }
 
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        hideNotificationRing()
+        super.draggingExited(sender)
+    }
+
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        if let payload = VaultSessionDragPayload.from(pasteboard: sender.draggingPasteboard) {
+            let handled = onVaultSessionDrop?(payload) == true
+            flashVaultDropFeedback(success: handled)
+            if handled { return true }
+        }
+
         guard let urls = sender.draggingPasteboard.readObjects(
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]
@@ -1549,6 +1572,15 @@ final class CocxyCoreView: NSView {
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
         bridge.sendText(paths, to: sid)
         return true
+    }
+
+    private func flashVaultDropFeedback(success: Bool) {
+        hideNotificationRing()
+        showNotificationRing(color: success ? CocxyColors.green : CocxyColors.red)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 650_000_000)
+            self?.hideNotificationRing()
+        }
     }
 
     // MARK: - Coordinate Conversion

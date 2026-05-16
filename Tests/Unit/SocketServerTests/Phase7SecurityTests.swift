@@ -687,8 +687,12 @@ final class Phase7WireProtocolTests: XCTestCase {
             "tmux",
             "top",
             "vault-clear",
+            "vault-export",
             "vault-list",
+            "vault-pin",
             "vault-resume",
+            "vault-search",
+            "vault-unpin",
             "verify",
         ]
         let cliCommands = Set(CLICommand.allCases.map { $0.rawValue })

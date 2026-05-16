@@ -129,6 +129,7 @@ extension MainWindowController {
         "agent.mode": KeybindingActionCatalog.reviewAgentMode.id,
         "agent.review": KeybindingActionCatalog.reviewCodeReview.id,
         "github.toggle": KeybindingActionCatalog.windowGitHubPane.id,
+        "vault.toggle": KeybindingActionCatalog.windowVaultSidebar.id,
         "notes.toggle": KeybindingActionCatalog.windowNotes.id,
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
@@ -423,6 +424,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleGitHubPane() }
+                }
+            ),
+            CommandAction(
+                id: "vault.toggle",
+                name: "Toggle Vault",
+                description: "Show locally vaulted external agent sessions",
+                shortcut: paletteShortcutLabel("vault.toggle", fallback: nil),
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.toggleVaultSidebar() }
                 }
             ),
             CommandAction(
@@ -1866,6 +1878,14 @@ extension MainWindowController {
             syncNotesRootView(panelWidth: notesWidth)
         }
 
+        if isVaultSidebarVisible {
+            let vaultWidth = clampedVaultSidebarPanelWidth(
+                vaultSidebarViewModel?.widthMode.panelWidth ?? vaultSidebarPanelWidth,
+                containerWidth: overlayContainer.bounds.width
+            )
+            syncVaultSidebarRootView(panelWidth: vaultWidth)
+        }
+
         let visiblePanels: [DockedPanel] = [
             isTimelineVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: timelineHostingView!, avoidsStatusBar: false) : nil,
             isDashboardVisible ? DockedPanel(width: DashboardPanelView.panelWidth, view: dashboardHostingView!, avoidsStatusBar: false) : nil,
@@ -1879,6 +1899,15 @@ extension MainWindowController {
                 applyFittedWidth: { [weak self] width in
                     self?.gitHubPanePanelWidth = width
                     self?.syncGitHubPaneRootView(panelWidth: width)
+                }
+            ) : nil,
+            isVaultSidebarVisible ? DockedPanel(
+                width: vaultSidebarPanelWidth,
+                view: vaultSidebarHostingView!,
+                avoidsStatusBar: true,
+                applyFittedWidth: { [weak self] width in
+                    self?.vaultSidebarPanelWidth = width
+                    self?.syncVaultSidebarRootView(panelWidth: width)
                 }
             ) : nil,
             isNotesVisible ? DockedPanel(
@@ -2008,13 +2037,15 @@ extension MainWindowController {
 
     private func minimumCodeReviewPanelWidth(containerWidth: CGFloat? = nil) -> CGFloat {
         let effectiveContainerWidth = containerWidth ?? overlayContainerView?.bounds.width ?? CodeReviewPanelView.defaultPanelWidth
-        let occupiedSiblingWidth =
-            (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
-            (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
-            (isActivityDashboardVisible ? ActivityDashboardView.panelWidth : 0) +
-            (isAgentModeVisible ? AgentPanelView.panelWidth : 0) +
-            (isGitHubPaneVisible ? gitHubPanePanelWidth : 0) +
-            (isNotesVisible ? clampedNotesPanelWidth(containerWidth: effectiveContainerWidth) : 0)
+        let occupiedSiblingWidth: CGFloat = [
+            isTimelineVisible ? DashboardPanelView.panelWidth : CGFloat(0),
+            isDashboardVisible ? DashboardPanelView.panelWidth : CGFloat(0),
+            isActivityDashboardVisible ? ActivityDashboardView.panelWidth : CGFloat(0),
+            isAgentModeVisible ? AgentPanelView.panelWidth : CGFloat(0),
+            isGitHubPaneVisible ? gitHubPanePanelWidth : CGFloat(0),
+            isVaultSidebarVisible ? vaultSidebarPanelWidth : CGFloat(0),
+            isNotesVisible ? clampedNotesPanelWidth(containerWidth: effectiveContainerWidth) : CGFloat(0),
+        ].reduce(0, +)
         let reservedTerminalWidth: CGFloat = 280
         let adaptiveMinimum = max(360, effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth)
         return min(CodeReviewPanelView.minimumPanelWidth, adaptiveMinimum)
@@ -2022,13 +2053,15 @@ extension MainWindowController {
 
     private func maximumCodeReviewPanelWidth(containerWidth: CGFloat? = nil) -> CGFloat {
         let effectiveContainerWidth = containerWidth ?? overlayContainerView?.bounds.width ?? CodeReviewPanelView.defaultPanelWidth
-        let occupiedSiblingWidth =
-            (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
-            (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
-            (isActivityDashboardVisible ? ActivityDashboardView.panelWidth : 0) +
-            (isAgentModeVisible ? AgentPanelView.panelWidth : 0) +
-            (isGitHubPaneVisible ? gitHubPanePanelWidth : 0) +
-            (isNotesVisible ? clampedNotesPanelWidth(containerWidth: effectiveContainerWidth) : 0)
+        let occupiedSiblingWidth: CGFloat = [
+            isTimelineVisible ? DashboardPanelView.panelWidth : CGFloat(0),
+            isDashboardVisible ? DashboardPanelView.panelWidth : CGFloat(0),
+            isActivityDashboardVisible ? ActivityDashboardView.panelWidth : CGFloat(0),
+            isAgentModeVisible ? AgentPanelView.panelWidth : CGFloat(0),
+            isGitHubPaneVisible ? gitHubPanePanelWidth : CGFloat(0),
+            isVaultSidebarVisible ? vaultSidebarPanelWidth : CGFloat(0),
+            isNotesVisible ? clampedNotesPanelWidth(containerWidth: effectiveContainerWidth) : CGFloat(0),
+        ].reduce(0, +)
         let reservedTerminalWidth: CGFloat = 280
         let minimumWidth = minimumCodeReviewPanelWidth(containerWidth: effectiveContainerWidth)
         let adaptiveMaximum = effectiveContainerWidth - occupiedSiblingWidth - reservedTerminalWidth
@@ -2529,6 +2562,8 @@ extension MainWindowController {
             dismissBrowserBookmarks()
         } else if isBrowserVisible {
             dismissBrowser()
+        } else if isVaultSidebarVisible {
+            dismissVaultSidebar()
         } else if isNotesVisible {
             dismissNotes()
         } else if isNotificationPanelVisible {
@@ -2580,6 +2615,7 @@ extension MainWindowController {
         syncRemoteWorkspaceVibrancyOverride(override)
         syncSearchBarVibrancyOverride(override)
         syncSubagentPanelsVibrancyOverride(override)
+        syncVaultSidebarVibrancyOverride(override)
     }
 
     private func syncCommandPaletteVibrancyOverride(_ override: NSAppearance?) {

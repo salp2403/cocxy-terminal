@@ -357,13 +357,15 @@ extension MainWindowController {
     ) -> CGFloat {
         let requestedWidth = proposedWidth ?? gitHubPanePanelWidth
         let absoluteClamped = MainWindowController.clampStoredGitHubPanePanelWidth(requestedWidth)
-        let occupiedSiblingWidth =
-            (isTimelineVisible ? DashboardPanelView.panelWidth : 0) +
-            (isDashboardVisible ? DashboardPanelView.panelWidth : 0) +
-            (isActivityDashboardVisible ? ActivityDashboardView.panelWidth : 0) +
-            (isAgentModeVisible ? AgentPanelView.panelWidth : 0) +
-            (isCodeReviewVisible ? codeReviewPanelWidth : 0) +
-            (isNotesVisible ? clampedNotesPanelWidth(containerWidth: containerWidth) : 0)
+        let occupiedSiblingWidth: CGFloat = [
+            isTimelineVisible ? DashboardPanelView.panelWidth : CGFloat(0),
+            isDashboardVisible ? DashboardPanelView.panelWidth : CGFloat(0),
+            isActivityDashboardVisible ? ActivityDashboardView.panelWidth : CGFloat(0),
+            isAgentModeVisible ? AgentPanelView.panelWidth : CGFloat(0),
+            isCodeReviewVisible ? codeReviewPanelWidth : CGFloat(0),
+            isVaultSidebarVisible ? vaultSidebarPanelWidth : CGFloat(0),
+            isNotesVisible ? clampedNotesPanelWidth(containerWidth: containerWidth) : CGFloat(0),
+        ].reduce(0, +)
         let adaptiveMaximum = containerWidth - occupiedSiblingWidth
         let containerMaximum = max(
             GitHubPaneView.minimumPanelWidth,

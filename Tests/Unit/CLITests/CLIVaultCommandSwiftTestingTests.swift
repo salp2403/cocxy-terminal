@@ -12,6 +12,33 @@ struct CLIVaultCommandSwiftTestingTests {
     @Test("vault commands parse without app socket")
     func vaultCommandsParseWithoutAppSocket() throws {
         #expect(try CLIArgumentParser.parse(["vault", "list"]) == .vaultList)
+        #expect(try CLIArgumentParser.parse(["vault", "open"]) == .vaultOpen)
+        #expect(
+            try CLIArgumentParser.parse(["vault", "search", "needle", "--agent", "codex", "--pinned", "--workspace", "/tmp/ws"])
+                == .vaultSearch(query: "needle", agent: "codex", pinned: true, workspace: "/tmp/ws")
+        )
+        #expect(try CLIArgumentParser.parse(["vault", "pin", "codex", "sess-123"]) == .vaultPin(agent: "codex", sessionID: "sess-123"))
+        #expect(try CLIArgumentParser.parse(["vault", "unpin", "codex", "sess-123"]) == .vaultUnpin(agent: "codex", sessionID: "sess-123"))
+        #expect(
+            try CLIArgumentParser.parse(["vault", "export", "codex", "sess-123", "--output", "/tmp/session.json", "--format", "json", "--force"])
+                == .vaultExport(
+                    agent: "codex",
+                    sessionID: "sess-123",
+                    format: .json,
+                    outputPath: "/tmp/session.json",
+                    force: true
+                )
+        )
+        #expect(
+            try CLIArgumentParser.parse(["vault", "export", "codex", "sess-123", "--output", "/tmp/session.txt", "--format", "txt"])
+                == .vaultExport(
+                    agent: "codex",
+                    sessionID: "sess-123",
+                    format: .text,
+                    outputPath: "/tmp/session.txt",
+                    force: false
+                )
+        )
         #expect(try CLIArgumentParser.parse(["vault", "clear"]) == .vaultClear)
         #expect(
             try CLIArgumentParser.parse(["vault", "resume", "codex", "sess-123", "--dry-run"])
@@ -55,6 +82,67 @@ struct CLIVaultCommandSwiftTestingTests {
         #expect(sessions[0]["sessionID"] as? String == "sess-123")
     }
 
+    @Test("vault search pin unpin and export use local encrypted store")
+    func vaultSearchPinUnpinAndExportUseLocalStore() throws {
+        let directory = try temporaryDirectory()
+        let defaults = try #require(UserDefaults(suiteName: "CLIVaultCommandTests-\(UUID().uuidString)"))
+        let store = VaultSessionStore(
+            storageURL: directory.appendingPathComponent("vault.enc"),
+            keyProvider: StaticVaultKeyProvider(keyData: Data(repeating: 10, count: 32))
+        )
+        try store.upsert(
+            VaultSession(
+                id: "codex:sess-456",
+                agentID: VaultAgentID("codex"),
+                agentDisplayName: "Codex",
+                sessionID: "sess-456",
+                workingDirectory: "/tmp/vault-search",
+                capturedAt: Date(timeIntervalSince1970: 1_789_000_000),
+                lastSeenAt: Date(timeIntervalSince1970: 1_789_000_100),
+                source: .manual,
+                sanitizedArguments: ["codex", "resume", "sess-456", "needle"]
+            )
+        )
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: "/tmp/missing-cocxy.sock"),
+            vaultStore: store,
+            vaultUserStateStore: VaultUserStateStore(defaults: defaults),
+            vaultSearchIndexFactory: {
+                try VaultSearchIndex(
+                    indexURL: directory.appendingPathComponent("vault-search.sqlite"),
+                    keyProvider: StaticVaultKeyProvider(keyData: Data(repeating: 11, count: 32))
+                )
+            }
+        )
+
+        let pin = runner.run(arguments: ["vault", "pin", "codex", "sess-456"])
+        #expect(pin.exitCode == 0)
+
+        let search = runner.run(arguments: ["vault", "search", "needle", "--pinned"])
+        #expect(search.exitCode == 0)
+        let searchObject = try jsonObject(from: search.stdout)
+        let sessions = try #require(searchObject["sessions"] as? [[String: Any]])
+        #expect(sessions.count == 1)
+        #expect(sessions[0]["pinned"] as? Bool == true)
+        #expect((sessions[0]["highlights"] as? [[String: Any]])?.isEmpty == false)
+
+        let exportPath = directory.appendingPathComponent("session.json").path
+        let exported = runner.run(arguments: [
+            "vault", "export", "codex", "sess-456",
+            "--output", exportPath,
+            "--format", "json",
+        ])
+        #expect(exported.exitCode == 0)
+        #expect(FileManager.default.fileExists(atPath: exportPath))
+
+        let unpin = runner.run(arguments: ["vault", "unpin", "codex", "sess-456"])
+        #expect(unpin.exitCode == 0)
+        let listed = runner.run(arguments: ["vault", "list"])
+        let listedObject = try jsonObject(from: listed.stdout)
+        let listedSessions = try #require(listedObject["sessions"] as? [[String: Any]])
+        #expect(listedSessions[0]["pinned"] as? Bool == false)
+    }
+
     @Test("vault resume dry-run returns planned invocation")
     func vaultResumeDryRunReturnsPlannedInvocation() throws {
         let directory = try temporaryDirectory()
@@ -81,6 +169,10 @@ struct CLIVaultCommandSwiftTestingTests {
         let help = CLIArgumentParser.helpText()
 
         #expect(help.contains("cocxy vault list"))
+        #expect(help.contains("cocxy vault open"))
+        #expect(help.contains("cocxy vault search <query>"))
+        #expect(help.contains("cocxy vault export <agent> <session-id>"))
+        #expect(help.contains("--format json|markdown|text"))
         #expect(help.contains("cocxy vault resume <agent> <session-id>"))
     }
 

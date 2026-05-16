@@ -2476,6 +2476,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return true
                 }
             },
+            vaultOpenProvider: {
+                syncOnMainActor {
+                    guard let wc = focusedControllerProvider() else { return nil }
+                    wc.showVaultSidebar()
+                    let stats = wc.vaultSidebarStatsSnapshot()
+                    return stats
+                }
+            },
             // V4: SSH — open SSH in a new tab.
             sshProvider: { destination, port, identityFile in
                 syncOnMainActor {

@@ -311,6 +311,14 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(githubPaneItem, with: KeybindingActionCatalog.windowGitHubPane)
         viewMenu.addItem(githubPaneItem)
 
+        let vaultItem = NSMenuItem(
+            title: menuString("menu.view.vault", "Vault", localizer),
+            action: #selector(MainWindowController.toggleVaultSidebarAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(vaultItem, with: KeybindingActionCatalog.windowVaultSidebar)
+        viewMenu.addItem(vaultItem)
+
         let notesItem = NSMenuItem(
             title: menuString("menu.view.notes", "Notes", localizer),
             action: #selector(MainWindowController.toggleNotesAction(_:)),

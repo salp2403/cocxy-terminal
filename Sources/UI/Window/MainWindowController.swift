@@ -357,6 +357,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// preload a pane view model with a stubbed service.
     var injectedGitHubPaneViewModel: GitHubPaneViewModel?
 
+    // MARK: - Vault Sidebar Overlay State
+
+    var vaultSidebarViewModel: VaultSidebarViewModel?
+    var vaultSidebarHostingView: NSHostingView<VaultSidebarView>?
+    var isVaultSidebarVisible: Bool = false
+    var vaultSidebarPanelWidth: CGFloat = VaultSidebarView.defaultPanelWidth
+    var injectedVaultSidebarViewModel: VaultSidebarViewModel?
+
     // MARK: - Theme Browser State
 
     /// Floating theme browser controller, retained while the picker is open.
@@ -1915,6 +1923,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             if isTimelineVisible { dismissTimeline() }
             if isNotificationPanelVisible { dismissNotificationPanel() }
             if isBrowserVisible { dismissBrowser() }
+            if isVaultSidebarVisible { dismissVaultSidebar() }
             if isNotesVisible { dismissNotes() }
         }
 
@@ -1923,7 +1932,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             toggleTabBarAction(nil)
         }
 
-        if isTimelineVisible || isDashboardVisible || isActivityDashboardVisible || isAgentModeVisible || isCodeReviewVisible || isGitHubPaneVisible || isNotesVisible {
+        if isTimelineVisible || isDashboardVisible || isActivityDashboardVisible || isAgentModeVisible || isCodeReviewVisible || isGitHubPaneVisible || isVaultSidebarVisible || isNotesVisible {
             layoutRightDockedAgentPanels()
         }
     }

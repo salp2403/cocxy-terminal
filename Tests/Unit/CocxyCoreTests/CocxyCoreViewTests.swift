@@ -1327,6 +1327,23 @@ struct CocxyCoreViewTests {
         }
     }
 
+    @Test("vault session drop routes host handler before file fallback")
+    func vaultSessionDropRoutesHostHandler() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let payload = VaultSessionDragPayload(sessionID: "vault-session-1", agentID: "codex")
+        let draggingInfo = MockDraggingInfo(vaultPayload: payload)
+        var handledPayload: VaultSessionDragPayload?
+        harness.view.onVaultSessionDrop = { droppedPayload in
+            handledPayload = droppedPayload
+            return true
+        }
+
+        #expect(harness.view.draggingEntered(draggingInfo) == .copy)
+        #expect(harness.view.performDragOperation(draggingInfo) == true)
+        #expect(handledPayload == payload)
+    }
+
     @Test("command block overlay restores rows and routes actions")
     func commandBlockOverlayRestoresRowsAndRoutesActions() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
@@ -1479,6 +1496,12 @@ private final class MockDraggingInfo: NSObject, NSDraggingInfo {
         pasteboard = NSPasteboard(name: NSPasteboard.Name("cocxy-file-drop-\(UUID().uuidString)"))
         pasteboard.clearContents()
         pasteboard.writeObjects(fileURLs.map { $0 as NSURL })
+    }
+
+    init(vaultPayload: VaultSessionDragPayload) {
+        pasteboard = NSPasteboard(name: NSPasteboard.Name("cocxy-vault-drop-\(UUID().uuidString)"))
+        pasteboard.clearContents()
+        pasteboard.setData(try? vaultPayload.encodedData(), forType: NSPasteboard.PasteboardType(VaultSessionDragPayload.pasteboardType))
     }
 
     var draggingDestinationWindow: NSWindow? { nil }

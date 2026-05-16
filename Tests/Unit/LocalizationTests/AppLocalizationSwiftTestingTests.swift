@@ -13,17 +13,24 @@ struct AppLocalizationSwiftTestingTests {
         #expect(AppLanguage.normalized("system") == .system)
         #expect(AppLanguage.normalized("en-US") == .english)
         #expect(AppLanguage.normalized("es_HN") == .spanish)
-        #expect(AppLanguage.normalized("fr") == nil)
+        #expect(AppLanguage.normalized("fr-FR")?.rawValue == "fr")
+        #expect(AppLanguage.normalized("pt_BR")?.rawValue == "pt-BR")
+        #expect(AppLanguage.normalized("zh-Hans")?.rawValue == "zh-CN")
+        #expect(AppLanguage.normalized("zh_Hant_TW")?.rawValue == "zh-TW")
+        #expect(AppLanguage.normalized("nb-NO")?.rawValue == "no")
+        #expect(AppLanguage.normalized("xx-ZZ") == nil)
     }
 
     @Test
-    func systemPreferenceResolvesFirstSupportedLocale() {
-        let spanish = AppLocalizationResolver(preferredLanguageIdentifiers: ["fr-FR", "es-HN"])
-        let fallback = AppLocalizationResolver(preferredLanguageIdentifiers: ["fr-FR"])
+    func systemPreferenceResolvesFirstSupportedLocale() throws {
+        let german = AppLocalizationResolver(preferredLanguageIdentifiers: ["de-DE", "es-HN"])
+        let fallback = AppLocalizationResolver(preferredLanguageIdentifiers: ["xx-ZZ"])
+        let french = try #require(AppLanguage.normalized("fr"))
 
-        #expect(spanish.resolve(.system) == .spanish)
+        #expect(german.resolve(.system).rawValue == "de")
         #expect(fallback.resolve(.system) == .english)
         #expect(fallback.resolve(.spanish) == .spanish)
+        #expect(fallback.resolve(french).rawValue == "fr")
     }
 
     @Test
@@ -854,6 +861,51 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(english.subtracting(spanish).isEmpty)
         #expect(spanish.subtracting(english).isEmpty)
+    }
+
+    @Test
+    func plannedVaultLocalizationResourcesExposeVaultKeys() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let english = try localizationKeys(
+            at: resourcesRoot.appendingPathComponent("en.lproj/Localizable.strings")
+        )
+        let expectedKeys = Set(english.filter { key in
+            key.hasPrefix("vault.")
+                || key == "command.vault.toggle.name"
+                || key == "command.vault.toggle.description"
+                || key == "menu.view.vault"
+                || key == "keybindings.action.window.vaultSidebar.name"
+                || key == "keybindings.action.window.vaultSidebar.summary"
+        })
+        let plannedLanguageCodes = [
+            "ar", "bs", "da", "de", "fr", "it", "ja", "km", "ko", "no",
+            "pl", "pt-BR", "ru", "th", "tr", "uk", "vi", "zh-CN", "zh-TW",
+        ]
+        let missingResources = plannedLanguageCodes.filter { code in
+            let path = resourcesRoot
+                .appendingPathComponent("\(code).lproj", isDirectory: true)
+                .appendingPathComponent("Localizable.strings")
+                .path
+            return !FileManager.default.fileExists(atPath: path)
+        }
+
+        #expect(
+            missingResources.isEmpty,
+            Comment(rawValue: "Missing planned Vault localization resources: \(missingResources.joined(separator: ", "))")
+        )
+
+        for code in plannedLanguageCodes where !missingResources.contains(code) {
+            let keys = try localizationKeys(
+                at: resourcesRoot.appendingPathComponent("\(code).lproj/Localizable.strings")
+            )
+            let missingKeys = expectedKeys.subtracting(keys).sorted()
+
+            #expect(
+                missingKeys.isEmpty,
+                Comment(rawValue: "\(code).lproj is missing Vault localization keys: \(missingKeys.joined(separator: ", "))")
+            )
+        }
     }
 
     @Test

@@ -152,7 +152,9 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .top:
             return formatDataOrJSON(response: response)
-        case .vaultList, .vaultClear, .vaultResume:
+        case .vaultOpen:
+            return "Vault opened."
+        case .vaultList, .vaultClear, .vaultSearch, .vaultPin, .vaultUnpin, .vaultExport, .vaultResume:
             return formatDataOrJSON(response: response)
         case .keysGenerate, .keysList, .keysExportPublic, .keysImport,
              .signArtifact, .verifyArtifact:

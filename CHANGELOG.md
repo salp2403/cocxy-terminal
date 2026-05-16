@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-05-16
+
+### Added
+- Added the local Vault visual sidebar with full-text search, filtering,
+  grouping, pinned sessions, previews, export, and drag-to-resume wiring for
+  terminal surfaces.
+- Added Vault CLI commands for opening the sidebar, searching sessions,
+  pinning or unpinning sessions, and exporting session records.
+- Added localized Vault resources for the supported app languages, including
+  Arabic, Bosnian, Danish, German, French, Italian, Japanese, Khmer, Korean,
+  Norwegian, Polish, Brazilian Portuguese, Russian, Thai, Turkish, Ukrainian,
+  Vietnamese, Simplified Chinese, and Traditional Chinese.
+
 ## [1.10.3] - 2026-05-14
 
 ### Fixed

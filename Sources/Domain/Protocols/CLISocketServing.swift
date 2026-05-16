@@ -179,6 +179,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case send
     /// Send a keystroke to the active terminal.
     case sendKey = "send-key"
+    /// Open the visual Vault sidebar in the focused window.
+    case vaultOpen = "vault-open"
 
     // MARK: - Remote Workspace (v2)
 

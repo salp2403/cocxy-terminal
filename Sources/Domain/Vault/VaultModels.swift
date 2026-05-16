@@ -131,6 +131,7 @@ public enum VaultError: LocalizedError, Equatable {
     case invalidKeyLength(Int)
     case corruptStore
     case invalidResumeTemplate(String)
+    case sessionNotFound(agent: String, sessionID: String)
 
     public var errorDescription: String? {
         switch self {
@@ -144,6 +145,8 @@ public enum VaultError: LocalizedError, Equatable {
             return "Vault store is corrupt or cannot be decrypted"
         case .invalidResumeTemplate(let agent):
             return "Agent \(agent) has an invalid resume template"
+        case .sessionNotFound(let agent, let sessionID):
+            return "Vault session not found for \(agent): \(sessionID)"
         }
     }
 }

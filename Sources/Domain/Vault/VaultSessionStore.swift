@@ -70,6 +70,8 @@ public struct VaultFileKeyProvider: VaultKeyProviding {
 }
 
 public struct VaultSessionStore: VaultSessionStoring {
+    public static let sessionsDidChangeNotification = Notification.Name("dev.cocxy.terminal.vault.sessionsDidChange")
+
     public let storageURL: URL
     public let keyProvider: any VaultKeyProviding
     public let fileManager: FileManager
@@ -145,6 +147,11 @@ public struct VaultSessionStore: VaultSessionStoring {
         let data = try JSONEncoder().encode(envelope)
         try data.write(to: storageURL, options: [.atomic])
         try fileManager.setAttributes([.posixPermissions: NSNumber(value: 0o600)], ofItemAtPath: storageURL.path)
+        NotificationCenter.default.post(
+            name: Self.sessionsDidChangeNotification,
+            object: nil,
+            userInfo: ["storageURL": storageURL.path]
+        )
     }
 
     public func upsert(_ session: VaultSession) throws {

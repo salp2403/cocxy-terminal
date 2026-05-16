@@ -478,6 +478,25 @@ enum AppLanguage: String, Codable, Sendable, Equatable, CaseIterable, Identifiab
     case system
     case english = "en"
     case spanish = "es"
+    case arabic = "ar"
+    case bosnian = "bs"
+    case danish = "da"
+    case german = "de"
+    case french = "fr"
+    case italian = "it"
+    case japanese = "ja"
+    case khmer = "km"
+    case korean = "ko"
+    case norwegian = "no"
+    case polish = "pl"
+    case portugueseBrazil = "pt-BR"
+    case russian = "ru"
+    case thai = "th"
+    case turkish = "tr"
+    case ukrainian = "uk"
+    case vietnamese = "vi"
+    case chineseSimplified = "zh-CN"
+    case chineseTraditional = "zh-TW"
 
     var id: String { rawValue }
 
@@ -486,6 +505,25 @@ enum AppLanguage: String, Codable, Sendable, Equatable, CaseIterable, Identifiab
         case .system: return "System"
         case .english: return "English"
         case .spanish: return "Español"
+        case .arabic: return "العربية"
+        case .bosnian: return "Bosanski"
+        case .danish: return "Dansk"
+        case .german: return "Deutsch"
+        case .french: return "Français"
+        case .italian: return "Italiano"
+        case .japanese: return "日本語"
+        case .khmer: return "ខ្មែរ"
+        case .korean: return "한국어"
+        case .norwegian: return "Norsk"
+        case .polish: return "Polski"
+        case .portugueseBrazil: return "Português (Brasil)"
+        case .russian: return "Русский"
+        case .thai: return "ไทย"
+        case .turkish: return "Türkçe"
+        case .ukrainian: return "Українська"
+        case .vietnamese: return "Tiếng Việt"
+        case .chineseSimplified: return "简体中文"
+        case .chineseTraditional: return "繁體中文"
         }
     }
 
@@ -499,6 +537,43 @@ enum AppLanguage: String, Codable, Sendable, Equatable, CaseIterable, Identifiab
         if normalized == "system" { return .system }
         if normalized == "en" || normalized.hasPrefix("en-") { return .english }
         if normalized == "es" || normalized.hasPrefix("es-") { return .spanish }
+        if normalized == "ar" || normalized.hasPrefix("ar-") { return .arabic }
+        if normalized == "bs" || normalized.hasPrefix("bs-") { return .bosnian }
+        if normalized == "da" || normalized.hasPrefix("da-") { return .danish }
+        if normalized == "de" || normalized.hasPrefix("de-") { return .german }
+        if normalized == "fr" || normalized.hasPrefix("fr-") { return .french }
+        if normalized == "it" || normalized.hasPrefix("it-") { return .italian }
+        if normalized == "ja" || normalized.hasPrefix("ja-") { return .japanese }
+        if normalized == "km" || normalized.hasPrefix("km-") { return .khmer }
+        if normalized == "ko" || normalized.hasPrefix("ko-") { return .korean }
+        if normalized == "no"
+            || normalized.hasPrefix("no-")
+            || normalized == "nb"
+            || normalized.hasPrefix("nb-")
+            || normalized == "nn"
+            || normalized.hasPrefix("nn-") {
+            return .norwegian
+        }
+        if normalized == "pl" || normalized.hasPrefix("pl-") { return .polish }
+        if normalized == "pt" || normalized.hasPrefix("pt-") { return .portugueseBrazil }
+        if normalized == "ru" || normalized.hasPrefix("ru-") { return .russian }
+        if normalized == "th" || normalized.hasPrefix("th-") { return .thai }
+        if normalized == "tr" || normalized.hasPrefix("tr-") { return .turkish }
+        if normalized == "uk" || normalized.hasPrefix("uk-") { return .ukrainian }
+        if normalized == "vi" || normalized.hasPrefix("vi-") { return .vietnamese }
+        if normalized == "zh-cn"
+            || normalized == "zh-hans"
+            || normalized.hasPrefix("zh-hans-")
+            || normalized == "zh-sg" {
+            return .chineseSimplified
+        }
+        if normalized == "zh-tw"
+            || normalized == "zh-hant"
+            || normalized.hasPrefix("zh-hant-")
+            || normalized == "zh-hk"
+            || normalized == "zh-mo" {
+            return .chineseTraditional
+        }
         return nil
     }
 }

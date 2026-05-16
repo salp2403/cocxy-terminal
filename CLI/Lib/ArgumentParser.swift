@@ -3,6 +3,7 @@
 
 import Foundation
 import CocxyShared
+import CocxyVault
 
 // MARK: - Parsed Command
 
@@ -317,6 +318,27 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy vault list`
     case vaultList
+
+    /// `cocxy vault open`
+    case vaultOpen
+
+    /// `cocxy vault search <query> [--agent <id>] [--pinned] [--workspace <path>]`
+    case vaultSearch(query: String, agent: String?, pinned: Bool, workspace: String?)
+
+    /// `cocxy vault pin <agent> <session-id>`
+    case vaultPin(agent: String, sessionID: String)
+
+    /// `cocxy vault unpin <agent> <session-id>`
+    case vaultUnpin(agent: String, sessionID: String)
+
+    /// `cocxy vault export <agent> <session-id> --output <path> [--format json|markdown|text] [--force]`
+    case vaultExport(
+        agent: String,
+        sessionID: String,
+        format: VaultSessionExportFormat,
+        outputPath: String,
+        force: Bool
+    )
 
     /// `cocxy vault clear`
     case vaultClear
@@ -765,7 +787,7 @@ public enum CLIArgumentParser {
     /// Last-resort fallback. It mirrors `Resources/Info.plist` and is only
     /// used when neither the enclosing `.app` nor a SwiftPM checkout can be
     /// resolved.
-    internal static let fallbackVersion = "1.10.3"
+    internal static let fallbackVersion = "1.11.0"
     internal static let fallbackBundleIdentifier = "dev.cocxy.terminal"
 
     /// Resolves the CLI version by preferring the enclosing app bundle's
@@ -2208,6 +2230,116 @@ public enum CLIArgumentParser {
             }
             return .vaultList
 
+        case "open":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "vault open",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "vault open does not accept extra arguments"
+                )
+            }
+            return .vaultOpen
+
+        case "search":
+            guard arguments.count >= 2 else {
+                throw CLIError.missingArgument(command: "vault search", argument: "query")
+            }
+            let query = arguments[1]
+            var agent: String?
+            var pinned = false
+            var workspace: String?
+            var index = 2
+            while index < arguments.count {
+                let token = arguments[index]
+                switch token {
+                case "--agent":
+                    guard index + 1 < arguments.count else {
+                        throw CLIError.missingArgument(command: "vault search", argument: "--agent value")
+                    }
+                    agent = arguments[index + 1]
+                    index += 2
+                case "--pinned":
+                    pinned = true
+                    index += 1
+                case "--workspace":
+                    guard index + 1 < arguments.count else {
+                        throw CLIError.missingArgument(command: "vault search", argument: "--workspace path")
+                    }
+                    workspace = arguments[index + 1]
+                    index += 2
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "vault search",
+                        argument: token,
+                        reason: "Supported options: --agent, --pinned, --workspace"
+                    )
+                }
+            }
+            return .vaultSearch(query: query, agent: agent, pinned: pinned, workspace: workspace)
+
+        case "pin", "unpin":
+            guard arguments.count == 3 else {
+                throw CLIError.missingArgument(command: "vault \(subcommand)", argument: "agent session-id")
+            }
+            if subcommand == "pin" {
+                return .vaultPin(agent: arguments[1], sessionID: arguments[2])
+            }
+            return .vaultUnpin(agent: arguments[1], sessionID: arguments[2])
+
+        case "export":
+            guard arguments.count >= 4 else {
+                throw CLIError.missingArgument(command: "vault export", argument: "agent session-id --output path")
+            }
+            let agent = arguments[1]
+            let sessionID = arguments[2]
+            var format: VaultSessionExportFormat = .json
+            var outputPath: String?
+            var force = false
+            var index = 3
+            while index < arguments.count {
+                let token = arguments[index]
+                switch token {
+                case "--output", "-o":
+                    guard index + 1 < arguments.count else {
+                        throw CLIError.missingArgument(command: "vault export", argument: "--output path")
+                    }
+                    outputPath = arguments[index + 1]
+                    index += 2
+                case "--format":
+                    guard index + 1 < arguments.count else {
+                        throw CLIError.missingArgument(command: "vault export", argument: "--format json|markdown|text")
+                    }
+                    guard let parsedFormat = parseVaultExportFormat(arguments[index + 1]) else {
+                        throw CLIError.invalidArgument(
+                            command: "vault export",
+                            argument: arguments[index + 1],
+                            reason: "Expected json, markdown, md, text, or txt"
+                        )
+                    }
+                    format = parsedFormat
+                    index += 2
+                case "--force":
+                    force = true
+                    index += 1
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "vault export",
+                        argument: token,
+                        reason: "Supported options: --output, --format, --force"
+                    )
+                }
+            }
+            guard let outputPath else {
+                throw CLIError.missingArgument(command: "vault export", argument: "--output path")
+            }
+            return .vaultExport(
+                agent: agent,
+                sessionID: sessionID,
+                format: format,
+                outputPath: outputPath,
+                force: force
+            )
+
         case "clear":
             guard arguments.count == 1 else {
                 throw CLIError.invalidArgument(
@@ -2243,8 +2375,21 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "vault",
                 argument: subcommand,
-                reason: "Expected list, clear, or resume"
+                reason: "Expected list, open, search, pin, unpin, export, clear, or resume"
             )
+        }
+    }
+
+    private static func parseVaultExportFormat(_ rawValue: String) -> VaultSessionExportFormat? {
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "json":
+            return .json
+        case "markdown", "md":
+            return .markdown
+        case "text", "txt", "plain":
+            return .text
+        default:
+            return nil
         }
     }
 

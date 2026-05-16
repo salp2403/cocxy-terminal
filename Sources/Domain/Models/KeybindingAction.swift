@@ -166,6 +166,14 @@ enum KeybindingActionCatalog {
         )
     )
 
+    static let windowVaultSidebar = KeybindingAction(
+        id: "window.vaultSidebar",
+        displayName: "Toggle Vault",
+        summary: "Show or hide the local external agent session Vault.",
+        category: .window,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "v")
+    )
+
     static let windowNotes = KeybindingAction(
         id: "window.notes",
         displayName: "Toggle Notes",
@@ -510,6 +518,7 @@ enum KeybindingActionCatalog {
         windowPreferences,
         windowQuickTerminal,
         windowGitHubPane,
+        windowVaultSidebar,
         windowNotes,
         windowFocusLocation,
         // Tab

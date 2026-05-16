@@ -102,6 +102,18 @@ extension AppSocketCommandHandler {
     }
 }
 
+// MARK: - Vault Handlers
+
+extension AppSocketCommandHandler {
+    func handleVaultOpen(_ request: SocketRequest) -> SocketResponse {
+        guard let provider = vaultOpenProvider,
+              let data = provider() else {
+            return .failure(id: request.id, error: "Vault sidebar not available")
+        }
+        return .ok(id: request.id, data: data)
+    }
+}
+
 // MARK: - V4 Timeline Handlers
 
 extension AppSocketCommandHandler {

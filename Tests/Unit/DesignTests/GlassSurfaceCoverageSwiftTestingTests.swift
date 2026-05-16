@@ -108,6 +108,7 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Templates/ProjectTemplatePanelView.swift",
         "Sources/UI/Terminal/AgentProgressOverlay.swift",
         "Sources/UI/Timeline/TimelineView.swift",
+        "Sources/UI/Vault/VaultSidebarView.swift",
         "Sources/UI/Welcome/WelcomeOverlayView.swift",
         "Sources/UI/Worktree/WorktreeAdvancedModal.swift",
         "Sources/UI/Worktree/WorktreeBatchCleanupSheet.swift",

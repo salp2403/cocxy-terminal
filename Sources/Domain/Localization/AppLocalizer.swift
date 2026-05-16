@@ -10,7 +10,7 @@ enum AppLocalizationKey: String, CaseIterable, Sendable {
 }
 
 struct AppLocalizationResolver: Sendable {
-    static let supportedLanguages: [AppLanguage] = [.english, .spanish]
+    static let supportedLanguages: [AppLanguage] = AppLanguage.allCases.filter { $0 != .system }
 
     var preferredLanguageIdentifiers: [String]
 
@@ -19,18 +19,17 @@ struct AppLocalizationResolver: Sendable {
     }
 
     func resolve(_ preference: AppLanguage) -> AppLanguage {
-        switch preference {
-        case .english, .spanish:
+        guard preference == .system else {
             return preference
-        case .system:
-            for identifier in preferredLanguageIdentifiers {
-                if let language = AppLanguage.normalized(identifier),
-                   Self.supportedLanguages.contains(language) {
-                    return language
-                }
-            }
-            return .english
         }
+
+        for identifier in preferredLanguageIdentifiers {
+            if let language = AppLanguage.normalized(identifier),
+               Self.supportedLanguages.contains(language) {
+                return language
+            }
+        }
+        return .english
     }
 }
 
@@ -55,12 +54,7 @@ struct AppLocalizer {
     }
 
     var locale: Locale {
-        switch language {
-        case .system, .english:
-            return Locale(identifier: "en")
-        case .spanish:
-            return Locale(identifier: "es")
-        }
+        Locale(identifier: language == .system ? AppLanguage.english.rawValue : language.rawValue)
     }
 
     func string(_ key: AppLocalizationKey) -> String {
@@ -86,6 +80,6 @@ struct AppLocalizer {
         .preferencesAppearanceLanguageTitle: "Language",
         .preferencesAppearanceLanguagePicker: "App language",
         .preferencesAppearanceLanguageHelp:
-            "System follows the first supported macOS preferred language. English and Spanish are available now.",
+            "System follows the first supported macOS preferred language. Vault and core app strings use bundled local resources.",
     ]
 }
