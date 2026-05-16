@@ -189,7 +189,7 @@ check_public_release_surfaces() {
 
     fetch_public_payload "https://cocxy.dev/appcast.xml" appcast_payload appcast_status
     appcast_version="$(printf "%s" "$appcast_payload" | sed -n 's/.*sparkle:shortVersionString="\([^"]*\)".*/\1/p' | head -1)"
-    if echo "$appcast_payload" | grep -q "sparkle:shortVersionString=\"${VERSION}\""; then
+    if grep -q "sparkle:shortVersionString=\"${VERSION}\"" <<< "$appcast_payload"; then
         ok "public Sparkle appcast points at ${VERSION}"
     else
         block "public Sparkle appcast does not point at ${VERSION} (current ${appcast_version:-unknown}, http ${appcast_status})"
@@ -197,7 +197,7 @@ check_public_release_surfaces() {
 
     brew_payload="$(brew info --cask salp2403/tap/cocxy 2>/dev/null || true)"
     brew_version="$(printf "%s" "$brew_payload" | sed -n 's/^==> cocxy.*): \([^[:space:]]*\)$/\1/p' | head -1)"
-    if echo "$brew_payload" | grep -q "): ${VERSION}$"; then
+    if grep -q "): ${VERSION}$" <<< "$brew_payload"; then
         ok "Homebrew cask reports ${VERSION}"
     else
         block "Homebrew cask does not report ${VERSION} (current ${brew_version:-unknown})"
@@ -205,7 +205,7 @@ check_public_release_surfaces() {
 
     fetch_public_payload "https://cocxy.dev/" homepage_payload homepage_status
     homepage_version="$(printf "%s" "$homepage_payload" | sed -n 's/.*"softwareVersion": "\([^"]*\)".*/\1/p' | head -1)"
-    if echo "$homepage_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+    if grep -q "CocxyTerminal-${VERSION}.dmg" <<< "$homepage_payload"; then
         ok "public homepage download points at ${VERSION}"
     else
         block "public homepage download does not point at ${VERSION} (current ${homepage_version:-unknown}, http ${homepage_status})"
@@ -213,7 +213,7 @@ check_public_release_surfaces() {
 
     fetch_public_payload "https://cocxy.dev/releases.html" releases_payload releases_status
     releases_version="$(printf "%s" "$releases_payload" | sed -n 's/.*>v\([0-9][^<]*\)<.*/\1/p' | head -1)"
-    if echo "$releases_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+    if grep -q "CocxyTerminal-${VERSION}.dmg" <<< "$releases_payload"; then
         ok "public releases page includes ${VERSION}"
     else
         block "public releases page does not include ${VERSION} (latest listed ${releases_version:-unknown}, http ${releases_status})"
@@ -221,7 +221,7 @@ check_public_release_surfaces() {
 
     fetch_public_payload "https://cocxy.dev/es/" spanish_homepage_payload spanish_homepage_status
     spanish_homepage_version="$(printf "%s" "$spanish_homepage_payload" | sed -n 's/.*"softwareVersion": "\([^"]*\)".*/\1/p' | head -1)"
-    if echo "$spanish_homepage_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+    if grep -q "CocxyTerminal-${VERSION}.dmg" <<< "$spanish_homepage_payload"; then
         ok "public Spanish homepage download points at ${VERSION}"
     else
         block "public Spanish homepage download does not point at ${VERSION} (current ${spanish_homepage_version:-unknown}, http ${spanish_homepage_status})"
@@ -229,7 +229,7 @@ check_public_release_surfaces() {
 
     fetch_public_payload "https://cocxy.dev/es/releases.html" spanish_releases_payload spanish_releases_status
     spanish_releases_version="$(printf "%s" "$spanish_releases_payload" | sed -n 's/.*>v\([0-9][^<]*\)<.*/\1/p' | head -1)"
-    if echo "$spanish_releases_payload" | grep -q "CocxyTerminal-${VERSION}.dmg"; then
+    if grep -q "CocxyTerminal-${VERSION}.dmg" <<< "$spanish_releases_payload"; then
         ok "public Spanish releases page includes ${VERSION}"
     else
         block "public Spanish releases page does not include ${VERSION} (latest listed ${spanish_releases_version:-unknown}, http ${spanish_releases_status})"
