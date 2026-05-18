@@ -52,6 +52,10 @@ jobs:
           chmod +x scripts/bench-cold-start.sh
           scripts/bench-cold-start.sh --app build/CocxyTerminal.app --runs 5 --enforce | tee build/performance/cold-start.json
 
+      - name: Cleanup CocxyTerminal processes
+        if: always()
+        run: pkill -x CocxyTerminal || true
+
       - name: Measure memory baseline
         run: |
           set -euo pipefail
