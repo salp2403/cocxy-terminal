@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "อาร์กิวเมนต์";
 "command.vault.toggle.name" = "สลับ Vault";
 "command.vault.toggle.description" = "แสดงเซสชันเอเจนต์ภายนอกที่เก็บไว้ในเครื่อง";
+"command.cells.list.name" = "Cells: แสดงรายการเซลล์";
+"command.cells.list.description" = "แสดงรายการเซลล์คอมพิวต์ในเครื่องและที่ผู้ใช้เป็นเจ้าของ";
+"command.cells.createDocker.name" = "Cells: สร้างเซลล์ Docker";
+"command.cells.createDocker.description" = "เตรียมคำสั่งในเครื่องสำหรับสร้างเซลล์ Docker";
+"command.cells.createSSH.name" = "Cells: สร้างเซลล์ SSH";
+"command.cells.createSSH.description" = "เตรียมคำสั่งสำหรับสร้างเซลล์ SSH ที่ผู้ใช้เป็นเจ้าของ";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "สลับ Vault";
 "keybindings.action.window.vaultSidebar.summary" = "แสดงหรือซ่อน Vault ในเครื่องสำหรับเซสชันเอเจนต์ภายนอก";

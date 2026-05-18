@@ -57,15 +57,34 @@ struct CITestGateScriptSwiftTestingTests {
             with: Data(contentsOf: baselinesURL),
             options: []
         ) as? [String: Any]
+        let ciBaselinesURL = root.appendingPathComponent("scripts/performance-baselines.macos15-ci.json")
+        let ciBaselinePayload = try JSONSerialization.jsonObject(
+            with: Data(contentsOf: ciBaselinesURL),
+            options: []
+        ) as? [String: Any]
+        let ciMetrics = ciBaselinePayload?["metrics"] as? [[String: Any]]
 
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(workflow.contains("tee build/performance/cold-start.json"))
         #expect(workflow.contains("tee build/performance/memory-baseline.json"))
         #expect(workflow.contains("tee build/performance/benchmark-suite.log"))
         #expect(workflow.contains("scripts/check-performance-regression.py"))
+        #expect(workflow.contains("COCXY_COLD_START_BUDGET_MS: \"800\""))
+        #expect(workflow.contains("COCXY_COLD_START_INTERNAL_BUDGET_MS: \"125\""))
+        #expect(workflow.contains("COCXY_PERFORMANCE_BASELINE: scripts/performance-baselines.macos15-ci.json"))
+        #expect(workflow.contains("--baseline \"$COCXY_PERFORMANCE_BASELINE\""))
         #expect(workflow.contains("--enforce"))
         #expect(baselinePayload?["default_tolerance_ratio"] as? Double == 0.1)
         #expect((baselinePayload?["metrics"] as? [[String: Any]])?.isEmpty == false)
+        #expect(ciBaselinePayload?["default_tolerance_ratio"] as? Double == 0.1)
+        #expect(ciMetrics?.contains {
+            $0["name"] as? String == "app_readiness_median_ms"
+                && ($0["baseline"] as? NSNumber)?.doubleValue == 800
+        } == true)
+        #expect(ciMetrics?.contains {
+            $0["name"] as? String == "internal_critical_path_median_ms"
+                && ($0["baseline"] as? NSNumber)?.doubleValue == 100
+        } == true)
         #expect(FileManager.default.isExecutableFile(atPath: memoryScriptURL.path))
         #expect(memoryScript.contains("BENCHMARK_ENV=\"COCXY_MEMORY_BASELINE_BENCHMARK=1\""))
         #expect(memoryScript.contains("/usr/bin/open -n --env \"$BENCHMARK_ENV\" \"$APP_PATH\""))
@@ -417,6 +436,9 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         #expect(script.contains("BENCHMARK_ENV=\"COCXY_COLD_START_BENCHMARK=1\""))
+        #expect(script.contains("COCXY_COLD_START_BUDGET_MS"))
+        #expect(script.contains("COCXY_COLD_START_INTERNAL_BUDGET_MS"))
+        #expect(script.contains("--internal-critical-path-budget-ms"))
         #expect(script.contains("/usr/bin/open -n --env \"$BENCHMARK_ENV\" \"$APP_PATH\""))
         #expect(script.contains("Cocxy Terminal is already running outside this benchmark."))
         #expect(script.contains("COCXY_BENCH_FORCE_KILL"))

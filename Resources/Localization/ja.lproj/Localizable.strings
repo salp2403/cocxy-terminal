@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "引数";
 "command.vault.toggle.name" = "Vault を切り替え";
 "command.vault.toggle.description" = "ローカルに保存された外部エージェントセッションを表示";
+"command.cells.list.name" = "Cells: セルを一覧表示";
+"command.cells.list.description" = "ローカルおよびユーザー所有のコンピュートセルを一覧表示";
+"command.cells.createDocker.name" = "Cells: Docker セルを作成";
+"command.cells.createDocker.description" = "Docker セル作成用のローカルコマンドを準備";
+"command.cells.createSSH.name" = "Cells: SSH セルを作成";
+"command.cells.createSSH.description" = "ユーザー所有の SSH セル作成コマンドを準備";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault を切り替え";
 "keybindings.action.window.vaultSidebar.summary" = "ローカルの外部エージェントセッション Vault を表示または非表示にします。";

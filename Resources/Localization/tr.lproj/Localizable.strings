@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Argümanlar";
 "command.vault.toggle.name" = "Vault’u aç/kapat";
 "command.vault.toggle.description" = "Yerel olarak saklanan harici ajan oturumlarını göster";
+"command.cells.list.name" = "Cells: hücreleri listele";
+"command.cells.list.description" = "Yerel ve kullanıcıya ait işlem hücrelerini listele";
+"command.cells.createDocker.name" = "Cells: Docker hücresi oluştur";
+"command.cells.createDocker.description" = "Docker hücresi oluşturmak için yerel bir komut hazırla";
+"command.cells.createSSH.name" = "Cells: SSH hücresi oluştur";
+"command.cells.createSSH.description" = "Kullanıcıya ait bir SSH hücresi oluşturma komutu hazırla";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault’u aç/kapat";
 "keybindings.action.window.vaultSidebar.summary" = "Yerel harici ajan oturumu Vault’unu göster veya gizle.";

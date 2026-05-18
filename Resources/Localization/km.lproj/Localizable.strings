@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "អាគុយម៉ង់";
 "command.vault.toggle.name" = "បិទ/បើក Vault";
 "command.vault.toggle.description" = "បង្ហាញសម័យភ្នាក់ងារខាងក្រៅដែលបានរក្សាទុកក្នុងម៉ាស៊ីន";
+"command.cells.list.name" = "Cells: រាយបញ្ជី cells";
+"command.cells.list.description" = "រាយបញ្ជី compute cells មូលដ្ឋាន និងដែលអ្នកប្រើជាម្ចាស់";
+"command.cells.createDocker.name" = "Cells: បង្កើត Docker cell";
+"command.cells.createDocker.description" = "រៀបចំពាក្យបញ្ជាមូលដ្ឋានសម្រាប់បង្កើត Docker cell";
+"command.cells.createSSH.name" = "Cells: បង្កើត SSH cell";
+"command.cells.createSSH.description" = "រៀបចំពាក្យបញ្ជាសម្រាប់បង្កើត SSH cell ដែលអ្នកប្រើជាម្ចាស់";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "បិទ/បើក Vault";
 "keybindings.action.window.vaultSidebar.summary" = "បង្ហាញ ឬលាក់ Vault ក្នុងម៉ាស៊ីនសម្រាប់សម័យភ្នាក់ងារខាងក្រៅ។";

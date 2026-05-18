@@ -144,13 +144,32 @@ latest_ok_summary() {
 latest_any_summary() {
   local provider="$1"
   local directory="${CLOUD_ARTIFACT_BASE}/cells-cloud-${provider}"
+  local file
+  local status
   if [ ! -d "$directory" ]; then
     return 1
   fi
 
-  find "$directory" -maxdepth 2 -type f -name summary.txt -print 2>/dev/null |
-    LC_ALL=C sort -r |
-    head -1
+  while IFS= read -r file; do
+    status="$(field_value status "$file")"
+    case "$status" in
+      ok)
+        verify_cloud_evidence "$file" || continue
+        ;;
+      blocked|failed|skipped|error)
+        ;;
+      *)
+        continue
+        ;;
+    esac
+    printf '%s\n' "$file"
+    return 0
+  done < <(
+    find "$directory" -maxdepth 2 -type f -name summary.txt -print 2>/dev/null |
+      LC_ALL=C sort -r
+  )
+
+  return 1
 }
 
 relative_artifact_path() {

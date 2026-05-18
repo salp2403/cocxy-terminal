@@ -379,16 +379,25 @@ extension MainWindowController {
     ///     of the split tree regardless of focus. Defaults to false (split at focus).
     ///   - focusNewPanel: When true, the new panel receives focus in the domain
     ///     model so the tab strip highlights it. Defaults to false.
-    func performVisualSplitWithPanel(isVertical: Bool, panel: PanelInfo, appendToEnd: Bool = false, focusNewPanel: Bool = false) {
-        guard let container = terminalContainerView else { return }
+    @discardableResult
+    func performVisualSplitWithPanel(
+        isVertical: Bool,
+        panel: PanelInfo,
+        appendToEnd: Bool = false,
+        focusNewPanel: Bool = false,
+        allowReadableGridReflow: Bool = false
+    ) -> Bool {
+        guard let container = terminalContainerView else { return false }
         if panel.type == .terminal {
             performVisualSplit(isVertical: isVertical)
-            return
+            return true
         }
         let currentPaneCount = countSplitPanes()
-        guard currentPaneCount < Self.maxPaneCount else { return }
-        guard hasRoomForPaneCreation(appendingToEnd: appendToEnd, isVertical: isVertical) else { return }
-        guard let focusedSurface = focusedSplitSurfaceView else { return }
+        guard currentPaneCount < Self.maxPaneCount else { return false }
+        let hasImmediateRoom = hasRoomForPaneCreation(appendingToEnd: appendToEnd, isVertical: isVertical)
+        let canReflowAfterCreation = allowReadableGridReflow && canCreatePaneWithReadableGridReflow()
+        guard hasImmediateRoom || canReflowAfterCreation else { return false }
+        guard let focusedSurface = focusedSplitSurfaceView else { return false }
         let currentTabID = visibleTabID ?? tabManager.activeTabID
         let splitManager = activeSplitManager
         let splitTargetLeafID = splitManager?.focusedLeafID
@@ -413,15 +422,26 @@ extension MainWindowController {
             ? nil
             : splitTargetLeafID.flatMap { splitManager?.parentSplitID(of: $0) }
         guard let contentID else {
-            return
+            return false
         }
 
         guard let panelView = makeWorkspacePanelView(panel: panel, contentID: contentID, tabID: currentTabID) else {
-            return
+            return false
         }
 
         applyCurrentAuroraAppearance(to: panelView)
         panelContentViews[contentID] = panelView
+
+        if allowReadableGridReflow && !hasImmediateRoom, let splitManager {
+            let panelTypes = splitManager.panelTypes
+            let panelTitles = splitManager.panelTitles
+            splitManager.restoreLayout(
+                rootNode: readableRestoredSplitNode(splitManager.rootNode),
+                focusedLeafID: splitManager.focusedLeafID,
+                panelTypes: panelTypes,
+                panelTitles: panelTitles
+            )
+        }
 
         if appendToEnd, let tabID = currentTabID {
             // Rebuild the entire view hierarchy from the domain model.
@@ -479,6 +499,7 @@ extension MainWindowController {
 
         // Update toolbar to show panel tabs.
         updateWorkspaceToolbar()
+        return true
     }
 
     func focusPanelView(_ panelView: NSView) {
@@ -1252,7 +1273,13 @@ extension MainWindowController {
     ///   - subagentId: The unique ID of the spawned subagent.
     ///   - sessionId: The parent session's ID.
     ///   - agentType: The subagent type (e.g., "Explore", "Plan").
-    func spawnSubagentPanel(subagentId: String, sessionId: String, agentType: String?, targetTabId: UUID? = nil) {
+    func spawnSubagentPanel(
+        subagentId: String,
+        sessionId: String,
+        agentType: String?,
+        targetTabId: UUID? = nil,
+        allowReadableGridReflow: Bool = false
+    ) {
         let normalizedSubagentId = subagentId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedSubagentId.isEmpty else { return }
         let normalizedAgentType = agentType?
@@ -1291,7 +1318,13 @@ extension MainWindowController {
 
         let panel = PanelInfo.subagent(id: normalizedSubagentId, sessionId: sessionId)
         let appendToEnd = hasRoomForPaneCreation(appendingToEnd: true, isVertical: true)
-        performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: appendToEnd)
+            || allowReadableGridReflow
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: panel,
+            appendToEnd: appendToEnd,
+            allowReadableGridReflow: allowReadableGridReflow
+        )
 
         if let activeTabID = visibleTabID ?? tabManager.activeTabID {
             let matchingPanel = panelContentViews.first(where: { _, view in
@@ -1301,7 +1334,8 @@ extension MainWindowController {
             if let contentID = matchingPanel?.key {
                 let splitManager = tabSplitCoordinator.splitManager(for: activeTabID)
                 splitManager.setPanelTitle(for: contentID, title: normalizedAgentType)
-                if let leafID = splitManager.rootNode.allLeafIDs().first(where: { $0.terminalID == contentID })?.leafID,
+                if splitManager.rootNode.leafCount == 2,
+                   let leafID = splitManager.rootNode.allLeafIDs().first(where: { $0.terminalID == contentID })?.leafID,
                    let parentSplitID = splitManager.parentSplitID(of: leafID) {
                     splitManager.setRatio(splitID: parentSplitID, ratio: Self.preferredSubagentTerminalRatio)
                     applyCurrentSplitRatiosAfterLayout()

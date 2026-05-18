@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Argumenter";
 "command.vault.toggle.name" = "Vis/skjul Vault";
 "command.vault.toggle.description" = "Vis lokalt lagrede eksterne agentøkter";
+"command.cells.list.name" = "Cells: vis celler";
+"command.cells.list.description" = "Vis lokale og brukereide compute-celler";
+"command.cells.createDocker.name" = "Cells: opprett Docker-celle";
+"command.cells.createDocker.description" = "Forbered en lokal kommando for å opprette en Docker-celle";
+"command.cells.createSSH.name" = "Cells: opprett SSH-celle";
+"command.cells.createSSH.description" = "Forbered en kommando for å opprette en brukereid SSH-celle";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vis/skjul Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Vis eller skjul lokal Vault for eksterne agentøkter.";

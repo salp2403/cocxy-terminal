@@ -13,6 +13,10 @@ jobs:
     name: Cold start smoke budget
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      COCXY_COLD_START_BUDGET_MS: "800"
+      COCXY_COLD_START_INTERNAL_BUDGET_MS: "125"
+      COCXY_PERFORMANCE_BASELINE: scripts/performance-baselines.macos15-ci.json
 
     steps:
       - name: Checkout
@@ -65,7 +69,7 @@ jobs:
       - name: Check performance regression baselines
         run: |
           scripts/check-performance-regression.py \
-            --baseline scripts/performance-baselines.json \
+            --baseline "$COCXY_PERFORMANCE_BASELINE" \
             --metric-file build/performance/cold-start.json \
             --metric-file build/performance/memory-baseline.json \
             --log-file build/performance/benchmark-suite.log \

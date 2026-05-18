@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Аргументи";
 "command.vault.toggle.name" = "Перемкнути Vault";
 "command.vault.toggle.description" = "Показати локально збережені сеанси зовнішніх агентів";
+"command.cells.list.name" = "Cells: список комірок";
+"command.cells.list.description" = "Показати локальні та користувацькі обчислювальні комірки";
+"command.cells.createDocker.name" = "Cells: створити Docker-комірку";
+"command.cells.createDocker.description" = "Підготувати локальну команду створення Docker-комірки";
+"command.cells.createSSH.name" = "Cells: створити SSH-комірку";
+"command.cells.createSSH.description" = "Підготувати команду створення користувацької SSH-комірки";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Перемкнути Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Показати або приховати локальний Vault сеансів зовнішніх агентів.";

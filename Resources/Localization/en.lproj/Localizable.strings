@@ -58,6 +58,12 @@
 "vault.compare.arguments" = "Arguments";
 "command.vault.toggle.name" = "Toggle Vault";
 "command.vault.toggle.description" = "Show locally vaulted external agent sessions";
+"command.cells.list.name" = "Cells: List Cells";
+"command.cells.list.description" = "List local and user-owned compute cells";
+"command.cells.createDocker.name" = "Cells: Create Docker Cell";
+"command.cells.createDocker.description" = "Prepare a local Docker cell creation command";
+"command.cells.createSSH.name" = "Cells: Create SSH Cell";
+"command.cells.createSSH.description" = "Prepare a user-owned SSH cell creation command";
 "preferences.section.hooks" = "Hooks";
 "preferences.section.mcpServers" = "MCP Servers";
 "preferences.section.voice" = "Voice";

@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Arguments";
 "command.vault.toggle.name" = "Basculer Vault";
 "command.vault.toggle.description" = "Afficher les sessions d’agents externes enregistrées localement";
+"command.cells.list.name" = "Cells : lister les cellules";
+"command.cells.list.description" = "Lister les cellules de calcul locales et appartenant à l’utilisateur";
+"command.cells.createDocker.name" = "Cells : créer une cellule Docker";
+"command.cells.createDocker.description" = "Préparer une commande locale de création de cellule Docker";
+"command.cells.createSSH.name" = "Cells : créer une cellule SSH";
+"command.cells.createSSH.description" = "Préparer une commande de création de cellule SSH appartenant à l’utilisateur";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Basculer Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Afficher ou masquer le Vault local des sessions d’agents externes.";

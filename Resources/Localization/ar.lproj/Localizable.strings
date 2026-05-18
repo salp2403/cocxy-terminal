@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "المعاملات";
 "command.vault.toggle.name" = "تبديل Vault";
 "command.vault.toggle.description" = "عرض جلسات الوكلاء الخارجية المحفوظة محليا";
+"command.cells.list.name" = "Cells: عرض الخلايا";
+"command.cells.list.description" = "عرض خلايا الحوسبة المحلية والمملوكة للمستخدم";
+"command.cells.createDocker.name" = "Cells: إنشاء خلية Docker";
+"command.cells.createDocker.description" = "تحضير أمر محلي لإنشاء خلية Docker";
+"command.cells.createSSH.name" = "Cells: إنشاء خلية SSH";
+"command.cells.createSSH.description" = "تحضير أمر لإنشاء خلية SSH مملوكة للمستخدم";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "تبديل Vault";
 "keybindings.action.window.vaultSidebar.summary" = "إظهار أو إخفاء Vault المحلي لجلسات الوكلاء الخارجية.";

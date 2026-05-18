@@ -917,6 +917,7 @@ struct AppLocalizationSwiftTestingTests {
         )
         let expectedKeys = Set(english.filter { key in
             key.hasPrefix("cells.")
+                || key.hasPrefix("command.cells.")
                 || key.hasPrefix("agentTeams.")
         })
         let plannedLanguageCodes = [

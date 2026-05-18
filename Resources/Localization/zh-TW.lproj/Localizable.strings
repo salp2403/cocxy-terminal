@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "引數";
 "command.vault.toggle.name" = "切換 Vault";
 "command.vault.toggle.description" = "顯示本機保存的外部代理工作階段";
+"command.cells.list.name" = "Cells：列出單元";
+"command.cells.list.description" = "列出本機和使用者擁有的運算單元";
+"command.cells.createDocker.name" = "Cells：建立 Docker 單元";
+"command.cells.createDocker.description" = "準備用於建立 Docker 單元的本機命令";
+"command.cells.createSSH.name" = "Cells：建立 SSH 單元";
+"command.cells.createSSH.description" = "準備用於建立使用者擁有的 SSH 單元的命令";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "切換 Vault";
 "keybindings.action.window.vaultSidebar.summary" = "顯示或隱藏本機外部代理工作階段 Vault。";

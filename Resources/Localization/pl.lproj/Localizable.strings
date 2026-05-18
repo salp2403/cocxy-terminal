@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Argumenty";
 "command.vault.toggle.name" = "Przełącz Vault";
 "command.vault.toggle.description" = "Pokaż lokalnie zapisane sesje zewnętrznych agentów";
+"command.cells.list.name" = "Cells: wyświetl komórki";
+"command.cells.list.description" = "Wyświetl lokalne i należące do użytkownika komórki obliczeniowe";
+"command.cells.createDocker.name" = "Cells: utwórz komórkę Docker";
+"command.cells.createDocker.description" = "Przygotuj lokalne polecenie utworzenia komórki Docker";
+"command.cells.createSSH.name" = "Cells: utwórz komórkę SSH";
+"command.cells.createSSH.description" = "Przygotuj polecenie utworzenia komórki SSH należącej do użytkownika";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Przełącz Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Pokaż lub ukryj lokalny Vault sesji zewnętrznych agentów.";

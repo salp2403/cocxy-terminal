@@ -141,7 +141,8 @@ extension MainWindowController: AgentTeamPaneLaunching {
             subagentId: launchSpec.teammateID,
             sessionId: launchSpec.teamID,
             agentType: "\(launchSpec.teammateName) - \(launchSpec.provider.displayName)",
-            targetTabId: visibleTabID?.rawValue ?? tabManager.activeTabID?.rawValue
+            targetTabId: visibleTabID?.rawValue ?? tabManager.activeTabID?.rawValue,
+            allowReadableGridReflow: true
         )
         let after = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count
         return after > before || panelContentViews.values.contains { view in

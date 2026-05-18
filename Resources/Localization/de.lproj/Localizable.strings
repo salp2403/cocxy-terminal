@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Argumente";
 "command.vault.toggle.name" = "Vault umschalten";
 "command.vault.toggle.description" = "Lokal gespeicherte externe Agent-Sitzungen anzeigen";
+"command.cells.list.name" = "Cells: Zellen auflisten";
+"command.cells.list.description" = "Lokale und benutzereigene Compute-Zellen auflisten";
+"command.cells.createDocker.name" = "Cells: Docker-Zelle erstellen";
+"command.cells.createDocker.description" = "Einen lokalen Befehl zum Erstellen einer Docker-Zelle vorbereiten";
+"command.cells.createSSH.name" = "Cells: SSH-Zelle erstellen";
+"command.cells.createSSH.description" = "Einen Befehl zum Erstellen einer benutzereigenen SSH-Zelle vorbereiten";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault umschalten";
 "keybindings.action.window.vaultSidebar.summary" = "Die lokale Vault für externe Agent-Sitzungen ein- oder ausblenden.";

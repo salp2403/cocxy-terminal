@@ -51,6 +51,12 @@
 "vault.compare.arguments" = "Аргументы";
 "command.vault.toggle.name" = "Переключить Vault";
 "command.vault.toggle.description" = "Показать локально сохраненные сеансы внешних агентов";
+"command.cells.list.name" = "Cells: список ячеек";
+"command.cells.list.description" = "Показать локальные и пользовательские вычислительные ячейки";
+"command.cells.createDocker.name" = "Cells: создать Docker-ячейку";
+"command.cells.createDocker.description" = "Подготовить локальную команду создания Docker-ячейки";
+"command.cells.createSSH.name" = "Cells: создать SSH-ячейку";
+"command.cells.createSSH.description" = "Подготовить команду создания пользовательской SSH-ячейки";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Переключить Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Показать или скрыть локальный Vault сеансов внешних агентов.";
