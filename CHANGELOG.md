@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-05-18
+
+### Added
+- Added Agent Workspace OS release readiness for the command palette,
+  dashboard, Browser DevTools, remote ports, Agent Teams, and Code Review
+  surfaces with archived product UX acceptance evidence.
+- Added account-backed Cells cloud readiness evidence across E2B, Fly, AWS,
+  GCP, and Azure lifecycle flows covering create, status, exec, logs, attach,
+  list, and destroy.
+- Added local release-target preflight coverage for bundle verification,
+  codesigning, DMG generation, Sparkle appcast metadata, cloud readiness, and
+  local release tagging.
+
 ## [1.11.0] - 2026-05-16
 
 ### Added
