@@ -46,6 +46,15 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
     /// Interval in seconds for SSH keep-alive packets.
     let keepAliveInterval: Int
 
+    /// Explicit host-key policy for non-interactive SSH flows.
+    let strictHostKeyChecking: String?
+
+    /// Optional known_hosts file to use for this profile.
+    let knownHostsFile: String?
+
+    /// Whether SSH should fail instead of prompting for credentials.
+    let batchMode: Bool?
+
     /// Whether to automatically reconnect on connection loss.
     let autoReconnect: Bool
 
@@ -68,6 +77,9 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
         group: String? = nil,
         envVars: [String: String] = [:],
         keepAliveInterval: Int = 60,
+        strictHostKeyChecking: String? = nil,
+        knownHostsFile: String? = nil,
+        batchMode: Bool? = nil,
         autoReconnect: Bool = true,
         proxyExclusions: [String] = [],
         relayChannels: [RelayChannelConfig] = []
@@ -83,6 +95,9 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
         self.group = group
         self.envVars = envVars
         self.keepAliveInterval = keepAliveInterval
+        self.strictHostKeyChecking = strictHostKeyChecking
+        self.knownHostsFile = knownHostsFile
+        self.batchMode = batchMode
         self.autoReconnect = autoReconnect
         self.proxyExclusions = proxyExclusions
         self.relayChannels = relayChannels
@@ -104,6 +119,9 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
         group = try container.decodeIfPresent(String.self, forKey: .group)
         envVars = try container.decodeIfPresent([String: String].self, forKey: .envVars) ?? [:]
         keepAliveInterval = try container.decodeIfPresent(Int.self, forKey: .keepAliveInterval) ?? 60
+        strictHostKeyChecking = try container.decodeIfPresent(String.self, forKey: .strictHostKeyChecking)
+        knownHostsFile = try container.decodeIfPresent(String.self, forKey: .knownHostsFile)
+        batchMode = try container.decodeIfPresent(Bool.self, forKey: .batchMode)
         autoReconnect = try container.decodeIfPresent(Bool.self, forKey: .autoReconnect) ?? true
         proxyExclusions = try container.decodeIfPresent([String].self, forKey: .proxyExclusions) ?? []
         relayChannels = try container.decodeIfPresent([RelayChannelConfig].self, forKey: .relayChannels) ?? []
@@ -111,7 +129,8 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case id, name, host, user, port, identityFile, jumpHosts, portForwards
-        case group, envVars, keepAliveInterval, autoReconnect, proxyExclusions, relayChannels
+        case group, envVars, keepAliveInterval, strictHostKeyChecking, knownHostsFile, batchMode
+        case autoReconnect, proxyExclusions, relayChannels
     }
 }
 
@@ -227,6 +246,18 @@ extension RemoteConnectionProfile {
 
         // Keep-alive.
         parts.append("-o ServerAliveInterval=\(keepAliveInterval)")
+
+        if let strictHostKeyChecking {
+            parts.append("-o StrictHostKeyChecking=\(strictHostKeyChecking)")
+        }
+
+        if let knownHostsFile {
+            parts.append("-o UserKnownHostsFile=\(knownHostsFile)")
+        }
+
+        if let batchMode {
+            parts.append("-o BatchMode=\(batchMode ? "yes" : "no")")
+        }
 
         // Environment variables.
         for key in envVars.keys.sorted() {

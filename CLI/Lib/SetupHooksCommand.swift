@@ -20,7 +20,7 @@ public enum SetupHooksTarget: String, CaseIterable, Equatable {
 
     static func fromCLIArgument(_ rawValue: String) -> SetupHooksTarget? {
         switch rawValue.lowercased() {
-        case "claude":
+        case "claude", "claude-code":
             return .claude
         case "codex":
             return .codex
@@ -347,7 +347,8 @@ enum SetupHooksCommand {
     ) throws -> String {
         switch source {
         case .claudeCode:
-            let manager = ClaudeSettingsManager()
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            let manager = ClaudeSettingsManager(settingsFilePath: path)
             if remove {
                 let result = try manager.uninstallHooks()
                 if result.nothingToRemove {
@@ -482,7 +483,8 @@ enum SetupHooksCommand {
 
         switch source {
         case .claudeCode:
-            status = try ClaudeSettingsManager().hooksStatus()
+            let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
+            status = try ClaudeSettingsManager(settingsFilePath: path).hooksStatus()
         case .codex, .geminiCLI, .cursor, .copilot, .codebuddy, .factory, .qoder:
             let path = try settingsFilePath(for: source, resolver: settingsFilePathResolver)
             let manager = GroupedHooksSettingsManager(
@@ -537,7 +539,7 @@ enum SetupHooksCommand {
     ) throws -> String {
         switch source {
         case .claudeCode:
-            return ClaudeSettingsManager.defaultSettingsFilePath
+            return resolver(source) ?? ClaudeSettingsManager.defaultSettingsFilePath
         default:
             guard let path = resolver(source) else {
                 throw HooksError.fileSystemError(reason: "Missing settings path")

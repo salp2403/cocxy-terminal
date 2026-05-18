@@ -232,13 +232,19 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(copy.secondaryButton == "Cancelar")
     }
 
-    @Test("cold start benchmark environment bypasses modal quit confirmation")
-    func coldStartBenchmarkEnvironmentBypassesModalQuitConfirmation() {
+    @Test("benchmark environments bypass modal quit confirmation")
+    func benchmarkEnvironmentsBypassModalQuitConfirmation() {
         #expect(AppDelegate.shouldBypassQuitConfirmationForAutomation(
             environment: ["COCXY_COLD_START_BENCHMARK": "1"]
         ))
+        #expect(AppDelegate.shouldBypassQuitConfirmationForAutomation(
+            environment: ["COCXY_MEMORY_BASELINE_BENCHMARK": "1"]
+        ))
         #expect(!AppDelegate.shouldBypassQuitConfirmationForAutomation(
             environment: ["COCXY_COLD_START_BENCHMARK": "0"]
+        ))
+        #expect(!AppDelegate.shouldBypassQuitConfirmationForAutomation(
+            environment: ["COCXY_MEMORY_BASELINE_BENCHMARK": "0"]
         ))
         #expect(!AppDelegate.shouldBypassQuitConfirmationForAutomation(environment: [:]))
     }

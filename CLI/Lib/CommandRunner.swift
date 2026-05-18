@@ -20,6 +20,9 @@ public struct CommandRunner {
     static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
     static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 65
     public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
+    static let extendedCellSocketTimeoutSeconds: TimeInterval = 300
+    static let defaultBrowserActionTimeoutMilliseconds = 5_000
+    static let browserActionSocketGraceSeconds: TimeInterval = 3
 
     /// The socket client to use for communication.
     public let socketClient: SocketClient
@@ -820,6 +823,36 @@ public struct CommandRunner {
 
     // MARK: - Request Building
 
+    private func browserActionParams(
+        _ params: [String: String],
+        timeoutMilliseconds: Int?
+    ) -> [String: String] {
+        var params = params
+        if let timeoutMilliseconds {
+            params["timeout"] = "\(timeoutMilliseconds)"
+        }
+        if let evidenceDir = ProcessInfo.processInfo.environment["COCXY_BROWSER_ACTION_EVIDENCE_DIR"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+            !evidenceDir.isEmpty {
+            params["screenshotDir"] = evidenceDir
+        }
+        return params
+    }
+
+    private func argvJSONString(_ argv: [String]) -> String {
+        let data = (try? JSONEncoder().encode(argv)) ?? Data("[]".utf8)
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    private func cellParams(cellID: String, provider: String?) -> [String: String] {
+        var params = ["cell-id": cellID]
+        if let provider = provider?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !provider.isEmpty {
+            params["provider"] = provider
+        }
+        return params
+    }
+
     /// Builds a `CLISocketRequest` from a parsed command.
     ///
     /// - Parameter command: The parsed command.
@@ -1061,6 +1094,9 @@ public struct CommandRunner {
         case .configPath:
             return CLISocketRequest(id: requestID, command: "config-path", params: nil)
 
+        case .importConfig(let options):
+            return CLISocketRequest(id: requestID, command: "import-config", params: options.socketParams)
+
         // MARK: Theme (v2)
 
         case .themeList:
@@ -1213,6 +1249,51 @@ public struct CommandRunner {
             if let profile { params = ["profile": profile] }
             return CLISocketRequest(id: requestID, command: "remote-tunnels", params: params)
 
+        // MARK: Cells (v7)
+
+        case .cellCreate(let options):
+            return CLISocketRequest(id: requestID, command: "cell-create", params: options.socketParams)
+
+        case .cellList:
+            return CLISocketRequest(id: requestID, command: "cell-list", params: nil)
+
+        case .cellExec(let cellID, let provider, let command):
+            return CLISocketRequest(
+                id: requestID,
+                command: "cell-exec",
+                params: cellParams(cellID: cellID, provider: provider)
+                    .merging(["argv-json": argvJSONString(command)]) { _, new in new }
+            )
+
+        case .cellAttach(let cellID, let provider):
+            return CLISocketRequest(
+                id: requestID,
+                command: "cell-attach",
+                params: cellParams(cellID: cellID, provider: provider)
+            )
+
+        case .cellDestroy(let cellID, let provider, let force):
+            return CLISocketRequest(
+                id: requestID,
+                command: "cell-destroy",
+                params: cellParams(cellID: cellID, provider: provider)
+                    .merging(["force": force ? "true" : "false"]) { _, new in new }
+            )
+
+        case .cellLogs(let cellID, let provider):
+            return CLISocketRequest(
+                id: requestID,
+                command: "cell-logs",
+                params: cellParams(cellID: cellID, provider: provider)
+            )
+
+        case .cellStatus(let cellID, let provider):
+            return CLISocketRequest(
+                id: requestID,
+                command: "cell-status",
+                params: cellParams(cellID: cellID, provider: provider)
+            )
+
         // MARK: Plugin Management (exposed v3)
 
         case .pluginList:
@@ -1285,9 +1366,69 @@ public struct CommandRunner {
         case .browserGetState:
             return CLISocketRequest(id: requestID, command: "browser-get-state", params: nil)
 
+        case .browserStateSave(let path):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-state-save",
+                params: ["path": path]
+            )
+
+        case .browserStateLoad(let path):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-state-load",
+                params: ["path": path]
+            )
+
         case .browserEval(let script):
             return CLISocketRequest(
                 id: requestID, command: "browser-eval", params: ["script": script]
+            )
+
+        case .browserAddScript(let script):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-add-script",
+                params: ["script": script]
+            )
+
+        case .browserAddStyle(let css):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-add-style",
+                params: ["css": css]
+            )
+
+        case .browserInitScriptAdd(let script):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-init-script-add",
+                params: ["script": script]
+            )
+
+        case .browserInitScriptsList:
+            return CLISocketRequest(id: requestID, command: "browser-init-scripts-list", params: nil)
+
+        case .browserDialogs:
+            return CLISocketRequest(id: requestID, command: "browser-dialogs", params: nil)
+
+        case .browserDialogAccept(let id, let promptText):
+            var params: [String: String] = [:]
+            if let id { params["id"] = id }
+            if let promptText { params["promptText"] = promptText }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-dialog-accept",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .browserDialogDismiss(let id):
+            var params: [String: String] = [:]
+            if let id { params["id"] = id }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-dialog-dismiss",
+                params: params.isEmpty ? nil : params
             )
 
         case .browserGetText:
@@ -1299,14 +1440,209 @@ public struct CommandRunner {
         case .browserSnapshot:
             return CLISocketRequest(id: requestID, command: "browser-snapshot", params: nil)
 
-        case .browserClick(let ref):
-            return CLISocketRequest(id: requestID, command: "browser-click", params: ["ref": ref])
+        case .browserContext(let targetRef, let around, let consoleTail, let networkTail):
+            var params: [String: String] = [:]
+            if let targetRef { params["target"] = targetRef }
+            if let around { params["around"] = "\(around)" }
+            if let consoleTail { params["console"] = "\(consoleTail)" }
+            if let networkTail { params["network"] = "\(networkTail)" }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-context",
+                params: params.isEmpty ? nil : params
+            )
 
-        case .browserFill(let ref, let text):
+        case .browserClick(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-click",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserDblClick(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-dblclick",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserHover(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-hover",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserFocus(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-focus",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserFill(let ref, let text, let timeoutMilliseconds):
             return CLISocketRequest(
                 id: requestID,
                 command: "browser-fill",
-                params: ["ref": ref, "text": text]
+                params: browserActionParams(["ref": ref, "text": text], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserUpload(let ref, let path, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-upload",
+                params: browserActionParams(["ref": ref, "path": path], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserType(let ref, let text, let timeoutMilliseconds):
+            var params = browserActionParams(["text": text], timeoutMilliseconds: timeoutMilliseconds)
+            if let ref {
+                params["ref"] = ref
+            }
+            return CLISocketRequest(id: requestID, command: "browser-type", params: params)
+
+        case .browserPress(let key, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-press",
+                params: browserActionParams(["key": key], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserKeyDown(let key, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-keydown",
+                params: browserActionParams(["key": key], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserKeyUp(let key, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-keyup",
+                params: browserActionParams(["key": key], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserCheck(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-check",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserUncheck(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-uncheck",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserSelect(let ref, let value, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-select",
+                params: browserActionParams(["ref": ref, "value": value], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserScroll(let x, let y, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-scroll",
+                params: browserActionParams(["x": "\(x)", "y": "\(y)"], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserScrollIntoView(let ref, let timeoutMilliseconds):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-scroll-into-view",
+                params: browserActionParams(["ref": ref], timeoutMilliseconds: timeoutMilliseconds)
+            )
+
+        case .browserGetHTML(let ref):
+            var params: [String: String] = [:]
+            if let ref {
+                params["ref"] = ref
+            }
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-get-html",
+                params: params.isEmpty ? nil : params
+            )
+
+        case .browserGetValue(let ref):
+            return CLISocketRequest(id: requestID, command: "browser-get-value", params: ["ref": ref])
+
+        case .browserGetAttr(let ref, let name):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-get-attr",
+                params: ["ref": ref, "name": name]
+            )
+
+        case .browserGetTitle:
+            return CLISocketRequest(id: requestID, command: "browser-get-title", params: nil)
+
+        case .browserGetCount(let selector):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-get-count",
+                params: ["selector": selector]
+            )
+
+        case .browserGetBox(let ref):
+            return CLISocketRequest(id: requestID, command: "browser-get-box", params: ["ref": ref])
+
+        case .browserGetStyles(let ref, let names):
+            var params: [String: String] = ["ref": ref]
+            if !names.isEmpty {
+                params["names"] = names.joined(separator: ",")
+            }
+            return CLISocketRequest(id: requestID, command: "browser-get-styles", params: params)
+
+        case .browserIsVisible(let ref):
+            return CLISocketRequest(id: requestID, command: "browser-is-visible", params: ["ref": ref])
+
+        case .browserIsEnabled(let ref):
+            return CLISocketRequest(id: requestID, command: "browser-is-enabled", params: ["ref": ref])
+
+        case .browserIsChecked(let ref):
+            return CLISocketRequest(id: requestID, command: "browser-is-checked", params: ["ref": ref])
+
+        case .browserFindRole(let role, let name):
+            var params: [String: String] = ["role": role]
+            if let name {
+                params["name"] = name
+            }
+            return CLISocketRequest(id: requestID, command: "browser-find-role", params: params)
+
+        case .browserFindText(let text):
+            return CLISocketRequest(id: requestID, command: "browser-find-text", params: ["text": text])
+
+        case .browserFindLabel(let text):
+            return CLISocketRequest(id: requestID, command: "browser-find-label", params: ["text": text])
+
+        case .browserFindPlaceholder(let text):
+            return CLISocketRequest(id: requestID, command: "browser-find-placeholder", params: ["text": text])
+
+        case .browserFindAlt(let text):
+            return CLISocketRequest(id: requestID, command: "browser-find-alt", params: ["text": text])
+
+        case .browserFindTitle(let text):
+            return CLISocketRequest(id: requestID, command: "browser-find-title", params: ["text": text])
+
+        case .browserFindTestID(let id):
+            return CLISocketRequest(id: requestID, command: "browser-find-testid", params: ["id": id])
+
+        case .browserFindFirst(let selector):
+            return CLISocketRequest(id: requestID, command: "browser-find-first", params: ["selector": selector])
+
+        case .browserFindLast(let selector):
+            return CLISocketRequest(id: requestID, command: "browser-find-last", params: ["selector": selector])
+
+        case .browserFindNth(let index, let selector):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-find-nth",
+                params: ["index": "\(index)", "selector": selector]
             )
 
         case .browserScreenshot(let outputPath):
@@ -1362,6 +1698,40 @@ public struct CommandRunner {
                 id: requestID,
                 command: "browser-network",
                 params: params.isEmpty ? nil : params
+            )
+
+        case .browserFrames:
+            return CLISocketRequest(id: requestID, command: "browser-frames", params: nil)
+
+        case .browserDownloads:
+            return CLISocketRequest(id: requestID, command: "browser-downloads", params: nil)
+
+        case .browserStorageList(let area):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-storage-list",
+                params: ["area": area.rawValue]
+            )
+
+        case .browserStorageGet(let area, let key):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-storage-get",
+                params: ["area": area.rawValue, "key": key]
+            )
+
+        case .browserStorageSet(let area, let key, let value):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-storage-set",
+                params: ["area": area.rawValue, "key": key, "value": value]
+            )
+
+        case .browserStorageDelete(let area, let key):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-storage-delete",
+                params: ["area": area.rawValue, "key": key]
             )
 
         case .browserImportPreview(let options):
@@ -1742,9 +2112,38 @@ public struct CommandRunner {
              .gitAssistantPRDraft,
              .gitAssistantReleaseNotes:
             return extendedGitAssistantSocketTimeoutSeconds
+        case .cellCreate,
+             .cellList,
+             .cellExec,
+             .cellAttach,
+             .cellDestroy,
+             .cellLogs,
+             .cellStatus:
+            return extendedCellSocketTimeoutSeconds
+        case .browserClick(_, let timeoutMilliseconds),
+             .browserDblClick(_, let timeoutMilliseconds),
+             .browserHover(_, let timeoutMilliseconds),
+             .browserFocus(_, let timeoutMilliseconds),
+             .browserFill(_, _, let timeoutMilliseconds),
+             .browserUpload(_, _, let timeoutMilliseconds),
+             .browserType(_, _, let timeoutMilliseconds),
+             .browserPress(_, let timeoutMilliseconds),
+             .browserKeyDown(_, let timeoutMilliseconds),
+             .browserKeyUp(_, let timeoutMilliseconds),
+             .browserCheck(_, let timeoutMilliseconds),
+             .browserUncheck(_, let timeoutMilliseconds),
+             .browserSelect(_, _, let timeoutMilliseconds),
+             .browserScroll(_, _, let timeoutMilliseconds),
+             .browserScrollIntoView(_, let timeoutMilliseconds):
+            return browserActionSocketTimeoutSeconds(timeoutMilliseconds: timeoutMilliseconds)
         default:
             return SocketClient.defaultTimeoutSeconds
         }
+    }
+
+    static func browserActionSocketTimeoutSeconds(timeoutMilliseconds: Int?) -> TimeInterval {
+        let milliseconds = timeoutMilliseconds ?? defaultBrowserActionTimeoutMilliseconds
+        return Double(milliseconds) / 1_000.0 + browserActionSocketGraceSeconds
     }
 }
 

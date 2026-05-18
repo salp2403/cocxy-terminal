@@ -909,6 +909,91 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func agentWorkspaceLocalizationResourcesExposeCellsAndAgentTeamKeys() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let english = try localizationKeys(
+            at: resourcesRoot.appendingPathComponent("en.lproj/Localizable.strings")
+        )
+        let expectedKeys = Set(english.filter { key in
+            key.hasPrefix("cells.")
+                || key.hasPrefix("agentTeams.")
+        })
+        let plannedLanguageCodes = [
+            "ar", "bs", "da", "de", "fr", "it", "ja", "km", "ko", "no",
+            "pl", "pt-BR", "ru", "th", "tr", "uk", "vi", "zh-CN", "zh-TW",
+        ]
+        let missingResources = plannedLanguageCodes.filter { code in
+            let path = resourcesRoot
+                .appendingPathComponent("\(code).lproj", isDirectory: true)
+                .appendingPathComponent("Localizable.strings")
+                .path
+            return !FileManager.default.fileExists(atPath: path)
+        }
+
+        #expect(
+            missingResources.isEmpty,
+            Comment(rawValue: "Missing planned Agent Workspace localization resources: \(missingResources.joined(separator: ", "))")
+        )
+
+        for code in plannedLanguageCodes where !missingResources.contains(code) {
+            let keys = try localizationKeys(
+                at: resourcesRoot.appendingPathComponent("\(code).lproj/Localizable.strings")
+            )
+            let missingKeys = expectedKeys.subtracting(keys).sorted()
+
+            #expect(
+                missingKeys.isEmpty,
+                Comment(rawValue: "\(code).lproj is missing Agent Workspace localization keys: \(missingKeys.joined(separator: ", "))")
+            )
+        }
+    }
+
+    @Test
+    func agentWorkspaceLocalizationResourcesAreNotEnglishClones() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let english = try localizationStrings(
+            at: resourcesRoot.appendingPathComponent("en.lproj/Localizable.strings")
+        )
+        let qualityKeys = [
+            "agentTeams.panel.title",
+            "agentTeams.creator.placeholder",
+            "agentTeams.creator.launch",
+            "agentTeams.graph.title",
+            "agentTeams.feed.empty",
+            "cells.sidebar.empty.title",
+            "cells.sidebar.empty.message",
+            "cells.toolbar.running",
+            "cells.toolbar.refresh",
+            "cells.toolbar.create",
+            "cells.card.destroy",
+            "cells.create.provider",
+            "cells.create.profile",
+            "cells.create.image",
+            "cells.create.launch",
+        ]
+        let plannedLanguageCodes = [
+            "ar", "bs", "da", "de", "fr", "it", "ja", "km", "ko", "no",
+            "pl", "pt-BR", "ru", "th", "tr", "uk", "vi", "zh-CN", "zh-TW",
+        ]
+
+        for code in plannedLanguageCodes {
+            let localized = try localizationStrings(
+                at: resourcesRoot.appendingPathComponent("\(code).lproj/Localizable.strings")
+            )
+            let clonedKeys = qualityKeys.filter { key in
+                localized[key] == english[key]
+            }
+
+            #expect(
+                clonedKeys.isEmpty,
+                Comment(rawValue: "\(code).lproj still has English Agent Workspace fallback text for: \(clonedKeys.joined(separator: ", "))")
+            )
+        }
+    }
+
+    @Test
     func sourceLiteralFallbackLocalizationKeysExistInEnglishAndSpanishResources() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let english = try localizationKeys(

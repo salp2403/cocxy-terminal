@@ -27,6 +27,15 @@ enum BrowserWebKitAutomationBridge {
                 timeout: timeout
             )
         }
+        viewModel.initScriptInstaller = { [weak webView] script, timeout in
+            guard let webView else {
+                return .failure("Browser web view is not available")
+            }
+            return installInitScript(script, in: webView, timeout: timeout)
+        }
+        for script in viewModel.initScripts {
+            addInitScript(script.source, to: webView)
+        }
         installPendingCookies(on: webView, profileID: viewModel.activeProfileID)
     }
 
@@ -46,13 +55,30 @@ enum BrowserWebKitAutomationBridge {
         let box = Box()
 
         DispatchQueue.main.async {
-            webView.evaluateJavaScript(script) { value, error in
-                if let error {
-                    box.result = .failure(error.localizedDescription)
-                } else {
-                    box.result = .success(stringValue(for: value))
+            if script.contains("waitForCocxyActionable") {
+                Task { @MainActor in
+                    do {
+                        let value = try await webView.callAsyncJavaScript(
+                            "return await \(script)",
+                            arguments: [:],
+                            in: nil,
+                            contentWorld: .page
+                        )
+                        box.result = .success(stringValue(for: value))
+                    } catch {
+                        box.result = .failure(error.localizedDescription)
+                    }
+                    semaphore.signal()
                 }
-                semaphore.signal()
+            } else {
+                webView.evaluateJavaScript(script) { value, error in
+                    if let error {
+                        box.result = .failure(error.localizedDescription)
+                    } else {
+                        box.result = .success(stringValue(for: value))
+                    }
+                    semaphore.signal()
+                }
             }
         }
 
@@ -129,6 +155,46 @@ enum BrowserWebKitAutomationBridge {
         return String(describing: value)
     }
 
+    private static func installInitScript(
+        _ source: String,
+        in webView: WKWebView,
+        timeout: TimeInterval
+    ) -> BrowserScriptEvaluationResult {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated {
+                addInitScript(source, to: webView)
+                return .success("installed")
+            }
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        final class Box: @unchecked Sendable {
+            var result: BrowserScriptEvaluationResult = .failure("Browser init script installation did not complete")
+        }
+        let box = Box()
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                addInitScript(source, to: webView)
+            }
+            box.result = .success("installed")
+            semaphore.signal()
+        }
+        guard semaphore.wait(timeout: .now() + timeout) == .success else {
+            return .failure("Browser init script installation timed out")
+        }
+        return box.result
+    }
+
+    @MainActor
+    private static func addInitScript(_ source: String, to webView: WKWebView) {
+        let script = WKUserScript(
+            source: source,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: false
+        )
+        webView.configuration.userContentController.addUserScript(script)
+    }
+
     private static func pngData(for image: NSImage) -> Data? {
         guard let tiff = image.tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiff) else {
@@ -137,6 +203,7 @@ enum BrowserWebKitAutomationBridge {
         return bitmap.representation(using: .png, properties: [:])
     }
 
+    @MainActor
     private static func installPendingCookies(on webView: WKWebView, profileID: UUID?) {
         guard let profileID else { return }
         let pendingCookies = BrowserPendingCookieImportStore.shared.drain(profileID: profileID)

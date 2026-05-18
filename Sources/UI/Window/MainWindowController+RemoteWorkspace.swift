@@ -2,6 +2,7 @@
 // MainWindowController+RemoteWorkspace.swift - Remote workspace overlay toggle.
 
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - Remote Workspace Panel
@@ -56,7 +57,11 @@ extension MainWindowController {
             onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
             localizer: appLocalizer(),
             sshKeyManager: sshKeyManager,
-            sftpExecutor: SystemSFTPExecutor()
+            sftpExecutor: SystemSFTPExecutor(),
+            remotePortScanner: remotePortScanner,
+            onOpenRemoteBrowser: { [weak self] profile, suggestion in
+                self?.openRemoteBrowser(profile: profile, suggestion: suggestion)
+            }
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
@@ -103,5 +108,43 @@ extension MainWindowController {
         })
 
         focusActiveTerminalSurface()
+    }
+
+    func openRemoteBrowser(
+        profile: RemoteConnectionProfile,
+        suggestion: RemoteBrowserOpenSuggestion
+    ) {
+        guard let viewModel = browserViewModelForExternalNavigation() else { return }
+        let proxyState = remoteConnectionManager?.proxyManager?.state ?? .off
+        let remoteProfile = remotePortScanner?.browserProfile(
+            for: profile,
+            proxyState: proxyState
+        ) ?? RemoteBrowserProfile(
+            remoteConnectionProfile: profile,
+            localForwardedPorts: [suggestion.remotePort: suggestion.localPort],
+            proxyState: proxyState
+        )
+
+        if viewModel.openRemoteForward(
+            remoteProfile,
+            remotePort: suggestion.remotePort
+        ) == nil {
+            viewModel.attachRemoteBrowserProfile(remoteProfile)
+            viewModel.navigate(to: suggestion.localURL.absoluteString)
+        }
+        bindRemoteBrowserProxyState(to: viewModel, profileID: profile.id)
+    }
+
+    func bindRemoteBrowserProxyState(to viewModel: BrowserViewModel, profileID: UUID) {
+        remoteBrowserProxyStateCancellable?.cancel()
+        remoteBrowserProxyStateCancellable = remoteConnectionManager?.proxyManager?.statePublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak viewModel] proxyState in
+                guard let viewModel,
+                      viewModel.activeRemoteBrowserProfile?.connectionProfileID == profileID else {
+                    return
+                }
+                viewModel.updateRemoteBrowserProxyState(proxyState)
+            }
     }
 }

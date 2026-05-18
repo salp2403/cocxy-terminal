@@ -269,13 +269,23 @@ struct CocxyCoreCompatibilityMatrixTests {
                 name: "claude help output",
                 requiredCommands: ["claude"],
                 scriptBody: "exec claude --help",
-                expectedSubstrings: ["Usage"]
+                expectedSubstrings: ["Usage"],
+                hostProbe: CompatibilityHostProbe(
+                    command: "claude",
+                    arguments: ["--help"],
+                    expectedSubstrings: ["Usage"]
+                )
             ),
             .init(
                 name: "codex help output",
                 requiredCommands: ["codex"],
                 scriptBody: "exec codex --help",
-                expectedSubstrings: ["Usage"]
+                expectedSubstrings: ["Usage"],
+                hostProbe: CompatibilityHostProbe(
+                    command: "codex",
+                    arguments: ["--help"],
+                    expectedSubstrings: ["Usage"]
+                )
             ),
         ]
 
@@ -296,6 +306,7 @@ private struct CompatibilityScenario {
     let scriptBody: String
     let expectedSubstrings: [String]
     let inputs: [CompatibilityInput]
+    let hostProbe: CompatibilityHostProbe?
     let timeoutNanoseconds: UInt64
 
     init(
@@ -304,6 +315,7 @@ private struct CompatibilityScenario {
         scriptBody: String,
         expectedSubstrings: [String],
         inputs: [CompatibilityInput] = [],
+        hostProbe: CompatibilityHostProbe? = nil,
         timeoutNanoseconds: UInt64 = 12_000_000_000
     ) {
         self.name = name
@@ -311,8 +323,15 @@ private struct CompatibilityScenario {
         self.scriptBody = scriptBody
         self.expectedSubstrings = expectedSubstrings
         self.inputs = inputs
+        self.hostProbe = hostProbe
         self.timeoutNanoseconds = timeoutNanoseconds
     }
+}
+
+private struct CompatibilityHostProbe {
+    let command: String
+    let arguments: [String]
+    let expectedSubstrings: [String]
 }
 
 private struct CompatibilityInput {
@@ -347,6 +366,10 @@ private func runScenarios(
     for scenario in scenarios {
         let allCommandsAvailable = scenario.requiredCommands.allSatisfy { executablePath(for: $0) != nil }
         if !allCommandsAvailable {
+            continue
+        }
+        if let hostProbe = scenario.hostProbe,
+           !hostProbeIsSatisfied(hostProbe) {
             continue
         }
 
@@ -444,6 +467,35 @@ private func executablePath(for command: String) -> String? {
         }
     }
     return nil
+}
+
+private func hostProbeIsSatisfied(_ probe: CompatibilityHostProbe) -> Bool {
+    guard let executable = executablePath(for: probe.command) else {
+        return false
+    }
+
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: executable)
+    process.arguments = probe.arguments
+
+    let stdout = Pipe()
+    let stderr = Pipe()
+    process.standardOutput = stdout
+    process.standardError = stderr
+
+    do {
+        try process.run()
+    } catch {
+        return false
+    }
+    process.waitUntilExit()
+
+    guard process.terminationStatus == 0 else {
+        return false
+    }
+    let output = String(decoding: stdout.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        + String(decoding: stderr.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    return probe.expectedSubstrings.allSatisfy { output.localizedCaseInsensitiveContains($0) }
 }
 
 @MainActor

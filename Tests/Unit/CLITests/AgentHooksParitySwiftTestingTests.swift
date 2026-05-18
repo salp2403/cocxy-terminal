@@ -21,6 +21,7 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(AgentSource.detect(environment: ["CODEBUDDY_SESSION_ID": "codebuddy-1"]) == .codebuddy)
         #expect(AgentSource.detect(environment: ["FACTORY_SESSION_ID": "factory-1"]) == .factory)
         #expect(AgentSource.detect(environment: ["QODER_SESSION_ID": "qoder-1"]) == .qoder)
+        #expect(AgentSource.detect(environment: ["COCXY_HOOK_AGENT": "claude-code"]) == .claudeCode)
         #expect(AgentSource.detect(environment: [:], payload: ["hook_event_name": "BeforeTool"]) == .geminiCLI)
         #expect(AgentSource.detect(environment: [:], payload: ["hook_event_name": "agentSpawn"]) == .kiro)
         #expect(AgentSource.detect(environment: [:], payload: [:]) == .unknown)
@@ -97,6 +98,42 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(payload["cwd"] as? String == "/tmp/codex")
     }
 
+    @Test("HookHandlerCommand carries agent team metadata from launch environment")
+    func buildRequestCarriesAgentTeamMetadata() throws {
+        let data = Data("""
+        {
+            "hook_event_name": "PostToolUse",
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "Sources/App.swift"
+            },
+            "cwd": "/tmp/team"
+        }
+        """.utf8)
+
+        let request = try HookHandlerCommand.buildRequest(
+            from: data,
+            environment: [
+                "COCXY_CLAUDE_HOOKS": "1",
+                "COCXY_HOOK_AGENT": "codex",
+                "CODEX_THREAD_ID": "codex-thread-1",
+                "COCXY_AGENT_TEAM_ID": "ship-team",
+                "COCXY_AGENT_TEAMMATE_ID": "ship-team-build",
+                "COCXY_AGENT_TEAMMATE_NAME": "Build",
+                "PWD": "/tmp/team"
+            ]
+        )
+
+        let payloadString = try #require(request.params?["payload"])
+        let payload = try #require(
+            try JSONSerialization.jsonObject(with: Data(payloadString.utf8)) as? [String: Any]
+        )
+
+        #expect(payload["team_id"] as? String == "ship-team")
+        #expect(payload["teammate_id"] as? String == "ship-team-build")
+        #expect(payload["teammate_name"] as? String == "Build")
+    }
+
     @Test("Forced hook agent marker disambiguates Gemini SessionStart")
     func forcedHookAgentDisambiguatesGeminiSessionStart() throws {
         let data = Data("""
@@ -129,6 +166,15 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(
             try CLIArgumentParser.parse(["setup-hooks"]) == .setupHooks(
                 agent: nil,
+                remove: false,
+                dryRun: false,
+                check: false,
+                opencodeProject: false
+            )
+        )
+        #expect(
+            try CLIArgumentParser.parse(["setup-hooks", "--agent", "claude-code"]) == .setupHooks(
+                agent: .claude,
                 remove: false,
                 dryRun: false,
                 check: false,
@@ -224,6 +270,89 @@ struct AgentHooksParitySwiftTestingTests {
             ["claude", "codex", "opencode", "qodercli", "kiro-cli"].contains(command)
         }
         #expect(detected == [.claudeCode, .codex, .kiro, .opencode, .qoder])
+    }
+
+    @Test("setup-hooks all installs checks and removes every supported agent in isolated fixtures")
+    func setupHooksAllTargetsUseIsolatedFixtures() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-hooks-all-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let resolver: (AgentSource) -> String? = { source in
+            switch source {
+            case .claudeCode:
+                return root.appendingPathComponent(".claude/settings.json").path
+            case .codex:
+                return root.appendingPathComponent(".codex/hooks.json").path
+            case .geminiCLI:
+                return root.appendingPathComponent(".gemini/settings.json").path
+            case .kiro:
+                return root.appendingPathComponent(".kiro/settings/cli.json").path
+            case .opencode:
+                return root.appendingPathComponent(".config/opencode/plugins").path
+            case .pi:
+                return root.appendingPathComponent(".pi/agent/extensions/cocxy-session.ts").path
+            case .cursor:
+                return root.appendingPathComponent(".cursor/hooks.json").path
+            case .rovoDev:
+                return root.appendingPathComponent(".rovodev/config.yml").path
+            case .copilot:
+                return root.appendingPathComponent(".copilot/config.json").path
+            case .codebuddy:
+                return root.appendingPathComponent(".codebuddy/settings.json").path
+            case .factory:
+                return root.appendingPathComponent(".factory/settings.json").path
+            case .qoder:
+                return root.appendingPathComponent(".qoder/settings.json").path
+            case .unknown:
+                return nil
+            }
+        }
+        let commandExists: SetupHooksCommand.CommandExists = { _ in true }
+        let expectedSources = SetupHooksCommand.detectInstalledAgents(commandExists: commandExists)
+
+        let install = SetupHooksCommand.execute(
+            target: .all,
+            remove: false,
+            commandExists: commandExists,
+            settingsFilePathResolver: resolver
+        )
+
+        #expect(install.exitCode == 0)
+        #expect(expectedSources.count == 12)
+        for source in expectedSources {
+            #expect(install.stdout.contains(source.displayName))
+            #expect(install.stdout.contains("hooks installed"))
+        }
+
+        let check = SetupHooksCommand.execute(
+            target: .all,
+            remove: false,
+            check: true,
+            commandExists: commandExists,
+            settingsFilePathResolver: resolver
+        )
+
+        #expect(check.exitCode == 0)
+        for source in expectedSources {
+            #expect(check.stdout.contains("\(source.displayName): hooks OK"))
+        }
+
+        let remove = SetupHooksCommand.execute(
+            target: .all,
+            remove: true,
+            commandExists: commandExists,
+            settingsFilePathResolver: resolver
+        )
+
+        #expect(remove.exitCode == 0)
+        for source in expectedSources {
+            #expect(remove.stdout.contains(source.displayName))
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: root.appendingPathComponent(".pi/agent/extensions/cocxy-session.ts").path
+        ))
     }
 
     @Test("ClaudeSettingsManager creates a backup before modifying settings")

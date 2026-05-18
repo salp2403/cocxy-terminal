@@ -120,12 +120,18 @@ final class BrowserProfileManager: ObservableObject {
     ///   - colorHex: Hex color for visual distinction.
     /// - Returns: The newly created profile.
     @discardableResult
-    func createProfile(name: String, icon: String, colorHex: String) -> BrowserProfile {
+    func createProfile(
+        name: String,
+        icon: String,
+        colorHex: String,
+        remoteProfile: RemoteBrowserProfile? = nil
+    ) -> BrowserProfile {
         let profile = BrowserProfile(
             name: name,
             icon: icon,
             colorHex: colorHex,
-            isDefault: false
+            isDefault: false,
+            remoteProfile: remoteProfile
         )
         profiles.append(profile)
         persist()
@@ -179,6 +185,19 @@ final class BrowserProfileManager: ObservableObject {
             }
         }
 
+        persist()
+    }
+
+    func attachRemoteProfile(_ remoteProfile: RemoteBrowserProfile, to profileID: UUID) {
+        guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        profiles[index].remoteProfile = remoteProfile
+        persist()
+    }
+
+    func clearRemoteProfile(for profileID: UUID) {
+        guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
+        guard profiles[index].remoteProfile != nil else { return }
+        profiles[index].remoteProfile = nil
         persist()
     }
 

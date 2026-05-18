@@ -329,6 +329,49 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         rebuildSessions()
     }
 
+    /// Mirrors a locally launched Agent Team into the dashboard even before
+    /// provider hooks start emitting lifecycle events.
+    func syncAgentTeamRun(
+        _ run: AgentTeamRunState,
+        tabId: UUID,
+        workingDirectory: String? = nil
+    ) {
+        let teammateStates = Dictionary(
+            uniqueKeysWithValues: run.coordinator.teammateStates.map { ($0.id, $0.status) }
+        )
+        let subagents = run.config.teammates.map { teammate in
+            SubagentInfo(
+                id: teammate.id,
+                type: teammate.name,
+                state: mapAgentTeamStatus(teammateStates[teammate.id] ?? .working),
+                startTime: run.createdAt,
+                lastActivity: "Provider handoff ready",
+                lastActivityTime: run.updatedAt
+            )
+        }
+        let resolvedWorkingDirectory = workingDirectory
+            ?? run.launchSpecs.compactMap(\.workingDirectory).first
+        let state = aggregateAgentTeamState(subagents.map(\.state))
+        let teammateNames = run.config.teammates.map(\.name).joined(separator: ", ")
+
+        sessionDataStore[run.config.id] = MutableSessionData(
+            id: run.config.id,
+            projectName: extractProjectName(from: resolvedWorkingDirectory),
+            tabId: tabId,
+            state: state,
+            agentName: run.config.provider.displayName,
+            lastActivity: teammateNames.isEmpty ? "Agent team launched" : "Agent team launched: \(teammateNames)",
+            lastActivityTime: run.updatedAt,
+            subagents: subagents
+        )
+        rebuildSessions()
+    }
+
+    func removeAgentTeamRun(teamID: String) {
+        sessionDataStore.removeValue(forKey: AgentTeamConfig.slug(teamID))
+        rebuildSessions()
+    }
+
     /// Processes a detection engine state change using a stable session ID.
     ///
     /// Pattern detection now emits the originating surface for every
@@ -884,6 +927,29 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         case .error:
             return .error
         }
+    }
+
+    private func mapAgentTeamStatus(_ status: AgentTeamStatus) -> AgentDashboardState {
+        switch status {
+        case .starting, .working:
+            return .working
+        case .waiting:
+            return .waitingForInput
+        case .finished:
+            return .finished
+        case .error:
+            return .error
+        }
+    }
+
+    private func aggregateAgentTeamState(_ states: [AgentDashboardState]) -> AgentDashboardState {
+        if states.contains(.error) { return .error }
+        if states.contains(.blocked) { return .blocked }
+        if states.contains(.waitingForInput) { return .waitingForInput }
+        if states.contains(.working) { return .working }
+        if states.contains(.launching) { return .launching }
+        if !states.isEmpty, states.allSatisfy({ $0 == .finished }) { return .finished }
+        return .working
     }
 }
 

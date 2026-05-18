@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "បិទ/បើក Vault";
 "keybindings.action.window.vaultSidebar.summary" = "បង្ហាញ ឬលាក់ Vault ក្នុងម៉ាស៊ីនសម្រាប់សម័យភ្នាក់ងារខាងក្រៅ។";
+
+"agentTeams.panel.title" = "ក្រុមភ្នាក់ងារ";
+"agentTeams.creator.title" = "ក្រុមភ្នាក់ងារ";
+"agentTeams.creator.placeholder" = "រចនា, សាងសង់, ពិនិត្យ";
+"agentTeams.creator.launch" = "ចាប់ផ្តើម";
+"agentTeams.graph.title" = "ក្រាហ្វក្រុម";
+"agentTeams.graph.accessibility" = "ក្រាហ្វក្រុមភ្នាក់ងារ";
+"agentTeams.feed.title" = "ព័ត៌មានភ្នាក់ងារ";
+"agentTeams.feed.empty" = "មិនមានព្រឹត្តិការណ៍ក្រុម";
+"agentTeams.feed.accessibility" = "ព័ត៌មានក្រុមភ្នាក់ងារ";
+
+"cells.sidebar.accessibility" = "Cells របស់ Cocxy";
+"cells.sidebar.empty.title" = "មិនមាន cell";
+"cells.sidebar.empty.message" = "បង្កើត cell មូលដ្ឋាន ឬ cell cloud ដែលអ្នកកាន់កាប់។";
+"cells.toolbar.title" = "Cells";
+"cells.toolbar.running" = "%d កំពុងដំណើរការ";
+"cells.toolbar.refresh" = "ធ្វើឱ្យ cells ថ្មី";
+"cells.toolbar.create" = "បង្កើត cell";
+"cells.card.destroy" = "លុប cell";
+"cells.card.destroy.accessibility" = "លុប %@";
+"cells.create.title" = "បង្កើត Cell";
+"cells.create.provider" = "អ្នកផ្តល់សេវា";
+"cells.create.profile" = "ប្រវត្តិរូប";
+"cells.create.image" = "រូបភាព ឬ ពុម្ព";
+"cells.create.host" = "ម៉ាស៊ីន SSH";
+"cells.create.launch" = "បង្កើត";

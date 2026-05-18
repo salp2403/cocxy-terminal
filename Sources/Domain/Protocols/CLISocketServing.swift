@@ -7,7 +7,7 @@ import Foundation
 
 /// Server that listens on a Unix Domain Socket for commands from `cocxy`.
 ///
-/// Security measures (addressing cmux vulnerabilities #385-#390):
+/// Security measures:
 /// 1. Socket file permissions are `0600` (owner-only read/write).
 /// 2. Every connection is verified via `getpeereid()` — the peer's UID must
 ///    match the server's UID.
@@ -59,7 +59,7 @@ import Foundation
 /// Closed set of commands accepted by the socket server.
 ///
 /// Any command name not in this enum is rejected with an error response.
-/// This prevents arbitrary command execution (unlike cmux's `browser.eval`).
+/// This prevents arbitrary command execution through the local socket.
 enum CLICommandName: String, CaseIterable, Sendable {
 
     // MARK: - Original commands (v1)
@@ -165,6 +165,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case configPath = "config-path"
     /// Show the active tab's project config (.cocxy.toml overrides).
     case configProject = "config-project"
+    /// Preview import of external terminal configuration.
+    case importConfig = "import-config"
 
     // MARK: - Theme (v2)
 
@@ -194,6 +196,23 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case remoteStatus = "remote-status"
     /// List active SSH tunnels.
     case remoteTunnels = "remote-tunnels"
+
+    // MARK: - Cells (v7)
+
+    /// Create a user-owned compute cell.
+    case cellCreate = "cell-create"
+    /// List known compute cells.
+    case cellList = "cell-list"
+    /// Execute a command inside a compute cell.
+    case cellExec = "cell-exec"
+    /// Attach to a compute cell through a single-use PTY lease.
+    case cellAttach = "cell-attach"
+    /// Destroy a compute cell.
+    case cellDestroy = "cell-destroy"
+    /// Read cell logs.
+    case cellLogs = "cell-logs"
+    /// Read cell status.
+    case cellStatus = "cell-status"
 
     // MARK: - Plugins (v2)
 
@@ -231,18 +250,104 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserReload = "browser-reload"
     /// Get current browser state (URL, title, loading, tabs).
     case browserGetState = "browser-get-state"
+    /// Save current browser cookies and storage state to a local JSON file.
+    case browserStateSave = "browser-state-save"
+    /// Load browser cookies and storage state from a local JSON file.
+    case browserStateLoad = "browser-state-load"
     /// Evaluate JavaScript in the active browser tab (max 10,000 chars).
     case browserEval = "browser-eval"
+    /// Add and execute an inline script in the active browser page.
+    case browserAddScript = "browser-add-script"
+    /// Add an inline stylesheet to the active browser page.
+    case browserAddStyle = "browser-add-style"
+    /// Register a script to run at document start on future browser page loads.
+    case browserInitScriptAdd = "browser-init-script-add"
+    /// List registered browser document-start init scripts.
+    case browserInitScriptsList = "browser-init-scripts-list"
+    /// List pending and recently handled JavaScript dialogs.
+    case browserDialogs = "browser-dialogs"
+    /// Accept the oldest pending or selected JavaScript dialog.
+    case browserDialogAccept = "browser-dialog-accept"
+    /// Dismiss the oldest pending or selected JavaScript dialog.
+    case browserDialogDismiss = "browser-dialog-dismiss"
     /// Get the text content of the current page via `document.body.innerText`.
     case browserGetText = "browser-get-text"
     /// List all open browser tabs.
     case browserListTabs = "browser-list-tabs"
     /// Capture a scriptable browser element tree with stable refs.
     case browserSnapshot = "browser-snapshot"
+    /// Capture an agent-ready browser context pack.
+    case browserContext = "browser-context"
     /// Click a scriptable browser element by ref.
     case browserClick = "browser-click"
+    /// Double-click a scriptable browser element by ref.
+    case browserDblClick = "browser-dblclick"
+    /// Hover a scriptable browser element by ref.
+    case browserHover = "browser-hover"
+    /// Focus a scriptable browser element by ref.
+    case browserFocus = "browser-focus"
     /// Fill a scriptable browser input by ref.
     case browserFill = "browser-fill"
+    /// Upload a local file into a scriptable browser file input by ref.
+    case browserUpload = "browser-upload"
+    /// Type text into a scriptable browser element or focused element.
+    case browserType = "browser-type"
+    /// Press a key in the active browser tab.
+    case browserPress = "browser-press"
+    /// Dispatch keydown in the active browser tab.
+    case browserKeyDown = "browser-keydown"
+    /// Dispatch keyup in the active browser tab.
+    case browserKeyUp = "browser-keyup"
+    /// Check a scriptable browser checkbox or radio by ref.
+    case browserCheck = "browser-check"
+    /// Uncheck a scriptable browser checkbox by ref.
+    case browserUncheck = "browser-uncheck"
+    /// Select a browser option by value, label, or index.
+    case browserSelect = "browser-select"
+    /// Scroll the active browser page by pixel deltas.
+    case browserScroll = "browser-scroll"
+    /// Scroll a scriptable browser element into view.
+    case browserScrollIntoView = "browser-scroll-into-view"
+    /// Get page or element HTML from the active browser tab.
+    case browserGetHTML = "browser-get-html"
+    /// Get a scriptable browser element value by ref.
+    case browserGetValue = "browser-get-value"
+    /// Get a scriptable browser element attribute by ref.
+    case browserGetAttr = "browser-get-attr"
+    /// Get the active browser document title.
+    case browserGetTitle = "browser-get-title"
+    /// Count elements matching a CSS selector in the active browser tab.
+    case browserGetCount = "browser-get-count"
+    /// Get a scriptable browser element bounding box.
+    case browserGetBox = "browser-get-box"
+    /// Get computed browser styles for a scriptable element.
+    case browserGetStyles = "browser-get-styles"
+    /// Check whether a scriptable browser element is visible.
+    case browserIsVisible = "browser-is-visible"
+    /// Check whether a scriptable browser element is enabled.
+    case browserIsEnabled = "browser-is-enabled"
+    /// Check whether a scriptable browser element is checked.
+    case browserIsChecked = "browser-is-checked"
+    /// Find scriptable browser elements by role and optional name.
+    case browserFindRole = "browser-find-role"
+    /// Find scriptable browser elements by visible text.
+    case browserFindText = "browser-find-text"
+    /// Find form controls by label text.
+    case browserFindLabel = "browser-find-label"
+    /// Find form controls by placeholder text.
+    case browserFindPlaceholder = "browser-find-placeholder"
+    /// Find browser elements by alt text.
+    case browserFindAlt = "browser-find-alt"
+    /// Find browser elements by title attribute.
+    case browserFindTitle = "browser-find-title"
+    /// Find browser elements by test id attributes.
+    case browserFindTestID = "browser-find-testid"
+    /// Find the first browser element matching a CSS selector.
+    case browserFindFirst = "browser-find-first"
+    /// Find the last browser element matching a CSS selector.
+    case browserFindLast = "browser-find-last"
+    /// Find the nth browser element matching a CSS selector.
+    case browserFindNth = "browser-find-nth"
     /// Capture a PNG screenshot from the active browser tab.
     case browserScreenshot = "browser-screenshot"
     /// List captured browser console entries.
@@ -257,6 +362,18 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserCookiesDelete = "browser-cookies-delete"
     /// List recent browser resource timing entries.
     case browserNetwork = "browser-network"
+    /// List frame metadata for the current browser page.
+    case browserFrames = "browser-frames"
+    /// List active and completed browser downloads.
+    case browserDownloads = "browser-downloads"
+    /// List localStorage or sessionStorage entries for the current browser page.
+    case browserStorageList = "browser-storage-list"
+    /// Get a localStorage or sessionStorage value for the current browser page.
+    case browserStorageGet = "browser-storage-get"
+    /// Set a localStorage or sessionStorage value for the current browser page.
+    case browserStorageSet = "browser-storage-set"
+    /// Delete a localStorage or sessionStorage value for the current browser page.
+    case browserStorageDelete = "browser-storage-delete"
     /// Preview browser history/cookie/bookmark import counts.
     case browserImportPreview = "browser-import-preview"
     /// Import browser history/cookies/bookmarks into a profile.

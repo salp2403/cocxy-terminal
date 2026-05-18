@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "切换 Vault";
 "keybindings.action.window.vaultSidebar.summary" = "显示或隐藏本地外部代理会话 Vault。";
+
+"agentTeams.panel.title" = "智能体团队";
+"agentTeams.creator.title" = "智能体团队";
+"agentTeams.creator.placeholder" = "设计、构建、审查";
+"agentTeams.creator.launch" = "启动";
+"agentTeams.graph.title" = "团队图";
+"agentTeams.graph.accessibility" = "智能体团队图";
+"agentTeams.feed.title" = "智能体动态";
+"agentTeams.feed.empty" = "没有团队事件";
+"agentTeams.feed.accessibility" = "智能体团队动态";
+
+"cells.sidebar.accessibility" = "Cocxy 单元";
+"cells.sidebar.empty.title" = "没有单元";
+"cells.sidebar.empty.message" = "创建本地或用户拥有的云端单元。";
+"cells.toolbar.title" = "单元";
+"cells.toolbar.running" = "%d 个运行中";
+"cells.toolbar.refresh" = "刷新单元";
+"cells.toolbar.create" = "创建单元";
+"cells.card.destroy" = "销毁单元";
+"cells.card.destroy.accessibility" = "销毁 %@";
+"cells.create.title" = "创建单元";
+"cells.create.provider" = "提供商";
+"cells.create.profile" = "配置文件";
+"cells.create.image" = "镜像或模板";
+"cells.create.host" = "SSH 主机";
+"cells.create.launch" = "创建";

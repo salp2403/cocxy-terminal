@@ -20,7 +20,45 @@ final class AgentTeamsCLIArgumentParserSwiftTestingTests: XCTestCase {
             .agentTeamLaunch(AgentTeamCLIOptions(
                 teammates: "A,B,C",
                 teamID: "review-team",
-                configPath: "/tmp/team.toml"
+                configPath: "/tmp/team.toml",
+                provider: "claude-code"
+            ))
+        )
+    }
+
+    func testAgentTeamsLaunchParsesProvider() throws {
+        let parsed = try CLIArgumentParser.parse([
+            "agent-teams",
+            "--provider", "codex",
+            "--teammates", "Plan,Build",
+            "--team-id", "codex-team",
+        ])
+
+        XCTAssertEqual(
+            parsed,
+            .agentTeamLaunch(AgentTeamCLIOptions(
+                teammates: "Plan,Build",
+                teamID: "codex-team",
+                provider: "codex"
+            ))
+        )
+    }
+
+    func testAgentTeamsLaunchParsesTemplate() throws {
+        let parsed = try CLIArgumentParser.parse([
+            "agent-teams",
+            "--template", "cli-tool",
+            "--provider", "opencode",
+            "--team-id", "ship-cli",
+        ])
+
+        XCTAssertEqual(
+            parsed,
+            .agentTeamLaunch(AgentTeamCLIOptions(
+                teammates: nil,
+                teamID: "ship-cli",
+                templateID: "cli-tool",
+                provider: "opencode"
             ))
         )
     }
@@ -29,14 +67,30 @@ final class AgentTeamsCLIArgumentParserSwiftTestingTests: XCTestCase {
         let request = runner.buildRequest(from: .agentTeamLaunch(AgentTeamCLIOptions(
             teammates: "A,B,C",
             teamID: "review-team",
-            configPath: "/tmp/team.toml"
+            configPath: "/tmp/team.toml",
+            provider: "codex"
         )))
 
         XCTAssertEqual(request.command, "agent-team-launch")
-        XCTAssertEqual(request.params?["provider"], "claude-code")
+        XCTAssertEqual(request.params?["provider"], "codex")
         XCTAssertEqual(request.params?["teammates"], "A,B,C")
         XCTAssertEqual(request.params?["team-id"], "review-team")
         XCTAssertEqual(request.params?["config"], "/tmp/team.toml")
+    }
+
+    func testAgentTeamsTemplateLaunchBuildsSocketRequest() {
+        let request = runner.buildRequest(from: .agentTeamLaunch(AgentTeamCLIOptions(
+            teammates: nil,
+            teamID: "ship-cli",
+            templateID: "cli-tool",
+            provider: "codex"
+        )))
+
+        XCTAssertEqual(request.command, "agent-team-launch")
+        XCTAssertEqual(request.params?["provider"], "codex")
+        XCTAssertEqual(request.params?["template"], "cli-tool")
+        XCTAssertEqual(request.params?["team-id"], "ship-cli")
+        XCTAssertNil(request.params?["teammates"])
     }
 
     func testClaudeTeamsListAndStopParseAndBuildRequests() throws {
@@ -55,6 +109,23 @@ final class AgentTeamsCLIArgumentParserSwiftTestingTests: XCTestCase {
             XCTAssertEqual(
                 error as? CLIError,
                 .missingArgument(command: "claude-teams", argument: "--teammates <name,name>")
+            )
+        }
+    }
+
+    func testAgentTeamsLaunchRejectsTemplateAndTeammatesTogether() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "agent-teams",
+            "--template", "cli-tool",
+            "--teammates", "Plan,Build",
+        ])) { error in
+            XCTAssertEqual(
+                error as? CLIError,
+                .invalidArgument(
+                    command: "claude-teams",
+                    argument: "--template cli-tool --teammates Plan,Build",
+                    reason: "Use either --template <id> or --teammates <name,name>, not both."
+                )
             )
         }
     }

@@ -392,6 +392,7 @@ extension MainWindowController {
         let currentTabID = visibleTabID ?? tabManager.activeTabID
         let splitManager = activeSplitManager
         let splitTargetLeafID = splitManager?.focusedLeafID
+        let savedFocusedLeafID = splitManager?.focusedLeafID
 
         // Update the domain model with panel type.
         let contentID: UUID?
@@ -402,6 +403,11 @@ extension MainWindowController {
                 direction: isVertical ? .horizontal : .vertical,
                 panel: panel
             )
+            if !focusNewPanel,
+               let savedFocusedLeafID,
+               splitManager?.rootNode.findLeaf(id: savedFocusedLeafID) != nil {
+                splitManager?.focusedLeafID = savedFocusedLeafID
+            }
         }
         let newSplitID = appendToEnd
             ? nil
@@ -1284,7 +1290,8 @@ extension MainWindowController {
         }
 
         let panel = PanelInfo.subagent(id: normalizedSubagentId, sessionId: sessionId)
-        performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: true)
+        let appendToEnd = hasRoomForPaneCreation(appendingToEnd: true, isVertical: true)
+        performVisualSplitWithPanel(isVertical: true, panel: panel, appendToEnd: appendToEnd)
 
         if let activeTabID = visibleTabID ?? tabManager.activeTabID {
             let matchingPanel = panelContentViews.first(where: { _, view in

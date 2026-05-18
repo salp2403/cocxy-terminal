@@ -9,6 +9,9 @@ STABILIZE_SECONDS="${STABILIZE_SECONDS:-1.0}"
 MEASURE_TIMEOUT_SECONDS="${MEASURE_TIMEOUT_SECONDS:-60}"
 POLL_INTERVAL_SECONDS="${POLL_INTERVAL_SECONDS:-1.0}"
 ENFORCE="${COCXY_ENFORCE_MEMORY_BASELINE:-0}"
+BENCHMARK_ENV="COCXY_MEMORY_BASELINE_BENCHMARK=1"
+FORCE_KILL="${COCXY_BENCH_FORCE_KILL:-0}"
+APP_PID=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -34,6 +37,23 @@ if [[ ! -x "$CLI" ]]; then
 fi
 
 quit_existing_app() {
+  local pids
+  pids="$(pgrep -x CocxyTerminal 2>/dev/null || true)"
+  if [[ -z "$pids" ]]; then
+    return
+  fi
+
+  local pid process_line
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    process_line="$(/bin/ps eww -p "$pid" 2>/dev/null || true)"
+    if [[ "$process_line" != *"$BENCHMARK_ENV"* ]]; then
+      echo "Cocxy Terminal is already running outside this benchmark." >&2
+      echo "Close it cleanly before running memory-baseline measurements." >&2
+      exit 1
+    fi
+  done <<< "$pids"
+
   /usr/bin/osascript -e 'quit app "Cocxy Terminal"' >/dev/null 2>&1 &
   local quit_pid=$!
   local deadline=$((SECONDS + 2))
@@ -49,15 +69,47 @@ quit_existing_app() {
   local shutdown_deadline=$((SECONDS + 2))
   while pgrep -x CocxyTerminal >/dev/null 2>&1; do
     if (( SECONDS >= shutdown_deadline )); then
-      pkill -x CocxyTerminal >/dev/null 2>&1 || true
-      break
+      if [[ "$FORCE_KILL" == "1" ]]; then
+        while IFS= read -r pid; do
+          [[ -z "$pid" ]] && continue
+          process_line="$(/bin/ps eww -p "$pid" 2>/dev/null || true)"
+          if [[ "$process_line" == *"$BENCHMARK_ENV"* ]]; then
+            kill "$pid" >/dev/null 2>&1 || true
+          fi
+        done < <(pgrep -x CocxyTerminal 2>/dev/null || true)
+        break
+      fi
+      echo "Cocxy Terminal did not quit cleanly after the benchmark run." >&2
+      echo "Set COCXY_BENCH_FORCE_KILL=1 only when you need cleanup over crash-recovery purity." >&2
+      exit 1
     fi
     sleep 0.05
   done
 }
 
+find_benchmark_pid() {
+  local pid process_line
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    process_line="$(/bin/ps eww -p "$pid" 2>/dev/null || true)"
+    if [[ "$process_line" == *"$BENCHMARK_ENV"* ]]; then
+      printf '%s\n' "$pid"
+      return 0
+    fi
+  done < <(pgrep -x CocxyTerminal 2>/dev/null || true)
+  return 1
+}
+
+cleanup() {
+  if [[ -n "$APP_PID" ]] && kill -0 "$APP_PID" >/dev/null 2>&1; then
+    kill "$APP_PID" >/dev/null 2>&1 || true
+    wait "$APP_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
 quit_existing_app
-/usr/bin/open -n "$APP_PATH"
+/usr/bin/open -n --env "$BENCHMARK_ENV" "$APP_PATH"
 
 deadline=$((SECONDS + 10))
 until "$CLI" status >/dev/null 2>&1; do
@@ -68,8 +120,8 @@ until "$CLI" status >/dev/null 2>&1; do
   sleep 0.05
 done
 
-pid="$(pgrep -x CocxyTerminal | head -n 1 || true)"
-if [[ -z "$pid" ]]; then
+APP_PID="$(find_benchmark_pid || true)"
+if [[ -z "$APP_PID" ]]; then
   echo "CocxyTerminal process not found after launch" >&2
   exit 1
 fi
@@ -116,7 +168,7 @@ samples=0
 within="0"
 
 while (( SECONDS <= deadline )); do
-  snapshot="$(read_memory_snapshot "$pid")"
+  snapshot="$(read_memory_snapshot "$APP_PID")"
   rss_mb="${snapshot%% *}"
   footprint_mb="${snapshot##* }"
   samples=$((samples + 1))
@@ -138,7 +190,7 @@ elapsed_seconds="$(awk -v now="$SECONDS" -v start="$started_at" 'BEGIN { printf 
 printf '{\n'
 printf '  "app": "%s",\n' "$APP_PATH"
 printf '  "benchmark_kind": "memory-baseline",\n'
-printf '  "pid": %s,\n' "$pid"
+printf '  "pid": %s,\n' "$APP_PID"
 printf '  "warmup_seconds": %s,\n' "$STABILIZE_SECONDS"
 printf '  "measure_timeout_seconds": %s,\n' "$MEASURE_TIMEOUT_SECONDS"
 printf '  "elapsed_measure_seconds": %s,\n' "$elapsed_seconds"

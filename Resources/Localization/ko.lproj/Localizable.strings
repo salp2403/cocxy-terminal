@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault 전환";
 "keybindings.action.window.vaultSidebar.summary" = "로컬 외부 에이전트 세션 Vault를 표시하거나 숨깁니다.";
+
+"agentTeams.panel.title" = "에이전트 팀";
+"agentTeams.creator.title" = "에이전트 팀";
+"agentTeams.creator.placeholder" = "설계, 빌드, 리뷰";
+"agentTeams.creator.launch" = "실행";
+"agentTeams.graph.title" = "팀 그래프";
+"agentTeams.graph.accessibility" = "에이전트 팀 그래프";
+"agentTeams.feed.title" = "에이전트 피드";
+"agentTeams.feed.empty" = "팀 이벤트 없음";
+"agentTeams.feed.accessibility" = "에이전트 팀 피드";
+
+"cells.sidebar.accessibility" = "Cocxy 셀";
+"cells.sidebar.empty.title" = "셀 없음";
+"cells.sidebar.empty.message" = "로컬 또는 사용자 소유 클라우드 셀을 만듭니다.";
+"cells.toolbar.title" = "셀";
+"cells.toolbar.running" = "%d개 실행 중";
+"cells.toolbar.refresh" = "셀 새로 고침";
+"cells.toolbar.create" = "셀 만들기";
+"cells.card.destroy" = "셀 삭제";
+"cells.card.destroy.accessibility" = "%@ 삭제";
+"cells.create.title" = "셀 만들기";
+"cells.create.provider" = "공급자";
+"cells.create.profile" = "프로필";
+"cells.create.image" = "이미지 또는 템플릿";
+"cells.create.host" = "SSH 호스트";
+"cells.create.launch" = "만들기";

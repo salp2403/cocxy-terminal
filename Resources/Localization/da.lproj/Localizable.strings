@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Slå Vault til/fra";
 "keybindings.action.window.vaultSidebar.summary" = "Vis eller skjul den lokale Vault til eksterne agent-sessioner.";
+
+"agentTeams.panel.title" = "Agentteam";
+"agentTeams.creator.title" = "Agentteam";
+"agentTeams.creator.placeholder" = "Design, byg, gennemgå";
+"agentTeams.creator.launch" = "Start";
+"agentTeams.graph.title" = "Teamgraf";
+"agentTeams.graph.accessibility" = "Agentteamgraf";
+"agentTeams.feed.title" = "Agentfeed";
+"agentTeams.feed.empty" = "Ingen teamhændelser";
+"agentTeams.feed.accessibility" = "Agentteamfeed";
+
+"cells.sidebar.accessibility" = "Cocxy-celler";
+"cells.sidebar.empty.title" = "Ingen celler";
+"cells.sidebar.empty.message" = "Opret en lokal eller brugerejet cloud-celle.";
+"cells.toolbar.title" = "Celler";
+"cells.toolbar.running" = "%d kører";
+"cells.toolbar.refresh" = "Opdater celler";
+"cells.toolbar.create" = "Opret celle";
+"cells.card.destroy" = "Slet celle";
+"cells.card.destroy.accessibility" = "Slet %@";
+"cells.create.title" = "Opret celle";
+"cells.create.provider" = "Udbyder";
+"cells.create.profile" = "Profil";
+"cells.create.image" = "Image eller skabelon";
+"cells.create.host" = "SSH-vært";
+"cells.create.launch" = "Opret";

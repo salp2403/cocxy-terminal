@@ -36,15 +36,77 @@ struct BrowserConsoleSnapshotEntry: Equatable, Sendable {
     let timestamp: Date
 }
 
+struct BrowserInitScript: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let source: String
+    let createdAt: Date
+
+    var length: Int {
+        source.count
+    }
+}
+
+enum BrowserDialogKind: String, Equatable, Sendable {
+    case alert
+    case confirm
+    case prompt
+}
+
+enum BrowserDialogState: String, Equatable, Sendable {
+    case pending
+    case accepted
+    case dismissed
+}
+
+enum BrowserDialogResolution: Equatable, Sendable {
+    case accept(promptText: String?)
+    case dismiss
+}
+
+struct BrowserDialogItem: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let kind: BrowserDialogKind
+    let message: String
+    let defaultText: String?
+    let url: String?
+    let createdAt: Date
+    var state: BrowserDialogState
+    var resolvedAt: Date?
+}
+
+struct RemoteBrowserRouteRequest: Equatable, Sendable {
+    let remotePort: Int
+    let scheme: String
+    let path: String
+}
+
+enum RemoteBrowserNoticeKind: String, Equatable, Sendable {
+    case missingForward
+    case proxyConnecting
+    case proxyDegraded
+    case proxyFailed
+    case navigationFailed
+}
+
+struct RemoteBrowserNotice: Equatable, Sendable {
+    let kind: RemoteBrowserNoticeKind
+    let remoteProfile: RemoteBrowserProfile
+    let routeRequest: RemoteBrowserRouteRequest?
+    let failedURLString: String?
+    let detail: String?
+}
+
 final class BrowserAutomationBridgeStore: @unchecked Sendable {
     typealias ScriptEvaluator = (String, TimeInterval) -> BrowserScriptEvaluationResult
     typealias ScreenshotCapturer = (String?, TimeInterval) -> BrowserScreenshotCaptureResult
     typealias CookieImporter = (BrowserImportedCookie, UUID, TimeInterval) -> BrowserCookieImportResult
+    typealias InitScriptInstaller = (String, TimeInterval) -> BrowserScriptEvaluationResult
 
     private let lock = NSLock()
     private var evaluator: ScriptEvaluator?
     private var capturer: ScreenshotCapturer?
     private var cookieImporterValue: CookieImporter?
+    private var initScriptInstallerValue: InitScriptInstaller?
 
     var scriptEvaluator: ScriptEvaluator? {
         get {
@@ -85,6 +147,19 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         }
     }
 
+    var initScriptInstaller: InitScriptInstaller? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return initScriptInstallerValue
+        }
+        set {
+            lock.lock()
+            initScriptInstallerValue = newValue
+            lock.unlock()
+        }
+    }
+
     func evaluate(
         script: String,
         timeout: TimeInterval
@@ -108,6 +183,14 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
     ) -> BrowserCookieImportResult? {
         guard let cookieImporter else { return nil }
         return cookieImporter(cookie, profileID, timeout)
+    }
+
+    func installInitScript(
+        _ script: String,
+        timeout: TimeInterval
+    ) -> BrowserScriptEvaluationResult? {
+        guard let initScriptInstaller else { return nil }
+        return initScriptInstaller(script, timeout)
     }
 }
 
@@ -167,6 +250,12 @@ final class BrowserViewModel: ObservableObject {
     /// Active and completed downloads tracked by the browser.
     @Published var downloads: [DownloadItem] = []
 
+    /// User-added scripts injected at document start for future page loads.
+    @Published private(set) var initScripts: [BrowserInitScript] = []
+
+    /// JavaScript alert/confirm/prompt dialogs captured from WebKit.
+    @Published private(set) var browserDialogs: [BrowserDialogItem] = []
+
     // MARK: - Find-in-Page State
 
     /// The current find-in-page search text.
@@ -180,6 +269,15 @@ final class BrowserViewModel: ObservableObject {
 
     /// Whether click-to-capture mode is active in the current browser page.
     @Published var isDOMGrabActive: Bool = false
+
+    /// Optional remote workspace context for the active browser surface.
+    ///
+    /// Nil means the browser is local. Non-nil is metadata only; proxy
+    /// lifecycle stays owned by RemoteWorkspace services.
+    @Published private(set) var activeRemoteBrowserProfile: RemoteBrowserProfile?
+
+    /// Actionable notice for remote route failures or degraded proxy state.
+    @Published private(set) var remoteBrowserNotice: RemoteBrowserNotice?
 
     // MARK: - Navigation Actions
 
@@ -213,6 +311,9 @@ final class BrowserViewModel: ObservableObject {
     /// `navigationActionSubject` when this bridge is not installed.
     nonisolated let automationBridge = BrowserAutomationBridgeStore()
 
+    private var browserDialogCompletions: [UUID: (BrowserDialogResolution) -> Void] = [:]
+    private var lastRemoteBrowserRouteRequest: RemoteBrowserRouteRequest?
+
     var scriptEvaluator: BrowserAutomationBridgeStore.ScriptEvaluator? {
         get { automationBridge.scriptEvaluator }
         set { automationBridge.scriptEvaluator = newValue }
@@ -228,6 +329,12 @@ final class BrowserViewModel: ObservableObject {
     var cookieImporter: BrowserAutomationBridgeStore.CookieImporter? {
         get { automationBridge.cookieImporter }
         set { automationBridge.cookieImporter = newValue }
+    }
+
+    /// Native init-script bridge installed by the active WebKit host.
+    var initScriptInstaller: BrowserAutomationBridgeStore.InitScriptInstaller? {
+        get { automationBridge.initScriptInstaller }
+        set { automationBridge.initScriptInstaller = newValue }
     }
 
     private(set) var consoleSnapshotEntries: [BrowserConsoleSnapshotEntry] = []
@@ -273,6 +380,145 @@ final class BrowserViewModel: ObservableObject {
         guard activeProfileID != profileID else { return }
         activeProfileID = profileID
         navigationActionSubject.send(.load(currentURL ?? BrowserTab.defaultURL))
+    }
+
+    func attachRemoteBrowserProfile(_ remoteProfile: RemoteBrowserProfile) {
+        activeRemoteBrowserProfile = remoteProfile
+        remoteBrowserNotice = nil
+        publishProxyNoticeIfNeeded(for: remoteProfile)
+    }
+
+    @discardableResult
+    func openRemoteForward(
+        _ remoteProfile: RemoteBrowserProfile,
+        remotePort: Int,
+        scheme: String = "http",
+        path: String = "/"
+    ) -> RemoteBrowserRoute? {
+        let request = RemoteBrowserRouteRequest(remotePort: remotePort, scheme: scheme, path: path)
+        lastRemoteBrowserRouteRequest = request
+
+        guard let route = remoteProfile.route(
+            forRemotePort: remotePort,
+            scheme: scheme,
+            path: path
+        ) else {
+            remoteBrowserNotice = RemoteBrowserNotice(
+                kind: .missingForward,
+                remoteProfile: remoteProfile,
+                routeRequest: request,
+                failedURLString: nil,
+                detail: nil
+            )
+            return nil
+        }
+        activeRemoteBrowserProfile = remoteProfile
+        navigate(to: route.localURL.absoluteString)
+        remoteBrowserNotice = nil
+        publishProxyNoticeIfNeeded(for: remoteProfile)
+        return route
+    }
+
+    func clearRemoteBrowserProfile() {
+        activeRemoteBrowserProfile = nil
+        remoteBrowserNotice = nil
+        lastRemoteBrowserRouteRequest = nil
+    }
+
+    func updateRemoteBrowserProxyState(_ proxyState: ProxyState) {
+        guard var remoteProfile = activeRemoteBrowserProfile else { return }
+        remoteProfile.apply(proxyState: proxyState)
+        activeRemoteBrowserProfile = remoteProfile
+        publishProxyNoticeIfNeeded(for: remoteProfile)
+    }
+
+    func recordRemoteBrowserNavigationFailure(error: Error, failedURL: URL?) {
+        guard let remoteProfile = activeRemoteBrowserProfile else { return }
+        let request = routeRequest(forLocalURL: failedURL) ?? lastRemoteBrowserRouteRequest
+        remoteBrowserNotice = RemoteBrowserNotice(
+            kind: .navigationFailed,
+            remoteProfile: remoteProfile,
+            routeRequest: request,
+            failedURLString: failedURL?.absoluteString ?? currentURL?.absoluteString ?? urlString,
+            detail: error.localizedDescription
+        )
+    }
+
+    func recordRemoteBrowserNavigationSucceeded(url: URL?) {
+        guard activeRemoteBrowserProfile != nil else { return }
+        switch remoteBrowserNotice?.kind {
+        case .missingForward, .navigationFailed:
+            remoteBrowserNotice = nil
+        case .proxyConnecting, .proxyDegraded, .proxyFailed, nil:
+            break
+        }
+    }
+
+    @discardableResult
+    func retryRemoteBrowserNotice() -> RemoteBrowserRoute? {
+        guard let notice = remoteBrowserNotice else { return nil }
+        guard let request = notice.routeRequest else {
+            reload()
+            return nil
+        }
+
+        let profile = activeRemoteBrowserProfile ?? notice.remoteProfile
+        return openRemoteForward(
+            profile,
+            remotePort: request.remotePort,
+            scheme: request.scheme,
+            path: request.path
+        )
+    }
+
+    func dismissRemoteBrowserNotice() {
+        remoteBrowserNotice = nil
+    }
+
+    private func routeRequest(forLocalURL url: URL?) -> RemoteBrowserRouteRequest? {
+        guard let url,
+              let localPort = url.port,
+              let remoteProfile = activeRemoteBrowserProfile,
+              let match = remoteProfile.localForwardedPorts.first(where: { $0.value == localPort }) else {
+            return nil
+        }
+
+        let path = url.path.isEmpty ? "/" : url.path
+        return RemoteBrowserRouteRequest(
+            remotePort: match.key,
+            scheme: url.scheme ?? "http",
+            path: path
+        )
+    }
+
+    private func publishProxyNoticeIfNeeded(for remoteProfile: RemoteBrowserProfile) {
+        let kind: RemoteBrowserNoticeKind?
+        switch remoteProfile.proxyHealth {
+        case .connecting:
+            kind = .proxyConnecting
+        case .degraded:
+            kind = .proxyDegraded
+        case .failed:
+            kind = .proxyFailed
+        case .disconnected, .active:
+            kind = nil
+        }
+
+        guard let kind else {
+            if remoteBrowserNotice?.kind != .missingForward,
+               remoteBrowserNotice?.kind != .navigationFailed {
+                remoteBrowserNotice = nil
+            }
+            return
+        }
+
+        remoteBrowserNotice = RemoteBrowserNotice(
+            kind: kind,
+            remoteProfile: remoteProfile,
+            routeRequest: lastRemoteBrowserRouteRequest,
+            failedURLString: currentURL?.absoluteString,
+            detail: nil
+        )
     }
 
     // MARK: - Initialization
@@ -421,6 +667,114 @@ final class BrowserViewModel: ObservableObject {
         return scriptEvaluator(script, timeout)
     }
 
+    @discardableResult
+    func addInitScript(_ source: String) -> BrowserInitScript {
+        let script = BrowserInitScript(id: UUID(), source: source, createdAt: Date())
+        initScripts.append(script)
+        return script
+    }
+
+    func getInitScriptList() -> [[String: String]] {
+        let formatter = ISO8601DateFormatter()
+        return initScripts.map { script in
+            [
+                "id": script.id.uuidString,
+                "length": "\(script.length)",
+                "createdAt": formatter.string(from: script.createdAt)
+            ]
+        }
+    }
+
+    @discardableResult
+    func recordJavaScriptDialog(
+        kind: BrowserDialogKind,
+        message: String,
+        defaultText: String? = nil,
+        url: String? = nil,
+        completion: @escaping (BrowserDialogResolution) -> Void
+    ) -> BrowserDialogItem {
+        let item = BrowserDialogItem(
+            id: UUID(),
+            kind: kind,
+            message: message,
+            defaultText: defaultText,
+            url: url,
+            createdAt: Date(),
+            state: .pending,
+            resolvedAt: nil
+        )
+        browserDialogs.append(item)
+        browserDialogCompletions[item.id] = completion
+        pruneBrowserDialogHistory()
+        return item
+    }
+
+    func isJavaScriptDialogPending(_ id: UUID) -> Bool {
+        browserDialogs.contains { $0.id == id && $0.state == .pending }
+    }
+
+    func resolveJavaScriptDialog(
+        id rawID: String?,
+        resolution: BrowserDialogResolution
+    ) -> BrowserDialogItem? {
+        let targetID: UUID?
+        if let rawID, !rawID.isEmpty {
+            guard let parsed = UUID(uuidString: rawID) else { return nil }
+            targetID = parsed
+        } else {
+            targetID = browserDialogs.first { $0.state == .pending }?.id
+        }
+        guard let targetID,
+              let index = browserDialogs.firstIndex(where: { $0.id == targetID && $0.state == .pending }) else {
+            return nil
+        }
+
+        let newState: BrowserDialogState
+        switch resolution {
+        case .accept:
+            newState = .accepted
+        case .dismiss:
+            newState = .dismissed
+        }
+        browserDialogs[index].state = newState
+        browserDialogs[index].resolvedAt = Date()
+
+        let completion = browserDialogCompletions.removeValue(forKey: targetID)
+        completion?(resolution)
+        return browserDialogs[index]
+    }
+
+    func getBrowserDialogList() -> [[String: String]] {
+        let formatter = ISO8601DateFormatter()
+        return browserDialogs.suffix(50).map { dialog in
+            var row: [String: String] = [
+                "id": dialog.id.uuidString,
+                "type": dialog.kind.rawValue,
+                "state": dialog.state.rawValue,
+                "message": dialog.message,
+                "createdAt": formatter.string(from: dialog.createdAt)
+            ]
+            if let defaultText = dialog.defaultText {
+                row["defaultText"] = defaultText
+            }
+            if let url = dialog.url {
+                row["url"] = url
+            }
+            if let resolvedAt = dialog.resolvedAt {
+                row["resolvedAt"] = formatter.string(from: resolvedAt)
+            }
+            return row
+        }
+    }
+
+    private func pruneBrowserDialogHistory() {
+        while browserDialogs.count > 100,
+              let index = browserDialogs.firstIndex(where: { $0.state != .pending }) {
+            browserDialogCompletions.removeValue(forKey: browserDialogs[index].id)
+            browserDialogs.remove(at: index)
+        }
+    }
+
     func captureScreenshot(
         outputPath: String?,
         timeout: TimeInterval = 3
@@ -470,7 +824,7 @@ final class BrowserViewModel: ObservableObject {
     /// All values are serialized to strings for compatibility with the
     /// socket protocol wire format (`[String: String]`).
     func getState() -> [String: String] {
-        [
+        var state = [
             "url": currentURL?.absoluteString ?? "",
             "title": pageTitle,
             "isLoading": "\(isLoading)",
@@ -478,8 +832,37 @@ final class BrowserViewModel: ObservableObject {
             "canGoForward": "\(canGoForward)",
             "tabCount": "\(browserTabs.count)",
             "activeTabID": activeTabID?.uuidString ?? "",
-            "profileID": activeProfileID?.uuidString ?? ""
+            "profileID": activeProfileID?.uuidString ?? "",
+            "browserRoute": activeRemoteBrowserProfile == nil ? "local" : "remote"
         ]
+        if let remote = activeRemoteBrowserProfile {
+            state["remoteBrowserProfileID"] = remote.id.uuidString
+            state["remoteConnectionProfileID"] = remote.connectionProfileID.uuidString
+            state["remoteDisplayTitle"] = remote.displayTitle
+            state["remoteHost"] = remote.host
+            state["remoteProxyHealth"] = remote.proxyHealth.rawValue
+            state["remoteRouting"] = remote.routingSummary
+            if let socksPort = remote.socksPort {
+                state["remoteSOCKSPort"] = "\(socksPort)"
+            }
+            if let httpConnectPort = remote.httpConnectPort {
+                state["remoteHTTPConnectPort"] = "\(httpConnectPort)"
+            }
+        }
+        if let notice = remoteBrowserNotice {
+            state["remoteNotice"] = notice.kind.rawValue
+            state["remoteNoticeProfileID"] = notice.remoteProfile.id.uuidString
+            if let request = notice.routeRequest {
+                state["remoteNoticePort"] = "\(request.remotePort)"
+            }
+            if let failedURLString = notice.failedURLString {
+                state["remoteNoticeURL"] = failedURLString
+            }
+            if let detail = notice.detail {
+                state["remoteNoticeDetail"] = detail
+            }
+        }
+        return state
     }
 
     /// Returns a serializable list of browser tabs.

@@ -206,6 +206,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Active local agent-team coordinators keyed by team ID.
     var activeAgentTeamCoordinators: [String: AgentTeamCoordinator] = [:]
 
+    /// Runtime Agent Team hook projections keyed by team ID.
+    var activeAgentTeamRuns: [String: AgentTeamRunState] = [:]
+
     /// The agent config service for agents.toml hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigService: AgentConfigService?
@@ -504,6 +507,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> Bool {
         environment["COCXY_COLD_START_BENCHMARK"] == "1"
+            || environment["COCXY_MEMORY_BASELINE_BENCHMARK"] == "1"
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -738,7 +742,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .daemon:
             experimental = ExperimentalConfig(
                 pipEnabled: baseExperimental.pipEnabled,
-                ptyDaemonEnabled: true
+                ptyDaemonEnabled: true,
+                browserV2: baseExperimental.browserV2,
+                remoteBrowser: baseExperimental.remoteBrowser,
+                cells: baseExperimental.cells,
+                cocxyCoreMoat: baseExperimental.cocxyCoreMoat,
+                agentTeamsV2: baseExperimental.agentTeamsV2
             )
         }
         let helperURL = PTYDaemonHelperLocator().executableURL()
@@ -2710,6 +2719,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return fallback
                 }
                 return delegate.handleAgentTeamCLIRequest(kind: kind, params: params)
+            },
+            cellCLIProvider: { kind, params in
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleCellCLIRequest(kind: kind, params: params)
             }
         )
 

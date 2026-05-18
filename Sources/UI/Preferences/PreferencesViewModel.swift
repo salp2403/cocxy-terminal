@@ -2833,6 +2833,21 @@ final class PreferencesViewModel: ObservableObject {
         [experimental]
         pip-enabled = \(defaults.experimental.pipEnabled)
         pty-daemon = \(defaults.experimental.ptyDaemonEnabled)
+
+        [experimental.browser-v2]
+        enabled = \(defaults.experimental.browserV2.enabled)
+
+        [experimental.remote-browser]
+        enabled = \(defaults.experimental.remoteBrowser.enabled)
+
+        [experimental.cells]
+        enabled = \(defaults.experimental.cells.enabled)
+
+        [experimental.cocxycore-moat]
+        enabled = \(defaults.experimental.cocxyCoreMoat.enabled)
+
+        [experimental.agent-teams-v2]
+        enabled = \(defaults.experimental.agentTeamsV2.enabled)
         """
     }
 

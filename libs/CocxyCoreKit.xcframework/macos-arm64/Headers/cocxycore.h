@@ -2486,7 +2486,7 @@ uint16_t cocxycore_web_connection_count(
 
 /**
  * Connection event callback type.
- * @param event_type  0=connect, 1=disconnect, 2=auth_fail
+ * @param event_type  0=connect, 1=disconnect, 2=auth_fail, 3=auth_ok
  * @param conn_id     Connection identifier
  * @param context     User-provided context pointer
  */

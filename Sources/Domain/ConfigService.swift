@@ -700,6 +700,21 @@ final class ConfigService: ConfigProviding {
         # implementation path.
         pip-enabled = \(defaults.experimental.pipEnabled)
         pty-daemon = \(defaults.experimental.ptyDaemonEnabled)
+
+        [experimental.browser-v2]
+        enabled = \(defaults.experimental.browserV2.enabled)
+
+        [experimental.remote-browser]
+        enabled = \(defaults.experimental.remoteBrowser.enabled)
+
+        [experimental.cells]
+        enabled = \(defaults.experimental.cells.enabled)
+
+        [experimental.cocxycore-moat]
+        enabled = \(defaults.experimental.cocxyCoreMoat.enabled)
+
+        [experimental.agent-teams-v2]
+        enabled = \(defaults.experimental.agentTeamsV2.enabled)
         """
     }
 
@@ -1782,7 +1797,43 @@ final class ConfigService: ConfigProviding {
         let defaults = ExperimentalConfig.defaults
         return ExperimentalConfig(
             pipEnabled: boolValue(table["pip-enabled"]) ?? defaults.pipEnabled,
-            ptyDaemonEnabled: boolValue(table["pty-daemon"]) ?? defaults.ptyDaemonEnabled
+            ptyDaemonEnabled: boolValue(table["pty-daemon"]) ?? defaults.ptyDaemonEnabled,
+            browserV2: parseExperimentalNamespaceConfig(
+                "experimental.browser-v2",
+                from: parsed,
+                defaultValue: defaults.browserV2
+            ),
+            remoteBrowser: parseExperimentalNamespaceConfig(
+                "experimental.remote-browser",
+                from: parsed,
+                defaultValue: defaults.remoteBrowser
+            ),
+            cells: parseExperimentalNamespaceConfig(
+                "experimental.cells",
+                from: parsed,
+                defaultValue: defaults.cells
+            ),
+            cocxyCoreMoat: parseExperimentalNamespaceConfig(
+                "experimental.cocxycore-moat",
+                from: parsed,
+                defaultValue: defaults.cocxyCoreMoat
+            ),
+            agentTeamsV2: parseExperimentalNamespaceConfig(
+                "experimental.agent-teams-v2",
+                from: parsed,
+                defaultValue: defaults.agentTeamsV2
+            )
+        )
+    }
+
+    private func parseExperimentalNamespaceConfig(
+        _ sectionName: String,
+        from parsed: [String: TOMLValue],
+        defaultValue: ExperimentalFeatureNamespaceConfig
+    ) -> ExperimentalFeatureNamespaceConfig {
+        let table = extractTable(sectionName, from: parsed)
+        return ExperimentalFeatureNamespaceConfig(
+            enabled: boolValue(table["enabled"]) ?? defaultValue.enabled
         )
     }
 

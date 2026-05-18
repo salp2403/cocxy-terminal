@@ -71,6 +71,9 @@ final class CommandPaletteWiringTests: XCTestCase {
             "workspace.templates",
             "workspace.macros",
             "workspace.dbCloud",
+            "cells.list",
+            "cells.createDocker",
+            "cells.createSSH",
             "remote.toggle",
             "browser.history",
             "browser.bookmarks",
@@ -102,6 +105,19 @@ final class CommandPaletteWiringTests: XCTestCase {
             engine.search(query: "toggle theme").first?.id,
             "theme.cycle",
             "The light/dark theme action must be discoverable by the user-facing toggle wording."
+        )
+        let cellsResults = engine.search(query: "cells").map(\.id)
+        XCTAssertTrue(
+            cellsResults.contains("cells.list"),
+            "The runtime command palette must expose a Cells list action when searching for cells."
+        )
+        XCTAssertTrue(
+            cellsResults.contains("cells.createDocker"),
+            "The runtime command palette must expose a local Docker Cells creation action when searching for cells."
+        )
+        XCTAssertTrue(
+            cellsResults.contains("cells.createSSH"),
+            "The runtime command palette must expose an SSH Cells creation action when searching for cells."
         )
     }
 

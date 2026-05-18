@@ -3,8 +3,77 @@
 
 import Foundation
 
-enum AgentTeamProvider: String, Codable, Sendable, Equatable {
+enum AgentTeamProvider: String, CaseIterable, Codable, Sendable, Equatable {
     case claudeCode = "claude-code"
+    case codex
+    case opencode
+    case pi
+    case cursor
+    case gemini
+    case rovoDev = "rovo-dev"
+    case copilot
+    case codebuddy
+    case factory
+    case qoder
+    case kiro
+
+    var displayName: String {
+        switch self {
+        case .claudeCode:
+            return "Claude Code"
+        case .codex:
+            return "Codex CLI"
+        case .opencode:
+            return "OpenCode"
+        case .pi:
+            return "Pi"
+        case .cursor:
+            return "Cursor"
+        case .gemini:
+            return "Gemini CLI"
+        case .rovoDev:
+            return "Rovo Dev"
+        case .copilot:
+            return "Copilot"
+        case .codebuddy:
+            return "CodeBuddy"
+        case .factory:
+            return "Factory"
+        case .qoder:
+            return "Qoder"
+        case .kiro:
+            return "Kiro"
+        }
+    }
+
+    var executableCandidates: [String] {
+        switch self {
+        case .claudeCode:
+            return ["claude", "claude-code"]
+        case .codex:
+            return ["codex"]
+        case .opencode:
+            return ["opencode", "open-code"]
+        case .pi:
+            return ["pi"]
+        case .cursor:
+            return ["cursor-agent", "cursor"]
+        case .gemini:
+            return ["gemini"]
+        case .rovoDev:
+            return ["acli", "rovodev", "rovo"]
+        case .copilot:
+            return ["copilot"]
+        case .codebuddy:
+            return ["codebuddy"]
+        case .factory:
+            return ["droid", "factory"]
+        case .qoder:
+            return ["qodercli", "qoder"]
+        case .kiro:
+            return ["kiro", "kiro-cli"]
+        }
+    }
 }
 
 enum AgentTeamStatus: String, Codable, Sendable, Equatable {
@@ -148,43 +217,64 @@ struct AgentTeamLaunchResult: Sendable, Equatable {
     let teamID: String
     let launchedCount: Int
     let teammateIDs: [String]
+    let launchSpecs: [AgentTeamProviderLaunchSpec]
 }
 
 @MainActor
 protocol AgentTeamPaneLaunching: AnyObject {
-    func spawnAgentTeamPane(teammateID: String, sessionID: String, agentType: String) -> Bool
+    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool
 }
 
 @MainActor
 final class AgentTeamLauncher {
     private weak var paneLauncher: (any AgentTeamPaneLaunching)?
+    private let adapterRegistry: AgentTeamProviderAdapterRegistry
+    private let launchProfileProvider: @Sendable (AgentTeammateConfig) -> AgentTeamLaunchProfile
 
-    init(paneLauncher: any AgentTeamPaneLaunching) {
+    init(
+        paneLauncher: any AgentTeamPaneLaunching,
+        adapterRegistry: AgentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry(),
+        launchProfileProvider: @escaping @Sendable (AgentTeammateConfig) -> AgentTeamLaunchProfile = { _ in
+            AgentTeamLaunchProfile()
+        }
+    ) {
         self.paneLauncher = paneLauncher
+        self.adapterRegistry = adapterRegistry
+        self.launchProfileProvider = launchProfileProvider
     }
 
     func launch(config: AgentTeamConfig) throws -> AgentTeamLaunchResult {
         guard let paneLauncher else {
             throw AgentTeamError.paneLaunchFailed("missing pane launcher")
         }
+        guard let adapter = adapterRegistry.adapter(for: config.provider) else {
+            throw AgentTeamProviderAdapterError.executableUnavailable(
+                provider: config.provider,
+                candidates: config.provider.executableCandidates
+            )
+        }
 
         var launchedIDs: [String] = []
+        var launchSpecs: [AgentTeamProviderLaunchSpec] = []
         for teammate in config.teammates {
-            let didLaunch = paneLauncher.spawnAgentTeamPane(
-                teammateID: teammate.id,
-                sessionID: config.id,
-                agentType: teammate.name
+            let launchSpec = try adapter.makeLaunchSpec(
+                config: config,
+                teammate: teammate,
+                profile: launchProfileProvider(teammate)
             )
+            let didLaunch = paneLauncher.spawnAgentTeamPane(launchSpec: launchSpec)
             guard didLaunch else {
                 throw AgentTeamError.paneLaunchFailed(teammate.id)
             }
             launchedIDs.append(teammate.id)
+            launchSpecs.append(launchSpec)
         }
 
         return AgentTeamLaunchResult(
             teamID: config.id,
             launchedCount: launchedIDs.count,
-            teammateIDs: launchedIDs
+            teammateIDs: launchedIDs,
+            launchSpecs: launchSpecs
         )
     }
 }

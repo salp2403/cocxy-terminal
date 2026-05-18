@@ -76,6 +76,13 @@ extension AppDelegate {
             }
             .store(in: &hookCancellables)
 
+        hookEventReceiver?.eventPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] event in
+                self?.applyAgentTeamHookEvent(event)
+            }
+            .store(in: &hookCancellables)
+
         // Start watching agents.toml for hot-reload. File changes are
         // debounced (500ms) and routed through the config service's
         // Combine publisher to update the pattern detector live.

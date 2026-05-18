@@ -57,11 +57,22 @@ struct AgentTeammateRowView: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var accessibilityLabel: String {
+        if notifications.isEmpty {
+            return "\(teammate.name), \(teammate.status.rawValue)"
+        }
+        return "\(teammate.name), \(teammate.status.rawValue), \(notifications.count) notifications"
     }
 }
 
 struct AgentTeamPanelView: View {
     let coordinator: AgentTeamCoordinator
+    var graph: AgentTeamGraph?
+    var feed: AgentTeamFeed?
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
@@ -80,8 +91,18 @@ struct AgentTeamPanelView: View {
                     notifications: coordinator.notifications(for: teammate.id)
                 )
             }
+            if let graph {
+                Divider()
+                TeamGraphView(graph: graph, localizer: localizer)
+            }
+            if let feed {
+                Divider()
+                AgentTeamFeedView(feed: feed, localizer: localizer)
+            }
         }
         .padding(12)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(localizer.string("agentTeams.panel.title", fallback: "Agent Team"))
     }
 }
 
@@ -114,18 +135,19 @@ struct AgentTeamCreatorSheet: View {
 }
 
 extension MainWindowController: AgentTeamPaneLaunching {
-    func spawnAgentTeamPane(teammateID: String, sessionID: String, agentType: String) -> Bool {
+    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
         let before = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count
         spawnSubagentPanel(
-            subagentId: teammateID,
-            sessionId: sessionID,
-            agentType: agentType,
+            subagentId: launchSpec.teammateID,
+            sessionId: launchSpec.teamID,
+            agentType: "\(launchSpec.teammateName) - \(launchSpec.provider.displayName)",
             targetTabId: visibleTabID?.rawValue ?? tabManager.activeTabID?.rawValue
         )
         let after = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count
         return after > before || panelContentViews.values.contains { view in
             guard let subagentView = view as? SubagentContentView else { return false }
-            return subagentView.subagentId == teammateID && subagentView.sessionId == sessionID
+            return subagentView.subagentId == launchSpec.teammateID
+                && subagentView.sessionId == launchSpec.teamID
         }
     }
 }

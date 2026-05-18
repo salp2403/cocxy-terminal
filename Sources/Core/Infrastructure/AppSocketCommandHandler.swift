@@ -152,6 +152,13 @@ struct SearchCommandResult: Sendable {
 /// - SeeAlso: `SocketCommandHandling` protocol
 /// - SeeAlso: `CLICommandName` for the closed set of valid commands.
 final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable {
+    private static let experimentalRolloutConfigKeys: Set<String> = [
+        "experimental.browser-v2.enabled",
+        "experimental.remote-browser.enabled",
+        "experimental.cells.enabled",
+        "experimental.cocxycore-moat.enabled",
+        "experimental.agent-teams-v2.enabled",
+    ]
 
     // MARK: - Dependencies
 
@@ -395,6 +402,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// can create panes on the focused window without owning UI state.
     let agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Routes `cocxy cell-*` verbs through the app-owned Cells coordinator.
+    let cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Starts a web terminal on the focused surface and returns status fields.
     let webStartProvider: (@Sendable (String, UInt16, String, UInt16, UInt32) -> [String: String]?)?
 
@@ -593,7 +603,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
-        agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
+        agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.configProvider = configProvider
         self.statusDetailsProvider = statusDetailsProvider
@@ -677,6 +688,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.githubCLIProvider = githubCLIProvider
         self.gitAssistantCLIProvider = gitAssistantCLIProvider
         self.agentTeamCLIProvider = agentTeamCLIProvider
+        self.cellCLIProvider = cellCLIProvider
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -941,6 +953,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleConfigPath(request)
         case .configProject:
             return handleConfigProject(request)
+        case .importConfig:
+            return handleImportConfig(request)
 
         // Theme operations
         case .themeList:
@@ -963,18 +977,104 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserReload(request)
         case .browserGetState:
             return handleBrowserGetState(request)
+        case .browserStateSave:
+            return handleBrowserStateSave(request)
+        case .browserStateLoad:
+            return handleBrowserStateLoad(request)
         case .browserEval:
             return handleBrowserEval(request)
+        case .browserAddScript:
+            return handleBrowserAddScript(request)
+        case .browserAddStyle:
+            return handleBrowserAddStyle(request)
+        case .browserInitScriptAdd:
+            return handleBrowserInitScriptAdd(request)
+        case .browserInitScriptsList:
+            return handleBrowserInitScriptsList(request)
+        case .browserDialogs:
+            return handleBrowserDialogs(request)
+        case .browserDialogAccept:
+            return handleBrowserDialogAccept(request)
+        case .browserDialogDismiss:
+            return handleBrowserDialogDismiss(request)
         case .browserGetText:
             return handleBrowserGetText(request)
         case .browserListTabs:
             return handleBrowserListTabs(request)
         case .browserSnapshot:
             return handleBrowserSnapshot(request)
+        case .browserContext:
+            return handleBrowserContext(request)
         case .browserClick:
             return handleBrowserClick(request)
+        case .browserDblClick:
+            return handleBrowserDblClick(request)
+        case .browserHover:
+            return handleBrowserHover(request)
+        case .browserFocus:
+            return handleBrowserFocus(request)
         case .browserFill:
             return handleBrowserFill(request)
+        case .browserUpload:
+            return handleBrowserUpload(request)
+        case .browserType:
+            return handleBrowserType(request)
+        case .browserPress:
+            return handleBrowserKey(request, mode: .press)
+        case .browserKeyDown:
+            return handleBrowserKey(request, mode: .down)
+        case .browserKeyUp:
+            return handleBrowserKey(request, mode: .up)
+        case .browserCheck:
+            return handleBrowserCheck(request)
+        case .browserUncheck:
+            return handleBrowserUncheck(request)
+        case .browserSelect:
+            return handleBrowserSelect(request)
+        case .browserScroll:
+            return handleBrowserScroll(request)
+        case .browserScrollIntoView:
+            return handleBrowserScrollIntoView(request)
+        case .browserGetHTML:
+            return handleBrowserGetHTML(request)
+        case .browserGetValue:
+            return handleBrowserGetValue(request)
+        case .browserGetAttr:
+            return handleBrowserGetAttr(request)
+        case .browserGetTitle:
+            return handleBrowserGetTitle(request)
+        case .browserGetCount:
+            return handleBrowserGetCount(request)
+        case .browserGetBox:
+            return handleBrowserGetBox(request)
+        case .browserGetStyles:
+            return handleBrowserGetStyles(request)
+        case .browserIsVisible:
+            return handleBrowserIsVisible(request)
+        case .browserIsEnabled:
+            return handleBrowserIsEnabled(request)
+        case .browserIsChecked:
+            return handleBrowserIsChecked(request)
+        case .browserFindRole:
+            return handleBrowserFindRole(request)
+        case .browserFindText:
+            return handleBrowserFindText(request)
+        case .browserFindLabel:
+            return handleBrowserFindAttributeText(request, attribute: "label")
+        case .browserFindPlaceholder:
+            return handleBrowserFindAttributeText(request, attribute: "placeholder")
+        case .browserFindAlt:
+            return handleBrowserFindAttributeText(request, attribute: "alt")
+        case .browserFindTitle:
+            return handleBrowserFindAttributeText(request, attribute: "title")
+        case .browserFindTestID:
+            return handleBrowserFindTestID(request)
+        case .browserFindFirst:
+            return handleBrowserFindSelector(request, mode: .first)
+        case .browserFindLast:
+            return handleBrowserFindSelector(request, mode: .last)
+        case .browserFindNth:
+            return handleBrowserFindSelector(request, mode: .nth)
         case .browserScreenshot:
             return handleBrowserScreenshot(request)
         case .browserConsole:
@@ -989,6 +1089,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserCookiesDelete(request)
         case .browserNetwork:
             return handleBrowserNetwork(request)
+        case .browserFrames:
+            return handleBrowserFrames(request)
+        case .browserDownloads:
+            return handleBrowserDownloads(request)
+        case .browserStorageList:
+            return handleBrowserStorageList(request)
+        case .browserStorageGet:
+            return handleBrowserStorageGet(request)
+        case .browserStorageSet:
+            return handleBrowserStorageSet(request)
+        case .browserStorageDelete:
+            return handleBrowserStorageDelete(request)
         case .browserImportPreview:
             return handleBrowserImport(kind: "preview", request: request)
         case .browserImportRun:
@@ -1011,6 +1123,20 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleRemoteStatus(request)
         case .remoteTunnels:
             return handleRemoteTunnels(request)
+        case .cellCreate:
+            return handleCell(kind: "create", request: request)
+        case .cellList:
+            return handleCell(kind: "list", request: request)
+        case .cellExec:
+            return handleCell(kind: "exec", request: request)
+        case .cellAttach:
+            return handleCell(kind: "attach", request: request)
+        case .cellDestroy:
+            return handleCell(kind: "destroy", request: request)
+        case .cellLogs:
+            return handleCell(kind: "logs", request: request)
+        case .cellStatus:
+            return handleCell(kind: "status", request: request)
 
         // Plugin commands
         case .pluginList:
@@ -1592,6 +1718,57 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         return .ok(id: request.id, data: ["path": configPath])
     }
 
+    /// Previews an external terminal config import.
+    ///
+    /// Required params: `source`, `path`. Apply mode is intentionally
+    /// rejected until the merge writer can create a backup and preserve
+    /// hand-edited Cocxy config comments.
+    private func handleImportConfig(_ request: SocketRequest) -> SocketResponse {
+        guard let rawSource = nonEmptyParam(request.params?["source"]) else {
+            return .failure(id: request.id, error: "Missing required param: source")
+        }
+        guard let source = TerminalConfigImportSource(rawValue: rawSource) else {
+            return .failure(id: request.id, error: "Unsupported config import source: \(rawSource)")
+        }
+        guard let path = nonEmptyParam(request.params?["path"]) else {
+            return .failure(id: request.id, error: "Missing required param: path")
+        }
+        let dryRun = request.params?["dry-run"] != "false"
+        guard dryRun else {
+            return .failure(
+                id: request.id,
+                error: "Config import apply is disabled in this build; rerun with --dry-run."
+            )
+        }
+        let sourceURL = URL(fileURLWithPath: path)
+        do {
+            let contents = try String(contentsOf: sourceURL, encoding: .utf8)
+            let registry = TerminalConfigImporterRegistry()
+            guard let importer = registry.importer(for: source) else {
+                return .failure(id: request.id, error: "Unsupported config import source: \(rawSource)")
+            }
+            let preview = try importer.preview(contents: contents, sourceURL: sourceURL)
+            var data: [String: String] = [
+                "status": "preview",
+                "source": preview.source.rawValue,
+                "path": preview.sourcePath,
+                "count": "\(preview.changes.count)",
+                "backup-required": "\(preview.requiresBackupBeforeApply)",
+            ]
+            for (index, change) in preview.changes.enumerated() {
+                data["change_\(index)_key"] = change.keyPath
+                data["change_\(index)_value"] = change.value
+                data["change_\(index)_source-key"] = change.sourceKey
+            }
+            for (index, warning) in preview.warnings.enumerated() {
+                data["warning_\(index)"] = warning
+            }
+            return .ok(id: request.id, data: data)
+        } catch {
+            return .failure(id: request.id, error: "Unable to import config: \(error.localizedDescription)")
+        }
+    }
+
     /// Reads a configuration value by its dotted key path.
     ///
     /// Required params: `key` (dotted path like "appearance.theme").
@@ -1952,6 +2129,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.experimental.pipEnabled)"
         case "experimental.pty-daemon":
             return "\(config.experimental.ptyDaemonEnabled)"
+        case "experimental.browser-v2.enabled":
+            return "\(config.experimental.browserV2.enabled)"
+        case "experimental.remote-browser.enabled":
+            return "\(config.experimental.remoteBrowser.enabled)"
+        case "experimental.cells.enabled":
+            return "\(config.experimental.cells.enabled)"
+        case "experimental.cocxycore-moat.enabled":
+            return "\(config.experimental.cocxyCoreMoat.enabled)"
+        case "experimental.agent-teams-v2.enabled":
+            return "\(config.experimental.agentTeamsV2.enabled)"
 
         // Keybindings
         case "keybindings.new-tab":
@@ -2066,6 +2253,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 return nil
             }
             return "\(value)"
+        case _ where Self.experimentalRolloutConfigKeys.contains(key):
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
         default:
             return AppSocketConfigTOMLUpdater.renderedScalarValue(rawValue)
         }
@@ -2111,6 +2301,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Maximum allowed JavaScript evaluation script size in characters.
     private static let maxBrowserEvalLength = 10_000
+
+    /// Maximum state snapshot size accepted for browser state save/load.
+    private static let maxBrowserStateFileBytes = 2_000_000
+
+    /// Maximum local file payload accepted by `browser-upload`.
+    private static let maxBrowserUploadFileBytes = 1_048_576
+
+    /// Inline screenshot data must fit inside the CLI socket frame.
+    private static let maxInlineBrowserScreenshotDataURLBytes =
+        Int(SocketMessageFraming.maxPayloadSize) - 8_192
 
     /// Navigates the embedded browser to a URL.
     ///
@@ -2203,6 +2403,87 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         return .ok(id: request.id, data: state)
     }
 
+    private func handleBrowserStateSave(_ request: SocketRequest) -> SocketResponse {
+        guard let fileURL = browserStateFileURL(from: request) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: path")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.stateSnapshotScript,
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        guard let snapshot = result.value,
+              let snapshotData = snapshot.data(using: .utf8),
+              snapshotData.count <= Self.maxBrowserStateFileBytes,
+              var summary = BrowserAutomationScriptLibrary.browserStateSummary(from: snapshot) else {
+            return .failure(id: request.id, error: "Browser state snapshot was invalid or too large")
+        }
+
+        do {
+            try snapshotData.write(to: fileURL, options: .atomic)
+        } catch {
+            return .failure(id: request.id, error: "Failed to save browser state: \(error.localizedDescription)")
+        }
+
+        summary["status"] = "saved"
+        summary["path"] = fileURL.path
+        summary["bytes"] = "\(snapshotData.count)"
+        return .ok(id: request.id, data: summary)
+    }
+
+    private func handleBrowserStateLoad(_ request: SocketRequest) -> SocketResponse {
+        guard let fileURL = browserStateFileURL(from: request) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: path")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let snapshotData: Data
+        do {
+            snapshotData = try Data(contentsOf: fileURL)
+        } catch {
+            return .failure(id: request.id, error: "Failed to read browser state: \(error.localizedDescription)")
+        }
+        guard snapshotData.count <= Self.maxBrowserStateFileBytes,
+              let snapshot = String(data: snapshotData, encoding: .utf8),
+              BrowserAutomationScriptLibrary.browserStateSummary(from: snapshot) != nil else {
+            return .failure(id: request.id, error: "Browser state file was invalid or too large")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.stateLoadScript(snapshotJSON: snapshot),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+
+        var data = BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? "")
+        data["path"] = fileURL.path
+        data["bytes"] = "\(snapshotData.count)"
+        return .ok(id: request.id, data: data)
+    }
+
+    private func browserStateFileURL(from request: SocketRequest) -> URL? {
+        guard let path = request.params?["path"],
+              !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              path.count <= 4_096,
+              !path.contains("\0") else {
+            return nil
+        }
+        let expandedPath = NSString(string: path).expandingTildeInPath
+        return URL(fileURLWithPath: expandedPath)
+    }
+
     /// Evaluates JavaScript in the active browser tab.
     ///
     /// Required params: `script` (the JavaScript code, max 10,000 characters).
@@ -2236,6 +2517,201 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         var data = ["status": "evaluated"]
         if let value = result.value, !value.isEmpty {
             data["result"] = value
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserAddScript(_ request: SocketRequest) -> SocketResponse {
+        guard let script = request.params?["script"], !script.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: script")
+        }
+        guard script.count <= Self.maxBrowserEvalLength else {
+            return .failure(
+                id: request.id,
+                error: "Script length \(script.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+            )
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.addScriptScript(source: script),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? ""))
+    }
+
+    private func handleBrowserAddStyle(_ request: SocketRequest) -> SocketResponse {
+        guard let css = request.params?["css"], !css.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: css")
+        }
+        guard css.count <= Self.maxBrowserEvalLength else {
+            return .failure(
+                id: request.id,
+                error: "CSS length \(css.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+            )
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.addStyleScript(css: css),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? ""))
+    }
+
+    private func handleBrowserInitScriptAdd(_ request: SocketRequest) -> SocketResponse {
+        guard let script = request.params?["script"], !script.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: script")
+        }
+        guard script.count <= Self.maxBrowserEvalLength else {
+            return .failure(
+                id: request.id,
+                error: "Script length \(script.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+            )
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let initScript: BrowserInitScript
+        if Thread.isMainThread {
+            initScript = MainActor.assumeIsolated {
+                viewModel.addInitScript(script)
+            }
+        } else {
+            initScript = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.addInitScript(script)
+                }
+            }
+        }
+
+        let installResult = viewModel.automationBridge.installInitScript(script, timeout: 3)
+        var data: [String: String] = [
+            "status": "added",
+            "id": initScript.id.uuidString,
+            "length": "\(initScript.length)",
+            "installed": installResult?.error == nil ? "true" : "false"
+        ]
+        if let error = installResult?.error {
+            data["installError"] = error
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserInitScriptsList(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let scripts: [[String: String]]
+        if Thread.isMainThread {
+            scripts = MainActor.assumeIsolated {
+                viewModel.getInitScriptList()
+            }
+        } else {
+            scripts = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.getInitScriptList()
+                }
+            }
+        }
+
+        var data: [String: String] = [
+            "status": "ok",
+            "count": "\(scripts.count)"
+        ]
+        for (index, script) in scripts.prefix(50).enumerated() {
+            data["script_\(index)_id"] = script["id"] ?? ""
+            data["script_\(index)_length"] = script["length"] ?? "0"
+            data["script_\(index)_createdAt"] = script["createdAt"] ?? ""
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserDialogs(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let dialogs: [[String: String]]
+        if Thread.isMainThread {
+            dialogs = MainActor.assumeIsolated {
+                viewModel.getBrowserDialogList()
+            }
+        } else {
+            dialogs = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.getBrowserDialogList()
+                }
+            }
+        }
+
+        var data: [String: String] = [
+            "status": "ok",
+            "count": "\(dialogs.count)"
+        ]
+        for (index, dialog) in dialogs.prefix(50).enumerated() {
+            for (key, value) in dialog {
+                data["dialog_\(index)_\(key)"] = value
+            }
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserDialogAccept(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserDialogResolution(request, resolution: .accept(promptText: request.params?["promptText"]))
+    }
+
+    private func handleBrowserDialogDismiss(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserDialogResolution(request, resolution: .dismiss)
+    }
+
+    private func handleBrowserDialogResolution(
+        _ request: SocketRequest,
+        resolution: BrowserDialogResolution
+    ) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let id = request.params?["id"]
+        let dialog: BrowserDialogItem?
+        if Thread.isMainThread {
+            dialog = MainActor.assumeIsolated {
+                viewModel.resolveJavaScriptDialog(id: id, resolution: resolution)
+            }
+        } else {
+            dialog = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.resolveJavaScriptDialog(id: id, resolution: resolution)
+                }
+            }
+        }
+        guard let dialog else {
+            return .failure(id: request.id, error: "No matching pending browser dialog")
+        }
+
+        var data: [String: String] = [
+            "status": dialog.state.rawValue,
+            "id": dialog.id.uuidString,
+            "type": dialog.kind.rawValue,
+            "message": dialog.message
+        ]
+        if let defaultText = dialog.defaultText {
+            data["defaultText"] = defaultText
+        }
+        if let url = dialog.url {
+            data["url"] = url
         }
         return .ok(id: request.id, data: data)
     }
@@ -2300,20 +2776,661 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
         let result = browserScriptResult(
             viewModel: viewModel,
-            script: Self.browserSnapshotScript,
+            script: BrowserAutomationScriptLibrary.snapshotScript,
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        var data = BrowserAutomationScriptLibrary.hybridSnapshotData(from: result.value ?? "[]")
+        let consoleEntries = browserConsoleSnapshotEntries(from: viewModel)
+        data["consoleCount"] = "\(consoleEntries.count)"
+        data["consoleErrors"] = "\(consoleEntries.filter { $0.level.lowercased() == "error" }.count)"
+        for (index, entry) in consoleEntries.filter({ $0.level.lowercased() == "error" }).suffix(5).enumerated() {
+            data["console_error_\(index)"] = entry.message
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserContext(_ request: SocketRequest) -> SocketResponse {
+        let targetRef = request.params?["target"]
+        if let targetRef, !BrowserAutomationScriptLibrary.isValidRef(targetRef) {
+            return .failure(id: request.id, error: "Invalid param: target")
+        }
+        guard let around = browserContextBoundedInteger(
+            from: request,
+            key: "around",
+            defaultValue: 3,
+            range: 0...20
+        ) else {
+            return .failure(id: request.id, error: "Invalid around value. Use 0...20.")
+        }
+        guard let consoleTail = browserContextBoundedInteger(
+            from: request,
+            key: "console",
+            defaultValue: 20,
+            range: 0...100
+        ) else {
+            return .failure(id: request.id, error: "Invalid console value. Use 0...100.")
+        }
+        guard let networkTail = browserContextBoundedInteger(
+            from: request,
+            key: "network",
+            defaultValue: 20,
+            range: 0...100
+        ) else {
+            return .failure(id: request.id, error: "Invalid network value. Use 0...100.")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.contextPackScript(
+                targetRef: targetRef,
+                around: around,
+                networkTail: networkTail
+            ),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+
+        var data = BrowserAutomationScriptLibrary.contextPackData(from: result.value ?? "{}")
+        let consoleEntries = Array(browserConsoleSnapshotEntries(from: viewModel).suffix(consoleTail))
+        data["console"] = browserConsoleContextJSON(from: consoleEntries)
+        data["consoleCount"] = "\(consoleEntries.count)"
+        data["consoleErrors"] = "\(consoleEntries.filter { $0.level.lowercased() == "error" }.count)"
+        data["around"] = "\(around)"
+        data["networkTail"] = "\(networkTail)"
+        data["consoleTail"] = "\(consoleTail)"
+        if let targetRef {
+            data["requestedTarget"] = targetRef
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func browserContextBoundedInteger(
+        from request: SocketRequest,
+        key: String,
+        defaultValue: Int,
+        range: ClosedRange<Int>
+    ) -> Int? {
+        guard let rawValue = request.params?[key] else { return defaultValue }
+        guard let parsed = Int(rawValue), range.contains(parsed) else { return nil }
+        return parsed
+    }
+
+    private func browserConsoleContextJSON(from entries: [BrowserConsoleSnapshotEntry]) -> String {
+        let formatter = ISO8601DateFormatter()
+        let rawEntries = entries.map { entry in
+            [
+                "level": entry.level,
+                "message": entry.message,
+                "timestamp": formatter.string(from: entry.timestamp)
+            ]
+        }
+        return BrowserAutomationScriptLibrary.compactJSONString(rawEntries)
+    }
+
+    private func handleBrowserClick(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.clickScript(ref: ref, timeoutMilliseconds: timeoutMilliseconds),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "clicked",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserDblClick(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.doubleClickScript(ref: ref, timeoutMilliseconds: timeoutMilliseconds),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "dblclicked",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserHover(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.hoverScript(ref: ref, timeoutMilliseconds: timeoutMilliseconds),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "hovered",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserFocus(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.focusScript(ref: ref, timeoutMilliseconds: timeoutMilliseconds),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "focused",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserFill(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let text = request.params?["text"] else {
+            return .failure(id: request.id, error: "Missing required param: text")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.fillScript(
+                ref: ref,
+                text: text,
+                timeoutMilliseconds: timeoutMilliseconds
+            ),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "filled",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserUpload(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let rawPath = request.params?["path"],
+              !rawPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              rawPath.count <= 4_096,
+              !rawPath.contains("\0") else {
+            return .failure(id: request.id, error: "Missing or invalid required param: path")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let expandedPath = NSString(string: rawPath).expandingTildeInPath
+        let fileURL = URL(fileURLWithPath: expandedPath)
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
+              !isDirectory.boolValue else {
+            return .failure(id: request.id, error: "Upload file not found or is a directory")
+        }
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path),
+           let fileSize = attributes[.size] as? NSNumber,
+           fileSize.int64Value > Int64(Self.maxBrowserUploadFileBytes) {
+            return .failure(
+                id: request.id,
+                error: "Upload file exceeds maximum \(Self.maxBrowserUploadFileBytes) bytes"
+            )
+        }
+
+        let payload: Data
+        do {
+            payload = try Data(contentsOf: fileURL)
+        } catch {
+            return .failure(id: request.id, error: "Failed to read upload file: \(error.localizedDescription)")
+        }
+        guard payload.count <= Self.maxBrowserUploadFileBytes else {
+            return .failure(
+                id: request.id,
+                error: "Upload file exceeds maximum \(Self.maxBrowserUploadFileBytes) bytes"
+            )
+        }
+
+        let fileName = fileURL.lastPathComponent.isEmpty ? "upload.bin" : fileURL.lastPathComponent
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.uploadFileScript(
+                ref: ref,
+                fileName: fileName,
+                mimeType: "application/octet-stream",
+                base64Data: payload.base64EncodedString(),
+                byteCount: payload.count,
+                timeoutMilliseconds: timeoutMilliseconds
+            ),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "uploaded",
+            ref: ref,
+            extra: [
+                "fileName": fileName,
+                "bytes": "\(payload.count)"
+            ],
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserType(_ request: SocketRequest) -> SocketResponse {
+        let ref = request.params?["ref"]
+        if let ref, !BrowserAutomationScriptLibrary.isValidRef(ref) {
+            return .failure(id: request.id, error: "Invalid param: ref")
+        }
+        guard let text = request.params?["text"] else {
+            return .failure(id: request.id, error: "Missing required param: text")
+        }
+        guard text.count <= Self.maxBrowserEvalLength else {
+            return .failure(
+                id: request.id,
+                error: "Text length \(text.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+            )
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.typeScript(
+                ref: ref,
+                text: text,
+                timeoutMilliseconds: timeoutMilliseconds
+            ),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "typed",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserKey(_ request: SocketRequest, mode: BrowserAutomationKeyMode) -> SocketResponse {
+        guard let key = request.params?["key"], BrowserAutomationScriptLibrary.isValidKey(key) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: key")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.keyScript(key: key, mode: mode),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: mode.status,
+            ref: nil,
+            extra: ["key": key],
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserCheck(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserCheckedState(request, checked: true)
+    }
+
+    private func handleBrowserUncheck(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserCheckedState(request, checked: false)
+    }
+
+    private func handleBrowserCheckedState(_ request: SocketRequest, checked: Bool) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.checkedStateScript(
+                ref: ref,
+                checked: checked,
+                timeoutMilliseconds: timeoutMilliseconds
+            ),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        let fallbackStatus = checked ? "checked" : "unchecked"
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: fallbackStatus,
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserSelect(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let value = request.params?["value"], !value.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: value")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.selectScript(
+                ref: ref,
+                value: value,
+                timeoutMilliseconds: timeoutMilliseconds
+            ),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "selected",
+            ref: ref,
+            extra: ["value": value],
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserScroll(_ request: SocketRequest) -> SocketResponse {
+        guard
+            let xRaw = request.params?["x"],
+            let yRaw = request.params?["y"],
+            let x = Int(xRaw),
+            let y = Int(yRaw)
+        else {
+            return .failure(id: request.id, error: "Missing or invalid required params: x, y")
+        }
+        guard BrowserAutomationScriptLibrary.isValidScrollDelta(x), BrowserAutomationScriptLibrary.isValidScrollDelta(y) else {
+            return .failure(id: request.id, error: "Scroll deltas must be between -100000 and 100000 pixels")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.scrollScript(x: x, y: y),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "scrolled",
+            ref: nil,
+            extra: ["x": "\(x)", "y": "\(y)"],
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserScrollIntoView(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let timeoutMilliseconds = browserActionTimeoutMilliseconds(from: request) else {
+            return invalidBrowserActionTimeoutResponse(id: request.id)
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.scrollIntoViewScript(
+                ref: ref,
+                timeoutMilliseconds: timeoutMilliseconds
+            ),
+            requiresBridge: true,
+            timeout: browserActionEvaluationTimeout(for: timeoutMilliseconds)
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: browserActionData(
+            resultValue: result.value,
+            fallbackStatus: "scrolled",
+            ref: ref,
+            viewModel: viewModel,
+            request: request
+        ))
+    }
+
+    private func handleBrowserGetHTML(_ request: SocketRequest) -> SocketResponse {
+        let ref = request.params?["ref"]
+        if let ref, !BrowserAutomationScriptLibrary.isValidRef(ref) {
+            return .failure(id: request.id, error: "Invalid param: ref")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.htmlScript(ref: ref),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        var data = ["status": result.value == "not-found" ? "not-found" : "ok"]
+        if let ref {
+            data["ref"] = ref
+        }
+        if data["status"] == "ok" {
+            data["html"] = result.value ?? ""
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserGetValue(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.valueScript(ref: ref),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        var data = ["status": result.value == "not-found" ? "not-found" : "ok", "ref": ref]
+        if data["status"] == "ok" {
+            data["value"] = result.value ?? ""
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserGetAttr(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let name = request.params?["name"], BrowserAutomationScriptLibrary.isValidAttributeName(name) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: name")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.attrScript(ref: ref, name: name),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        var data = BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? "")
+        data["ref"] = ref
+        data["name"] = name
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserGetTitle(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: "document.title || ''",
+            requiresBridge: false
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: [
+            "status": "ok",
+            "title": result.value ?? ""
+        ])
+    }
+
+    private func handleBrowserGetCount(_ request: SocketRequest) -> SocketResponse {
+        guard let selector = request.params?["selector"], !selector.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: selector")
+        }
+        guard selector.count <= 1_024 else {
+            return .failure(id: request.id, error: "Selector exceeds maximum 1024 characters")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.countScript(selector: selector),
             requiresBridge: true
         )
         if let error = result.error {
             return .failure(id: request.id, error: error)
         }
         return .ok(id: request.id, data: [
-            "status": "captured",
-            "snapshot": result.value ?? "[]"
+            "status": "ok",
+            "selector": selector,
+            "count": result.value ?? "0"
         ])
     }
 
-    private func handleBrowserClick(_ request: SocketRequest) -> SocketResponse {
-        guard let ref = request.params?["ref"], Self.isValidBrowserRef(ref) else {
+    private func handleBrowserGetBox(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
             return .failure(id: request.id, error: "Missing or invalid required param: ref")
         }
         guard let viewModel = browserViewModelProvider() else {
@@ -2321,36 +3438,165 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
         let result = browserScriptResult(
             viewModel: viewModel,
-            script: Self.browserClickScript(ref: ref),
+            script: BrowserAutomationScriptLibrary.boxScript(ref: ref),
             requiresBridge: true
         )
         if let error = result.error {
             return .failure(id: request.id, error: error)
         }
-        let status = result.value == "not-found" ? "not-found" : "clicked"
-        return .ok(id: request.id, data: ["status": status, "ref": ref])
+        var data = BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? "")
+        data["ref"] = ref
+        return .ok(id: request.id, data: data)
     }
 
-    private func handleBrowserFill(_ request: SocketRequest) -> SocketResponse {
-        guard let ref = request.params?["ref"], Self.isValidBrowserRef(ref) else {
+    private func handleBrowserGetStyles(_ request: SocketRequest) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
             return .failure(id: request.id, error: "Missing or invalid required param: ref")
         }
-        guard let text = request.params?["text"] else {
-            return .failure(id: request.id, error: "Missing required param: text")
+        let names = request.params?["names"]?
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+        guard names.allSatisfy(BrowserAutomationScriptLibrary.isValidStyleName) else {
+            return .failure(id: request.id, error: "Invalid computed style name")
         }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
         let result = browserScriptResult(
             viewModel: viewModel,
-            script: Self.browserFillScript(ref: ref, text: text),
+            script: BrowserAutomationScriptLibrary.stylesScript(ref: ref, names: names),
             requiresBridge: true
         )
         if let error = result.error {
             return .failure(id: request.id, error: error)
         }
-        let status = result.value == "not-found" ? "not-found" : "filled"
-        return .ok(id: request.id, data: ["status": status, "ref": ref])
+        var data = BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? "")
+        data["ref"] = ref
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserIsVisible(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserPredicate(request, key: "visible", scriptBuilder: BrowserAutomationScriptLibrary.visibleScript(ref:))
+    }
+
+    private func handleBrowserIsEnabled(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserPredicate(request, key: "enabled", scriptBuilder: BrowserAutomationScriptLibrary.enabledScript(ref:))
+    }
+
+    private func handleBrowserIsChecked(_ request: SocketRequest) -> SocketResponse {
+        handleBrowserPredicate(request, key: "checked", scriptBuilder: BrowserAutomationScriptLibrary.checkedScript(ref:))
+    }
+
+    private func handleBrowserPredicate(
+        _ request: SocketRequest,
+        key: String,
+        scriptBuilder: (String) -> String
+    ) -> SocketResponse {
+        guard let ref = request.params?["ref"], BrowserAutomationScriptLibrary.isValidRef(ref) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: ref")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: scriptBuilder(ref),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        var data = BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? "")
+        data["ref"] = ref
+        if data[key] == nil, data["status"] == "not-found" {
+            data[key] = "false"
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserFindRole(_ request: SocketRequest) -> SocketResponse {
+        guard let role = request.params?["role"], BrowserAutomationScriptLibrary.isValidFindQuery(role) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: role")
+        }
+        let name = request.params?["name"]
+        if let name, !BrowserAutomationScriptLibrary.isValidFindQuery(name) {
+            return .failure(id: request.id, error: "Invalid param: name")
+        }
+        return handleBrowserFindResults(
+            request,
+            script: BrowserAutomationScriptLibrary.findRoleScript(role: role, name: name)
+        )
+    }
+
+    private func handleBrowserFindText(_ request: SocketRequest) -> SocketResponse {
+        guard let text = request.params?["text"], BrowserAutomationScriptLibrary.isValidFindQuery(text) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: text")
+        }
+        return handleBrowserFindResults(
+            request,
+            script: BrowserAutomationScriptLibrary.findTextScript(text: text)
+        )
+    }
+
+    private func handleBrowserFindAttributeText(_ request: SocketRequest, attribute: String) -> SocketResponse {
+        guard let text = request.params?["text"], BrowserAutomationScriptLibrary.isValidFindQuery(text) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: text")
+        }
+        return handleBrowserFindResults(
+            request,
+            script: BrowserAutomationScriptLibrary.findAttributeTextScript(attribute: attribute, text: text)
+        )
+    }
+
+    private func handleBrowserFindTestID(_ request: SocketRequest) -> SocketResponse {
+        guard let id = request.params?["id"], BrowserAutomationScriptLibrary.isValidFindQuery(id) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: id")
+        }
+        return handleBrowserFindResults(
+            request,
+            script: BrowserAutomationScriptLibrary.findTestIDScript(id: id)
+        )
+    }
+
+    private func handleBrowserFindSelector(
+        _ request: SocketRequest,
+        mode: BrowserAutomationFindSelectorMode
+    ) -> SocketResponse {
+        guard let selector = request.params?["selector"], !selector.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: selector")
+        }
+        guard selector.count <= 1_024 else {
+            return .failure(id: request.id, error: "Selector exceeds maximum 1024 characters")
+        }
+        let index: Int?
+        if mode == .nth {
+            guard let rawIndex = request.params?["index"], let parsed = Int(rawIndex), parsed >= 0 else {
+                return .failure(id: request.id, error: "Missing or invalid required param: index")
+            }
+            index = parsed
+        } else {
+            index = nil
+        }
+        return handleBrowserFindResults(
+            request,
+            script: BrowserAutomationScriptLibrary.findSelectorScript(selector: selector, mode: mode, index: index)
+        )
+    }
+
+    private func handleBrowserFindResults(_ request: SocketRequest, script: String) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: script,
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: BrowserAutomationScriptLibrary.findResultData(from: result.value ?? "[]"))
     }
 
     private func handleBrowserScreenshot(_ request: SocketRequest) -> SocketResponse {
@@ -2362,6 +3608,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             ?? .failure("Browser page is not ready for screenshot capture")
         switch result {
         case .dataURL(let dataURL, let byteCount):
+            guard dataURL.utf8.count <= Self.maxInlineBrowserScreenshotDataURLBytes else {
+                return .failure(
+                    id: request.id,
+                    error: "Screenshot data (\(byteCount) bytes) exceeds the inline CLI response limit; pass --output <path>."
+                )
+            }
             return .ok(id: request.id, data: [
                 "status": "captured",
                 "dataURL": dataURL,
@@ -2382,14 +3634,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-        let entries: [BrowserConsoleSnapshotEntry]
-        if Thread.isMainThread {
-            entries = MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
-        } else {
-            entries = DispatchQueue.main.sync {
-                MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
-            }
-        }
+        let entries = browserConsoleSnapshotEntries(from: viewModel)
         var data: [String: String] = ["count": "\(entries.count)"]
         for (index, entry) in entries.enumerated() {
             data["entry_\(index)_level"] = entry.level
@@ -2397,6 +3642,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             data["entry_\(index)_timestamp"] = ISO8601DateFormatter().string(from: entry.timestamp)
         }
         return .ok(id: request.id, data: data)
+    }
+
+    private func browserConsoleSnapshotEntries(from viewModel: BrowserViewModel) -> [BrowserConsoleSnapshotEntry] {
+        if Thread.isMainThread {
+            return MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
+        }
+        return DispatchQueue.main.sync {
+            MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
+        }
     }
 
     private func handleBrowserWait(_ request: SocketRequest) -> SocketResponse {
@@ -2412,7 +3666,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         let deadline = Date().addingTimeInterval(TimeInterval(timeoutMilliseconds) / 1_000)
-        let script = Self.browserWaitScript(selector: selector)
+        let script = BrowserAutomationScriptLibrary.waitScript(selector: selector)
         repeat {
             let result = browserScriptResult(
                 viewModel: viewModel,
@@ -2447,7 +3701,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         let domainFilter = request.params?["domain"]?.lowercased()
-        let pairs = Self.cookiePairs(from: result.value ?? "")
+        let pairs = BrowserAutomationScriptLibrary.cookiePairs(from: result.value ?? "")
         var data: [String: String] = ["count": "\(pairs.count)"]
         if let domainFilter, !domainFilter.isEmpty {
             data["domain"] = domainFilter
@@ -2466,7 +3720,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let value = request.params?["value"] else {
             return .failure(id: request.id, error: "Missing required param: value")
         }
-        guard Self.isSafeCookieName(name) else {
+        guard BrowserAutomationScriptLibrary.isSafeCookieName(name) else {
             return .failure(id: request.id, error: "Invalid cookie name")
         }
         guard let viewModel = browserViewModelProvider() else {
@@ -2475,7 +3729,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
         let result = browserScriptResult(
             viewModel: viewModel,
-            script: Self.browserSetCookieScript(
+            script: BrowserAutomationScriptLibrary.setCookieScript(
                 name: name,
                 value: value,
                 path: request.params?["path"],
@@ -2496,7 +3750,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let name = request.params?["name"], !name.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: name")
         }
-        guard Self.isSafeCookieName(name) else {
+        guard BrowserAutomationScriptLibrary.isSafeCookieName(name) else {
             return .failure(id: request.id, error: "Invalid cookie name")
         }
         guard let viewModel = browserViewModelProvider() else {
@@ -2505,7 +3759,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
         let result = browserScriptResult(
             viewModel: viewModel,
-            script: Self.browserDeleteCookieScript(
+            script: BrowserAutomationScriptLibrary.deleteCookieScript(
                 name: name,
                 path: request.params?["path"],
                 domain: request.params?["domain"]
@@ -2524,13 +3778,13 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
         let result = browserScriptResult(
             viewModel: viewModel,
-            script: Self.browserNetworkScript,
+            script: BrowserAutomationScriptLibrary.networkScript,
             requiresBridge: true
         )
         if let error = result.error {
             return .failure(id: request.id, error: error)
         }
-        let entries = Self.browserNetworkEntries(
+        let entries = BrowserAutomationScriptLibrary.networkEntries(
             from: result.value ?? "[]",
             filter: request.params?["filter"],
             tail: request.params?["tail"].flatMap(Int.init)
@@ -2540,10 +3794,198 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             data["entry_\(index)_url"] = entry.url
             data["entry_\(index)_method"] = entry.method
             data["entry_\(index)_initiatorType"] = entry.initiatorType
-            data["entry_\(index)_duration"] = Self.browserNumberString(entry.duration)
+            data["entry_\(index)_duration"] = BrowserAutomationScriptLibrary.numberString(entry.duration)
             data["entry_\(index)_transferSize"] = "\(entry.transferSize)"
         }
         return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserFrames(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.framesScript,
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(
+            id: request.id,
+            data: BrowserAutomationScriptLibrary.frameTreeData(from: result.value ?? "[]")
+        )
+    }
+
+    private func handleBrowserDownloads(_ request: SocketRequest) -> SocketResponse {
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let downloads: [DownloadItem]
+        if Thread.isMainThread {
+            downloads = MainActor.assumeIsolated { viewModel.downloads }
+        } else {
+            downloads = DispatchQueue.main.sync {
+                MainActor.assumeIsolated { viewModel.downloads }
+            }
+        }
+
+        let formatter = ISO8601DateFormatter()
+        var data: [String: String] = [
+            "status": "ok",
+            "count": "\(downloads.count)"
+        ]
+        for (index, item) in downloads.prefix(100).enumerated() {
+            data["download_\(index)_id"] = item.id.uuidString
+            data["download_\(index)_fileName"] = item.fileName
+            data["download_\(index)_sourceURL"] = item.sourceURL
+            data["download_\(index)_receivedBytes"] = "\(item.receivedBytes)"
+            data["download_\(index)_startedAt"] = formatter.string(from: item.startedAt)
+            if let totalBytes = item.totalBytes {
+                data["download_\(index)_totalBytes"] = "\(totalBytes)"
+            }
+            if let localPath = item.localPath {
+                data["download_\(index)_localPath"] = localPath
+            }
+            switch item.state {
+            case .downloading(let progress):
+                data["download_\(index)_state"] = "downloading"
+                data["download_\(index)_progress"] = browserDownloadProgressString(progress)
+            case .completed:
+                data["download_\(index)_state"] = "completed"
+                data["download_\(index)_progress"] = "1"
+            case .failed(let reason):
+                data["download_\(index)_state"] = "failed"
+                data["download_\(index)_progress"] = "0"
+                data["download_\(index)_error"] = reason
+            }
+        }
+        return .ok(id: request.id, data: data)
+    }
+
+    private func browserDownloadProgressString(_ progress: Double) -> String {
+        let bounded = min(max(progress, 0), 1)
+        if bounded.rounded() == bounded {
+            return "\(Int(bounded))"
+        }
+        var value = String(format: "%.3f", bounded)
+        while value.last == "0" {
+            value.removeLast()
+        }
+        if value.last == "." {
+            value.removeLast()
+        }
+        return value
+    }
+
+    private func handleBrowserStorageList(_ request: SocketRequest) -> SocketResponse {
+        guard let area = browserStorageArea(from: request) else {
+            return .failure(id: request.id, error: "Invalid storage area. Use local or session.")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.storageListScript(area: area),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(
+            id: request.id,
+            data: BrowserAutomationScriptLibrary.storageEntriesData(from: result.value ?? "[]", area: area)
+        )
+    }
+
+    private func handleBrowserStorageGet(_ request: SocketRequest) -> SocketResponse {
+        guard let area = browserStorageArea(from: request) else {
+            return .failure(id: request.id, error: "Invalid storage area. Use local or session.")
+        }
+        guard let key = request.params?["key"], BrowserAutomationScriptLibrary.isValidStorageKey(key) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: key")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.storageGetScript(area: area, key: key),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        var data = BrowserAutomationScriptLibrary.flatJSONData(from: result.value ?? "")
+        data["area"] = area.rawValue
+        data["key"] = key
+        return .ok(id: request.id, data: data)
+    }
+
+    private func handleBrowserStorageSet(_ request: SocketRequest) -> SocketResponse {
+        guard let area = browserStorageArea(from: request) else {
+            return .failure(id: request.id, error: "Invalid storage area. Use local or session.")
+        }
+        guard let key = request.params?["key"], BrowserAutomationScriptLibrary.isValidStorageKey(key) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: key")
+        }
+        guard let value = request.params?["value"] else {
+            return .failure(id: request.id, error: "Missing required param: value")
+        }
+        guard value.count <= Self.maxBrowserEvalLength else {
+            return .failure(
+                id: request.id,
+                error: "Value length \(value.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+            )
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.storageSetScript(area: area, key: key, value: value),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: [
+            "status": "set",
+            "area": area.rawValue,
+            "key": key
+        ])
+    }
+
+    private func handleBrowserStorageDelete(_ request: SocketRequest) -> SocketResponse {
+        guard let area = browserStorageArea(from: request) else {
+            return .failure(id: request.id, error: "Invalid storage area. Use local or session.")
+        }
+        guard let key = request.params?["key"], BrowserAutomationScriptLibrary.isValidStorageKey(key) else {
+            return .failure(id: request.id, error: "Missing or invalid required param: key")
+        }
+        guard let viewModel = browserViewModelProvider() else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+        let result = browserScriptResult(
+            viewModel: viewModel,
+            script: BrowserAutomationScriptLibrary.storageDeleteScript(area: area, key: key),
+            requiresBridge: true
+        )
+        if let error = result.error {
+            return .failure(id: request.id, error: error)
+        }
+        return .ok(id: request.id, data: [
+            "status": "deleted",
+            "area": area.rawValue,
+            "key": key
+        ])
+    }
+
+    private func browserStorageArea(from request: SocketRequest) -> BrowserAutomationStorageArea? {
+        let rawValue = request.params?["area"] ?? BrowserAutomationStorageArea.local.rawValue
+        return BrowserAutomationStorageArea(rawValue: rawValue)
     }
 
     private func handleBrowserImport(kind: String, request: SocketRequest) -> SocketResponse {
@@ -2586,271 +4028,131 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         return .success("")
     }
 
-    private static func isValidBrowserRef(_ ref: String) -> Bool {
-        guard !ref.isEmpty, ref.count <= 64 else { return false }
-        return ref.allSatisfy { character in
-            character.isLetter || character.isNumber || character == "-" || character == "_"
+    private func browserActionTimeoutMilliseconds(from request: SocketRequest) -> Int? {
+        guard let rawTimeout = request.params?["timeout"] else {
+            return BrowserAutomationScriptLibrary.defaultActionTimeoutMilliseconds
         }
+        guard let timeout = Int(rawTimeout),
+              timeout >= 100,
+              timeout <= 60_000 else {
+            return nil
+        }
+        return timeout
     }
 
-    private static func browserClickScript(ref: String) -> String {
-        """
-        (function() {
-            const element = document.querySelector('[data-cocxy-ref=\"\(ref)\"]');
-            if (!element) { return 'not-found'; }
-            element.scrollIntoView({block: 'center', inline: 'center'});
-            element.click();
-            return 'clicked';
-        })();
-        """
+    private func browserActionEvaluationTimeout(for milliseconds: Int) -> TimeInterval {
+        Double(milliseconds) / 1_000.0 + 1.0
     }
 
-    private static func browserFillScript(ref: String, text: String) -> String {
-        let escapedText = javaScriptStringLiteral(text)
-        return """
-        (function() {
-            const element = document.querySelector('[data-cocxy-ref=\"\(ref)\"]');
-            if (!element) { return 'not-found'; }
-            element.scrollIntoView({block: 'center', inline: 'center'});
-            if (element.isContentEditable) {
-                element.textContent = \(escapedText);
-            } else {
-                element.value = \(escapedText);
-            }
-            element.dispatchEvent(new InputEvent('input', {bubbles: true, inputType: 'insertText', data: \(escapedText)}));
-            element.dispatchEvent(new Event('change', {bubbles: true}));
-            return 'filled';
-        })();
-        """
+    private func invalidBrowserActionTimeoutResponse(id: String) -> SocketResponse {
+        .failure(id: id, error: "Invalid timeout. Use milliseconds between 100 and 60000.")
     }
 
-    private static func browserWaitScript(selector: String) -> String {
-        let escapedSelector = javaScriptStringLiteral(selector)
-        return """
-        (function() {
-            try {
-                return document.querySelector(\(escapedSelector)) ? 'found' : 'missing';
-            } catch (error) {
-                return 'missing';
-            }
-        })();
-        """
-    }
+    private func browserActionData(
+        resultValue: String?,
+        fallbackStatus: String,
+        ref: String?,
+        extra: [String: String] = [:],
+        viewModel: BrowserViewModel? = nil,
+        request: SocketRequest? = nil
+    ) -> [String: String] {
+        let value = resultValue?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var data: [String: String]
+        if let value,
+           value.hasPrefix("{") {
+            let parsed = BrowserAutomationScriptLibrary.flatJSONData(from: value)
+            data = parsed["status"] == "invalid-response"
+                ? ["status": fallbackStatus]
+                : parsed
+        } else if let value, !value.isEmpty {
+            data = ["status": value]
+        } else {
+            data = ["status": fallbackStatus]
+        }
 
-    private static func browserSetCookieScript(
-        name: String,
-        value: String,
-        path: String?,
-        domain: String?,
-        secure: Bool,
-        sameSite: String?,
-        maxAge: Int?
-    ) -> String {
-        let cookie = cookieAssignment(
-            name: name,
-            value: value,
-            path: path,
-            domain: domain,
-            secure: secure,
-            sameSite: sameSite,
-            maxAge: maxAge
+        if let ref, data["ref"] == nil {
+            data["ref"] = ref
+        }
+        for (key, value) in extra where data[key] == nil {
+            data[key] = value
+        }
+        appendBrowserActionScreenshotEvidence(
+            to: &data,
+            viewModel: viewModel,
+            request: request,
+            action: data["status"] ?? fallbackStatus,
+            ref: ref
         )
-        return """
-        (function() {
-            document.cookie = \(javaScriptStringLiteral(cookie));
-            return 'ok';
-        })();
-        """
+        return data
     }
 
-    private static func browserDeleteCookieScript(name: String, path: String?, domain: String?) -> String {
-        let cookie = cookieAssignment(
-            name: name,
-            value: "",
-            path: path,
-            domain: domain,
-            secure: false,
-            sameSite: nil,
-            maxAge: 0
-        )
-        return """
-        (function() {
-            document.cookie = \(javaScriptStringLiteral(cookie));
-            return 'ok';
-        })();
-        """
-    }
+    private func appendBrowserActionScreenshotEvidence(
+        to data: inout [String: String],
+        viewModel: BrowserViewModel?,
+        request: SocketRequest?,
+        action: String,
+        ref: String?
+    ) {
+        guard let viewModel,
+              let request,
+              let screenshotDir = request.params?["screenshotDir"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !screenshotDir.isEmpty else { return }
 
-    private static func cookieAssignment(
-        name: String,
-        value: String,
-        path: String?,
-        domain: String?,
-        secure: Bool,
-        sameSite: String?,
-        maxAge: Int?
-    ) -> String {
-        var parts = ["\(name)=\(value)"]
-        if let path, !path.isEmpty { parts.append("Path=\(path)") }
-        if let domain, !domain.isEmpty { parts.append("Domain=\(domain)") }
-        if let maxAge { parts.append("Max-Age=\(maxAge)") }
-        if secure { parts.append("Secure") }
-        if let sameSite, !sameSite.isEmpty { parts.append("SameSite=\(sameSite)") }
-        return parts.joined(separator: "; ")
-    }
-
-    private static func isSafeCookieName(_ name: String) -> Bool {
-        guard !name.isEmpty, name.count <= 256 else { return false }
-        return !name.contains { character in
-            character == "=" || character == ";" || character.isWhitespace || character.isNewline
+        guard screenshotDir.count <= 2_048 else {
+            data["screenshotStatus"] = "invalid-dir"
+            data["screenshotError"] = "Screenshot directory path is too long."
+            return
         }
-    }
 
-    private static func cookiePairs(from cookieString: String) -> [(name: String, value: String)] {
-        cookieString
-            .split(separator: ";", omittingEmptySubsequences: true)
-            .compactMap { rawPair -> (name: String, value: String)? in
-                let pair = rawPair.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard let separator = pair.firstIndex(of: "=") else { return nil }
-                let name = String(pair[..<separator])
-                let value = String(pair[pair.index(after: separator)...])
-                guard !name.isEmpty else { return nil }
-                return (name, value)
-            }
-    }
-
-    private struct BrowserNetworkEntry {
-        let url: String
-        let method: String
-        let initiatorType: String
-        let duration: Double
-        let transferSize: Int
-    }
-
-    private static var browserNetworkScript: String {
-        """
-        (function() {
-            const entries = performance.getEntriesByType('resource').map(function(entry) {
-                const initiatorType = entry.initiatorType || 'other';
-                return {
-                    url: entry.name || '',
-                    method: (initiatorType === 'fetch' || initiatorType === 'xmlhttprequest') ? 'XHR' : 'GET',
-                    initiatorType: initiatorType,
-                    duration: entry.duration || 0,
-                    transferSize: entry.transferSize || 0
-                };
-            });
-            return JSON.stringify(entries);
-        })();
-        """
-    }
-
-    private static func browserNetworkEntries(
-        from jsonString: String,
-        filter: String?,
-        tail: Int?
-    ) -> [BrowserNetworkEntry] {
-        guard let data = jsonString.data(using: .utf8),
-              let rawEntries = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
-            return []
-        }
-        let normalizedFilter = filter?.lowercased()
-        var entries = rawEntries.compactMap { raw -> BrowserNetworkEntry? in
-            let url = (raw["url"] ?? raw["name"]) as? String ?? ""
-            guard !url.isEmpty else { return nil }
-            let method = raw["method"] as? String
-                ?? (((raw["initiatorType"] as? String) == "fetch"
-                    || (raw["initiatorType"] as? String) == "xmlhttprequest") ? "XHR" : "GET")
-            let initiatorType = raw["initiatorType"] as? String ?? "other"
-            let duration = raw["duration"] as? Double
-                ?? (raw["duration"] as? Int).map(Double.init)
-                ?? 0
-            let transferSize = raw["transferSize"] as? Int
-                ?? (raw["transferSize"] as? Double).map(Int.init)
-                ?? 0
-            return BrowserNetworkEntry(
-                url: url,
-                method: method,
-                initiatorType: initiatorType,
-                duration: duration,
-                transferSize: transferSize
+        let directoryURL = URL(fileURLWithPath: screenshotDir, isDirectory: true).standardizedFileURL
+        do {
+            try FileManager.default.createDirectory(
+                at: directoryURL,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
             )
+        } catch {
+            data["screenshotStatus"] = "failed"
+            data["screenshotError"] = error.localizedDescription
+            return
         }
-        if let normalizedFilter, !normalizedFilter.isEmpty {
-            entries = entries.filter {
-                $0.url.lowercased().contains(normalizedFilter)
-                    || $0.method.lowercased().contains(normalizedFilter)
-                    || $0.initiatorType.lowercased().contains(normalizedFilter)
+
+        let timestamp = String(Int(Date().timeIntervalSince1970 * 1_000))
+        let actionPart = browserEvidenceFilePart(action)
+        let refPart = browserEvidenceFilePart(ref ?? "page")
+        let requestPart = browserEvidenceFilePart(request.id)
+        let fileName = "\(timestamp)-\(actionPart)-\(refPart)-\(requestPart).png"
+        let outputURL = directoryURL.appendingPathComponent(fileName, isDirectory: false)
+
+        let screenshotResult = viewModel.automationBridge.captureScreenshot(
+            outputPath: outputURL.path,
+            timeout: 3
+        ) ?? .failure("Browser page is not ready for screenshot capture")
+        switch screenshotResult {
+        case .file(let path, let byteCount):
+            if FileManager.default.fileExists(atPath: path) {
+                try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: path)
             }
+            data["screenshotStatus"] = "captured"
+            data["screenshotPath"] = path
+            data["screenshotBytes"] = "\(byteCount)"
+        case .dataURL(_, let byteCount):
+            data["screenshotStatus"] = "captured"
+            data["screenshotBytes"] = "\(byteCount)"
+        case .failure(let error):
+            data["screenshotStatus"] = "failed"
+            data["screenshotError"] = error
         }
-        if let tail, tail > 0, entries.count > tail {
-            entries = Array(entries.suffix(tail))
-        }
-        return entries
     }
 
-    private static func browserNumberString(_ value: Double) -> String {
-        if value.rounded() == value {
-            return "\(Int(value))"
+    private func browserEvidenceFilePart(_ rawValue: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let sanitizedScalars = rawValue.unicodeScalars.map { scalar -> Character in
+            allowed.contains(scalar) ? Character(scalar) : "-"
         }
-        return String(format: "%.3f", value)
-    }
-
-    private static var browserSnapshotScript: String {
-        """
-        (function() {
-            const selector = [
-                'a[href]',
-                'button',
-                'input',
-                'textarea',
-                'select',
-                '[role]',
-                '[tabindex]',
-                '[contenteditable="true"]'
-            ].join(',');
-            const visible = (element) => {
-                const rect = element.getBoundingClientRect();
-                const style = window.getComputedStyle(element);
-                return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && style.display !== 'none';
-            };
-            const textFor = (element) => {
-                return (
-                    element.getAttribute('aria-label') ||
-                    element.getAttribute('title') ||
-                    element.innerText ||
-                    element.value ||
-                    element.getAttribute('placeholder') ||
-                    ''
-                ).trim().slice(0, 160);
-            };
-            const nodes = Array.from(document.querySelectorAll(selector)).filter(visible).slice(0, 500);
-            return JSON.stringify(nodes.map((element, index) => {
-                const cocxyRef = element.getAttribute('data-cocxy-ref') || `e${index + 1}`;
-                element.setAttribute('data-cocxy-ref', cocxyRef);
-                const rect = element.getBoundingClientRect();
-                return {
-                    ref: cocxyRef,
-                    role: element.getAttribute('role') || element.tagName.toLowerCase(),
-                    name: textFor(element),
-                    x: Math.round(rect.x),
-                    y: Math.round(rect.y),
-                    width: Math.round(rect.width),
-                    height: Math.round(rect.height)
-                };
-            }));
-        })();
-        """
-    }
-
-    private static func javaScriptStringLiteral(_ value: String) -> String {
-        let data = try? JSONSerialization.data(withJSONObject: [value], options: [])
-        guard let data,
-              let encoded = String(data: data, encoding: .utf8),
-              encoded.count >= 2 else {
-            return "''"
-        }
-        return String(encoded.dropFirst().dropLast())
+        let sanitized = String(sanitizedScalars)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-_"))
+        return String((sanitized.isEmpty ? "item" : sanitized).prefix(64))
     }
 
     // MARK: - Plugin Handlers
@@ -4085,6 +5387,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "worktree.id-length", "worktree.inherit-project-config",
             "worktree.show-badge",
             "experimental.pip-enabled", "experimental.pty-daemon",
+            "experimental.browser-v2.enabled", "experimental.remote-browser.enabled",
+            "experimental.cells.enabled", "experimental.cocxycore-moat.enabled",
+            "experimental.agent-teams-v2.enabled",
             "keybindings.new-tab", "keybindings.close-tab",
             "keybindings.next-tab", "keybindings.prev-tab",
             "keybindings.split-vertical", "keybindings.split-horizontal",
@@ -4455,14 +5760,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     /// Extracts the TOML section name from a dotted key.
     private func sectionFromKey(_ key: String) -> String {
-        let components = key.split(separator: ".", maxSplits: 1)
-        return components.first.map(String.init) ?? ""
+        guard let separator = key.lastIndex(of: ".") else { return "" }
+        return String(key[..<separator])
     }
 
     /// Extracts the TOML field name from a dotted key.
     private func fieldFromKey(_ key: String) -> String {
-        let components = key.split(separator: ".", maxSplits: 1)
-        return components.count > 1 ? String(components[1]) : ""
+        guard let separator = key.lastIndex(of: ".") else { return "" }
+        return String(key[key.index(after: separator)...])
     }
 
     // MARK: - Worktree (v0.1.81)

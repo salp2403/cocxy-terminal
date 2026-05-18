@@ -110,7 +110,7 @@ extension AppDelegate {
                 }
 
                 if let (profileID, _) = connectedProfile {
-                    if !scanner.isScanning {
+                    if scanner.scanningProfileID != profileID {
                         scanner.startScanning(profileID: profileID)
                     }
                 } else {

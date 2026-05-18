@@ -175,6 +175,162 @@ final class BrowserViewModelTests: XCTestCase {
         cancellable.cancel()
     }
 
+    func testRemoteBrowserProfileStateIsLocalByDefault() {
+        let vm = BrowserViewModel()
+
+        let state = vm.getState()
+
+        XCTAssertNil(vm.activeRemoteBrowserProfile)
+        XCTAssertEqual(state["browserRoute"], "local")
+        XCTAssertNil(state["remoteBrowserProfileID"])
+        XCTAssertNil(state["remoteRouting"])
+    }
+
+    func testAttachRemoteBrowserProfileUpdatesStateWithoutNavigation() {
+        let vm = BrowserViewModel()
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            user: "said",
+            sshPort: 2222,
+            localForwardedPorts: [5173: 55173],
+            socksPort: 1080,
+            httpConnectPort: 18080,
+            proxyHealth: .active
+        )
+        var reloadCount = 0
+        let cancellable = vm.navigationActionSubject.sink { _ in reloadCount += 1 }
+
+        vm.attachRemoteBrowserProfile(remote)
+
+        let state = vm.getState()
+        XCTAssertEqual(vm.activeRemoteBrowserProfile, remote)
+        XCTAssertEqual(reloadCount, 0)
+        XCTAssertEqual(state["browserRoute"], "remote")
+        XCTAssertEqual(state["remoteBrowserProfileID"], remote.id.uuidString)
+        XCTAssertEqual(state["remoteConnectionProfileID"], remote.connectionProfileID.uuidString)
+        XCTAssertEqual(state["remoteDisplayTitle"], "Remote Dev (said@dev.internal:2222)")
+        XCTAssertEqual(state["remoteHost"], "dev.internal")
+        XCTAssertEqual(state["remoteProxyHealth"], "active")
+        XCTAssertEqual(state["remoteSOCKSPort"], "1080")
+        XCTAssertEqual(state["remoteHTTPConnectPort"], "18080")
+        XCTAssertEqual(state["remoteRouting"], "health=active socks=127.0.0.1:1080 http-connect=127.0.0.1:18080 forwards=5173->55173")
+
+        vm.clearRemoteBrowserProfile()
+
+        XCTAssertNil(vm.activeRemoteBrowserProfile)
+        XCTAssertEqual(vm.getState()["browserRoute"], "local")
+        cancellable.cancel()
+    }
+
+    func testOpenRemoteForwardAttachesProfileAndNavigatesLocalMapping() {
+        let vm = BrowserViewModel()
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            localForwardedPorts: [3000: 53000],
+            proxyHealth: .active
+        )
+        var received: BrowserViewModel.NavigationAction?
+        let cancellable = vm.navigationActionSubject.sink { received = $0 }
+
+        let route = vm.openRemoteForward(remote, remotePort: 3000, path: "dashboard")
+
+        XCTAssertEqual(vm.activeRemoteBrowserProfile, remote)
+        XCTAssertEqual(route?.remoteAddress, "dev.internal:3000")
+        XCTAssertEqual(route?.localURL.absoluteString, "http://127.0.0.1:53000/dashboard")
+        XCTAssertEqual(vm.currentURL?.absoluteString, "http://127.0.0.1:53000/dashboard")
+        XCTAssertEqual(vm.getState()["browserRoute"], "remote")
+        if case .load(let url) = received {
+            XCTAssertEqual(url.absoluteString, "http://127.0.0.1:53000/dashboard")
+        } else {
+            XCTFail("Expected opening a remote forward to load the mapped local URL")
+        }
+        cancellable.cancel()
+    }
+
+    func testOpenRemoteForwardWithoutMappingDoesNotNavigateOrAttach() {
+        let vm = BrowserViewModel()
+        let originalURL = vm.urlString
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            localForwardedPorts: [:],
+            proxyHealth: .active
+        )
+        var reloadCount = 0
+        let cancellable = vm.navigationActionSubject.sink { _ in reloadCount += 1 }
+
+        let route = vm.openRemoteForward(remote, remotePort: 3000)
+
+        XCTAssertNil(route)
+        XCTAssertNil(vm.activeRemoteBrowserProfile)
+        XCTAssertEqual(vm.urlString, originalURL)
+        XCTAssertEqual(reloadCount, 0)
+        XCTAssertEqual(vm.remoteBrowserNotice?.kind, .missingForward)
+        XCTAssertEqual(vm.remoteBrowserNotice?.routeRequest?.remotePort, 3000)
+        XCTAssertEqual(vm.getState()["remoteNotice"], "missingForward")
+        XCTAssertEqual(vm.getState()["remoteNoticePort"], "3000")
+        cancellable.cancel()
+    }
+
+    func testRemoteProxyFailureUpdatesNoticeAndState() {
+        let vm = BrowserViewModel()
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            localForwardedPorts: [3000: 53000],
+            proxyHealth: .active
+        )
+
+        XCTAssertNotNil(vm.openRemoteForward(remote, remotePort: 3000))
+        XCTAssertNil(vm.remoteBrowserNotice)
+
+        vm.updateRemoteBrowserProxyState(.failing(reason: "probe failed"))
+
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.proxyHealth, .failed)
+        XCTAssertEqual(vm.remoteBrowserNotice?.kind, .proxyFailed)
+        XCTAssertEqual(vm.remoteBrowserNotice?.routeRequest?.remotePort, 3000)
+        XCTAssertEqual(vm.getState()["remoteProxyHealth"], "failed")
+        XCTAssertEqual(vm.getState()["remoteNotice"], "proxyFailed")
+
+        vm.updateRemoteBrowserProxyState(.active(socksPort: 1080, httpPort: 18080))
+
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.proxyHealth, .active)
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.socksPort, 1080)
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.httpConnectPort, 18080)
+        XCTAssertNil(vm.remoteBrowserNotice)
+    }
+
+    func testRemoteNavigationFailureRecordsActionableNotice() {
+        let vm = BrowserViewModel()
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            localForwardedPorts: [5173: 55173],
+            proxyHealth: .active
+        )
+        _ = vm.openRemoteForward(remote, remotePort: 5173, path: "app")
+        let failedURL = URL(string: "http://127.0.0.1:55173/app")!
+        let error = NSError(domain: NSURLErrorDomain, code: NSURLErrorCannotConnectToHost)
+
+        vm.recordRemoteBrowserNavigationFailure(error: error, failedURL: failedURL)
+
+        XCTAssertEqual(vm.remoteBrowserNotice?.kind, .navigationFailed)
+        XCTAssertEqual(vm.remoteBrowserNotice?.routeRequest?.remotePort, 5173)
+        XCTAssertEqual(vm.remoteBrowserNotice?.failedURLString, "http://127.0.0.1:55173/app")
+        XCTAssertEqual(vm.getState()["remoteNotice"], "navigationFailed")
+
+        vm.recordRemoteBrowserNavigationSucceeded(url: failedURL)
+
+        XCTAssertNil(vm.remoteBrowserNotice)
+    }
+
     func testAddBrowserTabEmitsLoadForNewTabURL() {
         let vm = BrowserViewModel()
         var received: BrowserViewModel.NavigationAction?

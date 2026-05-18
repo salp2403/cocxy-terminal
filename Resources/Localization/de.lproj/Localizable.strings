@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault umschalten";
 "keybindings.action.window.vaultSidebar.summary" = "Die lokale Vault für externe Agent-Sitzungen ein- oder ausblenden.";
+
+"agentTeams.panel.title" = "Agententeam";
+"agentTeams.creator.title" = "Agententeam";
+"agentTeams.creator.placeholder" = "Entwerfen, Erstellen, Prüfen";
+"agentTeams.creator.launch" = "Starten";
+"agentTeams.graph.title" = "Teamdiagramm";
+"agentTeams.graph.accessibility" = "Agententeamdiagramm";
+"agentTeams.feed.title" = "Agentenfeed";
+"agentTeams.feed.empty" = "Keine Teamereignisse";
+"agentTeams.feed.accessibility" = "Feed des Agententeams";
+
+"cells.sidebar.accessibility" = "Cocxy-Zellen";
+"cells.sidebar.empty.title" = "Keine Zellen";
+"cells.sidebar.empty.message" = "Erstelle eine lokale oder benutzereigene Cloud-Zelle.";
+"cells.toolbar.title" = "Zellen";
+"cells.toolbar.running" = "%d aktiv";
+"cells.toolbar.refresh" = "Zellen aktualisieren";
+"cells.toolbar.create" = "Zelle erstellen";
+"cells.card.destroy" = "Zelle löschen";
+"cells.card.destroy.accessibility" = "%@ löschen";
+"cells.create.title" = "Zelle erstellen";
+"cells.create.provider" = "Anbieter";
+"cells.create.profile" = "Profil";
+"cells.create.image" = "Image oder Vorlage";
+"cells.create.host" = "SSH-Host";
+"cells.create.launch" = "Erstellen";

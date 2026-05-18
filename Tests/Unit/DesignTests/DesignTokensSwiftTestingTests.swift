@@ -91,6 +91,21 @@ struct DesignTokensSwiftTestingTests {
         }
     }
 
+    @Test("Readable text tokens meet WCAG AA on opaque fallback surfaces")
+    func readableTextTokensMeetWCAGAAContrast() {
+        for palette in [Design.ThemePalette.aurora, .paper, .nocturne] {
+            for background in [
+                palette.backgroundPrimary,
+                palette.backgroundSecondary,
+                palette.backgroundTertiary,
+            ] {
+                #expect(contrastRatio(palette.textHigh, background) >= 4.5)
+                #expect(contrastRatio(palette.textMedium, background) >= 4.5)
+                #expect(contrastRatio(palette.accent, background) >= 3.0)
+            }
+        }
+    }
+
     // MARK: - Shipping palettes
 
     @Test("Aurora palette matches the design reference hue 260 / accent 250")
@@ -214,5 +229,30 @@ struct DesignTokensSwiftTestingTests {
             palette.accentSoft,
             palette.accentGlow,
         ]
+    }
+
+    private func contrastRatio(
+        _ first: Design.OKLCHColor,
+        _ second: Design.OKLCHColor
+    ) -> Double {
+        let firstLuminance = relativeLuminance(first)
+        let secondLuminance = relativeLuminance(second)
+        let lighter = max(firstLuminance, secondLuminance)
+        let darker = min(firstLuminance, secondLuminance)
+        return (lighter + 0.05) / (darker + 0.05)
+    }
+
+    private func relativeLuminance(_ color: Design.OKLCHColor) -> Double {
+        let red = linearizedSRGBChannel(color.sRGBRed)
+        let green = linearizedSRGBChannel(color.sRGBGreen)
+        let blue = linearizedSRGBChannel(color.sRGBBlue)
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+    }
+
+    private func linearizedSRGBChannel(_ channel: Double) -> Double {
+        if channel <= 0.03928 {
+            return channel / 12.92
+        }
+        return pow((channel + 0.055) / 1.055, 2.4)
     }
 }

@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Перемкнути Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Показати або приховати локальний Vault сеансів зовнішніх агентів.";
+
+"agentTeams.panel.title" = "Команда агентів";
+"agentTeams.creator.title" = "Команда агентів";
+"agentTeams.creator.placeholder" = "Проєктування, збірка, перевірка";
+"agentTeams.creator.launch" = "Запустити";
+"agentTeams.graph.title" = "Граф команди";
+"agentTeams.graph.accessibility" = "Граф команди агентів";
+"agentTeams.feed.title" = "Стрічка агентів";
+"agentTeams.feed.empty" = "Немає подій команди";
+"agentTeams.feed.accessibility" = "Стрічка команди агентів";
+
+"cells.sidebar.accessibility" = "Комірки Cocxy";
+"cells.sidebar.empty.title" = "Немає комірок";
+"cells.sidebar.empty.message" = "Створіть локальну або користувацьку хмарну комірку.";
+"cells.toolbar.title" = "Комірки";
+"cells.toolbar.running" = "%d виконується";
+"cells.toolbar.refresh" = "Оновити комірки";
+"cells.toolbar.create" = "Створити комірку";
+"cells.card.destroy" = "Знищити комірку";
+"cells.card.destroy.accessibility" = "Знищити %@";
+"cells.create.title" = "Створити комірку";
+"cells.create.provider" = "Провайдер";
+"cells.create.profile" = "Профіль";
+"cells.create.image" = "Образ або шаблон";
+"cells.create.host" = "Хост SSH";
+"cells.create.launch" = "Створити";

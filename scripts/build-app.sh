@@ -122,9 +122,12 @@ else
 fi
 APPINTENTS_WORK_DIR="${BUILD_DIR}/AppIntents"
 APPINTENTS_CONST_VALUES="${APPINTENTS_WORK_DIR}/${APP_NAME}.swiftconstvalues"
+APPINTENTS_CONST_VALUES_LIST="${APPINTENTS_WORK_DIR}/constvalues.list"
 APPINTENTS_PROTOCOL_LIST="${APPINTENTS_WORK_DIR}/protocols.json"
 APPINTENTS_SOURCE_LIST="${APPINTENTS_WORK_DIR}/sources.list"
 APPINTENTS_DEPLOYMENT_TARGET="14.0"
+APPINTENTS_TARGET_BUILD_DIR="${BUILD_DIR}/${APP_NAME}.build"
+APPINTENTS_SHORTCUTS_CONST_VALUES="${APPINTENTS_TARGET_BUILD_DIR}/CocxyShortcuts.swift.swiftconstvalues"
 
 OUTPUT_DIR="${PROJECT_ROOT}/build"
 APP_BUNDLE="${OUTPUT_DIR}/${APP_BUNDLE_BASENAME}.app"
@@ -175,8 +178,39 @@ run_appintents_swift_build() {
 }
 
 appintents_const_values_contain_metadata() {
-    [ -s "${APPINTENTS_CONST_VALUES}" ] \
-        && grep -q '"AppIntents.AppIntent"' "${APPINTENTS_CONST_VALUES}"
+    while IFS= read -r const_values_path; do
+        if [ -s "${const_values_path}" ] \
+            && grep -q '"AppIntents.AppIntent"' "${const_values_path}"
+        then
+            return 0
+        fi
+    done < <(appintents_const_values_paths)
+
+    return 1
+}
+
+appintents_const_values_paths() {
+    {
+        printf '%s\n' "${APPINTENTS_CONST_VALUES}"
+        printf '%s\n' "${APPINTENTS_SHORTCUTS_CONST_VALUES}"
+        if [ -d "${APPINTENTS_TARGET_BUILD_DIR}" ]; then
+            find "${APPINTENTS_TARGET_BUILD_DIR}" -maxdepth 1 -name '*CocxyShortcuts*.swiftconstvalues' -print
+        fi
+    } | awk 'NF && !seen[$0]++'
+}
+
+write_appintents_const_values_list() {
+    : > "${APPINTENTS_CONST_VALUES_LIST}"
+
+    while IFS= read -r const_values_path; do
+        if [ -s "${const_values_path}" ] \
+            && grep -Eq '"AppIntents\.(AppIntent|AppShortcutsProvider)"' "${const_values_path}"
+        then
+            printf '%s\n' "${const_values_path}" >> "${APPINTENTS_CONST_VALUES_LIST}"
+        fi
+    done < <(appintents_const_values_paths)
+
+    [ -s "${APPINTENTS_CONST_VALUES_LIST}" ]
 }
 
 run_appintents_swift_build
@@ -260,7 +294,10 @@ if [ "${APPINTENTS_AVAILABLE}" = "1" ]; then
     SDK_ROOT="$(xcrun --sdk macosx --show-sdk-path)"
     XCODE_BUILD_VERSION="$(xcodebuild -version | awk '/Build version/ { print $3; exit }')"
     TARGET_TRIPLE="$(uname -m)-apple-macosx${APPINTENTS_DEPLOYMENT_TARGET}"
-    printf '%s\n' "${APPINTENTS_CONST_VALUES}" > "${APPINTENTS_WORK_DIR}/constvalues.list"
+    if ! write_appintents_const_values_list; then
+        echo "ERROR: App Intents const values not generated at ${APPINTENTS_CONST_VALUES}"
+        exit 1
+    fi
     xcrun appintentsmetadataprocessor \
         --output "${RESOURCES}" \
         --toolchain-dir "${TOOLCHAIN_DIR}" \
@@ -271,7 +308,7 @@ if [ "${APPINTENTS_AVAILABLE}" = "1" ]; then
         --deployment-target "${APPINTENTS_DEPLOYMENT_TARGET}" \
         --target-triple "${TARGET_TRIPLE}" \
         --source-file-list "${APPINTENTS_SOURCE_LIST}" \
-        --swift-const-vals-list "${APPINTENTS_WORK_DIR}/constvalues.list" \
+        --swift-const-vals-list "${APPINTENTS_CONST_VALUES_LIST}" \
         --force-metadata-output \
         --no-app-shortcuts-localization \
         2>&1 | tail -3

@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Przełącz Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Pokaż lub ukryj lokalny Vault sesji zewnętrznych agentów.";
+
+"agentTeams.panel.title" = "Zespół agentów";
+"agentTeams.creator.title" = "Zespół agentów";
+"agentTeams.creator.placeholder" = "Projektuj, buduj, sprawdzaj";
+"agentTeams.creator.launch" = "Uruchom";
+"agentTeams.graph.title" = "Graf zespołu";
+"agentTeams.graph.accessibility" = "Graf zespołu agentów";
+"agentTeams.feed.title" = "Kanał agentów";
+"agentTeams.feed.empty" = "Brak zdarzeń zespołu";
+"agentTeams.feed.accessibility" = "Kanał zespołu agentów";
+
+"cells.sidebar.accessibility" = "Komórki Cocxy";
+"cells.sidebar.empty.title" = "Brak komórek";
+"cells.sidebar.empty.message" = "Utwórz lokalną lub należącą do użytkownika komórkę chmurową.";
+"cells.toolbar.title" = "Komórki";
+"cells.toolbar.running" = "%d działa";
+"cells.toolbar.refresh" = "Odśwież komórki";
+"cells.toolbar.create" = "Utwórz komórkę";
+"cells.card.destroy" = "Usuń komórkę";
+"cells.card.destroy.accessibility" = "Usuń %@";
+"cells.create.title" = "Utwórz komórkę";
+"cells.create.provider" = "Dostawca";
+"cells.create.profile" = "Profil";
+"cells.create.image" = "Obraz lub szablon";
+"cells.create.host" = "Host SSH";
+"cells.create.launch" = "Utwórz";

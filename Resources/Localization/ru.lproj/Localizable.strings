@@ -54,3 +54,29 @@
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Переключить Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Показать или скрыть локальный Vault сеансов внешних агентов.";
+
+"agentTeams.panel.title" = "Команда агентов";
+"agentTeams.creator.title" = "Команда агентов";
+"agentTeams.creator.placeholder" = "Проектирование, сборка, ревью";
+"agentTeams.creator.launch" = "Запустить";
+"agentTeams.graph.title" = "Граф команды";
+"agentTeams.graph.accessibility" = "Граф команды агентов";
+"agentTeams.feed.title" = "Лента агентов";
+"agentTeams.feed.empty" = "Нет событий команды";
+"agentTeams.feed.accessibility" = "Лента команды агентов";
+
+"cells.sidebar.accessibility" = "Ячейки Cocxy";
+"cells.sidebar.empty.title" = "Нет ячеек";
+"cells.sidebar.empty.message" = "Создайте локальную или принадлежащую пользователю облачную ячейку.";
+"cells.toolbar.title" = "Ячейки";
+"cells.toolbar.running" = "%d запущено";
+"cells.toolbar.refresh" = "Обновить ячейки";
+"cells.toolbar.create" = "Создать ячейку";
+"cells.card.destroy" = "Удалить ячейку";
+"cells.card.destroy.accessibility" = "Удалить %@";
+"cells.create.title" = "Создать ячейку";
+"cells.create.provider" = "Провайдер";
+"cells.create.profile" = "Профиль";
+"cells.create.image" = "Образ или шаблон";
+"cells.create.host" = "SSH-хост";
+"cells.create.launch" = "Создать";

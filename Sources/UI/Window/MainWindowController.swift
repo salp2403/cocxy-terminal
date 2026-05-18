@@ -313,6 +313,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserViewModel: BrowserViewModel?
     var browserHostingView: NSHostingView<BrowserPanelView>?
     var isBrowserVisible: Bool = false
+    var remoteBrowserProxyStateCancellable: AnyCancellable?
 
     var codeReviewViewModel: CodeReviewPanelViewModel?
     var codeReviewHostingView: NSHostingView<CodeReviewPanelView>?
@@ -1696,6 +1697,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         smartRoutingViewModel = nil
         notificationPanelViewModel?.onNavigateToTab = nil
         notificationPanelViewModel = nil
+        remoteBrowserProxyStateCancellable?.cancel()
+        remoteBrowserProxyStateCancellable = nil
         browserViewModel = nil
         timelineHostingView?.removeFromSuperview()
         timelineHostingView = nil
