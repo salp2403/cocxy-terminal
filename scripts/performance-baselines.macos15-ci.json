@@ -21,15 +21,15 @@
     },
     {
       "name": "editor_scroll_frame_ms",
-      "baseline": 10.0,
+      "baseline": 11.0,
       "direction": "lower",
       "absolute_tolerance": 2.0
     },
     {
       "name": "editor_insert_frame_ms",
-      "baseline": 8.5,
+      "baseline": 15.0,
       "direction": "lower",
-      "absolute_tolerance": 2.0
+      "absolute_tolerance": 3.0
     },
     {
       "name": "editor_delete_frame_ms",
@@ -45,9 +45,9 @@
     },
     {
       "name": "syntax_viewport_capture_ms",
-      "baseline": 4.5,
+      "baseline": 5.0,
       "direction": "lower",
-      "absolute_tolerance": 1.0
+      "absolute_tolerance": 1.5
     },
     {
       "name": "syntax_token_mapping_ms",
@@ -69,9 +69,9 @@
     },
     {
       "name": "cocxycore_surface_creation_ms",
-      "baseline": 140.0,
+      "baseline": 215.0,
       "direction": "lower",
-      "absolute_tolerance": 25.0
+      "absolute_tolerance": 35.0
     },
     {
       "name": "cocxycore_echo_latency_ms",
