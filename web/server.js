@@ -5,6 +5,10 @@ const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const REDIRECTS = Object.freeze({
+  "/getting-started.html": "/docs/first-run.html",
+  "/es/getting-started.html": "/es/docs/first-run.html",
+});
 
 app.use(compression());
 
@@ -13,8 +17,8 @@ app.use(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
-        fontSrc: ["'self'", "https://fonts.gstatic.com"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        fontSrc: ["'self'"],
         imgSrc: ["'self'", "data:"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         connectSrc: ["'self'"],
@@ -23,6 +27,22 @@ app.use(
     crossOriginEmbedderPolicy: false,
   })
 );
+
+app.use((_req, res, next) => {
+  res.setHeader(
+    "Permissions-Policy",
+    "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+  );
+  next();
+});
+
+app.use((req, res, next) => {
+  const target = REDIRECTS[req.path];
+  if (target) {
+    return res.redirect(301, target);
+  }
+  return next();
+});
 
 app.use(
   express.static(path.join(__dirname, "public"), {

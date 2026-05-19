@@ -1,108 +1,146 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-HN">
 <head>
   <meta charset="utf-8">
-  <title>Canales de actualizaci&oacute;n - Cocxy Terminal</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Instala y elige los canales stable, vista previa y nightly de Cocxy Terminal.">
-  <meta property="og:title" content="Canales de actualizaci&oacute;n - Cocxy Terminal">
-  <meta property="og:description" content="Builds stable, vista previa y nightly para Cocxy Terminal.">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Canales - Cocxy Terminal</title>
+  <meta name="description" content="Canales estable, validación y nocturno con riesgos claros.">
+  <meta name="author" content="Said Arturo Lopez">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <meta name="theme-color" content="#101018">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Cocxy Terminal">
+  <meta property="og:title" content="Canales - Cocxy Terminal">
+  <meta property="og:description" content="Canales estable, validación y nocturno con riesgos claros.">
   <meta property="og:url" content="https://cocxy.dev/es/channels.html">
-  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-channels.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Canales - Cocxy Terminal">
+  <meta property="og:locale" content="es_HN">
   <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Canales - Cocxy Terminal">
+  <meta name="twitter:description" content="Canales estable, validación y nocturno con riesgos claros.">
+  <meta name="twitter:image" content="https://cocxy.dev/og/og-channels.png">
   <link rel="canonical" href="https://cocxy.dev/es/channels.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html">
   <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/channels.html">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Stable Appcast" href="/appcast.xml">
-  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
-  <link rel="icon" href="/images/icon.png" type="image/png">
+  <link rel="icon" type="image/png" href="/images/icon.png">
   <link rel="apple-touch-icon" href="/images/icon.png">
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Canales de actualizacion de Cocxy Terminal",
-    "description": "Como instalar y elegir los canales stable, preview y nightly de Cocxy Terminal.",
-    "url": "https://cocxy.dev/es/channels.html",
-    "inLanguage": "es"
-  }
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
+  <link rel="preload" as="image" href="/images/cocxy-preview.avif" type="image/avif" fetchpriority="high">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <script>
+  (() => {
+    try {
+      const saved = localStorage.getItem('cocxy-theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+    } catch (_) {}
+  })();
   </script>
-  <style>
-    .channel-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; margin: 2rem 0; }
-    .channel-card { background: var(--surface0); border: 1px solid var(--surface1); border-radius: 12px; padding: 1.5rem; }
-    .channel-card h2 { font-size: 1.15rem; margin: 0 0 0.5rem; }
-    .channel-card p { color: var(--subtext1); line-height: 1.65; margin: 0 0 1rem; }
-    .channel-card code, .channel-command code { color: var(--lavender); font-family: ui-monospace, monospace; font-size: 0.85rem; }
-    .channel-command { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 8px; padding: 0.8rem; overflow-x: auto; }
-    .channel-list { color: var(--subtext1); line-height: 1.75; }
-    @media (max-width: 900px) { .channel-grid { grid-template-columns: 1fr; } }
-  </style>
+  <script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Inicio",
+      "item": "https://cocxy.dev/es/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Canales",
+      "item": "https://cocxy.dev/channels.html"
+    }
+  ]
+}
+  </script>
 </head>
 <body>
-  <header>
-    <nav class="nav" aria-label="Navegaci&oacute;n principal">
-      <a href="/es/" class="nav-logo"><img src="/images/icon.png" alt="" width="28" height="28"><span>Cocxy</span></a>
-      <div class="nav-links">
-        <a href="/es/features.html">Funciones</a>
-        <a href="/es/releases.html">Versiones</a>
-        <a href="/es/channels.html" class="nav-active">Canales</a>
-        <a href="/es/getting-started.html">Gu&iacute;a</a>
-        <a href="/channels.html" hreflang="en" lang="en">English</a>
-        <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-      </div>
-    </nav>
-  </header>
-
-  <main>
-    <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
-      <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Canales de actualizaci&oacute;n</h1>
-      <p style="color:var(--subtext0);max-width:760px;line-height:1.75;">Cocxy publica tres apps macOS firmadas con identificadores de bundle, feeds de actualizaci&oacute;n, preferencias y casks Homebrew separados. Puedes instalarlas juntas en <code>/Applications</code>.</p>
-
-      <div class="channel-grid">
-        <article class="channel-card">
-          <h2>Stable</h2>
-          <p>Releases de producci&oacute;n para uso diario. Stable sigue tags p&uacute;blicos y el feed Sparkle principal.</p>
-          <div class="channel-command"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code></div>
-          <p style="margin-top:1rem;">Feed: <a href="https://cocxy.dev/appcast.xml">appcast.xml</a></p>
-        </article>
-        <article class="channel-card">
-          <h2>Vista previa</h2>
-          <p>Builds anticipadas firmadas para validar cambios antes del siguiente release stable.</p>
-          <div class="channel-command"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy-pr&#101;view</code></div>
-          <p style="margin-top:1rem;">Feed: <a href="https://cocxy.dev/appcast-preview.xml">appcast-pr&#101;view.xml</a></p>
-        </article>
-        <article class="channel-card">
-          <h2>Nightly</h2>
-          <p>Builds diarias firmadas para probar el estado actual de desarrollo. Mant&eacute;n stable para trabajo regular.</p>
-          <div class="channel-command"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy-nightly</code></div>
-          <p style="margin-top:1rem;">Feed: <a href="https://cocxy.dev/appcast-nightly.xml">appcast-nightly.xml</a></p>
-        </article>
-      </div>
-
-      <section class="channel-list" aria-labelledby="channel-faq">
-        <h2 id="channel-faq" style="color:var(--text);font-size:1.35rem;">FAQ de canales</h2>
-        <p><strong style="color:var(--text);">Puedo instalar todos los canales a la vez?</strong><br>S&iacute;. Stable usa <code>dev.cocxy.terminal</code>, vista previa usa <code>dev.cocxy.terminal.pr&#101;view</code> y nightly usa <code>dev.cocxy.terminal.nightly</code>.</p>
-        <p><strong style="color:var(--text);">Puedo cambiar el feed dentro de la app?</strong><br>S&iacute;. Abre Preferencias y elige Stable, Vista previa o Nightly en Canal de actualizaci&oacute;n. El canal seleccionado cambia el feed Sparkle sin reinstalar la app.</p>
-        <p><strong style="color:var(--text);">D&oacute;nde quedan las preferencias?</strong><br>Stable conserva <code>~/.config/cocxy/</code>. Vista previa y nightly usan directorios por bundle para que probar builds no sobrescriba la configuraci&oacute;n stable.</p>
-      </section>
-    </section>
-  </main>
-
-  <footer class="site-footer" role="contentinfo">
-    <div class="container">
-      <div class="footer-content">
-        <div class="footer-brand"><img src="/images/icon.png" alt="" width="24" height="24"><span>Cocxy Terminal</span></div>
-        <div class="footer-links">
-          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-          <a href="/es/releases.html">Versiones</a>
-          <a href="/es/getting-started.html">Gu&iacute;a</a>
-          <a href="/channels.html" hreflang="en" lang="en">English</a>
-        </div>
-        <p class="footer-credit">Hecho por Said Arturo Lopez</p>
-      </div>
+<a class="skip-link" href="#main">Saltar al contenido</a>
+<header class="site-header">
+  <nav class="nav container" aria-label="Navegación principal">
+    <a class="nav-logo" href="/es/" aria-label="Cocxy Terminal">
+      <img src="/images/icon.png" width="32" height="32" alt="">
+      <span>Cocxy</span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+      <span></span><span></span><span></span>
+      <span class="sr-only">Abrir navegación</span>
+    </button>
+    <div class="nav-links" id="site-menu">
+      <a  href="/es/features.html">Funciones</a>
+      <a  href="/es/features/agents.html">Agentes</a>
+      <a  href="/es/privacy.html">Privacidad</a>
+      <a  href="/es/security.html">Seguridad</a>
+      <a  href="/es/docs/">Documentación</a>
+      <a class="nav-cta" href="#download">Descargar</a>
+      <button class="theme-toggle" type="button" aria-label="Cambiar tema" title="Cambiar tema">
+        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
+        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
+      </button>
+      <a href="/channels.html" hreflang="en" lang="en">English</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
-  </footer>
+  </nav>
+</header>
+<main id="main">
+<section class="page-hero"><div class="container">
+    <p class="eyebrow">Cocxy Terminal</p>
+    <h1>Canales</h1>
+    <p>Canales estable, validación y nocturno con riesgos claros.</p>
+  </div></section><section class="section"><div class="container cards-3">
+  <article class="card"><h2>Estable</h2><p>Canal recomendado para trabajo diario.</p><pre class="code-block"><code>brew install --cask cocxy</code><button class="copy-button" type="button">Copiar</button></pre><p>appcast.xml</p></article>
+  <article class="card"><h2>Validación</h2><p>Canal de validación antes del canal estable.</p><pre class="code-block"><code>brew install --cask cocxy-pr&#101;view</code><button class="copy-button" type="button">Copiar</button></pre><p><span data-feed="appcast-preview.xml">appcast de validación</span></p></article>
+  <article class="card"><h2>Nocturno</h2><p>Canal de mayor riesgo para pruebas tempranas.</p><pre class="code-block"><code>brew install --cask cocxy-nightly</code><button class="copy-button" type="button">Copiar</button></pre><p>appcast-nightly.xml</p></article>
+</div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">Descarga</p>
+      <h2 id="download-title">Instala Cocxy en macOS</h2>
+      <p>El sitio conserva placeholders de versión para que el release workflow los reescriba al publicar.</p>
+    </div>
+    <div class="download-grid">
+      <article class="card">
+        <h3>DMG</h3>
+        <p>Descarga directa desde GitHub Releases.</p>
+        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Descargar v0.0.0</a>
+      </article>
+      <article class="card">
+        <h3>Homebrew</h3>
+        <p>Instalación reproducible desde el tap oficial.</p>
+        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copiar</button></pre>
+      </article>
+      <article class="card">
+        <h3>Canales</h3>
+        <p>Canal estable, validación y nocturno documentados con sus riesgos.</p>
+        <a class="button button-secondary" href="/es/channels.html">Ver canales</a>
+      </article>
+    </div>
+  </div>
+</section>
+</main>
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <a class="footer-brand" href="/es/"><img src="/images/icon.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
+      <p>Terminal nativa para macOS, local primero, MIT y sin telemetría.</p>
+    </div>
+    <nav aria-label="Enlaces de pie">
+      <a href="/es/privacy.html">Privacidad</a>
+      <a href="/es/security.html">Seguridad</a>
+      <a href="/es/releases.html">Releases</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+    </nav>
+    <p class="footer-note">Hecho por Said Arturo Lopez.</p>
+  </div>
+</footer>
+<script src="/js/theme-switcher.js" defer></script>
+<script src="/js/main.js" defer></script>
 </body>
 </html>

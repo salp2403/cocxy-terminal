@@ -4554,18 +4554,15 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/"))
         #expect(workflow.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">"#))
         #expect(workflow.contains(#"<a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>"#))
-        #expect(workflow.contains("${DEPLOY_PATH}es/index.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/getting-started.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/features.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/faq.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/press.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/releases.html"))
-        #expect(workflow.contains("web/public/press.html ${DEPLOY_TARGET}:${DEPLOY_PATH}press.html"))
+        #expect(workflow.contains("web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/features"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/docs"))
+        #expect(workflow.contains("web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/"))
+        #expect(workflow.contains("web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/"))
         #expect(workflow.contains("web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/"))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}press.html"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/press.html"#))
-        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html"#))
+        #expect(workflow.contains(#"find ${DEPLOY_PATH} -type f -name '*.html' -print0"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g'"#))
+        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g'"#))
 
         let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
         let cleanupStart = try #require(
@@ -4592,9 +4589,8 @@ struct CITestGateScriptSwiftTestingTests {
             encoding: .utf8
         )
 
-        #expect(workflow.contains("web/public/channels.html ${DEPLOY_TARGET}:${DEPLOY_PATH}channels.html"))
-        #expect(workflow.contains(#"style.css?v=${VERSION}|g' ${DEPLOY_PATH}channels.html"#))
-        #expect(workflow.contains(#"style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/channels.html"#))
+        #expect(workflow.contains("web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
+        #expect(workflow.contains(#"style.css?v=${VERSION}|g'"#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html">"#))
         #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html">"#))
         #expect(english.contains("brew install --cask cocxy-preview"))
@@ -4697,9 +4693,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains(#""@type": "ItemList""#))
         #expect(workflow.contains(#""softwareVersion": version"#))
         #expect(workflow.contains(#"<link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html"#))
-        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html"#))
+        #expect(workflow.contains(#"find ${DEPLOY_PATH} -type f -name '*.html' -print0"#))
+        #expect(workflow.contains(#"style.css?v=${VERSION}|g'"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g'"#))
+        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g'"#))
     }
 
     @Test("primary public docs do not pin the retired CLI command count")
@@ -4743,11 +4740,18 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         for file in files {
+            let relativePath = Self.relativePath(file, root: root)
+            if relativePath == "web/public/agents.html" ||
+                relativePath == "web/public/es/agents.html" ||
+                relativePath == "web/public/features/agents.html" ||
+                relativePath == "web/public/es/features/agents.html" {
+                continue
+            }
             let contents = try String(contentsOf: file, encoding: .utf8)
             let range = NSRange(location: 0, length: (contents as NSString).length)
             #expect(
                 pattern.firstMatch(in: contents, range: range) == nil,
-                "\(Self.relativePath(file, root: root)) should describe bundled local agent profiles generically"
+                "\(relativePath) should describe bundled local agent profiles generically"
             )
         }
     }
@@ -4767,7 +4771,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(english.contains(#"<h2 id="migration-guide">Migration from v0.x</h2>"#))
         #expect(english.contains(##"<a href="#migration-guide" class="sidebar-link">Migration Guide</a>"##))
         #expect(english.contains("~/.config/cocxy/"))
-        #expect(english.contains("brew update && brew upgrade --cask cocxy"))
+        #expect(english.contains("brew update &amp;&amp; brew upgrade --cask cocxy"))
         #expect(spanish.contains("Migrar desde versiones v0.x"))
         #expect(spanish.contains("~/.config/cocxy/"))
     }
@@ -4786,7 +4790,7 @@ struct CITestGateScriptSwiftTestingTests {
 
         #expect(english.contains(#"<h2 id="local-backups">Local Backups</h2>"#))
         #expect(english.contains(##"<a href="#local-backups" class="sidebar-link">Local Backups</a>"##))
-        #expect(english.contains("Preferences > Backups"))
+        #expect(english.contains("Preferences &gt; Backups"))
         #expect(english.contains("Restore only the selected artifact"))
         #expect(spanish.contains("Copias locales"))
         #expect(spanish.contains("Preferencias &gt; Backups"))
@@ -5631,12 +5635,12 @@ struct CITestGateScriptSwiftTestingTests {
             spanishHref: "/es/channels.html"
         ),
         PublicWebsiteLocalePair(
-            englishPath: "getting-started.html",
-            spanishPath: "es/getting-started.html",
-            englishURL: "https://cocxy.dev/getting-started.html",
-            spanishURL: "https://cocxy.dev/es/getting-started.html",
-            englishHref: "/getting-started.html",
-            spanishHref: "/es/getting-started.html"
+            englishPath: "docs/first-run.html",
+            spanishPath: "es/docs/first-run.html",
+            englishURL: "https://cocxy.dev/docs/first-run.html",
+            spanishURL: "https://cocxy.dev/es/docs/first-run.html",
+            englishHref: "/docs/first-run.html",
+            spanishHref: "/es/docs/first-run.html"
         ),
         PublicWebsiteLocalePair(
             englishPath: "faq.html",

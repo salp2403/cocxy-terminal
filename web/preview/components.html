@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Cocxy Web Components Preview</title>
+  <link rel="stylesheet" href="../public/css/style.css?v=0.0.0">
+</head>
+<body>
+  <main id="main">
+    <section class="page-hero"><div class="container"><p class="eyebrow">Preview</p><h1>Component Preview</h1><p>Offline review surface for Cocxy web cards, buttons, stats, tables, docs search, and media frames.</p></div></section>
+    <section class="section"><div class="container">
+      <div class="hero-actions"><a class="button button-primary" href="#">Primary</a><a class="button button-secondary" href="#">Secondary</a><button class="theme-toggle" type="button" aria-label="Toggle theme"><span class="theme-toggle__sun">☀</span><span class="theme-toggle__moon">◐</span></button></div>
+      <div class="feature-grid"><article class="feature-card feature-icon--agents" id="agent-detection">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg>
+  <h3><a href="/features/agents.html">Multi-Layer Agent Detection</a></h3>
+  <p>Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.</p>
+  <ul><li>11 built-in profiles</li><li>Custom agents.toml support</li><li>Per-surface state</li></ul>
+</article><article class="feature-card feature-icon--config" id="vault">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg>
+  <h3><a href="/features/vault.html">Encrypted Vault</a></h3>
+  <p>Search, resume, pin, preview, and export local agent sessions without sending terminal history to a remote service.</p>
+  <ul><li>Encrypted at rest</li><li>Full-text search</li><li>Smart resume</li></ul>
+</article><article class="feature-card feature-icon--review" id="code-review">
+  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg>
+  <h3><a href="/features/code-review.html">Inline Code Review</a></h3>
+  <p>Review agent changes beside the terminal, comment on lines, accept or reject hunks, and return structured feedback to the session.</p>
+  <ul><li>File tree and diff</li><li>Inline comments</li><li>Keyboard workflow</li></ul>
+</article></div>
+      <div class="stats-grid"><div class="stat"><strong>11</strong><span>agents</span></div><div class="stat"><strong>21</strong><span>languages</span></div><div class="stat"><strong>0</strong><span>telemetry</span></div><div class="stat"><strong>MIT</strong><span>license</span></div><div class="stat"><strong>14+</strong><span>macOS</span></div></div>
+      <div class="docs-search"><label for="preview-search">Search</label><input id="preview-search" type="search" data-doc-search placeholder="ssh, agents, plugins"><div data-doc-search-results class="docs-search-results"></div></div>
+      <pre class="code-block"><code>cocxy status</code><button class="copy-button" type="button">Copy</button></pre>
+    </div></section>
+  </main>
+  <script src="../public/js/theme-switcher.js" defer></script>
+  <script src="../public/js/main.js" defer></script>
+</body>
+</html>
