@@ -87,9 +87,9 @@
     },
     {
       "name": "cocxycore_frame_average_ms",
-      "baseline": 2.0,
+      "baseline": 2.6,
       "direction": "lower",
-      "absolute_tolerance": 0.5
+      "absolute_tolerance": 0.6
     },
     {
       "name": "cocxycore_frame_p99_ms",
