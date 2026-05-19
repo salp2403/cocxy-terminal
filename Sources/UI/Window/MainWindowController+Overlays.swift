@@ -1023,6 +1023,7 @@ extension MainWindowController {
                 }
             ),
         ]
+        actions.append(contentsOf: commandPaletteCellsActions())
         actions.append(contentsOf: commandPaletteEditorActions())
         actions.append(contentsOf: commandPaletteCodexAccountActions())
 
@@ -2756,7 +2757,11 @@ extension MainWindowController {
             onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
             localizer: appLocalizer(),
             sshKeyManager: sshKeyManager,
-            sftpExecutor: SystemSFTPExecutor()
+            sftpExecutor: SystemSFTPExecutor(),
+            remotePortScanner: remotePortScanner,
+            onOpenRemoteBrowser: { [weak self] profile, suggestion in
+                self?.openRemoteBrowser(profile: profile, suggestion: suggestion)
+            }
         )
         viewModel.updateLocalizer(appLocalizer())
         view.vibrancyAppearanceOverride = override

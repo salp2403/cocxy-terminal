@@ -82,6 +82,8 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
         #expect(buildScript.contains("appintentsmetadataprocessor"))
         #expect(buildScript.contains("SwiftConstantValues/AppIntents.json"))
         #expect(buildScript.contains("--product \"${APP_NAME}\""))
+        #expect(buildScript.contains("CocxyShortcuts.swift.swiftconstvalues"))
+        #expect(buildScript.contains("write_appintents_const_values_list"))
         #expect(buildScript.contains("Metadata.appintents"))
         #expect(verifyScript.contains("[Shortcuts]"))
         #expect(verifyScript.contains("Metadata.appintents"))
@@ -97,6 +99,7 @@ struct CocxyShortcutsCatalogSwiftTestingTests {
 
         #expect(buildScript.contains("App Intents const values did not contain AppIntent metadata"))
         #expect(buildScript.contains("\"AppIntents.AppIntent\""))
+        #expect(buildScript.contains("\"AppIntents\\.(AppIntent|AppShortcutsProvider)\""))
         #expect(buildScript.contains("CocxyShortcuts.*"))
     }
 

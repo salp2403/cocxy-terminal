@@ -1257,6 +1257,23 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
         XCTAssertEqual(response.data?["experimental.pip-enabled"], "\(ExperimentalConfig.defaults.pipEnabled)")
         XCTAssertEqual(response.data?["experimental.pty-daemon"], "\(ExperimentalConfig.defaults.ptyDaemonEnabled)")
+        XCTAssertEqual(
+            response.data?["experimental.browser-v2.enabled"],
+            "\(ExperimentalConfig.defaults.browserV2.enabled)"
+        )
+        XCTAssertEqual(
+            response.data?["experimental.remote-browser.enabled"],
+            "\(ExperimentalConfig.defaults.remoteBrowser.enabled)"
+        )
+        XCTAssertEqual(response.data?["experimental.cells.enabled"], "\(ExperimentalConfig.defaults.cells.enabled)")
+        XCTAssertEqual(
+            response.data?["experimental.cocxycore-moat.enabled"],
+            "\(ExperimentalConfig.defaults.cocxyCoreMoat.enabled)"
+        )
+        XCTAssertEqual(
+            response.data?["experimental.agent-teams-v2.enabled"],
+            "\(ExperimentalConfig.defaults.agentTeamsV2.enabled)"
+        )
         XCTAssertEqual(response.data?["completions.inline-ai"], "\(CompletionConfig.defaults.inlineAIEnabled)")
         XCTAssertEqual(response.data?["completions.provider"], CompletionConfig.defaults.provider.rawValue)
         XCTAssertEqual(
@@ -1284,6 +1301,25 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["worktree.on-close"], WorktreeConfig.defaults.onClose.rawValue)
         XCTAssertNil(response.data?["appearance.theme"])
         XCTAssertNil(response.data?["experimental.pip-enabled"])
+    }
+
+    func test_configList_withExperimentalFilterReturnsRolloutKeys() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cl-experimental",
+            command: "config-list",
+            params: ["filter": "experimental."]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "7")
+        XCTAssertEqual(response.data?["experimental.pip-enabled"], "\(ExperimentalConfig.defaults.pipEnabled)")
+        XCTAssertEqual(response.data?["experimental.pty-daemon"], "\(ExperimentalConfig.defaults.ptyDaemonEnabled)")
+        XCTAssertEqual(
+            response.data?["experimental.remote-browser.enabled"],
+            "\(ExperimentalConfig.defaults.remoteBrowser.enabled)"
+        )
+        XCTAssertNil(response.data?["worktree.enabled"])
     }
 
     func test_configList_withCompletionFilterOnlyReturnsCompletionKeys() {
@@ -1413,6 +1449,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 ("rate-limit.enabled-providers", "[\"cursor\", copilot, \"cursor\"]"),
                 ("rate-limit.auto-detect", "FALSE"),
                 ("rate-limit.oauth-refresh-interval-minutes", "15"),
+                ("experimental.remote-browser.enabled", "TRUE"),
             ]
 
             for (index, testCase) in cases.enumerated() {
@@ -1425,6 +1462,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 XCTAssertEqual(response.data?["key"], testCase.0)
             }
             XCTAssertEqual(reloadCount.withValue { $0 }, cases.count)
+            let configURL = FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent(".config/cocxy/config.toml")
+            let written = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
+            XCTAssertTrue(written.contains("[experimental.remote-browser]\nenabled = true"))
         }
     }
 
@@ -1464,6 +1505,17 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         )
 
         XCTAssertTrue(updated.contains("\n[experimental]\npip-enabled = true"))
+    }
+
+    func test_configTOMLUpdater_appendsMissingNestedSection() {
+        let updated = AppSocketConfigTOMLUpdater.updateTomlValue(
+            in: "[general]\nshell = \"/bin/zsh\"",
+            section: "experimental.remote-browser",
+            field: "enabled",
+            newValue: "true"
+        )
+
+        XCTAssertTrue(updated.contains("\n[experimental.remote-browser]\nenabled = true"))
     }
 
     func test_configTOMLUpdater_escapesInsertedStringValues() {

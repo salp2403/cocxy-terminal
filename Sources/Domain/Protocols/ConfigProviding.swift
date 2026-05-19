@@ -2840,19 +2840,50 @@ struct RichInputConfig: Codable, Sendable, Equatable {
 struct ExperimentalConfig: Codable, Sendable, Equatable {
     let pipEnabled: Bool
     let ptyDaemonEnabled: Bool
+    let browserV2: ExperimentalFeatureNamespaceConfig
+    let remoteBrowser: ExperimentalFeatureNamespaceConfig
+    let cells: ExperimentalFeatureNamespaceConfig
+    let cocxyCoreMoat: ExperimentalFeatureNamespaceConfig
+    let agentTeamsV2: ExperimentalFeatureNamespaceConfig
 
     static var defaults: ExperimentalConfig {
-        ExperimentalConfig(pipEnabled: false, ptyDaemonEnabled: false)
+        ExperimentalConfig(
+            pipEnabled: false,
+            ptyDaemonEnabled: false,
+            browserV2: .defaults,
+            remoteBrowser: .defaults,
+            cells: .defaults,
+            cocxyCoreMoat: .defaults,
+            agentTeamsV2: .defaults
+        )
     }
 
-    init(pipEnabled: Bool = false, ptyDaemonEnabled: Bool = false) {
+    init(
+        pipEnabled: Bool = false,
+        ptyDaemonEnabled: Bool = false,
+        browserV2: ExperimentalFeatureNamespaceConfig = .defaults,
+        remoteBrowser: ExperimentalFeatureNamespaceConfig = .defaults,
+        cells: ExperimentalFeatureNamespaceConfig = .defaults,
+        cocxyCoreMoat: ExperimentalFeatureNamespaceConfig = .defaults,
+        agentTeamsV2: ExperimentalFeatureNamespaceConfig = .defaults
+    ) {
         self.pipEnabled = pipEnabled
         self.ptyDaemonEnabled = ptyDaemonEnabled
+        self.browserV2 = browserV2
+        self.remoteBrowser = remoteBrowser
+        self.cells = cells
+        self.cocxyCoreMoat = cocxyCoreMoat
+        self.agentTeamsV2 = agentTeamsV2
     }
 
     private enum CodingKeys: String, CodingKey {
         case pipEnabled
         case ptyDaemonEnabled
+        case browserV2
+        case remoteBrowser
+        case cells
+        case cocxyCoreMoat
+        case agentTeamsV2
     }
 
     init(from decoder: Decoder) throws {
@@ -2862,6 +2893,48 @@ struct ExperimentalConfig: Codable, Sendable, Equatable {
             ?? defaults.pipEnabled
         self.ptyDaemonEnabled = try container.decodeIfPresent(Bool.self, forKey: .ptyDaemonEnabled)
             ?? defaults.ptyDaemonEnabled
+        self.browserV2 = try container.decodeIfPresent(
+            ExperimentalFeatureNamespaceConfig.self,
+            forKey: .browserV2
+        ) ?? defaults.browserV2
+        self.remoteBrowser = try container.decodeIfPresent(
+            ExperimentalFeatureNamespaceConfig.self,
+            forKey: .remoteBrowser
+        ) ?? defaults.remoteBrowser
+        self.cells = try container.decodeIfPresent(
+            ExperimentalFeatureNamespaceConfig.self,
+            forKey: .cells
+        ) ?? defaults.cells
+        self.cocxyCoreMoat = try container.decodeIfPresent(
+            ExperimentalFeatureNamespaceConfig.self,
+            forKey: .cocxyCoreMoat
+        ) ?? defaults.cocxyCoreMoat
+        self.agentTeamsV2 = try container.decodeIfPresent(
+            ExperimentalFeatureNamespaceConfig.self,
+            forKey: .agentTeamsV2
+        ) ?? defaults.agentTeamsV2
+    }
+}
+
+struct ExperimentalFeatureNamespaceConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+
+    static var defaults: ExperimentalFeatureNamespaceConfig {
+        ExperimentalFeatureNamespaceConfig(enabled: false)
+    }
+
+    init(enabled: Bool = false) {
+        self.enabled = enabled
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.enabled = try container.decodeIfPresent(Bool.self, forKey: .enabled)
+            ?? Self.defaults.enabled
     }
 }
 

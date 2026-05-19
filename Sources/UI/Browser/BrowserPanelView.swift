@@ -102,6 +102,10 @@ struct BrowserPanelView: View {
             browserTabBar
             Divider()
             toolbarView
+            if let notice = viewModel.remoteBrowserNotice {
+                Divider()
+                remoteBrowserNoticeBanner(notice)
+            }
             Divider()
             if showFindBar {
                 BrowserFindBar(
@@ -191,6 +195,8 @@ struct BrowserPanelView: View {
                 )
             }
 
+            routeBadge
+
             Spacer()
 
             Button(action: onDismiss) {
@@ -204,6 +210,206 @@ struct BrowserPanelView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    private var routeBadge: some View {
+        let remoteProfile = viewModel.activeRemoteBrowserProfile
+        let isRemote = remoteProfile != nil
+        let tint = routeBadgeTint(for: remoteProfile)
+        let symbol = routeBadgeSymbol(for: remoteProfile)
+        let label = isRemote
+            ? localized("browser.route.remote", fallback: "Remote")
+            : localized("browser.route.local", fallback: "Local")
+        let detail = remoteProfile?.routingSummary
+            ?? localized("browser.route.local.detail", fallback: "Browser traffic uses local networking")
+
+        return HStack(spacing: 4) {
+            Image(systemName: symbol)
+                .font(.system(size: 9, weight: .semibold))
+            Text(label)
+                .font(.system(size: 10, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundColor(tint)
+        .padding(.horizontal, 7)
+        .frame(height: 20)
+        .background(
+            Capsule()
+                .fill(
+                    isRemote
+                        ? tint.opacity(0.12)
+                        : Color(nsColor: CocxyColors.surface0).opacity(0.72)
+                )
+        )
+        .overlay(
+            Capsule()
+                .stroke(
+                    isRemote
+                        ? tint.opacity(0.35)
+                        : Color(nsColor: CocxyColors.surface1).opacity(0.7),
+                    lineWidth: 1
+                )
+        )
+        .help(detail)
+        .accessibilityLabel(
+            isRemote
+                ? localized("browser.route.remote.accessibility", fallback: "Remote browser route")
+                : localized("browser.route.local.accessibility", fallback: "Local browser route")
+        )
+        .accessibilityValue(remoteProfile?.displayTitle ?? detail)
+    }
+
+    private func routeBadgeTint(for remoteProfile: RemoteBrowserProfile?) -> Color {
+        guard let remoteProfile else { return Color(nsColor: CocxyColors.subtext0) }
+        switch remoteProfile.proxyHealth {
+        case .failed:
+            return Color(nsColor: CocxyColors.red)
+        case .connecting, .degraded:
+            return Color(nsColor: CocxyColors.yellow)
+        case .disconnected, .active:
+            return Color(nsColor: CocxyColors.blue)
+        }
+    }
+
+    private func routeBadgeSymbol(for remoteProfile: RemoteBrowserProfile?) -> String {
+        guard let remoteProfile else { return "house" }
+        switch remoteProfile.proxyHealth {
+        case .failed:
+            return "exclamationmark.triangle.fill"
+        case .connecting:
+            return "arrow.triangle.2.circlepath"
+        case .degraded:
+            return "exclamationmark.triangle"
+        case .disconnected, .active:
+            return "network"
+        }
+    }
+
+    private func remoteBrowserNoticeBanner(_ notice: RemoteBrowserNotice) -> some View {
+        let presentation = remoteBrowserNoticePresentation(notice)
+
+        return HStack(alignment: .center, spacing: 8) {
+            Image(systemName: presentation.symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(presentation.tint)
+                .frame(width: 16, height: 16)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(presentation.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                    .lineLimit(1)
+
+                Text(presentation.detail)
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: { _ = viewModel.retryRemoteBrowserNotice() }) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 24, height: 24)
+            .foregroundColor(presentation.tint)
+            .help(localized("browser.route.notice.retry", fallback: "Retry"))
+            .accessibilityLabel(localized("browser.route.notice.retry", fallback: "Retry"))
+
+            Button(action: { viewModel.clearRemoteBrowserProfile() }) {
+                Image(systemName: "house")
+                    .font(.system(size: 11, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 24, height: 24)
+            .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+            .help(localized("browser.route.notice.switchLocal", fallback: "Switch to local"))
+            .accessibilityLabel(localized("browser.route.notice.switchLocal", fallback: "Switch to local"))
+
+            Button(action: { viewModel.dismissRemoteBrowserNotice() }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 22, height: 22)
+            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            .help(localized("browser.route.notice.dismiss", fallback: "Dismiss"))
+            .accessibilityLabel(localized("browser.route.notice.dismiss", fallback: "Dismiss"))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(presentation.tint.opacity(0.10))
+        .overlay(
+            Rectangle()
+                .fill(presentation.tint.opacity(0.25))
+                .frame(height: 1),
+            alignment: .bottom
+        )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(presentation.title)
+        .accessibilityValue(presentation.detail)
+    }
+
+    private func remoteBrowserNoticePresentation(
+        _ notice: RemoteBrowserNotice
+    ) -> (symbol: String, tint: Color, title: String, detail: String) {
+        let remoteTitle = notice.remoteProfile.displayTitle
+        let portText = notice.routeRequest.map { ":\($0.remotePort)" } ?? ""
+        switch notice.kind {
+        case .missingForward:
+            return (
+                "arrow.left.arrow.right",
+                Color(nsColor: CocxyColors.yellow),
+                localized("browser.route.notice.missingForward.title", fallback: "Remote route unavailable"),
+                String(
+                    format: localized("browser.route.notice.missingForward.detail", fallback: "%@ has no local forward for remote localhost%@."),
+                    remoteTitle,
+                    portText
+                )
+            )
+        case .proxyConnecting:
+            return (
+                "arrow.triangle.2.circlepath",
+                Color(nsColor: CocxyColors.yellow),
+                localized("browser.route.notice.proxyConnecting.title", fallback: "Remote proxy connecting"),
+                String(
+                    format: localized("browser.route.notice.proxyConnecting.detail", fallback: "%@ is attached; Cocxy is waiting for the proxy to become ready."),
+                    remoteTitle
+                )
+            )
+        case .proxyDegraded:
+            return (
+                "exclamationmark.triangle",
+                Color(nsColor: CocxyColors.yellow),
+                localized("browser.route.notice.proxyDegraded.title", fallback: "Remote proxy degraded"),
+                String(
+                    format: localized("browser.route.notice.proxyDegraded.detail", fallback: "%@ is still routed, but recent proxy checks are unstable."),
+                    remoteTitle
+                )
+            )
+        case .proxyFailed:
+            return (
+                "exclamationmark.triangle.fill",
+                Color(nsColor: CocxyColors.red),
+                localized("browser.route.notice.proxyFailed.title", fallback: "Remote proxy failed"),
+                String(
+                    format: localized("browser.route.notice.proxyFailed.detail", fallback: "%@ is attached. Retry the route or switch this browser back to local."),
+                    remoteTitle
+                )
+            )
+        case .navigationFailed:
+            return (
+                "wifi.exclamationmark",
+                Color(nsColor: CocxyColors.red),
+                localized("browser.route.notice.navigationFailed.title", fallback: "Remote page failed"),
+                notice.detail ?? notice.failedURLString ?? String(
+                    format: localized("browser.route.notice.navigationFailed.detail", fallback: "%@ could not load through the remote route."),
+                    remoteTitle
+                )
+            )
+        }
     }
 
     // MARK: - Browser Tab Bar
@@ -732,22 +938,13 @@ struct WebViewRepresentable: NSViewRepresentable {
 
         BrowserWebViewAppearance.configure(webView)
 
-        // Install console capture if provided.
-        if let consoleCapture {
-            consoleCapture.install(on: webView)
-            consoleCapture.onNewEntry = { [onConsoleEntry] entry in
-                onConsoleEntry?(entry)
-            }
-        }
-
-        // Start network monitoring if provided.
-        if let networkMonitor {
-            Task { @MainActor in
-                networkMonitor.startMonitoring(webView)
-            }
-        }
-
         context.coordinator.webView = webView
+        context.coordinator.installInstrumentationIfNeeded(
+            on: webView,
+            consoleCapture: consoleCapture,
+            networkMonitor: networkMonitor,
+            onConsoleEntry: onConsoleEntry
+        )
         BrowserWebKitAutomationBridge.install(on: viewModel, webView: webView)
         context.coordinator.subscribeToNavigationActions()
 
@@ -763,6 +960,12 @@ struct WebViewRepresentable: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: WKWebView, context: Context) {
+        context.coordinator.installInstrumentationIfNeeded(
+            on: nsView,
+            consoleCapture: consoleCapture,
+            networkMonitor: networkMonitor,
+            onConsoleEntry: onConsoleEntry
+        )
         // State updates are driven by the coordinator via Combine subscriptions,
         // not by SwiftUI diffs. This avoids re-entrant navigation loops.
     }
@@ -779,6 +982,8 @@ struct WebViewRepresentable: NSViewRepresentable {
         private let viewModel: BrowserViewModel
         private let localizer: AppLocalizer
         private var cancellables = Set<AnyCancellable>()
+        private weak var installedConsoleCapture: BrowserConsoleCapture?
+        private weak var installedNetworkMonitor: BrowserNetworkMonitor?
         let domGrabHandler: BrowserDOMGrabHandler
         weak var webView: WKWebView?
 
@@ -789,6 +994,35 @@ struct WebViewRepresentable: NSViewRepresentable {
             super.init()
             self.domGrabHandler.onPayload = { [weak viewModel] payload in
                 viewModel?.handleDOMGrabPayload(payload)
+            }
+        }
+
+        func installInstrumentationIfNeeded(
+            on webView: WKWebView,
+            consoleCapture: BrowserConsoleCapture?,
+            networkMonitor: BrowserNetworkMonitor?,
+            onConsoleEntry: ((ConsoleEntry) -> Void)?
+        ) {
+            if let installedConsoleCapture,
+               let consoleCapture,
+               installedConsoleCapture !== consoleCapture {
+                installedConsoleCapture.uninstall(from: webView)
+                self.installedConsoleCapture = nil
+            }
+
+            if let consoleCapture, installedConsoleCapture == nil {
+                consoleCapture.install(on: webView)
+                consoleCapture.onNewEntry = { [onConsoleEntry] entry in
+                    onConsoleEntry?(entry)
+                }
+                installedConsoleCapture = consoleCapture
+            }
+
+            if let networkMonitor, installedNetworkMonitor == nil {
+                Task { @MainActor in
+                    networkMonitor.startMonitoring(webView)
+                }
+                installedNetworkMonitor = networkMonitor
             }
         }
 
@@ -837,6 +1071,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
+                self.viewModel.recordRemoteBrowserNavigationSucceeded(url: webView.url)
                 if let url = webView.url?.absoluteString {
                     self.viewModel.recordPageVisit(url: url, title: webView.title)
                 }
@@ -851,6 +1086,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
+                self.viewModel.recordRemoteBrowserNavigationFailure(error: error, failedURL: webView.url)
                 BrowserErrorPageRenderer.render(
                     error: error,
                     failedURL: webView.url,
@@ -869,6 +1105,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
+                self.viewModel.recordRemoteBrowserNavigationFailure(error: error, failedURL: webView.url)
                 BrowserErrorPageRenderer.render(
                     error: error,
                     failedURL: webView.url,
@@ -903,6 +1140,86 @@ struct WebViewRepresentable: NSViewRepresentable {
                 webView.load(navigationAction.request)
             }
             return nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptAlertPanelWithMessage message: String,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping @MainActor @Sendable () -> Void
+        ) {
+            recordJavaScriptDialog(
+                kind: .alert,
+                message: message,
+                defaultText: nil,
+                webView: webView
+            ) { _ in
+                completionHandler()
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptConfirmPanelWithMessage message: String,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+        ) {
+            recordJavaScriptDialog(
+                kind: .confirm,
+                message: message,
+                defaultText: nil,
+                webView: webView
+            ) { resolution in
+                if case .accept = resolution {
+                    completionHandler(true)
+                } else {
+                    completionHandler(false)
+                }
+            }
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptTextInputPanelWithPrompt prompt: String,
+            defaultText: String?,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping @MainActor @Sendable (String?) -> Void
+        ) {
+            recordJavaScriptDialog(
+                kind: .prompt,
+                message: prompt,
+                defaultText: defaultText,
+                webView: webView
+            ) { resolution in
+                switch resolution {
+                case .accept(let promptText):
+                    completionHandler(promptText ?? defaultText ?? "")
+                case .dismiss:
+                    completionHandler(nil)
+                }
+            }
+        }
+
+        private func recordJavaScriptDialog(
+            kind: BrowserDialogKind,
+            message: String,
+            defaultText: String?,
+            webView: WKWebView,
+            completion: @escaping (BrowserDialogResolution) -> Void
+        ) {
+            let dialog = viewModel.recordJavaScriptDialog(
+                kind: kind,
+                message: message,
+                defaultText: defaultText,
+                url: webView.url?.absoluteString,
+                completion: completion
+            )
+            BrowserJavaScriptDialogPresenter.scheduleFallbackPresentation(
+                dialog: dialog,
+                viewModel: viewModel,
+                window: webView.window,
+                localizer: localizer
+            )
         }
 
         /// Allows HTTPS certificate errors for localhost dev servers.

@@ -186,6 +186,103 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.visibleLineText(for: SurfaceID(), visibleRow: 0) == nil)
     }
 
+    @Test("one-shot web terminal consumes auth-ok event and stops on disconnect")
+    func oneShotWebTerminalConsumesAuthOKEventAndStopsOnDisconnect() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let accepted = LockedBox(false)
+
+        let status = try #require(bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "test-token",
+                maxConnections: 1,
+                maxFrameRate: 30,
+                stopAfterFirstConnection: true,
+                firstConnectionHandler: {
+                    accepted.withValue { $0 = true }
+                }
+            )
+        ))
+
+        #expect(status.running)
+        #expect(status.authRequired)
+        #expect(status.oneShot)
+        #expect(status.connectionCount == 0)
+
+        bridge.recordWebTerminalEventForTesting(eventType: 0, connectionID: 7, for: surfaceID)
+        #expect(accepted.withValue { $0 } == false)
+        #expect(bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "connect")
+
+        bridge.recordWebTerminalEventForTesting(eventType: 3, connectionID: 7, for: surfaceID)
+
+        #expect(accepted.withValue { $0 })
+        #expect(bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "auth_ok")
+
+        bridge.recordWebTerminalEventForTesting(eventType: 1, connectionID: 7, for: surfaceID)
+
+        #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
+    }
+
+    @Test("one-shot web terminal rejects bad bearer token before consuming first connection")
+    func oneShotWebTerminalRejectsBadBearerBeforeConsumingFirstConnection() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let accepted = LockedBox(false)
+
+        let status = try #require(bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "network-token",
+                maxConnections: 1,
+                maxFrameRate: 30,
+                stopAfterFirstConnection: true,
+                firstConnectionHandler: {
+                    accepted.withValue { $0 = true }
+                }
+            )
+        ))
+
+        let badProbe = try WebSocketTestProbe(port: status.port, bearerToken: "wrong-token")
+        defer { badProbe.close() }
+        _ = try await badProbe.receive(containing: "\"type\":\"auth_fail\"")
+
+        try await waitUntil {
+            accepted.withValue { $0 }
+                || bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "auth_fail"
+        }
+
+        #expect(accepted.withValue { $0 } == false)
+        let afterBadAuth = try #require(bridge.webTerminalStatus(for: surfaceID))
+        #expect(afterBadAuth.running)
+        #expect(afterBadAuth.oneShot)
+        #expect(afterBadAuth.lastEventType == "auth_fail")
+
+        let goodProbe = try WebSocketTestProbe(port: status.port, bearerToken: "network-token")
+        defer { goodProbe.close() }
+        _ = try await goodProbe.receive(containing: "\"type\":\"auth_ok\"")
+
+        try await waitUntil {
+            accepted.withValue { $0 }
+                && bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "auth_ok"
+        }
+
+        #expect(accepted.withValue { $0 })
+
+        goodProbe.close()
+        try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+            bridge.webTerminalStatus(for: surfaceID) == nil
+        }
+
+        #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
+    }
+
     @Test("TUI status glyphs stay narrow so incremental redraws do not smear text")
     func tuiStatusGlyphsStayNarrow() throws {
         let bridge = try makeBridge()
@@ -1274,6 +1371,73 @@ func waitUntil(
         try await Task.sleep(nanoseconds: pollNanoseconds)
     }
     Issue.record("Timed out waiting for condition")
+}
+
+private enum WebSocketTestProbeError: Error, CustomStringConvertible {
+    case timeout(expected: String)
+    case unsupportedMessage
+
+    var description: String {
+        switch self {
+        case .timeout(let expected):
+            "Timed out waiting for WebSocket message containing \(expected)"
+        case .unsupportedMessage:
+            "Received unsupported WebSocket message"
+        }
+    }
+}
+
+private final class WebSocketTestProbe: @unchecked Sendable {
+    private let session: URLSession
+    private let task: URLSessionWebSocketTask
+
+    init(port: UInt16, bearerToken: String) throws {
+        let url = try #require(URL(string: "ws://127.0.0.1:\(port)/"))
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        let configuration = URLSessionConfiguration.ephemeral
+        self.session = URLSession(configuration: configuration)
+        self.task = session.webSocketTask(with: request)
+        task.resume()
+    }
+
+    func receive(
+        containing expected: String,
+        timeoutNanoseconds: UInt64 = 5_000_000_000
+    ) async throws -> String {
+        try await withThrowingTaskGroup(of: String.self) { group in
+            group.addTask { [self] in
+                while true {
+                    let message = try await task.receive()
+                    let text: String
+                    switch message {
+                    case .string(let value):
+                        text = value
+                    case .data(let data):
+                        text = String(decoding: data, as: UTF8.self)
+                    @unknown default:
+                        throw WebSocketTestProbeError.unsupportedMessage
+                    }
+                    if text.contains(expected) {
+                        return text
+                    }
+                }
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+                throw WebSocketTestProbeError.timeout(expected: expected)
+            }
+
+            let value = try await group.next() ?? ""
+            group.cancelAll()
+            return value
+        }
+    }
+
+    func close() {
+        task.cancel(with: .normalClosure, reason: nil)
+        session.invalidateAndCancel()
+    }
 }
 
 final class TestDataSink: @unchecked Sendable {

@@ -1071,7 +1071,7 @@ cocxy review --stats             # Print stats for the active session</code></pr
       <li><strong>Create sessions</strong> — Start a new persistent session from the Sessions panel</li>
       <li><strong>Reconnect</strong> — After an SSH drop, your tmux sessions are still alive. Reconnect and re-attach</li>
       <li><strong>Session UI</strong> — Visual panel showing all remote sessions with status, window count, and controls</li>
-      <li><strong>CLI</strong> — <code>cocxy remote-list</code>, <code>cocxy remote-connect &lt;name&gt;</code>, <code>cocxy remote-status</code></li>
+      <li><strong>CLI</strong> — <code>cocxy remote list</code>, <code>cocxy remote connect &lt;name&gt;</code>, <code>cocxy remote status</code></li>
     </ul>
 
     <h3>SOCKS5 + HTTP CONNECT Proxy</h3>
@@ -1318,9 +1318,9 @@ cocxy dashboard-toggle
 cocxy timeline-export --format json &gt; events.json
 
 # Remote workspaces
-cocxy remote-list
-cocxy remote-connect prod-web
-cocxy remote-status
+cocxy remote list
+cocxy remote connect prod-web
+cocxy remote status
 
 # Web terminal embed
 cocxy web-start --port 8080

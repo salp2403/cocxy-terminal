@@ -1360,6 +1360,84 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testAgentTeamPaneHandoffUsesProviderLaunchSpec() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-plan",
+            teammateName: "Plan",
+            executable: "/usr/local/bin/codex",
+            arguments: ["--profile", "agent-team"],
+            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+            workingDirectory: "/tmp/ship",
+            mutatesUserConfiguration: false,
+            requiresPreviewBeforeLaunch: true
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
+        let matchingPanel = controller.panelContentViews.first { _, view in
+            guard let subagentView = view as? SubagentContentView else { return false }
+            return subagentView.subagentId == "ship-plan" && subagentView.sessionId == "ship"
+        }
+
+        let contentID = matchingPanel?.key
+        XCTAssertNotNil(contentID)
+        if let contentID {
+            XCTAssertEqual(
+                controller.activeSplitManager?.panelTitle(for: contentID),
+                "Plan - Codex CLI"
+            )
+        }
+    }
+
+    func testAgentTeamPaneHandoffCreatesOnePanelPerTeammate() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.injectedDashboardViewModel = AgentDashboardViewModel()
+
+        let specs = [
+            AgentTeamProviderLaunchSpec(
+                provider: .codex,
+                teamID: "ship",
+                teammateID: "ship-planner",
+                teammateName: "Planner",
+                executable: "/usr/local/bin/codex",
+                arguments: ["--profile", "agent-team"],
+                environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+                workingDirectory: "/tmp/ship",
+                mutatesUserConfiguration: false,
+                requiresPreviewBeforeLaunch: true
+            ),
+            AgentTeamProviderLaunchSpec(
+                provider: .codex,
+                teamID: "ship",
+                teammateID: "ship-reviewer",
+                teammateName: "Reviewer",
+                executable: "/usr/local/bin/codex",
+                arguments: ["--profile", "agent-team"],
+                environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+                workingDirectory: "/tmp/ship",
+                mutatesUserConfiguration: false,
+                requiresPreviewBeforeLaunch: true
+            ),
+        ]
+
+        for spec in specs {
+            XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
+        }
+
+        let subagentPanels = controller.panelContentViews.values.compactMap { $0 as? SubagentContentView }
+        XCTAssertEqual(subagentPanels.count, 2)
+        XCTAssertTrue(subagentPanels.contains { $0.subagentId == "ship-planner" && $0.sessionId == "ship" })
+        XCTAssertTrue(subagentPanels.contains { $0.subagentId == "ship-reviewer" && $0.sessionId == "ship" })
+    }
+
     func testSpawnSubagentPanelIgnoresGenericSubprocessAgentType() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -1860,6 +1938,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        setPanelTestCanvas(width: 1600, height: 760, on: controller)
         if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
             controller.createTerminalSurface()
         }

@@ -26,11 +26,27 @@ struct ProcessResult: Sendable {
 // MARK: - Multiplexer Errors
 
 /// Errors that can occur during SSH multiplexing operations.
-enum SSHMultiplexerError: Error, Equatable {
+enum SSHMultiplexerError: Error, Equatable, LocalizedError {
     case connectionFailed(String)
     case disconnectFailed(String)
     case forwardFailed(String)
     case notConnected
+
+    var errorDescription: String? {
+        switch self {
+        case .connectionFailed(let message):
+            return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "SSH connection failed"
+        case .disconnectFailed(let message):
+            return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "SSH disconnect failed"
+        case .forwardFailed(let message):
+            return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "SSH port forward failed"
+        case .notConnected:
+            return "SSH ControlMaster is not connected"
+        }
+    }
 }
 
 // MARK: - SSH Multiplexing Protocol
@@ -105,10 +121,13 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        try ensureControlPathDirectory(for: profile)
+
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: ["-o", "ControlMaster=auto"])
         arguments.append(contentsOf: ["-o", "ControlPersist=yes"])
         arguments.append(contentsOf: ["-o", "ControlPath=\(controlPath(for: profile))"])
+        arguments.append("-f")
         arguments.append("-N")
         arguments.append(destination(for: profile))
 
@@ -148,11 +167,12 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> Bool {
-        let arguments = [
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
             "-O", "check",
             "-o", "ControlPath=\(controlPath(for: profile))",
             destination(for: profile),
-        ]
+        ])
 
         let result = try await executor.executeAsync(
             command: "/usr/bin/ssh", arguments: arguments
@@ -170,11 +190,12 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
-        let arguments = [
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
             "-O", "exit",
             "-o", "ControlPath=\(controlPath(for: profile))",
             destination(for: profile),
-        ]
+        ])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
         guard result.exitCode == 0 else {
@@ -193,10 +214,11 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         executor: any ProcessExecutor
     ) throws {
         let forwardArgs = forwardArguments(for: forward)
-        let arguments = [
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
             "-O", "forward",
             "-o", "ControlPath=\(controlPath(for: profile))",
-        ] + forwardArgs + [destination(for: profile)]
+        ] + forwardArgs + [destination(for: profile)])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
         guard result.exitCode == 0 else {
@@ -213,10 +235,11 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         executor: any ProcessExecutor
     ) throws {
         let forwardArgs = forwardArguments(for: forward)
-        let arguments = [
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
             "-O", "cancel",
             "-o", "ControlPath=\(controlPath(for: profile))",
-        ] + forwardArgs + [destination(for: profile)]
+        ] + forwardArgs + [destination(for: profile)])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
         guard result.exitCode == 0 else {
@@ -243,13 +266,14 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> ProcessResult {
-        let arguments = [
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
             "-o", "ControlMaster=no",
             "-o", "ControlPath=\(controlPath(for: profile))",
             destination(for: profile),
             "--",
             command,
-        ]
+        ])
 
         return try await executor.executeAsync(
             command: "/usr/bin/ssh",
@@ -271,6 +295,18 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
             arguments.append(contentsOf: ["-i", identityFile])
         }
 
+        if let strictHostKeyChecking = profile.strictHostKeyChecking {
+            arguments.append(contentsOf: ["-o", "StrictHostKeyChecking=\(strictHostKeyChecking)"])
+        }
+
+        if let knownHostsFile = profile.knownHostsFile {
+            arguments.append(contentsOf: ["-o", "UserKnownHostsFile=\(knownHostsFile)"])
+        }
+
+        if let batchMode = profile.batchMode {
+            arguments.append(contentsOf: ["-o", "BatchMode=\(batchMode ? "yes" : "no")"])
+        }
+
         if !profile.jumpHosts.isEmpty {
             arguments.append(contentsOf: ["-J", profile.jumpHosts.joined(separator: ",")])
         }
@@ -280,6 +316,16 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         ])
 
         return arguments
+    }
+
+    private func ensureControlPathDirectory(for profile: RemoteConnectionProfile) throws {
+        let controlPathURL = URL(fileURLWithPath: controlPath(for: profile))
+        let directoryURL = controlPathURL.deletingLastPathComponent()
+        try FileManager.default.createDirectory(
+            at: directoryURL,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
     }
 
     /// Returns the SSH destination string: "user@host" or just "host".
@@ -302,6 +348,12 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         case let .dynamic(localPort):
             return ["-D", "\(localPort)"]
         }
+    }
+}
+
+private extension String {
+    var nilIfEmpty: String? {
+        isEmpty ? nil : self
     }
 }
 

@@ -58,6 +58,12 @@
 "vault.compare.arguments" = "Arguments";
 "command.vault.toggle.name" = "Toggle Vault";
 "command.vault.toggle.description" = "Show locally vaulted external agent sessions";
+"command.cells.list.name" = "Cells: List Cells";
+"command.cells.list.description" = "List local and user-owned compute cells";
+"command.cells.createDocker.name" = "Cells: Create Docker Cell";
+"command.cells.createDocker.description" = "Prepare a local Docker cell creation command";
+"command.cells.createSSH.name" = "Cells: Create SSH Cell";
+"command.cells.createSSH.description" = "Prepare a user-owned SSH cell creation command";
 "preferences.section.hooks" = "Hooks";
 "preferences.section.mcpServers" = "MCP Servers";
 "preferences.section.voice" = "Voice";
@@ -2938,3 +2944,30 @@
 "agentTeams.creator.title" = "Agent Team";
 "agentTeams.creator.placeholder" = "Design, Build, Review";
 "agentTeams.creator.launch" = "Launch";
+"agentTeams.graph.title" = "Team Graph";
+"agentTeams.graph.accessibility" = "Agent team graph";
+"agentTeams.feed.title" = "Agent Feed";
+"agentTeams.feed.empty" = "No team events";
+"agentTeams.feed.accessibility" = "Agent team feed";
+
+"browser.dialog.ok" = "OK";
+"browser.dialog.cancel" = "Cancel";
+"browser.dialog.alert.title" = "JavaScript Alert";
+"browser.dialog.confirm.title" = "JavaScript Confirm";
+"browser.dialog.prompt.title" = "JavaScript Prompt";
+
+"cells.sidebar.accessibility" = "Cocxy Cells";
+"cells.sidebar.empty.title" = "No cells";
+"cells.sidebar.empty.message" = "Create a local or user-owned cloud cell.";
+"cells.toolbar.title" = "Cells";
+"cells.toolbar.running" = "%d running";
+"cells.toolbar.refresh" = "Refresh cells";
+"cells.toolbar.create" = "Create cell";
+"cells.card.destroy" = "Destroy cell";
+"cells.card.destroy.accessibility" = "Destroy %@";
+"cells.create.title" = "Create Cell";
+"cells.create.provider" = "Provider";
+"cells.create.profile" = "Profile";
+"cells.create.image" = "Image or template";
+"cells.create.host" = "SSH host";
+"cells.create.launch" = "Create";

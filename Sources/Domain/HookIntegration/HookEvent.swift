@@ -69,6 +69,15 @@ struct HookEvent: Codable, Sendable {
     /// arrive concurrently on the socket thread. Each event owns its CWD.
     let cwd: String?
 
+    /// Cocxy Agent Team identifier forwarded by team-launched agent panes.
+    let teamID: String?
+
+    /// Cocxy teammate or auto-linked subagent identifier for this event.
+    let teammateID: String?
+
+    /// Human-readable teammate or subagent name for team graph/feed projection.
+    let teammateName: String?
+
     // MARK: - Custom Decoding (Claude Code v2.1+ format)
 
     private enum CodingKeys: String, CodingKey {
@@ -92,6 +101,12 @@ struct HookEvent: Codable, Sendable {
         case changeType = "change_type"
         case textCharacterCount = "text_character_count"
         case attachmentCount = "attachment_count"
+        case teamIDSnake = "team_id"
+        case teamIDCamel = "teamID"
+        case teammateIDSnake = "teammate_id"
+        case teammateIDCamel = "teammateID"
+        case teammateNameSnake = "teammate_name"
+        case teammateNameCamel = "teammateName"
         // Legacy format keys (camelCase, backward compatibility)
         case type
         case sessionIdCamel = "sessionId"
@@ -109,6 +124,13 @@ struct HookEvent: Codable, Sendable {
             self.sessionId = try container.decode(String.self, forKey: .sessionIdSnake)
             self.timestamp = Date() // Claude Code doesn't send timestamp
             self.cwd = try? container.decode(String.self, forKey: .cwd)
+            self.teamID = Self.metadataString(from: container, snake: .teamIDSnake, camel: .teamIDCamel)
+            self.teammateID = Self.metadataString(from: container, snake: .teammateIDSnake, camel: .teammateIDCamel)
+            self.teammateName = Self.metadataString(
+                from: container,
+                snake: .teammateNameSnake,
+                camel: .teammateNameCamel
+            )
 
             // Build data from flat fields.
             switch eventType {
@@ -200,14 +222,29 @@ struct HookEvent: Codable, Sendable {
         self.timestamp = (try? container.decode(Date.self, forKey: .timestamp)) ?? Date()
         self.data = (try? container.decode(HookEventData.self, forKey: .data)) ?? .generic
         self.cwd = try? container.decode(String.self, forKey: .cwd)
+        self.teamID = Self.metadataString(from: container, snake: .teamIDSnake, camel: .teamIDCamel)
+        self.teammateID = Self.metadataString(from: container, snake: .teammateIDSnake, camel: .teammateIDCamel)
+        self.teammateName = Self.metadataString(from: container, snake: .teammateNameSnake, camel: .teammateNameCamel)
     }
 
-    init(type: HookEventType, sessionId: String, timestamp: Date = Date(), data: HookEventData = .generic, cwd: String? = nil) {
+    init(
+        type: HookEventType,
+        sessionId: String,
+        timestamp: Date = Date(),
+        data: HookEventData = .generic,
+        cwd: String? = nil,
+        teamID: String? = nil,
+        teammateID: String? = nil,
+        teammateName: String? = nil
+    ) {
         self.type = type
         self.sessionId = sessionId
         self.timestamp = timestamp
         self.data = data
         self.cwd = cwd
+        self.teamID = Self.normalizedMetadata(teamID)
+        self.teammateID = Self.normalizedMetadata(teammateID)
+        self.teammateName = Self.normalizedMetadata(teammateName)
     }
 
     // MARK: - Encodable (legacy format for tests and serialization)
@@ -218,6 +255,9 @@ struct HookEvent: Codable, Sendable {
         try container.encode(sessionId, forKey: .sessionIdCamel)
         try container.encode(timestamp, forKey: .timestamp)
         try container.encode(data, forKey: .data)
+        try container.encodeIfPresent(teamID, forKey: .teamIDSnake)
+        try container.encodeIfPresent(teammateID, forKey: .teammateIDSnake)
+        try container.encodeIfPresent(teammateName, forKey: .teammateNameSnake)
     }
 
     // MARK: - Tool Input Extraction
@@ -237,6 +277,23 @@ struct HookEvent: Codable, Sendable {
             return result.isEmpty ? nil : result
         }
         return nil
+    }
+
+    private static func metadataString(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        snake: CodingKeys,
+        camel: CodingKeys
+    ) -> String? {
+        normalizedMetadata((try? container.decode(String.self, forKey: snake))
+            ?? (try? container.decode(String.self, forKey: camel)))
+    }
+
+    private static func normalizedMetadata(_ value: String?) -> String? {
+        guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 
     /// Extracts tool result as a string summary from tool_response.

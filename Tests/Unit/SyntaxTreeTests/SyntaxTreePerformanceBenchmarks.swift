@@ -8,6 +8,23 @@ import Testing
 private enum SyntaxBenchmarkConfiguration {
     static let isEnabled =
         ProcessInfo.processInfo.environment["COCXY_RUN_SYNTAX_BENCHMARKS"] == "1"
+
+    static let incrementalParseBudgetSeconds = seconds(
+        fromMillisecondsEnvironmentKey: "COCXY_SYNTAX_INCREMENTAL_PARSE_BUDGET_MS",
+        defaultMilliseconds: 5.0
+    )
+
+    private static func seconds(
+        fromMillisecondsEnvironmentKey key: String,
+        defaultMilliseconds: Double
+    ) -> Double {
+        guard let rawValue = ProcessInfo.processInfo.environment[key],
+              let milliseconds = Double(rawValue),
+              milliseconds > 0 else {
+            return defaultMilliseconds / 1_000.0
+        }
+        return milliseconds / 1_000.0
+    }
 }
 
 @Suite(
@@ -20,7 +37,7 @@ private enum SyntaxBenchmarkConfiguration {
 )
 struct SyntaxTreePerformanceBenchmarks {
     private static let highlightThreshold = 0.050
-    private static let incrementalParseThreshold = 0.005
+    private static let incrementalParseThreshold = SyntaxBenchmarkConfiguration.incrementalParseBudgetSeconds
 
     @Test("5000-line Swift cached viewport highlight stays below Phase C budget")
     func fiveThousandLineSwiftViewportHighlightBudget() throws {

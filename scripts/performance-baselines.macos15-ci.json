@@ -1,0 +1,107 @@
+{
+  "default_tolerance_ratio": 0.1,
+  "metrics": [
+    {
+      "name": "app_readiness_median_ms",
+      "baseline": 800.0,
+      "direction": "lower",
+      "absolute_tolerance": 80.0
+    },
+    {
+      "name": "internal_critical_path_median_ms",
+      "baseline": 100.0,
+      "direction": "lower",
+      "absolute_tolerance": 25.0
+    },
+    {
+      "name": "physical_footprint_mb",
+      "baseline": 207.0,
+      "direction": "lower",
+      "absolute_tolerance": 20.0
+    },
+    {
+      "name": "editor_scroll_frame_ms",
+      "baseline": 10.0,
+      "direction": "lower",
+      "absolute_tolerance": 2.0
+    },
+    {
+      "name": "editor_insert_frame_ms",
+      "baseline": 8.5,
+      "direction": "lower",
+      "absolute_tolerance": 2.0
+    },
+    {
+      "name": "editor_delete_frame_ms",
+      "baseline": 7.0,
+      "direction": "lower",
+      "absolute_tolerance": 2.0
+    },
+    {
+      "name": "syntax_cold_parse_ms",
+      "baseline": 10.0,
+      "direction": "lower",
+      "absolute_tolerance": 2.0
+    },
+    {
+      "name": "syntax_viewport_capture_ms",
+      "baseline": 4.5,
+      "direction": "lower",
+      "absolute_tolerance": 1.0
+    },
+    {
+      "name": "syntax_token_mapping_ms",
+      "baseline": 0.35,
+      "direction": "lower",
+      "absolute_tolerance": 0.15
+    },
+    {
+      "name": "syntax_viewport_highlight_ms",
+      "baseline": 15.0,
+      "direction": "lower",
+      "absolute_tolerance": 3.0
+    },
+    {
+      "name": "syntax_incremental_parse_ms",
+      "baseline": 5.0,
+      "direction": "lower",
+      "absolute_tolerance": 3.0
+    },
+    {
+      "name": "cocxycore_surface_creation_ms",
+      "baseline": 120.0,
+      "direction": "lower",
+      "absolute_tolerance": 20.0
+    },
+    {
+      "name": "cocxycore_echo_latency_ms",
+      "baseline": 10.0,
+      "direction": "lower",
+      "absolute_tolerance": 5.0
+    },
+    {
+      "name": "cocxycore_output_throughput_mbps",
+      "baseline": 1.3,
+      "direction": "higher",
+      "absolute_tolerance": 0.3
+    },
+    {
+      "name": "cocxycore_frame_average_ms",
+      "baseline": 2.0,
+      "direction": "lower",
+      "absolute_tolerance": 0.5
+    },
+    {
+      "name": "cocxycore_frame_p99_ms",
+      "baseline": 4.5,
+      "direction": "lower",
+      "absolute_tolerance": 1.0
+    },
+    {
+      "name": "cocxycore_idle_rss_delta_mb",
+      "baseline": 3.0,
+      "direction": "lower",
+      "absolute_tolerance": 1.0
+    }
+  ]
+}

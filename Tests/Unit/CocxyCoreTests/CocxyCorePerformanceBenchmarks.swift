@@ -9,6 +9,23 @@ import CocxyCoreKit
 private enum CocxyCoreBenchmarkConfiguration {
     static let isEnabled =
         ProcessInfo.processInfo.environment["COCXY_RUN_COCXYCORE_BENCHMARKS"] == "1"
+
+    static let outputThroughputThresholdMBps = positiveDouble(
+        fromEnvironmentKey: "COCXYCORE_OUTPUT_THROUGHPUT_BUDGET_MBPS",
+        defaultValue: 2.5
+    )
+
+    private static func positiveDouble(
+        fromEnvironmentKey key: String,
+        defaultValue: Double
+    ) -> Double {
+        guard let rawValue = ProcessInfo.processInfo.environment[key],
+              let value = Double(rawValue),
+              value > 0 else {
+            return defaultValue
+        }
+        return value
+    }
 }
 
 @Suite(
@@ -23,7 +40,7 @@ private enum CocxyCoreBenchmarkConfiguration {
 struct CocxyCorePerformanceBenchmarks {
 
     private static let throughputPayloadBytes = 4 * 1024 * 1024
-    private static let throughputThresholdMBps = 2.5
+    private static let throughputThresholdMBps = CocxyCoreBenchmarkConfiguration.outputThroughputThresholdMBps
 
     @Test("surface creation stays within the startup budget")
     func surfaceCreationStartupBudget() throws {

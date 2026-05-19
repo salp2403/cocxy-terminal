@@ -78,11 +78,44 @@ enum HookEventNormalizer {
             payload["agent_type"] = agentType
         }
 
+        copyEnvironmentValue(
+            "COCXY_AGENT_TEAM_ID",
+            to: "team_id",
+            payload: &payload,
+            environment: environment
+        )
+        copyEnvironmentValue(
+            "COCXY_AGENT_TEAMMATE_ID",
+            to: "teammate_id",
+            payload: &payload,
+            environment: environment
+        )
+        copyEnvironmentValue(
+            "COCXY_AGENT_TEAMMATE_NAME",
+            to: "teammate_name",
+            payload: &payload,
+            environment: environment
+        )
+
         if payload["cwd"] == nil, let pwd = environment["PWD"], !pwd.isEmpty {
             payload["cwd"] = pwd
         }
 
         return try JSONSerialization.data(withJSONObject: payload, options: [])
+    }
+
+    private static func copyEnvironmentValue(
+        _ environmentKey: String,
+        to payloadKey: String,
+        payload: inout [String: Any],
+        environment: [String: String]
+    ) {
+        guard payload[payloadKey] == nil,
+              let value = environment[environmentKey]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return
+        }
+        payload[payloadKey] = value
     }
 
     private static func fallbackSessionID(

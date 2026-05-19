@@ -37,6 +37,13 @@ struct BrowserProfile: Identifiable, Codable, Equatable, Sendable {
     /// Timestamp when this profile was created.
     let createdAt: Date
 
+    /// Optional remote workspace context for browser tabs using this profile.
+    ///
+    /// Nil keeps the profile fully local. A non-nil value is descriptive
+    /// metadata only; it does not start SSH tunnels or enable proxies by
+    /// itself.
+    var remoteProfile: RemoteBrowserProfile?
+
     /// Creates a new browser profile.
     ///
     /// - Parameters:
@@ -52,7 +59,8 @@ struct BrowserProfile: Identifiable, Codable, Equatable, Sendable {
         icon: String = "person.circle",
         colorHex: String = "#FFFFFF",
         isDefault: Bool = false,
-        createdAt: Date = Date()
+        createdAt: Date = Date(),
+        remoteProfile: RemoteBrowserProfile? = nil
     ) {
         self.id = id
         self.name = name
@@ -60,6 +68,7 @@ struct BrowserProfile: Identifiable, Codable, Equatable, Sendable {
         self.colorHex = colorHex
         self.isDefault = isDefault
         self.createdAt = createdAt
+        self.remoteProfile = remoteProfile
     }
 
     // MARK: - Paths
@@ -76,5 +85,13 @@ struct BrowserProfile: Identifiable, Codable, Equatable, Sendable {
     /// Directory path for this profile's Cocxy-owned sidecar data.
     var dataStorePath: String {
         "\(Self.profilesBaseDirectory)/\(id.uuidString)"
+    }
+
+    var isRemoteBacked: Bool {
+        remoteProfile != nil
+    }
+
+    var contextLabel: String {
+        remoteProfile?.displayTitle ?? "Local"
     }
 }

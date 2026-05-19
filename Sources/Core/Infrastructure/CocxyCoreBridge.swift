@@ -324,6 +324,26 @@ struct WebTerminalConfiguration: Equatable, Sendable {
     let authToken: String
     let maxConnections: UInt16
     let maxFrameRate: UInt32
+    let stopAfterFirstConnection: Bool
+    let firstConnectionHandler: (@Sendable () -> Void)?
+
+    init(
+        bindAddress: String,
+        port: UInt16,
+        authToken: String,
+        maxConnections: UInt16,
+        maxFrameRate: UInt32,
+        stopAfterFirstConnection: Bool = false,
+        firstConnectionHandler: (@Sendable () -> Void)? = nil
+    ) {
+        self.bindAddress = bindAddress
+        self.port = port
+        self.authToken = authToken
+        self.maxConnections = maxConnections
+        self.maxFrameRate = maxFrameRate
+        self.stopAfterFirstConnection = stopAfterFirstConnection
+        self.firstConnectionHandler = firstConnectionHandler
+    }
 
     static let `default` = WebTerminalConfiguration(
         bindAddress: "127.0.0.1",
@@ -332,6 +352,15 @@ struct WebTerminalConfiguration: Equatable, Sendable {
         maxConnections: 4,
         maxFrameRate: 60
     )
+
+    static func == (lhs: WebTerminalConfiguration, rhs: WebTerminalConfiguration) -> Bool {
+        lhs.bindAddress == rhs.bindAddress
+            && lhs.port == rhs.port
+            && lhs.authToken == rhs.authToken
+            && lhs.maxConnections == rhs.maxConnections
+            && lhs.maxFrameRate == rhs.maxFrameRate
+            && lhs.stopAfterFirstConnection == rhs.stopAfterFirstConnection
+    }
 }
 
 struct WebTerminalStatus: Equatable, Sendable {
@@ -341,6 +370,7 @@ struct WebTerminalStatus: Equatable, Sendable {
     let connectionCount: UInt16
     let authRequired: Bool
     let maxFrameRate: UInt32
+    let oneShot: Bool
     let lastEventType: String?
     let lastEventConnectionID: UInt16?
 }
@@ -384,7 +414,10 @@ final class CocxyCoreBridge: TerminalEngine {
             let handle: OpaquePointer
             let bindAddress: String
             let authToken: String
+            let stopAfterFirstConnection: Bool
+            let firstConnectionHandler: (@Sendable () -> Void)?
             var maxFrameRate: UInt32
+            var oneShotAcceptedConnectionID: UInt16?
             var lastEventType: String?
             var lastEventConnectionID: UInt16?
         }
@@ -2350,7 +2383,9 @@ final class CocxyCoreBridge: TerminalEngine {
         guard var state = surfaces[surface] else { return nil }
 
         if let existing = state.webServer {
-            if existing.bindAddress != configuration.bindAddress || existing.authToken != configuration.authToken {
+            if existing.bindAddress != configuration.bindAddress
+                || existing.authToken != configuration.authToken
+                || existing.stopAfterFirstConnection != configuration.stopAfterFirstConnection {
                 destroyWebServer(existing)
                 state.webServer = nil
             } else {
@@ -2405,7 +2440,10 @@ final class CocxyCoreBridge: TerminalEngine {
             handle: server,
             bindAddress: configuration.bindAddress,
             authToken: configuration.authToken,
+            stopAfterFirstConnection: configuration.stopAfterFirstConnection,
+            firstConnectionHandler: configuration.firstConnectionHandler,
             maxFrameRate: configuration.maxFrameRate,
+            oneShotAcceptedConnectionID: nil,
             lastEventType: nil,
             lastEventConnectionID: nil
         )
@@ -2419,6 +2457,18 @@ final class CocxyCoreBridge: TerminalEngine {
         destroyWebServer(webState)
         state.webServer = nil
         surfaces[surface] = state
+    }
+
+    func recordWebTerminalEventForTesting(
+        eventType: UInt8,
+        connectionID: UInt16,
+        for surfaceID: SurfaceID
+    ) {
+        handleWebTerminalEvent(
+            eventType: eventType,
+            connectionID: connectionID,
+            for: surfaceID
+        )
     }
 
     /// Returns the visible-history top row for a surface.
@@ -3565,6 +3615,7 @@ final class CocxyCoreBridge: TerminalEngine {
         for surfaceID: SurfaceID
     ) {
         guard var state = surfaces[surfaceID], var webState = state.webServer else { return }
+        let firstConnectionHandler = webState.firstConnectionHandler
         switch eventType {
         case 0:
             webState.lastEventType = "connect"
@@ -3572,11 +3623,30 @@ final class CocxyCoreBridge: TerminalEngine {
             webState.lastEventType = "disconnect"
         case 2:
             webState.lastEventType = "auth_fail"
+        case 3:
+            webState.lastEventType = "auth_ok"
         default:
             webState.lastEventType = "unknown"
         }
         webState.lastEventConnectionID = connectionID
-        state.webServer = webState
+
+        let acceptsOneShotConnection = webState.stopAfterFirstConnection
+            && webState.oneShotAcceptedConnectionID == nil
+            && (eventType == 3 || (eventType == 0 && webState.authToken.isEmpty))
+        if acceptsOneShotConnection {
+            webState.oneShotAcceptedConnectionID = connectionID
+            firstConnectionHandler?()
+        }
+
+        let shouldStopOneShot = webState.stopAfterFirstConnection
+            && eventType == 1
+            && webState.oneShotAcceptedConnectionID == connectionID
+        if shouldStopOneShot {
+            destroyWebServer(webState)
+            state.webServer = nil
+        } else {
+            state.webServer = webState
+        }
         surfaces[surfaceID] = state
     }
 
@@ -3719,6 +3789,7 @@ final class CocxyCoreBridge: TerminalEngine {
             connectionCount: cocxycore_web_connection_count(webState.handle),
             authRequired: !webState.authToken.isEmpty,
             maxFrameRate: webState.maxFrameRate,
+            oneShot: webState.stopAfterFirstConnection,
             lastEventType: webState.lastEventType,
             lastEventConnectionID: webState.lastEventConnectionID
         )

@@ -86,6 +86,7 @@ struct SSHMultiplexerTests {
         #expect(call.arguments.contains("-o"))
         #expect(call.arguments.contains("ControlMaster=auto"))
         #expect(call.arguments.contains("ControlPersist=yes"))
+        #expect(call.arguments.contains("-f"))
         #expect(call.arguments.contains("root@server.com"))
     }
 
@@ -173,6 +174,39 @@ struct SSHMultiplexerTests {
         let call = executor.executedCommands[0]
         #expect(call.arguments.contains("-O"))
         #expect(call.arguments.contains("check"))
+    }
+
+    @Test func controlOperationsCarryPortAndIdentity() async throws {
+        let executor = MockProcessExecutor()
+        executor.stubbedAsyncResult = ProcessResult(
+            exitCode: 0,
+            stdout: "Master running",
+            stderr: ""
+        )
+        let profile = RemoteConnectionProfile(
+            name: "lab",
+            host: "127.0.0.1",
+            user: "deploy",
+            port: 2222,
+            identityFile: "/tmp/cocxy key",
+            strictHostKeyChecking: "no",
+            knownHostsFile: "/tmp/cocxy-known-hosts",
+            batchMode: true
+        )
+
+        _ = try await multiplexer.isAlive(profile: profile, executor: executor)
+        try multiplexer.disconnect(profile: profile, executor: executor)
+        _ = try await multiplexer.executeRemoteCommand("printf ok", on: profile, executor: executor)
+
+        for call in executor.executedCommands {
+            #expect(call.arguments.contains("-p"))
+            #expect(call.arguments.contains("2222"))
+            #expect(call.arguments.contains("-i"))
+            #expect(call.arguments.contains("/tmp/cocxy key"))
+            #expect(call.arguments.contains("StrictHostKeyChecking=no"))
+            #expect(call.arguments.contains("UserKnownHostsFile=/tmp/cocxy-known-hosts"))
+            #expect(call.arguments.contains("BatchMode=yes"))
+        }
     }
 
     @Test func isAliveReturnsFalseWhenConnectionDead() async throws {

@@ -152,7 +152,9 @@ enum AgentSource: String, CaseIterable, Sendable {
     }
 
     var hookSettingsFilePath: String? {
-        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let home = ProcessInfo.processInfo.environment["COCXY_HOOKS_HOME"]
+            .flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
+            ?? FileManager.default.homeDirectoryForCurrentUser.path
         switch self {
         case .claudeCode:
             return "\(home)/.claude/settings.json"
@@ -239,7 +241,7 @@ enum AgentSource: String, CaseIterable, Sendable {
 
     static func fromCLIArgument(_ rawValue: String) -> AgentSource? {
         switch rawValue.lowercased() {
-        case "claude":
+        case "claude", "claude-code":
             return .claudeCode
         case "codex":
             return .codex

@@ -749,6 +749,7 @@ extension AppDelegate {
             "connections": "\(status.connectionCount)",
             "auth_required": status.authRequired ? "true" : "false",
             "max_fps": "\(status.maxFrameRate)",
+            "one_shot": status.oneShot ? "true" : "false",
         ]
         if let eventType = status.lastEventType {
             if let connectionID = status.lastEventConnectionID {

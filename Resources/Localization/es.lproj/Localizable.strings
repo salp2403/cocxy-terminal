@@ -58,6 +58,12 @@
 "vault.compare.arguments" = "Argumentos";
 "command.vault.toggle.name" = "Alternar Vault";
 "command.vault.toggle.description" = "Mostrar sesiones locales guardadas de agentes externos";
+"command.cells.list.name" = "Cells: listar celdas";
+"command.cells.list.description" = "Listar celdas locales y de nube propiedad del usuario";
+"command.cells.createDocker.name" = "Cells: crear celda Docker";
+"command.cells.createDocker.description" = "Preparar un comando local para crear una celda Docker";
+"command.cells.createSSH.name" = "Cells: crear celda SSH";
+"command.cells.createSSH.description" = "Preparar un comando para crear una celda SSH propiedad del usuario";
 "preferences.section.hooks" = "Hooks";
 "preferences.section.mcpServers" = "Servidores MCP";
 "preferences.section.voice" = "Voz";
@@ -2938,3 +2944,30 @@
 "agentTeams.creator.title" = "Equipo de agentes";
 "agentTeams.creator.placeholder" = "Diseño, Construcción, Revisión";
 "agentTeams.creator.launch" = "Lanzar";
+"agentTeams.graph.title" = "Grafo del equipo";
+"agentTeams.graph.accessibility" = "Grafo del equipo de agentes";
+"agentTeams.feed.title" = "Feed de agentes";
+"agentTeams.feed.empty" = "No hay eventos del equipo";
+"agentTeams.feed.accessibility" = "Feed del equipo de agentes";
+
+"browser.dialog.ok" = "OK";
+"browser.dialog.cancel" = "Cancelar";
+"browser.dialog.alert.title" = "Alerta de JavaScript";
+"browser.dialog.confirm.title" = "Confirmación de JavaScript";
+"browser.dialog.prompt.title" = "Prompt de JavaScript";
+
+"cells.sidebar.accessibility" = "Cocxy Cells";
+"cells.sidebar.empty.title" = "No hay cells";
+"cells.sidebar.empty.message" = "Crea una cell local o cloud propia.";
+"cells.toolbar.title" = "Cells";
+"cells.toolbar.running" = "%d en ejecución";
+"cells.toolbar.refresh" = "Refrescar cells";
+"cells.toolbar.create" = "Crear cell";
+"cells.card.destroy" = "Destruir cell";
+"cells.card.destroy.accessibility" = "Destruir %@";
+"cells.create.title" = "Crear Cell";
+"cells.create.provider" = "Proveedor";
+"cells.create.profile" = "Perfil";
+"cells.create.image" = "Imagen o plantilla";
+"cells.create.host" = "Host SSH";
+"cells.create.launch" = "Crear";

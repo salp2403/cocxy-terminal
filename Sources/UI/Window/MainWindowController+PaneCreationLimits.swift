@@ -49,6 +49,31 @@ extension MainWindowController {
         return available >= (minimum * 2) + divider
     }
 
+    func canCreatePaneWithReadableGridReflow() -> Bool {
+        let currentLeafCount = activeSplitManager?.rootNode.leafCount ?? countSplitPanes()
+        let proposedLeafCount = currentLeafCount + 1
+        guard proposedLeafCount <= Self.maxPaneCount else { return false }
+        guard proposedLeafCount >= 3 else { return true }
+
+        let rootFrame = splitRootFrame()
+        guard rootFrame.width > 0, rootFrame.height > 0 else {
+            return true
+        }
+
+        let divider = activeSplitView?.dividerThickness ?? 1
+        let topColumnCount = Int(ceil(Double(proposedLeafCount) / 2.0))
+        let bottomColumnCount = proposedLeafCount - topColumnCount
+        let columnCount = max(topColumnCount, bottomColumnCount)
+        let rowCount = bottomColumnCount > 0 ? 2 : 1
+
+        let requiredWidth = (CGFloat(columnCount) * Self.minimumReadableSplitPaneWidth)
+            + (CGFloat(max(0, columnCount - 1)) * divider)
+        let requiredHeight = (CGFloat(rowCount) * Self.minimumReadableSplitPaneHeight)
+            + (CGFloat(max(0, rowCount - 1)) * divider)
+
+        return rootFrame.width >= requiredWidth && rootFrame.height >= requiredHeight
+    }
+
     func readableRestoredSplitNode(_ rootNode: SplitNode) -> SplitNode {
         let leaves = rootNode.allLeafIDs()
         guard leaves.count >= 3 else { return rootNode }

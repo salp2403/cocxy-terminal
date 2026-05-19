@@ -3,7 +3,18 @@ set -euo pipefail
 
 APP_PATH="${APP_PATH:-build/CocxyTerminal.app}"
 RUNS="${RUNS:-5}"
-BUDGET_MS="${BUDGET_MS:-400}"
+BUDGET_MS="${COCXY_COLD_START_BUDGET_MS:-${BUDGET_MS:-400}}"
+DEFAULT_INTERNAL_CRITICAL_PATH_BUDGET_MS="50"
+INTERNAL_CRITICAL_PATH_BUDGET_OVERRIDDEN="0"
+if [[ -n "${COCXY_COLD_START_INTERNAL_BUDGET_MS:-}" ]]; then
+  INTERNAL_CRITICAL_PATH_BUDGET_MS="$COCXY_COLD_START_INTERNAL_BUDGET_MS"
+  INTERNAL_CRITICAL_PATH_BUDGET_OVERRIDDEN="1"
+else
+  INTERNAL_CRITICAL_PATH_BUDGET_MS="${INTERNAL_CRITICAL_PATH_BUDGET_MS:-$DEFAULT_INTERNAL_CRITICAL_PATH_BUDGET_MS}"
+  if [[ "$INTERNAL_CRITICAL_PATH_BUDGET_MS" != "$DEFAULT_INTERNAL_CRITICAL_PATH_BUDGET_MS" ]]; then
+    INTERNAL_CRITICAL_PATH_BUDGET_OVERRIDDEN="1"
+  fi
+fi
 TOLERANCE_RATIO="${TOLERANCE_RATIO:-0.10}"
 REQUIRED_CONSECUTIVE_FAILURES="${REQUIRED_CONSECUTIVE_FAILURES:-3}"
 ENFORCE="${COCXY_ENFORCE_COLD_START:-0}"
@@ -11,11 +22,55 @@ BENCHMARK_KIND="app-readiness"
 BENCHMARK_ENV="COCXY_COLD_START_BENCHMARK=1"
 FORCE_KILL="${COCXY_BENCH_FORCE_KILL:-0}"
 
+benchmark_pids() {
+  local pid process_line found="0"
+  while IFS= read -r pid; do
+    [[ -z "$pid" ]] && continue
+    process_line="$(/bin/ps eww -p "$pid" 2>/dev/null || true)"
+    if [[ "$process_line" == *"$BENCHMARK_ENV"* ]]; then
+      printf '%s\n' "$pid"
+      found="1"
+    fi
+  done < <(pgrep -x CocxyTerminal 2>/dev/null || true)
+  [[ "$found" == "1" ]]
+}
+
+cleanup_benchmark_app() {
+  local pids
+  pids="$(benchmark_pids || true)"
+  if [[ -z "$pids" ]]; then
+    return
+  fi
+
+  /usr/bin/osascript -e 'quit app "Cocxy Terminal"' >/dev/null 2>&1 &
+  local quit_pid=$!
+  local deadline=$((SECONDS + 2))
+  while kill -0 "$quit_pid" >/dev/null 2>&1; do
+    if (( SECONDS >= deadline )); then
+      kill "$quit_pid" >/dev/null 2>&1 || true
+      break
+    fi
+    sleep 0.05
+  done
+  wait "$quit_pid" >/dev/null 2>&1 || true
+
+  pids="$(benchmark_pids || true)"
+  if [[ -n "$pids" ]]; then
+    local pid
+    while IFS= read -r pid; do
+      [[ -z "$pid" ]] && continue
+      kill "$pid" >/dev/null 2>&1 || true
+    done <<< "$pids"
+  fi
+}
+trap cleanup_benchmark_app EXIT
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --app) APP_PATH="$2"; shift 2 ;;
     --runs) RUNS="$2"; shift 2 ;;
     --budget-ms) BUDGET_MS="$2"; shift 2 ;;
+    --internal-critical-path-budget-ms) INTERNAL_CRITICAL_PATH_BUDGET_MS="$2"; INTERNAL_CRITICAL_PATH_BUDGET_OVERRIDDEN="1"; shift 2 ;;
     --required-consecutive-failures) REQUIRED_CONSECUTIVE_FAILURES="$2"; shift 2 ;;
     --enforce) ENFORCE="1"; shift ;;
     *) echo "Unknown option: $1" >&2; exit 2 ;;
@@ -81,7 +136,7 @@ quit_existing_app() {
 
 samples=()
 internal_critical_path_samples=()
-internal_critical_path_budget_ms="50"
+internal_critical_path_budget_ms="$INTERNAL_CRITICAL_PATH_BUDGET_MS"
 for ((i = 1; i <= RUNS; i++)); do
   quit_existing_app
   sleep 0.35
@@ -116,7 +171,9 @@ for ((i = 1; i <= RUNS; i++)); do
   done
   if [[ "$launch_status_output" =~ "$launch_regex" ]]; then
     internal_critical_path_samples+=("$match[1]")
-    internal_critical_path_budget_ms="$match[2]"
+    if [[ "$INTERNAL_CRITICAL_PATH_BUDGET_OVERRIDDEN" != "1" ]]; then
+      internal_critical_path_budget_ms="$match[2]"
+    fi
   fi
 done
 

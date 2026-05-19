@@ -93,6 +93,30 @@ struct BrowserProfileManagerTests {
         #expect(store.savedProfiles.last?.name == "Persisted")
     }
 
+    @Test("Create remote browser profile preserves remote context")
+    func createRemoteProfilePreservesContext() {
+        let store = MockBrowserProfileStore()
+        let manager = BrowserProfileManager(store: store)
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            localForwardedPorts: [3000: 53000],
+            proxyHealth: .active
+        )
+
+        let created = manager.createProfile(
+            name: "Remote Browser",
+            icon: "network",
+            colorHex: "#88AAFF",
+            remoteProfile: remote
+        )
+
+        #expect(created.remoteProfile == remote)
+        #expect(manager.profiles.last?.remoteProfile == remote)
+        #expect(store.savedProfiles.last?.remoteProfile == remote)
+    }
+
     // MARK: - Delete
 
     @Test("Delete non-default profile removes it")
@@ -197,6 +221,30 @@ struct BrowserProfileManagerTests {
         manager.updateProfile(ghost)
 
         #expect(manager.profiles.count == countBefore)
+    }
+
+    @Test("Attach and clear remote profile persists changes")
+    func attachAndClearRemoteProfilePersists() {
+        let store = MockBrowserProfileStore()
+        let manager = BrowserProfileManager(store: store)
+        let created = manager.createProfile(name: "Remote Target", icon: "network", colorHex: "#FFF")
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote Target",
+            host: "remote.internal",
+            socksPort: 1080,
+            proxyHealth: .connecting
+        )
+
+        manager.attachRemoteProfile(remote, to: created.id)
+
+        #expect(manager.profiles.first(where: { $0.id == created.id })?.remoteProfile == remote)
+        #expect(store.savedProfiles.first(where: { $0.id == created.id })?.remoteProfile == remote)
+
+        manager.clearRemoteProfile(for: created.id)
+
+        #expect(manager.profiles.first(where: { $0.id == created.id })?.remoteProfile == nil)
+        #expect(store.savedProfiles.first(where: { $0.id == created.id })?.remoteProfile == nil)
     }
 
     // MARK: - Active Profile

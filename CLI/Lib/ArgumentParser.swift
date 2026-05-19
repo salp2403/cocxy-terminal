@@ -69,24 +69,182 @@ public struct BrowserImportCLIOptions: Equatable {
 }
 
 public struct AgentTeamCLIOptions: Equatable {
-    public let teammates: String
+    public let teammates: String?
     public let teamID: String?
     public let configPath: String?
+    public let templateID: String?
+    public let provider: String
 
-    public init(teammates: String, teamID: String? = nil, configPath: String? = nil) {
+    public init(
+        teammates: String?,
+        teamID: String? = nil,
+        configPath: String? = nil,
+        templateID: String? = nil,
+        provider: String = "claude-code"
+    ) {
         self.teammates = teammates
         self.teamID = teamID
         self.configPath = configPath
+        self.templateID = templateID
+        self.provider = provider
     }
 
     var socketParams: [String: String] {
         var params: [String: String] = [
-            "provider": "claude-code",
-            "teammates": teammates,
+            "provider": provider,
         ]
+        if let teammates { params["teammates"] = teammates }
         if let teamID { params["team-id"] = teamID }
         if let configPath { params["config"] = configPath }
+        if let templateID { params["template"] = templateID }
         return params
+    }
+}
+
+public struct CellCreateCLIOptions: Equatable {
+    public let provider: String
+    public let profile: String?
+    public let image: String?
+    public let host: String?
+    public let user: String?
+    public let port: Int?
+    public let identity: String?
+    public let knownHostsFile: String?
+    public let strictHostKeyChecking: String?
+    public let template: String?
+    public let app: String?
+    public let region: String?
+    public let vmSize: String?
+    public let vmMemory: String?
+    public let vmCPUs: Int?
+    public let config: String?
+    public let path: String?
+    public let cloudProfile: String?
+    public let project: String?
+    public let zone: String?
+    public let resourceGroup: String?
+    public let network: String?
+    public let subnet: String?
+    public let securityGroup: String?
+    public let keyName: String?
+    public let instanceProfile: String?
+    public let cloudInit: String?
+
+    public init(
+        provider: String,
+        profile: String? = nil,
+        image: String? = nil,
+        host: String? = nil,
+        user: String? = nil,
+        port: Int? = nil,
+        identity: String? = nil,
+        knownHostsFile: String? = nil,
+        strictHostKeyChecking: String? = nil,
+        template: String? = nil,
+        app: String? = nil,
+        region: String? = nil,
+        vmSize: String? = nil,
+        vmMemory: String? = nil,
+        vmCPUs: Int? = nil,
+        config: String? = nil,
+        path: String? = nil,
+        cloudProfile: String? = nil,
+        project: String? = nil,
+        zone: String? = nil,
+        resourceGroup: String? = nil,
+        network: String? = nil,
+        subnet: String? = nil,
+        securityGroup: String? = nil,
+        keyName: String? = nil,
+        instanceProfile: String? = nil,
+        cloudInit: String? = nil
+    ) {
+        self.provider = provider
+        self.profile = profile
+        self.image = image
+        self.host = host
+        self.user = user
+        self.port = port
+        self.identity = identity
+        self.knownHostsFile = knownHostsFile
+        self.strictHostKeyChecking = strictHostKeyChecking
+        self.template = template
+        self.app = app
+        self.region = region
+        self.vmSize = vmSize
+        self.vmMemory = vmMemory
+        self.vmCPUs = vmCPUs
+        self.config = config
+        self.path = path
+        self.cloudProfile = cloudProfile
+        self.project = project
+        self.zone = zone
+        self.resourceGroup = resourceGroup
+        self.network = network
+        self.subnet = subnet
+        self.securityGroup = securityGroup
+        self.keyName = keyName
+        self.instanceProfile = instanceProfile
+        self.cloudInit = cloudInit
+    }
+
+    var socketParams: [String: String] {
+        var params = ["provider": provider]
+        if let profile { params["profile"] = profile }
+        if let image { params["image"] = image }
+        if let host { params["host"] = host }
+        if let user { params["user"] = user }
+        if let port { params["port"] = "\(port)" }
+        if let identity { params["identity"] = identity }
+        if let knownHostsFile { params["known-hosts"] = knownHostsFile }
+        if let strictHostKeyChecking { params["strict-host-key-checking"] = strictHostKeyChecking }
+        if let template { params["template"] = template }
+        if let app { params["app"] = app }
+        if let region { params["region"] = region }
+        if let vmSize { params["vm-size"] = vmSize }
+        if let vmMemory { params["vm-memory"] = vmMemory }
+        if let vmCPUs { params["vm-cpus"] = "\(vmCPUs)" }
+        if let config { params["config"] = config }
+        if let path { params["path"] = path }
+        if let cloudProfile { params["cloud-profile"] = cloudProfile }
+        if let project { params["project"] = project }
+        if let zone { params["zone"] = zone }
+        if let resourceGroup { params["resource-group"] = resourceGroup }
+        if let network { params["network"] = network }
+        if let subnet { params["subnet"] = subnet }
+        if let securityGroup { params["security-group"] = securityGroup }
+        if let keyName { params["key-name"] = keyName }
+        if let instanceProfile { params["instance-profile"] = instanceProfile }
+        if let cloudInit { params["cloud-init"] = cloudInit }
+        return params
+    }
+}
+
+public struct ConfigImportCLIOptions: Equatable {
+    public let source: String
+    public let path: String
+    public let dryRun: Bool
+    public let backup: Bool
+
+    public init(
+        source: String,
+        path: String,
+        dryRun: Bool = true,
+        backup: Bool = false
+    ) {
+        self.source = source
+        self.path = path
+        self.dryRun = dryRun
+        self.backup = backup
+    }
+
+    var socketParams: [String: String] {
+        [
+            "source": source,
+            "path": path,
+            "dry-run": dryRun ? "true" : "false",
+            "backup": backup ? "true" : "false",
+        ]
     }
 }
 
@@ -129,6 +287,11 @@ public struct BrowserCookieSetCLIOptions: Equatable {
         if let maxAgeSeconds { params["max-age"] = "\(maxAgeSeconds)" }
         return params
     }
+}
+
+public enum BrowserStorageArea: String, Equatable, Sendable {
+    case local
+    case session
 }
 
 /// The result of parsing CLI arguments into a concrete command and its parameters.
@@ -281,6 +444,9 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy config path`
     case configPath
+
+    /// `cocxy import-config --from <source> --path <path> [--dry-run] [--backup]`
+    case importConfig(ConfigImportCLIOptions)
 
     // MARK: - Theme (v2)
 
@@ -452,6 +618,29 @@ public enum ParsedCommand: Equatable {
     /// `cocxy remote tunnels [--profile <name>]`
     case remoteTunnels(profile: String?)
 
+    // MARK: - Cells (v7)
+
+    /// `cocxy cell create --provider <provider> [--profile <name>] [--image <image>] [--host <host>]`
+    case cellCreate(CellCreateCLIOptions)
+
+    /// `cocxy cell list`
+    case cellList
+
+    /// `cocxy cell exec <cell-id> [--provider <provider>] -- <command...>`
+    case cellExec(cellID: String, provider: String?, command: [String])
+
+    /// `cocxy cell attach <cell-id> [--provider <provider>]`
+    case cellAttach(cellID: String, provider: String?)
+
+    /// `cocxy cell destroy <cell-id> [--provider <provider>] [--force]`
+    case cellDestroy(cellID: String, provider: String?, force: Bool)
+
+    /// `cocxy cell logs <cell-id> [--provider <provider>]`
+    case cellLogs(cellID: String, provider: String?)
+
+    /// `cocxy cell status <cell-id> [--provider <provider>]`
+    case cellStatus(cellID: String, provider: String?)
+
     // MARK: - Plugin Management (exposed v3)
 
     /// `cocxy plugin list`
@@ -500,8 +689,35 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser state`
     case browserGetState
 
+    /// `cocxy browser state save <path>`
+    case browserStateSave(path: String)
+
+    /// `cocxy browser state load <path>`
+    case browserStateLoad(path: String)
+
     /// `cocxy browser eval <script>`
     case browserEval(script: String)
+
+    /// `cocxy browser add script <script>`
+    case browserAddScript(script: String)
+
+    /// `cocxy browser add style <css>`
+    case browserAddStyle(css: String)
+
+    /// `cocxy browser init scripts add <script>`
+    case browserInitScriptAdd(script: String)
+
+    /// `cocxy browser init scripts list`
+    case browserInitScriptsList
+
+    /// `cocxy browser dialogs`
+    case browserDialogs
+
+    /// `cocxy browser dialog accept [id] [--text <text>]`
+    case browserDialogAccept(id: String?, promptText: String?)
+
+    /// `cocxy browser dialog dismiss [id]`
+    case browserDialogDismiss(id: String?)
 
     /// `cocxy browser text`
     case browserGetText
@@ -512,11 +728,113 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser snapshot`
     case browserSnapshot
 
-    /// `cocxy browser click <ref>`
-    case browserClick(ref: String)
+    /// `cocxy browser context [--target <ref>] [--around <n>] [--console <n>] [--network <n>]`
+    case browserContext(targetRef: String?, around: Int?, consoleTail: Int?, networkTail: Int?)
 
-    /// `cocxy browser fill <ref> <text>`
-    case browserFill(ref: String, text: String)
+    /// `cocxy browser click <ref> [--timeout <ms>]`
+    case browserClick(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser dblclick <ref> [--timeout <ms>]`
+    case browserDblClick(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser hover <ref> [--timeout <ms>]`
+    case browserHover(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser focus <ref> [--timeout <ms>]`
+    case browserFocus(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser fill <ref> <text> [--timeout <ms>]`
+    case browserFill(ref: String, text: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser upload <ref> <path> [--timeout <ms>]`
+    case browserUpload(ref: String, path: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser type [ref] <text> [--timeout <ms>]`
+    case browserType(ref: String?, text: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser press <key> [--timeout <ms>]`
+    case browserPress(key: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser keydown <key> [--timeout <ms>]`
+    case browserKeyDown(key: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser keyup <key> [--timeout <ms>]`
+    case browserKeyUp(key: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser check <ref> [--timeout <ms>]`
+    case browserCheck(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser uncheck <ref> [--timeout <ms>]`
+    case browserUncheck(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser select <ref> <value> [--timeout <ms>]`
+    case browserSelect(ref: String, value: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser scroll --x <px> --y <px> [--timeout <ms>]`
+    case browserScroll(x: Int, y: Int, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser scroll-into-view <ref> [--timeout <ms>]`
+    case browserScrollIntoView(ref: String, timeoutMilliseconds: Int? = nil)
+
+    /// `cocxy browser get html [ref]`
+    case browserGetHTML(ref: String?)
+
+    /// `cocxy browser get value <ref>`
+    case browserGetValue(ref: String)
+
+    /// `cocxy browser get attr <ref> <name>`
+    case browserGetAttr(ref: String, name: String)
+
+    /// `cocxy browser get title`
+    case browserGetTitle
+
+    /// `cocxy browser get count <selector>`
+    case browserGetCount(selector: String)
+
+    /// `cocxy browser get box <ref>`
+    case browserGetBox(ref: String)
+
+    /// `cocxy browser get styles <ref> [names...]`
+    case browserGetStyles(ref: String, names: [String])
+
+    /// `cocxy browser is visible <ref>`
+    case browserIsVisible(ref: String)
+
+    /// `cocxy browser is enabled <ref>`
+    case browserIsEnabled(ref: String)
+
+    /// `cocxy browser is checked <ref>`
+    case browserIsChecked(ref: String)
+
+    /// `cocxy browser find role <role> [name]`
+    case browserFindRole(role: String, name: String?)
+
+    /// `cocxy browser find text <text>`
+    case browserFindText(text: String)
+
+    /// `cocxy browser find label <text>`
+    case browserFindLabel(text: String)
+
+    /// `cocxy browser find placeholder <text>`
+    case browserFindPlaceholder(text: String)
+
+    /// `cocxy browser find alt <text>`
+    case browserFindAlt(text: String)
+
+    /// `cocxy browser find title <text>`
+    case browserFindTitle(text: String)
+
+    /// `cocxy browser find testid <id>`
+    case browserFindTestID(id: String)
+
+    /// `cocxy browser find first <selector>`
+    case browserFindFirst(selector: String)
+
+    /// `cocxy browser find last <selector>`
+    case browserFindLast(selector: String)
+
+    /// `cocxy browser find nth <index> <selector>`
+    case browserFindNth(index: Int, selector: String)
 
     /// `cocxy browser screenshot [--output <path>]`
     case browserScreenshot(outputPath: String?)
@@ -539,19 +857,37 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser network [--filter <text>] [--tail <n>]`
     case browserNetwork(filter: String?, tail: Int?)
 
+    /// `cocxy browser frames`
+    case browserFrames
+
+    /// `cocxy browser downloads`
+    case browserDownloads
+
+    /// `cocxy browser storage list [--area local|session]`
+    case browserStorageList(area: BrowserStorageArea)
+
+    /// `cocxy browser storage get <key> [--area local|session]`
+    case browserStorageGet(area: BrowserStorageArea, key: String)
+
+    /// `cocxy browser storage set <key> <value> [--area local|session]`
+    case browserStorageSet(area: BrowserStorageArea, key: String, value: String)
+
+    /// `cocxy browser storage delete <key> [--area local|session]`
+    case browserStorageDelete(area: BrowserStorageArea, key: String)
+
     /// `cocxy browser import preview --source <browser> [options]`
     case browserImportPreview(BrowserImportCLIOptions)
 
     /// `cocxy browser import run --source <browser> [options]`
     case browserImportRun(BrowserImportCLIOptions)
 
-    /// `cocxy claude-teams --teammates "A,B,C" [--team-id <id>] [--config <path>]`
+    /// `cocxy agent-teams --teammates "A,B,C" [--template <id>] [--provider <provider>]`
     case agentTeamLaunch(AgentTeamCLIOptions)
 
-    /// `cocxy claude-teams list`
+    /// `cocxy agent-teams list`
     case agentTeamList
 
-    /// `cocxy claude-teams stop <team-id>`
+    /// `cocxy agent-teams stop <team-id>`
     case agentTeamStop(teamID: String)
 
     // MARK: - SSH (v4)
@@ -787,7 +1123,7 @@ public enum CLIArgumentParser {
     /// Last-resort fallback. It mirrors `Resources/Info.plist` and is only
     /// used when neither the enclosing `.app` nor a SwiftPM checkout can be
     /// resolved.
-    internal static let fallbackVersion = "1.11.0"
+    internal static let fallbackVersion = "1.18.0"
     internal static let fallbackBundleIdentifier = "dev.cocxy.terminal"
 
     /// Resolves the CLI version by preferring the enclosing app bundle's
@@ -957,6 +1293,9 @@ public enum CLIArgumentParser {
         case "config":
             return try parseConfig(arguments: Array(arguments.dropFirst()))
 
+        case "import-config":
+            return try parseImportConfig(arguments: Array(arguments.dropFirst()))
+
         case "theme":
             return try parseTheme(arguments: Array(arguments.dropFirst()))
 
@@ -1019,6 +1358,9 @@ public enum CLIArgumentParser {
         case "remote":
             return try parseRemote(arguments: Array(arguments.dropFirst()))
 
+        case "cell":
+            return try parseCell(arguments: Array(arguments.dropFirst()))
+
         case "ssh":
             return try parseSSH(arguments: Array(arguments.dropFirst()))
 
@@ -1045,7 +1387,7 @@ public enum CLIArgumentParser {
         case "browser":
             return try parseBrowser(arguments: Array(arguments.dropFirst()))
 
-        case "claude-teams":
+        case "claude-teams", "agent-teams":
             return try parseAgentTeams(arguments: Array(arguments.dropFirst()))
 
         case "web":
@@ -1292,7 +1634,7 @@ public enum CLIArgumentParser {
                     throw CLIError.invalidArgument(
                         command: "setup-hooks",
                         argument: rawAgent,
-                        reason: "Must be claude, codex, gemini, kiro, opencode, pi, cursor, rovo-dev, copilot, codebuddy, factory, qoder, or all."
+                        reason: "Must be claude, claude-code, codex, gemini, kiro, opencode, pi, cursor, rovo-dev, copilot, codebuddy, factory, qoder, or all."
                     )
                 }
 
@@ -2718,6 +3060,335 @@ public enum CLIArgumentParser {
         }
     }
 
+    /// Parses `cocxy cell <subcommand>`.
+    private static func parseCell(arguments: [String]) throws -> ParsedCommand {
+        guard let subcommand = arguments.first else {
+            throw CLIError.missingArgument(command: "cell", argument: "subcommand")
+        }
+
+        switch subcommand {
+        case "create":
+            return try parseCellCreate(arguments: Array(arguments.dropFirst()))
+        case "list":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "cell list",
+                    argument: Array(arguments.dropFirst()).joined(separator: " "),
+                    reason: "List does not accept additional arguments."
+                )
+            }
+            return .cellList
+        case "exec":
+            return try parseCellExec(arguments: Array(arguments.dropFirst()))
+        case "attach":
+            return try parseCellSingleID(arguments: arguments, command: "cell attach") {
+                .cellAttach(cellID: $0.cellID, provider: $0.provider)
+            }
+        case "destroy":
+            return try parseCellDestroy(arguments: Array(arguments.dropFirst()))
+        case "logs":
+            return try parseCellSingleID(arguments: arguments, command: "cell logs") {
+                .cellLogs(cellID: $0.cellID, provider: $0.provider)
+            }
+        case "status":
+            return try parseCellSingleID(arguments: arguments, command: "cell status") {
+                .cellStatus(cellID: $0.cellID, provider: $0.provider)
+            }
+        default:
+            throw CLIError.invalidArgument(
+                command: "cell",
+                argument: subcommand,
+                reason: "Unknown subcommand. Use create, list, exec, attach, destroy, logs, or status."
+            )
+        }
+    }
+
+    private static func parseImportConfig(arguments: [String]) throws -> ParsedCommand {
+        var source: String?
+        var path: String?
+        var dryRun = true
+        var backup = false
+        var index = 0
+
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--from", "--source":
+                source = try value(after: argument, in: arguments, at: &index, command: "import-config")
+            case "--path":
+                path = try value(after: argument, in: arguments, at: &index, command: "import-config")
+            case "--dry-run":
+                dryRun = true
+            case "--apply":
+                dryRun = false
+            case "--backup":
+                backup = true
+            default:
+                throw CLIError.invalidArgument(
+                    command: "import-config",
+                    argument: argument,
+                    reason: "Use --from <ghostty|iterm2|alacritty|kitty|wezterm> --path <path> [--dry-run|--apply] [--backup]."
+                )
+            }
+            index += 1
+        }
+
+        guard let source, !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.missingArgument(command: "import-config", argument: "--from <source>")
+        }
+        guard let path, !path.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.missingArgument(command: "import-config", argument: "--path <path>")
+        }
+
+        return .importConfig(ConfigImportCLIOptions(
+            source: source,
+            path: path,
+            dryRun: dryRun,
+            backup: backup
+        ))
+    }
+
+    private static func parseCellCreate(arguments: [String]) throws -> ParsedCommand {
+        var provider: String?
+        var profile: String?
+        var image: String?
+        var host: String?
+        var user: String?
+        var port: Int?
+        var identity: String?
+        var knownHostsFile: String?
+        var strictHostKeyChecking: String?
+        var template: String?
+        var app: String?
+        var region: String?
+        var vmSize: String?
+        var vmMemory: String?
+        var vmCPUs: Int?
+        var config: String?
+        var path: String?
+        var cloudProfile: String?
+        var project: String?
+        var zone: String?
+        var resourceGroup: String?
+        var network: String?
+        var subnet: String?
+        var securityGroup: String?
+        var keyName: String?
+        var instanceProfile: String?
+        var cloudInit: String?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--provider":
+                provider = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--profile":
+                profile = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--image":
+                image = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--host":
+                host = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--user":
+                user = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--port":
+                let rawPort = try value(after: argument, in: arguments, at: &index, command: "cell create")
+                guard let parsedPort = Int(rawPort), (1...65_535).contains(parsedPort) else {
+                    throw CLIError.invalidArgument(
+                        command: "cell create",
+                        argument: rawPort,
+                        reason: "--port must be an integer between 1 and 65535."
+                    )
+                }
+                port = parsedPort
+            case "--identity", "--identity-file":
+                identity = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--known-hosts", "--known-hosts-file":
+                knownHostsFile = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--strict-host-key-checking":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "cell create")
+                let normalized = rawValue.lowercased()
+                guard ["yes", "no", "ask", "accept-new", "off"].contains(normalized) else {
+                    throw CLIError.invalidArgument(
+                        command: "cell create",
+                        argument: rawValue,
+                        reason: "--strict-host-key-checking must be yes, no, ask, accept-new, or off."
+                    )
+                }
+                strictHostKeyChecking = normalized
+            case "--template":
+                template = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--app":
+                app = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--region":
+                region = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--vm-size":
+                vmSize = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--vm-memory", "--memory":
+                vmMemory = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--vm-cpus", "--cpus":
+                let rawCPUs = try value(after: argument, in: arguments, at: &index, command: "cell create")
+                guard let parsedCPUs = Int(rawCPUs), parsedCPUs > 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "cell create",
+                        argument: rawCPUs,
+                        reason: "--vm-cpus must be a positive integer."
+                    )
+                }
+                vmCPUs = parsedCPUs
+            case "--config":
+                config = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--path":
+                path = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--cloud-profile":
+                cloudProfile = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--project":
+                project = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--zone":
+                zone = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--resource-group":
+                resourceGroup = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--network":
+                network = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--subnet":
+                subnet = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--security-group":
+                securityGroup = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--key-name":
+                keyName = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--instance-profile":
+                instanceProfile = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            case "--cloud-init":
+                cloudInit = try value(after: argument, in: arguments, at: &index, command: "cell create")
+            default:
+                throw CLIError.invalidArgument(
+                    command: "cell create",
+                    argument: argument,
+                    reason: "Use --provider <provider> with optional --profile, --image, --host, --user, --port, --identity, --known-hosts, --strict-host-key-checking, --template, --app, --region, --vm-size, --vm-memory, --vm-cpus, --config, --path, --cloud-profile, --project, --zone, --resource-group, --network, --subnet, --security-group, --key-name, --instance-profile, and --cloud-init."
+                )
+            }
+            index += 1
+        }
+
+        guard let provider, !provider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.missingArgument(command: "cell create", argument: "--provider <provider>")
+        }
+        return .cellCreate(CellCreateCLIOptions(
+            provider: provider,
+            profile: profile,
+            image: image,
+            host: host,
+            user: user,
+            port: port,
+            identity: identity,
+            knownHostsFile: knownHostsFile,
+            strictHostKeyChecking: strictHostKeyChecking,
+            template: template,
+            app: app,
+            region: region,
+            vmSize: vmSize,
+            vmMemory: vmMemory,
+            vmCPUs: vmCPUs,
+            config: config,
+            path: path,
+            cloudProfile: cloudProfile,
+            project: project,
+            zone: zone,
+            resourceGroup: resourceGroup,
+            network: network,
+            subnet: subnet,
+            securityGroup: securityGroup,
+            keyName: keyName,
+            instanceProfile: instanceProfile,
+            cloudInit: cloudInit
+        ))
+    }
+
+    private static func parseCellExec(arguments: [String]) throws -> ParsedCommand {
+        guard let cellID = arguments.first, !cellID.isEmpty else {
+            throw CLIError.missingArgument(command: "cell exec", argument: "cell-id")
+        }
+        var provider: String?
+        guard let separatorIndex = arguments.firstIndex(of: "--"),
+              separatorIndex > 0,
+              separatorIndex + 1 < arguments.count else {
+            throw CLIError.missingArgument(command: "cell exec", argument: "-- <command>")
+        }
+        var index = 1
+        while index < separatorIndex {
+            let argument = arguments[index]
+            switch argument {
+            case "--provider":
+                provider = try value(before: separatorIndex, after: argument, in: arguments, at: &index, command: "cell exec")
+            default:
+                throw CLIError.invalidArgument(
+                    command: "cell exec",
+                    argument: argument,
+                    reason: "Use <cell-id> [--provider <provider>] -- <command>."
+                )
+            }
+            index += 1
+        }
+        let command = Array(arguments[(separatorIndex + 1)...])
+        guard !command.isEmpty else {
+            throw CLIError.missingArgument(command: "cell exec", argument: "-- <command>")
+        }
+        return .cellExec(cellID: cellID, provider: provider, command: command)
+    }
+
+    private static func parseCellDestroy(arguments: [String]) throws -> ParsedCommand {
+        guard let cellID = arguments.first, !cellID.isEmpty else {
+            throw CLIError.missingArgument(command: "cell destroy", argument: "cell-id")
+        }
+        var force = false
+        var provider: String?
+        var index = 1
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--force":
+                force = true
+            case "--provider":
+                provider = try value(after: argument, in: arguments, at: &index, command: "cell destroy")
+            default:
+                throw CLIError.invalidArgument(
+                    command: "cell destroy",
+                    argument: argument,
+                    reason: "Use <cell-id> [--provider <provider>] [--force]."
+                )
+            }
+            index += 1
+        }
+        return .cellDestroy(cellID: cellID, provider: provider, force: force)
+    }
+
+    private static func parseCellSingleID(
+        arguments: [String],
+        command: String,
+        makeCommand: ((cellID: String, provider: String?)) -> ParsedCommand
+    ) throws -> ParsedCommand {
+        let rest = Array(arguments.dropFirst())
+        guard let cellID = rest.first, !cellID.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "cell-id")
+        }
+        var provider: String?
+        var index = 1
+        while index < rest.count {
+            let argument = rest[index]
+            switch argument {
+            case "--provider":
+                provider = try value(after: argument, in: rest, at: &index, command: command)
+            default:
+                throw CLIError.invalidArgument(
+                    command: command,
+                    argument: argument,
+                    reason: "Use <cell-id> [--provider <provider>]."
+                )
+            }
+            index += 1
+        }
+        return makeCommand((cellID, provider))
+    }
+
     /// Parses `cocxy plugin <subcommand>`.
     private static func parsePlugin(arguments: [String]) throws -> ParsedCommand {
         guard let subcommand = arguments.first else {
@@ -2870,35 +3541,163 @@ public enum CLIArgumentParser {
         case "reload":
             return .browserReload
         case "state":
-            return .browserGetState
+            return try parseBrowserState(arguments: Array(arguments.dropFirst()))
         case "eval":
             let rest = Array(arguments.dropFirst())
             guard !rest.isEmpty else {
                 throw CLIError.missingArgument(command: "browser eval", argument: "script")
             }
             return .browserEval(script: rest.joined(separator: " "))
+        case "add":
+            return try parseBrowserAdd(arguments: Array(arguments.dropFirst()))
+        case "init":
+            return try parseBrowserInit(arguments: Array(arguments.dropFirst()))
+        case "dialogs":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser dialogs",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "Dialogs does not take arguments."
+                )
+            }
+            return .browserDialogs
+        case "dialog":
+            return try parseBrowserDialog(arguments: Array(arguments.dropFirst()))
         case "text":
             return .browserGetText
         case "tabs":
             return .browserListTabs
         case "snapshot":
             return .browserSnapshot
+        case "context":
+            return try parseBrowserContext(arguments: Array(arguments.dropFirst()))
         case "click":
-            let rest = Array(arguments.dropFirst())
-            guard let ref = rest.first, !ref.isEmpty else {
-                throw CLIError.missingArgument(command: "browser click", argument: "ref")
-            }
-            return .browserClick(ref: ref)
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser click"
+            )
+            return .browserClick(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "dblclick":
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser dblclick"
+            )
+            return .browserDblClick(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "hover":
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser hover"
+            )
+            return .browserHover(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "focus":
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser focus"
+            )
+            return .browserFocus(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
         case "fill":
-            let rest = Array(arguments.dropFirst())
+            let parsed = try stripBrowserActionTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser fill"
+            )
+            let rest = parsed.arguments
             guard let ref = rest.first, !ref.isEmpty else {
                 throw CLIError.missingArgument(command: "browser fill", argument: "ref")
             }
-            let textParts = Array(rest.dropFirst())
+            var textParts = Array(rest.dropFirst())
+            if textParts.first == "--" {
+                textParts.removeFirst()
+            }
             guard !textParts.isEmpty else {
                 throw CLIError.missingArgument(command: "browser fill", argument: "text")
             }
-            return .browserFill(ref: ref, text: textParts.joined(separator: " "))
+            return .browserFill(
+                ref: ref,
+                text: textParts.joined(separator: " "),
+                timeoutMilliseconds: parsed.timeoutMilliseconds
+            )
+        case "upload":
+            let parsed = try stripBrowserActionTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser upload"
+            )
+            let rest = parsed.arguments
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser upload", argument: "ref")
+            }
+            guard rest.count >= 2, !rest[1].isEmpty else {
+                throw CLIError.missingArgument(command: "browser upload", argument: "path")
+            }
+            guard rest.count == 2 else {
+                throw CLIError.invalidArgument(
+                    command: "browser upload",
+                    argument: rest.dropFirst(2).joined(separator: " "),
+                    reason: "Use browser upload <ref> <path> [--timeout <ms>]."
+                )
+            }
+            return .browserUpload(
+                ref: ref,
+                path: rest[1],
+                timeoutMilliseconds: parsed.timeoutMilliseconds
+            )
+        case "type":
+            return try parseBrowserType(arguments: Array(arguments.dropFirst()))
+        case "press":
+            let parsed = try parseBrowserKey(arguments: Array(arguments.dropFirst()), command: "browser press")
+            return .browserPress(key: parsed.key, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "keydown":
+            let parsed = try parseBrowserKey(arguments: Array(arguments.dropFirst()), command: "browser keydown")
+            return .browserKeyDown(key: parsed.key, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "keyup":
+            let parsed = try parseBrowserKey(arguments: Array(arguments.dropFirst()), command: "browser keyup")
+            return .browserKeyUp(key: parsed.key, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "check":
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser check"
+            )
+            return .browserCheck(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "uncheck":
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser uncheck"
+            )
+            return .browserUncheck(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "select":
+            let parsed = try stripBrowserActionTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser select"
+            )
+            let rest = parsed.arguments
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser select", argument: "ref")
+            }
+            var valueParts = Array(rest.dropFirst())
+            if valueParts.first == "--" {
+                valueParts.removeFirst()
+            }
+            guard !valueParts.isEmpty else {
+                throw CLIError.missingArgument(command: "browser select", argument: "value")
+            }
+            return .browserSelect(
+                ref: ref,
+                value: valueParts.joined(separator: " "),
+                timeoutMilliseconds: parsed.timeoutMilliseconds
+            )
+        case "scroll":
+            return try parseBrowserScroll(arguments: Array(arguments.dropFirst()))
+        case "scroll-into-view":
+            let parsed = try parseBrowserSingleRefWithTimeout(
+                arguments: Array(arguments.dropFirst()),
+                command: "browser scroll-into-view"
+            )
+            return .browserScrollIntoView(ref: parsed.ref, timeoutMilliseconds: parsed.timeoutMilliseconds)
+        case "get":
+            return try parseBrowserGet(arguments: Array(arguments.dropFirst()))
+        case "is":
+            return try parseBrowserIs(arguments: Array(arguments.dropFirst()))
+        case "find":
+            return try parseBrowserFind(arguments: Array(arguments.dropFirst()))
         case "screenshot":
             let rest = Array(arguments.dropFirst())
             if rest.isEmpty {
@@ -2920,15 +3719,689 @@ public enum CLIArgumentParser {
             return try parseBrowserCookies(arguments: Array(arguments.dropFirst()))
         case "network":
             return try parseBrowserNetwork(arguments: Array(arguments.dropFirst()))
+        case "frames":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser frames",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "Frames does not take arguments."
+                )
+            }
+            return .browserFrames
+        case "downloads":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser downloads",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "Downloads does not take arguments."
+                )
+            }
+            return .browserDownloads
+        case "storage":
+            return try parseBrowserStorage(arguments: Array(arguments.dropFirst()))
         case "import":
             return try parseBrowserImport(arguments: Array(arguments.dropFirst()))
         default:
             throw CLIError.invalidArgument(
                 command: "browser",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, text, tabs, snapshot, click, fill, screenshot, console, wait, cookies, network, or import."
+                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, add, init, dialogs, dialog, text, tabs, snapshot, context, click, dblclick, hover, focus, fill, upload, type, press, keydown, keyup, check, uncheck, select, scroll, scroll-into-view, get, is, find, screenshot, console, wait, cookies, network, frames, downloads, storage, or import."
             )
         }
+    }
+
+    private static func parseBrowserContext(arguments: [String]) throws -> ParsedCommand {
+        var targetRef: String?
+        var around: Int?
+        var consoleTail: Int?
+        var networkTail: Int?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--target":
+                let value = try value(after: argument, in: arguments, at: &index, command: "browser context")
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(command: "browser context", argument: "target")
+                }
+                targetRef = value
+            case "--around":
+                around = try parseBrowserContextBoundedInteger(
+                    flag: argument,
+                    arguments: arguments,
+                    index: &index,
+                    range: 0...20,
+                    command: "browser context"
+                )
+            case "--console":
+                consoleTail = try parseBrowserContextBoundedInteger(
+                    flag: argument,
+                    arguments: arguments,
+                    index: &index,
+                    range: 0...100,
+                    command: "browser context"
+                )
+            case "--network":
+                networkTail = try parseBrowserContextBoundedInteger(
+                    flag: argument,
+                    arguments: arguments,
+                    index: &index,
+                    range: 0...100,
+                    command: "browser context"
+                )
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser context",
+                    argument: argument,
+                    reason: "Use --target <ref>, --around <n>, --console <n>, --network <n>, or omit them."
+                )
+            }
+            index += 1
+        }
+        return .browserContext(
+            targetRef: targetRef,
+            around: around,
+            consoleTail: consoleTail,
+            networkTail: networkTail
+        )
+    }
+
+    private static func parseBrowserContextBoundedInteger(
+        flag: String,
+        arguments: [String],
+        index: inout Int,
+        range: ClosedRange<Int>,
+        command: String
+    ) throws -> Int {
+        let rawValue = try value(after: flag, in: arguments, at: &index, command: command)
+        guard let parsed = Int(rawValue), range.contains(parsed) else {
+            throw CLIError.invalidArgument(
+                command: command,
+                argument: rawValue,
+                reason: "\(flag) must be an integer between \(range.lowerBound) and \(range.upperBound)."
+            )
+        }
+        return parsed
+    }
+
+    private static func parseBrowserAdd(arguments: [String]) throws -> ParsedCommand {
+        guard let kind = arguments.first else {
+            throw CLIError.missingArgument(command: "browser add", argument: "script|style")
+        }
+        let payload = Array(arguments.dropFirst()).joined(separator: " ")
+        guard !payload.isEmpty else {
+            throw CLIError.missingArgument(command: "browser add \(kind)", argument: kind == "style" ? "css" : "script")
+        }
+        switch kind {
+        case "script":
+            return .browserAddScript(script: payload)
+        case "style":
+            return .browserAddStyle(css: payload)
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser add",
+                argument: kind,
+                reason: "Use script <script> or style <css>."
+            )
+        }
+    }
+
+    private static func parseBrowserInit(arguments: [String]) throws -> ParsedCommand {
+        guard arguments.first == "scripts" else {
+            throw CLIError.invalidArgument(
+                command: "browser init",
+                argument: arguments.first ?? "",
+                reason: "Use scripts add <script> or scripts list."
+            )
+        }
+        let rest = Array(arguments.dropFirst())
+        guard let action = rest.first else {
+            throw CLIError.missingArgument(command: "browser init scripts", argument: "add|list")
+        }
+        switch action {
+        case "add":
+            let script = Array(rest.dropFirst()).joined(separator: " ")
+            guard !script.isEmpty else {
+                throw CLIError.missingArgument(command: "browser init scripts add", argument: "script")
+            }
+            return .browserInitScriptAdd(script: script)
+        case "list":
+            guard rest.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser init scripts list",
+                    argument: rest.dropFirst().joined(separator: " "),
+                    reason: "List does not take arguments."
+                )
+            }
+            return .browserInitScriptsList
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser init scripts",
+                argument: action,
+                reason: "Use add <script> or list."
+            )
+        }
+    }
+
+    private static func parseBrowserDialog(arguments: [String]) throws -> ParsedCommand {
+        guard let action = arguments.first else {
+            throw CLIError.missingArgument(command: "browser dialog", argument: "accept|dismiss")
+        }
+        let rest = Array(arguments.dropFirst())
+        switch action {
+        case "accept":
+            return try parseBrowserDialogAccept(arguments: rest)
+        case "dismiss":
+            guard rest.count <= 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser dialog dismiss",
+                    argument: rest.dropFirst().joined(separator: " "),
+                    reason: "Use an optional dialog id only."
+                )
+            }
+            return .browserDialogDismiss(id: rest.first)
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser dialog",
+                argument: action,
+                reason: "Use accept [id] [--text <text>] or dismiss [id]."
+            )
+        }
+    }
+
+    private static func parseBrowserDialogAccept(arguments: [String]) throws -> ParsedCommand {
+        var id: String?
+        var promptText: String?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            if argument == "--text" {
+                let textParts = Array(arguments.dropFirst(index + 1))
+                guard !textParts.isEmpty else {
+                    throw CLIError.missingArgument(command: "browser dialog accept", argument: "text")
+                }
+                promptText = textParts.joined(separator: " ")
+                index = arguments.count
+            } else if id == nil {
+                id = argument
+                index += 1
+            } else {
+                throw CLIError.invalidArgument(
+                    command: "browser dialog accept",
+                    argument: argument,
+                    reason: "Use an optional id followed by optional --text <text>."
+                )
+            }
+        }
+        return .browserDialogAccept(id: id, promptText: promptText)
+    }
+
+    private static func parseBrowserState(arguments: [String]) throws -> ParsedCommand {
+        guard let action = arguments.first else {
+            return .browserGetState
+        }
+        guard arguments.count == 2, !arguments[1].isEmpty else {
+            throw CLIError.invalidArgument(
+                command: "browser state",
+                argument: arguments.joined(separator: " "),
+                reason: "Use no arguments, save <path>, or load <path>."
+            )
+        }
+        switch action {
+        case "save":
+            return .browserStateSave(path: arguments[1])
+        case "load":
+            return .browserStateLoad(path: arguments[1])
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser state",
+                argument: action,
+                reason: "Use save <path> or load <path>."
+            )
+        }
+    }
+
+    private static func parseBrowserSingleRef(arguments: [String], command: String) throws -> String {
+        guard let ref = arguments.first, !ref.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "ref")
+        }
+        guard arguments.count == 1 else {
+            throw CLIError.invalidArgument(
+                command: command,
+                argument: arguments.dropFirst().joined(separator: " "),
+                reason: "Use exactly one element ref."
+            )
+        }
+        return ref
+    }
+
+    private static func parseBrowserSingleRefWithTimeout(
+        arguments: [String],
+        command: String
+    ) throws -> (ref: String, timeoutMilliseconds: Int?) {
+        let parsed = try stripBrowserActionTimeout(arguments: arguments, command: command)
+        let ref = try parseBrowserSingleRef(arguments: parsed.arguments, command: command)
+        return (ref, parsed.timeoutMilliseconds)
+    }
+
+    private static func stripBrowserActionTimeout(
+        arguments: [String],
+        command: String
+    ) throws -> (arguments: [String], timeoutMilliseconds: Int?) {
+        var remaining: [String] = []
+        var timeoutMilliseconds: Int?
+        var index = 0
+        var reachedLiteralSeparator = false
+
+        while index < arguments.count {
+            let argument = arguments[index]
+            if reachedLiteralSeparator {
+                remaining.append(argument)
+                index += 1
+                continue
+            }
+            if argument == "--" {
+                reachedLiteralSeparator = true
+                remaining.append(argument)
+                index += 1
+                continue
+            }
+            if argument == "--timeout" {
+                guard timeoutMilliseconds == nil else {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: argument,
+                        reason: "Use --timeout <ms> only once."
+                    )
+                }
+                let valueIndex = index + 1
+                guard valueIndex < arguments.count else {
+                    throw CLIError.missingArgument(command: command, argument: "timeout")
+                }
+                let rawValue = arguments[valueIndex]
+                guard !rawValue.isEmpty, !rawValue.hasPrefix("--") else {
+                    throw CLIError.missingArgument(command: command, argument: "timeout")
+                }
+                guard let parsed = Int(rawValue), (100...60_000).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: rawValue,
+                        reason: "Timeout must be milliseconds between 100 and 60000."
+                    )
+                }
+                timeoutMilliseconds = parsed
+                index += 2
+                continue
+            }
+            remaining.append(argument)
+            index += 1
+        }
+
+        return (remaining, timeoutMilliseconds)
+    }
+
+    private static func parseBrowserType(arguments: [String]) throws -> ParsedCommand {
+        let parsed = try stripBrowserActionTimeout(arguments: arguments, command: "browser type")
+        let arguments = parsed.arguments
+        guard !arguments.isEmpty else {
+            throw CLIError.missingArgument(command: "browser type", argument: "text")
+        }
+        if arguments.first == "--" {
+            let textParts = Array(arguments.dropFirst())
+            guard !textParts.isEmpty else {
+                throw CLIError.missingArgument(command: "browser type", argument: "text")
+            }
+            return .browserType(
+                ref: nil,
+                text: textParts.joined(separator: " "),
+                timeoutMilliseconds: parsed.timeoutMilliseconds
+            )
+        }
+        if arguments.count == 1 {
+            return .browserType(ref: nil, text: arguments[0], timeoutMilliseconds: parsed.timeoutMilliseconds)
+        }
+        let ref = arguments[0]
+        let text = arguments.dropFirst().joined(separator: " ")
+        return .browserType(ref: ref, text: text, timeoutMilliseconds: parsed.timeoutMilliseconds)
+    }
+
+    private static func parseBrowserKey(
+        arguments: [String],
+        command: String
+    ) throws -> (key: String, timeoutMilliseconds: Int?) {
+        let parsed = try stripBrowserActionTimeout(arguments: arguments, command: command)
+        guard let key = parsed.arguments.first, !key.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "key")
+        }
+        guard parsed.arguments.count == 1 else {
+            throw CLIError.invalidArgument(
+                command: command,
+                argument: parsed.arguments.dropFirst().joined(separator: " "),
+                reason: "Use exactly one key name."
+            )
+        }
+        return (key, parsed.timeoutMilliseconds)
+    }
+
+    private static func parseBrowserScroll(arguments: [String]) throws -> ParsedCommand {
+        var x: Int?
+        var y: Int?
+        var timeoutMilliseconds: Int?
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--x":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser scroll")
+                guard let parsed = Int(rawValue) else {
+                    throw CLIError.invalidArgument(
+                        command: "browser scroll",
+                        argument: rawValue,
+                        reason: "--x must be an integer pixel delta."
+                    )
+                }
+                x = parsed
+            case "--y":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser scroll")
+                guard let parsed = Int(rawValue) else {
+                    throw CLIError.invalidArgument(
+                        command: "browser scroll",
+                        argument: rawValue,
+                        reason: "--y must be an integer pixel delta."
+                    )
+                }
+                y = parsed
+            case "--timeout":
+                guard timeoutMilliseconds == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "browser scroll",
+                        argument: argument,
+                        reason: "Use --timeout <ms> only once."
+                    )
+                }
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "browser scroll")
+                guard let parsed = Int(rawValue), (100...60_000).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "browser scroll",
+                        argument: rawValue,
+                        reason: "Timeout must be milliseconds between 100 and 60000."
+                    )
+                }
+                timeoutMilliseconds = parsed
+            default:
+                throw CLIError.invalidArgument(
+                    command: "browser scroll",
+                    argument: argument,
+                    reason: "Use --x <px>, --y <px>, and optional --timeout <ms>."
+                )
+            }
+            index += 1
+        }
+        guard let x, let y else {
+            throw CLIError.missingArgument(command: "browser scroll", argument: "--x <px> --y <px>")
+        }
+        return .browserScroll(x: x, y: y, timeoutMilliseconds: timeoutMilliseconds)
+    }
+
+    private static func parseBrowserGet(arguments: [String]) throws -> ParsedCommand {
+        guard let subject = arguments.first else {
+            throw CLIError.missingArgument(command: "browser get", argument: "html|value|attr|title|count|box|styles")
+        }
+        let rest = Array(arguments.dropFirst())
+        switch subject {
+        case "html":
+            guard rest.count <= 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser get html",
+                    argument: rest.dropFirst().joined(separator: " "),
+                    reason: "Use zero or one element ref."
+                )
+            }
+            return .browserGetHTML(ref: rest.first)
+        case "value":
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser get value", argument: "ref")
+            }
+            guard rest.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser get value",
+                    argument: rest.dropFirst().joined(separator: " "),
+                    reason: "Use exactly one element ref."
+                )
+            }
+            return .browserGetValue(ref: ref)
+        case "attr":
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser get attr", argument: "ref")
+            }
+            guard rest.count == 2, !rest[1].isEmpty else {
+                throw CLIError.missingArgument(command: "browser get attr", argument: "name")
+            }
+            return .browserGetAttr(ref: ref, name: rest[1])
+        case "title":
+            guard rest.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "browser get title",
+                    argument: rest.joined(separator: " "),
+                    reason: "Title getter does not take arguments."
+                )
+            }
+            return .browserGetTitle
+        case "count":
+            guard !rest.isEmpty else {
+                throw CLIError.missingArgument(command: "browser get count", argument: "selector")
+            }
+            return .browserGetCount(selector: rest.joined(separator: " "))
+        case "box":
+            return .browserGetBox(
+                ref: try parseBrowserSingleRef(arguments: rest, command: "browser get box")
+            )
+        case "styles":
+            guard let ref = rest.first, !ref.isEmpty else {
+                throw CLIError.missingArgument(command: "browser get styles", argument: "ref")
+            }
+            return .browserGetStyles(ref: ref, names: Array(rest.dropFirst()))
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser get",
+                argument: subject,
+                reason: "Use html, value, attr, title, count, box, or styles."
+            )
+        }
+    }
+
+    private static func parseBrowserIs(arguments: [String]) throws -> ParsedCommand {
+        guard let predicate = arguments.first else {
+            throw CLIError.missingArgument(command: "browser is", argument: "visible|enabled|checked")
+        }
+        let rest = Array(arguments.dropFirst())
+        let ref = try parseBrowserSingleRef(arguments: rest, command: "browser is \(predicate)")
+        switch predicate {
+        case "visible":
+            return .browserIsVisible(ref: ref)
+        case "enabled":
+            return .browserIsEnabled(ref: ref)
+        case "checked":
+            return .browserIsChecked(ref: ref)
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser is",
+                argument: predicate,
+                reason: "Use visible, enabled, or checked."
+            )
+        }
+    }
+
+    private static func parseBrowserFind(arguments: [String]) throws -> ParsedCommand {
+        guard let kind = arguments.first else {
+            throw CLIError.missingArgument(command: "browser find", argument: "kind")
+        }
+        let rest = Array(arguments.dropFirst())
+        switch kind {
+        case "role":
+            guard let role = rest.first, !role.isEmpty else {
+                throw CLIError.missingArgument(command: "browser find role", argument: "role")
+            }
+            let nameParts = Array(rest.dropFirst())
+            return .browserFindRole(
+                role: role,
+                name: nameParts.isEmpty ? nil : nameParts.joined(separator: " ")
+            )
+        case "text":
+            return .browserFindText(
+                text: try parseBrowserJoinedText(arguments: rest, command: "browser find text")
+            )
+        case "label":
+            return .browserFindLabel(
+                text: try parseBrowserJoinedText(arguments: rest, command: "browser find label")
+            )
+        case "placeholder":
+            return .browserFindPlaceholder(
+                text: try parseBrowserJoinedText(arguments: rest, command: "browser find placeholder")
+            )
+        case "alt":
+            return .browserFindAlt(
+                text: try parseBrowserJoinedText(arguments: rest, command: "browser find alt")
+            )
+        case "title":
+            return .browserFindTitle(
+                text: try parseBrowserJoinedText(arguments: rest, command: "browser find title")
+            )
+        case "testid":
+            guard rest.count == 1, let id = rest.first, !id.isEmpty else {
+                throw CLIError.missingArgument(command: "browser find testid", argument: "id")
+            }
+            return .browserFindTestID(id: id)
+        case "first":
+            return .browserFindFirst(
+                selector: try parseBrowserJoinedText(arguments: rest, command: "browser find first")
+            )
+        case "last":
+            return .browserFindLast(
+                selector: try parseBrowserJoinedText(arguments: rest, command: "browser find last")
+            )
+        case "nth":
+            guard let rawIndex = rest.first, let index = Int(rawIndex), index >= 0 else {
+                throw CLIError.invalidArgument(
+                    command: "browser find nth",
+                    argument: rest.first ?? "",
+                    reason: "Index must be a non-negative integer."
+                )
+            }
+            let selectorParts = Array(rest.dropFirst())
+            return .browserFindNth(
+                index: index,
+                selector: try parseBrowserJoinedText(arguments: selectorParts, command: "browser find nth")
+            )
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser find",
+                argument: kind,
+                reason: "Use role, text, label, placeholder, alt, title, testid, first, last, or nth."
+            )
+        }
+    }
+
+    private static func parseBrowserJoinedText(arguments: [String], command: String) throws -> String {
+        guard !arguments.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: "text")
+        }
+        return arguments.joined(separator: " ")
+    }
+
+    private static func parseBrowserStorage(arguments: [String]) throws -> ParsedCommand {
+        guard let action = arguments.first else {
+            throw CLIError.missingArgument(command: "browser storage", argument: "list|get|set|delete")
+        }
+        let parsed = try parseBrowserStorageArguments(
+            Array(arguments.dropFirst()),
+            command: "browser storage \(action)"
+        )
+        switch action {
+        case "list":
+            guard parsed.positionals.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "browser storage list",
+                    argument: parsed.positionals.joined(separator: " "),
+                    reason: "Use only --area local|session."
+                )
+            }
+            return .browserStorageList(area: parsed.area)
+        case "get":
+            guard let key = parsed.positionals.first, !key.isEmpty else {
+                throw CLIError.missingArgument(command: "browser storage get", argument: "key")
+            }
+            guard parsed.positionals.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser storage get",
+                    argument: parsed.positionals.dropFirst().joined(separator: " "),
+                    reason: "Use exactly one key."
+                )
+            }
+            return .browserStorageGet(area: parsed.area, key: key)
+        case "set":
+            guard let key = parsed.positionals.first, !key.isEmpty else {
+                throw CLIError.missingArgument(command: "browser storage set", argument: "key")
+            }
+            let valueParts = Array(parsed.positionals.dropFirst())
+            guard !valueParts.isEmpty else {
+                throw CLIError.missingArgument(command: "browser storage set", argument: "value")
+            }
+            return .browserStorageSet(area: parsed.area, key: key, value: valueParts.joined(separator: " "))
+        case "delete":
+            guard let key = parsed.positionals.first, !key.isEmpty else {
+                throw CLIError.missingArgument(command: "browser storage delete", argument: "key")
+            }
+            guard parsed.positionals.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser storage delete",
+                    argument: parsed.positionals.dropFirst().joined(separator: " "),
+                    reason: "Use exactly one key."
+                )
+            }
+            return .browserStorageDelete(area: parsed.area, key: key)
+        default:
+            throw CLIError.invalidArgument(
+                command: "browser storage",
+                argument: action,
+                reason: "Use list, get, set, or delete."
+            )
+        }
+    }
+
+    private static func parseBrowserStorageArguments(
+        _ arguments: [String],
+        command: String
+    ) throws -> (area: BrowserStorageArea, positionals: [String]) {
+        var area = BrowserStorageArea.local
+        var positionals: [String] = []
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--area":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: command)
+                guard let parsed = BrowserStorageArea(rawValue: rawValue) else {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: rawValue,
+                        reason: "Area must be local or session."
+                    )
+                }
+                area = parsed
+            default:
+                if argument.hasPrefix("--") {
+                    throw CLIError.invalidArgument(
+                        command: command,
+                        argument: argument,
+                        reason: "Use --area local|session."
+                    )
+                }
+                positionals.append(argument)
+            }
+            index += 1
+        }
+        return (area, positionals)
     }
 
     private static func parseBrowserWait(arguments: [String]) throws -> ParsedCommand {
@@ -3257,6 +4730,8 @@ public enum CLIArgumentParser {
         var teammates: String?
         var teamID: String?
         var configPath: String?
+        var templateID: String?
+        var provider = "claude-code"
         var index = 0
         while index < arguments.count {
             let argument = arguments[index]
@@ -3267,24 +4742,44 @@ public enum CLIArgumentParser {
                 teamID = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
             case "--config":
                 configPath = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
+            case "--template":
+                templateID = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
+            case "--provider":
+                provider = try value(after: argument, in: arguments, at: &index, command: "claude-teams")
             default:
                 throw CLIError.invalidArgument(
                     command: "claude-teams",
                     argument: argument,
-                    reason: "Use --teammates <name,name>, --team-id <id>, --config <path>, list, or stop."
+                    reason: "Use --teammates <name,name>, --template <id>, --team-id <id>, --config <path>, --provider <provider>, list, or stop."
                 )
             }
             index += 1
         }
 
-        guard let teammates, !teammates.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let normalizedTeammates = teammates?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTemplateID = templateID?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasTeammates = normalizedTeammates?.isEmpty == false
+        let hasTemplate = normalizedTemplateID?.isEmpty == false
+
+        if hasTeammates, hasTemplate {
+            let templateArgument = normalizedTemplateID ?? ""
+            let teammateArgument = normalizedTeammates ?? ""
+            throw CLIError.invalidArgument(
+                command: "claude-teams",
+                argument: "--template \(templateArgument) --teammates \(teammateArgument)",
+                reason: "Use either --template <id> or --teammates <name,name>, not both."
+            )
+        }
+        guard hasTeammates || hasTemplate else {
             throw CLIError.missingArgument(command: "claude-teams", argument: "--teammates <name,name>")
         }
 
         return .agentTeamLaunch(AgentTeamCLIOptions(
-            teammates: teammates,
+            teammates: hasTeammates ? normalizedTeammates : nil,
             teamID: teamID,
-            configPath: configPath
+            configPath: configPath,
+            templateID: hasTemplate ? normalizedTemplateID : nil,
+            provider: provider
         ))
     }
 
@@ -3296,6 +4791,25 @@ public enum CLIArgumentParser {
     ) throws -> String {
         let valueIndex = index + 1
         guard valueIndex < arguments.count else {
+            throw CLIError.missingArgument(command: command, argument: "\(flag) value")
+        }
+        let value = arguments[valueIndex]
+        guard !value.isEmpty, !value.hasPrefix("--") else {
+            throw CLIError.missingArgument(command: command, argument: "\(flag) value")
+        }
+        index = valueIndex
+        return value
+    }
+
+    private static func value(
+        before limit: Int,
+        after flag: String,
+        in arguments: [String],
+        at index: inout Int,
+        command: String
+    ) throws -> String {
+        let valueIndex = index + 1
+        guard valueIndex < limit else {
             throw CLIError.missingArgument(command: command, argument: "\(flag) value")
         }
         let value = arguments[valueIndex]

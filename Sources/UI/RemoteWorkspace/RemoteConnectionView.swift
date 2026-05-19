@@ -90,6 +90,7 @@ final class RemoteConnectionViewModel: ObservableObject {
     let tunnelManager: SSHTunnelManager
     private let profileStore: RemoteProfileStore
     private var localizer: AppLocalizer
+    private var transientProfileIDs: Set<UUID> = []
 
     // MARK: - Initialization
 
@@ -141,10 +142,14 @@ final class RemoteConnectionViewModel: ObservableObject {
 
     func loadProfiles() {
         do {
-            profiles = try profileStore.loadAll()
+            let savedProfiles = try profileStore.loadAll()
+            let transientProfiles = profiles.filter { transientProfileIDs.contains($0.id) }
+            var seenIDs = Set(savedProfiles.map(\.id))
+            profiles = savedProfiles + transientProfiles.filter { seenIDs.insert($0.id).inserted }
         } catch {
-            profiles = []
+            profiles = profiles.filter { transientProfileIDs.contains($0.id) }
         }
+        selectConnectedProfileIfNeeded()
     }
 
     func connect(profile: RemoteConnectionProfile) {
@@ -160,6 +165,7 @@ final class RemoteConnectionViewModel: ObservableObject {
     }
 
     func toggleConnection(for profile: RemoteConnectionProfile) {
+        selectedProfileID = profile.id
         if isConnected(profile.id) {
             disconnect(profileID: profile.id)
         } else {
@@ -179,8 +185,31 @@ final class RemoteConnectionViewModel: ObservableObject {
             port: parsed.port
         )
 
+        transientProfileIDs.insert(profile.id)
+        profiles.removeAll { $0.id == profile.id }
+        profiles.append(profile)
+        selectedProfileID = profile.id
+        selectedSubPanel = .tunnels
         connect(profile: profile)
         quickConnectText = ""
+    }
+
+    private func selectConnectedProfileIfNeeded() {
+        if let selectedProfileID,
+           profiles.contains(where: { $0.id == selectedProfileID }) {
+            return
+        }
+
+        guard let connectedProfile = profiles.first(where: { isConnected($0.id) }) else {
+            if let selectedProfileID,
+               !profiles.contains(where: { $0.id == selectedProfileID }) {
+                self.selectedProfileID = nil
+            }
+            return
+        }
+
+        selectedProfileID = connectedProfile.id
+        selectedSubPanel = .tunnels
     }
 
     func toggleGroupCollapse(_ group: String) {
@@ -307,6 +336,12 @@ struct RemoteConnectionView: View {
 
     /// Injected SFTP executor for the file browser sub-panel.
     var sftpExecutor: (any SFTPExecutor)?
+
+    /// Remote dev-server scanner used to offer browser open suggestions.
+    var remotePortScanner: RemotePortScanner?
+
+    /// Opens a detected remote dev server in the browser.
+    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Void)?
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -669,18 +704,22 @@ struct RemoteConnectionView: View {
 
     private var tunnelsSubPanel: some View {
         Group {
-            if let profileID = viewModel.selectedProfileID {
-                PortForwardingView(
-                    tunnelManager: viewModel.tunnelManager,
-                    profileID: profileID,
-                    onForwardPort: { forward, profID in
-                        try? viewModel.connectionManager.forwardPort(forward, for: profID)
-                    },
-                    onCancelForward: { forward, profID in
-                        try? viewModel.connectionManager.cancelForward(forward, for: profID)
-                    },
-                    localizer: localizer
-                )
+            if let profileID = viewModel.selectedProfileID,
+               let profile = viewModel.profiles.first(where: { $0.id == profileID }) {
+                VStack(alignment: .leading, spacing: 0) {
+                    PortForwardingView(
+                        tunnelManager: viewModel.tunnelManager,
+                        profileID: profileID,
+                        onForwardPort: { forward, profID in
+                            try? viewModel.connectionManager.forwardPort(forward, for: profID)
+                        },
+                        onCancelForward: { forward, profID in
+                            try? viewModel.connectionManager.cancelForward(forward, for: profID)
+                        },
+                        localizer: localizer
+                    )
+                    remoteBrowserSuggestions(profile: profile)
+                }
             } else {
                 selectProfilePlaceholder(
                     icon: "arrow.left.arrow.right",
@@ -688,6 +727,91 @@ struct RemoteConnectionView: View {
                 )
             }
         }
+    }
+
+    @ViewBuilder
+    private func remoteBrowserSuggestions(profile: RemoteConnectionProfile) -> some View {
+        let suggestions = remotePortScanner?.browserOpenSuggestions
+            .filter { $0.profileID == profile.id }
+            .sorted { $0.remotePort < $1.remotePort } ?? []
+
+        if !suggestions.isEmpty {
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "globe.badge.chevron.backward")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(nsColor: CocxyColors.blue))
+                    Text(localized("remoteWorkspace.browserSuggestions.title", fallback: "Remote Browser"))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(nsColor: CocxyColors.text))
+                    Spacer()
+                }
+
+                ForEach(suggestions) { suggestion in
+                    remoteBrowserSuggestionRow(profile: profile, suggestion: suggestion)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
+        }
+    }
+
+    private func remoteBrowserSuggestionRow(
+        profile: RemoteConnectionProfile,
+        suggestion: RemoteBrowserOpenSuggestion
+    ) -> some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(
+                    String(
+                        format: localized("remoteWorkspace.browserSuggestions.port", fallback: "localhost:%d"),
+                        suggestion.remotePort
+                    )
+                )
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+
+                Text(suggestion.process ?? localized("remoteWorkspace.browserSuggestions.unknownProcess", fallback: "remote service"))
+                    .font(.system(size: 10))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                    .lineLimit(1)
+            }
+
+            Spacer()
+
+            Text("127.0.0.1:\(suggestion.localPort)")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                .lineLimit(1)
+
+            Button(action: { onOpenRemoteBrowser?(profile, suggestion) }) {
+                Image(systemName: "arrow.up.forward.square")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(Color(nsColor: CocxyColors.blue))
+            }
+            .buttonStyle(.plain)
+            .frame(width: 24, height: 24)
+            .disabled(onOpenRemoteBrowser == nil)
+            .accessibilityLabel(
+                String(
+                    format: localized("remoteWorkspace.browserSuggestions.open.accessibility", fallback: "Open remote port %d in browser"),
+                    suggestion.remotePort
+                )
+            )
+            .help(localized("remoteWorkspace.browserSuggestions.open", fallback: "Open in Browser"))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: CocxyColors.surface1).opacity(0.55), lineWidth: 1)
+        )
     }
 
     private var proxySubPanel: some View {

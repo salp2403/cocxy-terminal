@@ -243,6 +243,30 @@ final class HookEventTests: XCTestCase {
         )
     }
 
+    func testFlatHookEventCarriesAgentTeamMetadata() throws {
+        let json = """
+        {
+            "hook_event_name": "PostToolUse",
+            "session_id": "codex-thread-1",
+            "cwd": "/Users/dev/project",
+            "team_id": "ship-team",
+            "teammate_id": "ship-team-build",
+            "teammate_name": "Build",
+            "tool_name": "Edit",
+            "tool_input": {
+                "file_path": "Sources/App.swift"
+            }
+        }
+        """
+
+        let event = try makeDecoder().decode(HookEvent.self, from: Data(json.utf8))
+
+        XCTAssertEqual(event.type, .postToolUse)
+        XCTAssertEqual(event.teamID, "ship-team")
+        XCTAssertEqual(event.teammateID, "ship-team-build")
+        XCTAssertEqual(event.teammateName, "Build")
+    }
+
     // MARK: - Invalid JSON Graceful Error
 
     func testParseInvalidJSONReturnsError() {

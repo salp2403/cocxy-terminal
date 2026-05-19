@@ -78,6 +78,7 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Browser/BrowserDownloadsView.swift",
         "Sources/UI/Browser/BrowserHistoryView.swift",
         "Sources/UI/Browser/BrowserPanelView.swift",
+        "Sources/UI/Cells/CellsSidebarView.swift",
         "Sources/UI/CodeReview/CodeReviewPanelView.swift",
         "Sources/UI/CodeReview/CodeReviewAgentActivityView.swift",
         "Sources/UI/CodeReview/CodeReviewGitWorkflowPanel.swift",

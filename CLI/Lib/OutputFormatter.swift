@@ -232,6 +232,21 @@ public enum OutputFormatter {
         case .remoteTunnels:
             return formatDataOrJSON(response: response)
 
+        // MARK: Cells (v7)
+
+        case .cellCreate:
+            if let cellID = response.data?["cell-id"] ?? response.data?["id"] {
+                return "Cell created: \(cellID)"
+            }
+            return "Cell created."
+        case .cellList, .cellStatus, .cellLogs, .cellAttach, .cellExec:
+            return formatDataOrJSON(response: response)
+        case .cellDestroy:
+            return response.data?["status"] ?? "Cell destroyed."
+
+        case .importConfig:
+            return formatDataOrJSON(response: response)
+
         // MARK: Plugin Management (exposed v3)
 
         case .pluginList:
@@ -268,7 +283,25 @@ public enum OutputFormatter {
             return "Page reloaded."
         case .browserGetState:
             return formatDataOrJSON(response: response)
+        case .browserStateSave:
+            return formatDataOrJSON(response: response)
+        case .browserStateLoad:
+            return formatDataOrJSON(response: response)
         case .browserEval:
+            return formatDataOrJSON(response: response)
+        case .browserAddScript:
+            return formatDataOrJSON(response: response)
+        case .browserAddStyle:
+            return formatDataOrJSON(response: response)
+        case .browserInitScriptAdd:
+            return formatDataOrJSON(response: response)
+        case .browserInitScriptsList:
+            return formatDataOrJSON(response: response)
+        case .browserDialogs:
+            return formatDataOrJSON(response: response)
+        case .browserDialogAccept:
+            return formatDataOrJSON(response: response)
+        case .browserDialogDismiss:
             return formatDataOrJSON(response: response)
         case .browserGetText:
             return formatDataOrJSON(response: response)
@@ -276,9 +309,77 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .browserSnapshot:
             return formatDataOrJSON(response: response)
+        case .browserContext:
+            return formatDataOrJSON(response: response)
         case .browserClick:
             return formatDataOrJSON(response: response)
+        case .browserDblClick:
+            return formatDataOrJSON(response: response)
+        case .browserHover:
+            return formatDataOrJSON(response: response)
+        case .browserFocus:
+            return formatDataOrJSON(response: response)
         case .browserFill:
+            return formatDataOrJSON(response: response)
+        case .browserUpload:
+            return formatDataOrJSON(response: response)
+        case .browserType:
+            return formatDataOrJSON(response: response)
+        case .browserPress:
+            return formatDataOrJSON(response: response)
+        case .browserKeyDown:
+            return formatDataOrJSON(response: response)
+        case .browserKeyUp:
+            return formatDataOrJSON(response: response)
+        case .browserCheck:
+            return formatDataOrJSON(response: response)
+        case .browserUncheck:
+            return formatDataOrJSON(response: response)
+        case .browserSelect:
+            return formatDataOrJSON(response: response)
+        case .browserScroll:
+            return formatDataOrJSON(response: response)
+        case .browserScrollIntoView:
+            return formatDataOrJSON(response: response)
+        case .browserGetHTML:
+            return formatDataOrJSON(response: response)
+        case .browserGetValue:
+            return formatDataOrJSON(response: response)
+        case .browserGetAttr:
+            return formatDataOrJSON(response: response)
+        case .browserGetTitle:
+            return formatDataOrJSON(response: response)
+        case .browserGetCount:
+            return formatDataOrJSON(response: response)
+        case .browserGetBox:
+            return formatDataOrJSON(response: response)
+        case .browserGetStyles:
+            return formatDataOrJSON(response: response)
+        case .browserIsVisible:
+            return formatDataOrJSON(response: response)
+        case .browserIsEnabled:
+            return formatDataOrJSON(response: response)
+        case .browserIsChecked:
+            return formatDataOrJSON(response: response)
+        case .browserFindRole:
+            return formatDataOrJSON(response: response)
+        case .browserFindText:
+            return formatDataOrJSON(response: response)
+        case .browserFindLabel:
+            return formatDataOrJSON(response: response)
+        case .browserFindPlaceholder:
+            return formatDataOrJSON(response: response)
+        case .browserFindAlt:
+            return formatDataOrJSON(response: response)
+        case .browserFindTitle:
+            return formatDataOrJSON(response: response)
+        case .browserFindTestID:
+            return formatDataOrJSON(response: response)
+        case .browserFindFirst:
+            return formatDataOrJSON(response: response)
+        case .browserFindLast:
+            return formatDataOrJSON(response: response)
+        case .browserFindNth:
             return formatDataOrJSON(response: response)
         case .browserScreenshot:
             return formatDataOrJSON(response: response)
@@ -293,6 +394,18 @@ public enum OutputFormatter {
         case .browserCookiesDelete:
             return formatDataOrJSON(response: response)
         case .browserNetwork:
+            return formatDataOrJSON(response: response)
+        case .browserFrames:
+            return formatDataOrJSON(response: response)
+        case .browserDownloads:
+            return formatDataOrJSON(response: response)
+        case .browserStorageList:
+            return formatDataOrJSON(response: response)
+        case .browserStorageGet:
+            return formatDataOrJSON(response: response)
+        case .browserStorageSet:
+            return formatDataOrJSON(response: response)
+        case .browserStorageDelete:
             return formatDataOrJSON(response: response)
         case .browserImportPreview:
             return formatDataOrJSON(response: response)
@@ -663,6 +776,9 @@ public enum OutputFormatter {
         }
         if let authRequired = data["auth_required"] {
             lines.append("Auth required: \(boolText(authRequired))")
+        }
+        if let oneShot = data["one_shot"] {
+            lines.append("One shot: \(boolText(oneShot))")
         }
         if let connections = data["connections"] {
             lines.append("Connections: \(connections)")

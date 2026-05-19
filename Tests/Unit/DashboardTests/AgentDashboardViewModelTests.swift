@@ -430,6 +430,55 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertEqual(sut.sessions.first?.subagents.first?.state, .working)
     }
 
+    func testSyncAgentTeamRunAddsWorkingSessionWithActiveTeammates() throws {
+        let tabID = UUID()
+        let config = try AgentTeamConfig.from(
+            teammates: "Plan, Review",
+            teamID: "codex-ui-smoke",
+            provider: .codex
+        )
+        let launchSpecs = config.teammates.map { teammate in
+            AgentTeamProviderLaunchSpec(
+                provider: config.provider,
+                teamID: config.id,
+                teammateID: teammate.id,
+                teammateName: teammate.name,
+                executable: "/usr/local/bin/codex",
+                arguments: [],
+                environment: [:],
+                workingDirectory: "/tmp/cocxy-project",
+                mutatesUserConfiguration: false,
+                requiresPreviewBeforeLaunch: true
+            )
+        }
+        let run = AgentTeamRunState(config: config, launchSpecs: launchSpecs)
+
+        sut.syncAgentTeamRun(run, tabId: tabID)
+
+        let session = try XCTUnwrap(sut.sessions.first(where: { $0.id == "codex-ui-smoke" }))
+        XCTAssertEqual(session.projectName, "cocxy-project")
+        XCTAssertEqual(session.tabId, tabID)
+        XCTAssertEqual(session.agentName, "Codex CLI")
+        XCTAssertEqual(session.state, .working)
+        XCTAssertEqual(session.subagents.map(\.id), ["codex-ui-smoke-plan", "codex-ui-smoke-review"])
+        XCTAssertEqual(session.subagents.map(\.type), ["Plan", "Review"])
+        XCTAssertTrue(session.subagents.allSatisfy(\.isActive))
+    }
+
+    func testRemoveAgentTeamRunRemovesSyntheticDashboardSession() throws {
+        let config = try AgentTeamConfig.from(
+            teammates: "Plan",
+            teamID: "codex-ui-smoke",
+            provider: .codex
+        )
+        let run = AgentTeamRunState(config: config, launchSpecs: [])
+        sut.syncAgentTeamRun(run, tabId: UUID())
+
+        sut.removeAgentTeamRun(teamID: "codex-ui-smoke")
+
+        XCTAssertFalse(sut.sessions.contains { $0.id == "codex-ui-smoke" })
+    }
+
     // MARK: - ViewModel Tests: Hook SessionEnd
 
     func testSessionEndRemovesSession() {

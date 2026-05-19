@@ -60,6 +60,9 @@ final class BrowserContentView: NSView {
     /// The URL text field.
     private var urlField: NSTextField?
 
+    /// Compact Local/Remote route indicator in the browser toolbar.
+    private var routeIndicatorLabel: NSTextField?
+
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
 
@@ -137,6 +140,7 @@ final class BrowserContentView: NSView {
         Task { @MainActor in
             monitor?.stopMonitoring()
             wv?.navigationDelegate = nil
+            wv?.uiDelegate = nil
             if let wv {
                 capture?.uninstall(from: wv)
                 BrowserDOMGrabWebKitSupport.uninstall(from: wv)
@@ -218,6 +222,21 @@ final class BrowserContentView: NSView {
         rightStack.spacing = 2
         rightStack.translatesAutoresizingMaskIntoConstraints = false
         toolbar.addSubview(rightStack)
+
+        let routeIndicator = NSTextField(labelWithString: "")
+        routeIndicator.font = .systemFont(ofSize: 10, weight: .semibold)
+        routeIndicator.alignment = .center
+        routeIndicator.isBezeled = false
+        routeIndicator.drawsBackground = false
+        routeIndicator.wantsLayer = true
+        routeIndicator.layer?.cornerRadius = 10
+        routeIndicator.layer?.masksToBounds = true
+        routeIndicator.translatesAutoresizingMaskIntoConstraints = false
+        rightStack.addArrangedSubview(routeIndicator)
+        routeIndicator.widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
+        routeIndicator.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        self.routeIndicatorLabel = routeIndicator
+        updateRouteIndicator(remoteProfile: viewModel.activeRemoteBrowserProfile)
 
         if let profileManager {
             let newProfileNameFormat = localized("browser.profile.newName", fallback: "Profile %d")
@@ -318,7 +337,7 @@ final class BrowserContentView: NSView {
             reloadButton.heightAnchor.constraint(equalToConstant: 24),
         ])
 
-        installWebViewForActiveProfile(loadCurrentURL: false)
+        installWebViewForActiveProfile(loadCurrentURL: viewModel.currentURL != nil)
     }
 
     private func createToolbarButton(symbol: String, action: Selector) -> NSButton {
@@ -345,6 +364,7 @@ final class BrowserContentView: NSView {
         networkMonitor?.stopMonitoring()
         observations.removeAll()
         previousWebView?.navigationDelegate = nil
+        previousWebView?.uiDelegate = nil
         previousWebView?.removeFromSuperview()
         webViewBottomConstraint = nil
 
@@ -363,6 +383,7 @@ final class BrowserContentView: NSView {
         let wv = WKWebView(frame: .zero, configuration: config)
         wv.translatesAutoresizingMaskIntoConstraints = false
         wv.navigationDelegate = self
+        wv.uiDelegate = self
         wv.allowsBackForwardNavigationGestures = true
         BrowserWebViewAppearance.configure(wv)
         addSubview(wv, positioned: .below, relativeTo: toolbarContainer)
@@ -441,6 +462,13 @@ final class BrowserContentView: NSView {
                     self.dismissDevTools()
                 }
                 self.installWebViewForActiveProfile(loadCurrentURL: true)
+            }
+            .store(in: &cancellables)
+
+        viewModel.$activeRemoteBrowserProfile
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] remoteProfile in
+                self?.updateRouteIndicator(remoteProfile: remoteProfile)
             }
             .store(in: &cancellables)
     }
@@ -535,6 +563,39 @@ final class BrowserContentView: NSView {
         domGrabButton?.toolTip = active
             ? localized("browser.panel.domGrab.stop", fallback: "Stop DOM grab")
             : localized("browser.panel.domGrab.grab", fallback: "Grab DOM element")
+    }
+
+    private func updateRouteIndicator(remoteProfile: RemoteBrowserProfile?) {
+        guard let routeIndicatorLabel else { return }
+        let isRemote = remoteProfile != nil
+        let tint = routeIndicatorTint(for: remoteProfile)
+        routeIndicatorLabel.stringValue = isRemote
+            ? localized("browser.route.remote", fallback: "Remote")
+            : localized("browser.route.local", fallback: "Local")
+        routeIndicatorLabel.textColor = tint
+        routeIndicatorLabel.layer?.backgroundColor = isRemote
+            ? tint.withAlphaComponent(0.12).cgColor
+            : CocxyColors.surface0.withAlphaComponent(0.72).cgColor
+        routeIndicatorLabel.toolTip = remoteProfile?.routingSummary
+            ?? localized("browser.route.local.detail", fallback: "Browser traffic uses local networking")
+        routeIndicatorLabel.setAccessibilityLabel(
+            isRemote
+                ? localized("browser.route.remote.accessibility", fallback: "Remote browser route")
+                : localized("browser.route.local.accessibility", fallback: "Local browser route")
+        )
+        routeIndicatorLabel.setAccessibilityValue(remoteProfile?.displayTitle ?? routeIndicatorLabel.toolTip)
+    }
+
+    private func routeIndicatorTint(for remoteProfile: RemoteBrowserProfile?) -> NSColor {
+        guard let remoteProfile else { return CocxyColors.subtext0 }
+        switch remoteProfile.proxyHealth {
+        case .failed:
+            return CocxyColors.red
+        case .connecting, .degraded:
+            return CocxyColors.yellow
+        case .disconnected, .active:
+            return CocxyColors.blue
+        }
     }
 
     // MARK: - Feature Toggle Actions
@@ -695,6 +756,7 @@ extension BrowserContentView: WKNavigationDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.viewModel.isLoading = false
+            self.viewModel.recordRemoteBrowserNavigationSucceeded(url: webView.url)
             if let url = webView.url?.absoluteString {
                 self.viewModel.recordPageVisit(url: url, title: webView.title)
             }
@@ -726,6 +788,90 @@ extension BrowserContentView: WKNavigationDelegate {
     }
 }
 
+// MARK: - WKUIDelegate
+
+extension BrowserContentView: WKUIDelegate {
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptAlertPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable () -> Void
+    ) {
+        recordJavaScriptDialog(
+            kind: .alert,
+            message: message,
+            defaultText: nil,
+            webView: webView
+        ) { _ in
+            completionHandler()
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptConfirmPanelWithMessage message: String,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        recordJavaScriptDialog(
+            kind: .confirm,
+            message: message,
+            defaultText: nil,
+            webView: webView
+        ) { resolution in
+            if case .accept = resolution {
+                completionHandler(true)
+            } else {
+                completionHandler(false)
+            }
+        }
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        runJavaScriptTextInputPanelWithPrompt prompt: String,
+        defaultText: String?,
+        initiatedByFrame frame: WKFrameInfo,
+        completionHandler: @escaping @MainActor @Sendable (String?) -> Void
+    ) {
+        recordJavaScriptDialog(
+            kind: .prompt,
+            message: prompt,
+            defaultText: defaultText,
+            webView: webView
+        ) { resolution in
+            switch resolution {
+            case .accept(let promptText):
+                completionHandler(promptText ?? defaultText ?? "")
+            case .dismiss:
+                completionHandler(nil)
+            }
+        }
+    }
+
+    private func recordJavaScriptDialog(
+        kind: BrowserDialogKind,
+        message: String,
+        defaultText: String?,
+        webView: WKWebView,
+        completion: @escaping (BrowserDialogResolution) -> Void
+    ) {
+        let dialog = viewModel.recordJavaScriptDialog(
+            kind: kind,
+            message: message,
+            defaultText: defaultText,
+            url: webView.url?.absoluteString,
+            completion: completion
+        )
+        BrowserJavaScriptDialogPresenter.scheduleFallbackPresentation(
+            dialog: dialog,
+            viewModel: viewModel,
+            window: webView.window,
+            localizer: localizer
+        )
+    }
+}
+
 // MARK: - Error Page
 
 extension BrowserContentView {
@@ -736,6 +882,7 @@ extension BrowserContentView {
     /// styled to match the Catppuccin Mocha terminal theme.
     private func showErrorPage(error: Error, failedURL: URL?) {
         guard let webView else { return }
+        viewModel.recordRemoteBrowserNavigationFailure(error: error, failedURL: failedURL)
         BrowserErrorPageRenderer.render(
             error: error,
             failedURL: failedURL,

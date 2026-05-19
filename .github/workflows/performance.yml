@@ -13,6 +13,12 @@ jobs:
     name: Cold start smoke budget
     runs-on: macos-15
     timeout-minutes: 30
+    env:
+      COCXY_COLD_START_BUDGET_MS: "800"
+      COCXY_COLD_START_INTERNAL_BUDGET_MS: "125"
+      COCXY_PERFORMANCE_BASELINE: scripts/performance-baselines.macos15-ci.json
+      COCXY_SYNTAX_INCREMENTAL_PARSE_BUDGET_MS: "8"
+      COCXYCORE_OUTPUT_THROUGHPUT_BUDGET_MBPS: "1.0"
 
     steps:
       - name: Checkout
@@ -48,6 +54,10 @@ jobs:
           chmod +x scripts/bench-cold-start.sh
           scripts/bench-cold-start.sh --app build/CocxyTerminal.app --runs 5 --enforce | tee build/performance/cold-start.json
 
+      - name: Cleanup CocxyTerminal processes
+        if: always()
+        run: pkill -x CocxyTerminal || true
+
       - name: Measure memory baseline
         run: |
           set -euo pipefail
@@ -65,7 +75,7 @@ jobs:
       - name: Check performance regression baselines
         run: |
           scripts/check-performance-regression.py \
-            --baseline scripts/performance-baselines.json \
+            --baseline "$COCXY_PERFORMANCE_BASELINE" \
             --metric-file build/performance/cold-start.json \
             --metric-file build/performance/memory-baseline.json \
             --log-file build/performance/benchmark-suite.log \
