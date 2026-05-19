@@ -515,11 +515,11 @@ jobs:
             web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
           # Deploy CSS, JS, image, video, OG, and nested static pages
-          scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            web/public/css/ ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
           if [ -d web/public/js ]; then
-            scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-              web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
           fi
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/public/images/* ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
@@ -801,6 +801,23 @@ jobs:
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'"
+
+          # Deploy the Express runtime too. The redesigned site relies on
+          # server.js for redirects, CSP, and security headers; static assets
+          # alone are not enough for a correct production deploy.
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
+            ${DEPLOY_TARGET}:${DEPLOY_PATH}
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "set -e; \
+             cd ${DEPLOY_PATH}; \
+             npm ci --omit=dev --no-audit --no-fund; \
+             if pm2 describe cocxy-web >/dev/null 2>&1; then \
+               pm2 reload cocxy-web --update-env; \
+             else \
+               pm2 start ecosystem.config.js --only cocxy-web; \
+             fi; \
+             pm2 save"
 
           rm /tmp/deploy_key
           echo "Website deployed to cocxy.dev"

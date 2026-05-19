@@ -237,8 +237,42 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(deployBlock.contains(#"*) DEPLOY_PATH="${DEPLOY_PATH}/" ;;"#))
         #expect(deployBlock.contains("mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es"))
         #expect(deployBlock.contains("if [ -d web/public/js ]; then"))
-        #expect(deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
-        #expect(!deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
+        #expect(deployBlock.contains("web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/"))
+        #expect(deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
+        #expect(deployBlock.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
+        #expect(deployBlock.contains("npm ci --omit=dev --no-audit --no-fund"))
+        #expect(deployBlock.contains("pm2 reload cocxy-web --update-env"))
+        #expect(deployBlock.contains("pm2 start ecosystem.config.js --only cocxy-web"))
+        #expect(!deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
+    }
+
+    @Test("manual website deploy workflow validates static site and restarts server runtime")
+    func manualWebsiteDeployWorkflowValidatesStaticSiteAndRestartsServerRuntime() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("workflow_dispatch:"))
+        #expect(workflow.contains("environment: production"))
+        #expect(workflow.contains("npm run smoke"))
+        #expect(workflow.contains("npm audit --audit-level=high"))
+        #expect(workflow.contains("npm run smoke:visual"))
+        #expect(workflow.contains("npm run audit:quality:full"))
+        #expect(workflow.contains("node scripts/generate-releases-page.mjs"))
+        #expect(workflow.contains("tar -czf /tmp/${BACKUP_NAME} -C ${DEPLOY_PATH} ."))
+        #expect(workflow.contains("web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/"))
+        #expect(workflow.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
+        #expect(workflow.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
+        #expect(workflow.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
+        #expect(workflow.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
+        #expect(workflow.contains("npm ci --omit=dev --no-audit --no-fund"))
+        #expect(workflow.contains("pm2 reload cocxy-web --update-env"))
+        #expect(workflow.contains("pm2 start ecosystem.config.js --only cocxy-web"))
+        #expect(workflow.contains("https://cocxy.dev/getting-started.html"))
+        #expect(workflow.contains(#"test "$REDIRECT_STATUS" = "301""#))
+        #expect(!workflow.contains("|| true"))
     }
 
     @Test("release readiness script documents external blockers")

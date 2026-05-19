@@ -1,0 +1,174 @@
+name: Deploy Website
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to write into website placeholders. Defaults to the latest GitHub release."
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-website:
+    name: Deploy cocxy.dev website
+    runs-on: macos-15
+    timeout-minutes: 120
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install website dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Resolve website version
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="$REQUESTED_VERSION"
+          if [ -z "$VERSION" ]; then
+            VERSION="$(gh release view --json tagName --jq '.tagName | ltrimstr("v")')"
+          fi
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid website version: ${VERSION}"
+            exit 1
+          fi
+          echo "VERSION=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and verify website
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          npm run smoke
+          npm audit --audit-level=high
+          npm run smoke:visual
+          npm run audit:quality:full
+          mkdir -p ../build/es
+          node scripts/generate-releases-page.mjs \
+            --version "${{ steps.version.outputs.VERSION }}" \
+            --locale en \
+            --output ../build/releases.html
+          node scripts/generate-releases-page.mjs \
+            --version "${{ steps.version.outputs.VERSION }}" \
+            --locale es \
+            --output ../build/es/releases.html
+        working-directory: web
+
+      - name: Deploy website
+        env:
+          SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          set -euo pipefail
+          echo "$SERVER_KEY" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          DEPLOY_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
+          case "$DEPLOY_PATH" in
+            */) ;;
+            *) DEPLOY_PATH="${DEPLOY_PATH}/" ;;
+          esac
+          BACKUP_NAME="cocxy-web-backup-${GITHUB_RUN_ID}-$(date -u +%Y%m%d%H%M%S).tar.gz"
+
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "set -e; \
+             mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es ${DEPLOY_PATH}videos ${DEPLOY_PATH}og ${DEPLOY_PATH}features ${DEPLOY_PATH}docs ${DEPLOY_PATH}es/features ${DEPLOY_PATH}es/docs; \
+             tar -czf /tmp/${BACKUP_NAME} -C ${DEPLOY_PATH} ."
+
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/images/* ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/og/* ${DEPLOY_TARGET}:${DEPLOY_PATH}og/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/docs/search-index.json ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/search-index.json
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/robots.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}robots.txt
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/sitemap.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}sitemap.xml
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/manifest.webmanifest ${DEPLOY_TARGET}:${DEPLOY_PATH}manifest.webmanifest
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/llms.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}llms.txt
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html
+
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "set -e; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'"
+
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
+            ${DEPLOY_TARGET}:${DEPLOY_PATH}
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "set -e; \
+             cd ${DEPLOY_PATH}; \
+             npm ci --omit=dev --no-audit --no-fund; \
+             if pm2 describe cocxy-web >/dev/null 2>&1; then \
+               pm2 reload cocxy-web --update-env; \
+             else \
+               pm2 start ecosystem.config.js --only cocxy-web; \
+             fi; \
+             pm2 save"
+
+          rm /tmp/deploy_key
+          echo "backup=/tmp/${BACKUP_NAME}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Production smoke
+        run: |
+          set -euo pipefail
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/privacy.html)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/features/agents.html)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/docs/first-run.html)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/llms.txt)" = "200"
+          test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/health)" = "200"
+          REDIRECT_STATUS="$(curl -fsS -o /dev/null -w '%{http_code}' -I https://cocxy.dev/getting-started.html)"
+          test "$REDIRECT_STATUS" = "301"
+          curl -fsSL https://cocxy.dev/ | grep -q "style.css?v=${{ steps.version.outputs.VERSION }}"
+          curl -fsSL https://cocxy.dev/ | grep -q "CocxyTerminal-${{ steps.version.outputs.VERSION }}.dmg"
+          curl -fsSL https://cocxy.dev/privacy.html | grep -q "No telemetry pipeline"
+          curl -fsSL https://cocxy.dev/sitemap.xml | grep -q "https://cocxy.dev/privacy.html"
+          curl -fsSL https://cocxy.dev/robots.txt | grep -q "Sitemap: https://cocxy.dev/sitemap.xml"
