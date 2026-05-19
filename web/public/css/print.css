@@ -1,0 +1,26 @@
+@media print {
+  .site-header,
+  .site-footer,
+  .nav-toggle,
+  .theme-toggle,
+  .copy-button,
+  .hero-media {
+    display: none !important;
+  }
+
+  body {
+    color: #111;
+    background: #fff;
+  }
+
+  a {
+    color: #111;
+    text-decoration: underline;
+  }
+
+  .section,
+  .page-hero,
+  .hero-inner {
+    padding-block: 1rem;
+  }
+}
