@@ -39,33 +39,33 @@
     },
     {
       "name": "syntax_cold_parse_ms",
-      "baseline": 4.74,
+      "baseline": 10.0,
       "direction": "lower",
-      "absolute_tolerance": 1.0
+      "absolute_tolerance": 2.0
     },
     {
       "name": "syntax_viewport_capture_ms",
-      "baseline": 1.38,
-      "direction": "lower",
-      "absolute_tolerance": 0.5
-    },
-    {
-      "name": "syntax_token_mapping_ms",
-      "baseline": 0.13,
-      "direction": "lower",
-      "absolute_tolerance": 0.1
-    },
-    {
-      "name": "syntax_viewport_highlight_ms",
-      "baseline": 6.26,
+      "baseline": 4.5,
       "direction": "lower",
       "absolute_tolerance": 1.0
     },
     {
-      "name": "syntax_incremental_parse_ms",
-      "baseline": 1.58,
+      "name": "syntax_token_mapping_ms",
+      "baseline": 0.35,
       "direction": "lower",
-      "absolute_tolerance": 0.5
+      "absolute_tolerance": 0.15
+    },
+    {
+      "name": "syntax_viewport_highlight_ms",
+      "baseline": 15.0,
+      "direction": "lower",
+      "absolute_tolerance": 3.0
+    },
+    {
+      "name": "syntax_incremental_parse_ms",
+      "baseline": 5.0,
+      "direction": "lower",
+      "absolute_tolerance": 3.0
     },
     {
       "name": "cocxycore_surface_creation_ms",

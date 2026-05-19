@@ -19,7 +19,7 @@ struct CellCLICommandServiceSwiftTestingTests {
                 metadata: ["token": "secret-token", "image": "swift:6.0"]
             ),
         ])
-        let service = CellCLICommandService(providers: [.docker: provider])
+        let service = makeService(providers: [.docker: provider])
 
         let result = await service.perform(kind: "create", params: [
             "provider": "docker",
@@ -48,7 +48,7 @@ struct CellCLICommandServiceSwiftTestingTests {
                 metadata: ["host": "example.test"]
             ),
         ])
-        let service = CellCLICommandService(providers: [.ssh: provider])
+        let service = makeService(providers: [.ssh: provider])
 
         let result = await service.perform(kind: "create", params: [
             "provider": "ssh",
@@ -80,7 +80,7 @@ struct CellCLICommandServiceSwiftTestingTests {
                 metadata: ["resource-group": "rg-cocxy"]
             ),
         ])
-        let service = CellCLICommandService(providers: [.azure: provider])
+        let service = makeService(providers: [.azure: provider])
 
         let result = await service.perform(kind: "create", params: [
             "provider": "azure",
@@ -121,7 +121,7 @@ struct CellCLICommandServiceSwiftTestingTests {
             Cell(id: cellID, name: "local", provider: .docker, status: .running),
         ])
         provider.execOutput = "ok\n"
-        let service = CellCLICommandService(providers: [.docker: provider])
+        let service = makeService(providers: [.docker: provider])
         let argvJSON = String(decoding: try JSONEncoder().encode(["echo", "ok"]), as: UTF8.self)
 
         let result = await service.perform(kind: "exec", params: [
@@ -149,7 +149,7 @@ struct CellCLICommandServiceSwiftTestingTests {
             stderr: "machine is not ready"
         )
         let sshProvider = FakeCellProvider(kind: .ssh, cells: [])
-        let service = CellCLICommandService(providers: [
+        let service = makeService(providers: [
             .docker: dockerProvider,
             .fly: flyProvider,
             .ssh: sshProvider,
@@ -174,7 +174,7 @@ struct CellCLICommandServiceSwiftTestingTests {
             Cell(id: cellID, name: "gcp", provider: .gcp, status: .running),
         ])
         provider.logsOutput = String(repeating: "x", count: 70_000)
-        let service = CellCLICommandService(providers: [.gcp: provider])
+        let service = makeService(providers: [.gcp: provider])
 
         let result = await service.perform(kind: "logs", params: [
             "cell-id": cellID.uuidString,
@@ -195,7 +195,7 @@ struct CellCLICommandServiceSwiftTestingTests {
         let provider = FakeCellProvider(cells: [
             Cell(id: cellID, name: "local", provider: .docker, status: .running),
         ])
-        let service = CellCLICommandService(providers: [.docker: provider])
+        let service = makeService(providers: [.docker: provider])
 
         let result = await service.perform(kind: "list", params: [:])
 
@@ -216,7 +216,7 @@ struct CellCLICommandServiceSwiftTestingTests {
         let sshProvider = FakeCellProvider(kind: .ssh, cells: [
             Cell(id: cellID, name: "ssh-lab", provider: .ssh, status: .running),
         ])
-        let service = CellCLICommandService(providers: [
+        let service = makeService(providers: [
             .docker: dockerProvider,
             .ssh: sshProvider,
         ])
@@ -246,7 +246,7 @@ struct CellCLICommandServiceSwiftTestingTests {
         ])
         provider.execOutput = "ok\n"
         let auditLog = RecordingCellAuditLog()
-        let service = CellCLICommandService(
+        let service = makeService(
             providers: [.docker: provider],
             auditLog: auditLog,
             actorProvider: { "cells-test" },
@@ -283,7 +283,7 @@ struct CellCLICommandServiceSwiftTestingTests {
             displayName: "Docker Cell"
         )
         let auditLog = RecordingCellAuditLog()
-        let service = CellCLICommandService(
+        let service = makeService(
             providers: [.docker: provider],
             auditLog: auditLog,
             actorProvider: { "cells-test" }
@@ -311,6 +311,22 @@ struct CellCLICommandServiceSwiftTestingTests {
         #expect(auditLog.events.map(\.action) == [.attach])
         #expect(auditLog.events[0].metadata.keys.sorted() == ["lease-id"])
     }
+}
+
+private func makeService(
+    providers: [CellProviderKind: any CellProvider],
+    leaseManager: CellLeaseManager = CellLeaseManager(),
+    auditLog: any CellAuditLogging = RecordingCellAuditLog(),
+    actorProvider: @escaping @Sendable () -> String = { "cells-test" },
+    now: @escaping @Sendable () -> Date = { Date(timeIntervalSince1970: 1_800_000_000) }
+) -> CellCLICommandService {
+    CellCLICommandService(
+        providers: providers,
+        leaseManager: leaseManager,
+        auditLog: auditLog,
+        actorProvider: actorProvider,
+        now: now
+    )
 }
 
 private final class FakeCellProvider: CellProvider, @unchecked Sendable {

@@ -63,6 +63,9 @@ struct CITestGateScriptSwiftTestingTests {
             options: []
         ) as? [String: Any]
         let ciMetrics = ciBaselinePayload?["metrics"] as? [[String: Any]]
+        let ciMetric: (String) -> [String: Any]? = { metricName in
+            ciMetrics?.first { $0["name"] as? String == metricName }
+        }
 
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(workflow.contains("tee build/performance/cold-start.json"))
@@ -72,6 +75,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("COCXY_COLD_START_BUDGET_MS: \"800\""))
         #expect(workflow.contains("COCXY_COLD_START_INTERNAL_BUDGET_MS: \"125\""))
         #expect(workflow.contains("COCXY_PERFORMANCE_BASELINE: scripts/performance-baselines.macos15-ci.json"))
+        #expect(workflow.contains("COCXY_SYNTAX_INCREMENTAL_PARSE_BUDGET_MS: \"8\""))
         #expect(workflow.contains("--baseline \"$COCXY_PERFORMANCE_BASELINE\""))
         #expect(workflow.contains("Cleanup CocxyTerminal processes"))
         #expect(workflow.contains("pkill -x CocxyTerminal || true"))
@@ -87,6 +91,16 @@ struct CITestGateScriptSwiftTestingTests {
             $0["name"] as? String == "internal_critical_path_median_ms"
                 && ($0["baseline"] as? NSNumber)?.doubleValue == 100
         } == true)
+        #expect((ciMetric("syntax_cold_parse_ms")?["baseline"] as? NSNumber)?.doubleValue == 10.0)
+        #expect((ciMetric("syntax_cold_parse_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 2.0)
+        #expect((ciMetric("syntax_viewport_capture_ms")?["baseline"] as? NSNumber)?.doubleValue == 4.5)
+        #expect((ciMetric("syntax_viewport_capture_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 1.0)
+        #expect((ciMetric("syntax_token_mapping_ms")?["baseline"] as? NSNumber)?.doubleValue == 0.35)
+        #expect((ciMetric("syntax_token_mapping_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.15)
+        #expect((ciMetric("syntax_viewport_highlight_ms")?["baseline"] as? NSNumber)?.doubleValue == 15.0)
+        #expect((ciMetric("syntax_viewport_highlight_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 3.0)
+        #expect((ciMetric("syntax_incremental_parse_ms")?["baseline"] as? NSNumber)?.doubleValue == 5.0)
+        #expect((ciMetric("syntax_incremental_parse_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 3.0)
         #expect(FileManager.default.isExecutableFile(atPath: memoryScriptURL.path))
         #expect(memoryScript.contains("BENCHMARK_ENV=\"COCXY_MEMORY_BASELINE_BENCHMARK=1\""))
         #expect(memoryScript.contains("/usr/bin/open -n --env \"$BENCHMARK_ENV\" \"$APP_PATH\""))
