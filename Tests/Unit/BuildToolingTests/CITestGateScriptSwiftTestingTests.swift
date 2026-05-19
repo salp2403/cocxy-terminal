@@ -1033,6 +1033,24 @@ struct CITestGateScriptSwiftTestingTests {
         let isComplete = result.stdout.contains("status=complete")
         #expect(result.terminationStatus == (isComplete ? 0 : 1))
         #expect(isComplete || result.stdout.contains("status=not-complete"))
+
+        let isCI = ProcessInfo.processInfo.environment["CI"] == "true"
+        let privateCompletionEvidenceMissing = [
+            "blocker=source plan missing:",
+            "blocker=completion audit missing:",
+            "blocker=completion final report missing:",
+            "blocker=command instruction doc missing:",
+        ].contains { result.stdout.contains($0) }
+        if isCI && privateCompletionEvidenceMissing {
+            #expect(result.terminationStatus == 1)
+            #expect(result.stdout.contains("status=not-complete"))
+            #expect(result.stdout.contains("check=browser-mcp-tools="))
+            #expect(result.stdout.contains("check=agent-workspace-e2e-matrices=9"))
+            #expect(result.stdout.contains("blocker=completion final report missing:"))
+            #expect(result.stdout.contains("blocker=command instruction doc missing:"))
+            return
+        }
+
         #expect(result.stdout.contains("check=plan-current-status-note=complete"))
         #expect(result.stdout.contains("check=browser-mcp-tools="))
         #expect(result.stdout.contains("check=completion-final-report=present"))
