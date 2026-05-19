@@ -79,6 +79,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("COCXY_PERFORMANCE_BASELINE: scripts/performance-baselines.macos15-ci.json"))
         #expect(workflow.contains("COCXY_SYNTAX_INCREMENTAL_PARSE_BUDGET_MS: \"8\""))
         #expect(workflow.contains("COCXYCORE_OUTPUT_THROUGHPUT_BUDGET_MBPS: \"0.8\""))
+        #expect(workflow.contains("timeout-minutes: 75"))
+        #expect(workflow.contains("timeout-minutes: 60"))
         #expect(workflow.contains("--baseline \"$COCXY_PERFORMANCE_BASELINE\""))
         #expect(workflow.contains("Cleanup CocxyTerminal processes"))
         #expect(workflow.contains("pkill -x CocxyTerminal || true"))

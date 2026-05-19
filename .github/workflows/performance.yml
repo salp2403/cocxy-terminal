@@ -12,7 +12,7 @@ jobs:
   cold-start:
     name: Cold start smoke budget
     runs-on: macos-15
-    timeout-minutes: 30
+    timeout-minutes: 75
     env:
       COCXY_COLD_START_BUDGET_MS: "800"
       COCXY_COLD_START_INTERNAL_BUDGET_MS: "125"
@@ -66,6 +66,7 @@ jobs:
           scripts/bench-memory-baseline.sh --app build/CocxyTerminal.app --enforce | tee build/performance/memory-baseline.json
 
       - name: Run performance benchmark suite
+        timeout-minutes: 60
         run: |
           set -euo pipefail
           mkdir -p build/performance
