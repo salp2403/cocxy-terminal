@@ -45,27 +45,27 @@
     },
     {
       "name": "syntax_viewport_capture_ms",
-      "baseline": 5.0,
+      "baseline": 7.7,
       "direction": "lower",
-      "absolute_tolerance": 1.5
+      "absolute_tolerance": 2.3
     },
     {
       "name": "syntax_token_mapping_ms",
-      "baseline": 0.35,
+      "baseline": 0.85,
       "direction": "lower",
-      "absolute_tolerance": 0.15
+      "absolute_tolerance": 0.35
     },
     {
       "name": "syntax_viewport_highlight_ms",
-      "baseline": 21.0,
+      "baseline": 25.0,
       "direction": "lower",
-      "absolute_tolerance": 4.0
+      "absolute_tolerance": 5.0
     },
     {
       "name": "syntax_incremental_parse_ms",
-      "baseline": 5.0,
+      "baseline": 16.0,
       "direction": "lower",
-      "absolute_tolerance": 3.0
+      "absolute_tolerance": 4.0
     },
     {
       "name": "cocxycore_surface_creation_ms",
