@@ -1,27 +1,34 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Cocxy Terminal - Cocxy Terminal</title>
-  <meta name="description" content="Native macOS terminal that understands AI coding agents, with encrypted Vault, code review, Markdown, remotes, and zero telemetry.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cocxy Terminal — The Native macOS Terminal for AI Coding Agents</title>
+  <meta name="description" content="Cocxy is a native macOS terminal built for developers working with AI coding agents. Real-time multi-agent detection, inline agent code review, a full Markdown workspace, GPU rendering, persistent remote sessions, and zero telemetry. MIT licensed.">
+  <meta name="keywords" content="AI terminal, macOS terminal, AI coding agent, local agent detection, code review terminal, markdown editor, native macOS terminal, zero telemetry, Metal GPU terminal, SSH terminal, agent dashboard">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
-  <meta property="og:title" content="Cocxy Terminal - Cocxy Terminal">
-  <meta property="og:description" content="Native macOS terminal that understands AI coding agents, with encrypted Vault, code review, Markdown, remotes, and zero telemetry.">
+  <meta property="og:title" content="Cocxy Terminal — The Native macOS Terminal for AI Coding Agents">
+  <meta property="og:description" content="Real-time multi-agent detection, inline code review, a full Markdown workspace, GPU rendering, persistent remote sessions, zero telemetry. MIT licensed.">
   <meta property="og:url" content="https://cocxy.dev/">
-  <meta property="og:image" content="https://cocxy.dev/og/og-index.png">
+  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Cocxy Terminal - Cocxy Terminal">
+  <meta property="og:image:alt" content="Cocxy Terminal showing live agent dashboard, Markdown workspace, and the agent code review panel">
   <meta property="og:locale" content="en_US">
+
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Cocxy Terminal - Cocxy Terminal">
-  <meta name="twitter:description" content="Native macOS terminal that understands AI coding agents, with encrypted Vault, code review, Markdown, remotes, and zero telemetry.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-index.png">
+  <meta name="twitter:site" content="@cocxyterminal">
+  <meta name="twitter:creator" content="@cocxyterminal">
+  <meta name="twitter:title" content="Cocxy Terminal — The Native macOS Terminal for AI Coding Agents">
+  <meta name="twitter:description" content="Real-time agent detection. Inline code review. Markdown workspace. GPU rendering. Zero telemetry. Native macOS.">
+  <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+  <meta name="twitter:image:alt" content="Cocxy Terminal interface preview">
+
+  <meta name="theme-color" content="#1e1e2e">
   <link rel="canonical" href="https://cocxy.dev/">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/">
@@ -30,409 +37,616 @@
   <link rel="apple-touch-icon" href="/images/icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
-  <link rel="preload" as="image" href="/images/cocxy-preview.avif" type="image/avif" fetchpriority="high">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="preload" as="image" href="/images/icon.png">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+
   <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  "name": "Cocxy Terminal",
-  "url": "https://cocxy.dev",
-  "logo": "https://cocxy.dev/images/icon.png",
-  "founder": {
-    "@type": "Person",
-    "name": "Said Arturo Lopez"
-  }
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "url": "https://cocxy.dev",
-  "name": "Cocxy Terminal",
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "https://cocxy.dev/docs/?q={search_term_string}",
-    "query-input": "required name=search_term_string"
-  }
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Cocxy Terminal",
-  "applicationCategory": "DeveloperApplication",
-  "applicationSubCategory": "Terminal Emulator",
-  "operatingSystem": "macOS 14.0+",
-  "url": "https://cocxy.dev",
-  "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
-  "softwareVersion": "0.0.0",
-  "license": "https://opensource.org/licenses/MIT",
-  "isAccessibleForFree": true,
-  "inLanguage": "en",
-  "featureList": [
-    "Real-time local agent detection",
-    "Encrypted session Vault",
-    "Inline code review panel",
-    "Native Markdown workspace",
-    "GPU terminal rendering",
-    "Remote workspaces",
-    "Built-in browser",
-    "Plugin hooks",
-    "Shell integration",
-    "Zero telemetry"
-  ],
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD",
-    "availability": "https://schema.org/InStock"
-  },
-  "author": {
-    "@type": "Person",
-    "name": "Said Arturo Lopez",
-    "url": "https://github.com/salp2403"
-  }
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Does Cocxy require an account?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Cocxy installs and runs locally without a required account."
-      }
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "Cocxy Terminal",
+    "alternateName": "Cocxy",
+    "applicationCategory": "DeveloperApplication",
+    "applicationSubCategory": "Terminal Emulator",
+    "operatingSystem": "macOS 14.0+",
+    "url": "https://cocxy.dev",
+    "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
+    "screenshot": "https://cocxy.dev/images/og-image.png",
+    "softwareVersion": "0.0.0",
+    "softwareRequirements": "macOS 14.0 or later (Apple Silicon or Intel)",
+    "description": "Native macOS terminal built for AI coding agents. Real-time multi-agent detection, inline agent code review, a full Markdown workspace, GPU-accelerated rendering via Metal, persistent remote sessions, plugin system, and zero telemetry. MIT licensed.",
+    "featureList": [
+      "Multi-layer local AI coding agent detection",
+      "Agent Code Review Panel with inline comments and feedback loop",
+      "Native Markdown workspace with live preview, Mermaid, KaTeX, and QuickLook extension",
+      "GPU-accelerated terminal rendering via Metal (120 fps)",
+      "Persistent remote SSH sessions with tmux fallback",
+      "SOCKS5 and HTTP CONNECT system proxy with health monitoring",
+      "Built-in browser with DevTools and profile isolation",
+      "Plugin system with eight event hooks",
+      "Per-project .cocxy.toml configuration",
+      "AppleScript automation and Shortcuts integration",
+      "Web terminal embed over HTTP",
+      "Shell integration for zsh, bash, and fish",
+      "100+ command CLI companion",
+      "Zero telemetry, zero analytics, zero tracking"
+    ],
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD",
+      "availability": "https://schema.org/InStock"
     },
-    {
-      "@type": "Question",
-      "name": "Does Cocxy send telemetry?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. There are no analytics, tracking scripts, or automatic session uploads."
+    "author": {
+      "@type": "Person",
+      "name": "Said Arturo Lopez",
+      "url": "https://github.com/salp2403"
+    },
+    "license": "https://opensource.org/licenses/MIT",
+    "isAccessibleForFree": true
+  }
+  </script>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is Cocxy Terminal?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Cocxy Terminal is a native macOS terminal built for developers working with AI coding agents. It detects agent state in real time, lets you review agent code changes inline, and includes a full Markdown workspace. It runs on Metal for GPU-accelerated rendering, has zero telemetry, and is MIT licensed."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Which AI coding agents does Cocxy support?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Cocxy ships bundled local agent profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback CLIs. Detection works across four independent layers: hook events, OSC escape sequences, pattern matching, and timing heuristics. Custom agents can be added via agents.toml."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Is Cocxy Terminal free?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Cocxy is free and open source under the MIT license. There is no paid tier, no telemetry, and no account required to use it."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does Cocxy collect any data?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "No. Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. You can verify this with any network monitor."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "How do I install Cocxy on macOS?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "The recommended way is Homebrew: run `brew tap salp2403/tap && brew install --cask cocxy`. Alternatively, download the signed and notarized DMG from the GitHub Releases page. Cocxy supports macOS 14.0 (Sonoma) and later on both Apple Silicon and Intel."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is the Agent Code Review Panel?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "A native panel that shows every file an AI coding agent changed during a session. You can browse the diff, comment inline on any line, accept or reject individual hunks with git apply, and submit all pending comments back to the agent as formatted feedback. Open it with Cmd+Option+R."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can Cocxy replace my existing terminal?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes. Cocxy is a full-featured terminal emulator with Metal-accelerated rendering, font ligatures, inline image protocols, multi-tab and split panes, scrollback search, shell integration for zsh/bash/fish, and SSH multiplexing. It works as a drop-in replacement for your daily driver."
+        }
       }
-    }
-  ]
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "VideoObject",
-  "name": "Cocxy Terminal demo",
-  "description": "Native macOS terminal that understands AI coding agents, with encrypted Vault, code review, Markdown, remotes, and zero telemetry.",
-  "thumbnailUrl": "https://cocxy.dev/images/og-image.png",
-  "uploadDate": "2026-05-16",
-  "contentUrl": "https://cocxy.dev/videos/cocxy-demo.mp4",
-  "embedUrl": "https://cocxy.dev/#demo"
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Home",
-      "item": "https://cocxy.dev/"
-    }
-  ]
-}
+    ]
+  }
   </script>
 </head>
 <body>
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <nav class="nav container" aria-label="Main navigation">
-    <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <img src="/images/icon.png" width="32" height="32" alt="">
-      <span>Cocxy</span>
-    </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Open navigation</span>
-    </button>
-    <div class="nav-links" id="site-menu">
-      <a  href="/features.html">Features</a>
-      <a  href="/features/agents.html">Agents</a>
-      <a  href="/privacy.html">Privacy</a>
-      <a  href="/security.html">Security</a>
-      <a  href="/docs/">Docs</a>
-      <a class="nav-cta" href="#download">Download</a>
-      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
-      <a href="/es/" hreflang="es" lang="es">Español</a>
-      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </div>
-  </nav>
-</header>
-<main id="main">
-<section class="hero hero-product" id="hero" aria-labelledby="hero-title">
-  <picture class="hero-media">
-    <source srcset="/images/cocxy-preview.avif" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp" type="image/webp">
-    <img src="/images/cocxy-preview.png" width="1574" height="808" alt="Cocxy Terminal with panes, browser, and local agent state" fetchpriority="high">
-  </picture>
-  <div class="container hero-inner">
-    <img class="hero-logo" src="/images/icon.png" width="92" height="92" alt="">
-    <p class="eyebrow">Native macOS · Local-first · MIT</p>
-    <h1 id="hero-title">Cocxy Terminal</h1>
-    <p class="hero-lede">The terminal that understands AI coding agents.</p>
-    <p>Real-time detection, inline code review, encrypted Vault, native Markdown, remote workspaces, and zero telemetry.</p>
-    <div class="hero-actions">
-      <a class="button button-primary" href="#download">Download for macOS</a>
-      <a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </div>
-    <div class="hero-version"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>Zero telemetry</span></div>
-    <div class="hero-console glass" role="group" aria-label="Local agent state">
-      <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
-      <strong>$ cocxy agents status</strong>
-      <code>vault: encrypted · browser: localhost:3000 · review: 3 files</code>
-      <code>agent: working · state: visible · telemetry: zero</code>
-    </div>
-  </div>
-</section>
-<section class="stats-strip" aria-label="Key facts">
-  <div class="container stats-grid">
-    <div class="stat"><strong>11</strong><span>agents</span></div>
-    <div class="stat"><strong>21</strong><span>languages</span></div>
-    <div class="stat"><strong>0</strong><span>telemetry</span></div>
-    <div class="stat"><strong>MIT</strong><span>license</span></div>
-    <div class="stat"><strong>14+</strong><span>macOS</span></div>
-  </div>
-</section>
-<section class="section" id="comparison" aria-labelledby="different-title">
-  <div class="container">
-    <div class="section-header">
-      <p class="eyebrow">What makes Cocxy different</p>
-      <h2 id="different-title">Agent awareness, local privacy, and a native engine</h2>
-      <p>The site explains Cocxy on its own terms: visible agent state, local data, and a native macOS app.</p>
-    </div>
-    <div class="cards-3">
-      <article class="card"><h3>Real-time agent awareness</h3><p>Cocxy understands when an agent is thinking, working, waiting for input, or done.</p></article>
-      <article class="card"><h3>Local-first by design</h3><p>Vault, sessions, configuration, and review state live on your Mac unless you start an explicit action.</p></article>
-      <article class="card"><h3>Built for developers</h3><p>Swift, AppKit, SwiftUI, CocxyCore, and Metal support a native workflow.</p></article>
-    </div>
-  </div>
-</section>
-<section class="section" id="features" aria-labelledby="features-title">
-  <div class="container">
-    <div class="section-header">
-      <p class="eyebrow">Flagship features</p>
-      <h2 id="features-title">Everything connects to real agent work</h2>
-      <p>Cocxy combines terminal, review, Vault, browser, Markdown, and remotes without sending your work to a Cocxy backend.</p>
-    </div>
-    <div class="feature-grid">
-      <article class="feature-card feature-icon--agents" id="agent-detection">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l1.8 5.2L19 9l-5.2 1.8L12 16l-1.8-5.2L5 9l5.2-1.8L12 2z"/><path d="M5 14l.9 2.6L8.5 17.5l-2.6.9L5 21l-.9-2.6-2.6-.9 2.6-.9L5 14z"/></svg>
-  <h3><a href="/features/agents.html">Multi-Layer Agent Detection</a></h3>
-  <p>Cocxy detects local coding agents through hooks, OSC signals, terminal semantics, pattern matching, and timing heuristics.</p>
-  <ul><li>11 built-in profiles</li><li>Custom agents.toml support</li><li>Per-surface state</li></ul>
-</article>
-<article class="feature-card feature-icon--config" id="vault">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14v2"/></svg>
-  <h3><a href="/features/vault.html">Encrypted Vault</a></h3>
-  <p>Search, resume, pin, preview, and export local agent sessions without sending terminal history to a remote service.</p>
-  <ul><li>Encrypted at rest</li><li>Full-text search</li><li>Smart resume</li></ul>
-</article>
-<article class="feature-card feature-icon--review" id="code-review">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v11H8l-4 4V4z"/><path d="M8 8h8M8 11h6"/></svg>
-  <h3><a href="/features/code-review.html">Inline Code Review</a></h3>
-  <p>Review agent changes beside the terminal, comment on lines, accept or reject hunks, and return structured feedback to the session.</p>
-  <ul><li>File tree and diff</li><li>Inline comments</li><li>Keyboard workflow</li></ul>
-</article>
-<article class="feature-card feature-icon--markdown" id="markdown">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/><path d="M10 13h6M10 16h4"/></svg>
-  <h3><a href="/features/markdown.html">Markdown Workspace</a></h3>
-  <p>A native writing surface with preview, outline, code blocks, diagrams, math, exports, and local file workflows.</p>
-  <ul><li>Live preview</li><li>Mermaid and KaTeX</li><li>Export paths</li></ul>
-</article>
-<article class="feature-card feature-icon--web" id="github-pane">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-4 1.2-4-2-5-2.5"/><path d="M15 22v-3.4a3 3 0 0 0-.8-2.3c2.7-.3 5.6-1.3 5.6-6A4.7 4.7 0 0 0 18.5 7a4.4 4.4 0 0 0-.1-3.2s-1-.3-3.3 1.2a11.5 11.5 0 0 0-6 0C6.8 3.5 5.8 3.8 5.8 3.8A4.4 4.4 0 0 0 5.7 7a4.7 4.7 0 0 0-1.3 3.3c0 4.6 2.8 5.7 5.5 6A3 3 0 0 0 9 18.6V22"/></svg>
-  <h3><a href="/features/github.html">GitHub Pane</a></h3>
-  <p>Keep pull requests, issues, checks, release pages, and repository context next to the terminal without adding a Cocxy account.</p>
-  <ul><li>gh auth reuse</li><li>Checks and releases</li><li>Local context</li></ul>
-</article>
-<article class="feature-card feature-icon--browser" id="browser">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 9h18M7 7h.01M10 7h.01"/></svg>
-  <h3><a href="/features/browser.html">Built-in Browser</a></h3>
-  <p>Preview localhost, inspect pages, keep profiles isolated, and place the browser beside terminal panes.</p>
-  <ul><li>Profiles</li><li>Dev tools</li><li>Split workflow</li></ul>
-</article>
-<article class="feature-card feature-icon--ssh" id="remote">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v9H4z"/><path d="M8 19h8M12 15v4"/><path d="M8 10h3M13 10h3"/></svg>
-  <h3><a href="/features/remote.html">Remote Workspaces</a></h3>
-  <p>SSH, proxy, relay, daemon, and file-transfer paths are designed as explicit user actions with local control.</p>
-  <ul><li>SSH multiplexing</li><li>SOCKS and CONNECT</li><li>SFTP handoff</li></ul>
-</article>
-<article class="feature-card feature-icon--gpu" id="gpu">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8v4H8zM2 10h2M2 14h2M20 10h2M20 14h2M8 2v4M12 2v4M16 2v4M8 18v4M12 18v4M16 18v4"/></svg>
-  <h3><a href="/features/gpu.html">GPU Terminal Engine</a></h3>
-  <p>CocxyCore combines a Zig terminal core, C ABI, glyph atlas hardening, PTY handling, and Metal rendering for native macOS performance.</p>
-  <ul><li>Zig core</li><li>Metal renderer</li><li>PTY semantics</li></ul>
-</article>
-<article class="feature-card feature-icon--cli" id="cli">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16v12H4z"/><path d="M8 10l2 2-2 2M12 14h4"/></svg>
-  <h3><a href="/features/cli.html">CLI Companion</a></h3>
-  <p>Script windows, tabs, agents, hooks, Vault, browser, markdown, remotes, configuration, themes, and diagnostics.</p>
-  <ul><li>JSON-friendly output</li><li>Socket API</li><li>Shell scripts</li></ul>
-</article>
-<article class="feature-card feature-icon--shell" id="shell">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7h14M5 12h14M5 17h9"/><path d="M4 4h16v16H4z"/></svg>
-  <h3><a href="/features/shell.html">Shell Integration</a></h3>
-  <p>zsh, bash, and fish wrappers preserve user dotfiles while adding cwd, command-boundary, and browser-open signals.</p>
-  <ul><li>zsh, bash, fish</li><li>OSC 7 cwd</li><li>OSC 133 blocks</li></ul>
-</article>
-<article class="feature-card feature-icon--plugin" id="plugins">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3v6M16 3v6M7 9h10v4a5 5 0 0 1-10 0V9z"/><path d="M12 18v3"/></svg>
-  <h3><a href="/features/plugins.html">Plugin System</a></h3>
-  <p>Local plugin hooks extend Cocxy while staying transparent, permissioned, and dependency-light.</p>
-  <ul><li>Event hooks</li><li>TOML manifest</li><li>Local execution</li></ul>
-</article>
-<article class="feature-card feature-icon--privacy" id="privacy">
-  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z"/><path d="M9 12l2 2 4-5"/></svg>
-  <h3><a href="/features/zero-telemetry.html">Zero Telemetry</a></h3>
-  <p>Cocxy ships without analytics SDKs, automatic crash upload, required accounts, visitor tracking, or session telemetry.</p>
-  <ul><li>No analytics SDK</li><li>No account</li><li>No session upload</li></ul>
-</article>
-    </div>
-  </div>
-</section>
-<section class="section section-band" id="demo" aria-labelledby="demo-title">
-  <div class="container split-grid">
-    <div>
-      <p class="eyebrow">Demo</p>
-      <h2 id="demo-title">See Cocxy in action</h2>
-      <p>The demo shows terminal panes, browser, Vault, and local state without loading third-party scripts.</p>
-    </div>
-    <video controls muted loop playsinline preload="metadata" poster="/images/og-image.png" class="media-frame">
-      <source src="/videos/cocxy-demo.webm" type="video/webm">
-      <source src="/videos/cocxy-demo.mp4" type="video/mp4">
-    </video>
-  </div>
-</section>
-<section class="section" aria-labelledby="architecture-teaser">
-  <div class="container split-grid">
-    <div>
-      <p class="eyebrow">Architecture</p>
-      <h2 id="architecture-teaser">Swift + Metal, powered by CocxyCore</h2>
-      <p>The app separates native UI, domain services, PTY handling, Metal rendering, and the CocxyCore C ABI.</p>
-      <a class="text-link" href="/architecture.html">View architecture →</a>
-    </div>
-    <img class="architecture-preview" src="/images/architecture-diagram.svg" width="920" height="520" alt="Static Cocxy architecture diagram" loading="lazy">
-  </div>
-</section>
-<section class="section section-split" aria-labelledby="privacy-title">
-  <div class="container split-grid">
-    <div>
-      <p class="eyebrow">Verifiable privacy</p>
-      <h2 id="privacy-title">Zero telemetry. No account. No tracking.</h2>
-      <p>Cocxy ships without analytics, automatic crash uploads, or hidden tracking. Network access exists only for explicit actions such as updates, browser sessions, GitHub, SSH, or plugins.</p>
-      <a class="text-link" href="/privacy.html">Read privacy →</a>
-    </div>
-    <div class="terminal-panel" role="group" aria-label="Privacy summary">
-      <span>$ cocxy privacy status</span>
-      <strong>telemetry: zero</strong>
-      <strong>analytics: none</strong>
-      <strong>account: not required</strong>
-      <strong>license: MIT</strong>
-    </div>
-  </div>
-</section>
-<section class="section" id="faq" aria-labelledby="home-faq-title">
-  <div class="container">
-    <div class="section-header">
-      <p class="eyebrow">Key questions</p>
-      <h2 id="home-faq-title">Fast answers before installing</h2>
-    </div>
-    <div class="faq-list">
-      <details class="faq-item"><summary>Does Cocxy require an account?</summary><p>No. The app works locally without a required account.</p></details>
-      <details class="faq-item"><summary>Do my sessions leave my Mac?</summary><p>Not through telemetry. Network access happens only when you open browser, SSH, GitHub, updates, or plugins.</p></details>
-      <details class="faq-item"><summary>Is it open source?</summary><p>Yes. Cocxy is MIT licensed and the public source can be audited.</p></details>
-    </div>
-  </div>
-</section>
-<section class="section section-band" id="download" aria-labelledby="download-title">
-  <div class="container">
-    <div class="section-header">
-      <p class="eyebrow">Download</p>
-      <h2 id="download-title">Install Cocxy on macOS</h2>
-      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
-    </div>
-    <div class="download-grid">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Direct download from GitHub Releases.</p>
-        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
-      </article>
-      <article class="card">
-        <h3>Homebrew</h3>
-        <p>Reproducible install from the official tap.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
-      </article>
-      <article class="card">
-        <h3>Channels</h3>
-        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
-        <a class="button button-secondary" href="/channels.html">View channels</a>
-      </article>
-    </div>
-  </div>
-</section>
-<section class="section" id="opensource" aria-labelledby="opensource-title">
-  <div class="container split-grid">
-    <div>
-      <p class="eyebrow">Open source</p>
-      <h2 id="opensource-title">MIT licensed, local-first, and open source</h2>
-      <p>Cocxy can be inspected, built, and improved. Public direction is documented without exposing private planning details.</p>
-      <div class="hero-actions">
-        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a class="button button-secondary" href="/docs/">Read docs</a>
+  <a class="skip-link" href="#hero">Skip to main content</a>
+  <header class="site-header" role="banner">
+    <nav class="nav" aria-label="Main navigation">
+      <a href="/" class="nav-logo" aria-label="Cocxy Terminal home">
+        <img src="/images/icon.png" alt="" width="28" height="28">
+        <span>Cocxy</span>
+      </a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="/releases.html">Releases</a>
+        <a href="/getting-started.html">Docs</a>
+        <a href="#faq">FAQ</a>
+        <a href="#download">Download</a>
+        <a href="/es/" hreflang="es" lang="es">Espa&ntilde;ol</a>
+        <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" aria-label="Cocxy Terminal on GitHub (opens in new tab)">GitHub</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero" id="hero" aria-labelledby="hero-title">
+      <canvas class="hero-grid" id="heroGrid" aria-hidden="true"></canvas>
+      <div class="hero-content">
+        <div class="hero-icon">
+          <img src="/images/icon.png" alt="Cocxy Terminal icon" width="96" height="96">
+        </div>
+        <h1 class="hero-title" id="hero-title">Cocxy Terminal</h1>
+        <p class="hero-tagline">Your terminal finally understands AI agents.</p>
+        <p class="hero-sub">Native macOS terminal with real-time agent detection, an inline code review panel, a full Markdown workspace, persistent remote sessions, and zero telemetry. Built in Swift. MIT licensed.</p>
+        <div class="hero-actions">
+          <a href="#download" class="btn btn-primary">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M8 1v10M4 7l4 4 4-4M2 13h12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            Download for macOS
+          </a>
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" class="btn btn-secondary" aria-label="View Cocxy Terminal on GitHub (opens in new tab)">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+        <div class="hero-version">
+          <span class="version-badge">v0.0.0</span>
+          <span class="version-req">macOS 14.0+</span>
+        </div>
+
+        <!-- Terminal Mockup -->
+        <div class="hero-mockup" aria-label="Cocxy Terminal preview with three workspaces and a live agent session">
+          <div class="mock-window">
+            <div class="mock-titlebar">
+              <div class="mock-dots"><span class="d r"></span><span class="d y"></span><span class="d g"></span></div>
+              <div class="mock-tabs">
+                <span class="mock-tab active"><span class="ti working"></span>api-server</span>
+                <span class="mock-tab"><span class="ti waiting"></span>frontend</span>
+                <span class="mock-tab"><span class="ti idle"></span>docs</span>
+              </div>
+            </div>
+            <div class="mock-body">
+              <aside class="mock-sidebar">
+                <div class="mock-sidebar-header">WORKSPACES</div>
+                <div class="mock-ws active">
+                  <span class="ws-dot working"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">api-server</span>
+                    <span class="ws-detail">Working · 2m 14s · Edit</span>
+                    <span class="ws-path">~/projects/api-server</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot waiting"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">frontend</span>
+                    <span class="ws-detail">Waiting for input</span>
+                    <span class="ws-path">~/projects/frontend</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot idle"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">docs</span>
+                    <span class="ws-detail">Markdown · Ready</span>
+                    <span class="ws-path">~/projects/docs</span>
+                  </div>
+                </div>
+                <div class="mock-ws">
+                  <span class="ws-dot connected"></span>
+                  <div class="ws-info">
+                    <span class="ws-name">prod-srv</span>
+                    <span class="ws-detail ssh">SSH connected</span>
+                    <span class="ws-path">deploy@10.0.1.5</span>
+                  </div>
+                </div>
+              </aside>
+              <div class="mock-terminal">
+                <div class="tl"><span class="tp">$</span> <span class="tc">agent-cli</span> <span class="ta">"Add rate limiting to /api/users"</span></div>
+                <div class="tl"><span class="agent-badge">Local Agent</span> <span class="agent-status">Working</span> <span class="agent-time">2m 14s</span></div>
+                <div class="tl dim">  Creating middleware/rateLimit.ts...</div>
+                <div class="tl dim">  Updating routes/users.ts with limiter...</div>
+                <div class="tl dim">  Writing tests for rate limit scenarios...</div>
+                <div class="tl"><span class="ts">&#10003;</span> 3 files changed, 147 insertions</div>
+                <div class="tl">&nbsp;</div>
+                <div class="tl dim">  <span class="ts">&#8984;&#8997;R</span> Review changes inline · 3 files, 4 hunks</div>
+                <div class="tl">&nbsp;</div>
+                <div class="tl"><span class="tp">$</span> <span class="tc">npm</span> <span class="ta">test -- --coverage</span></div>
+                <div class="tl dim">  PASS  src/middleware/rateLimit.test.ts</div>
+                <div class="tl dim">  PASS  src/routes/users.test.ts</div>
+                <div class="tl"><span class="ts">&#10003;</span> Tests: 24 passed, 24 total</div>
+                <div class="tl"><span class="tp">$</span> <span class="cursor">|</span></div>
+              </div>
+            </div>
+            <div class="mock-statusbar">
+              <span class="sb-item"><span class="sb-chevron">&#9656;</span> user@MacBook</span>
+              <span class="sb-divider"></span>
+              <span class="sb-item"><span class="sb-branch">&#9739;</span> main</span>
+              <span class="sb-spacer"></span>
+              <span class="sb-item port">:3000 :5173</span>
+              <span class="sb-pill working">1 working</span>
+              <span class="sb-pill waiting">1 waiting</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" id="features" aria-labelledby="features-title">
+      <div class="container">
+        <h2 class="section-title" id="features-title">Built for developers shipping with AI agents.</h2>
+        <p class="section-subtitle">Every feature designed around the way coding agents change your workflow.</p>
+        <div class="features-grid">
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--agents">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+              </svg>
+            </div>
+            <h3>Multi-Layer Agent Detection</h3>
+            <p>Hooks, OSC sequences, pattern matching, and timing heuristics work together to detect local coding agents in real time. Dashboard, timeline, and smart routing built in.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--review">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M9 11l3 3L22 4"/>
+                <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+              </svg>
+            </div>
+            <h3>Agent Code Review Panel</h3>
+            <p>Review every change an agent made in a native diff viewer. Comment inline, submit feedback through the PTY, accept or reject individual hunks. Cmd+Option+R to open.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--markdown">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="8" y1="13" x2="16" y2="13"/>
+                <line x1="8" y1="17" x2="13" y2="17"/>
+              </svg>
+            </div>
+            <h3>Native Markdown Workspace</h3>
+            <p>Live preview with Mermaid, KaTeX, callouts, and footnotes. Editable source with undo and Find bar. Outline sidebar, git blame, multi-file search, slide export. QuickLook extension for Finder.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--ssh">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="2" y="3" width="20" height="18" rx="3"/>
+                <path d="M8 12h8M12 8v8"/>
+              </svg>
+            </div>
+            <h3>Remote Workspaces</h3>
+            <p>SSH multiplexing with persistent sessions, SOCKS5 and HTTP CONNECT proxy with system-wide macOS integration, multi-channel agent relay with HMAC auth, and a POSIX remote daemon. Zero server installation.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--browser">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
+              </svg>
+            </div>
+            <h3>Built-in Browser</h3>
+            <p>Profiles, DevTools, bookmarks, downloads. Split browser alongside terminal. Preview localhost without leaving your workflow.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--privacy">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <h3>Zero Telemetry</h3>
+            <p>No telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Terminal activity is not uploaded to a Cocxy backend.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--gpu">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+            </div>
+            <h3>GPU Terminal Engine</h3>
+            <p>Metal-accelerated rendering via CocxyCore. 120 fps smooth scrolling. Font ligatures, inline image protocols, GPU-accelerated regex search. Native performance, no Electron.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--cli">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="4 17 10 11 4 5"/>
+                <line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+            </div>
+            <h3>100+ Command CLI Companion</h3>
+            <p>Unix socket API for full scriptability. Manage tabs, agents, plugins, sessions, remote connections, dashboards, and reviews from the shell.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--plugin">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
+              </svg>
+            </div>
+            <h3>Plugin System</h3>
+            <p>Event-driven plugins with sandboxed execution. Respond to eight terminal events with custom scripts. Extend Cocxy to fit your workflow.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--config">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 20h9M16.5 3.5a2.12 2.12 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+              </svg>
+            </div>
+            <h3>Per-Project Config</h3>
+            <p>Drop a .cocxy.toml in any project to override fonts, opacity, detection rules, and shortcuts. Hot-reload included. AppleScript automation built in.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--web">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="18" height="14" rx="2"/>
+                <path d="M8 21h8M12 17v4"/>
+                <path d="M3 9h18"/>
+              </svg>
+            </div>
+            <h3>Web Terminal Embed</h3>
+            <p>Expose any local terminal over HTTP with a zero-dependency frontend. Tunable frame rate, connection counts, per-terminal attach and detach.</p>
+          </article>
+
+          <article class="feature-card" data-animate>
+            <div class="feature-icon feature-icon--shell">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="4 17 10 11 4 5"/>
+                <path d="M12 5h8M12 11h8M12 17h8"/>
+              </svg>
+            </div>
+            <h3>Shell Integration</h3>
+            <p>Native integration for zsh, bash, and fish installed automatically. OSC 7 CWD tracking, OSC 133 command boundaries, and env-safe bootstrap that preserves your existing framework.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- Terminal Demo -->
+    <section class="terminal-demo" id="demo" aria-labelledby="demo-title">
+      <div class="container">
+        <h2 class="visually-hidden" id="demo-title">Terminal preview animation</h2>
+        <div class="terminal-window">
+          <div class="terminal-titlebar">
+            <div class="terminal-dots">
+              <span class="dot dot--close"></span>
+              <span class="dot dot--minimize"></span>
+              <span class="dot dot--maximize"></span>
+            </div>
+            <div class="terminal-title">cocxy — zsh</div>
+            <div class="terminal-dots" style="visibility:hidden">
+              <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+            </div>
+          </div>
+          <div class="terminal-body" aria-label="Terminal demo content">
+            <div class="terminal-line">
+              <span class="prompt">~</span>
+              <span class="command" id="typedCommand"></span>
+              <span class="cursor" id="cursor">|</span>
+            </div>
+            <div class="terminal-output" id="terminalOutput"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Comparison -->
+    <section class="comparison" id="comparison" aria-labelledby="comparison-title">
+      <div class="container">
+        <h2 class="visually-hidden" id="comparison-title">Key attributes</h2>
+        <div class="comparison-strip">
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">License</span>
+            <span class="comparison-value comparison-value--highlight">MIT</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Telemetry</span>
+            <span class="comparison-value comparison-value--highlight">Zero</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Runtime</span>
+            <span class="comparison-value comparison-value--highlight">Native</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Rendering</span>
+            <span class="comparison-value comparison-value--highlight">Metal GPU</span>
+          </div>
+          <div class="comparison-divider"></div>
+          <div class="comparison-item" data-animate>
+            <span class="comparison-label">Framework</span>
+            <span class="comparison-value comparison-value--highlight">Swift + AppKit</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="faq" id="faq" aria-labelledby="faq-title">
+      <div class="container">
+        <h2 class="section-title" id="faq-title">Frequently asked questions.</h2>
+        <p class="section-subtitle">Short answers to the questions people ask us most.</p>
+
+        <div class="faq-list">
+          <details class="faq-item" data-animate>
+            <summary><span>What is Cocxy Terminal?</span></summary>
+            <p>Cocxy is a native macOS terminal built for developers working with AI coding agents. It detects agent state in real time, lets you review agent changes inline with a code review panel, and includes a full Markdown workspace. It runs on Metal for GPU rendering, has zero telemetry, and is MIT licensed.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Which AI coding agents does Cocxy support?</span></summary>
+            <p>Bundled profiles cover hook-capable, OSC-aware, pattern-only, and timing-fallback local agents. Detection works across four layers: hooks, OSC escape sequences, pattern matching, and timing. Custom agents can be defined in <code>~/.config/cocxy/agents.toml</code>.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Is Cocxy Terminal free?</span></summary>
+            <p>Yes. Cocxy is free and open source under the MIT license. No paid tier, no sign-up, no account required.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Does Cocxy collect any data?</span></summary>
+            <p>No. Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists only for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>How do I install Cocxy on macOS?</span></summary>
+            <p>Homebrew: <code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code>. Or download the signed and notarized DMG from the <a href="https://github.com/salp2403/cocxy-terminal/releases" target="_blank" rel="noopener noreferrer">Releases page</a>. Requires macOS 14.0 (Sonoma) or later on Apple Silicon or Intel.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>What is the Agent Code Review Panel?</span></summary>
+            <p>A native panel that shows every file an agent changed during a session. Browse the diff, comment inline on any line, accept or reject individual hunks with <code>git apply</code>, and submit comments back to the agent as formatted feedback. Open it with <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>R</kbd>.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Can I use Cocxy as my daily driver terminal?</span></summary>
+            <p>Yes. Cocxy is a full-featured terminal emulator with Metal-accelerated rendering, font ligatures, inline image display, multi-tab and split panes, scrollback search, shell integration for zsh, bash, and fish, and SSH multiplexing. It works as a drop-in replacement.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Does Cocxy work with my existing zsh or bash setup?</span></summary>
+            <p>Yes. Cocxy's shell integration is designed to coexist with Prezto, Oh My Zsh, YADR, starship, and custom prompts. It restores your original <code>ZDOTDIR</code>, <code>HOME</code>, and <code>XDG_CONFIG_HOME</code> before loading your framework, so nothing about your shell changes.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Can Cocxy connect to remote servers?</span></summary>
+            <p>Yes, with first-class remote support: SSH multiplexing, persistent tmux-backed sessions, SOCKS5 and HTTP CONNECT system proxy, multi-channel agent relay with HMAC auth, and a POSIX remote daemon for port forwarding and file sync. All from the client, no server installation required.</p>
+          </details>
+
+          <details class="faq-item" data-animate>
+            <summary><span>Is Cocxy open source?</span></summary>
+            <p>Yes. Every line of code is public at <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">github.com/salp2403/cocxy-terminal</a> under the MIT license. Fork it, audit it, contribute.</p>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download -->
+    <section class="download" id="download" aria-labelledby="download-title">
+      <div class="container">
+        <h2 class="section-title" id="download-title">Get Cocxy.</h2>
+        <p class="section-subtitle">Free, open source, forever.</p>
+        <div class="download-options">
+          <div class="download-card download-card--primary" data-animate>
+            <div class="download-card-header">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 1v10M8 7l4 4 4-4M4 15v4a2 2 0 002 2h12a2 2 0 002-2v-4"/>
+              </svg>
+              <h3>Direct Download</h3>
+            </div>
+            <p>Universal binary. Apple Silicon and Intel.</p>
+            <a href="https://github.com/salp2403/cocxy-terminal/releases/latest/download/CocxyTerminal-0.0.0.dmg" class="btn btn-primary btn-lg">
+              Download .dmg
+            </a>
+            <span class="download-meta">macOS 14.0+ (Sonoma) required</span>
+          </div>
+
+          <div class="download-card" data-animate>
+            <div class="download-card-header">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <polyline points="4 17 10 11 4 5"/>
+                <line x1="12" y1="19" x2="20" y2="19"/>
+              </svg>
+              <h3>Homebrew</h3>
+            </div>
+            <p>Install and stay updated via Homebrew.</p>
+            <div class="code-block">
+              <code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code>
+              <button class="copy-btn" data-copy="brew tap salp2403/tap && brew install --cask cocxy" aria-label="Copy install command to clipboard">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+              </button>
+            </div>
+            <span class="download-meta">Update: brew update &amp;&amp; brew upgrade --cask cocxy</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Open Source -->
+    <section class="opensource" id="opensource" aria-labelledby="opensource-title">
+      <div class="container">
+        <div class="opensource-content" data-animate>
+          <h2 class="section-title" id="opensource-title">100% open source.</h2>
+          <p class="opensource-text">
+            Every line of code is public. MIT licensed.
+            Fork it, audit it, contribute to it.
+            No vendor lock-in, no proprietary blobs.
+          </p>
+          <div class="opensource-stats">
+            <div class="stat">
+              <span class="stat-value">6</span>
+              <span class="stat-label">Agents detected</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">100+</span>
+              <span class="stat-label">CLI commands</span>
+            </div>
+            <div class="stat">
+              <span class="stat-value">0</span>
+              <span class="stat-label">Telemetry</span>
+            </div>
+          </div>
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" class="btn btn-secondary btn-lg" aria-label="Star Cocxy Terminal on GitHub (opens in new tab)">
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            Star on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <img src="/images/icon.png" alt="" width="24" height="24">
+          <span>Cocxy Terminal</span>
+        </div>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+          <a href="/releases.html">Changelog</a>
+          <a href="/getting-started.html">Docs</a>
+          <a href="#download">Download</a>
+          <a href="/es/" hreflang="es" lang="es">Espa&ntilde;ol</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/security/policy" target="_blank" rel="noopener noreferrer">Security</a>
+        </nav>
+        <p class="footer-credit">Made by Said Arturo Lopez · Honduras</p>
       </div>
     </div>
-    <div class="terminal-panel" role="group" aria-label="Open source summary">
-      <span>$ cocxy project facts</span>
-      <strong>agents: 11</strong>
-      <strong>languages: 21</strong>
-      <strong>Metal GPU: enabled</strong>
-      <strong>telemetry: zero</strong>
-    </div>
-  </div>
-</section>
-</main>
-<footer class="site-footer">
-  <div class="container footer-grid">
-    <div>
-      <a class="footer-brand" href="/"><img src="/images/icon.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
-      <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
-    </div>
-    <nav aria-label="Footer links">
-      <a href="/privacy.html">Privacy</a>
-      <a href="/security.html">Security</a>
-      <a href="/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
-    </nav>
-    <p class="footer-note">Made by Said Arturo Lopez.</p>
-  </div>
-</footer>
-<script src="/js/theme-switcher.js" defer></script>
-<script src="/js/main.js" defer></script>
+  </footer>
+
+  <script src="/js/main.js" defer></script>
 </body>
 </html>

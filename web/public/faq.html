@@ -1,230 +1,340 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>FAQ - Cocxy Terminal</title>
-  <meta name="description" content="Answers about installation, privacy, agents, updates, remotes, and source code.">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FAQ — Cocxy Terminal | Questions About the Native macOS Terminal for AI Agents</title>
+  <meta name="description" content="Answers to common questions about Cocxy Terminal: supported AI agents, pricing, privacy, installation, migration, code review panel, Markdown workspace, system requirements, and more.">
+  <meta name="keywords" content="Cocxy Terminal FAQ, macOS terminal questions, AI coding agent terminal, local agent detection, privacy, zero telemetry, MIT license, Apple Silicon terminal">
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
-  <meta name="theme-color" content="#101018">
+
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
-  <meta property="og:title" content="FAQ - Cocxy Terminal">
-  <meta property="og:description" content="Answers about installation, privacy, agents, updates, remotes, and source code.">
+  <meta property="og:title" content="FAQ — Cocxy Terminal">
+  <meta property="og:description" content="Answers to common questions about Cocxy Terminal: supported agents, pricing, privacy, installation, migration, and system requirements.">
   <meta property="og:url" content="https://cocxy.dev/faq.html">
-  <meta property="og:image" content="https://cocxy.dev/og/og-faq.png">
+  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="FAQ - Cocxy Terminal">
+  <meta property="og:image:alt" content="Cocxy Terminal FAQ">
   <meta property="og:locale" content="en_US">
+
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="FAQ - Cocxy Terminal">
-  <meta name="twitter:description" content="Answers about installation, privacy, agents, updates, remotes, and source code.">
-  <meta name="twitter:image" content="https://cocxy.dev/og/og-faq.png">
+  <meta name="twitter:site" content="@cocxyterminal">
+  <meta name="twitter:title" content="FAQ — Cocxy Terminal">
+  <meta name="twitter:description" content="Answers to common questions about Cocxy Terminal.">
+  <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+
+  <meta name="theme-color" content="#1e1e2e">
   <link rel="canonical" href="https://cocxy.dev/faq.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/faq.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/faq.html">
   <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/faq.html">
   <link rel="icon" type="image/png" href="/images/icon.png">
   <link rel="apple-touch-icon" href="/images/icon.png">
-  <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
-  <link rel="preload" as="image" href="/images/cocxy-preview.avif" type="image/avif" fetchpriority="high">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
-  <script>
-  (() => {
-    try {
-      const saved = localStorage.getItem('cocxy-theme');
-      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
-    } catch (_) {}
-  })();
-  </script>
+
   <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Home",
-      "item": "https://cocxy.dev/"
-    },
-    {
-      "@type": "ListItem",
-      "position": 2,
-      "name": "FAQ",
-      "item": "https://cocxy.dev/faq.html"
-    }
-  ]
-}
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://cocxy.dev/"},
+      {"@type": "ListItem", "position": 2, "name": "FAQ", "item": "https://cocxy.dev/faq.html"}
+    ]
+  }
   </script>
+
   <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "Does Cocxy require an account?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Install and use Cocxy without signing in."
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is Cocxy Terminal?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Cocxy Terminal is a native macOS terminal emulator built for developers working with AI coding agents. It detects agent state in real time, includes an inline code review panel, a full Markdown workspace with QuickLook integration, GPU-accelerated rendering via Metal, persistent remote SSH sessions, and zero telemetry. It is free and open source under the MIT license."}
+      },
+      {
+        "@type": "Question",
+        "name": "Is Cocxy Terminal free?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes. Cocxy is completely free under the MIT license. There is no paid tier, no sign-up, no account, no subscription. Fork it, audit it, contribute — every line of code is public."}
+      },
+      {
+        "@type": "Question",
+        "name": "Which AI coding agents does Cocxy support?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Cocxy ships bundled local agent profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback CLIs. Detection uses four layers: hook events, OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in ~/.config/cocxy/agents.toml."}
+      },
+      {
+        "@type": "Question",
+        "name": "Does Cocxy collect any data?",
+        "acceptedAnswer": {"@type": "Answer", "text": "No. Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. You can verify with Little Snitch, LuLu, or any network monitor."}
+      },
+      {
+        "@type": "Question",
+        "name": "What are the system requirements?",
+        "acceptedAnswer": {"@type": "Answer", "text": "macOS 14.0 (Sonoma) or later. Universal binary supporting both Apple Silicon (M1, M2, M3, M4) and Intel Macs. About 60 MB of disk space for the installed app. An internet connection is only required for downloading updates."}
+      },
+      {
+        "@type": "Question",
+        "name": "How do I install Cocxy on macOS?",
+        "acceptedAnswer": {"@type": "Answer", "text": "The recommended way is Homebrew: run `brew tap salp2403/tap && brew install --cask cocxy`. Alternatively, download the signed and notarized DMG from the GitHub Releases page and drag the app into /Applications. The CLI companion is installed automatically."}
+      },
+      {
+        "@type": "Question",
+        "name": "How do I update Cocxy?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Cocxy checks for updates automatically via Sparkle with EdDSA signature verification. If you installed via Homebrew, run `brew update && brew upgrade --cask cocxy` periodically. You can also download new DMGs manually from the Releases page."}
+      },
+      {
+        "@type": "Question",
+        "name": "What is the Agent Code Review Panel?",
+        "acceptedAnswer": {"@type": "Answer", "text": "A native panel that shows every file an AI coding agent changed during a session. Browse the diff, comment inline on any line, accept or reject individual hunks with git apply, and submit all pending comments back to the agent as formatted feedback through the PTY. Open it with Cmd+Option+R or `cocxy review`. It auto-opens when the agent session ends."}
+      },
+      {
+        "@type": "Question",
+        "name": "Can I use Cocxy as my daily driver terminal?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes. Cocxy is a full-featured terminal emulator with Metal-accelerated rendering, font ligatures, inline image protocols, multi-tab and split panes, scrollback search, shell integration for zsh / bash / fish, SSH multiplexing, and AppleScript automation. It works as a drop-in replacement for any other terminal."}
+      },
+      {
+        "@type": "Question",
+        "name": "Does Cocxy work with my existing zsh or bash setup?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes. Cocxy's shell integration is designed to coexist safely with Prezto, Oh My Zsh, YADR, starship, and any custom prompt. It restores your original ZDOTDIR, HOME, and XDG_CONFIG_HOME before loading your framework, so nothing about your shell configuration changes. You do not need to add anything to your dotfiles."}
+      },
+      {
+        "@type": "Question",
+        "name": "Can Cocxy connect to remote servers?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes, with first-class remote support. Features include SSH multiplexing via OpenSSH ControlMaster, persistent tmux-backed sessions that survive disconnects, SOCKS5 and HTTP CONNECT system proxy, multi-channel agent relay with HMAC-SHA256 auth, a POSIX remote daemon, and SFTP file browsing. All from the client — no server installation required."}
+      },
+      {
+        "@type": "Question",
+        "name": "What is the Markdown workspace?",
+        "acceptedAnswer": {"@type": "Answer", "text": "A first-class native Markdown panel that renders in a split pane next to your terminal. Edit Markdown with undo, Find bar, and auto-save. Preview with Mermaid diagrams, KaTeX math, callouts, footnotes, and syntax highlighting. Outline sidebar, multi-file search, git blame and diff, slide export, interactive task list checkboxes, and a QuickLook extension for Finder previews. All offline, no network."}
+      },
+      {
+        "@type": "Question",
+        "name": "Does Cocxy support custom themes?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes. Cocxy ships with Catppuccin (Mocha and Latte), One Dark, and Solarized (Dark and Light). Drop a .toml theme into ~/.config/cocxy/themes/ and it appears immediately in the theme picker. You can configure a dark / light theme pair that auto-switches with the macOS appearance setting."}
+      },
+      {
+        "@type": "Question",
+        "name": "How do I configure Cocxy?",
+        "acceptedAnswer": {"@type": "Answer", "text": "All configuration lives in ~/.config/cocxy/. The main file is config.toml for fonts, theme, terminal behavior, and keybindings. agents.toml holds agent detection patterns. You can also drop a .cocxy.toml in any project root to override settings per directory with automatic hot-reload when you cd in."}
+      },
+      {
+        "@type": "Question",
+        "name": "Is there a CLI?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes. The cocxy CLI has more than 100 commands covering tabs, splits, windows, sessions, agents, hooks, code review, Markdown, browser, remote connections, proxy, plugins, themes, timeline, and terminal diagnostics. It communicates with the app through a local Unix Domain Socket authenticated by UID. Run `cocxy help` for the full reference."}
+      },
+      {
+        "@type": "Question",
+        "name": "Does Cocxy support plugins?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes. Plugins respond to eight terminal events (session start / end, agent detected, state changed, command complete, tab created / closed, directory changed). Drop a manifest and shell scripts into ~/.config/cocxy/plugins/ and they run in a sandboxed environment with timeout enforcement. Manage with `cocxy plugin-list`, `plugin-enable`, and `plugin-disable`."}
+      },
+      {
+        "@type": "Question",
+        "name": "Is Cocxy open source?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Yes, fully. Every line of code is public at github.com/salp2403/cocxy-terminal under the MIT license. Fork it, audit it, contribute. The CocxyCore terminal engine is a separate repository written in Zig with a stable C ABI, also open source."}
+      },
+      {
+        "@type": "Question",
+        "name": "How do I report a bug or request a feature?",
+        "acceptedAnswer": {"@type": "Answer", "text": "Open an issue on GitHub at github.com/salp2403/cocxy-terminal/issues. Use the Bug Report template for bugs (include Cocxy version, macOS version, chip, steps to reproduce) or the Feature Request template for enhancements. For security vulnerabilities, email security@cocxy.dev privately — do not open a public issue."}
+      },
+      {
+        "@type": "Question",
+        "name": "How do I uninstall Cocxy?",
+        "acceptedAnswer": {"@type": "Answer", "text": "If you installed via Homebrew: `brew uninstall --cask cocxy`. Otherwise, drag the app to Trash. To remove your configuration and sessions too, delete ~/.config/cocxy/ and ~/Library/Application Support/dev.cocxy.terminal/. Note: deleting ~/.config/cocxy/ also removes SSH profiles, bookmarks, and browser history stored there."}
       }
-    },
-    {
-      "@type": "Question",
-      "name": "Does it upload sessions?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Sessions and Vault data stay local."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "How do I install it?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Use the signed DMG or Homebrew."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Which agents are supported?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "11 built-in profiles plus custom configured agents."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "What does Vault store?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Local session metadata and content according to the actions you enable."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Can I use SSH?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Yes. SSH connections are explicit user-started actions."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Does the website load third-party JavaScript?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. The website avoids third-party JavaScript."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Where are the docs?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "The documentation hub is available at /docs/."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "How do I report security issues?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "Use GitHub Security Advisory or dev@cocxy.dev."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "Does the license change?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Cocxy stays MIT licensed."
-      }
-    }
-  ]
-}
+    ]
+  }
   </script>
 </head>
 <body>
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <nav class="nav container" aria-label="Main navigation">
-    <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <img src="/images/icon.png" width="32" height="32" alt="">
-      <span>Cocxy</span>
-    </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Open navigation</span>
-    </button>
-    <div class="nav-links" id="site-menu">
-      <a  href="/features.html">Features</a>
-      <a  href="/features/agents.html">Agents</a>
-      <a  href="/privacy.html">Privacy</a>
-      <a  href="/security.html">Security</a>
-      <a  href="/docs/">Docs</a>
-      <a class="nav-cta" href="#download">Download</a>
-      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
-      <a href="/es/faq.html" hreflang="es" lang="es">Español</a>
-      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </div>
-  </nav>
-</header>
-<main id="main">
-<section class="page-hero"><div class="container">
-    <p class="eyebrow">Cocxy Terminal</p>
-    <h1>FAQ</h1>
-    <p>Answers about installation, privacy, agents, updates, remotes, and source code.</p>
-  </div></section><section class="section"><div class="container faq-list"><details class="faq-item"><summary>Does Cocxy require an account?</summary><p>No. Install and use Cocxy without signing in.</p></details><details class="faq-item"><summary>Does it upload sessions?</summary><p>No. Sessions and Vault data stay local.</p></details><details class="faq-item"><summary>How do I install it?</summary><p>Use the signed DMG or Homebrew.</p></details><details class="faq-item"><summary>Which agents are supported?</summary><p>11 built-in profiles plus custom configured agents.</p></details><details class="faq-item"><summary>What does Vault store?</summary><p>Local session metadata and content according to the actions you enable.</p></details><details class="faq-item"><summary>Can I use SSH?</summary><p>Yes. SSH connections are explicit user-started actions.</p></details><details class="faq-item"><summary>Does the website load third-party JavaScript?</summary><p>No. The website avoids third-party JavaScript.</p></details><details class="faq-item"><summary>Where are the docs?</summary><p>The documentation hub is available at /docs/.</p></details><details class="faq-item"><summary>How do I report security issues?</summary><p>Use GitHub Security Advisory or dev@cocxy.dev.</p></details><details class="faq-item"><summary>Does the license change?</summary><p>No. Cocxy stays MIT licensed.</p></details></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
-  <div class="container">
-    <div class="section-header">
-      <p class="eyebrow">Download</p>
-      <h2 id="download-title">Install Cocxy on macOS</h2>
-      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
-    </div>
-    <div class="download-grid">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Direct download from GitHub Releases.</p>
-        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
-      </article>
-      <article class="card">
-        <h3>Homebrew</h3>
-        <p>Reproducible install from the official tap.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
-      </article>
-      <article class="card">
-        <h3>Channels</h3>
-        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
-        <a class="button button-secondary" href="/channels.html">View channels</a>
-      </article>
-    </div>
-  </div>
-</section>
-</main>
-<footer class="site-footer">
-  <div class="container footer-grid">
-    <div>
-      <a class="footer-brand" href="/"><img src="/images/icon.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
-      <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
-    </div>
-    <nav aria-label="Footer links">
-      <a href="/privacy.html">Privacy</a>
-      <a href="/security.html">Security</a>
-      <a href="/releases.html">Releases</a>
-      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <header class="site-header" role="banner">
+    <nav class="nav" aria-label="Main navigation">
+      <a href="/" class="nav-logo" aria-label="Cocxy Terminal home">
+        <img src="/images/icon.png" alt="" width="28" height="28">
+        <span>Cocxy</span>
+      </a>
+      <div class="nav-links">
+        <a href="/features.html">Features</a>
+        <a href="/releases.html">Releases</a>
+        <a href="/getting-started.html">Docs</a>
+        <a href="/faq.html" class="nav-active">FAQ</a>
+        <a href="/#download">Download</a>
+        <a href="/es/faq.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
+        <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer" aria-label="Cocxy on GitHub (opens in new tab)">GitHub</a>
+      </div>
     </nav>
-    <p class="footer-note">Made by Said Arturo Lopez.</p>
-  </div>
-</footer>
-<script src="/js/theme-switcher.js" defer></script>
-<script src="/js/main.js" defer></script>
+  </header>
+
+  <main id="main">
+    <section class="faq-page container">
+      <nav class="breadcrumb" aria-label="Breadcrumb">
+        <ol>
+          <li><a href="/">Home</a></li>
+          <li aria-hidden="true">/</li>
+          <li aria-current="page">FAQ</li>
+        </ol>
+      </nav>
+
+      <header class="faq-hero">
+        <p class="eyebrow">Support center</p>
+        <h1>Frequently asked questions</h1>
+        <p>Everything people ask us about Cocxy Terminal: privacy, agents, Markdown, remote workspaces, the CLI, and daily-driver setup. If your question is not here, open an <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer">issue on GitHub</a>.</p>
+      </header>
+
+      <div class="faq-quick-grid" aria-label="Popular FAQ topics">
+        <a class="faq-quick-card" href="#privacy">
+          <span>Privacy</span>
+          <strong>Zero telemetry, local-first behavior, and update checks.</strong>
+        </a>
+        <a class="faq-quick-card" href="#agents">
+          <span>Agents</span>
+          <strong>Detection layers, dashboard state, and code review flow.</strong>
+        </a>
+        <a class="faq-quick-card" href="#workflows">
+          <span>Workflows</span>
+          <strong>Markdown, remote sessions, themes, plugins, and CLI control.</strong>
+        </a>
+      </div>
+
+      <div class="faq-list">
+        <details class="faq-item" open>
+          <summary><span>What is Cocxy Terminal?</span></summary>
+          <p>Cocxy Terminal is a native macOS terminal emulator built for developers working with AI coding agents. It detects agent state in real time, includes an inline code review panel, a full Markdown workspace with a QuickLook extension, GPU-accelerated rendering via Metal, persistent remote SSH sessions, and zero telemetry. It is free and open source under the MIT license.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Is Cocxy Terminal free?</span></summary>
+          <p>Yes. Cocxy is completely free under the MIT license. There is no paid tier, no sign-up, no account, no subscription. Every line of code is public at <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">github.com/salp2403/cocxy-terminal</a>.</p>
+        </details>
+
+        <details class="faq-item" id="agents">
+          <summary><span>Which AI coding agents does Cocxy support?</span></summary>
+          <p>Cocxy ships bundled local agent profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback CLIs. Detection uses four layers: hook events, OSC escape sequences, output pattern matching, and timing heuristics. You can add custom agents in <code>~/.config/cocxy/agents.toml</code>.</p>
+        </details>
+
+        <details class="faq-item" id="privacy">
+          <summary><span>Does Cocxy collect any data?</span></summary>
+          <p>No. Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend. You can verify with Little Snitch, LuLu, or any network monitor.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>What are the system requirements?</span></summary>
+          <p>macOS 14.0 (Sonoma) or later. Universal binary supporting both Apple Silicon (M1, M2, M3, M4) and Intel Macs. About 60 MB of disk space for the installed app. An internet connection is only required for downloading updates.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>How do I install Cocxy on macOS?</span></summary>
+          <p>The recommended way is Homebrew: <code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code>. Alternatively, download the signed and notarized DMG from the <a href="https://github.com/salp2403/cocxy-terminal/releases" target="_blank" rel="noopener noreferrer">Releases page</a> and drag the app into <code>/Applications</code>. The CLI companion is installed automatically.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>How do I update Cocxy?</span></summary>
+          <p>Cocxy checks for updates automatically via Sparkle with EdDSA signature verification. If you installed via Homebrew, run <code>brew update &amp;&amp; brew upgrade --cask cocxy</code> periodically. You can also download new DMGs manually from the Releases page.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>What is the Agent Code Review Panel?</span></summary>
+          <p>A native panel that shows every file an AI coding agent changed during a session. Browse the diff, comment inline on any line, accept or reject individual hunks with <code>git apply</code>, and submit all pending comments back to the agent as formatted feedback through the PTY. Open it with <kbd>Cmd</kbd>+<kbd>Option</kbd>+<kbd>R</kbd> or <code>cocxy review</code>. It auto-opens when the agent session ends.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Can I use Cocxy as my daily driver terminal?</span></summary>
+          <p>Yes. Cocxy is a full-featured terminal emulator with Metal-accelerated rendering, font ligatures, inline image protocols, multi-tab and split panes, scrollback search, shell integration for zsh / bash / fish, SSH multiplexing, and AppleScript automation. It works as a drop-in replacement for any other terminal on macOS.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Does Cocxy work with my existing zsh or bash setup?</span></summary>
+          <p>Yes. Cocxy's shell integration is designed to coexist safely with Prezto, Oh My Zsh, YADR, starship, and any custom prompt. It restores your original <code>ZDOTDIR</code>, <code>HOME</code>, and <code>XDG_CONFIG_HOME</code> before loading your framework, so nothing about your shell configuration changes. You do not need to add anything to your dotfiles.</p>
+        </details>
+
+        <details class="faq-item" id="workflows">
+          <summary><span>Can Cocxy connect to remote servers?</span></summary>
+          <p>Yes, with first-class remote support: SSH multiplexing via OpenSSH ControlMaster, persistent tmux-backed sessions that survive disconnects, SOCKS5 and HTTP CONNECT system proxy, multi-channel agent relay with HMAC-SHA256 auth, a POSIX remote daemon, and SFTP file browsing. All from the client — no server installation required.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>What is the Markdown workspace?</span></summary>
+          <p>A first-class native Markdown panel that renders in a split pane next to your terminal. Edit Markdown with undo / redo, Find bar, and auto-save. Preview with Mermaid diagrams, KaTeX math, fifteen callout types, footnotes, and syntax highlighting for 190+ languages. Outline sidebar, multi-file full-text search, git blame and diff, slide export, interactive task list checkboxes, and a QuickLook extension for Finder previews — all offline, no network.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Does Cocxy support custom themes?</span></summary>
+          <p>Yes. Cocxy ships with Catppuccin (Mocha and Latte), One Dark, and Solarized (Dark and Light). Drop a <code>.toml</code> theme into <code>~/.config/cocxy/themes/</code> and it appears immediately in the theme picker. You can configure a dark / light theme pair that auto-switches with the macOS appearance setting.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>How do I configure Cocxy?</span></summary>
+          <p>All configuration lives in <code>~/.config/cocxy/</code>. The main file is <code>config.toml</code> for fonts, theme, terminal behavior, and keybindings. <code>agents.toml</code> holds agent detection patterns. You can also drop a <code>.cocxy.toml</code> in any project root to override settings per directory with automatic hot-reload when you <code>cd</code> in.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Is there a CLI?</span></summary>
+          <p>Yes. The <code>cocxy</code> CLI has more than 100 commands covering tabs, splits, windows, sessions, agents, hooks, code review, Markdown, browser, remote connections, proxy, plugins, themes, timeline, and terminal diagnostics. It communicates with the app through a local Unix Domain Socket authenticated by UID. Run <code>cocxy help</code> for the full reference.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Does Cocxy support plugins?</span></summary>
+          <p>Yes. Plugins respond to eight terminal events (session start / end, agent detected, state changed, command complete, tab created / closed, directory changed). Drop a manifest and shell scripts into <code>~/.config/cocxy/plugins/</code> and they run in a sandboxed environment with timeout enforcement. Manage with <code>cocxy plugin-list</code>, <code>cocxy plugin-enable</code>, and <code>cocxy plugin-disable</code>.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>Is Cocxy open source?</span></summary>
+          <p>Yes, fully. Every line of code is public at <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">github.com/salp2403/cocxy-terminal</a> under the MIT license. Fork it, audit it, contribute. The CocxyCore terminal engine is a separate repository written in Zig with a stable C ABI, also open source.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>How do I report a bug or request a feature?</span></summary>
+          <p>Open an issue on <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer">GitHub Issues</a>. Use the Bug Report template for bugs (Cocxy version, macOS version, chip, steps to reproduce) or the Feature Request template for enhancements. For security vulnerabilities, email <a href="mailto:security@cocxy.dev">security@cocxy.dev</a> privately — do not open a public issue.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary><span>How do I uninstall Cocxy?</span></summary>
+          <p>If you installed via Homebrew: <code>brew uninstall --cask cocxy</code>. Otherwise, drag the app to Trash. To remove your configuration and sessions too, delete <code>~/.config/cocxy/</code> and <code>~/Library/Application Support/dev.cocxy.terminal/</code>. Note: deleting <code>~/.config/cocxy/</code> also removes SSH profiles, bookmarks, and browser history stored there.</p>
+        </details>
+      </div>
+
+      <!-- CTA -->
+      <section class="faq-cta">
+        <p class="eyebrow">Need a human?</p>
+        <h2>Still have questions?</h2>
+        <p>Open an issue on GitHub or email us. Include your Cocxy version, macOS version, chip, and steps to reproduce when reporting a bug.</p>
+        <div>
+          <a href="https://github.com/salp2403/cocxy-terminal/issues" target="_blank" rel="noopener noreferrer" class="btn btn-primary">Open an issue</a>
+          <a href="/getting-started.html" class="btn btn-secondary">Read the Docs</a>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <footer class="site-footer" role="contentinfo">
+    <div class="container">
+      <div class="footer-content">
+        <div class="footer-brand">
+          <img src="/images/icon.png" alt="" width="24" height="24">
+          <span>Cocxy Terminal</span>
+        </div>
+        <nav class="footer-links" aria-label="Footer navigation">
+          <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+          <a href="/releases.html">Changelog</a>
+          <a href="/getting-started.html">Docs</a>
+          <a href="/es/faq.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
+          <a href="/#download">Download</a>
+          <a href="https://github.com/salp2403/cocxy-terminal/security/policy" target="_blank" rel="noopener noreferrer">Security</a>
+        </nav>
+        <p class="footer-credit">Made by Said Arturo Lopez · Honduras</p>
+      </div>
+    </div>
+  </footer>
 </body>
 </html>

@@ -4,32 +4,17 @@
   "description": "Landing page for Cocxy Terminal",
   "main": "server.js",
   "scripts": {
-    "build:css": "node scripts/build-site.mjs --css-only",
-    "build:site": "node scripts/build-site.mjs",
-    "generate:docs-index": "node scripts/generate-docs-index.mjs",
-    "verify:site": "node scripts/verify-site.mjs",
-    "smoke:visual": "node scripts/visual-smoke.mjs",
-    "audit:quality": "npm run build:site && node scripts/quality-audit.mjs",
-    "audit:quality:full": "npm run build:site && COCXY_WEB_QUALITY_FULL=1 node scripts/quality-audit.mjs",
-    "smoke": "npm run build:site && npm run verify:site",
     "start": "node server.js",
     "dev": "node server.js"
   },
   "dependencies": {
-    "compression": "^1.7.4",
     "express": "^4.21.0",
+    "compression": "^1.7.4",
     "helmet": "^8.0.0"
   },
   "engines": {
-    "node": ">=18.20.0"
+    "node": ">=18.0.0"
   },
   "license": "MIT",
-  "author": "Said Arturo Lopez",
-  "devDependencies": {
-    "@axe-core/playwright": "4.10.2",
-    "chrome-launcher": "1.1.2",
-    "html-validate": "9.7.1",
-    "lighthouse": "12.6.1",
-    "playwright": "1.60.0"
-  }
+  "author": "Said Arturo Lopez"
 }
