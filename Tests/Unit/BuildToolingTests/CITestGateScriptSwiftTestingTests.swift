@@ -33,6 +33,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks"))
         #expect(script.contains("./scripts/run-swift-testing-serial.sh"))
+        #expect(script.contains("web/scripts/build-site.mjs"))
+        #expect(script.contains("Node.js 18+ is required to generate public website test fixtures"))
         #expect(serialScript.contains("swift-testing-serial-profraw"))
         #expect(serialScript.contains("xcrun llvm-profdata merge -sparse"))
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
