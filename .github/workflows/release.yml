@@ -816,9 +816,11 @@ jobs:
             "set -e; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|Download v[0-9]*\.[0-9]*\.[0-9]*|Download v${VERSION}|g; s|Descargar v[0-9]*\.[0-9]*\.[0-9]*|Descargar v${VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'"
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'; \
+             sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt"
 
           # Deploy the Express runtime too. The redesigned site relies on
           # server.js for redirects, CSP, and security headers; static assets
