@@ -7,6 +7,7 @@
     "build:css": "node scripts/build-site.mjs --css-only",
     "build:site": "node scripts/build-site.mjs",
     "generate:docs-index": "node scripts/generate-docs-index.mjs",
+    "render:preview": "node scripts/render-public-preview.mjs",
     "verify:site": "node scripts/verify-site.mjs",
     "smoke:visual": "node scripts/visual-smoke.mjs",
     "audit:quality": "npm run build:site && node scripts/quality-audit.mjs",

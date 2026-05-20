@@ -278,6 +278,25 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!workflow.contains("|| true"))
     }
 
+    @Test("web quality audit keeps strict Lighthouse gates when CI runner hits Lantern zero-score")
+    func webQualityAuditKeepsStrictLighthouseGatesWhenCIRunnerHitsLanternZeroScore() throws {
+        let root = repositoryRoot()
+        let auditScript = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/quality-audit.mjs"),
+            encoding: .utf8
+        )
+
+        #expect(auditScript.contains("shouldRerunLighthouseWithDevtools"))
+        #expect(auditScript.contains("throttlingMethod: method"))
+        #expect(auditScript.contains("lighthouseDevtoolsFallback"))
+        #expect(auditScript.contains("fallbackFrom: fallbackFrom ? primaryMethod : null"))
+        #expect(auditScript.contains("performance: 0"))
+        #expect(auditScript.contains("'best-practices': 0"))
+        #expect(auditScript.contains("Lighthouse ${category} on ${url} scored ${score}, below ${threshold}"))
+        #expect(!auditScript.contains("if (process.env.CI"))
+        #expect(!auditScript.contains("|| true"))
+    }
+
     @Test("release readiness script documents external blockers")
     func releaseReadinessScriptDocumentsExternalBlockers() throws {
         let root = repositoryRoot()

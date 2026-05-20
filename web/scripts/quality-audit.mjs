@@ -21,6 +21,8 @@ const port = Number(process.env.COCXY_WEB_QUALITY_PORT || 3117);
 const baseURL = `http://127.0.0.1:${port}`;
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const fullLighthouse = process.env.COCXY_WEB_QUALITY_FULL === '1';
+const primaryLighthouseMethod = process.env.COCXY_WEB_LIGHTHOUSE_THROTTLING || 'simulate';
+const lighthouseDevtoolsFallback = process.env.COCXY_WEB_LIGHTHOUSE_DEVTOOLS_FALLBACK !== '0';
 
 const failures = [];
 const consoleErrors = [];
@@ -173,6 +175,64 @@ function lighthouseThresholds(url) {
   };
 }
 
+const lighthouseInternalFailureScores = {
+  performance: 0,
+  'best-practices': 0,
+};
+
+function lighthouseSettings(method) {
+  return {
+    formFactor: 'mobile',
+    screenEmulation: {
+      mobile: true,
+      width: 390,
+      height: 844,
+      deviceScaleFactor: 2,
+      disabled: false,
+    },
+    throttlingMethod: method,
+  };
+}
+
+function lighthouseCategories(lhr) {
+  return Object.fromEntries(
+    Object.entries(lhr.categories).map(([key, category]) => [key, category.score])
+  );
+}
+
+function isLighthouseDevtoolsFallbackError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes('LanternError') || message.includes('Invalid dependency graph');
+}
+
+function shouldRerunLighthouseWithDevtools({ method, categories, lhr }) {
+  const internalZeroScore =
+    categories.performance === lighthouseInternalFailureScores.performance
+    && categories['best-practices'] === lighthouseInternalFailureScores['best-practices'];
+  return lighthouseDevtoolsFallback
+    && method === 'simulate'
+    && (Boolean(lhr.runtimeError) || internalZeroScore);
+}
+
+async function runSingleLighthouse(url, chromePort, method) {
+  const runnerResult = await lighthouse(`${baseURL}${url}`, {
+    port: chromePort,
+    output: 'json',
+    logLevel: 'error',
+    onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
+  }, {
+    extends: 'lighthouse:default',
+    settings: lighthouseSettings(method),
+  });
+  const lhr = runnerResult.lhr;
+  return {
+    categories: lighthouseCategories(lhr),
+    lhr,
+    method,
+    report: runnerResult.report,
+  };
+}
+
 async function runLighthouse(urls) {
   const chrome = await launch({
     chromePath,
@@ -186,29 +246,31 @@ async function runLighthouse(urls) {
   const results = [];
   try {
     for (const url of urls) {
-      const runnerResult = await lighthouse(`${baseURL}${url}`, {
-        port: chrome.port,
-        output: 'json',
-        logLevel: 'error',
-        onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
-      }, {
-        extends: 'lighthouse:default',
-        settings: {
-          formFactor: 'mobile',
-          screenEmulation: {
-            mobile: true,
-            width: 390,
-            height: 844,
-            deviceScaleFactor: 2,
-            disabled: false,
-          },
-          throttlingMethod: 'simulate',
-        },
-      });
-      const lhr = runnerResult.lhr;
-      const categories = Object.fromEntries(
-        Object.entries(lhr.categories).map(([key, category]) => [key, category.score])
-      );
+      let lighthouseResult;
+      let fallbackFrom = null;
+      const primaryMethod = primaryLighthouseMethod;
+      try {
+        lighthouseResult = await runSingleLighthouse(url, chrome.port, primaryMethod);
+      } catch (error) {
+        if (
+          lighthouseDevtoolsFallback
+          && primaryMethod === 'simulate'
+          && isLighthouseDevtoolsFallbackError(error)
+        ) {
+          fallbackFrom = primaryMethod;
+          console.warn(`Lighthouse ${primaryMethod} failed internally on ${url}; rerunning with devtools throttling.`);
+          lighthouseResult = await runSingleLighthouse(url, chrome.port, 'devtools');
+        } else {
+          throw error;
+        }
+      }
+      if (shouldRerunLighthouseWithDevtools(lighthouseResult)) {
+        fallbackFrom = primaryMethod;
+        console.warn(`Lighthouse ${primaryMethod} returned an internal zero-score result on ${url}; rerunning with devtools throttling.`);
+        lighthouseResult = await runSingleLighthouse(url, chrome.port, 'devtools');
+      }
+
+      const categories = lighthouseResult.categories;
       const thresholds = lighthouseThresholds(url);
       for (const [category, threshold] of Object.entries(thresholds)) {
         const score = categories[category] ?? 0;
@@ -217,10 +279,13 @@ async function runLighthouse(urls) {
         }
       }
       const reportPath = path.join(reportRoot, `lighthouse-${slugFor(url)}.json`);
-      fs.writeFileSync(reportPath, runnerResult.report);
+      fs.writeFileSync(reportPath, lighthouseResult.report);
       results.push({
         url,
         scores: categories,
+        throttlingMethod: lighthouseResult.method,
+        fallbackFrom: fallbackFrom ? primaryMethod : null,
+        runtimeError: lighthouseResult.lhr.runtimeError ?? null,
         report: path.relative(repoRoot, reportPath),
       });
     }

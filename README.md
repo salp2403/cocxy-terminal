@@ -15,7 +15,7 @@
 Cocxy knows when your coding agent is thinking, working, waiting for input, or done. It shows you — so you stop watching terminals and start shipping code.
 
 <p align="center">
-  <img src="web/public/images/cocxy-preview.png" alt="Cocxy Terminal showing a live agent dashboard, an open Markdown workspace, and the agent code review panel" width="860" />
+  <img src="web/public/images/cocxy-preview.png" alt="Cocxy Terminal showing a public demo workspace with the agent dashboard, browser, Vault, Markdown, and inline code review" width="860" />
 </p>
 
 ## Table of Contents
