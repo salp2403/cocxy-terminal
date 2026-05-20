@@ -239,6 +239,9 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(deployBlock.contains("if [ -d web/public/js ]; then"))
         #expect(deployBlock.contains("web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/"))
         #expect(deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
+        #expect(deployBlock.contains("node web/scripts/generate-releases-page.mjs"))
+        #expect(deployBlock.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
+        #expect(deployBlock.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
         #expect(deployBlock.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
         #expect(deployBlock.contains("npm ci --omit=dev --no-audit --no-fund"))
         #expect(deployBlock.contains("pm2 reload cocxy-web --update-env"))
@@ -4593,15 +4596,22 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
             encoding: .utf8
         )
+        let releasesGenerator = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/generate-releases-page.mjs"),
+            encoding: .utf8
+        )
 
         #expect(workflow.contains("web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/"))
-        #expect(workflow.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">"#))
-        #expect(workflow.contains(#"<a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>"#))
+        #expect(releasesGenerator.contains(#"<link rel="alternate" hreflang="es" href="${site}/es/releases.html">"#))
+        #expect(releasesGenerator.contains(#"languageHref: '/es/releases.html'"#))
+        #expect(releasesGenerator.contains(#"languageHref: '/releases.html'"#))
         #expect(workflow.contains("web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
         #expect(workflow.contains("${DEPLOY_PATH}es/features"))
         #expect(workflow.contains("${DEPLOY_PATH}es/docs"))
         #expect(workflow.contains("web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/"))
         #expect(workflow.contains("web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/"))
+        #expect(workflow.contains("node web/scripts/generate-releases-page.mjs"))
+        #expect(workflow.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
         #expect(workflow.contains("web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/"))
         #expect(workflow.contains(#"find ${DEPLOY_PATH} -type f -name '*.html' -print0"#))
         #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g'"#))

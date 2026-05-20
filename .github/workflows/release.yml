@@ -781,9 +781,25 @@ jobs:
           print(f"Generated releases page with {len(releases)} entries ({PER_PAGE} visible, rest paginated)")
           PYEOF
 
+          # Keep tag-triggered releases and manual website deploys on the
+          # same releases-page generator. The inline Python above is retained
+          # for continuity with older release runs, but this shared generator
+          # is the source of truth for the redesigned EN/ES pages.
+          mkdir -p build/es
+          node web/scripts/generate-releases-page.mjs \
+            --version "$VERSION" \
+            --locale en \
+            --output build/releases.html
+          node web/scripts/generate-releases-page.mjs \
+            --version "$VERSION" \
+            --locale es \
+            --output build/es/releases.html
+
           # Deploy releases page and getting-started docs
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html
 
           # Deploy getting-started page from repo
           if [ -f web/public/getting-started.html ]; then
