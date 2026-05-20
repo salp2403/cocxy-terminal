@@ -404,11 +404,14 @@ function icon(name) {
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[name] ?? paths.spark}</svg>`;
 }
 
-function head({ title, description, page, lang = 'en', schema = [], type = 'website' }) {
+function head({ title, description, page, lang = 'en', type = 'website' }) {
   const htmlLang = lang === 'es' ? 'es-HN' : 'en';
   const ogLocale = lang === 'es' ? 'es_HN' : 'en_US';
   const url = canonicalFor(page, lang);
   const titleFull = `${title} - Cocxy Terminal`;
+  const previewPreload = page === '/'
+    ? `\n  <link rel="preload" as="image" href="${previewImage('avif')}" type="image/avif" media="(min-width: 721px)" fetchpriority="high">`
+    : '';
   return `<!DOCTYPE html>
 <html lang="${htmlLang}">
 <head>
@@ -419,6 +422,7 @@ function head({ title, description, page, lang = 'en', schema = [], type = 'webs
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <meta name="theme-color" content="#101018">
+  <link rel="stylesheet" href="${cssHref}">
   <meta property="og:type" content="${type}">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="${escapeHTML(titleFull)}">
@@ -439,9 +443,7 @@ function head({ title, description, page, lang = 'en', schema = [], type = 'webs
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <link rel="preload" as="image" href="${previewImage('avif')}" type="image/avif" fetchpriority="high">
-  <link rel="stylesheet" href="${cssHref}">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">${previewPreload}
   <script>
   (() => {
     try {
@@ -450,8 +452,11 @@ function head({ title, description, page, lang = 'en', schema = [], type = 'webs
     } catch (_) {}
   })();
   </script>
-  ${schema.map((entry) => `<script type="application/ld+json">\n${json(entry)}\n  </script>`).join('\n  ')}
 </head>`;
+}
+
+function schemaScripts(schema = []) {
+  return schema.map((entry) => `<script type="application/ld+json">\n${json(entry)}\n</script>`).join('\n');
 }
 
 function nav(lang = 'en', active = '') {
@@ -581,7 +586,7 @@ function softwareSchema(lang = 'en') {
 
 function layout({ page, lang = 'en', title, description, active = '', schema = [], body }) {
   currentPage = page;
-  return `${head({ title, description, page, lang, schema })}\n<body>\n${nav(lang, active)}\n<main id="main">\n${body}\n</main>\n${footer(lang)}`;
+  return `${head({ title, description, page, lang })}\n<body>\n${nav(lang, active)}\n<main id="main">\n${body}\n</main>\n${schemaScripts(schema)}\n${footer(lang)}`;
 }
 
 function downloadSection(lang = 'en') {
@@ -645,12 +650,14 @@ function home(lang = 'en') {
     },
     breadcrumbSchema([[es ? 'Inicio' : 'Home', es ? '/es/' : '/']]),
   ];
-  const body = `<section class="hero hero-product" id="hero" aria-labelledby="hero-title">
-  <picture class="hero-media">
-    <source srcset="${previewImage('avif')}" type="image/avif">
-    <source srcset="${previewImage('webp')}" type="image/webp">
-    <img src="${previewImage('png')}" width="1574" height="808" alt="${es ? 'Cocxy Terminal con paneles, navegador y agentes locales' : 'Cocxy Terminal with panes, browser, and local agent state'}" fetchpriority="high">
-  </picture>
+  const body = `<section id="hero" class="page-hero home-mobile-hero">
+    <div class="container">
+      <p class="eyebrow">${es ? 'Nativa macOS · Local primero · MIT' : 'Native macOS · Local-first · MIT'}</p>
+      <h1 id="hero-title-mobile">Cocxy Terminal</h1>
+      <p>${es ? 'Agentes locales. Bóveda cifrada. Cero telemetría.' : 'Local agents. Encrypted Vault. Zero telemetry.'}</p>
+    </div>
+  </section>
+  <div class="hero hero-product">
   <div class="container hero-inner">
     <img class="hero-logo" src="/images/icon.png" width="92" height="92" alt="">
     <p class="eyebrow">${es ? 'Nativa macOS · Local primero · MIT' : 'Native macOS · Local-first · MIT'}</p>
@@ -669,7 +676,12 @@ function home(lang = 'en') {
       <code>${es ? 'agente: trabajando · estado: visible · telemetría: cero' : 'agent: working · state: visible · telemetry: zero'}</code>
     </div>
   </div>
-</section>
+  <picture class="hero-media">
+    <source srcset="${previewImage('avif')}" type="image/avif">
+    <source srcset="${previewImage('webp')}" type="image/webp">
+    <img src="${previewImage('png')}" width="1574" height="808" alt="${es ? 'Cocxy Terminal con paneles, navegador y agentes locales' : 'Cocxy Terminal with panes, browser, and local agent state'}" loading="lazy" decoding="async" fetchpriority="low">
+  </picture>
+</div>
 <section class="stats-strip" aria-label="${es ? 'Datos clave' : 'Key facts'}">
   <div class="container stats-grid">
     ${stat('11', es ? 'agentes' : 'agents')}

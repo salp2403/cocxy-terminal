@@ -8,6 +8,7 @@
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <meta name="theme-color" content="#101018">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="Cocxy Terminal - Cocxy Terminal">
@@ -32,8 +33,7 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <link rel="preload" as="image" href="/images/cocxy-preview.avif?v=0.0.0" type="image/avif" fetchpriority="high">
-  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
+  <link rel="preload" as="image" href="/images/cocxy-preview.avif?v=0.0.0" type="image/avif" media="(min-width: 721px)" fetchpriority="high">
   <script>
   (() => {
     try {
@@ -41,121 +41,6 @@
       if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
     } catch (_) {}
   })();
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "Organization",
-  "name": "Cocxy Terminal",
-  "url": "https://cocxy.dev",
-  "logo": "https://cocxy.dev/images/icon.png",
-  "founder": {
-    "@type": "Person",
-    "name": "Said Arturo Lopez"
-  }
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebSite",
-  "url": "https://cocxy.dev",
-  "name": "Cocxy Terminal",
-  "potentialAction": {
-    "@type": "SearchAction",
-    "target": "https://cocxy.dev/es/docs/?q={search_term_string}",
-    "query-input": "required name=search_term_string"
-  }
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "SoftwareApplication",
-  "name": "Cocxy Terminal",
-  "applicationCategory": "DeveloperApplication",
-  "applicationSubCategory": "Terminal Emulator",
-  "operatingSystem": "macOS 14.0+",
-  "url": "https://cocxy.dev",
-  "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
-  "softwareVersion": "0.0.0",
-  "license": "https://opensource.org/licenses/MIT",
-  "isAccessibleForFree": true,
-  "inLanguage": "es-HN",
-  "featureList": [
-    "Real-time local agent detection",
-    "Encrypted session Vault",
-    "Inline code review panel",
-    "Native Markdown workspace",
-    "GPU terminal rendering",
-    "Remote workspaces",
-    "Built-in browser",
-    "Plugin hooks",
-    "Shell integration",
-    "Zero telemetry"
-  ],
-  "offers": {
-    "@type": "Offer",
-    "price": "0",
-    "priceCurrency": "USD",
-    "availability": "https://schema.org/InStock"
-  },
-  "author": {
-    "@type": "Person",
-    "name": "Said Arturo Lopez",
-    "url": "https://github.com/salp2403"
-  }
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "FAQPage",
-  "mainEntity": [
-    {
-      "@type": "Question",
-      "name": "¿Cocxy requiere cuenta?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. Cocxy se instala y usa localmente sin cuenta obligatoria."
-      }
-    },
-    {
-      "@type": "Question",
-      "name": "¿Cocxy envía telemetría?",
-      "acceptedAnswer": {
-        "@type": "Answer",
-        "text": "No. No hay analíticas, rastreo ni subida automática de sesiones."
-      }
-    }
-  ]
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "VideoObject",
-  "name": "Demo de Cocxy Terminal",
-  "description": "Terminal nativa para macOS que entiende agentes de IA, con Bóveda cifrada, revisión de código, Markdown, remotos y cero telemetría.",
-  "thumbnailUrl": "https://cocxy.dev/images/og-image.png",
-  "uploadDate": "2026-05-16",
-  "contentUrl": "https://cocxy.dev/videos/cocxy-demo.mp4",
-  "embedUrl": "https://cocxy.dev/#demo"
-}
-  </script>
-  <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "BreadcrumbList",
-  "itemListElement": [
-    {
-      "@type": "ListItem",
-      "position": 1,
-      "name": "Inicio",
-      "item": "https://cocxy.dev/es/"
-    }
-  ]
-}
   </script>
 </head>
 <body>
@@ -187,12 +72,14 @@
   </nav>
 </header>
 <main id="main">
-<section class="hero hero-product" id="hero" aria-labelledby="hero-title">
-  <picture class="hero-media">
-    <source srcset="/images/cocxy-preview.avif?v=0.0.0" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
-    <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="Cocxy Terminal con paneles, navegador y agentes locales" fetchpriority="high">
-  </picture>
+<section id="hero" class="page-hero home-mobile-hero">
+    <div class="container">
+      <p class="eyebrow">Nativa macOS · Local primero · MIT</p>
+      <h1 id="hero-title-mobile">Cocxy Terminal</h1>
+      <p>Agentes locales. Bóveda cifrada. Cero telemetría.</p>
+    </div>
+  </section>
+  <div class="hero hero-product">
   <div class="container hero-inner">
     <img class="hero-logo" src="/images/icon.png" width="92" height="92" alt="">
     <p class="eyebrow">Nativa macOS · Local primero · MIT</p>
@@ -211,7 +98,12 @@
       <code>agente: trabajando · estado: visible · telemetría: cero</code>
     </div>
   </div>
-</section>
+  <picture class="hero-media">
+    <source srcset="/images/cocxy-preview.avif?v=0.0.0" type="image/avif">
+    <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
+    <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="Cocxy Terminal con paneles, navegador y agentes locales" loading="lazy" decoding="async" fetchpriority="low">
+  </picture>
+</div>
 <section class="stats-strip" aria-label="Datos clave">
   <div class="container stats-grid">
     <div class="stat"><strong>11</strong><span>agentes</span></div>
@@ -419,6 +311,121 @@
   </div>
 </section>
 </main>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "Cocxy Terminal",
+  "url": "https://cocxy.dev",
+  "logo": "https://cocxy.dev/images/icon.png",
+  "founder": {
+    "@type": "Person",
+    "name": "Said Arturo Lopez"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "url": "https://cocxy.dev",
+  "name": "Cocxy Terminal",
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://cocxy.dev/es/docs/?q={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Cocxy Terminal",
+  "applicationCategory": "DeveloperApplication",
+  "applicationSubCategory": "Terminal Emulator",
+  "operatingSystem": "macOS 14.0+",
+  "url": "https://cocxy.dev",
+  "downloadUrl": "https://github.com/salp2403/cocxy-terminal/releases/latest",
+  "softwareVersion": "0.0.0",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "inLanguage": "es-HN",
+  "featureList": [
+    "Real-time local agent detection",
+    "Encrypted session Vault",
+    "Inline code review panel",
+    "Native Markdown workspace",
+    "GPU terminal rendering",
+    "Remote workspaces",
+    "Built-in browser",
+    "Plugin hooks",
+    "Shell integration",
+    "Zero telemetry"
+  ],
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD",
+    "availability": "https://schema.org/InStock"
+  },
+  "author": {
+    "@type": "Person",
+    "name": "Said Arturo Lopez",
+    "url": "https://github.com/salp2403"
+  }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    {
+      "@type": "Question",
+      "name": "¿Cocxy requiere cuenta?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. Cocxy se instala y usa localmente sin cuenta obligatoria."
+      }
+    },
+    {
+      "@type": "Question",
+      "name": "¿Cocxy envía telemetría?",
+      "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "No. No hay analíticas, rastreo ni subida automática de sesiones."
+      }
+    }
+  ]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  "name": "Demo de Cocxy Terminal",
+  "description": "Terminal nativa para macOS que entiende agentes de IA, con Bóveda cifrada, revisión de código, Markdown, remotos y cero telemetría.",
+  "thumbnailUrl": "https://cocxy.dev/images/og-image.png",
+  "uploadDate": "2026-05-16",
+  "contentUrl": "https://cocxy.dev/videos/cocxy-demo.mp4",
+  "embedUrl": "https://cocxy.dev/#demo"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Inicio",
+      "item": "https://cocxy.dev/es/"
+    }
+  ]
+}
+</script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>

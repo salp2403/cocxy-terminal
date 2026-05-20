@@ -8,6 +8,7 @@
   <meta name="author" content="Said Arturo Lopez">
   <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
   <meta name="theme-color" content="#101018">
+  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
   <meta property="og:title" content="FAQ - Cocxy Terminal">
@@ -32,8 +33,6 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <link rel="preload" as="image" href="/images/cocxy-preview.avif?v=0.0.0" type="image/avif" fetchpriority="high">
-  <link rel="stylesheet" href="/css/style.css?v=0.0.0">
   <script>
   (() => {
     try {
@@ -42,7 +41,68 @@
     } catch (_) {}
   })();
   </script>
-  <script type="application/ld+json">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="site-header">
+  <nav class="nav container" aria-label="Main navigation">
+    <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
+      <img src="/images/icon.png" width="32" height="32" alt="">
+      <span>Cocxy</span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+      <span></span><span></span><span></span>
+      <span class="sr-only">Open navigation</span>
+    </button>
+    <div class="nav-links" id="site-menu">
+      <a  href="/features.html">Features</a>
+      <a  href="/features/agents.html">Agents</a>
+      <a  href="/privacy.html">Privacy</a>
+      <a  href="/security.html">Security</a>
+      <a  href="/docs/">Docs</a>
+      <a class="nav-cta" href="#download">Download</a>
+      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
+        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
+      </button>
+      <a href="/es/faq.html" hreflang="es" lang="es">Español</a>
+      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
+    </div>
+  </nav>
+</header>
+<main id="main">
+<section class="page-hero"><div class="container">
+    <p class="eyebrow">Cocxy Terminal</p>
+    <h1>FAQ</h1>
+    <p>Answers about installation, privacy, agents, updates, remotes, and source code.</p>
+  </div></section><section class="section"><div class="container faq-list"><details class="faq-item"><summary>Does Cocxy require an account?</summary><p>No. Install and use Cocxy without signing in.</p></details><details class="faq-item"><summary>Does it upload sessions?</summary><p>No. Sessions and Vault data stay local.</p></details><details class="faq-item"><summary>How do I install it?</summary><p>Use the signed DMG or Homebrew.</p></details><details class="faq-item"><summary>Which agents are supported?</summary><p>11 built-in profiles plus custom configured agents.</p></details><details class="faq-item"><summary>What does Vault store?</summary><p>Local session metadata and content according to the actions you enable.</p></details><details class="faq-item"><summary>Can I use SSH?</summary><p>Yes. SSH connections are explicit user-started actions.</p></details><details class="faq-item"><summary>Does the website load third-party JavaScript?</summary><p>No. The website avoids third-party JavaScript.</p></details><details class="faq-item"><summary>Where are the docs?</summary><p>The documentation hub is available at /docs/.</p></details><details class="faq-item"><summary>How do I report security issues?</summary><p>Use GitHub Security Advisory or dev@cocxy.dev.</p></details><details class="faq-item"><summary>Does the license change?</summary><p>No. Cocxy stays MIT licensed.</p></details></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
+  <div class="container">
+    <div class="section-header">
+      <p class="eyebrow">Download</p>
+      <h2 id="download-title">Install Cocxy on macOS</h2>
+      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
+    </div>
+    <div class="download-grid">
+      <article class="card">
+        <h3>DMG</h3>
+        <p>Direct download from GitHub Releases.</p>
+        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
+      </article>
+      <article class="card">
+        <h3>Homebrew</h3>
+        <p>Reproducible install from the official tap.</p>
+        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
+      </article>
+      <article class="card">
+        <h3>Channels</h3>
+        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
+        <a class="button button-secondary" href="/channels.html">View channels</a>
+      </article>
+    </div>
+  </div>
+</section>
+</main>
+<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "BreadcrumbList",
@@ -61,8 +121,8 @@
     }
   ]
 }
-  </script>
-  <script type="application/ld+json">
+</script>
+<script type="application/ld+json">
 {
   "@context": "https://schema.org",
   "@type": "FAQPage",
@@ -149,68 +209,7 @@
     }
   ]
 }
-  </script>
-</head>
-<body>
-<a class="skip-link" href="#main">Skip to main content</a>
-<header class="site-header">
-  <nav class="nav container" aria-label="Main navigation">
-    <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
-      <img src="/images/icon.png" width="32" height="32" alt="">
-      <span>Cocxy</span>
-    </a>
-    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
-      <span></span><span></span><span></span>
-      <span class="sr-only">Open navigation</span>
-    </button>
-    <div class="nav-links" id="site-menu">
-      <a  href="/features.html">Features</a>
-      <a  href="/features/agents.html">Agents</a>
-      <a  href="/privacy.html">Privacy</a>
-      <a  href="/security.html">Security</a>
-      <a  href="/docs/">Docs</a>
-      <a class="nav-cta" href="#download">Download</a>
-      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
-        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
-        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
-      </button>
-      <a href="/es/faq.html" hreflang="es" lang="es">Español</a>
-      <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-    </div>
-  </nav>
-</header>
-<main id="main">
-<section class="page-hero"><div class="container">
-    <p class="eyebrow">Cocxy Terminal</p>
-    <h1>FAQ</h1>
-    <p>Answers about installation, privacy, agents, updates, remotes, and source code.</p>
-  </div></section><section class="section"><div class="container faq-list"><details class="faq-item"><summary>Does Cocxy require an account?</summary><p>No. Install and use Cocxy without signing in.</p></details><details class="faq-item"><summary>Does it upload sessions?</summary><p>No. Sessions and Vault data stay local.</p></details><details class="faq-item"><summary>How do I install it?</summary><p>Use the signed DMG or Homebrew.</p></details><details class="faq-item"><summary>Which agents are supported?</summary><p>11 built-in profiles plus custom configured agents.</p></details><details class="faq-item"><summary>What does Vault store?</summary><p>Local session metadata and content according to the actions you enable.</p></details><details class="faq-item"><summary>Can I use SSH?</summary><p>Yes. SSH connections are explicit user-started actions.</p></details><details class="faq-item"><summary>Does the website load third-party JavaScript?</summary><p>No. The website avoids third-party JavaScript.</p></details><details class="faq-item"><summary>Where are the docs?</summary><p>The documentation hub is available at /docs/.</p></details><details class="faq-item"><summary>How do I report security issues?</summary><p>Use GitHub Security Advisory or dev@cocxy.dev.</p></details><details class="faq-item"><summary>Does the license change?</summary><p>No. Cocxy stays MIT licensed.</p></details></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
-  <div class="container">
-    <div class="section-header">
-      <p class="eyebrow">Download</p>
-      <h2 id="download-title">Install Cocxy on macOS</h2>
-      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
-    </div>
-    <div class="download-grid">
-      <article class="card">
-        <h3>DMG</h3>
-        <p>Direct download from GitHub Releases.</p>
-        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
-      </article>
-      <article class="card">
-        <h3>Homebrew</h3>
-        <p>Reproducible install from the official tap.</p>
-        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
-      </article>
-      <article class="card">
-        <h3>Channels</h3>
-        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
-        <a class="button button-secondary" href="/channels.html">View channels</a>
-      </article>
-    </div>
-  </div>
-</section>
-</main>
+</script>
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
