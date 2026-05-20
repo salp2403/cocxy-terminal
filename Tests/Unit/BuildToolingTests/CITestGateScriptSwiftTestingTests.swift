@@ -316,6 +316,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(auditScript.contains("shouldRerunLighthouseWithDevtools"))
         #expect(auditScript.contains("throttlingMethod: method"))
         #expect(auditScript.contains("lighthouseDevtoolsFallback"))
+        #expect(auditScript.contains("lighthouseBorderlineRetryMargin"))
+        #expect(auditScript.contains("rerunning in isolated Chrome"))
         #expect(auditScript.contains("fallbackFrom: fallbackFrom ? primaryMethod : null"))
         #expect(auditScript.contains("performance: 0"))
         #expect(auditScript.contains("'best-practices': 0"))

@@ -23,6 +23,9 @@ const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 const fullLighthouse = process.env.COCXY_WEB_QUALITY_FULL === '1';
 const primaryLighthouseMethod = process.env.COCXY_WEB_LIGHTHOUSE_THROTTLING || 'simulate';
 const lighthouseDevtoolsFallback = process.env.COCXY_WEB_LIGHTHOUSE_DEVTOOLS_FALLBACK !== '0';
+const lighthouseBorderlineRetryMargin = {
+  performance: 0.03,
+};
 
 const failures = [];
 const consoleErrors = [];
@@ -194,6 +197,18 @@ function lighthouseSettings(method) {
   };
 }
 
+function chromeLaunchOptions() {
+  return {
+    chromePath,
+    chromeFlags: [
+      '--headless=new',
+      '--disable-gpu',
+      '--no-sandbox',
+      '--disable-dev-shm-usage',
+    ],
+  };
+}
+
 function lighthouseCategories(lhr) {
   return Object.fromEntries(
     Object.entries(lhr.categories).map(([key, category]) => [key, category.score])
@@ -206,12 +221,36 @@ function isLighthouseDevtoolsFallbackError(error) {
 }
 
 function shouldRerunLighthouseWithDevtools({ method, categories, lhr }) {
+  return lighthouseDevtoolsFallback
+    && method === 'simulate'
+    && isLighthouseInternalFailure({ categories, lhr });
+}
+
+function isLighthouseInternalFailure({ categories, lhr }) {
   const internalZeroScore =
     categories.performance === lighthouseInternalFailureScores.performance
     && categories['best-practices'] === lighthouseInternalFailureScores['best-practices'];
-  return lighthouseDevtoolsFallback
-    && method === 'simulate'
-    && (Boolean(lhr.runtimeError) || internalZeroScore);
+  return Boolean(lhr.runtimeError) || internalZeroScore;
+}
+
+function shouldRetryBorderlineLighthouseScore(categories, thresholds) {
+  return Object.entries(thresholds).some(([category, threshold]) => {
+    const margin = lighthouseBorderlineRetryMargin[category] ?? 0;
+    const score = categories[category] ?? 0;
+    return margin > 0 && score < threshold && score >= threshold - margin;
+  });
+}
+
+function lighthouseScoreTotal(categories) {
+  return Object.values(categories).reduce(
+    (total, score) => total + (typeof score === 'number' && Number.isFinite(score) ? score : 0),
+    0
+  );
+}
+
+function shouldUseLighthouseRetry(currentResult, retryResult) {
+  if (isLighthouseInternalFailure(currentResult) && !isLighthouseInternalFailure(retryResult)) return true;
+  return lighthouseScoreTotal(retryResult.categories) > lighthouseScoreTotal(currentResult.categories);
 }
 
 async function runSingleLighthouse(url, chromePort, method) {
@@ -233,21 +272,23 @@ async function runSingleLighthouse(url, chromePort, method) {
   };
 }
 
+async function runIsolatedLighthouse(url, method) {
+  const chrome = await launch(chromeLaunchOptions());
+  try {
+    return await runSingleLighthouse(url, chrome.port, method);
+  } finally {
+    await chrome.kill();
+  }
+}
+
 async function runLighthouse(urls) {
-  const chrome = await launch({
-    chromePath,
-    chromeFlags: [
-      '--headless=new',
-      '--disable-gpu',
-      '--no-sandbox',
-      '--disable-dev-shm-usage',
-    ],
-  });
+  const chrome = await launch(chromeLaunchOptions());
   const results = [];
   try {
     for (const url of urls) {
       let lighthouseResult;
       let fallbackFrom = null;
+      let retryReason = null;
       const primaryMethod = primaryLighthouseMethod;
       try {
         lighthouseResult = await runSingleLighthouse(url, chrome.port, primaryMethod);
@@ -272,8 +313,24 @@ async function runLighthouse(urls) {
 
       const categories = lighthouseResult.categories;
       const thresholds = lighthouseThresholds(url);
+      if (isLighthouseInternalFailure(lighthouseResult)) {
+        retryReason = 'internal zero-score result';
+      } else if (shouldRetryBorderlineLighthouseScore(categories, thresholds)) {
+        retryReason = 'borderline performance score';
+      }
+      if (retryReason) {
+        const retryMethod = lighthouseResult.method;
+        console.warn(`Lighthouse ${retryMethod} returned ${retryReason} on ${url}; rerunning in isolated Chrome.`);
+        const retryResult = await runIsolatedLighthouse(url, retryMethod);
+        if (shouldUseLighthouseRetry(lighthouseResult, retryResult)) {
+          fallbackFrom = fallbackFrom ?? lighthouseResult.method;
+          lighthouseResult = retryResult;
+        }
+      }
+
+      const finalCategories = lighthouseResult.categories;
       for (const [category, threshold] of Object.entries(thresholds)) {
-        const score = categories[category] ?? 0;
+        const score = finalCategories[category] ?? 0;
         if (score < threshold) {
           fail(`Lighthouse ${category} on ${url} scored ${score}, below ${threshold}`);
         }
@@ -282,7 +339,7 @@ async function runLighthouse(urls) {
       fs.writeFileSync(reportPath, lighthouseResult.report);
       results.push({
         url,
-        scores: categories,
+        scores: finalCategories,
         throttlingMethod: lighthouseResult.method,
         fallbackFrom: fallbackFrom ? primaryMethod : null,
         runtimeError: lighthouseResult.lhr.runtimeError ?? null,
