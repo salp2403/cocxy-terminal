@@ -10,10 +10,12 @@ const webRoot = path.resolve(__dirname, '..');
 const publicRoot = path.join(webRoot, 'public');
 const repoRoot = path.resolve(webRoot, '..');
 const site = 'https://cocxy.dev';
-const cssHref = '/css/style.css?v=0.0.0';
-const releaseVersion = '0.0.0';
-const previewAssetVersion = '0.0.0';
+const assetVersion = '0.0.0';
+const cssHref = `/css/style.css?v=${assetVersion}`;
+const releaseVersion = assetVersion;
+const previewAssetVersion = assetVersion;
 const previewImage = (extension) => `/images/cocxy-preview.${extension}?v=${previewAssetVersion}`;
+const scriptSrc = (file) => `/js/${file}?v=${assetVersion}`;
 
 const agents = [
   ['Claude', 'claude', 'OSC and hooks', '--resume <session-id>'],
@@ -517,8 +519,8 @@ function footer(lang = 'en') {
     <p class="footer-note">${es ? 'Hecho por Said Arturo Lopez.' : 'Made by Said Arturo Lopez.'}</p>
   </div>
 </footer>
-<script src="/js/theme-switcher.js" defer></script>
-<script src="/js/main.js" defer></script>
+<script src="${scriptSrc('theme-switcher.js')}" defer></script>
+<script src="${scriptSrc('main.js')}" defer></script>
 </body>
 </html>`;
 }
@@ -1448,8 +1450,8 @@ function previewComponents() {
       <pre class="code-block"><code>cocxy status</code><button class="copy-button" type="button">Copy</button></pre>
     </div></section>
   </main>
-  <script src="../public/js/theme-switcher.js" defer></script>
-  <script src="../public/js/main.js" defer></script>
+  <script src="../public/js/theme-switcher.js?v=${assetVersion}" defer></script>
+  <script src="../public/js/main.js?v=${assetVersion}" defer></script>
 </body>
 </html>`;
 }
@@ -1659,18 +1661,18 @@ function serviceWorker() {
     '/docs/',
     '/docs/first-run.html',
     '/releases.html',
-    '/css/style.css?v=0.0.0',
-    '/js/main.js',
-    '/js/theme-switcher.js',
+    `/css/style.css?v=${assetVersion}`,
+    `/js/main.js?v=${assetVersion}`,
+    `/js/theme-switcher.js?v=${assetVersion}`,
     '/images/icon.png',
-    '/images/cocxy-preview.avif?v=0.0.0',
-    '/images/cocxy-preview.webp?v=0.0.0',
+    `/images/cocxy-preview.avif?v=${assetVersion}`,
+    `/images/cocxy-preview.webp?v=${assetVersion}`,
     '/manifest.webmanifest',
     '/llms.txt',
     '/feed.xml',
     '/releases.xml',
   ];
-  return `const CACHE_NAME = 'cocxy-web-static-v0.0.0';
+  return `const CACHE_NAME = 'cocxy-web-static-v${assetVersion}';
 const PRECACHE_URLS = ${JSON.stringify(precacheURLs, null, 2)};
 
 self.addEventListener('install', (event) => {

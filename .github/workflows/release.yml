@@ -787,7 +787,8 @@ jobs:
                   <p class="footer-credit">Made by Said Arturo Lopez</p>
               </div>
             </footer>
-            <script src="/js/main.js" defer></script>
+            <script src="/js/main.js?v={version}" defer></script>
+            <script src="/js/theme-switcher.js?v={version}" defer></script>
           </body>
           </html>"""
 
@@ -833,10 +834,11 @@ jobs:
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|Download v[0-9]*\.[0-9]*\.[0-9]*|Download v${VERSION}|g; s|Descargar v[0-9]*\.[0-9]*\.[0-9]*|Descargar v${VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|/js/main.js?v=[0-9A-Za-z._-]*|/js/main.js?v=${ASSET_VERSION}|g; s|/js/theme-switcher.js?v=[0-9A-Za-z._-]*|/js/theme-switcher.js?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'; \
              sed -i 's|cocxy-web-static-v[0-9A-Za-z._-]*|cocxy-web-static-v${ASSET_VERSION}|g' ${DEPLOY_PATH}service-worker.js; \
-             sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g; s|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g' ${DEPLOY_PATH}service-worker.js; \
+             sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g; s|main.js?v=[0-9A-Za-z._-]*|main.js?v=${ASSET_VERSION}|g; s|theme-switcher.js?v=[0-9A-Za-z._-]*|theme-switcher.js?v=${ASSET_VERSION}|g; s|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g' ${DEPLOY_PATH}service-worker.js; \
              sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt; \
              if find ${DEPLOY_PATH} \( -name '*.html' -o -name 'llms.txt' -o -name 'service-worker.js' \) -print0 | xargs -0 grep -F 'v0.0.0'; then echo 'unresolved version placeholder in deployed website'; exit 1; fi"
 

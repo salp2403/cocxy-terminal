@@ -164,6 +164,8 @@ for (const file of htmlFiles) {
     'hreflang="en"',
     'hreflang="es"',
     'style.css?v=0.0.0',
+    'theme-switcher.js?v=0.0.0',
+    'main.js?v=0.0.0',
     'application/ld+json',
   ]) {
     if (!content.includes(needle)) fail(`Missing ${needle} in ${relative}`);
@@ -434,7 +436,16 @@ function verifyServiceWorker() {
     return;
   }
   const content = read('service-worker.js');
-  for (const needle of ['CACHE_NAME', 'PRECACHE_URLS', 'self.addEventListener(\'install\'', 'self.addEventListener(\'fetch\'', "url.origin !== self.location.origin"]) {
+  for (const needle of [
+    'CACHE_NAME',
+    'PRECACHE_URLS',
+    'style.css?v=0.0.0',
+    'main.js?v=0.0.0',
+    'theme-switcher.js?v=0.0.0',
+    'self.addEventListener(\'install\'',
+    'self.addEventListener(\'fetch\'',
+    "url.origin !== self.location.origin",
+  ]) {
     if (!content.includes(needle)) fail(`service-worker.js missing ${needle}`);
   }
   if (/https?:\/\//i.test(content)) fail('service-worker.js must not hard-code external URLs');

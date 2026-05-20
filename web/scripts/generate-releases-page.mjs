@@ -351,8 +351,8 @@ ${structuredData}
     <p class="footer-credit">${text.madeBy}</p>
   </div>
 </footer>
-<script src="/js/main.js" defer></script>
-<script src="/js/theme-switcher.js" defer></script>
+<script src="/js/main.js?v=${version}" defer></script>
+<script src="/js/theme-switcher.js?v=${version}" defer></script>
 </body>
 </html>
 `;
