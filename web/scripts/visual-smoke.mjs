@@ -52,7 +52,10 @@ async function verifyHeaders() {
   const response = await fetch(`${baseURL}/`);
   const csp = response.headers.get('content-security-policy') || '';
   const permissions = response.headers.get('permissions-policy') || '';
+  const frameOptions = response.headers.get('x-frame-options') || '';
   if (!csp.includes("default-src 'self'")) fail('Missing self-only default CSP');
+  if (!csp.includes("frame-ancestors 'none'")) fail('Missing frame-ancestors hardening');
+  if (frameOptions.toUpperCase() !== 'DENY') fail(`X-Frame-Options is ${frameOptions || 'missing'}`);
   if (!permissions.includes('geolocation=()')) fail('Missing Permissions-Policy hardening');
 
   const redirect = await fetch(`${baseURL}/getting-started.html`, { redirect: 'manual' });

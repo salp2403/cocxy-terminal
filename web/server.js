@@ -52,9 +52,13 @@ app.use(
         imgSrc: ["'self'", "data:"],
         scriptSrc: ["'self'", "'unsafe-inline'"],
         connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
       },
     },
     crossOriginEmbedderPolicy: false,
+    frameguard: {
+      action: "deny",
+    },
   })
 );
 
