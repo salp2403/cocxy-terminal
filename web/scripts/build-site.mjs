@@ -435,6 +435,7 @@ function head({ title, description, page, lang = 'en', schema = [], type = 'webs
   <link rel="icon" type="image/png" href="/images/icon.png">
   <link rel="apple-touch-icon" href="/images/icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <link rel="preload" as="image" href="${previewImage('avif')}" type="image/avif" fetchpriority="high">

@@ -735,6 +735,7 @@ jobs:
             <link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html">
             <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">
             <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html">
+            <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
             <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
             <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
             <link rel="stylesheet" href="/css/style.css?v={version}">
