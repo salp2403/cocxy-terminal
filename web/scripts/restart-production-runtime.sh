@@ -80,13 +80,38 @@ matching_node_server_pids() {
   done
 }
 
+matching_port_pids() {
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true
+  elif command -v fuser >/dev/null 2>&1; then
+    fuser "${PORT}/tcp" 2>/dev/null || true
+  fi | while read -r pid; do
+    [ -n "$pid" ] || continue
+    [ "$pid" != "$$" ] || continue
+    if [ -d "/proc/$pid" ]; then
+      cwd="$(readlink "/proc/$pid/cwd" 2>/dev/null || true)"
+      if [ "$cwd" = "$APP_DIR" ]; then
+        printf '%s\n' "$pid"
+      fi
+    fi
+  done
+}
+
+local_health_is_ready() {
+  if ! command -v curl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null
+}
+
 wait_for_health() {
   if ! command -v curl >/dev/null 2>&1; then
     return 0
   fi
 
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    if curl -fsS "http://127.0.0.1:${PORT}/health" >/dev/null; then
+    if local_health_is_ready; then
       return 0
     fi
     sleep 1
@@ -127,6 +152,15 @@ fi
 for pid in $(matching_node_server_pids); do
   stop_pid "$pid"
 done
+
+for pid in $(matching_port_pids); do
+  stop_pid "$pid"
+done
+
+if local_health_is_ready; then
+  echo "Existing cocxy-web runtime is healthy on port ${PORT}; leaving it in place."
+  exit 0
+fi
 
 umask 077
 if command -v setsid >/dev/null 2>&1; then
