@@ -29,7 +29,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.10.2",
     "chrome-launcher": "1.1.2",
-    "html-validate": "9.7.1",
+    "html-validate": "10.17.0",
     "lighthouse": "12.6.1",
     "playwright": "1.60.0"
   }

@@ -34,13 +34,14 @@ jobs:
 
       - name: Install website dependencies
         working-directory: web
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run website smoke gates
         working-directory: web
         run: |
           npm run smoke
           npm audit --audit-level=high
+          npm audit signatures
           npm run smoke:visual
           npm run audit:quality:full
 

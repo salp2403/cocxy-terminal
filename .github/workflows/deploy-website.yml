@@ -32,7 +32,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install website dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: web
 
       - name: Resolve website version
@@ -59,6 +59,7 @@ jobs:
           set -euo pipefail
           npm run smoke
           npm audit --audit-level=high
+          npm audit signatures
           npm run smoke:visual
           npm run audit:quality:full
           mkdir -p ../build/es
@@ -145,7 +146,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "set -e; \
              cd ${DEPLOY_PATH}; \
-             npm ci --omit=dev --no-audit --no-fund; \
+             npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
              if pm2 describe cocxy-web >/dev/null 2>&1; then \
                pm2 reload cocxy-web --update-env; \
              else \

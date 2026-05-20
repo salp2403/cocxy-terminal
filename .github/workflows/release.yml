@@ -827,7 +827,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "set -e; \
              cd ${DEPLOY_PATH}; \
-             npm ci --omit=dev --no-audit --no-fund; \
+             npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
              if pm2 describe cocxy-web >/dev/null 2>&1; then \
                pm2 reload cocxy-web --update-env; \
              else \
