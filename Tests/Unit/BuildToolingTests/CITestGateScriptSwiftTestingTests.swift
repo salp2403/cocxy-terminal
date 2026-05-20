@@ -229,6 +229,8 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
             encoding: .utf8
         )
+        let runtimeScriptURL = root.appendingPathComponent("web/scripts/restart-production-runtime.sh")
+        let runtimeScript = try String(contentsOf: runtimeScriptURL, encoding: .utf8)
 
         let deployStart = try #require(workflow.range(of: "- name: Deploy website"))
         let homebrewStart = try #require(workflow.range(of: "- name: Update Homebrew Cask"))
@@ -243,16 +245,20 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(deployBlock.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
         #expect(deployBlock.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
         #expect(deployBlock.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
+        #expect(deployBlock.contains("web/scripts/restart-production-runtime.sh"))
         #expect(deployBlock.contains("npm ci --omit=dev --ignore-scripts --no-audit --no-fund"))
         #expect(deployBlock.contains(#"export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\""#))
         #expect(deployBlock.contains(#"if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\""#))
-        #expect(deployBlock.contains("PM2_BIN=''"))
-        #expect(deployBlock.contains(#"if command -v pm2 >/dev/null 2>&1; then PM2_BIN=\"\$(command -v pm2)\"; fi"#))
-        #expect(deployBlock.contains(#"for candidate in \"\$HOME/.npm-global/bin/pm2\" \"\$HOME/.npm/bin/pm2\" \"\$HOME/.local/bin/pm2\" /usr/local/bin/pm2 /opt/homebrew/bin/pm2 /usr/bin/pm2"#))
-        #expect(deployBlock.contains(#"for candidate in \"\$HOME\"/.nvm/versions/node/*/bin/pm2"#))
-        #expect(deployBlock.contains("pm2 not found in deploy environment"))
-        #expect(deployBlock.contains(#"\"\$PM2_BIN\" reload cocxy-web --update-env"#))
-        #expect(deployBlock.contains(#"\"\$PM2_BIN\" start ecosystem.config.js --only cocxy-web"#))
+        #expect(deployBlock.contains("chmod +x restart-production-runtime.sh"))
+        #expect(deployBlock.contains("./restart-production-runtime.sh"))
+        #expect(FileManager.default.isExecutableFile(atPath: runtimeScriptURL.path))
+        #expect(runtimeScript.contains("./node_modules/.bin/pm2"))
+        #expect(runtimeScript.contains(#""$PM2_BIN" reload "$APP_NAME" --update-env"#))
+        #expect(runtimeScript.contains(#""$PM2_BIN" start ecosystem.config.js --only "$APP_NAME""#))
+        #expect(runtimeScript.contains("matching_node_server_pids"))
+        #expect(runtimeScript.contains(#"[ "$cwd" = "$APP_DIR" ]"#))
+        #expect(runtimeScript.contains(#"nohup env NODE_ENV=production PORT="$PORT" "$NODE_BIN" server.js"#))
+        #expect(runtimeScript.contains(#""http://127.0.0.1:${PORT}/health""#))
         #expect(!deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
     }
 
@@ -261,6 +267,10 @@ struct CITestGateScriptSwiftTestingTests {
         let root = repositoryRoot()
         let workflow = try String(
             contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+        let runtimeScript = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/restart-production-runtime.sh"),
             encoding: .utf8
         )
 
@@ -278,16 +288,15 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
         #expect(workflow.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
         #expect(workflow.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
+        #expect(workflow.contains("web/scripts/restart-production-runtime.sh"))
         #expect(workflow.contains("npm ci --omit=dev --ignore-scripts --no-audit --no-fund"))
         #expect(workflow.contains(#"export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\""#))
         #expect(workflow.contains(#"if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\""#))
-        #expect(workflow.contains("PM2_BIN=''"))
-        #expect(workflow.contains(#"if command -v pm2 >/dev/null 2>&1; then PM2_BIN=\"\$(command -v pm2)\"; fi"#))
-        #expect(workflow.contains(#"for candidate in \"\$HOME/.npm-global/bin/pm2\" \"\$HOME/.npm/bin/pm2\" \"\$HOME/.local/bin/pm2\" /usr/local/bin/pm2 /opt/homebrew/bin/pm2 /usr/bin/pm2"#))
-        #expect(workflow.contains(#"for candidate in \"\$HOME\"/.nvm/versions/node/*/bin/pm2"#))
-        #expect(workflow.contains("pm2 not found in deploy environment"))
-        #expect(workflow.contains(#"\"\$PM2_BIN\" reload cocxy-web --update-env"#))
-        #expect(workflow.contains(#"\"\$PM2_BIN\" start ecosystem.config.js --only cocxy-web"#))
+        #expect(workflow.contains("chmod +x restart-production-runtime.sh"))
+        #expect(workflow.contains("./restart-production-runtime.sh"))
+        #expect(runtimeScript.contains("node not found in deploy environment and pm2 is unavailable"))
+        #expect(runtimeScript.contains("cocxy-web failed to stay running after fallback start"))
+        #expect(runtimeScript.contains("cocxy-web did not pass local health check"))
         #expect(workflow.contains("https://cocxy.dev/getting-started.html"))
         #expect(workflow.contains(#"test "$REDIRECT_STATUS" = "301""#))
         #expect(!workflow.contains("|| true"))

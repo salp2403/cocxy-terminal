@@ -142,6 +142,7 @@ jobs:
 
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
+            web/scripts/restart-production-runtime.sh \
             ${DEPLOY_TARGET}:${DEPLOY_PATH}
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "set -e; \
@@ -149,25 +150,8 @@ jobs:
              if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\" >/dev/null 2>&1; fi; \
              cd ${DEPLOY_PATH}; \
              npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
-             PM2_BIN=''; \
-             if command -v pm2 >/dev/null 2>&1; then PM2_BIN=\"\$(command -v pm2)\"; fi; \
-             if [ -z \"\$PM2_BIN\" ]; then \
-               for candidate in \"\$HOME/.npm-global/bin/pm2\" \"\$HOME/.npm/bin/pm2\" \"\$HOME/.local/bin/pm2\" /usr/local/bin/pm2 /opt/homebrew/bin/pm2 /usr/bin/pm2; do \
-                 if [ -x \"\$candidate\" ]; then PM2_BIN=\"\$candidate\"; break; fi; \
-               done; \
-             fi; \
-             if [ -z \"\$PM2_BIN\" ]; then \
-               for candidate in \"\$HOME\"/.nvm/versions/node/*/bin/pm2; do \
-                 if [ -x \"\$candidate\" ]; then PM2_BIN=\"\$candidate\"; break; fi; \
-               done; \
-             fi; \
-             if [ -z \"\$PM2_BIN\" ]; then echo 'pm2 not found in deploy environment' >&2; exit 127; fi; \
-             if \"\$PM2_BIN\" describe cocxy-web >/dev/null 2>&1; then \
-               \"\$PM2_BIN\" reload cocxy-web --update-env; \
-             else \
-               \"\$PM2_BIN\" start ecosystem.config.js --only cocxy-web; \
-             fi; \
-             \"\$PM2_BIN\" save"
+             chmod +x restart-production-runtime.sh; \
+             ./restart-production-runtime.sh"
 
           rm /tmp/deploy_key
           echo "backup=/tmp/${BACKUP_NAME}" >> "$GITHUB_STEP_SUMMARY"
