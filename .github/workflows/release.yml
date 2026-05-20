@@ -815,12 +815,14 @@ jobs:
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "set -e; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|releases/download/v[0-9]*\.[0-9]*\.[0-9]*/CocxyTerminal-|releases/download/v${VERSION}/CocxyTerminal-|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|Download v[0-9]*\.[0-9]*\.[0-9]*|Download v${VERSION}|g; s|Descargar v[0-9]*\.[0-9]*\.[0-9]*|Descargar v${VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'; \
-             sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt"
+             sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt; \
+             if find ${DEPLOY_PATH} \( -name '*.html' -o -name 'llms.txt' \) -print0 | xargs -0 grep -F 'v0.0.0'; then echo 'unresolved version placeholder in deployed website'; exit 1; fi"
 
           # Deploy the Express runtime too. The redesigned site relies on
           # server.js for redirects, CSP, and security headers; static assets
