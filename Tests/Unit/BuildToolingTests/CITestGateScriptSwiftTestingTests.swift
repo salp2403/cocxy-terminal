@@ -310,6 +310,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(serverScript.contains(#"dotfiles: "ignore""#))
         #expect(workflow.contains("https://cocxy.dev/getting-started.html"))
         #expect(workflow.contains(#"test "$REDIRECT_STATUS" = "301""#))
+        #expect(workflow.contains(#"SMOKE_DIR="$(mktemp -d)""#))
+        #expect(workflow.contains(#"curl -fsSL https://cocxy.dev/ -o "$SMOKE_DIR/home.html""#))
+        #expect(workflow.contains(#"grep -q "style.css?v=${{ steps.version.outputs.VERSION }}" "$SMOKE_DIR/home.html""#))
+        #expect(!workflow.contains("curl -fsSL https://cocxy.dev/ | grep -q"))
         #expect(!workflow.contains("|| true"))
     }
 
