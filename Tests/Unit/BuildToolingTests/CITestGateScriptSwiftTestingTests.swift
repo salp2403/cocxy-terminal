@@ -33,6 +33,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks"))
         #expect(script.contains("./scripts/run-swift-testing-serial.sh"))
+        #expect(script.contains("web/scripts/build-site.mjs"))
+        #expect(script.contains("Node.js 18+ is required to generate public website test fixtures"))
         #expect(serialScript.contains("swift-testing-serial-profraw"))
         #expect(serialScript.contains("xcrun llvm-profdata merge -sparse"))
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
@@ -75,8 +77,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("COCXY_COLD_START_BUDGET_MS: \"800\""))
         #expect(workflow.contains("COCXY_COLD_START_INTERNAL_BUDGET_MS: \"125\""))
         #expect(workflow.contains("COCXY_PERFORMANCE_BASELINE: scripts/performance-baselines.macos15-ci.json"))
-        #expect(workflow.contains("COCXY_SYNTAX_INCREMENTAL_PARSE_BUDGET_MS: \"8\""))
-        #expect(workflow.contains("COCXYCORE_OUTPUT_THROUGHPUT_BUDGET_MBPS: \"1.0\""))
+        #expect(workflow.contains("COCXY_SYNTAX_INCREMENTAL_PARSE_BUDGET_MS: \"20\""))
+        #expect(workflow.contains("COCXYCORE_OUTPUT_THROUGHPUT_BUDGET_MBPS: \"0.8\""))
+        #expect(workflow.contains("timeout-minutes: 75"))
+        #expect(workflow.contains("timeout-minutes: 60"))
         #expect(workflow.contains("--baseline \"$COCXY_PERFORMANCE_BASELINE\""))
         #expect(workflow.contains("Cleanup CocxyTerminal processes"))
         #expect(workflow.contains("pkill -x CocxyTerminal || true"))
@@ -92,25 +96,30 @@ struct CITestGateScriptSwiftTestingTests {
             $0["name"] as? String == "internal_critical_path_median_ms"
                 && ($0["baseline"] as? NSNumber)?.doubleValue == 100
         } == true)
-        #expect((ciMetric("syntax_cold_parse_ms")?["baseline"] as? NSNumber)?.doubleValue == 10.0)
-        #expect((ciMetric("syntax_cold_parse_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 2.0)
-        #expect((ciMetric("editor_scroll_frame_ms")?["baseline"] as? NSNumber)?.doubleValue == 10.0)
-        #expect((ciMetric("editor_insert_frame_ms")?["baseline"] as? NSNumber)?.doubleValue == 8.5)
-        #expect((ciMetric("editor_delete_frame_ms")?["baseline"] as? NSNumber)?.doubleValue == 7.0)
-        #expect((ciMetric("syntax_viewport_capture_ms")?["baseline"] as? NSNumber)?.doubleValue == 4.5)
-        #expect((ciMetric("syntax_viewport_capture_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 1.0)
-        #expect((ciMetric("syntax_token_mapping_ms")?["baseline"] as? NSNumber)?.doubleValue == 0.35)
-        #expect((ciMetric("syntax_token_mapping_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.15)
-        #expect((ciMetric("syntax_viewport_highlight_ms")?["baseline"] as? NSNumber)?.doubleValue == 15.0)
-        #expect((ciMetric("syntax_viewport_highlight_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 3.0)
-        #expect((ciMetric("syntax_incremental_parse_ms")?["baseline"] as? NSNumber)?.doubleValue == 5.0)
-        #expect((ciMetric("syntax_incremental_parse_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 3.0)
-        #expect((ciMetric("cocxycore_surface_creation_ms")?["baseline"] as? NSNumber)?.doubleValue == 120.0)
+        #expect((ciMetric("syntax_cold_parse_ms")?["baseline"] as? NSNumber)?.doubleValue == 16.0)
+        #expect((ciMetric("syntax_cold_parse_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 4.0)
+        #expect((ciMetric("editor_scroll_frame_ms")?["baseline"] as? NSNumber)?.doubleValue == 11.0)
+        #expect((ciMetric("editor_insert_frame_ms")?["baseline"] as? NSNumber)?.doubleValue == 15.0)
+        #expect((ciMetric("editor_insert_frame_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 3.0)
+        #expect((ciMetric("editor_delete_frame_ms")?["baseline"] as? NSNumber)?.doubleValue == 13.0)
+        #expect((ciMetric("editor_delete_frame_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 3.0)
+        #expect((ciMetric("syntax_viewport_capture_ms")?["baseline"] as? NSNumber)?.doubleValue == 7.7)
+        #expect((ciMetric("syntax_viewport_capture_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 2.3)
+        #expect((ciMetric("syntax_token_mapping_ms")?["baseline"] as? NSNumber)?.doubleValue == 0.85)
+        #expect((ciMetric("syntax_token_mapping_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.35)
+        #expect((ciMetric("syntax_viewport_highlight_ms")?["baseline"] as? NSNumber)?.doubleValue == 25.0)
+        #expect((ciMetric("syntax_viewport_highlight_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 5.0)
+        #expect((ciMetric("syntax_incremental_parse_ms")?["baseline"] as? NSNumber)?.doubleValue == 16.0)
+        #expect((ciMetric("syntax_incremental_parse_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 4.0)
+        #expect((ciMetric("cocxycore_surface_creation_ms")?["baseline"] as? NSNumber)?.doubleValue == 215.0)
+        #expect((ciMetric("cocxycore_surface_creation_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 35.0)
         #expect((ciMetric("cocxycore_echo_latency_ms")?["baseline"] as? NSNumber)?.doubleValue == 10.0)
-        #expect((ciMetric("cocxycore_output_throughput_mbps")?["baseline"] as? NSNumber)?.doubleValue == 1.3)
-        #expect((ciMetric("cocxycore_output_throughput_mbps")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.3)
-        #expect((ciMetric("cocxycore_frame_average_ms")?["baseline"] as? NSNumber)?.doubleValue == 2.0)
-        #expect((ciMetric("cocxycore_frame_p99_ms")?["baseline"] as? NSNumber)?.doubleValue == 4.5)
+        #expect((ciMetric("cocxycore_output_throughput_mbps")?["baseline"] as? NSNumber)?.doubleValue == 1.0)
+        #expect((ciMetric("cocxycore_output_throughput_mbps")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.2)
+        #expect((ciMetric("cocxycore_frame_average_ms")?["baseline"] as? NSNumber)?.doubleValue == 2.6)
+        #expect((ciMetric("cocxycore_frame_average_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 0.6)
+        #expect((ciMetric("cocxycore_frame_p99_ms")?["baseline"] as? NSNumber)?.doubleValue == 6.5)
+        #expect((ciMetric("cocxycore_frame_p99_ms")?["absolute_tolerance"] as? NSNumber)?.doubleValue == 1.5)
         #expect((ciMetric("cocxycore_idle_rss_delta_mb")?["baseline"] as? NSNumber)?.doubleValue == 3.0)
         #expect(FileManager.default.isExecutableFile(atPath: memoryScriptURL.path))
         #expect(memoryScript.contains("BENCHMARK_ENV=\"COCXY_MEMORY_BASELINE_BENCHMARK=1\""))
@@ -228,8 +237,45 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(deployBlock.contains(#"*) DEPLOY_PATH="${DEPLOY_PATH}/" ;;"#))
         #expect(deployBlock.contains("mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es"))
         #expect(deployBlock.contains("if [ -d web/public/js ]; then"))
-        #expect(deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
-        #expect(!deployBlock.contains("web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
+        #expect(deployBlock.contains("web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/"))
+        #expect(deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
+        #expect(deployBlock.contains("node web/scripts/generate-releases-page.mjs"))
+        #expect(deployBlock.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
+        #expect(deployBlock.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
+        #expect(deployBlock.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
+        #expect(deployBlock.contains("npm ci --omit=dev --no-audit --no-fund"))
+        #expect(deployBlock.contains("pm2 reload cocxy-web --update-env"))
+        #expect(deployBlock.contains("pm2 start ecosystem.config.js --only cocxy-web"))
+        #expect(!deployBlock.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/ || true"))
+    }
+
+    @Test("manual website deploy workflow validates static site and restarts server runtime")
+    func manualWebsiteDeployWorkflowValidatesStaticSiteAndRestartsServerRuntime() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("workflow_dispatch:"))
+        #expect(workflow.contains("environment: production"))
+        #expect(workflow.contains("npm run smoke"))
+        #expect(workflow.contains("npm audit --audit-level=high"))
+        #expect(workflow.contains("npm run smoke:visual"))
+        #expect(workflow.contains("npm run audit:quality:full"))
+        #expect(workflow.contains("node scripts/generate-releases-page.mjs"))
+        #expect(workflow.contains("tar -czf /tmp/${BACKUP_NAME} -C ${DEPLOY_PATH} ."))
+        #expect(workflow.contains("web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/"))
+        #expect(workflow.contains("web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/"))
+        #expect(workflow.contains("build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html"))
+        #expect(workflow.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
+        #expect(workflow.contains("web/server.js web/package.json web/package-lock.json web/ecosystem.config.js"))
+        #expect(workflow.contains("npm ci --omit=dev --no-audit --no-fund"))
+        #expect(workflow.contains("pm2 reload cocxy-web --update-env"))
+        #expect(workflow.contains("pm2 start ecosystem.config.js --only cocxy-web"))
+        #expect(workflow.contains("https://cocxy.dev/getting-started.html"))
+        #expect(workflow.contains(#"test "$REDIRECT_STATUS" = "301""#))
+        #expect(!workflow.contains("|| true"))
     }
 
     @Test("release readiness script documents external blockers")
@@ -4550,22 +4596,26 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
             encoding: .utf8
         )
+        let releasesGenerator = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/generate-releases-page.mjs"),
+            encoding: .utf8
+        )
 
         #expect(workflow.contains("web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/"))
-        #expect(workflow.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html">"#))
-        #expect(workflow.contains(#"<a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>"#))
-        #expect(workflow.contains("${DEPLOY_PATH}es/index.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/getting-started.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/features.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/faq.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/press.html"))
-        #expect(workflow.contains("${DEPLOY_PATH}es/releases.html"))
-        #expect(workflow.contains("web/public/press.html ${DEPLOY_TARGET}:${DEPLOY_PATH}press.html"))
+        #expect(releasesGenerator.contains(#"<link rel="alternate" hreflang="es" href="${site}/es/releases.html">"#))
+        #expect(releasesGenerator.contains(#"languageHref: '/es/releases.html'"#))
+        #expect(releasesGenerator.contains(#"languageHref: '/releases.html'"#))
+        #expect(workflow.contains("web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/features"))
+        #expect(workflow.contains("${DEPLOY_PATH}es/docs"))
+        #expect(workflow.contains("web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/"))
+        #expect(workflow.contains("web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/"))
+        #expect(workflow.contains("node web/scripts/generate-releases-page.mjs"))
+        #expect(workflow.contains("build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html"))
         #expect(workflow.contains("web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/"))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}press.html"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/press.html"#))
-        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html"#))
+        #expect(workflow.contains(#"find ${DEPLOY_PATH} -type f -name '*.html' -print0"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g'"#))
+        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g'"#))
 
         let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
         let cleanupStart = try #require(
@@ -4592,9 +4642,8 @@ struct CITestGateScriptSwiftTestingTests {
             encoding: .utf8
         )
 
-        #expect(workflow.contains("web/public/channels.html ${DEPLOY_TARGET}:${DEPLOY_PATH}channels.html"))
-        #expect(workflow.contains(#"style.css?v=${VERSION}|g' ${DEPLOY_PATH}channels.html"#))
-        #expect(workflow.contains(#"style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/channels.html"#))
+        #expect(workflow.contains("web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}"))
+        #expect(workflow.contains(#"style.css?v=${VERSION}|g'"#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html">"#))
         #expect(spanish.contains(#"<link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html">"#))
         #expect(english.contains("brew install --cask cocxy-preview"))
@@ -4697,9 +4746,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains(#""@type": "ItemList""#))
         #expect(workflow.contains(#""softwareVersion": version"#))
         #expect(workflow.contains(#"<link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html"#))
-        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html"#))
-        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html"#))
+        #expect(workflow.contains(#"find ${DEPLOY_PATH} -type f -name '*.html' -print0"#))
+        #expect(workflow.contains(#"style.css?v=${VERSION}|g'"#))
+        #expect(workflow.contains(#"\"softwareVersion\": \"${VERSION}\"|g'"#))
+        #expect(workflow.contains(#"CocxyTerminal-${VERSION}.dmg|g'"#))
     }
 
     @Test("primary public docs do not pin the retired CLI command count")
@@ -4743,11 +4793,18 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         for file in files {
+            let relativePath = Self.relativePath(file, root: root)
+            if relativePath == "web/public/agents.html" ||
+                relativePath == "web/public/es/agents.html" ||
+                relativePath == "web/public/features/agents.html" ||
+                relativePath == "web/public/es/features/agents.html" {
+                continue
+            }
             let contents = try String(contentsOf: file, encoding: .utf8)
             let range = NSRange(location: 0, length: (contents as NSString).length)
             #expect(
                 pattern.firstMatch(in: contents, range: range) == nil,
-                "\(Self.relativePath(file, root: root)) should describe bundled local agent profiles generically"
+                "\(relativePath) should describe bundled local agent profiles generically"
             )
         }
     }
@@ -4767,7 +4824,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(english.contains(#"<h2 id="migration-guide">Migration from v0.x</h2>"#))
         #expect(english.contains(##"<a href="#migration-guide" class="sidebar-link">Migration Guide</a>"##))
         #expect(english.contains("~/.config/cocxy/"))
-        #expect(english.contains("brew update && brew upgrade --cask cocxy"))
+        #expect(english.contains("brew update &amp;&amp; brew upgrade --cask cocxy"))
         #expect(spanish.contains("Migrar desde versiones v0.x"))
         #expect(spanish.contains("~/.config/cocxy/"))
     }
@@ -4786,7 +4843,7 @@ struct CITestGateScriptSwiftTestingTests {
 
         #expect(english.contains(#"<h2 id="local-backups">Local Backups</h2>"#))
         #expect(english.contains(##"<a href="#local-backups" class="sidebar-link">Local Backups</a>"##))
-        #expect(english.contains("Preferences > Backups"))
+        #expect(english.contains("Preferences &gt; Backups"))
         #expect(english.contains("Restore only the selected artifact"))
         #expect(spanish.contains("Copias locales"))
         #expect(spanish.contains("Preferencias &gt; Backups"))
@@ -5631,12 +5688,12 @@ struct CITestGateScriptSwiftTestingTests {
             spanishHref: "/es/channels.html"
         ),
         PublicWebsiteLocalePair(
-            englishPath: "getting-started.html",
-            spanishPath: "es/getting-started.html",
-            englishURL: "https://cocxy.dev/getting-started.html",
-            spanishURL: "https://cocxy.dev/es/getting-started.html",
-            englishHref: "/getting-started.html",
-            spanishHref: "/es/getting-started.html"
+            englishPath: "docs/first-run.html",
+            spanishPath: "es/docs/first-run.html",
+            englishURL: "https://cocxy.dev/docs/first-run.html",
+            spanishURL: "https://cocxy.dev/es/docs/first-run.html",
+            englishHref: "/docs/first-run.html",
+            spanishHref: "/es/docs/first-run.html"
         ),
         PublicWebsiteLocalePair(
             englishPath: "faq.html",

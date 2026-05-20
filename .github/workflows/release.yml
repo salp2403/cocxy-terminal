@@ -35,6 +35,11 @@ jobs:
         with:
           version: 0.15.2
 
+      - name: Setup Node.js for website build
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
@@ -496,31 +501,45 @@ jobs:
             *) DEPLOY_PATH="${DEPLOY_PATH}/" ;;
           esac
 
+          node web/scripts/build-site.mjs
+
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es"
+            "mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es ${DEPLOY_PATH}videos ${DEPLOY_PATH}og ${DEPLOY_PATH}features ${DEPLOY_PATH}docs ${DEPLOY_PATH}es/features ${DEPLOY_PATH}es/docs"
 
           # Deploy appcast.xml
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             build/appcast.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
-          # Deploy landing page from repo (ensures nav links, content are current)
+          # Deploy static pages from repo (ensures nav links, content are current)
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            web/public/index.html ${DEPLOY_TARGET}:${DEPLOY_PATH}index.html
+            web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
-          # Deploy CSS, JS, and image assets
-          scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            web/public/css/ ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
-          if [ -d web/public/js ]; then
-            scp -r -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-              web/public/js/ ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
-          fi
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-            "mkdir -p ${DEPLOY_PATH}images"
+          # Deploy CSS, JS, image, video, OG, and nested static pages
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-            web/public/images/*.png ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
+            web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
+          if [ -d web/public/js ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
+          fi
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/public/images/* ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
+          if [ -d web/public/og ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/og/* ${DEPLOY_TARGET}:${DEPLOY_PATH}og/
+          fi
+          if [ -d web/public/features ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features/
+          fi
+          if [ -d web/public/docs ]; then
+            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              web/public/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/
+            if [ -f web/public/docs/search-index.json ]; then
+              scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+                web/public/docs/search-index.json ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/search-index.json
+            fi
+          fi
           if [ -d web/public/videos ]; then
-            ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-              "mkdir -p ${DEPLOY_PATH}videos"
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/
           fi
@@ -536,29 +555,21 @@ jobs:
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/manifest.webmanifest ${DEPLOY_TARGET}:${DEPLOY_PATH}manifest.webmanifest
           fi
-
-          # Deploy secondary landing pages (features + FAQ)
-          if [ -f web/public/features.html ]; then
+          if [ -f web/public/llms.txt ]; then
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-              web/public/features.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features.html
-          fi
-          if [ -f web/public/channels.html ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-              web/public/channels.html ${DEPLOY_TARGET}:${DEPLOY_PATH}channels.html
-          fi
-          if [ -f web/public/faq.html ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-              web/public/faq.html ${DEPLOY_TARGET}:${DEPLOY_PATH}faq.html
-          fi
-          if [ -f web/public/press.html ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
-              web/public/press.html ${DEPLOY_TARGET}:${DEPLOY_PATH}press.html
+              web/public/llms.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}llms.txt
           fi
           if [ -d web/public/es ]; then
-            ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
-              "mkdir -p ${DEPLOY_PATH}es"
             scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
               web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/
+            if [ -d web/public/es/features ]; then
+              scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+                web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/
+            fi
+            if [ -d web/public/es/docs ]; then
+              scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+                web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/
+            fi
           fi
 
           # Fetch releases with body content for release notes (gh release list lacks body field, use API)
@@ -600,7 +611,7 @@ jobs:
               date_str = date_raw[:10] if date_raw else ""
               body = md_to_html(r.get("body", ""))
               badge = ' <span class="rel-badge">Latest</span>' if i == 0 else ""
-              hidden = ' style="display:none"' if i >= PER_PAGE else ""
+              hidden = ' hidden data-release-hidden="true"' if i >= PER_PAGE else ""
               dmg = f"https://github.com/salp2403/cocxy-terminal/releases/download/{tag}/CocxyTerminal-{ver}.dmg"
               gh = f"https://github.com/salp2403/cocxy-terminal/releases/tag/{tag}"
               notes_html = f'<div class="rel-notes">{body}</div>' if body else ""
@@ -612,8 +623,8 @@ jobs:
                   </div>
                   {notes_html}
                   <div class="rel-actions">
-                    <a href="{dmg}" class="btn btn-primary">Download DMG</a>
-                    <a href="{gh}" target="_blank" rel="noopener noreferrer" class="btn btn-secondary">Release Notes</a>
+                    <a href="{dmg}" class="button button-primary">Download DMG</a>
+                    <a href="{gh}" target="_blank" rel="noopener noreferrer" class="button button-secondary">Release Notes</a>
                   </div>
                 </article>''')
               release_items.append({
@@ -631,8 +642,8 @@ jobs:
           if len(releases) > PER_PAGE:
               hidden_count = len(releases) - PER_PAGE
               show_more = f'''
-                <div id="showMore" style="text-align:center;margin:2rem 0;">
-                  <button onclick="document.querySelectorAll('.rel-card[style]').forEach(c=>c.style.display='');this.parentElement.style.display='none'" class="btn btn-secondary" style="padding:0.6rem 2rem;">
+                <div class="release-more">
+                  <button id="showMoreReleases" class="button button-secondary" type="button">
                     Show {hidden_count} older release{"s" if hidden_count != 1 else ""}
                   </button>
                 </div>'''
@@ -716,60 +727,42 @@ jobs:
             <link rel="stylesheet" href="/css/style.css?v={version}">
             <link rel="icon" href="/images/icon.png" type="image/png">
             <link rel="apple-touch-icon" href="/images/icon.png">
-            <link rel="preconnect" href="https://fonts.googleapis.com">
-            <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
             <script type="application/ld+json">
             {structured_data}
             </script>
-            <style>
-              .rel-card {{background:var(--surface0);border:1px solid var(--surface1);border-radius:12px;padding:2rem;margin-bottom:1.5rem;}}
-              .rel-header {{display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;}}
-              .rel-header h2 {{font-size:1.5rem;font-weight:700;margin:0;}}
-              .rel-header time {{color:var(--subtext0);font-size:0.875rem;margin-left:auto;}}
-              .rel-badge {{background:var(--lavender);color:var(--crust);padding:0.15rem 0.6rem;border-radius:20px;font-size:0.75rem;font-weight:600;text-transform:uppercase;}}
-              .rel-notes {{color:var(--subtext1);font-size:0.9rem;line-height:1.7;margin-bottom:1.25rem;border-left:2px solid var(--surface1);padding-left:1rem;}}
-              .rel-notes h3 {{font-size:1.1rem;font-weight:600;color:var(--text);margin:1rem 0 0.5rem;}}
-              .rel-notes h4 {{font-size:0.95rem;font-weight:600;color:var(--subtext1);margin:0.75rem 0 0.25rem;}}
-              .rel-notes code {{font-family:var(--font-mono);font-size:0.8em;background:var(--crust);padding:0.15em 0.4em;border-radius:4px;color:var(--peach);}}
-              .rel-notes ul {{margin:0.5rem 0 0.5rem 1.25rem;}}
-              .rel-notes li {{margin-bottom:0.25rem;}}
-              .rel-actions {{display:flex;gap:0.75rem;margin-top:1rem;}}
-              .rel-actions .btn {{padding:0.5rem 1.2rem;font-size:0.85rem;}}
-            </style>
           </head>
           <body>
-            <header>
-              <nav class="nav" aria-label="Main navigation">
+            <a class="skip-link" href="#main">Skip to main content</a>
+            <header class="site-header">
+              <nav class="nav container" aria-label="Main navigation">
                 <a href="/" class="nav-logo"><img src="/images/icon.png" alt="" width="28" height="28"><span>Cocxy</span></a>
                 <div class="nav-links">
                   <a href="/#features">Features</a>
                   <a href="/releases.html">Releases</a>
-                  <a href="/getting-started.html">Docs</a>
+                  <a href="/docs/">Docs</a>
                   <a href="/#download">Download</a>
                   <a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
                   <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
                 </div>
               </nav>
             </header>
-            <main>
-              <section class="container" style="padding-top:8rem;padding-bottom:4rem;min-height:80vh;">
-                <h1 style="font-size:2.5rem;font-weight:700;margin-bottom:0.5rem;">Releases</h1>
-                <p style="color:var(--subtext0);margin-bottom:3rem;">Release history and changelog for Cocxy Terminal.</p>
+            <main id="main">
+              <section class="page-hero">
+                <div class="container">
+                  <p class="eyebrow">Releases</p>
+                  <h1>Releases</h1>
+                  <p>Release history and changelog for Cocxy Terminal.</p>
+                </div>
+              </section>
+              <section class="section">
+                <div class="container">
                 {"".join(cards)}
                 {show_more}
-                <div style="margin-top:3rem;text-align:center;">
-                  <h2 style="font-size:1.25rem;margin-bottom:1rem;">Install via Homebrew</h2>
-                  <div style="display:inline-block;padding:1rem 2rem;border-radius:8px;background:var(--mantle);border:1px solid var(--surface0);">
-                    <code style="color:var(--lavender);font-family:ui-monospace,monospace;font-size:0.9rem;">brew tap salp2403/tap && brew install --cask cocxy</code>
-                  </div>
-                  <p style="color:var(--subtext0);font-size:0.85rem;margin-top:0.75rem;">Update: <code style="color:var(--lavender);font-family:ui-monospace,monospace;font-size:0.85rem;">brew update &amp;&amp; brew upgrade --cask cocxy</code></p>
                 </div>
               </section>
             </main>
             <footer class="site-footer" role="contentinfo">
-              <div class="container">
-                <div class="footer-content">
+              <div class="container footer-grid">
                   <div class="footer-brand"><img src="/images/icon.png" alt="" width="24" height="24"><span>Cocxy Terminal</span></div>
                   <div class="footer-links">
                     <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
@@ -778,9 +771,9 @@ jobs:
                     <a href="/es/releases.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
                   </div>
                   <p class="footer-credit">Made by Said Arturo Lopez</p>
-                </div>
               </div>
             </footer>
+            <script src="/js/main.js" defer></script>
           </body>
           </html>"""
 
@@ -788,9 +781,25 @@ jobs:
           print(f"Generated releases page with {len(releases)} entries ({PER_PAGE} visible, rest paginated)")
           PYEOF
 
+          # Keep tag-triggered releases and manual website deploys on the
+          # same releases-page generator. The inline Python above is retained
+          # for continuity with older release runs, but this shared generator
+          # is the source of truth for the redesigned EN/ES pages.
+          mkdir -p build/es
+          node web/scripts/generate-releases-page.mjs \
+            --version "$VERSION" \
+            --locale en \
+            --output build/releases.html
+          node web/scripts/generate-releases-page.mjs \
+            --version "$VERSION" \
+            --locale es \
+            --output build/es/releases.html
+
           # Deploy releases page and getting-started docs
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
             build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html
 
           # Deploy getting-started page from repo
           if [ -f web/public/getting-started.html ]; then
@@ -804,31 +813,27 @@ jobs:
           # Match the regex [0-9]*\.[0-9]*\.[0-9]* so any prior version also gets replaced.
           ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
             "set -e; \
-             sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}index.html; \
-             sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}index.html; \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}index.html; \
-             sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}getting-started.html; \
-             if [ -f ${DEPLOY_PATH}features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}features.html; fi; \
-             if [ -f ${DEPLOY_PATH}channels.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}channels.html; fi; \
-             if [ -f ${DEPLOY_PATH}faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}faq.html; fi; \
-             if [ -f ${DEPLOY_PATH}press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}press.html; fi; \
-             if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}releases.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/index.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g' ${DEPLOY_PATH}es/releases.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g' ${DEPLOY_PATH}es/index.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/index.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/getting-started.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/getting-started.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/features.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/features.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/channels.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/channels.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/faq.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/faq.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/press.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/press.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g' ${DEPLOY_PATH}es/releases.html; fi; \
-             sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}index.html; \
-             if [ -f ${DEPLOY_PATH}press.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}press.html; fi; \
-             if [ -f ${DEPLOY_PATH}releases.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}releases.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/index.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/index.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/press.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/press.html; fi; \
-             if [ -f ${DEPLOY_PATH}es/releases.html ]; then sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g' ${DEPLOY_PATH}es/releases.html; fi"
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'"
+
+          # Deploy the Express runtime too. The redesigned site relies on
+          # server.js for redirects, CSP, and security headers; static assets
+          # alone are not enough for a correct production deploy.
+          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
+            ${DEPLOY_TARGET}:${DEPLOY_PATH}
+          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+            "set -e; \
+             cd ${DEPLOY_PATH}; \
+             npm ci --omit=dev --no-audit --no-fund; \
+             if pm2 describe cocxy-web >/dev/null 2>&1; then \
+               pm2 reload cocxy-web --update-env; \
+             else \
+               pm2 start ecosystem.config.js --only cocxy-web; \
+             fi; \
+             pm2 save"
 
           rm /tmp/deploy_key
           echo "Website deployed to cocxy.dev"

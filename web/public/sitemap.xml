@@ -1,14 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xmlns:xhtml="http://www.w3.org/1999/xhtml"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9 http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://cocxy.dev/</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/"/>
-    <lastmod>2026-05-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -17,7 +13,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/"/>
-    <lastmod>2026-05-06</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -26,35 +21,271 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features.html"/>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://cocxy.dev/es/features.html</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features.html"/>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
-  </url>
-  <url>
-    <loc>https://cocxy.dev/getting-started.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/getting-started.html"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/getting-started.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/getting-started.html"/>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>weekly</changefreq>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://cocxy.dev/es/getting-started.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/getting-started.html"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/getting-started.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/getting-started.html"/>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>weekly</changefreq>
+    <loc>https://cocxy.dev/features/agents.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/agents.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/agents.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/agents.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/vault.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/vault.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/vault.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/vault.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/vault.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/vault.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/vault.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/vault.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/code-review.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/code-review.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/code-review.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/code-review.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/code-review.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/code-review.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/code-review.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/code-review.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/markdown.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/markdown.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/markdown.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/markdown.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/markdown.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/markdown.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/markdown.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/markdown.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/github.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/github.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/github.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/github.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/github.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/github.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/github.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/github.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/browser.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/browser.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/browser.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/browser.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/browser.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/browser.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/browser.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/browser.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/remote.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/remote.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/remote.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/remote.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/remote.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/remote.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/remote.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/remote.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/gpu.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/gpu.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/gpu.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/gpu.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/gpu.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/gpu.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/gpu.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/gpu.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/cli.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/cli.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/cli.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/cli.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/cli.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/cli.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/cli.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/cli.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/shell.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/shell.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/shell.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/shell.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/shell.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/shell.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/shell.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/shell.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/plugins.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/plugins.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/plugins.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/plugins.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/plugins.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/plugins.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/plugins.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/plugins.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/features/zero-telemetry.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/zero-telemetry.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/zero-telemetry.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/zero-telemetry.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/features/zero-telemetry.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/features/zero-telemetry.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/features/zero-telemetry.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/features/zero-telemetry.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/privacy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/privacy.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/privacy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/privacy.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/security.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/security.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/security.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/security.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/security.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/security.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/security.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/security.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/architecture.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/architecture.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/architecture.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/architecture.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/architecture.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/architecture.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/architecture.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/architecture.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/why-cocxy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/why-cocxy.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/why-cocxy.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/why-cocxy.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/why-cocxy.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/why-cocxy.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/why-cocxy.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/why-cocxy.html"/>
+    <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
@@ -62,7 +293,6 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/faq.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/faq.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/faq.html"/>
-    <lastmod>2026-05-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -71,62 +301,295 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/faq.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/faq.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/faq.html"/>
-    <lastmod>2026-05-06</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
-  </url>
-  <url>
-    <loc>https://cocxy.dev/releases.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html"/>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
-  </url>
-  <url>
-    <loc>https://cocxy.dev/es/releases.html</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html"/>
-    <lastmod>2026-05-06</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://cocxy.dev/channels.html</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/channels.html"/>
-    <lastmod>2026-05-11</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://cocxy.dev/es/channels.html</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/channels.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/channels.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/channels.html"/>
-    <lastmod>2026-05-11</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://cocxy.dev/press.html</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/press.html"/>
-    <lastmod>2026-05-07</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.8</priority>
   </url>
   <url>
     <loc>https://cocxy.dev/es/press.html</loc>
     <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/press.html"/>
     <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/press.html"/>
-    <lastmod>2026-05-07</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/roadmap.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/roadmap.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/roadmap.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/roadmap.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/roadmap.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/roadmap.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/roadmap.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/roadmap.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/sponsors.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/sponsors.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/sponsors.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/sponsors.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/sponsors.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/sponsors.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/sponsors.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/sponsors.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/agents.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/agents.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/agents.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/agents.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/agents.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/install.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/install.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/install.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/install.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/install.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/install.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/install.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/install.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/first-run.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/first-run.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/first-run.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/first-run.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/first-run.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/first-run.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/first-run.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/first-run.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/configuration.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/configuration.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/configuration.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/configuration.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/configuration.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/configuration.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/configuration.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/configuration.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/agents-setup.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/agents-setup.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/agents-setup.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/agents-setup.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/agents-setup.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/agents-setup.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/agents-setup.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/agents-setup.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/shortcuts.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/shortcuts.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/shortcuts.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/shortcuts.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/shortcuts.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/shortcuts.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/shortcuts.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/shortcuts.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/cli-reference.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/cli-reference.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/cli-reference.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/cli-reference.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/cli-reference.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/cli-reference.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/cli-reference.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/cli-reference.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/plugins-dev.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/plugins-dev.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/plugins-dev.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/plugins-dev.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/plugins-dev.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/plugins-dev.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/plugins-dev.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/plugins-dev.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/ssh-remote.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/ssh-remote.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/ssh-remote.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/ssh-remote.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/ssh-remote.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/ssh-remote.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/ssh-remote.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/ssh-remote.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/markdown-guide.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/markdown-guide.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/markdown-guide.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/markdown-guide.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/markdown-guide.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/markdown-guide.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/markdown-guide.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/markdown-guide.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/release-channels.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/release-channels.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/release-channels.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/release-channels.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/release-channels.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/release-channels.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/release-channels.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/release-channels.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/docs/troubleshooting.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/troubleshooting.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/troubleshooting.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/troubleshooting.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/docs/troubleshooting.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/docs/troubleshooting.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/docs/troubleshooting.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/docs/troubleshooting.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/releases.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://cocxy.dev/es/releases.html</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://cocxy.dev/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://cocxy.dev/es/releases.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://cocxy.dev/releases.html"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
   </url>
 </urlset>

@@ -2,1552 +2,212 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Documentation — Cocxy Terminal</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Cocxy Terminal documentation. Installation, configuration, keyboard shortcuts, agent detection, code review panel, Markdown workspace, remote workspaces, CLI reference, and more.">
-  <meta name="keywords" content="Cocxy docs, macOS terminal docs, AI agent detection, agent code review, Markdown workspace, SSH terminal, CLI reference, keyboard shortcuts">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>First Run - Cocxy Terminal</title>
+  <meta name="description" content="This guide moved into the documentation hub.">
   <meta name="author" content="Said Arturo Lopez">
-  <meta name="robots" content="index, follow">
-  <meta property="og:type" content="article">
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large">
+  <meta name="theme-color" content="#101018">
+  <meta property="og:type" content="website">
   <meta property="og:site_name" content="Cocxy Terminal">
-  <meta property="og:title" content="Documentation — Cocxy Terminal">
-  <meta property="og:description" content="Installation, configuration, shortcuts, agent detection, code review panel, Markdown workspace, CLI reference, and troubleshooting.">
+  <meta property="og:title" content="First Run - Cocxy Terminal">
+  <meta property="og:description" content="This guide moved into the documentation hub.">
   <meta property="og:url" content="https://cocxy.dev/getting-started.html">
-  <meta property="og:image" content="https://cocxy.dev/images/og-image.png">
+  <meta property="og:image" content="https://cocxy.dev/og/og-getting-started.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Cocxy Terminal documentation">
+  <meta property="og:image:alt" content="First Run - Cocxy Terminal">
   <meta property="og:locale" content="en_US">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:site" content="@cocxyterminal">
-  <meta name="twitter:title" content="Documentation — Cocxy Terminal">
-  <meta name="twitter:description" content="Installation, configuration, shortcuts, agent detection, code review, Markdown workspace, CLI, and troubleshooting.">
-  <meta name="twitter:image" content="https://cocxy.dev/images/og-image.png">
+  <meta name="twitter:title" content="First Run - Cocxy Terminal">
+  <meta name="twitter:description" content="This guide moved into the documentation hub.">
+  <meta name="twitter:image" content="https://cocxy.dev/og/og-getting-started.png">
   <link rel="canonical" href="https://cocxy.dev/getting-started.html">
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/getting-started.html">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/getting-started.html">
   <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/getting-started.html">
   <link rel="icon" type="image/png" href="/images/icon.png">
   <link rel="apple-touch-icon" href="/images/icon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
+  <link rel="preload" as="image" href="/images/cocxy-preview.avif" type="image/avif" fetchpriority="high">
   <link rel="stylesheet" href="/css/style.css?v=0.0.0">
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "BreadcrumbList",
-    "itemListElement": [
-      {"@type": "ListItem", "position": 1, "name": "Home", "item": "https://cocxy.dev/"},
-      {"@type": "ListItem", "position": 2, "name": "Documentation", "item": "https://cocxy.dev/getting-started.html"}
-    ]
-  }
+  <script>
+  (() => {
+    try {
+      const saved = localStorage.getItem('cocxy-theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+    } catch (_) {}
+  })();
   </script>
   <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@type": "TechArticle",
-    "headline": "Cocxy Terminal Documentation",
-    "description": "Complete guide to installing, configuring, and using Cocxy Terminal on macOS.",
-    "author": {"@type": "Person", "name": "Said Arturo Lopez"},
-    "publisher": {"@type": "Organization", "name": "Cocxy", "logo": {"@type": "ImageObject", "url": "https://cocxy.dev/images/icon.png"}},
-    "inLanguage": "en-US",
-    "url": "https://cocxy.dev/getting-started.html"
-  }
+{
+  "@context": "https://schema.org",
+  "@type": "BreadcrumbList",
+  "itemListElement": [
+    {
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Home",
+      "item": "https://cocxy.dev/"
+    },
+    {
+      "@type": "ListItem",
+      "position": 2,
+      "name": "First Run",
+      "item": "https://cocxy.dev/getting-started.html"
+    }
+  ]
+}
   </script>
-  <style>
-    /* ===== Docs Layout ===== */
-    body { background: var(--bg-deep); }
-
-    .docs-layout {
-      display: flex;
-      min-height: 100vh;
-      padding-top: 3.5rem;
-    }
-
-    /* ===== Sidebar ===== */
-    .docs-sidebar {
-      position: fixed;
-      top: 3.5rem;
-      left: 0;
-      bottom: 0;
-      width: 260px;
-      background: rgba(17, 17, 27, 0.6);
-      border-right: 1px solid rgba(49, 50, 68, 0.4);
-      overflow-y: auto;
-      padding: 1.5rem 0 2rem;
-      z-index: 50;
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      transition: transform 0.3s var(--ease);
-    }
-
-    .docs-sidebar::-webkit-scrollbar { width: 4px; }
-    .docs-sidebar::-webkit-scrollbar-track { background: transparent; }
-    .docs-sidebar::-webkit-scrollbar-thumb { background: var(--surface1); border-radius: 2px; }
-
-    .sidebar-group { margin-bottom: 1.75rem; padding: 0 1rem; }
-
-    .sidebar-group h3 {
-      font-size: 0.7rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--overlay0);
-      margin-bottom: 0.5rem;
-      padding: 0 0.75rem;
-      font-weight: 600;
-    }
-
-    .sidebar-link {
-      display: block;
-      padding: 0.4rem 0.75rem;
-      font-size: 0.85rem;
-      color: var(--subtext0) !important;
-      border-radius: 6px;
-      transition: all 0.15s ease;
-      border-left: 2px solid transparent;
-    }
-
-    .sidebar-link:hover {
-      color: var(--text) !important;
-      background: rgba(49, 50, 68, 0.4);
-    }
-
-    .sidebar-link.active {
-      color: var(--text) !important;
-      background: rgba(49, 50, 68, 0.5);
-      border-left-color: var(--lavender);
-    }
-
-    .sidebar-link.sub {
-      padding-left: 1.5rem;
-      font-size: 0.8rem;
-    }
-
-    /* Active nav link */
-    .nav-links .nav-active { color: var(--text) !important; }
-
-    /* Mobile sidebar toggle */
-    .docs-menu-btn {
-      display: none;
-      background: none;
-      border: none;
-      color: var(--subtext0);
-      cursor: pointer;
-      padding: 4px;
-      margin-right: 8px;
-      border-radius: 4px;
-      transition: color 0.15s;
-    }
-
-    .docs-menu-btn:hover { color: var(--text); }
-
-    .docs-menu-btn svg {
-      display: block;
-      width: 20px;
-      height: 20px;
-    }
-
-    .docs-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0, 0, 0, 0.5);
-      z-index: 40;
-    }
-
-    .docs-overlay.visible { display: block; }
-
-    /* ===== Content ===== */
-    .docs-content {
-      margin-left: 260px;
-      padding: 3rem 3.5rem 4rem;
-      max-width: 860px;
-      width: 100%;
-      line-height: 1.75;
-    }
-
-    .docs-content h1 {
-      font-size: 2.25rem;
-      font-weight: 700;
-      letter-spacing: -0.03em;
-      margin-bottom: 0.5rem;
-      background: linear-gradient(135deg, var(--text), var(--lavender));
-      -webkit-background-clip: text;
-      background-clip: text;
-      -webkit-text-fill-color: transparent;
-    }
-
-    .docs-content > p:first-of-type {
-      font-size: 1.05rem;
-      color: var(--subtext0);
-      margin-bottom: 2rem;
-    }
-
-    .docs-content h2 {
-      font-size: 1.5rem;
-      font-weight: 600;
-      letter-spacing: -0.02em;
-      margin: 3.5rem 0 1.25rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid rgba(49, 50, 68, 0.4);
-      scroll-margin-top: 5rem;
-    }
-
-    .docs-content h2:first-of-type { border-top: none; margin-top: 2rem; }
-
-    .docs-content h3 {
-      font-size: 1.1rem;
-      font-weight: 600;
-      margin: 2rem 0 0.75rem;
-      color: var(--subtext1);
-      scroll-margin-top: 5rem;
-    }
-
-    .docs-content p {
-      margin-bottom: 1rem;
-      color: var(--subtext1);
-    }
-
-    .docs-content ul,
-    .docs-content ol {
-      margin: 0 0 1.25rem 1.5rem;
-      color: var(--subtext1);
-    }
-
-    .docs-content li { margin-bottom: 0.4rem; }
-
-    .docs-content strong { color: var(--text); }
-
-    .docs-content > a { color: var(--blue); }
-    .docs-content > a:hover { color: var(--lavender); }
-    .docs-content p a { color: var(--blue); }
-    .docs-content p a:hover { color: var(--lavender); }
-    .docs-content li a { color: var(--blue); }
-    .docs-content li a:hover { color: var(--lavender); }
-
-    .docs-content code {
-      font-family: var(--font-mono);
-      font-size: 0.85em;
-      background: rgba(49, 50, 68, 0.5);
-      padding: 0.15em 0.4em;
-      border-radius: 4px;
-      color: var(--peach);
-    }
-
-    /* ===== Code Blocks ===== */
-    .code-wrap {
-      position: relative;
-      margin: 1rem 0 1.5rem;
-    }
-
-    .code-wrap pre {
-      background: var(--crust);
-      border: 1px solid rgba(49, 50, 68, 0.5);
-      border-radius: 10px;
-      padding: 1.1rem 1.25rem;
-      overflow-x: auto;
-      font-family: var(--font-mono);
-      font-size: 0.85rem;
-      line-height: 1.65;
-      color: var(--text);
-      margin: 0;
-    }
-
-    .code-wrap pre code {
-      background: none;
-      padding: 0;
-      color: inherit;
-      font-size: inherit;
-    }
-
-    .code-wrap .copy-btn {
-      position: absolute;
-      top: 8px;
-      right: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      background: rgba(49, 50, 68, 0.6);
-      border: 1px solid rgba(69, 71, 90, 0.4);
-      border-radius: 6px;
-      color: var(--overlay0);
-      cursor: pointer;
-      opacity: 0;
-      transition: all 0.2s ease;
-    }
-
-    .code-wrap:hover .copy-btn { opacity: 1; }
-
-    .code-wrap .copy-btn:hover {
-      color: var(--text);
-      background: rgba(49, 50, 68, 0.9);
-      border-color: var(--surface1);
-    }
-
-    .code-wrap .copy-btn.copied { color: var(--green); }
-
-    /* ===== Tables ===== */
-    .docs-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 1rem 0 1.5rem;
-      font-size: 0.875rem;
-    }
-
-    .docs-table th {
-      text-align: left;
-      padding: 0.65rem 0.85rem;
-      background: rgba(49, 50, 68, 0.5);
-      color: var(--subtext1);
-      font-weight: 600;
-      border-bottom: 1px solid var(--surface1);
-    }
-
-    .docs-table th:first-child { border-radius: 6px 0 0 0; }
-    .docs-table th:last-child { border-radius: 0 6px 0 0; }
-
-    .docs-table td {
-      padding: 0.65rem 0.85rem;
-      border-bottom: 1px solid rgba(49, 50, 68, 0.4);
-      color: var(--subtext0);
-    }
-
-    .docs-table tr:hover td {
-      background: rgba(49, 50, 68, 0.15);
-    }
-
-    .docs-table td code { font-size: 0.8rem; }
-
-    /* ===== Callouts ===== */
-    .callout {
-      background: rgba(49, 50, 68, 0.3);
-      border-left: 3px solid var(--blue);
-      border-radius: 0 10px 10px 0;
-      padding: 1rem 1.25rem;
-      margin: 1rem 0 1.5rem;
-    }
-
-    .callout.warn { border-left-color: var(--yellow); }
-
-    .callout p {
-      margin: 0;
-      font-size: 0.9rem;
-    }
-
-    .callout strong { color: var(--blue); }
-    .callout.warn strong { color: var(--yellow); }
-
-    /* ===== Keyboard Badges ===== */
-    kbd {
-      display: inline-block;
-      background: rgba(49, 50, 68, 0.5);
-      border: 1px solid var(--surface1);
-      border-radius: 5px;
-      padding: 0.1em 0.5em;
-      font-family: var(--font-mono);
-      font-size: 0.78em;
-      color: var(--subtext1);
-      line-height: 1.5;
-      box-shadow: 0 1px 0 var(--surface1);
-    }
-
-    /* ===== Screenshots ===== */
-    .screenshot-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 1rem;
-      margin: 1.25rem 0 2rem;
-    }
-
-    .screenshot-card {
-      margin: 0;
-      overflow: hidden;
-      border: 1px solid rgba(69, 71, 90, 0.55);
-      border-radius: 14px;
-      background: rgba(17, 17, 27, 0.72);
-      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.24);
-    }
-
-    .screenshot-card.wide { grid-column: 1 / -1; }
-
-    .screenshot-card img {
-      display: block;
-      width: 100%;
-      height: auto;
-      background: var(--crust);
-    }
-
-    .screenshot-card figcaption {
-      padding: 0.85rem 1rem 1rem;
-      color: var(--subtext0);
-      font-size: 0.88rem;
-      line-height: 1.55;
-      border-top: 1px solid rgba(69, 71, 90, 0.35);
-    }
-
-    .screenshot-card figcaption strong {
-      display: block;
-      margin-bottom: 0.15rem;
-      color: var(--text);
-      font-size: 0.92rem;
-    }
-
-    /* ===== Back to top ===== */
-    .back-to-top {
-      position: fixed;
-      bottom: 2rem;
-      right: 2rem;
-      width: 40px;
-      height: 40px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(49, 50, 68, 0.7);
-      border: 1px solid var(--surface1);
-      border-radius: 10px;
-      color: var(--subtext0);
-      cursor: pointer;
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s ease;
-      z-index: 30;
-      backdrop-filter: blur(8px);
-      -webkit-backdrop-filter: blur(8px);
-    }
-
-    .back-to-top.visible { opacity: 1; visibility: visible; }
-    .back-to-top:hover { color: var(--text); background: rgba(49, 50, 68, 0.95); transform: translateY(-2px); }
-
-    /* ===== Responsive ===== */
-    @media (max-width: 900px) {
-      .docs-menu-btn { display: flex; }
-
-      .docs-sidebar {
-        transform: translateX(-100%);
-        z-index: 60;
-        background: var(--crust);
-        backdrop-filter: none;
-      }
-
-      .docs-sidebar.open { transform: translateX(0); }
-
-      .docs-content {
-        margin-left: 0;
-        padding: 2.5rem 1.5rem 3rem;
-      }
-
-      .screenshot-grid { grid-template-columns: 1fr; }
-      .screenshot-card.wide { grid-column: auto; }
-    }
-
-    @media (max-width: 480px) {
-      .docs-content h1 { font-size: 1.75rem; }
-      .docs-content h2 { font-size: 1.25rem; }
-      .docs-content { padding: 2rem 1rem 3rem; }
-    }
-
-    /* ===== Print ===== */
-    @media print {
-      .docs-sidebar, .site-header, .site-footer, .back-to-top, .copy-btn, .docs-menu-btn { display: none !important; }
-      .docs-content { margin-left: 0; max-width: 100%; }
-      body { background: #fff; color: #000; }
-    }
-  </style>
 </head>
 <body>
-
-<!-- Header (shared with site) -->
-<header class="site-header" role="banner">
-  <nav class="nav" aria-label="Main navigation">
-    <div style="display:flex;align-items:center;">
-      <button class="docs-menu-btn" id="menuBtn" aria-label="Toggle navigation">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/>
-        </svg>
+<a class="skip-link" href="#main">Skip to main content</a>
+<header class="site-header">
+  <nav class="nav container" aria-label="Main navigation">
+    <a class="nav-logo" href="/" aria-label="Cocxy Terminal">
+      <img src="/images/icon.png" width="32" height="32" alt="">
+      <span>Cocxy</span>
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
+      <span></span><span></span><span></span>
+      <span class="sr-only">Open navigation</span>
+    </button>
+    <div class="nav-links" id="site-menu">
+      <a  href="/features.html">Features</a>
+      <a  href="/features/agents.html">Agents</a>
+      <a  href="/privacy.html">Privacy</a>
+      <a  href="/security.html">Security</a>
+      <a aria-current="page" href="/docs/">Docs</a>
+      <a class="nav-cta" href="/#download">Download</a>
+      <button class="theme-toggle" type="button" aria-label="Toggle theme" title="Toggle theme">
+        <span class="theme-toggle__sun" aria-hidden="true">☀</span>
+        <span class="theme-toggle__moon" aria-hidden="true">◐</span>
       </button>
-      <a href="/" class="nav-logo" aria-label="Cocxy Terminal home">
-        <img src="/images/icon.png" alt="" width="28" height="28">
-        <span>Cocxy</span>
-      </a>
-    </div>
-    <div class="nav-links">
-      <a href="/#features">Features</a>
-      <a href="/releases.html">Releases</a>
-      <a href="/getting-started.html" class="nav-active">Docs</a>
-      <a href="/#download">Download</a>
-      <a href="/es/getting-started.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
+      <a href="/es/getting-started.html" hreflang="es" lang="es">Español</a>
       <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
   </nav>
 </header>
-
-<!-- Mobile overlay -->
-<div class="docs-overlay" id="sidebarOverlay"></div>
-
-<!-- Layout -->
-<div class="docs-layout">
-
-  <!-- Sidebar -->
-  <aside class="docs-sidebar" id="sidebar">
-    <div class="sidebar-group">
-      <a href="#getting-started" class="sidebar-link active">Getting Started</a>
-      <a href="#visual-tour" class="sidebar-link">Visual Tour</a>
-      <a href="#concepts" class="sidebar-link">Concepts</a>
-      <a href="#configuration" class="sidebar-link">Configuration</a>
-      <a href="#keyboard-shortcuts" class="sidebar-link">Keyboard Shortcuts</a>
-    </div>
-    <div class="sidebar-group">
-      <h3>Features</h3>
-      <a href="#agent-detection" class="sidebar-link">Agent Detection</a>
-      <a href="#code-review" class="sidebar-link">Code Review Panel</a>
-      <a href="#markdown" class="sidebar-link">Markdown Workspace</a>
-      <a href="#quicklook" class="sidebar-link">QuickLook Extension</a>
-      <a href="#browser" class="sidebar-link">Browser</a>
-      <a href="#remote-workspaces" class="sidebar-link">Remote Workspaces</a>
-      <a href="#web-terminal" class="sidebar-link">Web Terminal</a>
-      <a href="#shell-integration" class="sidebar-link">Shell Integration</a>
-      <a href="#per-project-config" class="sidebar-link">Per-Project Config</a>
-      <a href="#applescript" class="sidebar-link">AppleScript</a>
-      <a href="#plugin-system" class="sidebar-link">Plugin System</a>
-      <a href="#splits" class="sidebar-link">Splits</a>
-      <a href="#quick-terminal" class="sidebar-link">Quick Terminal</a>
-      <a href="#notifications" class="sidebar-link">Notifications</a>
-      <a href="#command-palette" class="sidebar-link">Command Palette</a>
-      <a href="#sessions" class="sidebar-link">Sessions</a>
-      <a href="#local-backups" class="sidebar-link">Local Backups</a>
-      <a href="#input-classifier" class="sidebar-link">Input Classifier</a>
-      <a href="#command-signatures" class="sidebar-link">Command Signatures</a>
-      <a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a>
-      <a href="#command-corrections" class="sidebar-link">Command Corrections</a>
-    </div>
-    <div class="sidebar-group">
-      <h3>Agent Integrations</h3>
-      <a href="#agent-bundled" class="sidebar-link sub">Bundled Profiles</a>
-      <a href="#agent-custom" class="sidebar-link sub">Custom Agents</a>
-    </div>
-    <div class="sidebar-group">
-      <h3>Reference</h3>
-      <a href="#cli-companion" class="sidebar-link">CLI Companion</a>
-      <a href="#themes" class="sidebar-link">Themes</a>
-      <a href="#agents-toml" class="sidebar-link">agents.toml</a>
-      <a href="#migration-guide" class="sidebar-link">Migration Guide</a>
-      <a href="#troubleshooting" class="sidebar-link">Troubleshooting</a>
-    </div>
-  </aside>
-
-  <!-- Content -->
-  <main class="docs-content">
-
-    <!-- Getting Started -->
-    <h1 id="getting-started">Getting Started</h1>
-    <p>Cocxy Terminal is a native macOS terminal built for AI agent workflows. Zero telemetry, GPU-accelerated rendering, an inline agent code review panel, a full native Markdown workspace, and bundled local profiles for common coding-agent CLIs.</p>
-
-    <h3>System Requirements</h3>
-    <ul>
-      <li>macOS 14.0 (Sonoma) or later</li>
-      <li>Apple Silicon or Intel Mac</li>
-      <li>~60 MB disk space</li>
-    </ul>
-
-    <h3>Install via Homebrew (recommended)</h3>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>brew tap salp2403/tap && brew install --cask cocxy</code></pre>
-    </div>
-    <p>To update later:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>brew update && brew upgrade --cask cocxy</code></pre>
-    </div>
-
-    <h3>Install via DMG</h3>
-    <ol>
-      <li>Download the latest DMG from <a href="https://github.com/salp2403/cocxy-terminal/releases/latest">GitHub Releases</a></li>
-      <li>Open the DMG and drag <strong>Cocxy Terminal</strong> to <code>/Applications</code></li>
-      <li>Launch from Spotlight or Launchpad</li>
-    </ol>
-
-    <div class="callout">
-      <p><strong>Note:</strong> The app is signed and notarized by Apple. If macOS still shows a warning on first launch, right-click the app and select "Open".</p>
-    </div>
-
-    <h3>First Launch</h3>
-    <p>On first launch, Cocxy creates its configuration directory at <code>~/.config/cocxy/</code> with sensible defaults. A welcome overlay introduces the key features. You can dismiss it with <kbd>Esc</kbd> and bring it back from the Help menu.</p>
-
-    <!-- Visual Tour -->
-    <h2 id="visual-tour">Visual Tour</h2>
-    <p>These screenshots were captured from Cocxy running against a local demo workspace, with the Aurora sidebar, split panes, dashboard, browser, command palette, and Preferences visible in real app state.</p>
-
-    <div class="screenshot-grid">
-      <figure class="screenshot-card">
-        <img src="/images/getting-started-sidebar.png" alt="Cocxy Aurora workspace sidebar showing project sessions and tab status" loading="lazy" decoding="async">
-        <figcaption><strong>Aurora sidebar</strong> Workspaces group sessions by project and show tab state, pane count, and close controls without leaving the terminal.</figcaption>
-      </figure>
-
-      <figure class="screenshot-card">
-        <img src="/images/getting-started-command-palette.png" alt="Cocxy command palette listing searchable actions and keyboard shortcuts" loading="lazy" decoding="async">
-        <figcaption><strong>Command palette</strong> Search actions, see shortcuts, and jump to browser, split, theme, and dashboard controls from the keyboard.</figcaption>
-      </figure>
-
-      <figure class="screenshot-card wide">
-        <img src="/images/getting-started-dashboard.png" alt="Cocxy agent dashboard tracking an active agent session and touched file" loading="lazy" decoding="async">
-        <figcaption><strong>Agent dashboard</strong> Live hook events summarize active agents, touched files, tool calls, errors, and the current window scope.</figcaption>
-      </figure>
-
-      <figure class="screenshot-card">
-        <img src="/images/getting-started-splits.png" alt="Cocxy split panes showing two terminal sessions in one tab" loading="lazy" decoding="async">
-        <figcaption><strong>Split panes</strong> Run multiple shells or panels side by side inside the same tab, then navigate between focused panes.</figcaption>
-      </figure>
-
-      <figure class="screenshot-card">
-        <img src="/images/getting-started-browser.png" alt="Cocxy browser panel open next to terminal panes with a local demo server" loading="lazy" decoding="async">
-        <figcaption><strong>Browser panel</strong> Preview local development servers next to your terminal and keep port chips visible in the status bar.</figcaption>
-      </figure>
-
-      <figure class="screenshot-card wide">
-        <img src="/images/getting-started-preferences.png" alt="Cocxy Preferences window with shell path, working directory, and sidebar categories" loading="lazy" decoding="async">
-        <figcaption><strong>Preferences</strong> Configure shell, appearance, keybindings, notifications, terminal behavior, and agent detection from the native settings window.</figcaption>
-      </figure>
-    </div>
-
-    <!-- Concepts -->
-    <h2 id="concepts">Concepts</h2>
-
-    <h3>Workspaces</h3>
-    <p>The vertical sidebar on the left is your workspace. Each entry is a <strong>tab</strong> with its own terminal session. Tabs show the current directory, git branch, and agent state in real time.</p>
-
-    <h3>Agent Detection</h3>
-    <p>Cocxy automatically detects AI agents running in your terminal. When a configured local agent profile matches a launch command, hook event, OSC marker, or output pattern, the tab indicator changes to show the agent's state: launching, working, waiting for input, finished, or error.</p>
-
-    <h3>Splits</h3>
-    <p>Any tab can be split horizontally or vertically to show multiple terminal sessions or panels (browser, markdown preview) side by side.</p>
-
-    <h3>Zero Telemetry</h3>
-    <p>Cocxy has no telemetry pipeline, no analytics SDK, no automatic crash upload, and no tracking. Network use exists for signed updates and explicit user actions such as browser sessions, remotes, GitHub CLI operations, plugins, or tools you run yourself. Terminal activity is not uploaded to a Cocxy backend.</p>
-
-    <h3>Local Input Classification</h3>
-    <p>The input classifier runs on this Mac before execution. It distinguishes <code>shell-command</code>, <code>natural-language</code>, <code>dangerous-command</code>, empty input, and unknown text so Cocxy can warn on destructive commands and offer agent routing without changing the default shell flow.</p>
-
-    <!-- Configuration -->
-    <h2 id="configuration">Configuration</h2>
-    <p>Cocxy is configured via TOML files in <code>~/.config/cocxy/</code>. Changes are detected automatically within one second.</p>
-
-    <h3>config.toml</h3>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code># ~/.config/cocxy/config.toml
-
-[general]
-shell = "/bin/zsh"
-working-directory = "~"
-confirm-close-process = true
-
-[appearance]
-theme = "catppuccin-mocha"
-font-family = "JetBrainsMono Nerd Font"
-font-size = 14.0
-tab-position = "left"            # "left", "top", "hidden"
-window-padding = 8.0
-background-opacity = 1.0         # 0.1 - 1.0
-background-blur-radius = 0.0     # 0 - 100
-
-[terminal]
-scrollback-lines = 10000
-cursor-style = "bar"             # "block", "bar", "underline"
-cursor-blink = true
-copy-on-select = true
-clipboard-paste-protection = true
-
-[agent-detection]
-enabled = true
-osc-notifications = true
-pattern-matching = true
-timing-heuristics = true
-idle-timeout-seconds = 5
-
-[input-classifier]
-enabled = true
+<main id="main">
+<section class="page-hero"><div class="container">
+    <p class="eyebrow">Moved</p>
+    <h1>First Run now lives in Docs</h1>
+    <p>The server redirects this URL to the new guide so existing links keep working.</p>
+  </div></section><section class="section"><div class="container"><a class="button button-primary" href="/docs/first-run.html">Open guide</a></div></section><section class="section"><div class="container docs-layout">
+  <nav class="toc" aria-label="First run contents"><strong>Contents</strong><a href="#install" class="sidebar-link">Install</a><a href="#visual-tour" class="sidebar-link">Visual Tour</a><a href="#concepts" class="sidebar-link">Concepts</a><a href="#configuration" class="sidebar-link">Configuration</a><a href="#keyboard-shortcuts" class="sidebar-link">Keyboard Shortcuts</a><a href="#agent-detection" class="sidebar-link">Agent Detection</a><a href="#code-review" class="sidebar-link">Code Review</a><a href="#markdown" class="sidebar-link">Markdown</a><a href="#quicklook" class="sidebar-link">Quick Look</a><a href="#browser" class="sidebar-link">Browser</a><a href="#remote-workspaces" class="sidebar-link">Remote Workspaces</a><a href="#web-terminal" class="sidebar-link">Web Terminal</a><a href="#shell-integration" class="sidebar-link">Shell Integration</a><a href="#per-project-config" class="sidebar-link">Per-project Config</a><a href="#applescript" class="sidebar-link">AppleScript</a><a href="#plugin-system" class="sidebar-link">Plugin System</a><a href="#splits" class="sidebar-link">Splits</a><a href="#quick-terminal" class="sidebar-link">Quick Terminal</a><a href="#notifications" class="sidebar-link">Notifications</a><a href="#command-palette" class="sidebar-link">Command Palette</a><a href="#sessions" class="sidebar-link">Sessions</a><a href="#local-backups" class="sidebar-link">Local Backups</a><a href="#input-classifier" class="sidebar-link">Input Classifier</a><a href="#command-signatures" class="sidebar-link">Command Signatures</a><a href="#sandbox-controls" class="sidebar-link">Sandbox Controls</a><a href="#command-corrections" class="sidebar-link">Command Corrections</a><a href="#cli-companion" class="sidebar-link">CLI Companion</a><a href="#themes" class="sidebar-link">Themes</a><a href="#agents-toml" class="sidebar-link">agents.toml</a><a href="#migration-guide" class="sidebar-link">Migration Guide</a><a href="#troubleshooting" class="sidebar-link">Troubleshooting</a></nav>
+  <article class="prose">
+    <h2 id="install">Install</h2><p>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</p>
+<h2 id="visual-tour">Visual Tour</h2><p>Open the sidebar, browser, and Vault to confirm local state.</p>
+<h2 id="concepts">Concepts</h2><p>Tabs, panes, sessions, agents, and Vault live on your Mac.</p>
+<h2 id="configuration">Configuration</h2><p>.cocxy.toml controls themes, hooks, agents, and security per project.</p>
+<h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2><p>Use the command palette to discover actions without memorizing shortcuts.</p>
+<h2 id="agent-detection">Agent Detection</h2><p>cocxy setup-hooks installs local hooks and cocxy status verifies state.</p>
+<h2 id="code-review">Code Review</h2><p>Review diffs, inline comments, and changes before returning feedback.</p>
+<h2 id="markdown">Markdown</h2><p>Open documents, preview, and export without leaving the local workspace.</p>
+<h2 id="quicklook">Quick Look</h2><p>Preview content offline with sanitization.</p>
+<h2 id="browser">Browser</h2><p>Use the built-in browser for localhost, docs, and web apps.</p>
+<h2 id="remote-workspaces">Remote Workspaces</h2><p>SSH, SFTP, proxy, and daemon paths start only from explicit action.</p>
+<h2 id="web-terminal">Web Terminal</h2><p>Use remote sessions only when you start the connection.</p>
+<h2 id="shell-integration">Shell Integration</h2><p>zsh, bash, and fish preserve your dotfiles.</p>
+<h2 id="per-project-config">Per-project Config</h2><p>Repo-local settings stay separate from the global profile.</p>
+<h2 id="applescript">AppleScript</h2><p>Automate windows and tabs through system permissions.</p>
+<h2 id="plugin-system">Plugin System</h2><p>Plugins use TOML manifests and explicit permissions.</p>
+<h2 id="splits">Splits</h2><p>Place terminal, browser, and Markdown surfaces side by side.</p>
+<h2 id="quick-terminal">Quick Terminal</h2><p>Open a lightweight console without losing context.</p>
+<h2 id="notifications">Notifications</h2><p>Local alerts are based on visible events.</p>
+<h2 id="command-palette">Command Palette</h2><p>Search actions, windows, and commands from one place.</p>
+<h2 id="sessions">Sessions</h2><p>Resume work from local Vault history.</p>
+<h2 id="local-backups">Local Backups</h2><p>Preferences &gt; Backups lets you Restore only the selected artifact.</p>
+<h2 id="input-classifier">Input Classifier</h2><pre class="code-block"><code>[input-classifier]
 dangerous-command-warning = true
 auto-route-natural-language = false
-locale-detection = true
 foundation-models-fallback = true
-
-[notifications]
-macos-notifications = true
-sound = true
-badge-on-tab = true
-show-dock-badge = true
-
-[quick-terminal]
-enabled = true
-hotkey = "cmd+grave"
-position = "top"                 # "top", "bottom", "left", "right"
-height-percentage = 40
-hide-on-deactivate = true
-
-[keybindings]
-new-tab = "cmd+t"
-close-tab = "cmd+w"
-next-tab = "cmd+shift+]"
-prev-tab = "cmd+shift+["
-split-vertical = "cmd+shift+d"
-split-horizontal = "cmd+d"
-goto-attention = "cmd+shift+u"
-
-[sessions]
-auto-save = true
-auto-save-interval = 30
-restore-on-launch = true</code></pre>
-    </div>
-
-    <div class="callout">
-      <p><strong>Tip:</strong> Invalid values are clamped to valid ranges instead of causing errors. For example, <code>font-size = 200</code> is clamped to 72.</p>
-    </div>
-
-    <!-- Input Classifier -->
-    <h2 id="input-classifier">Input Classifier</h2>
-    <p>Cocxy classifies short prompt input locally before it is sent to a shell or routed to an agent workflow. The classifier detects shell commands such as <code>git status</code>, natural-language prompts such as <code>what is the weather</code>, and dangerous commands such as <code>rm -rf /</code>. Dangerous matches return <code>dangerous-command</code>, a confidence score, severity, and <code>shouldWarnBeforeExecution</code>.</p>
-    <p>Use <code>cocxy classify "git status"</code> or <code>cocxy classify "what is the weather"</code> to inspect the local JSON decision. The command prints fields such as <code>category</code>, <code>confidence</code>, <code>languageCode</code>, <code>routingHint</code>, and <code>shouldWarnBeforeExecution</code> without contacting a Cocxy service.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[input-classifier]
-enabled = true
-dangerous-command-warning = true
-auto-route-natural-language = false
-locale-detection = true
-foundation-models-fallback = true</code></pre>
-    </div>
-    <p><code>auto-route-natural-language</code> defaults to <code>false</code>, so natural-language detection remains an explicit user choice instead of changing existing terminal behavior.</p>
-
-    <!-- Command Signatures -->
-    <h2 id="command-signatures">Command Signatures</h2>
-    <p>Cocxy can sign and verify shared templates, macros, plugins, notebooks, and files with local Ed25519 keys. The key material stays in the macOS Keychain, trusted public keys stay in the local trusted author registry, and verification runs on this Mac before install or playback decisions.</p>
-    <p>Unsigned templates, macros, and plugins keep working by default. If a signature is present and cannot be verified, Cocxy reports an invalid signature instead of silently trusting the artifact. Verified items can show <code>verified</code>, unsigned items can show <code>unsigned</code>, and broken sidecars are treated as <code>invalid signature</code>.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[security]
+cocxy classify
+dangerous-command
+natural-language</code><button class="copy-button" type="button">Copy</button></pre>
+<h2 id="command-signatures">Command Signatures</h2><pre class="code-block"><code>[security]
 require-signed-templates = false
 require-signed-macros = false
 require-signed-plugins = false
 warn-on-unsigned = true
-trust-on-first-use = false</code></pre>
-    </div>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>cocxy keys generate --author "Your Name"
-cocxy keys export-public &lt;key-id&gt; --output author.cocxykey
-cocxy keys import author.cocxykey
-cocxy sign template ./my-template
-cocxy verify template ./my-template</code></pre>
-    </div>
-    <p>Strict signature requirements are opt-in through <code>[security]</code>. Leave <code>trust-on-first-use</code> disabled when sharing artifacts across teams so every trusted author key is imported deliberately.</p>
-
-    <!-- Sandbox Controls -->
-    <h2 id="sandbox-controls">Sandbox Controls</h2>
-    <p>Cocxy isolates local extension surfaces with component-level sandbox profiles instead of putting the whole terminal inside the macOS app sandbox. Plugins, Agent Mode command tools, and local MCP stdio servers get their own filesystem and process rules while the terminal keeps normal workspace access.</p>
-    <p>The Sandbox Inspector in Preferences shows active plugin capability grants and the local audit log. Revoke a grant from the inspector or use the CLI when you want a scriptable local check.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[security.sandbox]
+trust-on-first-use = false
+cocxy keys generate --author
+cocxy sign template
+cocxy verify template
+verified
+unsigned
+invalid signature</code><button class="copy-button" type="button">Copy</button></pre>
+<h2 id="sandbox-controls">Sandbox Controls</h2><pre class="code-block"><code>[security.sandbox]
 plugins-strict = true
 agents-isolated = true
 mcp-isolated = true
 audit-log-enabled = true
-warn-on-grant = true</code></pre>
-    </div>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>cocxy sandbox list-grants &lt;plugin-id&gt;
-cocxy sandbox revoke &lt;plugin-id&gt; &lt;capability&gt;</code></pre>
-    </div>
-    <p>Plugin write grants stay scoped to the plugin state directory. Agent command tools run with workspace-scoped read/write access, and MCP stdio servers inherit only the configured working directory and explicit file arguments.</p>
-
-    <!-- Command Corrections -->
-    <h2 id="command-corrections">Command Corrections</h2>
-    <p>Cocxy can suggest local fixes after a failed shell command. It checks common typos such as <code>gti status</code>, aliases such as <code>sl</code>, command-name edit distance, shell hint text, and nearby filesystem paths such as a mistyped <code>cd</code> target. The instant heuristic path is local and designed for interactive latency.</p>
-    <p>Use <code>cocxy correct "gti status"</code> or <code>cocxy correct "pyhton -m venv ."</code> to inspect the JSON suggestions without opening the app socket. When the terminal overlay appears after a failed command, press <kbd>Tab</kbd> to accept the suggestion or <kbd>Esc</kbd> to dismiss it.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[command-corrections]
-enabled = true
+warn-on-grant = true
+cocxy sandbox list-grants
+cocxy sandbox revoke
+Sandbox Inspector
+Agent command tools run with workspace-scoped read/write access</code><button class="copy-button" type="button">Copy</button></pre>
+<h2 id="command-corrections">Command Corrections</h2><pre class="code-block"><code>[command-corrections]
 edit-distance-threshold = 2
 foundation-models-enabled = true
 agent-fallback = false
 auto-show-on-failure = true
 show-confidence-badge = true
-max-suggestions-shown = 3</code></pre>
-    </div>
-    <p><code>agent-fallback</code> defaults to <code>false</code>. Turn it on only if you want the active, user-configured agent to participate in harder correction cases.</p>
-
-    <!-- Keyboard Shortcuts -->
-    <h2 id="keyboard-shortcuts">Keyboard Shortcuts</h2>
-
-    <h3>Tabs</h3>
-    <table class="docs-table">
-      <tr><th>Shortcut</th><th>Action</th></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>T</kbd></td><td>New tab</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>W</kbd></td><td>Close tab</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>]</kbd></td><td>Next tab</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>[</kbd></td><td>Previous tab</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>1</kbd> ... <kbd>9</kbd></td><td>Switch to tab 1-9</td></tr>
-    </table>
-
-    <h3>Splits</h3>
-    <table class="docs-table">
-      <tr><th>Shortcut</th><th>Action</th></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>D</kbd></td><td>Split horizontal</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd></td><td>Split vertical</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd></td><td>Close split</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>Arrow</kbd></td><td>Navigate between splits</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd></td><td>Equalize split sizes</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></td><td>Zoom/unzoom focused split</td></tr>
-    </table>
-
-    <h3>Panels &amp; Overlays</h3>
-    <table class="docs-table">
-      <tr><th>Shortcut</th><th>Action</th></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd></td><td>Command Palette</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>R</kbd></td><td>Agent Code Review Panel</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>G</kbd></td><td>GitHub Pane (PRs, issues, checks via gh)</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>A</kbd></td><td>Agent Dashboard</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd></td><td>Agent Timeline</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd></td><td>Smart Routing (Quick Switch)</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd></td><td>Notifications panel</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd></td><td>Browser panel</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd></td><td>Remote Workspaces</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd></td><td>Markdown outline sidebar (when active)</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>1</kbd> / <kbd>2</kbd> / <kbd>3</kbd></td><td>Markdown source / preview / split mode</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>F</kbd></td><td>Search terminal / Find in browser / Find in Markdown</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>Dismiss overlay</td></tr>
-    </table>
-
-    <h3>Terminal</h3>
-    <table class="docs-table">
-      <tr><th>Shortcut</th><th>Action</th></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>C</kbd></td><td>Copy selection</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>V</kbd></td><td>Paste</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>K</kbd></td><td>Clear screen</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>+</kbd></td><td>Zoom in</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>-</kbd></td><td>Zoom out</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>0</kbd></td><td>Reset zoom</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Click</kbd></td><td>Open URL / file path</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>`</kbd></td><td>Quick Terminal (dropdown)</td></tr>
-    </table>
-
-    <!-- Agent Detection -->
-    <h2 id="agent-detection">Agent Detection</h2>
-    <p>Cocxy uses a multi-layer detection engine to identify AI agents running in your terminal. Each layer cross-validates with the others for high-confidence results:</p>
-    <ol>
-      <li><strong>Hook Events</strong> (highest priority) — Multi-agent hook integration streams local events in real time: tool calls, responses, session lifecycle, subagent spawn, and error signals. Run <code>cocxy setup-hooks</code> to auto-configure hooks for compatible installed agents.</li>
-      <li><strong>OSC Sequences</strong> — Shell integration markers (OSC 133, OSC 7) for working directory and command boundary detection.</li>
-      <li><strong>Pattern Matching</strong> — Regex patterns matched against terminal output to detect agent launch commands, waiting prompts, completion markers, and errors.</li>
-      <li><strong>Timing Heuristics</strong> (fallback) — Detects idle timeouts and sustained output patterns when the other layers don't match.</li>
-    </ol>
-
-    <h3>Agent States</h3>
-    <table class="docs-table">
-      <tr><th>State</th><th>Indicator</th><th>Meaning</th></tr>
-      <tr><td>Idle</td><td>Gray dot</td><td>No agent running</td></tr>
-      <tr><td>Launched</td><td>Blue pulse (hollow)</td><td>Agent detected, initializing</td></tr>
-      <tr><td>Working</td><td>Blue pulse (filled)</td><td>Agent generating output</td></tr>
-      <tr><td>Waiting</td><td>Yellow dot with <code>?</code></td><td>Agent waiting for your input</td></tr>
-      <tr><td>Finished</td><td>Green dot with <code>&#10003;</code></td><td>Task completed</td></tr>
-      <tr><td>Error</td><td>Red dot with <code>!</code></td><td>Error occurred</td></tr>
-    </table>
-
-    <h3 id="agent-bundled">Bundled Agent Profiles</h3>
-    <p>Cocxy ships bundled local profiles for hook-capable, OSC-aware, pattern-only, and timing-fallback coding-agent CLIs. Hook-capable profiles provide the richest state because Cocxy receives local events for session start/end, tool use, subagent spawn, errors, and prompt handoff. Profiles without hooks still use OSC markers, output patterns, and timing heuristics.</p>
-    <p>Detection patterns stay local and are evaluated with NSRegularExpression against terminal output already rendered in Cocxy. You can inspect or override profile behavior from <code>~/.config/cocxy/agents.toml</code>.</p>
-
-    <h3 id="agent-custom">Custom Agents</h3>
-    <p>Add your own agents by editing <code>~/.config/cocxy/agents.toml</code>:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[my-agent]
-display-name = "My Agent"
-osc-supported = false
-launch-patterns = ['^my-agent\b']
-waiting-patterns = ['^> ']
-error-patterns = ['Error:']
-finished-indicators = ['^\$\s*$']
-idle-timeout-override = 8</code></pre>
-    </div>
-
-    <!-- Code Review Panel -->
-    <h2 id="code-review">Agent Code Review Panel</h2>
-    <p>A native panel to review every change an AI coding agent made during a session. Comment inline, submit feedback back to the agent, and accept or reject individual hunks — all without leaving Cocxy.</p>
-
-    <h3>Opening the Panel</h3>
-    <ul>
-      <li><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>R</kbd> — Toggle the panel for the active tab</li>
-      <li><code>cocxy review</code> — Toggle via the CLI</li>
-      <li><strong>Auto-trigger</strong> — The panel opens automatically when an agent session ends (configurable via <code>[code-review] auto-show-on-session-end</code>)</li>
-    </ul>
-
-    <h3>Reviewing Changes</h3>
-    <ul>
-      <li><strong>File tree</strong> — Shows every file the agent touched, with status icons (added, modified, deleted, renamed) and per-author chips when multiple agents edited the same session</li>
-      <li><strong>Unified diff</strong> — Rendered with line numbers and syntax-aware colors</li>
-      <li><strong>Inline comments</strong> — Click any line in the gutter, type a comment, press <kbd>Enter</kbd>; a comment bubble anchors under that line</li>
-      <li><strong>Stats toolbar</strong> — Live counts of pending comments, files changed, hunks accepted or rejected</li>
-    </ul>
-
-    <h3>Feedback Loop</h3>
-    <p>Click <strong>Submit N Comments</strong> (or press <kbd>Cmd</kbd>+<kbd>Enter</kbd>) and the formatted feedback is sent through the agent's PTY. The agent picks up the corrections and re-runs the task. The panel refreshes automatically as the agent produces new changes.</p>
-
-    <h3>Accept or Reject Hunks</h3>
-    <ul>
-      <li><strong>Accept</strong> — Stages the hunk with <code>git apply --cached</code>, keeping the agent's change</li>
-      <li><strong>Reject</strong> — Reverses the hunk with <code>git apply --reverse</code>, discarding it from the working tree</li>
-      <li>All operations are serialized through a dedicated queue to prevent races</li>
-    </ul>
-
-    <h3>Keyboard Navigation</h3>
-    <table class="docs-table">
-      <tr><th>Key</th><th>Action</th></tr>
-      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>Next / previous hunk</td></tr>
-      <tr><td><kbd>n</kbd> / <kbd>p</kbd></td><td>Next / previous file</td></tr>
-      <tr><td><kbd>c</kbd></td><td>Start a comment on the current line</td></tr>
-      <tr><td><kbd>a</kbd> / <kbd>r</kbd></td><td>Accept / reject the current hunk</td></tr>
-      <tr><td><kbd>d</kbd></td><td>Toggle between session-diff mode and working-tree mode</td></tr>
-      <tr><td><kbd>Cmd</kbd>+<kbd>Enter</kbd></td><td>Submit all pending comments</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>Close the panel</td></tr>
-    </table>
-
-    <h3>CLI Commands</h3>
-    <pre><code>cocxy review                     # Toggle the panel
-cocxy review --refresh           # Force refresh diffs
-cocxy review --submit            # Submit all pending comments to the agent
-cocxy review --stats             # Print stats for the active session</code></pre>
-
-    <!-- Markdown Workspace -->
-    <h2 id="markdown">Markdown Workspace</h2>
-    <p>A first-class native Markdown panel that renders in a split pane next to your terminal. Written from scratch in pure Swift — no external parser dependency, no network calls.</p>
-
-    <h3>Opening Markdown</h3>
-    <ul>
-      <li>Drag a <code>.md</code> file onto any tab or split pane</li>
-      <li>Use the Command Palette: <strong>Open Markdown</strong></li>
-      <li>Double-click a <code>.md</code> file in the file explorer sidebar</li>
-    </ul>
-
-    <h3>View Modes</h3>
-    <ul>
-      <li><kbd>Cmd</kbd>+<kbd>1</kbd> — Source (editable plain text with syntax highlighting)</li>
-      <li><kbd>Cmd</kbd>+<kbd>2</kbd> — Preview (WKWebView with Mermaid, KaTeX, callouts, footnotes)</li>
-      <li><kbd>Cmd</kbd>+<kbd>3</kbd> — Split (source + preview side by side with scroll sync)</li>
-    </ul>
-
-    <h3>Editor</h3>
-    <ul>
-      <li><kbd>Cmd</kbd>+<kbd>B</kbd> — Toggle <strong>bold</strong> on the selection</li>
-      <li><kbd>Cmd</kbd>+<kbd>I</kbd> — Toggle <em>italic</em></li>
-      <li><kbd>Cmd</kbd>+<kbd>K</kbd> — Wrap in a Markdown link</li>
-      <li>Native AppKit Find bar with <kbd>Cmd</kbd>+<kbd>F</kbd></li>
-      <li>Debounced auto-save (150 ms) with atomic writes</li>
-      <li>File watcher dedup by content — no reload loops when the editor saves</li>
-      <li>All AppKit autosubstitutions disabled so Markdown syntax is never rewritten</li>
-    </ul>
-
-    <h3>Rendering</h3>
-    <ul>
-      <li>GitHub Flavored Markdown (tables, task lists, strikethrough, autolinks)</li>
-      <li>Reference-style links and setext headings</li>
-      <li>Fifteen callout types (<code>[!note]</code>, <code>[!tip]</code>, <code>[!warning]</code>, <code>[!important]</code>, etc.)</li>
-      <li>Footnotes with hover previews</li>
-      <li>Highlight (<code>==text==</code>), superscript (<code>^text^</code>), subscript (<code>~text~</code>)</li>
-      <li>200+ emoji shortcodes (<code>:rocket:</code>, <code>:warning:</code>)</li>
-      <li>Mermaid diagrams and KaTeX math (bundled offline, zero network)</li>
-      <li>Syntax highlighting for 190+ languages via Highlight.js (bundled)</li>
-      <li>Sortable tables with three-state (none / asc / desc) numeric-aware sort</li>
-      <li>Inline <code>[TOC]</code> placeholder generates a table of contents</li>
-    </ul>
-
-    <h3>Sidebar and Search</h3>
-    <ul>
-      <li><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>O</kbd> — Toggle the outline / files / search sidebar</li>
-      <li><strong>Outline</strong> — Heading tree navigation (click to jump)</li>
-      <li><strong>Files</strong> — Browse the workspace's Markdown files with rename, move-to-trash, reveal-in-Finder</li>
-      <li><strong>Search</strong> — Multi-file full-text search with debounced results</li>
-    </ul>
-
-    <h3>Git Integration</h3>
-    <ul>
-      <li><strong>Blame</strong> — Inline line-by-line authorship and commit history</li>
-      <li><strong>Diff</strong> — Side-by-side working-tree vs last commit view</li>
-    </ul>
-
-    <h3>Export and Copy</h3>
-    <ul>
-      <li>Export to PDF via the system print dialog</li>
-      <li>Export to standalone HTML with inlined images as base64 data URIs</li>
-      <li>Slide exporter: split the document on horizontal rules, preserve original formatting, embed Mermaid and KaTeX inline</li>
-      <li>Copy as Markdown, HTML, rich text (RTF), or plain text</li>
-    </ul>
-
-    <h3>Interactive Preview</h3>
-    <ul>
-      <li><strong>Clickable checkboxes</strong> — Toggle task list checkboxes directly in the preview; changes write back to the source</li>
-      <li><strong>Click-to-source</strong> — Double-click any block to jump to its line in the source editor</li>
-      <li><strong>Image lightbox</strong> — Click any image to expand</li>
-      <li><strong>Paste PNG or TIFF</strong> — Cmd+V pastes image data from the clipboard directly into the document</li>
-      <li><strong>Drag and drop</strong> — Drop an image file to insert an inline reference</li>
-      <li><strong>Copy table as TSV</strong> — One-click copy for pasting into spreadsheets</li>
-    </ul>
-
-    <!-- QuickLook -->
-    <h2 id="quicklook">QuickLook Preview Extension</h2>
-    <p>A system-integrated QuickLook extension that renders <code>.md</code> files directly in macOS Finder. Select a Markdown file in Finder and press <kbd>Space</kbd>.</p>
-    <ul>
-      <li>Same renderer as the in-app preview: Mermaid, KaTeX, callouts, footnotes, Highlight.js</li>
-      <li>Bundled offline with zero network dependency</li>
-      <li>Sandboxed as an <code>.appex</code> plugin following macOS security conventions</li>
-      <li>Registered automatically when you install Cocxy; verify with <code>cocxy hooks install</code> which also checks QuickLook registration</li>
-    </ul>
-
-    <!-- Browser -->
-    <h2 id="browser">Browser</h2>
-    <p>Cocxy includes a built-in browser panel for viewing dev servers, documentation, and web apps alongside your terminal.</p>
-
-    <h3>Opening the Browser</h3>
-    <ul>
-      <li><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> — Slide-in panel (overlay mode)</li>
-      <li>Command Palette &rarr; "Open Browser" — Opens in a split pane</li>
-    </ul>
-    <p>By default, the browser opens <code>http://localhost:3000</code>. The URL bar supports full navigation with back, forward, and reload controls.</p>
-
-    <h3>Profiles</h3>
-    <p>Browser profiles isolate cookies, storage, and history. Create profiles for different projects or environments. Each profile gets its own WebKit data store.</p>
-
-    <h3>Bookmarks</h3>
-    <p>Organize bookmarks in folders with nested hierarchy support. Access via <kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd>.</p>
-
-    <h3>History</h3>
-    <p>Full-text search across all visited URLs and page titles. History is stored locally in SQLite with FTS5 indexing. Access via <kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>B</kbd>.</p>
-
-    <h3>DevTools</h3>
-    <p>Cocxy includes a lightweight DevTools panel with three tabs:</p>
-    <ul>
-      <li><strong>Console</strong> — Captures <code>console.log</code>, <code>warn</code>, <code>error</code>, and <code>info</code> output</li>
-      <li><strong>Network</strong> — Monitors HTTP requests via the Performance API</li>
-      <li><strong>DOM</strong> — Inspectable DOM tree view</li>
-    </ul>
-
-    <!-- Remote Workspaces -->
-    <h2 id="remote-workspaces">Remote Workspaces</h2>
-    <p>Connect to remote servers via SSH with persistent connections, port forwarding, SFTP file browsing, and key management. Open with <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>.</p>
-
-    <h3>Connection Profiles</h3>
-    <p>Create reusable profiles with host, user, port, identity file, and port forwarding rules. Profiles are stored as JSON in <code>~/.config/cocxy/remotes/</code>.</p>
-
-    <h3>SSH Multiplexing</h3>
-    <p>Cocxy uses OpenSSH ControlMaster for connection multiplexing. A single persistent TCP connection is shared across all sessions to the same host, eliminating re-authentication overhead.</p>
-
-    <h3>Port Forwarding</h3>
-    <p>Three forwarding modes are supported:</p>
-    <ul>
-      <li><strong>Local</strong> (<code>-L</code>) — Forward a local port to a remote service</li>
-      <li><strong>Remote</strong> (<code>-R</code>) — Forward a remote port to a local service</li>
-      <li><strong>Dynamic</strong> (<code>-D</code>) — SOCKS proxy for tunneling all traffic</li>
-    </ul>
-
-    <h3>SFTP Browser</h3>
-    <p>Browse remote filesystems, download files, upload files, and create directories — all from the Remote Workspaces panel.</p>
-
-    <h3>Key Management</h3>
-    <p>Discover, generate, and manage SSH keys. Supports ED25519, RSA, ECDSA, and DSA key types. Keys can be loaded into the SSH agent directly from the UI.</p>
-
-    <h3>Auto-Reconnect</h3>
-    <p>When enabled on a profile, Cocxy automatically reconnects with exponential backoff (1s, 2s, 4s, 8s, up to 30s) for up to 5 attempts.</p>
-
-    <h3>Persistent Sessions (tmux)</h3>
-    <p>Remote sessions backed by tmux survive SSH disconnects. When you reconnect, your sessions are waiting exactly where you left them. Zero installation required on the server — Cocxy uses the tmux that's already there.</p>
-    <ul>
-      <li><strong>Auto-detection</strong> — Cocxy checks for tmux (preferred) or screen on the remote host</li>
-      <li><strong>Create sessions</strong> — Start a new persistent session from the Sessions panel</li>
-      <li><strong>Reconnect</strong> — After an SSH drop, your tmux sessions are still alive. Reconnect and re-attach</li>
-      <li><strong>Session UI</strong> — Visual panel showing all remote sessions with status, window count, and controls</li>
-      <li><strong>CLI</strong> — <code>cocxy remote list</code>, <code>cocxy remote connect &lt;name&gt;</code>, <code>cocxy remote status</code></li>
-    </ul>
-
-    <h3>SOCKS5 + HTTP CONNECT Proxy</h3>
-    <p>A native proxy that tunnels traffic through a connected SSH host. System-wide macOS integration, PAC generation, per-host exclusion lists, and health monitoring with auto-failover to a backup host.</p>
-
-    <h3>Agent Relay</h3>
-    <p>Multi-channel reverse tunnels with HMAC-SHA256 authentication, per-channel ACLs, audit logs (JSON lines), token rotation, and Keychain persistence. Useful for exposing a local agent to a remote tool chain securely.</p>
-
-    <h3>Remote Daemon</h3>
-    <p>A POSIX shell daemon (no compilation required on the server) with three-level session fallback (tmux / screen / native PTY), persistent port forwards managed from the daemon, file sync watching, and 24-hour auto-cleanup for orphan sessions.</p>
-
-    <!-- Web Terminal -->
-    <h2 id="web-terminal">Web Terminal Embed</h2>
-    <p>Expose any local Cocxy terminal over HTTP with a zero-dependency frontend. Useful for peer programming, remote assistance, or embedding a live terminal into an internal dashboard.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>cocxy web-start --port 8080         # Expose the active terminal on http://localhost:8080
-cocxy web-stop                       # Stop the web server
-cocxy web-status                     # Show active connections and frame rate</code></pre>
-    </div>
-    <ul>
-      <li>Tunable frame rate (default 30 fps, up to 60 fps)</li>
-      <li>On-demand full-frame refresh from the server</li>
-      <li>Per-terminal attach and detach</li>
-      <li>Plugin events for connection open / close</li>
-    </ul>
-
-    <!-- Shell Integration -->
-    <h2 id="shell-integration">Shell Integration</h2>
-    <p>Native shell integration for zsh, bash, and fish. Installed automatically — no setup required. Designed to coexist safely with Prezto, Oh My Zsh, YADR, starship, and any custom prompt.</p>
-
-    <h3>What It Provides</h3>
-    <ul>
-      <li><strong>OSC 7</strong> — Working directory reporting with URI encoding for paths with spaces and non-ASCII characters</li>
-      <li><strong>OSC 133</strong> — Semantic prompts for command boundaries, duration tracking, and exit code reporting</li>
-      <li><strong>Safe env injection</strong> — Cocxy's integration scripts restore your original <code>ZDOTDIR</code>, <code>HOME</code>, and <code>XDG_CONFIG_HOME</code> before loading your framework, so nothing about your existing setup changes</li>
-    </ul>
-
-    <h3>Per-Shell Behavior</h3>
-    <ul>
-      <li><strong>zsh</strong> — Integration via <code>ZDOTDIR</code> pointing at Cocxy's shim that bootstraps your real config. Works with Prezto, Oh My Zsh, and starship out of the box.</li>
-      <li><strong>bash</strong> — Integration via <code>HOME</code> pointing at a shim that sources your real <code>.bashrc</code>. Preserves any existing <code>DEBUG</code> trap and <code>PROMPT_COMMAND</code>.</li>
-      <li><strong>fish</strong> — Integration via <code>XDG_CONFIG_HOME</code> pointing at Cocxy's fish config that then sources yours. Uses fish's native <code>--on-variable PWD</code> hook, no DEBUG trap required.</li>
-    </ul>
-
-    <!-- Per-Project Config -->
-    <h2 id="per-project-config">Per-Project Configuration</h2>
-    <p>Create a <code>.cocxy.toml</code> file in any project directory to override global settings. Cocxy detects it automatically when you <code>cd</code> into the directory and applies the overrides to the active tab.</p>
-
-    <h3>Supported Overrides</h3>
-    <ul>
-      <li><code>font-size</code> — Override font size for this project</li>
-      <li><code>background-opacity</code> / <code>background-blur-radius</code> — Per-project transparency</li>
-      <li><code>window-padding-x</code> / <code>window-padding-y</code> — Terminal padding</li>
-      <li><code>[agent-detection] extra-launch-patterns</code> — Custom agent detection patterns for project-specific tools</li>
-      <li><code>[keybindings]</code> — Project-specific keyboard shortcuts</li>
-    </ul>
-
-    <h3>Example .cocxy.toml</h3>
-    <pre><code># Project-specific overrides
-font-size = 13
-background-opacity = 0.95
-
-[agent-detection]
-extra-launch-patterns = ["^python manage.py", "^cargo run"]
-
-[keybindings]
-"cmd+shift+t" = "split-vertical"</code></pre>
-
-    <h3>Hot Reload</h3>
-    <p>Changes to <code>.cocxy.toml</code> are detected and applied in real time — no restart needed. Use <code>cocxy config-project</code> to view the active overrides for the current tab.</p>
-
-    <!-- AppleScript -->
-    <h2 id="applescript">AppleScript Automation</h2>
-    <p>Cocxy exposes a full AppleScript vocabulary for automation and integration with Shortcuts, Automator, Raycast, and other macOS tools.</p>
-
-    <h3>Vocabulary</h3>
-    <table class="docs-table">
-      <tr><th>Object</th><th>Properties</th></tr>
-      <tr><td><code>tab</code></td><td>id, name (read/write), working directory, agent state, is active, process name</td></tr>
-      <tr><th>Command</th><th>Description</th></tr>
-      <tr><td><code>make new tab</code></td><td>Create a tab with optional command and directory</td></tr>
-      <tr><td><code>run command</code></td><td>Send a command to the active terminal</td></tr>
-      <tr><td><code>split terminal</code></td><td>Split the active pane (horizontal or vertical)</td></tr>
-      <tr><td><code>focus tab</code></td><td>Focus a tab by index</td></tr>
-      <tr><td><code>close</code></td><td>Close a tab</td></tr>
-      <tr><td><code>count tabs</code></td><td>Get the number of open tabs</td></tr>
-    </table>
-
-    <h3>Examples</h3>
-    <pre><code>-- Create a new tab and run a command
-tell application "Cocxy Terminal"
-    make new tab with properties {command:"ssh deploy@prod"}
-    set name of tab 1 to "Production"
-end tell
-
--- Count tabs
-tell application "Cocxy Terminal" to count tabs
-
--- From the command line
-osascript -e 'tell application "Cocxy Terminal" to make new tab'</code></pre>
-
-    <!-- Plugin System -->
-    <h2 id="plugin-system">Plugin System</h2>
-    <p>Extend Cocxy with custom plugins that respond to terminal events. Plugins are stored in <code>~/.config/cocxy/plugins/</code> and managed via the CLI.</p>
-
-    <h3>Plugin Structure</h3>
-    <pre><code>~/.config/cocxy/plugins/
-  my-plugin/
-    manifest.toml          # Required: plugin metadata
-    on-session-start.sh    # Optional: runs when a session starts
-    on-agent-detected.sh   # Optional: runs when an agent is detected
-    on-command-complete.sh  # Optional: runs when a command finishes
-    README.md              # Optional: documentation</code></pre>
-
-    <h3>manifest.toml</h3>
-    <pre><code>name = "My Plugin"
-version = "1.0.0"
-author = "Your Name"
-description = "What this plugin does"
-events = ["session-start", "agent-detected", "command-complete"]</code></pre>
-
-    <h3>Available Events</h3>
-    <table class="docs-table">
-      <tr><th>Event</th><th>Script</th><th>When</th></tr>
-      <tr><td>session-start</td><td>on-session-start.sh</td><td>A new terminal session begins</td></tr>
-      <tr><td>session-end</td><td>on-session-end.sh</td><td>A terminal session ends</td></tr>
-      <tr><td>agent-detected</td><td>on-agent-detected.sh</td><td>A coding agent is detected</td></tr>
-      <tr><td>agent-state-changed</td><td>on-agent-state-changed.sh</td><td>Agent state changes (working, waiting, etc.)</td></tr>
-      <tr><td>command-complete</td><td>on-command-complete.sh</td><td>A shell command finishes executing</td></tr>
-      <tr><td>tab-created</td><td>on-tab-created.sh</td><td>A new tab is opened</td></tr>
-      <tr><td>tab-closed</td><td>on-tab-closed.sh</td><td>A tab is closed</td></tr>
-      <tr><td>directory-changed</td><td>on-directory-changed.sh</td><td>Working directory changes</td></tr>
-    </table>
-
-    <h3>Security</h3>
-    <p>Plugin scripts run in a sandboxed environment with a clean PATH, a 10-second timeout, and no access to Cocxy internals beyond the environment variables passed to them. Scripts execute as the current user — no privilege escalation.</p>
-
-    <h3>CLI Commands</h3>
-    <pre><code>cocxy plugin-list               # List installed plugins
-cocxy plugin-enable my-plugin   # Enable a plugin
-cocxy plugin-disable my-plugin  # Disable a plugin</code></pre>
-
-    <!-- Splits -->
-    <h2 id="splits">Splits</h2>
-    <p>Split any tab into multiple panes. Each split runs its own terminal session or panel (browser, markdown preview).</p>
-    <ul>
-      <li><kbd>Cmd</kbd>+<kbd>D</kbd> — Split horizontally (side by side)</li>
-      <li><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>D</kbd> — Split vertically (top/bottom)</li>
-      <li><kbd>Cmd</kbd>+<kbd>Opt</kbd>+<kbd>Arrow</kbd> — Navigate between splits</li>
-      <li><kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> — Close focused split (LIFO order, last terminal is protected)</li>
-    </ul>
-
-    <!-- Quick Terminal -->
-    <h2 id="quick-terminal">Quick Terminal</h2>
-    <p>A dropdown terminal panel accessible from anywhere on your Mac via a global hotkey.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[quick-terminal]
-enabled = true
-hotkey = "cmd+grave"        # Cmd+` (backtick)
-position = "top"            # top, bottom, left, right
-height-percentage = 40
-hide-on-deactivate = true</code></pre>
-    </div>
-    <p>Press <kbd>Cmd</kbd>+<kbd>`</kbd> to toggle the Quick Terminal. It slides in from the configured edge and stays on top of other windows.</p>
-
-    <!-- Notifications -->
-    <h2 id="notifications">Notifications</h2>
-    <p>Cocxy notifies you when agents need attention:</p>
-    <ul>
-      <li><strong>Tab badge</strong> — Colored dot on the tab sidebar indicating agent state</li>
-      <li><strong>Dock badge</strong> — Unread count on the Dock icon</li>
-      <li><strong>macOS notification</strong> — System notification when the app is in the background</li>
-      <li><strong>Notification panel</strong> — In-app history of all notifications (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>I</kbd>)</li>
-      <li><strong>Smart Routing</strong> — Jump to the tab that needs attention (<kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>U</kbd>)</li>
-    </ul>
-
-    <!-- Command Palette -->
-    <h2 id="command-palette">Command Palette</h2>
-    <p>Press <kbd>Cmd</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd> to open the Command Palette. Fuzzy search through all available actions, then press <kbd>Enter</kbd> to execute.</p>
-    <p>Actions include: new tab, close tab, toggle browser, toggle remote workspaces, switch theme, open dashboard, and more.</p>
-
-    <!-- Sessions -->
-    <h2 id="sessions">Sessions</h2>
-    <p>Cocxy saves your workspace state (tabs, working directories, active tab) and restores it on next launch.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[sessions]
-auto-save = true
-auto-save-interval = 30     # seconds
-restore-on-launch = true</code></pre>
-    </div>
-    <p>Sessions are saved to <code>~/Library/Application Support/dev.cocxy.terminal/sessions/</code>.</p>
-
-    <!-- Local Backups -->
-    <h2 id="local-backups">Local Backups</h2>
-    <p>Cocxy writes local backup snapshots to your Mac by default. They cover settings, notebooks, workflows, custom skills, notes, snippets, themes, and encrypted SSH host metadata when those sources exist. Nothing is uploaded.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[backup]
-enabled = true
-storage-directory = "~/Library/Backups/Cocxy"
-daily-retention-count = 30
-monthly-retention-count = 12</code></pre>
-    </div>
-    <ul>
-      <li><strong>Review snapshots</strong> — Open <strong>Preferences > Backups</strong> and use <strong>Refresh</strong> to scan the configured backup folder.</li>
-      <li><strong>Restore manually</strong> — Pick a backup, choose one artifact type, then press <strong>Restore</strong>. Restore only the selected artifact; other local files are left in place.</li>
-      <li><strong>Move to another Mac</strong> — Copy the backup folder, point Cocxy at that location, refresh, and restore only the artifacts you want.</li>
-    </ul>
-    <div class="callout warn">
-      <p><strong>Before restoring:</strong> save or discard pending preference edits. Cocxy blocks manual restore while Preferences has unsaved changes so a restore cannot be overwritten by an old settings form.</p>
-    </div>
-
-    <!-- CLI Companion -->
-    <h2 id="cli-companion">CLI Companion</h2>
-    <p>The <code>cocxy</code> CLI provides more than 100 commands for scripting and automation via a local Unix Domain Socket with per-UID authentication.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code># Tab management
-cocxy new-tab --dir ~/projects/my-app
-cocxy list-tabs
-cocxy tab-duplicate
-cocxy tab-pin
-
-# Agent hooks (one command sets up every installed agent)
-cocxy setup-hooks
-cocxy hooks install
-
-# Agent code review
-cocxy review                     # Toggle the panel
-cocxy review --refresh           # Force diff refresh
-cocxy review --submit            # Send pending comments to the agent
-cocxy review --stats             # Print review stats
-
-# Window and session management
-cocxy window-list
-cocxy session-save my-workspace
-cocxy session-restore my-workspace
-
-# Panels and dashboards
-cocxy dashboard-toggle
-cocxy timeline-export --format json &gt; events.json
-
-# Remote workspaces
-cocxy remote list
-cocxy remote connect prod-web
-cocxy remote status
-
-# Web terminal embed
-cocxy web-start --port 8080
-cocxy web-status
-cocxy web-stop
-
-# Plugins
-cocxy plugin-list
-cocxy plugin-enable my-plugin
-
-# Configuration and themes
-cocxy theme-set catppuccin-mocha
-cocxy config-list
-cocxy config-reload
-
-# Terminal diagnostics
-cocxy core-modes                 # Dump alt-screen, cursor, semantic state
-cocxy capture-pane
-cocxy send --stdin               # Read multiline / escape-safe input from stdin
-
-# Run cocxy help for the full command reference</code></pre>
-    </div>
-    <p>The CLI is automatically installed at <code>/opt/homebrew/bin/cocxy</code> when you install via Homebrew, or symlinked from the app bundle at <code>~/.local/bin/cocxy</code>.</p>
-
-    <!-- Themes -->
-    <h2 id="themes">Themes</h2>
-    <p>Cocxy ships with a curated set of themes and supports custom themes via Cocxy-compatible TOML files. Drop a <code>.toml</code> theme into <code>~/.config/cocxy/themes/</code> and it appears immediately in the theme picker.</p>
-    <h3>Built-in Themes</h3>
-    <ul>
-      <li>Catppuccin Mocha (default dark)</li>
-      <li>Catppuccin Latte (default light)</li>
-      <li>One Dark</li>
-      <li>Solarized Dark</li>
-      <li>Solarized Light</li>
-    </ul>
-    <p>Set your theme in <code>config.toml</code>:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[theme]
-name = "catppuccin-mocha"
-light-theme = "catppuccin-latte"</code></pre>
-    </div>
-    <p>Cocxy automatically switches between the <code>name</code> (dark) and <code>light-theme</code> pair based on macOS appearance settings. Live hot-reload applies theme changes without recreating terminal surfaces.</p>
-
-    <!-- agents.toml Reference -->
-    <h2 id="agents-toml">agents.toml Reference</h2>
-    <p>Agent detection patterns are configured in <code>~/.config/cocxy/agents.toml</code>. The file is auto-generated on first launch with built-in agent definitions.</p>
-
-    <table class="docs-table">
-      <tr><th>Field</th><th>Type</th><th>Description</th></tr>
-      <tr><td><code>display-name</code></td><td>string</td><td>Name shown in the UI</td></tr>
-      <tr><td><code>osc-supported</code></td><td>boolean</td><td>Whether the agent emits OSC sequences</td></tr>
-      <tr><td><code>launch-patterns</code></td><td>string[]</td><td>Regex patterns for detecting the launch command</td></tr>
-      <tr><td><code>waiting-patterns</code></td><td>string[]</td><td>Regex patterns for input prompts</td></tr>
-      <tr><td><code>error-patterns</code></td><td>string[]</td><td>Regex patterns for error output</td></tr>
-      <tr><td><code>finished-indicators</code></td><td>string[]</td><td>Regex patterns for completion signals</td></tr>
-      <tr><td><code>idle-timeout-override</code></td><td>integer</td><td>Custom idle timeout in seconds (optional)</td></tr>
-    </table>
-
-    <p>Patterns use NSRegularExpression syntax. Use single-quoted TOML strings so backslashes are literal: <code>'^my-agent\b'</code>.</p>
-
-    <!-- Migration Guide -->
-    <h2 id="migration-guide">Migration from v0.x</h2>
-    <p>Before upgrading across v0.x releases, review the <a href="/releases.html">Releases</a> page and keep a local copy of <code>~/.config/cocxy/</code> if you rely on SSH profiles, snippets, custom themes, plugins, browser data, or saved workspaces.</p>
-    <p>Cocxy migrations are conservative: valid TOML is preserved, unknown user-defined plugin and theme files stay in place, and local-only stores remain on your Mac. New defaults are added only when the app needs a missing key to keep an existing workflow working.</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>cp -R ~/.config/cocxy ~/Desktop/cocxy-config-backup
-brew update && brew upgrade --cask cocxy</code></pre>
-    </div>
-    <div class="callout info">
-      <p><strong>Tip:</strong> If a custom config stops applying after an upgrade, keep the backup, launch Cocxy once to regenerate missing defaults, then copy your custom sections back into the new file.</p>
-    </div>
-
-    <!-- Troubleshooting -->
-    <h2 id="troubleshooting">Troubleshooting</h2>
-
-    <h3>Backspace doesn't work</h3>
-    <p>Cocxy sets <code>TERM=xterm-256color</code> by default. If your shell or SSH server expects a different terminal type, add to your shell config:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>export TERM=xterm-256color</code></pre>
-    </div>
-
-    <h3>Agent detection not working</h3>
-    <p>Verify detection is enabled in <code>config.toml</code>:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>[agent-detection]
-enabled = true</code></pre>
-    </div>
-    <p>Check that <code>agents.toml</code> exists at <code>~/.config/cocxy/agents.toml</code>. Delete it and restart Cocxy to regenerate defaults.</p>
-
-    <h3>Font not rendering correctly</h3>
-    <p>Ensure the font is installed system-wide. Cocxy recommends <a href="https://www.nerdfonts.com/" target="_blank" rel="noopener noreferrer">Nerd Fonts</a> for icon support:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>brew install --cask font-jetbrains-mono-nerd-font</code></pre>
-    </div>
-
-    <h3>brew upgrade not finding new version</h3>
-    <p>Run <code>brew update</code> first to sync the tap, then upgrade:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>brew update && brew upgrade --cask cocxy</code></pre>
-    </div>
-
-    <h3>Reset to defaults</h3>
-    <p>Delete the config directory to reset all settings:</p>
-    <div class="code-wrap">
-      <button class="copy-btn" aria-label="Copy"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
-      <pre><code>rm -rf ~/.config/cocxy
-# Restart Cocxy — defaults will be regenerated</code></pre>
-    </div>
-
-    <div class="callout warn">
-      <p><strong>Warning:</strong> This also removes SSH connection profiles, bookmarks, and browser history stored under <code>~/.config/cocxy/</code>.</p>
-    </div>
-
-  </main>
-</div>
-
-<!-- Back to top -->
-<button class="back-to-top" id="backToTop" aria-label="Back to top">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <polyline points="18 15 12 9 6 15"/>
-  </svg>
-</button>
-
-<!-- Footer (shared with site) -->
-<footer class="site-footer" role="contentinfo">
+cocxy correct
+gti status
+pyhton -m venv .
+Tab
+Esc</code><button class="copy-button" type="button">Copy</button></pre>
+<h2 id="cli-companion">CLI Companion</h2><p>cocxy --help lists commands for local automation.</p>
+<h2 id="themes">Themes</h2><p>Configure colors, font, and contrast from preferences.</p>
+<h2 id="agents-toml">agents.toml</h2><p>Define custom agents, patterns, and resume rules.</p>
+<h2 id="migration-guide">Migration from v0.x</h2><p>~/.config/cocxy/ keeps configuration; use brew update &amp;&amp; brew upgrade --cask cocxy.</p>
+<h2 id="troubleshooting">Troubleshooting</h2><p>Run cocxy doctor and inspect local permissions.</p>
+  </article>
+</div></section><section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="footer-content">
-      <div class="footer-brand">
-        <img src="/images/icon.png" alt="" width="24" height="24">
-        <span>Cocxy Terminal</span>
-      </div>
-      <div class="footer-links">
-        <a href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
-        <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
-        <a href="/releases.html">Releases</a>
-        <a href="/es/getting-started.html" hreflang="es" lang="es">Espa&ntilde;ol</a>
-      </div>
-      <p class="footer-credit">Made by Said Arturo Lopez</p>
+    <div class="section-header">
+      <p class="eyebrow">Download</p>
+      <h2 id="download-title">Install Cocxy on macOS</h2>
+      <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
+    </div>
+    <div class="download-grid">
+      <article class="card">
+        <h3>DMG</h3>
+        <p>Direct download from GitHub Releases.</p>
+        <a class="button button-primary" href="https://github.com/salp2403/cocxy-terminal/releases/download/v0.0.0/CocxyTerminal-0.0.0.dmg">Download v0.0.0</a>
+      </article>
+      <article class="card">
+        <h3>Homebrew</h3>
+        <p>Reproducible install from the official tap.</p>
+        <pre class="code-block"><code>brew tap salp2403/tap &amp;&amp; brew install --cask cocxy</code><button class="copy-button" type="button">Copy</button></pre>
+      </article>
+      <article class="card">
+        <h3>Channels</h3>
+        <p>Stable, preview, and nightly are documented with clear risk levels.</p>
+        <a class="button button-secondary" href="/channels.html">View channels</a>
+      </article>
     </div>
   </div>
+</section>
+</main>
+<footer class="site-footer">
+  <div class="container footer-grid">
+    <div>
+      <a class="footer-brand" href="/"><img src="/images/icon.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
+      <p>Native macOS terminal, local-first, MIT licensed, and zero telemetry.</p>
+    </div>
+    <nav aria-label="Footer links">
+      <a href="/privacy.html">Privacy</a>
+      <a href="/security.html">Security</a>
+      <a href="/releases.html">Releases</a>
+      <a href="https://github.com/salp2403/cocxy-terminal/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT</a>
+    </nav>
+    <p class="footer-note">Made by Said Arturo Lopez.</p>
+  </div>
 </footer>
-
-<script>
-(function() {
-  // Sidebar scroll tracking
-  var links = document.querySelectorAll('.sidebar-link[href^="#"]');
-  var sections = [];
-  links.forEach(function(a) {
-    var id = a.getAttribute('href').slice(1);
-    var el = document.getElementById(id);
-    if (el) sections.push({ el: el, link: a });
-  });
-
-  function updateActive() {
-    var current = null;
-    for (var i = 0; i < sections.length; i++) {
-      if (sections[i].el.getBoundingClientRect().top <= 120) {
-        current = sections[i].link;
-      }
-    }
-    links.forEach(function(a) { a.classList.remove('active'); });
-    if (current) current.classList.add('active');
-  }
-
-  window.addEventListener('scroll', updateActive, { passive: true });
-  updateActive();
-
-  // Copy buttons
-  document.querySelectorAll('.code-wrap .copy-btn').forEach(function(btn) {
-    btn.addEventListener('click', function() {
-      var code = btn.closest('.code-wrap').querySelector('code');
-      if (!code) return;
-      navigator.clipboard.writeText(code.textContent).then(function() {
-        btn.classList.add('copied');
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
-        setTimeout(function() {
-          btn.classList.remove('copied');
-          btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
-        }, 1500);
-      });
-    });
-  });
-
-  // Mobile sidebar toggle
-  var menuBtn = document.getElementById('menuBtn');
-  var sidebar = document.getElementById('sidebar');
-  var overlay = document.getElementById('sidebarOverlay');
-
-  function toggleSidebar() {
-    sidebar.classList.toggle('open');
-    overlay.classList.toggle('visible');
-  }
-
-  function closeSidebar() {
-    sidebar.classList.remove('open');
-    overlay.classList.remove('visible');
-  }
-
-  if (menuBtn) menuBtn.addEventListener('click', toggleSidebar);
-  if (overlay) overlay.addEventListener('click', closeSidebar);
-
-  // Close sidebar on link click (mobile)
-  links.forEach(function(a) {
-    a.addEventListener('click', closeSidebar);
-  });
-
-  // Back to top
-  var backBtn = document.getElementById('backToTop');
-  window.addEventListener('scroll', function() {
-    if (window.scrollY > 400) {
-      backBtn.classList.add('visible');
-    } else {
-      backBtn.classList.remove('visible');
-    }
-  }, { passive: true });
-
-  backBtn.addEventListener('click', function() {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  });
-})();
-</script>
-
+<script src="/js/theme-switcher.js" defer></script>
+<script src="/js/main.js" defer></script>
 </body>
 </html>
