@@ -80,12 +80,16 @@ matching_node_server_pids() {
   done
 }
 
-matching_port_pids() {
+port_listener_pids() {
   if command -v lsof >/dev/null 2>&1; then
     lsof -nP -tiTCP:"$PORT" -sTCP:LISTEN 2>/dev/null || true
   elif command -v fuser >/dev/null 2>&1; then
     fuser "${PORT}/tcp" 2>/dev/null || true
-  fi | while read -r pid; do
+  fi
+}
+
+matching_port_pids() {
+  port_listener_pids | while read -r pid; do
     [ -n "$pid" ] || continue
     [ "$pid" != "$$" ] || continue
     if [ -d "/proc/$pid" ]; then
@@ -158,8 +162,14 @@ for pid in $(matching_port_pids); do
 done
 
 if local_health_is_ready; then
-  echo "Existing cocxy-web runtime is healthy on port ${PORT}; leaving it in place."
-  exit 0
+  listener_pids="$(port_listener_pids | tr '\n' ' ')"
+  if [ -z "$listener_pids" ]; then
+    echo "Existing cocxy-web runtime is healthy on port ${PORT}, but no listener PID was available; leaving it in place."
+    exit 0
+  fi
+  for pid in $listener_pids; do
+    stop_pid "$pid"
+  done
 fi
 
 umask 077
