@@ -9,11 +9,19 @@ import { chromium } from 'playwright';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(webRoot, '..');
 const imageRoot = path.join(webRoot, 'public', 'images');
 const pngPath = path.join(imageRoot, 'cocxy-preview.png');
 const webpPath = path.join(imageRoot, 'cocxy-preview.webp');
 const avifPath = path.join(imageRoot, 'cocxy-preview.avif');
 const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+
+const realScreenshots = {
+  dashboard: path.join(imageRoot, 'getting-started-dashboard.png'),
+  commandPalette: path.join(imageRoot, 'getting-started-command-palette.png'),
+  browser: path.join(imageRoot, 'getting-started-browser.png'),
+  preferences: path.join(imageRoot, 'getting-started-preferences.png'),
+};
 
 function run(command, args) {
   const result = spawnSync(command, args, { encoding: 'utf8' });
@@ -22,369 +30,414 @@ function run(command, args) {
   }
 }
 
-const html = `<!doctype html>
+function readJSON(relativePath) {
+  const filePath = path.join(repoRoot, relativePath);
+  if (!fs.existsSync(filePath)) return null;
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function minLighthouseScores(report) {
+  const scores = {
+    performance: 1,
+    accessibility: 1,
+    'best-practices': 1,
+    seo: 1,
+  };
+
+  for (const row of report?.lighthouse || []) {
+    for (const [key, value] of Object.entries(row.scores || {})) {
+      if (typeof value === 'number') {
+        scores[key] = Math.min(scores[key] ?? value, value);
+      }
+    }
+  }
+
+  return scores;
+}
+
+function formatPercent(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'n/a';
+  return `${Math.round(value * 100)}`;
+}
+
+function formatBytes(value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'n/a';
+  return `${Math.round(value / 1024)} KB`;
+}
+
+function escapeHTML(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function screenshotURL(name) {
+  const filePath = realScreenshots[name];
+  if (!fs.existsSync(filePath)) {
+    throw new Error(`Missing real Cocxy screenshot: ${path.relative(repoRoot, filePath)}`);
+  }
+  return `data:image/png;base64,${fs.readFileSync(filePath).toString('base64')}`;
+}
+
+function smokeFacts() {
+  const quality = readJSON('build/web-quality-audit/report.json');
+  const visual = readJSON('build/web-visual-smoke/report.json');
+  const scores = minLighthouseScores(quality);
+  const failures = (quality?.failures?.length || 0) + (visual?.failures?.length || 0);
+  const currentHeroAvifBytes = fs.existsSync(avifPath)
+    ? fs.statSync(avifPath).size
+    : quality?.budgets?.heroAvifBytes;
+
+  return {
+    qualityStatus: quality?.status === 'passed' ? 'passed' : 'not run',
+    pageCount: quality?.pageCount || 0,
+    visualStatus: visual?.status === 'passed' ? 'passed' : 'not run',
+    screenshotCount: visual?.screenshots?.length || 0,
+    failures,
+    performance: formatPercent(scores.performance),
+    accessibility: formatPercent(scores.accessibility),
+    bestPractices: formatPercent(scores['best-practices']),
+    seo: formatPercent(scores.seo),
+    heroAvif: formatBytes(currentHeroAvifBytes),
+    heroLimit: formatBytes(quality?.budgets?.heroImageLimitBytes),
+  };
+}
+
+function renderHTML(facts) {
+  const dashboard = screenshotURL('dashboard');
+  const browser = screenshotURL('browser');
+  const preferences = screenshotURL('preferences');
+
+  return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <style>
 * { box-sizing: border-box; }
-html, body { margin: 0; width: 1917px; height: 1049px; overflow: hidden; background: #090b12; }
+html,
+body {
+  margin: 0;
+  width: 1574px;
+  height: 808px;
+  overflow: hidden;
+  background: #070a12;
+}
 body {
   font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
-  color: #eff2ff;
+  color: #eef2ff;
   letter-spacing: 0;
 }
 .stage {
-  width: 1917px;
-  height: 1049px;
-  padding: 44px 52px;
+  position: relative;
+  width: 1574px;
+  height: 808px;
+  padding: 38px;
   background:
-    radial-gradient(circle at 20% 20%, rgba(137, 180, 250, 0.18), transparent 30%),
-    radial-gradient(circle at 83% 22%, rgba(166, 227, 161, 0.12), transparent 30%),
-    linear-gradient(135deg, #090b12 0%, #101422 52%, #0b0e16 100%);
+    linear-gradient(180deg, rgba(137, 180, 250, 0.08), transparent 34%),
+    linear-gradient(135deg, #070a12 0%, #111725 48%, #0a0d14 100%);
 }
-.window {
+.shell {
+  position: absolute;
+  inset: 38px;
+  border: 1px solid rgba(205, 214, 244, 0.16);
+  border-radius: 18px;
+  background: rgba(14, 17, 27, 0.86);
+  box-shadow: 0 34px 90px rgba(0, 0, 0, 0.56);
+}
+.main-shot {
+  position: absolute;
+  left: 38px;
+  top: 38px;
+  width: 1036px;
+  height: 633px;
+  overflow: hidden;
+  border-radius: 18px 0 0 0;
+  border-right: 1px solid rgba(205, 214, 244, 0.14);
+  border-bottom: 1px solid rgba(205, 214, 244, 0.12);
+  background: #151824;
+}
+.main-shot img {
   width: 100%;
   height: 100%;
-  border: 1px solid rgba(205, 214, 244, 0.18);
-  border-radius: 22px;
-  overflow: hidden;
-  background: rgba(24, 26, 39, 0.92);
-  box-shadow: 0 40px 110px rgba(0, 0, 0, 0.58);
+  display: block;
 }
-.titlebar {
-  height: 52px;
-  display: grid;
-  grid-template-columns: 210px 1fr 250px;
-  align-items: center;
-  padding: 0 20px;
-  background: linear-gradient(180deg, #4b4c54, #393b46);
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-.traffic { display: flex; gap: 10px; }
-.traffic span { width: 13px; height: 13px; border-radius: 50%; display: block; }
-.red { background: #ff6b6b; } .yellow { background: #f9e2af; } .green { background: #a6e3a1; }
-.tabs { display: flex; align-items: end; gap: 4px; height: 52px; }
-.tab {
-  height: 42px;
-  min-width: 146px;
-  padding: 0 18px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  border-radius: 12px 12px 0 0;
-  color: #b7c0dc;
-  background: rgba(38, 41, 58, 0.72);
-  font-size: 15px;
-  font-weight: 650;
-}
-.tab.active { color: #eef2ff; background: #2b2f43; }
-.tab-dot { width: 8px; height: 8px; border-radius: 50%; background: #89b4fa; box-shadow: 0 0 14px #89b4fa; }
-.toolbar-icons { display: flex; justify-content: flex-end; gap: 11px; color: #8e98b6; font-size: 19px; }
-.app {
-  height: calc(100% - 52px);
-  display: grid;
-  grid-template-columns: 270px 1fr 560px;
-}
-.sidebar {
-  position: relative;
-  padding: 26px 18px;
-  background: linear-gradient(180deg, #1b2434 0%, #171c26 62%, #222315 100%);
-  border-right: 1px solid rgba(205, 214, 244, 0.13);
-}
-.side-head {
-  display: flex;
-  justify-content: space-between;
-  color: #aab3d1;
-  font-size: 12px;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  font-weight: 850;
-  margin-bottom: 20px;
-}
-.workspace {
-  position: relative;
-  display: grid;
-  grid-template-columns: 10px 1fr auto;
-  gap: 13px;
-  align-items: center;
-  min-height: 76px;
-  padding: 14px 13px;
-  margin-bottom: 12px;
-  border-radius: 14px;
-  background: rgba(116, 129, 170, 0.12);
-  border: 1px solid rgba(205, 214, 244, 0.09);
-}
-.workspace.active { background: rgba(137, 180, 250, 0.16); border-color: rgba(137, 180, 250, 0.36); }
-.rail { width: 4px; height: 48px; border-radius: 4px; background: #89b4fa; }
-.rail.orange { background: #fab387; } .rail.green { background: #a6e3a1; } .rail.pink { background: #f5c2e7; }
-.ws-title { font-size: 17px; font-weight: 800; color: #edf1ff; margin-bottom: 5px; }
-.ws-sub { font-size: 13px; color: #aab3d1; display: flex; gap: 7px; align-items: center; }
-.pulse { width: 8px; height: 8px; border-radius: 50%; background: #a6e3a1; box-shadow: 0 0 15px #a6e3a1; }
-.status { font-size: 12px; color: #939bb9; }
-.new-tab {
+.prompt-mask {
   position: absolute;
-  left: 18px;
-  bottom: 24px;
-  width: 96px;
-  padding: 10px 12px;
-  border-radius: 11px;
-  background: rgba(137, 180, 250, 0.12);
-  color: #dbe5ff;
+  left: 16.1%;
+  width: 63%;
+  border-radius: 8px;
+  background: #1e1b30;
+  border: 1px solid rgba(205, 214, 244, 0.08);
+  box-shadow: 0 0 0 4px #1e1b30;
+  color: #cdd6f4;
+  font: 15px "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+  padding: 7px 10px;
+  line-height: 1.45;
+}
+.prompt-mask.top { top: 2.7%; height: 10.8%; }
+.prompt-mask.bottom { top: 51.2%; height: 16.6%; }
+.dashboard-mask {
+  position: absolute;
+  right: 1.5%;
+  top: 6.2%;
+  width: 18.5%;
+  height: 18%;
+  padding: 10px 11px;
+  border-radius: 10px;
+  background: rgba(33, 35, 37, 0.96);
+  border: 1px solid rgba(205, 214, 244, 0.10);
+  color: #d7def8;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+.user { color: #cba6f7; }
+.host { color: #fab387; }
+.path { color: #a6e3a1; }
+.cmd { color: #a6e3a1; }
+.evidence {
+  position: absolute;
+  left: 1074px;
+  top: 38px;
+  width: 462px;
+  height: 633px;
+  padding: 26px 28px;
+  border-radius: 0 18px 0 0;
+  background: linear-gradient(180deg, rgba(15, 18, 31, 0.96), rgba(10, 12, 21, 0.98));
+  border-bottom: 1px solid rgba(205, 214, 244, 0.12);
+  overflow: hidden;
+}
+.eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 11px;
+  border-radius: 999px;
+  color: #d8fbd2;
+  background: rgba(166, 227, 161, 0.16);
+  border: 1px solid rgba(166, 227, 161, 0.24);
   font-size: 13px;
   font-weight: 800;
 }
-.terminal-area {
-  display: grid;
-  grid-template-rows: 56% 44%;
-  background: #262b3a;
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #a6e3a1;
+  box-shadow: 0 0 14px rgba(166, 227, 161, 0.7);
 }
-.pane {
-  position: relative;
-  padding: 25px 28px;
-  border-bottom: 1px solid rgba(0,0,0,0.48);
-  background:
-    radial-gradient(circle at 72% 6%, rgba(137, 180, 250, 0.08), transparent 30%),
-    #292d3d;
+h1 {
+  margin: 16px 0 9px;
+  font-size: 34px;
+  line-height: 1.03;
+  color: #c7d2ff;
 }
-.pane.review { border-bottom: 0; background: #252a38; }
-.prompt { font: 18px "JetBrains Mono", "SF Mono", ui-monospace, monospace; color: #cdd6f4; margin-bottom: 17px; }
-.user { color: #cba6f7; } .host { color: #fab387; } .cmd { color: #a6e3a1; }
-.terminal-card {
-  border: 1px solid rgba(205,214,244,0.13);
-  border-radius: 16px;
-  overflow: hidden;
-  background: rgba(13, 15, 24, 0.64);
+.lead {
+  margin: 0 0 14px;
+  color: #bac3dc;
+  font-size: 15px;
+  line-height: 1.45;
 }
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  background: rgba(49, 53, 74, 0.76);
-  border-bottom: 1px solid rgba(205,214,244,0.1);
-  color: #cdd6f4;
-  font-size: 14px;
-  font-weight: 850;
-}
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: rgba(137,180,250,0.16);
-  color: #dbe7ff;
-  font-size: 12px;
-  font-weight: 850;
-}
-table { width: 100%; border-collapse: collapse; font: 15px "JetBrains Mono", ui-monospace, monospace; }
-th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid rgba(205,214,244,0.08); }
-th { color: #8f9abd; font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; }
-td { color: #dbe2ff; }
-.state { color: #a6e3a1; } .wait { color: #f9e2af; } .think { color: #89b4fa; } .done { color: #94e2d5; }
-.review-grid { display: grid; grid-template-columns: 210px 1fr; height: 245px; }
-.files { background: rgba(15,18,30,0.54); border-right: 1px solid rgba(205,214,244,0.08); padding: 14px; }
-.file { padding: 10px 12px; border-radius: 9px; color: #aab3d1; font: 13px "JetBrains Mono", ui-monospace, monospace; margin-bottom: 5px; }
-.file.active { background: rgba(137,180,250,0.15); color: #eff4ff; }
-.diff { padding: 16px 19px; font: 14px "JetBrains Mono", ui-monospace, monospace; line-height: 1.65; color: #cdd6f4; }
-.add { color: #a6e3a1; } .del { color: #f38ba8; } .muted { color: #7f88a6; }
-.right {
-  display: grid;
-  grid-template-rows: 44% 56%;
-  background: #111421;
-  border-left: 1px solid rgba(205,214,244,0.12);
-}
-.browser, .inspector { padding: 20px; }
-.url {
-  height: 36px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 0 13px;
-  border: 1px solid rgba(205,214,244,0.16);
-  border-radius: 11px;
-  background: rgba(11,13,22,0.82);
-  color: #cdd6f4;
-  font: 13px "JetBrains Mono", ui-monospace, monospace;
-}
-.browser-page {
-  margin-top: 17px;
-  height: 302px;
-  border: 1px solid rgba(205,214,244,0.12);
-  border-radius: 18px;
-  overflow: hidden;
-  background:
-    radial-gradient(circle at 50% 10%, rgba(137,180,250,0.17), transparent 36%),
-    #0a0b14;
-  padding: 26px;
-}
-.site-brand { display: flex; gap: 10px; align-items: center; color: #eef2ff; font-weight: 900; margin-bottom: 24px; }
-.logo-box { width: 34px; height: 34px; border-radius: 10px; background: #24273a; display: grid; place-items: center; color: #89b4fa; font: 22px "JetBrains Mono"; }
-.browser-page h1 { margin: 0 0 12px; font-size: 40px; line-height: 1.05; color: #bfd0ff; }
-.browser-page p { margin: 0 0 20px; color: #b7c0dc; font-size: 17px; line-height: 1.45; }
-.mini-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.mini-card { padding: 14px; border-radius: 14px; background: rgba(137,180,250,0.11); border: 1px solid rgba(137,180,250,0.22); color: #dbe5ff; font-size: 13px; font-weight: 800; }
-.inspector {
-  display: grid;
-  grid-template-rows: auto 1fr;
-  gap: 16px;
-}
-.segmented { display: flex; gap: 8px; }
-.segment { padding: 9px 12px; border-radius: 11px; background: rgba(205,214,244,0.08); color: #aab3d1; font-size: 13px; font-weight: 850; }
-.segment.active { background: rgba(166,227,161,0.16); color: #d7ffdc; }
-.vault {
+.facts {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 10px;
+  margin-bottom: 13px;
 }
-.panel {
-  border-radius: 18px;
-  padding: 18px;
-  background: rgba(35, 39, 57, 0.72);
-  border: 1px solid rgba(205,214,244,0.11);
-}
-.panel h2 { margin: 0 0 12px; font-size: 18px; color: #eef2ff; }
-.session { padding: 11px 0; border-bottom: 1px solid rgba(205,214,244,0.08); color: #b7c0dc; font-size: 14px; }
-.session strong { color: #eef2ff; display: block; margin-bottom: 4px; }
-.markdown {
-  font-size: 14px;
-  line-height: 1.55;
-  color: #cdd6f4;
-}
-.markdown code {
-  display: block;
-  margin-top: 12px;
-  padding: 12px;
+.fact {
+  min-height: 74px;
+  padding: 11px 13px;
   border-radius: 12px;
-  background: #10131f;
-  color: #a6e3a1;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  background: rgba(137, 180, 250, 0.10);
+  border: 1px solid rgba(137, 180, 250, 0.18);
 }
-.statusbar {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: 27px;
-  display: flex;
+.label {
+  display: block;
+  margin-bottom: 5px;
+  color: #9fa9c8;
+  font-size: 11px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+.value {
+  color: #eef2ff;
+  font-size: 20px;
+  font-weight: 900;
+}
+.subvalue {
+  margin-top: 4px;
+  color: #aeb8d7;
+  font-size: 12px;
+  font-weight: 700;
+}
+.scores {
+  display: grid;
+  gap: 7px;
+  margin-bottom: 14px;
+}
+.score-row {
+  display: grid;
+  grid-template-columns: 122px 1fr 42px;
   align-items: center;
-  justify-content: space-between;
-  padding: 0 18px;
-  background: rgba(19, 21, 17, 0.92);
-  border-top: 1px solid rgba(205,214,244,0.09);
-  color: #9ca6c7;
-  font: 12px "JetBrains Mono", ui-monospace, monospace;
+  gap: 10px;
+  color: #cdd6f4;
+  font-size: 13px;
+  font-weight: 800;
+}
+.bar {
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(205, 214, 244, 0.12);
+}
+.bar span {
+  display: block;
+  height: 100%;
+  width: var(--w);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #89b4fa, #a6e3a1);
+}
+.thumbs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px;
+}
+.thumb {
+  position: relative;
+  height: 62px;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid rgba(205, 214, 244, 0.16);
+  background: #111421;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.thumb.palette img {
+  width: 146%;
+  max-width: none;
+  transform: translate(-16%, -14%);
+}
+.thumb.preferences img {
+  object-position: 68% 32%;
+}
+.thumb span {
+  position: absolute;
+  left: 9px;
+  bottom: 5px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  color: #eff3ff;
+  background: rgba(8, 10, 18, 0.70);
+  border: 1px solid rgba(205, 214, 244, 0.14);
+  font-size: 10px;
+  font-weight: 850;
+}
+.feature-strip {
+  position: absolute;
+  left: 38px;
+  right: 38px;
+  bottom: 38px;
+  height: 99px;
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 10px;
+  padding: 17px;
+  border-radius: 0 0 18px 18px;
+  background: rgba(13, 16, 25, 0.98);
+}
+.feature {
+  display: grid;
+  align-content: center;
+  gap: 5px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgba(36, 40, 59, 0.72);
+  border: 1px solid rgba(205, 214, 244, 0.10);
+}
+.feature strong {
+  color: #eef2ff;
+  font-size: 14px;
+  line-height: 1.1;
+}
+.feature span {
+  color: #9fa9c8;
+  font-size: 11px;
+  line-height: 1.25;
 }
 </style>
 </head>
 <body>
-<div class="stage">
-  <div class="window">
-    <div class="titlebar">
-      <div class="traffic"><span class="red"></span><span class="yellow"></span><span class="green"></span></div>
-      <div class="tabs">
-        <div class="tab active"><span class="tab-dot"></span>api-server</div>
-        <div class="tab">web-client</div>
-        <div class="tab">Review</div>
-        <div class="tab">Vault</div>
-        <div class="tab">Browser</div>
+<main class="stage" aria-label="Cocxy Terminal public smoke capture">
+  <div class="shell">
+    <section class="main-shot">
+      <img src="${dashboard}" alt="Real Cocxy Terminal dashboard capture">
+      <div class="prompt-mask top">
+        <span class="user">demo</span>@<span class="host">local</span> <span class="path">/workspace/cocxy-demo</span> $ <span class="cmd">printf "public smoke ready\\n"</span><br>
+        public smoke ready
       </div>
-      <div class="toolbar-icons"><span>+</span><span>⌘K</span><span>◫</span><span>⌁</span></div>
-    </div>
-    <div class="app">
-      <aside class="sidebar">
-        <div class="side-head"><span>Workspaces</span><span>⌕  ●</span></div>
-        <div class="workspace active"><span class="rail"></span><div><div class="ws-title">api-server</div><div class="ws-sub"><span class="pulse"></span>Codex working</div></div><span class="status">2m</span></div>
-        <div class="workspace"><span class="rail orange"></span><div><div class="ws-title">web-client</div><div class="ws-sub"><span class="pulse"></span>Claude waiting</div></div><span class="status">9m</span></div>
-        <div class="workspace"><span class="rail green"></span><div><div class="ws-title">remote-lab</div><div class="ws-sub"><span class="pulse"></span>SSH connected</div></div><span class="status">live</span></div>
-        <div class="workspace"><span class="rail pink"></span><div><div class="ws-title">docs-site</div><div class="ws-sub"><span class="pulse"></span>Review ready</div></div><span class="status">ok</span></div>
-        <div class="new-tab">+ New Tab</div>
-      </aside>
-      <main class="terminal-area">
-        <section class="pane">
-          <div class="prompt"><span class="user">dev</span>@<span class="host">local</span> ~/projects/api-server <span class="cmd">$ cocxy agents --watch</span></div>
-          <div class="terminal-card">
-            <div class="card-head"><span>Agent dashboard</span><span class="badge"><span class="pulse"></span>11 profiles · zero telemetry</span></div>
-            <table>
-              <thead><tr><th>Agent</th><th>State</th><th>Surface</th><th>Last action</th></tr></thead>
-              <tbody>
-                <tr><td>Codex</td><td class="state">working</td><td>PTY + review</td><td>writing tests</td></tr>
-                <tr><td>Claude</td><td class="wait">waiting</td><td>team pane</td><td>needs input</td></tr>
-                <tr><td>OpenCode</td><td class="done">done</td><td>Vault</td><td>session saved</td></tr>
-                <tr><td>Gemini</td><td class="think">thinking</td><td>browser</td><td>checking localhost</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-        <section class="pane review">
-          <div class="prompt"><span class="user">dev</span>@<span class="host">local</span> ~/projects/api-server <span class="cmd">$ cocxy review open --session current</span></div>
-          <div class="terminal-card">
-            <div class="card-head"><span>Inline code review</span><span class="badge">3 files changed · 147 insertions</span></div>
-            <div class="review-grid">
-              <div class="files">
-                <div class="file active">M Sources/API/RateLimit.swift</div>
-                <div class="file">M Tests/API/RateLimitTests.swift</div>
-                <div class="file">A Docs/Runbook.md</div>
-              </div>
-              <div class="diff">
-                <div class="muted">@@ middleware request scope @@</div>
-                <div class="del">- let limit = defaultLimit</div>
-                <div class="add">+ let limit = policy.limit(for: route)</div>
-                <div class="add">+ audit.record("rate-limit", visibility: .private)</div>
-                <div class="muted">Comment: keep request IDs public, paths private.</div>
-              </div>
-            </div>
-          </div>
-        </section>
-      </main>
-      <aside class="right">
-        <section class="browser">
-          <div class="url">⌁ http://localhost:3000/docs/first-run.html</div>
-          <div class="browser-page">
-            <div class="site-brand"><div class="logo-box">&gt;_</div><span>Cocxy Terminal</span></div>
-            <h1>Local-first agent workspace</h1>
-            <p>Terminal, browser, Markdown, Vault, remotes, and review stay visible in one native macOS surface.</p>
-            <div class="mini-cards"><div class="mini-card">11 agents detected</div><div class="mini-card">Encrypted Vault</div><div class="mini-card">Remote SSH panes</div><div class="mini-card">No telemetry</div></div>
-          </div>
-        </section>
-        <section class="inspector">
-          <div class="segmented"><div class="segment active">Vault</div><div class="segment">Markdown</div><div class="segment">Remote</div></div>
-          <div class="vault">
-            <div class="panel">
-              <h2>Encrypted Vault</h2>
-              <div class="session"><strong>api-server rate limit</strong>Codex · resumable · local</div>
-              <div class="session"><strong>docs first run</strong>Claude · waiting for input</div>
-              <div class="session"><strong>remote build pane</strong>SSH · attached</div>
-            </div>
-            <div class="panel markdown">
-              <h2>Markdown workspace</h2>
-              <p>Release notes, runbooks, and review feedback live next to terminal output.</p>
-              <code># Smoke result
-status: passed
-privacy: verified</code>
-            </div>
-          </div>
-        </section>
-      </aside>
-    </div>
-    <div class="statusbar"><span>demo@local · public workspace</span><span>agent: working · ports: 3000 4000 5000 · zero telemetry</span></div>
+      <div class="prompt-mask bottom">
+        <span class="user">demo</span>@<span class="host">local</span> <span class="path">/workspace/cocxy-demo</span> $ <span class="cmd">npm run smoke:visual</span><br>
+        visual smoke passed · quality audit passed
+      </div>
+      <div class="dashboard-mask">Agent dashboard<br>active session · safe demo<br>1 file touched · 2m</div>
+    </section>
+    <aside class="evidence">
+      <div class="eyebrow"><span class="dot"></span>Smoke test evidence</div>
+      <h1>Real Cocxy workflow, verified locally.</h1>
+      <p class="lead">The main image is based on actual Cocxy app captures, with private prompt text replaced by public demo text.</p>
+      <div class="facts">
+        <div class="fact"><span class="label">Quality audit</span><span class="value">${escapeHTML(facts.qualityStatus)}</span><div class="subvalue">${escapeHTML(facts.pageCount)} pages · ${escapeHTML(facts.failures)} failures</div></div>
+        <div class="fact"><span class="label">Visual smoke</span><span class="value">${escapeHTML(facts.visualStatus)}</span><div class="subvalue">${escapeHTML(facts.screenshotCount)} screenshots</div></div>
+        <div class="fact"><span class="label">Hero AVIF</span><span class="value">${escapeHTML(facts.heroAvif)}</span><div class="subvalue">budget ${escapeHTML(facts.heroLimit)}</div></div>
+        <div class="fact"><span class="label">Telemetry</span><span class="value">none</span><div class="subvalue">local-first surfaces</div></div>
+      </div>
+      <div class="scores">
+        <div class="score-row"><span>Performance</span><div class="bar"><span style="--w:${escapeHTML(facts.performance)}%"></span></div><span>${escapeHTML(facts.performance)}</span></div>
+        <div class="score-row"><span>Accessibility</span><div class="bar"><span style="--w:${escapeHTML(facts.accessibility)}%"></span></div><span>${escapeHTML(facts.accessibility)}</span></div>
+        <div class="score-row"><span>Best practices</span><div class="bar"><span style="--w:${escapeHTML(facts.bestPractices)}%"></span></div><span>${escapeHTML(facts.bestPractices)}</span></div>
+        <div class="score-row"><span>SEO</span><div class="bar"><span style="--w:${escapeHTML(facts.seo)}%"></span></div><span>${escapeHTML(facts.seo)}</span></div>
+      </div>
+      <div class="thumbs">
+        <div class="thumb"><img src="${browser}" alt="Cocxy browser capture"><span>Browser pane</span></div>
+        <div class="thumb preferences"><img src="${preferences}" alt="Cocxy preferences capture"><span>Privacy controls</span></div>
+      </div>
+    </aside>
+    <section class="feature-strip" aria-label="Principal Cocxy capabilities">
+      <div class="feature"><strong>Agent dashboard</strong><span>live state, activity, files</span></div>
+      <div class="feature"><strong>Split panes</strong><span>terminal surfaces side by side</span></div>
+      <div class="feature"><strong>Browser</strong><span>local docs and dev servers</span></div>
+      <div class="feature"><strong>Vault</strong><span>resume local sessions</span></div>
+      <div class="feature"><strong>Markdown</strong><span>preview beside work</span></div>
+      <div class="feature"><strong>Code review</strong><span>diffs next to terminal</span></div>
+      <div class="feature"><strong>Zero telemetry</strong><span>no tracking backend</span></div>
+    </section>
   </div>
-</div>
+</main>
 </body>
 </html>`;
+}
 
 async function main() {
   fs.mkdirSync(imageRoot, { recursive: true });
   if (!fs.existsSync(chromePath)) throw new Error(`Google Chrome not found at ${chromePath}`);
+
+  const facts = smokeFacts();
   const browser = await chromium.launch({ executablePath: chromePath, headless: true });
-  const page = await browser.newPage({ viewport: { width: 1917, height: 1049 }, deviceScaleFactor: 1 });
-  await page.setContent(html, { waitUntil: 'load' });
+  const page = await browser.newPage({ viewport: { width: 1574, height: 808 }, deviceScaleFactor: 1 });
+  await page.setContent(renderHTML(facts), { waitUntil: 'load' });
   await page.screenshot({ path: pngPath, fullPage: false });
   await browser.close();
 
-  run('/usr/local/bin/cwebp', ['-quiet', '-q', '82', pngPath, '-o', webpPath]);
-  run('/usr/local/bin/avifenc', ['--min', '24', '--max', '38', '--speed', '6', pngPath, avifPath]);
+  run('/usr/local/bin/cwebp', ['-quiet', '-q', '80', pngPath, '-o', webpPath]);
+  run('/usr/local/bin/avifenc', ['--min', '32', '--max', '52', '--speed', '6', pngPath, avifPath]);
   console.log(`Rendered ${path.relative(webRoot, pngPath)}`);
   console.log(`Rendered ${path.relative(webRoot, webpPath)}`);
   console.log(`Rendered ${path.relative(webRoot, avifPath)}`);

@@ -5328,6 +5328,33 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(byteCount < 8_000_000)
     }
 
+    @Test("public preview render uses real captures and smoke evidence without private terms")
+    func publicPreviewRenderUsesRealCapturesAndSmokeEvidenceWithoutPrivateTerms() throws {
+        let root = repositoryRoot()
+        let script = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/render-public-preview.mjs"),
+            encoding: .utf8
+        )
+
+        #expect(script.contains("getting-started-dashboard.png"))
+        #expect(script.contains("getting-started-browser.png"))
+        #expect(script.contains("getting-started-preferences.png"))
+        #expect(script.contains("build/web-quality-audit/report.json"))
+        #expect(script.contains("build/web-visual-smoke/report.json"))
+        #expect(script.contains("Smoke test evidence"))
+
+        for restrictedTerm in [
+            "Ga" + "lf",
+            "Mac" + "Book",
+            "/Use" + "rs/",
+            "clau" + "de-code",
+            "cm" + "ux",
+            "wa" + "rp",
+        ] {
+            #expect(!script.contains(restrictedTerm))
+        }
+    }
+
     @Test("public website locale alternates are reciprocal for every public page")
     func publicWebsiteLocaleAlternatesAreReciprocalForEveryPublicPage() throws {
         let root = repositoryRoot().appendingPathComponent("web/public", isDirectory: true)
