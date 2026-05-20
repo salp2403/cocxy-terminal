@@ -23,6 +23,7 @@ const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome
 const fullLighthouse = process.env.COCXY_WEB_QUALITY_FULL === '1';
 const primaryLighthouseMethod = process.env.COCXY_WEB_LIGHTHOUSE_THROTTLING || 'simulate';
 const lighthouseDevtoolsFallback = process.env.COCXY_WEB_LIGHTHOUSE_DEVTOOLS_FALLBACK !== '0';
+const lighthouseProvidedFallback = process.env.COCXY_WEB_LIGHTHOUSE_PROVIDED_FALLBACK !== '0';
 const lighthouseBorderlineRetryMargin = {
   performance: 0.03,
 };
@@ -325,6 +326,18 @@ async function runLighthouse(urls) {
         if (shouldUseLighthouseRetry(lighthouseResult, retryResult)) {
           fallbackFrom = fallbackFrom ?? lighthouseResult.method;
           lighthouseResult = retryResult;
+        }
+      }
+      if (
+        lighthouseProvidedFallback
+        && isLighthouseInternalFailure(lighthouseResult)
+        && lighthouseResult.method !== 'provided'
+      ) {
+        console.warn(`Lighthouse ${lighthouseResult.method} still returned an internal zero-score result on ${url}; rerunning with provided throttling in isolated Chrome.`);
+        const providedResult = await runIsolatedLighthouse(url, 'provided');
+        if (shouldUseLighthouseRetry(lighthouseResult, providedResult)) {
+          fallbackFrom = fallbackFrom ?? lighthouseResult.method;
+          lighthouseResult = providedResult;
         }
       }
 
