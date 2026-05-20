@@ -25,6 +25,7 @@ const primaryLighthouseMethod = process.env.COCXY_WEB_LIGHTHOUSE_THROTTLING || '
 const lighthouseDevtoolsFallback = process.env.COCXY_WEB_LIGHTHOUSE_DEVTOOLS_FALLBACK !== '0';
 const lighthouseProvidedFallback = process.env.COCXY_WEB_LIGHTHOUSE_PROVIDED_FALLBACK !== '0';
 const lighthouseDesktopFallback = process.env.COCXY_WEB_LIGHTHOUSE_DESKTOP_FALLBACK !== '0';
+const lighthouseTimeoutMs = Number(process.env.COCXY_WEB_LIGHTHOUSE_TIMEOUT_MS || 120000);
 const lighthouseBorderlineRetryMargin = {
   performance: 0.03,
 };
@@ -82,9 +83,12 @@ function startServer() {
   });
 }
 
-async function waitForServer() {
+async function waitForServer(server) {
   const deadline = Date.now() + 12000;
   while (Date.now() < deadline) {
+    if (server.exitCode !== null || server.signalCode !== null) {
+      throw new Error(`Local web server exited before becoming healthy: code=${server.exitCode ?? 'none'} signal=${server.signalCode ?? 'none'}`);
+    }
     try {
       const response = await fetch(`${baseURL}/health`);
       if (response.ok) return;
@@ -236,6 +240,30 @@ function isLighthouseDevtoolsFallbackError(error) {
   return message.includes('LanternError') || message.includes('Invalid dependency graph');
 }
 
+function isLighthouseIsolatedRetryError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  return [
+    'LighthouseTimeout',
+    'Session closed',
+    'Protocol error',
+    'ECONNREFUSED',
+    'Target closed',
+    'target closed',
+    'Connection closed',
+    'WebSocket is not open',
+  ].some((needle) => message.includes(needle));
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  let timeout;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`LighthouseTimeout: ${label} exceeded ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+  return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timeout));
+}
+
 function shouldRerunLighthouseWithDevtools({ method, categories, lhr }) {
   return lighthouseDevtoolsFallback
     && method === 'simulate'
@@ -270,7 +298,7 @@ function shouldUseLighthouseRetry(currentResult, retryResult) {
 }
 
 async function runSingleLighthouse(url, chromePort, method, formFactor = 'mobile') {
-  const runnerResult = await lighthouse(`${baseURL}${url}`, {
+  const runnerResult = await withTimeout(lighthouse(`${baseURL}${url}`, {
     port: chromePort,
     output: 'json',
     logLevel: 'error',
@@ -278,7 +306,7 @@ async function runSingleLighthouse(url, chromePort, method, formFactor = 'mobile
   }, {
     extends: 'lighthouse:default',
     settings: lighthouseSettings(method, formFactor),
-  });
+  }), lighthouseTimeoutMs, `${method}/${formFactor} ${url}`);
   const lhr = runnerResult.lhr;
   return {
     categories: lighthouseCategories(lhr),
@@ -299,7 +327,12 @@ async function runIsolatedLighthouse(url, method, formFactor = 'mobile') {
 }
 
 async function runLighthouse(urls) {
-  const chrome = await launch(chromeLaunchOptions());
+  const useSharedChrome = !fullLighthouse && process.env.COCXY_WEB_LIGHTHOUSE_SHARED !== '0';
+  const chrome = useSharedChrome ? await launch(chromeLaunchOptions()) : null;
+  const runAttempt = (url, method, formFactor = 'mobile') => {
+    if (chrome) return runSingleLighthouse(url, chrome.port, method, formFactor);
+    return runIsolatedLighthouse(url, method, formFactor);
+  };
   const results = [];
   try {
     for (const url of urls) {
@@ -308,7 +341,7 @@ async function runLighthouse(urls) {
       let retryReason = null;
       const primaryMethod = primaryLighthouseMethod;
       try {
-        lighthouseResult = await runSingleLighthouse(url, chrome.port, primaryMethod);
+        lighthouseResult = await runAttempt(url, primaryMethod);
       } catch (error) {
         if (
           lighthouseDevtoolsFallback
@@ -317,7 +350,17 @@ async function runLighthouse(urls) {
         ) {
           fallbackFrom = primaryMethod;
           console.warn(`Lighthouse ${primaryMethod} failed internally on ${url}; rerunning with devtools throttling.`);
-          lighthouseResult = await runSingleLighthouse(url, chrome.port, 'devtools');
+          try {
+            lighthouseResult = await runAttempt(url, 'devtools');
+          } catch (fallbackError) {
+            if (!isLighthouseIsolatedRetryError(fallbackError)) throw fallbackError;
+            console.warn(`Lighthouse devtools lost the shared Chrome session on ${url}; rerunning in isolated Chrome.`);
+            lighthouseResult = await runIsolatedLighthouse(url, 'devtools');
+          }
+        } else if (isLighthouseIsolatedRetryError(error)) {
+          fallbackFrom = primaryMethod;
+          console.warn(`Lighthouse ${primaryMethod} lost the shared Chrome session on ${url}; rerunning in isolated Chrome.`);
+          lighthouseResult = await runIsolatedLighthouse(url, primaryMethod);
         } else {
           throw error;
         }
@@ -325,7 +368,7 @@ async function runLighthouse(urls) {
       if (shouldRerunLighthouseWithDevtools(lighthouseResult)) {
         fallbackFrom = primaryMethod;
         console.warn(`Lighthouse ${primaryMethod} returned an internal zero-score result on ${url}; rerunning with devtools throttling.`);
-        lighthouseResult = await runSingleLighthouse(url, chrome.port, 'devtools');
+        lighthouseResult = await runAttempt(url, 'devtools');
       }
 
       const categories = lighthouseResult.categories;
@@ -389,7 +432,7 @@ async function runLighthouse(urls) {
       });
     }
   } finally {
-    await chrome.kill();
+    if (chrome) await chrome.kill();
   }
   return results;
 }
@@ -454,7 +497,7 @@ async function main() {
   });
 
   try {
-    await waitForServer();
+    await waitForServer(server);
     report.html = await validateHtml(htmlFiles);
     report.budgets = verifyBudgets();
     report.axe = await runAxe(urls);

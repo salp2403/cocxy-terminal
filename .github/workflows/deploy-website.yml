@@ -82,6 +82,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           set -euo pipefail
+          ASSET_VERSION="${VERSION}-${GITHUB_SHA::12}"
           echo "$SERVER_KEY" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           DEPLOY_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
@@ -137,8 +138,8 @@ jobs:
             "set -e; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9]*\.[0-9]*\.[0-9]*|cocxy-preview.avif?v=${VERSION}|g; s|cocxy-preview.webp?v=[0-9]*\.[0-9]*\.[0-9]*|cocxy-preview.webp?v=${VERSION}|g; s|cocxy-preview.png?v=[0-9]*\.[0-9]*\.[0-9]*|cocxy-preview.png?v=${VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'"
 
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
@@ -160,6 +161,7 @@ jobs:
       - name: Production smoke
         run: |
           set -euo pipefail
+          ASSET_VERSION="${{ steps.version.outputs.VERSION }}-${GITHUB_SHA::12}"
           test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/)" = "200"
           test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/privacy.html)" = "200"
           test "$(curl -fsS -o /dev/null -w '%{http_code}' https://cocxy.dev/features/agents.html)" = "200"
@@ -174,7 +176,7 @@ jobs:
           curl -fsSL https://cocxy.dev/privacy.html -o "$SMOKE_DIR/privacy.html"
           curl -fsSL https://cocxy.dev/sitemap.xml -o "$SMOKE_DIR/sitemap.xml"
           curl -fsSL https://cocxy.dev/robots.txt -o "$SMOKE_DIR/robots.txt"
-          grep -q "style.css?v=${{ steps.version.outputs.VERSION }}" "$SMOKE_DIR/home.html"
+          grep -q "style.css?v=${ASSET_VERSION}" "$SMOKE_DIR/home.html"
           grep -q "CocxyTerminal-${{ steps.version.outputs.VERSION }}.dmg" "$SMOKE_DIR/home.html"
           grep -q "No telemetry pipeline" "$SMOKE_DIR/privacy.html"
           grep -q "https://cocxy.dev/privacy.html" "$SMOKE_DIR/sitemap.xml"

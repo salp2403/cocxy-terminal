@@ -33,11 +33,34 @@ const PUBLIC_ROOT_DIRECTORIES = Object.freeze([
   "/og/",
   "/videos/",
 ]);
+const IMMUTABLE_STATIC_EXTENSIONS = new Set([
+  ".avif",
+  ".css",
+  ".ico",
+  ".jpg",
+  ".jpeg",
+  ".js",
+  ".mp4",
+  ".png",
+  ".svg",
+  ".webm",
+  ".webp",
+  ".woff2",
+]);
 
 function isPublicRequestPath(requestPath) {
   if (PUBLIC_ROOT_FILES.has(requestPath)) return true;
   if (/^\/[^/]+\.html$/.test(requestPath)) return true;
   return PUBLIC_ROOT_DIRECTORIES.some((prefix) => requestPath.startsWith(prefix));
+}
+
+function setStaticCacheHeaders(res, filePath) {
+  const extension = path.extname(filePath).toLowerCase();
+  if (IMMUTABLE_STATIC_EXTENSIONS.has(extension)) {
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+    return;
+  }
+  res.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
 }
 
 app.use(compression());
@@ -89,8 +112,9 @@ app.use(
   express.static(PUBLIC_ROOT, {
     dotfiles: "ignore",
     index: "index.html",
-    maxAge: process.env.NODE_ENV === "production" ? "1y" : 0,
+    maxAge: 0,
     etag: true,
+    setHeaders: setStaticCacheHeaders,
   })
 );
 
