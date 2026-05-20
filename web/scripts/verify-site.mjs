@@ -42,13 +42,16 @@ const requiredPages = [
   'docs/release-channels.html',
   'docs/troubleshooting.html',
   'docs/search-index.json',
+  'feed.xml',
   'faq.html',
   'releases.html',
+  'releases.xml',
   'channels.html',
   'press.html',
   'roadmap.html',
   'sponsors.html',
   'llms.txt',
+  'service-worker.js',
   'sitemap.xml',
   'robots.txt',
 ];
@@ -184,6 +187,7 @@ for (const file of jsFiles) {
     fail(`Runtime inline style mutation in ${relative}`);
   }
 }
+verifyServiceWorker();
 
 const cssFiles = publicFiles.filter((file) => file.endsWith('.css'));
 const entryCSS = cssFiles.find((file) => path.basename(file) === 'style.css');
@@ -314,6 +318,9 @@ for (const page of requiredPages.filter((page) => page.endsWith('.html'))) {
   if (!sitemap.includes(url)) fail(`Sitemap missing ${url}`);
 }
 
+verifyRSSFeed('feed.xml');
+verifyRSSFeed('releases.xml');
+
 const server = fs.readFileSync(path.join(webRoot, 'server.js'), 'utf8');
 for (const needle of [
   '"/getting-started.html"',
@@ -326,8 +333,19 @@ for (const needle of [
   'PUBLIC_ROOT',
   'isPublicRequestPath',
   'dotfiles: "ignore"',
+  '"/feed.xml"',
+  '"/releases.xml"',
+  '"/service-worker.js"',
+  'path.basename(filePath) === "service-worker.js"',
 ]) {
   if (!server.includes(needle)) fail(`server.js missing ${needle}`);
+}
+
+for (const workflow of ['.github/workflows/deploy-website.yml', '.github/workflows/release.yml']) {
+  const content = fs.readFileSync(path.join(repoRoot, workflow), 'utf8');
+  for (const needle of ['web/public/feed.xml', 'web/public/releases.xml', 'web/public/service-worker.js']) {
+    if (!content.includes(needle)) fail(`${workflow} missing deploy copy for ${needle}`);
+  }
 }
 
 for (const asset of ['images/cocxy-preview.webp', 'images/cocxy-preview.avif', 'og/og-index.png']) {
@@ -394,6 +412,32 @@ function verifyOpenGraphImage(relative, content) {
     return;
   }
   if (!exists(match[1])) fail(`Missing og:image asset for ${relative}: ${match[1]}`);
+}
+
+function verifyRSSFeed(relative) {
+  if (!exists(relative)) {
+    fail(`Missing RSS feed: ${relative}`);
+    return;
+  }
+  const content = read(relative);
+  for (const needle of ['<rss version="2.0"', '<channel>', '<atom:link', '<item>', '<guid']) {
+    if (!content.includes(needle)) fail(`${relative} missing ${needle}`);
+  }
+  if (/https?:\/\/(?!github\.com|cocxy\.dev|www\.w3\.org\/2005\/Atom)/i.test(content)) {
+    fail(`${relative} includes unexpected external URL`);
+  }
+}
+
+function verifyServiceWorker() {
+  if (!exists('service-worker.js')) {
+    fail('Missing service-worker.js');
+    return;
+  }
+  const content = read('service-worker.js');
+  for (const needle of ['CACHE_NAME', 'PRECACHE_URLS', 'self.addEventListener(\'install\'', 'self.addEventListener(\'fetch\'', "url.origin !== self.location.origin"]) {
+    if (!content.includes(needle)) fail(`service-worker.js missing ${needle}`);
+  }
+  if (/https?:\/\//i.test(content)) fail('service-worker.js must not hard-code external URLs');
 }
 
 function verifyCSSCustomProperties(files) {

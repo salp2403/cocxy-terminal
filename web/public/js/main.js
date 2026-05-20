@@ -3,6 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initCopyButtons();
   initReleasePagination();
   initDocsSearch();
+  initOfflineSupport();
 });
 
 function initNavigation() {
@@ -93,5 +94,13 @@ async function initDocsSearch() {
       list.append(row);
     }
     results.replaceChildren(list);
+  });
+}
+
+function initOfflineSupport() {
+  if (!('serviceWorker' in navigator) || location.protocol === 'file:') return;
+
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js', { scope: '/' }).catch(() => {});
   });
 }

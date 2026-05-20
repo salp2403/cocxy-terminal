@@ -16,11 +16,14 @@ const REDIRECTS = Object.freeze({
 });
 const PUBLIC_ROOT_FILES = new Set([
   "/",
+  "/feed.xml",
   "/health",
   "/index.html",
   "/llms.txt",
   "/manifest.webmanifest",
+  "/releases.xml",
   "/robots.txt",
+  "/service-worker.js",
   "/sitemap.xml",
 ]);
 const PUBLIC_ROOT_DIRECTORIES = Object.freeze([
@@ -56,6 +59,10 @@ function isPublicRequestPath(requestPath) {
 
 function setStaticCacheHeaders(res, filePath) {
   const extension = path.extname(filePath).toLowerCase();
+  if (path.basename(filePath) === "service-worker.js") {
+    res.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
+    return;
+  }
   if (IMMUTABLE_STATIC_EXTENSIONS.has(extension)) {
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     return;

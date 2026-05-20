@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Cocxy Terminal Updates</title>
+    <link>https://cocxy.dev</link>
+    <description>Product, documentation, security, privacy, and roadmap updates for Cocxy Terminal.</description>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 20 May 2026 00:00:00 GMT</lastBuildDate>
+    <atom:link href="https://cocxy.dev/feed.xml" rel="self" type="application/rss+xml"/>
+    <item>
+      <title>Cocxy Terminal 1.18.0 web and release readiness</title>
+      <link>https://cocxy.dev/releases.html</link>
+      <guid isPermaLink="true">https://cocxy.dev/releases.html</guid>
+      <pubDate>Wed, 20 May 2026 00:00:00 GMT</pubDate>
+      <description>Release readiness page with local-first privacy, agent workflows, Vault, documentation, and download links.</description>
+    </item>
+    <item>
+      <title>Security and privacy verification guide</title>
+      <link>https://cocxy.dev/security.html</link>
+      <guid isPermaLink="true">https://cocxy.dev/security.html</guid>
+      <pubDate>Tue, 19 May 2026 00:00:00 GMT</pubDate>
+      <description>Threat model, signing, update, local storage, and zero telemetry verification notes.</description>
+    </item>
+    <item>
+      <title>Public roadmap</title>
+      <link>https://cocxy.dev/roadmap.html</link>
+      <guid isPermaLink="true">https://cocxy.dev/roadmap.html</guid>
+      <pubDate>Mon, 18 May 2026 00:00:00 GMT</pubDate>
+      <description>Public direction for the native macOS terminal, agent workflows, documentation, and release channels.</description>
+    </item>
+  </channel>
+</rss>

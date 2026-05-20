@@ -352,6 +352,15 @@ function escapeHTML(value) {
     .replace(/\u0000(\d+)\u0000/g, (_, index) => entities[Number(index)]);
 }
 
+function escapeXML(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+}
+
 function json(value) {
   return JSON.stringify(value, null, 2)
     .replaceAll('<', '\\u003c')
@@ -426,7 +435,8 @@ function head({ title, description, page, lang = 'en', schema = [], type = 'webs
   <link rel="icon" type="image/png" href="/images/icon.png">
   <link rel="apple-touch-icon" href="/images/icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
-  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
+  <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
   <link rel="preload" as="image" href="${previewImage('avif')}" type="image/avif" fetchpriority="high">
   <link rel="stylesheet" href="${cssHref}">
   <script>
@@ -1473,6 +1483,9 @@ function writeAll() {
   write('sitemap.xml', sitemap());
   write('robots.txt', robots());
   write('llms.txt', llms());
+  write('feed.xml', feed());
+  write('releases.xml', releasesFeed());
+  write('service-worker.js', serviceWorker());
   writeWeb('preview/components.html', previewComponents());
   ensureOgImages();
 }
@@ -1553,6 +1566,164 @@ function llms() {
 ## Supported agents
 ${agents.map((agent) => `- ${agent[0]}`).join('\n')}
 `;
+}
+
+function rssItem({ title, link, description, pubDate, guid = link }) {
+  return `    <item>
+      <title>${escapeXML(title)}</title>
+      <link>${escapeXML(link)}</link>
+      <guid isPermaLink="true">${escapeXML(guid)}</guid>
+      <pubDate>${escapeXML(pubDate)}</pubDate>
+      <description>${escapeXML(description)}</description>
+    </item>`;
+}
+
+function rssChannel({ title, description, link, atomSelf, items }) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>${escapeXML(title)}</title>
+    <link>${escapeXML(link)}</link>
+    <description>${escapeXML(description)}</description>
+    <language>en-us</language>
+    <lastBuildDate>Wed, 20 May 2026 00:00:00 GMT</lastBuildDate>
+    <atom:link href="${escapeXML(atomSelf)}" rel="self" type="application/rss+xml"/>
+${items.map(rssItem).join('\n')}
+  </channel>
+</rss>`;
+}
+
+function feed() {
+  return rssChannel({
+    title: 'Cocxy Terminal Updates',
+    description: 'Product, documentation, security, privacy, and roadmap updates for Cocxy Terminal.',
+    link: site,
+    atomSelf: `${site}/feed.xml`,
+    items: [
+      {
+        title: 'Cocxy Terminal 1.18.0 web and release readiness',
+        link: `${site}/releases.html`,
+        pubDate: 'Wed, 20 May 2026 00:00:00 GMT',
+        description: 'Release readiness page with local-first privacy, agent workflows, Vault, documentation, and download links.',
+      },
+      {
+        title: 'Security and privacy verification guide',
+        link: `${site}/security.html`,
+        pubDate: 'Tue, 19 May 2026 00:00:00 GMT',
+        description: 'Threat model, signing, update, local storage, and zero telemetry verification notes.',
+      },
+      {
+        title: 'Public roadmap',
+        link: `${site}/roadmap.html`,
+        pubDate: 'Mon, 18 May 2026 00:00:00 GMT',
+        description: 'Public direction for the native macOS terminal, agent workflows, documentation, and release channels.',
+      },
+    ],
+  });
+}
+
+function releasesFeed() {
+  return rssChannel({
+    title: 'Cocxy Terminal Releases',
+    description: 'Release notes and download updates for Cocxy Terminal.',
+    link: `${site}/releases.html`,
+    atomSelf: `${site}/releases.xml`,
+    items: [
+      {
+        title: 'Cocxy Terminal 1.18.0',
+        link: 'https://github.com/salp2403/cocxy-terminal/releases/latest',
+        guid: `${site}/releases.html#v1-18-0`,
+        pubDate: 'Wed, 20 May 2026 00:00:00 GMT',
+        description: 'Current release channel entry for the native macOS app and bundled command-line companion.',
+      },
+      {
+        title: 'Release channels',
+        link: `${site}/channels.html`,
+        pubDate: 'Tue, 19 May 2026 00:00:00 GMT',
+        description: 'Stable, preview, and nightly channel guidance with explicit risk tradeoffs.',
+      },
+    ],
+  });
+}
+
+function serviceWorker() {
+  const precacheURLs = [
+    '/',
+    '/features.html',
+    '/features/agents.html',
+    '/privacy.html',
+    '/security.html',
+    '/architecture.html',
+    '/why-cocxy.html',
+    '/docs/',
+    '/docs/first-run.html',
+    '/releases.html',
+    '/css/style.css?v=0.0.0',
+    '/js/main.js',
+    '/js/theme-switcher.js',
+    '/images/icon.png',
+    '/images/cocxy-preview.avif?v=0.0.0',
+    '/images/cocxy-preview.webp?v=0.0.0',
+    '/manifest.webmanifest',
+    '/llms.txt',
+    '/feed.xml',
+    '/releases.xml',
+  ];
+  return `const CACHE_NAME = 'cocxy-web-static-v0.0.0';
+const PRECACHE_URLS = ${JSON.stringify(precacheURLs, null, 2)};
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then((cache) => cache.addAll(PRECACHE_URLS))
+      .then(() => self.skipWaiting())
+  );
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys()
+      .then((names) => Promise.all(names
+        .filter((name) => name.startsWith('cocxy-web-') && name !== CACHE_NAME)
+        .map((name) => caches.delete(name))))
+      .then(() => self.clients.claim())
+  );
+});
+
+self.addEventListener('fetch', (event) => {
+  const request = event.request;
+  if (request.method !== 'GET') return;
+
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || url.pathname === '/health') return;
+
+  if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request, '/'));
+    return;
+  }
+
+  event.respondWith(cacheFirst(request));
+});
+
+async function networkFirst(request, fallbackURL) {
+  const cache = await caches.open(CACHE_NAME);
+  try {
+    const response = await fetch(request);
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch (_) {
+    return (await cache.match(request)) || cache.match(fallbackURL);
+  }
+}
+
+async function cacheFirst(request) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok) await cache.put(request, response.clone());
+  return response;
+}`;
 }
 
 function verifySourceFacts() {
