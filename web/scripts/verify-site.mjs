@@ -315,7 +315,15 @@ for (const page of requiredPages.filter((page) => page.endsWith('.html'))) {
 }
 
 const server = fs.readFileSync(path.join(webRoot, 'server.js'), 'utf8');
-for (const needle of ['"/getting-started.html"', '"/docs/first-run.html"', 'Permissions-Policy']) {
+for (const needle of [
+  '"/getting-started.html"',
+  '"/docs/first-run.html"',
+  'Permissions-Policy',
+  '"/health"',
+  'PUBLIC_ROOT',
+  'isPublicRequestPath',
+  'dotfiles: "ignore"',
+]) {
   if (!server.includes(needle)) fail(`server.js missing ${needle}`);
 }
 

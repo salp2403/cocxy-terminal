@@ -276,6 +276,10 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent("web/scripts/restart-production-runtime.sh"),
             encoding: .utf8
         )
+        let serverScript = try String(
+            contentsOf: root.appendingPathComponent("web/server.js"),
+            encoding: .utf8
+        )
 
         #expect(workflow.contains("workflow_dispatch:"))
         #expect(workflow.contains("environment: production"))
@@ -301,6 +305,9 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(runtimeScript.contains("cocxy-web failed to stay running after fallback start"))
         #expect(runtimeScript.contains("cocxy-web did not pass local health check"))
         #expect(runtimeScript.contains("port_listener_pids | tr"))
+        #expect(serverScript.contains("PUBLIC_ROOT"))
+        #expect(serverScript.contains("isPublicRequestPath"))
+        #expect(serverScript.contains(#"dotfiles: "ignore""#))
         #expect(workflow.contains("https://cocxy.dev/getting-started.html"))
         #expect(workflow.contains(#"test "$REDIRECT_STATUS" = "301""#))
         #expect(!workflow.contains("|| true"))
