@@ -138,6 +138,7 @@ jobs:
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9]*\.[0-9]*\.[0-9]*|style.css?v=${VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9]*\.[0-9]*\.[0-9]*|cocxy-preview.avif?v=${VERSION}|g; s|cocxy-preview.webp?v=[0-9]*\.[0-9]*\.[0-9]*|cocxy-preview.webp?v=${VERSION}|g; s|cocxy-preview.png?v=[0-9]*\.[0-9]*\.[0-9]*|cocxy-preview.png?v=${VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'"
 
           scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \

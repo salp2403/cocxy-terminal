@@ -12,6 +12,8 @@ const repoRoot = path.resolve(webRoot, '..');
 const site = 'https://cocxy.dev';
 const cssHref = '/css/style.css?v=0.0.0';
 const releaseVersion = '0.0.0';
+const previewAssetVersion = '0.0.0';
+const previewImage = (extension) => `/images/cocxy-preview.${extension}?v=${previewAssetVersion}`;
 
 const agents = [
   ['Claude', 'claude', 'OSC and hooks', '--resume <session-id>'],
@@ -425,7 +427,7 @@ function head({ title, description, page, lang = 'en', schema = [], type = 'webs
   <link rel="apple-touch-icon" href="/images/icon.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/appcast.xml">
-  <link rel="preload" as="image" href="/images/cocxy-preview.avif" type="image/avif" fetchpriority="high">
+  <link rel="preload" as="image" href="${previewImage('avif')}" type="image/avif" fetchpriority="high">
   <link rel="stylesheet" href="${cssHref}">
   <script>
   (() => {
@@ -632,9 +634,9 @@ function home(lang = 'en') {
   ];
   const body = `<section class="hero hero-product" id="hero" aria-labelledby="hero-title">
   <picture class="hero-media">
-    <source srcset="/images/cocxy-preview.avif" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp" type="image/webp">
-    <img src="/images/cocxy-preview.png" width="1574" height="808" alt="${es ? 'Cocxy Terminal con paneles, navegador y agentes locales' : 'Cocxy Terminal with panes, browser, and local agent state'}" fetchpriority="high">
+    <source srcset="${previewImage('avif')}" type="image/avif">
+    <source srcset="${previewImage('webp')}" type="image/webp">
+    <img src="${previewImage('png')}" width="1574" height="808" alt="${es ? 'Cocxy Terminal con paneles, navegador y agentes locales' : 'Cocxy Terminal with panes, browser, and local agent state'}" fetchpriority="high">
   </picture>
   <div class="container hero-inner">
     <img class="hero-logo" src="/images/icon.png" width="92" height="92" alt="">
@@ -938,9 +940,9 @@ patterns = ["waiting", "working"]</code><button class="copy-button" type="button
     <article class="card"><h2>${es ? 'Integración con Bóveda' : 'Vault integration'}</h2><p>${es ? 'Las sesiones detectadas pueden buscarse y reanudarse desde la Bóveda cifrada.' : 'Detected sessions can be searched and resumed from the encrypted Vault.'}</p></article>
   </div>
   <picture class="screenshot-frame">
-    <source srcset="/images/cocxy-preview.avif" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp" type="image/webp">
-    <img src="/images/cocxy-preview.png" width="1574" height="808" alt="${es ? 'Cocxy mostrando agentes y paneles locales' : 'Cocxy showing agents and local panes'}" loading="lazy">
+    <source srcset="${previewImage('avif')}" type="image/avif">
+    <source srcset="${previewImage('webp')}" type="image/webp">
+    <img src="${previewImage('png')}" width="1574" height="808" alt="${es ? 'Cocxy mostrando agentes y paneles locales' : 'Cocxy showing agents and local panes'}" loading="lazy">
   </picture>
   <div class="callout">
     <h2>${es ? 'Agentes propios' : 'Custom agents'}</h2>
@@ -960,9 +962,9 @@ function detailSections(feature, lang = 'en') {
     ${sections.map(([title, text], index) => `<h2 id="section-${index + 1}">${escapeHTML(title)}</h2><p>${escapeHTML(text)}</p>`).join('\n')}
     <h2 id="screenshot">${es ? 'Captura del flujo' : 'Workflow screenshot'}</h2>
     <picture class="screenshot-frame">
-      <source srcset="/images/cocxy-preview.avif" type="image/avif">
-      <source srcset="/images/cocxy-preview.webp" type="image/webp">
-      <img src="/images/cocxy-preview.png" width="1574" height="808" alt="${escapeHTML(es ? `${feature.esTitle} en Cocxy Terminal` : `${feature.title} in Cocxy Terminal`)}" loading="lazy">
+      <source srcset="${previewImage('avif')}" type="image/avif">
+      <source srcset="${previewImage('webp')}" type="image/webp">
+      <img src="${previewImage('png')}" width="1574" height="808" alt="${escapeHTML(es ? `${feature.esTitle} en Cocxy Terminal` : `${feature.title} in Cocxy Terminal`)}" loading="lazy">
     </picture>
     <div class="callout">
       <h2>${es ? 'Local primero' : 'Local-first'}</h2>
