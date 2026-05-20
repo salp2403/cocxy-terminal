@@ -278,6 +278,31 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!workflow.contains("|| true"))
     }
 
+    @Test("preview workflow runs website quality gates without publishing from pull requests")
+    func previewWorkflowRunsWebsiteQualityGatesWithoutPublishingFromPullRequests() throws {
+        let root = repositoryRoot()
+        let workflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/preview.yml"),
+            encoding: .utf8
+        )
+
+        #expect(workflow.contains("pull_request:"))
+        #expect(workflow.contains("- 'web/**'"))
+        #expect(workflow.contains("website-quality:"))
+        #expect(workflow.contains("name: Website Quality"))
+        #expect(workflow.contains("timeout-minutes: 45"))
+        #expect(workflow.contains("permissions:\n      contents: read"))
+        #expect(workflow.contains("working-directory: web"))
+        #expect(workflow.contains("npm ci --no-audit --no-fund"))
+        #expect(workflow.contains("npm run smoke"))
+        #expect(workflow.contains("npm audit --audit-level=high"))
+        #expect(workflow.contains("npm run smoke:visual"))
+        #expect(workflow.contains("npm run audit:quality:full"))
+        #expect(workflow.contains("build-preview:"))
+        #expect(workflow.contains("if: github.event_name != 'pull_request'"))
+        #expect(workflow.contains("contents: write"))
+    }
+
     @Test("web quality audit keeps strict Lighthouse gates when CI runner hits Lantern zero-score")
     func webQualityAuditKeepsStrictLighthouseGatesWhenCIRunnerHitsLanternZeroScore() throws {
         let root = repositoryRoot()

@@ -1,6 +1,10 @@
 name: Preview Build
 
 on:
+  pull_request:
+    paths:
+      - '.github/workflows/preview.yml'
+      - 'web/**'
   push:
     tags:
       - 'v*-preview.*'
@@ -12,14 +16,42 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  website-quality:
+    name: Website Quality
+    runs-on: macos-15
+    timeout-minutes: 45
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          lfs: true
+
+      - name: Install website dependencies
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: Run website smoke gates
+        working-directory: web
+        run: |
+          npm run smoke
+          npm audit --audit-level=high
+          npm run smoke:visual
+          npm run audit:quality:full
+
   build-preview:
     name: Build Preview
+    if: github.event_name != 'pull_request'
     runs-on: macos-15
     timeout-minutes: 60
     environment: production
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
