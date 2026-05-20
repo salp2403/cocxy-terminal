@@ -339,6 +339,7 @@ for (const needle of [
   '"/releases.xml"',
   '"/service-worker.js"',
   'path.basename(filePath) === "service-worker.js"',
+  '"no-cache, no-transform, max-age=0, must-revalidate"',
 ]) {
   if (!server.includes(needle)) fail(`server.js missing ${needle}`);
 }

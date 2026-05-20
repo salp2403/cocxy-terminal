@@ -60,14 +60,18 @@ function isPublicRequestPath(requestPath) {
 function setStaticCacheHeaders(res, filePath) {
   const extension = path.extname(filePath).toLowerCase();
   if (path.basename(filePath) === "service-worker.js") {
-    res.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
+    res.setHeader("Cache-Control", "no-cache, no-transform, max-age=0, must-revalidate");
+    return;
+  }
+  if (extension === ".html") {
+    res.setHeader("Cache-Control", "no-cache, no-transform, max-age=0, must-revalidate");
     return;
   }
   if (IMMUTABLE_STATIC_EXTENSIONS.has(extension)) {
     res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
     return;
   }
-  res.setHeader("Cache-Control", "no-cache, max-age=0, must-revalidate");
+  res.setHeader("Cache-Control", "no-cache, no-transform, max-age=0, must-revalidate");
 }
 
 app.use(compression());
