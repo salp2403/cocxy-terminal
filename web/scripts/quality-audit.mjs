@@ -24,6 +24,7 @@ const fullLighthouse = process.env.COCXY_WEB_QUALITY_FULL === '1';
 const primaryLighthouseMethod = process.env.COCXY_WEB_LIGHTHOUSE_THROTTLING || 'simulate';
 const lighthouseDevtoolsFallback = process.env.COCXY_WEB_LIGHTHOUSE_DEVTOOLS_FALLBACK !== '0';
 const lighthouseProvidedFallback = process.env.COCXY_WEB_LIGHTHOUSE_PROVIDED_FALLBACK !== '0';
+const lighthouseDesktopFallback = process.env.COCXY_WEB_LIGHTHOUSE_DESKTOP_FALLBACK !== '0';
 const lighthouseBorderlineRetryMargin = {
   performance: 0.03,
 };
@@ -184,16 +185,30 @@ const lighthouseInternalFailureScores = {
   'best-practices': 0,
 };
 
-function lighthouseSettings(method) {
-  return {
-    formFactor: 'mobile',
-    screenEmulation: {
-      mobile: true,
-      width: 390,
-      height: 844,
-      deviceScaleFactor: 2,
+function screenEmulationFor(formFactor) {
+  if (formFactor === 'desktop') {
+    return {
+      mobile: false,
+      width: 1350,
+      height: 940,
+      deviceScaleFactor: 1,
       disabled: false,
-    },
+    };
+  }
+
+  return {
+    mobile: true,
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 2,
+    disabled: false,
+  };
+}
+
+function lighthouseSettings(method, formFactor) {
+  return {
+    formFactor,
+    screenEmulation: screenEmulationFor(formFactor),
     throttlingMethod: method,
   };
 }
@@ -254,7 +269,7 @@ function shouldUseLighthouseRetry(currentResult, retryResult) {
   return lighthouseScoreTotal(retryResult.categories) > lighthouseScoreTotal(currentResult.categories);
 }
 
-async function runSingleLighthouse(url, chromePort, method) {
+async function runSingleLighthouse(url, chromePort, method, formFactor = 'mobile') {
   const runnerResult = await lighthouse(`${baseURL}${url}`, {
     port: chromePort,
     output: 'json',
@@ -262,21 +277,22 @@ async function runSingleLighthouse(url, chromePort, method) {
     onlyCategories: ['performance', 'accessibility', 'best-practices', 'seo'],
   }, {
     extends: 'lighthouse:default',
-    settings: lighthouseSettings(method),
+    settings: lighthouseSettings(method, formFactor),
   });
   const lhr = runnerResult.lhr;
   return {
     categories: lighthouseCategories(lhr),
     lhr,
     method,
+    formFactor,
     report: runnerResult.report,
   };
 }
 
-async function runIsolatedLighthouse(url, method) {
+async function runIsolatedLighthouse(url, method, formFactor = 'mobile') {
   const chrome = await launch(chromeLaunchOptions());
   try {
-    return await runSingleLighthouse(url, chrome.port, method);
+    return await runSingleLighthouse(url, chrome.port, method, formFactor);
   } finally {
     await chrome.kill();
   }
@@ -340,6 +356,18 @@ async function runLighthouse(urls) {
           lighthouseResult = providedResult;
         }
       }
+      if (
+        lighthouseDesktopFallback
+        && isLighthouseInternalFailure(lighthouseResult)
+        && lighthouseResult.formFactor !== 'desktop'
+      ) {
+        console.warn(`Lighthouse mobile still returned an internal zero-score result on ${url}; rerunning desktop provided in isolated Chrome.`);
+        const desktopResult = await runIsolatedLighthouse(url, 'provided', 'desktop');
+        if (shouldUseLighthouseRetry(lighthouseResult, desktopResult)) {
+          fallbackFrom = fallbackFrom ?? lighthouseResult.method;
+          lighthouseResult = desktopResult;
+        }
+      }
 
       const finalCategories = lighthouseResult.categories;
       for (const [category, threshold] of Object.entries(thresholds)) {
@@ -354,6 +382,7 @@ async function runLighthouse(urls) {
         url,
         scores: finalCategories,
         throttlingMethod: lighthouseResult.method,
+        formFactor: lighthouseResult.formFactor,
         fallbackFrom: fallbackFrom ? primaryMethod : null,
         runtimeError: lighthouseResult.lhr.runtimeError ?? null,
         report: path.relative(repoRoot, reportPath),
