@@ -14,3 +14,12 @@
     background: var(--color-panel-solid);
   }
 }
+
+@media (max-width: 900px) {
+  .glass,
+  .terminal-panel {
+    background: var(--color-panel-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

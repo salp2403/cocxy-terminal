@@ -18,7 +18,7 @@ body {
   color: var(--color-fg);
   background: var(--color-bg);
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
+  text-rendering: auto;
 }
 
 body::before {

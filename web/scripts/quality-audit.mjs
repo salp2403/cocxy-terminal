@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { spawn } from 'node:child_process';
@@ -29,9 +30,27 @@ const lighthouseTimeoutMs = Number(process.env.COCXY_WEB_LIGHTHOUSE_TIMEOUT_MS |
 const lighthouseBorderlineRetryMargin = {
   performance: 0.03,
 };
+const labMetricThresholds = {
+  lcpMs: 1500,
+  cls: 0.05,
+  maxPotentialFidMs: 100,
+  totalBlockingTimeMs: 200,
+  firstContentfulPaintMs: 1000,
+  interactiveMs: 2500,
+};
 
 const failures = [];
 const consoleErrors = [];
+
+function assertNativePerformanceRuntime() {
+  if (process.platform !== 'darwin') return;
+  if (os.arch() !== 'arm64') return;
+  if (process.arch === 'arm64') return;
+
+  throw new Error(
+    `Performance audit must run under arm64 Node on Apple Silicon. Current Node is ${process.arch} at ${process.execPath}. Use an arm64 Node binary so Lighthouse does not launch Chrome through Rosetta.`
+  );
+}
 
 const coreLighthouseUrls = [
   '/',
@@ -235,6 +254,21 @@ function lighthouseCategories(lhr) {
   );
 }
 
+function lighthouseMetrics(lhr) {
+  const auditValue = (id) => {
+    const value = lhr.audits?.[id]?.numericValue;
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
+  return {
+    largestContentfulPaintMs: auditValue('largest-contentful-paint'),
+    cumulativeLayoutShift: auditValue('cumulative-layout-shift'),
+    maxPotentialFidMs: auditValue('max-potential-fid'),
+    totalBlockingTimeMs: auditValue('total-blocking-time'),
+    firstContentfulPaintMs: auditValue('first-contentful-paint'),
+    interactiveMs: auditValue('interactive'),
+  };
+}
+
 function isLighthouseDevtoolsFallbackError(error) {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes('LanternError') || message.includes('Invalid dependency graph');
@@ -413,17 +447,49 @@ async function runLighthouse(urls) {
       }
 
       const finalCategories = lighthouseResult.categories;
+      const finalMetrics = lighthouseMetrics(lighthouseResult.lhr);
       for (const [category, threshold] of Object.entries(thresholds)) {
         const score = finalCategories[category] ?? 0;
         if (score < threshold) {
           fail(`Lighthouse ${category} on ${url} scored ${score}, below ${threshold}`);
         }
       }
+      if (finalMetrics.largestContentfulPaintMs === null) {
+        fail(`Lighthouse LCP missing on ${url}`);
+      } else if (finalMetrics.largestContentfulPaintMs >= labMetricThresholds.lcpMs) {
+        fail(`Lighthouse LCP on ${url} was ${finalMetrics.largestContentfulPaintMs.toFixed(1)}ms, expected < ${labMetricThresholds.lcpMs}ms`);
+      }
+      if (finalMetrics.cumulativeLayoutShift === null) {
+        fail(`Lighthouse CLS missing on ${url}`);
+      } else if (finalMetrics.cumulativeLayoutShift >= labMetricThresholds.cls) {
+        fail(`Lighthouse CLS on ${url} was ${finalMetrics.cumulativeLayoutShift}, expected < ${labMetricThresholds.cls}`);
+      }
+      if (finalMetrics.maxPotentialFidMs === null) {
+        fail(`Lighthouse Max Potential FID missing on ${url}`);
+      } else if (finalMetrics.maxPotentialFidMs >= labMetricThresholds.maxPotentialFidMs) {
+        fail(`Lighthouse Max Potential FID on ${url} was ${finalMetrics.maxPotentialFidMs.toFixed(1)}ms, expected < ${labMetricThresholds.maxPotentialFidMs}ms`);
+      }
+      if (finalMetrics.totalBlockingTimeMs === null) {
+        fail(`Lighthouse TBT missing on ${url}`);
+      } else if (finalMetrics.totalBlockingTimeMs >= labMetricThresholds.totalBlockingTimeMs) {
+        fail(`Lighthouse TBT on ${url} was ${finalMetrics.totalBlockingTimeMs.toFixed(1)}ms, expected < ${labMetricThresholds.totalBlockingTimeMs}ms`);
+      }
+      if (finalMetrics.firstContentfulPaintMs === null) {
+        fail(`Lighthouse FCP missing on ${url}`);
+      } else if (finalMetrics.firstContentfulPaintMs >= labMetricThresholds.firstContentfulPaintMs) {
+        fail(`Lighthouse FCP on ${url} was ${finalMetrics.firstContentfulPaintMs.toFixed(1)}ms, expected < ${labMetricThresholds.firstContentfulPaintMs}ms`);
+      }
+      if (finalMetrics.interactiveMs === null) {
+        fail(`Lighthouse TTI missing on ${url}`);
+      } else if (finalMetrics.interactiveMs >= labMetricThresholds.interactiveMs) {
+        fail(`Lighthouse TTI on ${url} was ${finalMetrics.interactiveMs.toFixed(1)}ms, expected < ${labMetricThresholds.interactiveMs}ms`);
+      }
       const reportPath = path.join(reportRoot, `lighthouse-${slugFor(url)}.json`);
       fs.writeFileSync(reportPath, lighthouseResult.report);
       results.push({
         url,
         scores: finalCategories,
+        metrics: finalMetrics,
         throttlingMethod: lighthouseResult.method,
         formFactor: lighthouseResult.formFactor,
         fallbackFrom: fallbackFrom ? primaryMethod : null,
@@ -470,6 +536,7 @@ function verifyBudgets() {
 }
 
 async function main() {
+  assertNativePerformanceRuntime();
   if (!fs.existsSync(chromePath)) throw new Error(`Google Chrome not found at ${chromePath}`);
   fs.mkdirSync(reportRoot, { recursive: true });
 

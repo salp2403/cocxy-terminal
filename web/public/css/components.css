@@ -438,6 +438,16 @@ thead th {
 }
 
 @media (max-width: 900px) {
+  .site-header {
+    background: rgba(16, 16, 24, 0.94);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  :root[data-theme="light"] .site-header {
+    background: rgba(250, 251, 255, 0.96);
+  }
+
   .nav-toggle {
     display: block;
   }

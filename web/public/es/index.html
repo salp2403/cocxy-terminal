@@ -27,8 +27,8 @@
   <link rel="alternate" hreflang="en" href="https://cocxy.dev/">
   <link rel="alternate" hreflang="es" href="https://cocxy.dev/es/">
   <link rel="alternate" hreflang="x-default" href="https://cocxy.dev/">
-  <link rel="icon" type="image/png" href="/images/icon.png">
-  <link rel="apple-touch-icon" href="/images/icon.png">
+  <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
+  <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
@@ -48,7 +48,7 @@
 <header class="site-header">
   <nav class="nav container" aria-label="Navegación principal">
     <a class="nav-logo" href="/es/" aria-label="Cocxy Terminal">
-      <img src="/images/icon.png" width="32" height="32" alt="">
+      <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="32" height="32" alt=""></picture>
       <span>Cocxy</span>
     </a>
     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
@@ -72,16 +72,9 @@
   </nav>
 </header>
 <main id="main">
-<section id="hero" class="page-hero home-mobile-hero">
-    <div class="container">
-      <p class="eyebrow">Nativa macOS · Local primero · MIT</p>
-      <h1 id="hero-title-mobile">Cocxy Terminal</h1>
-      <p>Agentes locales. Bóveda cifrada. Cero telemetría.</p>
-    </div>
-  </section>
-  <div class="hero hero-product">
+<section id="hero" class="hero hero-product" aria-labelledby="hero-title">
   <div class="container hero-inner">
-    <img class="hero-logo" src="/images/icon.png" width="92" height="92" alt="">
+    <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img class="hero-logo" src="/images/icon.png" width="92" height="92" alt=""></picture>
     <p class="eyebrow">Nativa macOS · Local primero · MIT</p>
     <h1 id="hero-title">Cocxy Terminal</h1>
     <p class="hero-lede">La terminal que entiende a los agentes de IA.</p>
@@ -103,7 +96,7 @@
     <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
     <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="Cocxy Terminal con paneles, navegador y agentes locales" loading="lazy" decoding="async" fetchpriority="low">
   </picture>
-</div>
+</section>
 <section class="stats-strip" aria-label="Datos clave">
   <div class="container stats-grid">
     <div class="stat"><strong>11</strong><span>agentes</span></div>
@@ -217,7 +210,7 @@
       <h2 id="demo-title">Cocxy en acción</h2>
       <p>La demo muestra terminal, paneles, navegador, Bóveda y estados locales sin cargar scripts de terceros.</p>
     </div>
-    <video controls muted loop playsinline preload="metadata" poster="/images/og-image.png" class="media-frame">
+    <video controls muted loop playsinline preload="metadata" poster="/images/og-image.avif" class="media-frame">
       <source src="/videos/cocxy-demo.webm" type="video/webm">
       <source src="/videos/cocxy-demo.mp4" type="video/mp4">
     </video>
@@ -429,7 +422,7 @@
 <footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="/es/"><img src="/images/icon.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="/es/"><picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img src="/images/icon.png" width="28" height="28" alt=""></picture><span>Cocxy Terminal</span></a>
       <p>Terminal nativa para macOS, local primero, MIT y sin telemetría.</p>
     </div>
     <nav aria-label="Enlaces de pie">

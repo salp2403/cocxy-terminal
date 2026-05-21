@@ -15,6 +15,7 @@ const cssHref = `/css/style.css?v=${assetVersion}`;
 const releaseVersion = assetVersion;
 const previewAssetVersion = assetVersion;
 const previewImage = (extension) => `/images/cocxy-preview.${extension}?v=${previewAssetVersion}`;
+const posterImage = '/images/og-image.avif';
 const scriptSrc = (file) => `/js/${file}?v=${assetVersion}`;
 
 const agents = [
@@ -335,9 +336,57 @@ function buildCSSBundle() {
   const parts = ['tokens.css', 'base.css', 'components.css', 'glass.css', 'pages.css', 'print.css'];
   const bundled = parts.map((file) => {
     const source = fs.readFileSync(path.join(cssDir, file), 'utf8').trim();
-    return `/* ${file} */\n${source}`;
+    return source;
   }).join('\n\n');
-  fs.writeFileSync(path.join(cssDir, 'style.css'), `${bundled}\n`);
+  fs.writeFileSync(path.join(cssDir, 'style.css'), `${minifyCSS(bundled)}\n`);
+}
+
+function stripCSSComments(source) {
+  let output = '';
+  let quote = null;
+
+  for (let index = 0; index < source.length; index += 1) {
+    const current = source[index];
+    const next = source[index + 1];
+
+    if (quote) {
+      output += current;
+      if (current === '\\') {
+        index += 1;
+        if (index < source.length) output += source[index];
+      } else if (current === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (current === '"' || current === "'") {
+      quote = current;
+      output += current;
+      continue;
+    }
+
+    if (current === '/' && next === '*') {
+      index += 2;
+      while (index < source.length && !(source[index] === '*' && source[index + 1] === '/')) {
+        index += 1;
+      }
+      index += 1;
+      continue;
+    }
+
+    output += current;
+  }
+
+  return output;
+}
+
+function minifyCSS(source) {
+  return stripCSSComments(source)
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([{}:;,>])\s*/g, '$1')
+    .replace(/;}/g, '}')
+    .trim();
 }
 
 function escapeHTML(value) {
@@ -404,6 +453,11 @@ function icon(name) {
   return `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${paths[name] ?? paths.spark}</svg>`;
 }
 
+function logoImage({ width, height, className = '', alt = '' }) {
+  const classAttribute = className ? ` class="${className}"` : '';
+  return `<picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img${classAttribute} src="/images/icon.png" width="${width}" height="${height}" alt="${escapeHTML(alt)}"></picture>`;
+}
+
 function head({ title, description, page, lang = 'en', type = 'website' }) {
   const htmlLang = lang === 'es' ? 'es-HN' : 'en';
   const ogLocale = lang === 'es' ? 'es_HN' : 'en_US';
@@ -438,8 +492,8 @@ function head({ title, description, page, lang = 'en', type = 'website' }) {
   <meta name="twitter:description" content="${escapeHTML(description)}">
   <meta name="twitter:image" content="${site}/og/og-${pageToSlug(page)}.png">
   ${alternateLinks(page, lang)}
-  <link rel="icon" type="image/png" href="/images/icon.png">
-  <link rel="apple-touch-icon" href="/images/icon.png">
+  <link rel="icon" type="image/svg+xml" href="/images/icon.svg">
+  <link rel="apple-touch-icon" href="/images/icon-192.png">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
@@ -470,7 +524,7 @@ function nav(lang = 'en', active = '') {
 <header class="site-header">
   <nav class="nav container" aria-label="${es ? 'Navegación principal' : 'Main navigation'}">
     <a class="nav-logo" href="${es ? '/es/' : '/'}" aria-label="Cocxy Terminal">
-      <img src="/images/icon.png" width="32" height="32" alt="">
+      ${logoImage({ width: 32, height: 32 })}
       <span>Cocxy</span>
     </a>
     <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-menu">
@@ -512,7 +566,7 @@ function footer(lang = 'en') {
   return `<footer class="site-footer">
   <div class="container footer-grid">
     <div>
-      <a class="footer-brand" href="${es ? '/es/' : '/'}"><img src="/images/icon.png" width="28" height="28" alt=""><span>Cocxy Terminal</span></a>
+      <a class="footer-brand" href="${es ? '/es/' : '/'}">${logoImage({ width: 28, height: 28 })}<span>Cocxy Terminal</span></a>
       <p>${es ? 'Terminal nativa para macOS, local primero, MIT y sin telemetría.' : 'Native macOS terminal, local-first, MIT licensed, and zero telemetry.'}</p>
     </div>
     <nav aria-label="${es ? 'Enlaces de pie' : 'Footer links'}">
@@ -650,16 +704,9 @@ function home(lang = 'en') {
     },
     breadcrumbSchema([[es ? 'Inicio' : 'Home', es ? '/es/' : '/']]),
   ];
-  const body = `<section id="hero" class="page-hero home-mobile-hero">
-    <div class="container">
-      <p class="eyebrow">${es ? 'Nativa macOS · Local primero · MIT' : 'Native macOS · Local-first · MIT'}</p>
-      <h1 id="hero-title-mobile">Cocxy Terminal</h1>
-      <p>${es ? 'Agentes locales. Bóveda cifrada. Cero telemetría.' : 'Local agents. Encrypted Vault. Zero telemetry.'}</p>
-    </div>
-  </section>
-  <div class="hero hero-product">
+  const body = `<section id="hero" class="hero hero-product" aria-labelledby="hero-title">
   <div class="container hero-inner">
-    <img class="hero-logo" src="/images/icon.png" width="92" height="92" alt="">
+    ${logoImage({ width: 92, height: 92, className: 'hero-logo' })}
     <p class="eyebrow">${es ? 'Nativa macOS · Local primero · MIT' : 'Native macOS · Local-first · MIT'}</p>
     <h1 id="hero-title">Cocxy Terminal</h1>
     <p class="hero-lede">${es ? 'La terminal que entiende a los agentes de IA.' : 'The terminal that understands AI coding agents.'}</p>
@@ -681,7 +728,7 @@ function home(lang = 'en') {
     <source srcset="${previewImage('webp')}" type="image/webp">
     <img src="${previewImage('png')}" width="1574" height="808" alt="${es ? 'Cocxy Terminal con paneles, navegador y agentes locales' : 'Cocxy Terminal with panes, browser, and local agent state'}" loading="lazy" decoding="async" fetchpriority="low">
   </picture>
-</div>
+</section>
 <section class="stats-strip" aria-label="${es ? 'Datos clave' : 'Key facts'}">
   <div class="container stats-grid">
     ${stat('11', es ? 'agentes' : 'agents')}
@@ -724,7 +771,7 @@ function home(lang = 'en') {
       <h2 id="demo-title">${es ? 'Cocxy en acción' : 'See Cocxy in action'}</h2>
       <p>${es ? 'La demo muestra terminal, paneles, navegador, Bóveda y estados locales sin cargar scripts de terceros.' : 'The demo shows terminal panes, browser, Vault, and local state without loading third-party scripts.'}</p>
     </div>
-    <video controls muted loop playsinline preload="metadata" poster="/images/og-image.png" class="media-frame">
+    <video controls muted loop playsinline preload="metadata" poster="${posterImage}" class="media-frame">
       <source src="/videos/cocxy-demo.webm" type="video/webm">
       <source src="/videos/cocxy-demo.mp4" type="video/mp4">
     </video>
@@ -1190,7 +1237,7 @@ function pressBody(lang) {
   <article class="card"><h2>${es ? 'Datos' : 'Facts'}</h2><ul><li>Cocxy Terminal</li><li>macOS 14+</li><li>MIT</li><li>dev@cocxy.dev</li></ul></article>
 </div></section>
 <section class="section"><div class="container">
-  <video controls preload="metadata" poster="/images/og-image.png" class="media-frame">
+  <video controls preload="metadata" poster="${posterImage}" class="media-frame">
     <source src="/videos/cocxy-demo.mp4" type="video/mp4">
   </video>
   <p>${es ? 'Video demo' : 'Demo video'}</p>
@@ -1677,6 +1724,11 @@ function serviceWorker() {
     `/js/main.js?v=${assetVersion}`,
     `/js/theme-switcher.js?v=${assetVersion}`,
     '/images/icon.png',
+    '/images/icon.svg',
+    '/images/icon-192.png',
+    '/images/icon.avif',
+    '/images/icon.webp',
+    posterImage,
     `/images/cocxy-preview.avif?v=${assetVersion}`,
     `/images/cocxy-preview.webp?v=${assetVersion}`,
     '/manifest.webmanifest',
