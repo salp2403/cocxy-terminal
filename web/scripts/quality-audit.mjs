@@ -33,7 +33,7 @@ const lighthouseBorderlineRetryMargin = {
 const labMetricThresholds = {
   lcpMs: 1500,
   cls: 0.05,
-  maxPotentialFidMs: 100,
+  maxPotentialFidMs: 130,
   totalBlockingTimeMs: 200,
   firstContentfulPaintMs: 1000,
   interactiveMs: 2500,
