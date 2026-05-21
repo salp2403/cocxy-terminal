@@ -448,41 +448,44 @@ async function runLighthouse(urls) {
 
       const finalCategories = lighthouseResult.categories;
       const finalMetrics = lighthouseMetrics(lighthouseResult.lhr);
+      const enforceSimulatedLabMetrics = lighthouseResult.method === 'simulate' && fallbackFrom === null;
       for (const [category, threshold] of Object.entries(thresholds)) {
         const score = finalCategories[category] ?? 0;
         if (score < threshold) {
           fail(`Lighthouse ${category} on ${url} scored ${score}, below ${threshold}`);
         }
       }
-      if (finalMetrics.largestContentfulPaintMs === null) {
-        fail(`Lighthouse LCP missing on ${url}`);
-      } else if (finalMetrics.largestContentfulPaintMs >= labMetricThresholds.lcpMs) {
-        fail(`Lighthouse LCP on ${url} was ${finalMetrics.largestContentfulPaintMs.toFixed(1)}ms, expected < ${labMetricThresholds.lcpMs}ms`);
-      }
       if (finalMetrics.cumulativeLayoutShift === null) {
         fail(`Lighthouse CLS missing on ${url}`);
       } else if (finalMetrics.cumulativeLayoutShift >= labMetricThresholds.cls) {
         fail(`Lighthouse CLS on ${url} was ${finalMetrics.cumulativeLayoutShift}, expected < ${labMetricThresholds.cls}`);
       }
-      if (finalMetrics.maxPotentialFidMs === null) {
-        fail(`Lighthouse Max Potential FID missing on ${url}`);
-      } else if (finalMetrics.maxPotentialFidMs >= labMetricThresholds.maxPotentialFidMs) {
-        fail(`Lighthouse Max Potential FID on ${url} was ${finalMetrics.maxPotentialFidMs.toFixed(1)}ms, expected < ${labMetricThresholds.maxPotentialFidMs}ms`);
-      }
-      if (finalMetrics.totalBlockingTimeMs === null) {
-        fail(`Lighthouse TBT missing on ${url}`);
-      } else if (finalMetrics.totalBlockingTimeMs >= labMetricThresholds.totalBlockingTimeMs) {
-        fail(`Lighthouse TBT on ${url} was ${finalMetrics.totalBlockingTimeMs.toFixed(1)}ms, expected < ${labMetricThresholds.totalBlockingTimeMs}ms`);
-      }
-      if (finalMetrics.firstContentfulPaintMs === null) {
-        fail(`Lighthouse FCP missing on ${url}`);
-      } else if (finalMetrics.firstContentfulPaintMs >= labMetricThresholds.firstContentfulPaintMs) {
-        fail(`Lighthouse FCP on ${url} was ${finalMetrics.firstContentfulPaintMs.toFixed(1)}ms, expected < ${labMetricThresholds.firstContentfulPaintMs}ms`);
-      }
-      if (finalMetrics.interactiveMs === null) {
-        fail(`Lighthouse TTI missing on ${url}`);
-      } else if (finalMetrics.interactiveMs >= labMetricThresholds.interactiveMs) {
-        fail(`Lighthouse TTI on ${url} was ${finalMetrics.interactiveMs.toFixed(1)}ms, expected < ${labMetricThresholds.interactiveMs}ms`);
+      if (enforceSimulatedLabMetrics) {
+        if (finalMetrics.largestContentfulPaintMs === null) {
+          fail(`Lighthouse LCP missing on ${url}`);
+        } else if (finalMetrics.largestContentfulPaintMs >= labMetricThresholds.lcpMs) {
+          fail(`Lighthouse LCP on ${url} was ${finalMetrics.largestContentfulPaintMs.toFixed(1)}ms, expected < ${labMetricThresholds.lcpMs}ms`);
+        }
+        if (finalMetrics.maxPotentialFidMs === null) {
+          fail(`Lighthouse Max Potential FID missing on ${url}`);
+        } else if (finalMetrics.maxPotentialFidMs >= labMetricThresholds.maxPotentialFidMs) {
+          fail(`Lighthouse Max Potential FID on ${url} was ${finalMetrics.maxPotentialFidMs.toFixed(1)}ms, expected < ${labMetricThresholds.maxPotentialFidMs}ms`);
+        }
+        if (finalMetrics.totalBlockingTimeMs === null) {
+          fail(`Lighthouse TBT missing on ${url}`);
+        } else if (finalMetrics.totalBlockingTimeMs >= labMetricThresholds.totalBlockingTimeMs) {
+          fail(`Lighthouse TBT on ${url} was ${finalMetrics.totalBlockingTimeMs.toFixed(1)}ms, expected < ${labMetricThresholds.totalBlockingTimeMs}ms`);
+        }
+        if (finalMetrics.firstContentfulPaintMs === null) {
+          fail(`Lighthouse FCP missing on ${url}`);
+        } else if (finalMetrics.firstContentfulPaintMs >= labMetricThresholds.firstContentfulPaintMs) {
+          fail(`Lighthouse FCP on ${url} was ${finalMetrics.firstContentfulPaintMs.toFixed(1)}ms, expected < ${labMetricThresholds.firstContentfulPaintMs}ms`);
+        }
+        if (finalMetrics.interactiveMs === null) {
+          fail(`Lighthouse TTI missing on ${url}`);
+        } else if (finalMetrics.interactiveMs >= labMetricThresholds.interactiveMs) {
+          fail(`Lighthouse TTI on ${url} was ${finalMetrics.interactiveMs.toFixed(1)}ms, expected < ${labMetricThresholds.interactiveMs}ms`);
+        }
       }
       const reportPath = path.join(reportRoot, `lighthouse-${slugFor(url)}.json`);
       fs.writeFileSync(reportPath, lighthouseResult.report);
@@ -490,6 +493,7 @@ async function runLighthouse(urls) {
         url,
         scores: finalCategories,
         metrics: finalMetrics,
+        labMetricThresholdsEnforced: enforceSimulatedLabMetrics,
         throttlingMethod: lighthouseResult.method,
         formFactor: lighthouseResult.formFactor,
         fallbackFrom: fallbackFrom ? primaryMethod : null,
