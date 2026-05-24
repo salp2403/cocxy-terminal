@@ -676,7 +676,7 @@ function downloadSection(lang = 'en') {
 function home(lang = 'en') {
   const es = lang === 'es';
   const page = '/';
-  const title = es ? 'Cocxy Terminal' : 'Cocxy Terminal';
+  const title = es ? 'Terminal nativa para agentes de IA' : 'Native macOS for AI Coding Agents';
   const description = es
     ? 'Terminal nativa para macOS que entiende agentes de IA, con Bóveda cifrada, revisión de código, Markdown, remotos y cero telemetría.'
     : 'Native macOS terminal that understands AI coding agents, with encrypted Vault, code review, Markdown, remotes, and zero telemetry.';
