@@ -43,13 +43,38 @@
 
 .nav-links a,
 .nav-links button {
+  position: relative;
   color: var(--color-muted);
   text-decoration: none;
+  transition: color var(--dur-base) var(--ease-out);
+}
+
+.nav-links a::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -6px;
+  width: 100%;
+  height: 2px;
+  background: var(--color-accent);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--dur-base) var(--ease-out);
 }
 
 .nav-links a:hover,
 .nav-links a[aria-current="page"] {
   color: var(--color-fg);
+}
+
+.nav-links a:hover::after,
+.nav-links a:focus-visible::after,
+.nav-links a[aria-current="page"]::after {
+  transform: scaleX(1);
+}
+
+.nav-cta::after {
+  display: none;
 }
 
 .nav-cta {
@@ -94,24 +119,41 @@
 }
 
 .button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   min-height: 2.75rem;
-  padding: 0.7rem 1rem;
+  padding: 0.7rem 1.1rem;
   border-radius: var(--radius-md);
   font-weight: 700;
   text-decoration: none;
-  transition: transform var(--dur) var(--ease), border-color var(--dur) var(--ease), background var(--dur) var(--ease);
+  isolation: isolate;
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease), background var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
 }
 
 .button:hover {
   transform: translateY(-1px);
+  box-shadow: var(--shadow-1);
+}
+
+.button:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 3px;
 }
 
 .button-primary {
   color: #071018;
-  background: var(--color-accent);
+  background: var(--grad-button-primary);
+  background-size: 200% 200%;
+  background-position: 0% 50%;
+  transition: transform var(--dur-base) var(--ease-out), background-position var(--dur-slow) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+
+.button-primary:hover {
+  transform: translateY(-1px);
+  background-position: 100% 50%;
+  box-shadow: var(--glow-accent), var(--shadow-1);
 }
 
 .button-secondary {
@@ -120,10 +162,9 @@
   background: var(--color-panel);
 }
 
-.text-link {
-  color: var(--color-accent);
-  font-weight: 700;
-  text-decoration: none;
+.button-secondary:hover {
+  border-color: var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-panel) 85%, var(--color-accent));
 }
 
 .section {
@@ -152,15 +193,29 @@
 .card,
 .feature-card,
 .callout {
+  position: relative;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-panel);
   box-shadow: var(--shadow-1);
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
 }
 
 .card,
 .callout {
   padding: var(--space-6);
+}
+
+.card:hover,
+.callout:hover {
+  transform: translateY(-2px);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-2);
+}
+
+.callout {
+  border-left: 3px solid var(--color-accent-2);
+  background: color-mix(in srgb, var(--color-panel) 92%, var(--color-accent-2));
 }
 
 .feature-grid,
@@ -175,6 +230,34 @@
 
 .feature-card {
   padding: var(--space-5);
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.feature-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-sheen);
+  transform: translateX(-110%);
+  transition: transform var(--dur-slower) var(--ease-out);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.feature-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-2);
+}
+
+.feature-card:hover::before {
+  transform: translateX(110%);
+}
+
+.feature-card > * {
+  position: relative;
+  z-index: 1;
 }
 
 .feature-card[id] {
@@ -183,6 +266,11 @@
 
 .feature-card a {
   text-decoration: none;
+  transition: color var(--dur-base) var(--ease);
+}
+
+.feature-card:hover h3 a {
+  color: var(--color-accent);
 }
 
 .feature-card ul,
@@ -196,6 +284,7 @@
   height: 2rem;
   margin-block-end: var(--space-4);
   color: var(--color-accent);
+  transition: color var(--dur-base) var(--ease), filter var(--dur-base) var(--ease), transform var(--dur-base) var(--ease-out);
 }
 
 .feature-icon--review .icon,
@@ -206,6 +295,11 @@
 .feature-icon--gpu .icon,
 .feature-icon--web .icon {
   color: var(--color-accent-2);
+}
+
+.feature-card:hover .icon {
+  filter: drop-shadow(0 0 12px currentColor);
+  transform: translateY(-2px);
 }
 
 .stats-grid {
@@ -227,10 +321,35 @@
   display: block;
   font-size: var(--fs-xl);
   color: var(--color-fg);
+  background: var(--grad-text-accent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .stat span {
   color: var(--color-muted);
+}
+
+.metric {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.metric strong {
+  font-size: var(--fs-2xl);
+  font-weight: 700;
+  background: var(--grad-text-accent);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.metric span {
+  color: var(--color-muted);
+  font-size: var(--fs-sm);
 }
 
 .code-block {
@@ -247,11 +366,43 @@
   position: absolute;
   top: var(--space-2);
   right: var(--space-2);
+  padding: 0.3rem 0.6rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   color: var(--color-fg);
   background: var(--color-panel);
   cursor: pointer;
+  transition: border-color var(--dur-base) var(--ease), background var(--dur-base) var(--ease), color var(--dur-base) var(--ease);
+}
+
+.copy-button:hover {
+  border-color: var(--color-border-strong);
+  background: color-mix(in srgb, var(--color-panel) 80%, var(--color-accent));
+  color: var(--color-fg);
+}
+
+.text-link {
+  color: var(--color-accent);
+  font-weight: 700;
+  text-decoration: none;
+  transition: color var(--dur-base) var(--ease);
+}
+
+.text-link:hover {
+  color: color-mix(in srgb, var(--color-accent) 60%, var(--color-fg));
+}
+
+.faq-item {
+  transition: border-color var(--dur-base) var(--ease), background var(--dur-base) var(--ease);
+}
+
+.faq-item:hover {
+  border-color: var(--color-border-strong);
+}
+
+.faq-item[open] {
+  border-color: color-mix(in srgb, var(--color-border-strong) 50%, var(--color-accent));
+  background: color-mix(in srgb, var(--color-panel) 92%, var(--color-accent));
 }
 
 .table-wrap {
@@ -466,5 +617,74 @@ thead th {
 
   .nav-links.is-open {
     display: flex;
+  }
+}
+
+/* Motion language — @keyframes definitions for ambient and reveal animations.
+   Each keyframe ships with a corresponding reduced-motion guard further down. */
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    box-shadow: var(--glow-soft);
+  }
+  50% {
+    box-shadow: var(--glow-strong);
+  }
+}
+
+@keyframes cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes subtle-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes gradient-shift {
+  0%,
+  100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Global reduced-motion guard.
+   Honors WCAG 2.3.3 and the user's OS-level preference.
+   All animations collapse to ~instant, all transitions become near-instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

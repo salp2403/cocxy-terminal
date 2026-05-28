@@ -77,12 +77,12 @@
     <p>Local secrets, signed updates, encrypted stores, hardened runtime, and explicit network actions.</p>
   </div></section><section class="section"><div class="container detail-grid"><article class="card"><h2>Threat model</h2><p>Terminal output, secrets, sockets, clipboard, paths, and network connections are treated as sensitive.</p></article><article class="card"><h2>Cryptography</h2><p>AES-GCM protects Vault records, EdDSA signs Sparkle updates, HMAC-SHA256 protects relay auth, and Keychain stores secrets.</p></article><article class="card"><h2>Code signing and notarization</h2><p>Public releases use Developer ID Application signing, hardened runtime, secure timestamp, and Apple notarization.</p></article><article class="card"><h2>Dependency hygiene</h2><p>Swift and Apple frameworks are the default, Sparkle is audited, Zig dependencies are pinned, and npm is limited to web tooling.</p></article><article class="card"><h2>SBOM</h2><p>The public SBOM is linked with release artifacts when the release flow produces it.</p></article><article class="card"><h2>Disclosure</h2><p>Report vulnerabilities through GitHub Security Advisory or dev@cocxy.dev.</p></article></div></section><section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header" data-reveal="fade-up">
       <p class="eyebrow">Download</p>
       <h2 id="download-title">Install Cocxy on macOS</h2>
       <p>The site keeps version placeholders so the release workflow can rewrite them when publishing.</p>
     </div>
-    <div class="download-grid">
+    <div class="download-grid" data-reveal="stagger">
       <article class="card">
         <h3>DMG</h3>
         <p>Direct download from GitHub Releases.</p>

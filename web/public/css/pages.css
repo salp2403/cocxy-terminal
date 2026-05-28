@@ -5,6 +5,10 @@
   align-items: end;
   overflow: hidden;
   border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(ellipse 60% 50% at 12% 0%, var(--grad-hero-mesh-1), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 88% 14%, var(--grad-hero-mesh-2), transparent 60%),
+    radial-gradient(ellipse 70% 60% at 50% 92%, var(--grad-hero-mesh-3), transparent 65%);
 }
 
 .hero-media {
@@ -21,9 +25,18 @@
   min-width: 100%;
   object-fit: cover;
   object-position: center top;
-  opacity: 0.42;
+  opacity: 0.28;
   position: absolute;
   width: 100%;
+}
+
+.hero-product::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: radial-gradient(ellipse at 60% 40%, transparent 0%, rgba(16, 16, 24, 0.55) 70%, var(--color-bg) 100%);
+  pointer-events: none;
 }
 
 .hero-product::after {
@@ -31,11 +44,16 @@
   position: absolute;
   inset: 0;
   z-index: -1;
-  background: linear-gradient(180deg, rgba(16, 16, 24, 0.2), var(--color-bg) 96%);
+  background: linear-gradient(180deg, rgba(16, 16, 24, 0.18), var(--color-bg) 96%);
+  pointer-events: none;
 }
 
 :root[data-theme="light"] .hero-media img {
-  opacity: 0.28;
+  opacity: 0.20;
+}
+
+:root[data-theme="light"] .hero-product::before {
+  background: radial-gradient(ellipse at 60% 40%, transparent 0%, rgba(250, 251, 255, 0.55) 70%, var(--color-bg) 100%);
 }
 
 .hero-inner {
@@ -48,6 +66,8 @@
   margin-block-end: var(--space-5);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-2);
+  filter: drop-shadow(var(--glow-soft));
+  animation: subtle-float var(--dur-ambient) ease-in-out infinite;
 }
 
 .hero-lede {
@@ -124,6 +144,14 @@
   white-space: normal;
 }
 
+.hero-console code:last-of-type::after {
+  content: "▌";
+  display: inline-block;
+  margin-inline-start: 0.25rem;
+  color: var(--color-accent-2);
+  animation: cursor-blink 1.2s steps(1) infinite;
+}
+
 @media (max-width: 720px) {
   .hero-media {
     display: none;
@@ -192,7 +220,7 @@
   display: grid;
   gap: var(--space-2);
   padding: var(--space-6);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   font-family: var(--font-mono);
 }
 
@@ -205,14 +233,38 @@
   font-weight: 700;
 }
 
+.terminal-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-accent) 8%, transparent), transparent 50%);
+  pointer-events: none;
+  opacity: 0.55;
+}
+
+.terminal-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
 .page-hero {
+  position: relative;
   padding-block: 7rem var(--space-12);
   border-bottom: 1px solid var(--color-border);
+  background:
+    radial-gradient(ellipse 60% 50% at 18% 0%, var(--grad-hero-mesh-1), transparent 60%),
+    radial-gradient(ellipse 55% 45% at 82% 30%, var(--grad-hero-mesh-2), transparent 60%);
+  overflow: hidden;
 }
 
 .page-hero p:not(.eyebrow) {
   max-width: 780px;
   font-size: var(--fs-md);
+}
+
+.page-hero h1 {
+  letter-spacing: var(--tracking-tight);
 }
 
 .docs-layout {
@@ -256,9 +308,17 @@
 .screenshot-frame {
   width: 100%;
   border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: var(--color-panel-solid);
   box-shadow: var(--shadow-1);
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease), box-shadow var(--dur-base) var(--ease);
+}
+
+.architecture-preview:hover,
+.screenshot-frame:hover {
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-2);
+  transform: translateY(-2px);
 }
 
 .screenshot-frame {
@@ -275,6 +335,77 @@
 [id] {
   scroll-margin-top: 6rem;
 }
+
+/* Section ambient overlays — adds a subtle, themed gradient halo to band
+   sections without affecting the existing background color rules in
+   components.css. The ::before sits behind content via z-index. */
+
+.section-band {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+}
+
+.section-band::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: var(--grad-section-band);
+  pointer-events: none;
+}
+
+.section-band > * {
+  position: relative;
+  z-index: 0;
+}
+
+/* Scroll-reveal opt-in styles. Elements opt in via
+   `data-reveal="fade-up"` in markup. Activated by IntersectionObserver
+   in main.js, which toggles the `.is-visible` class. Honors
+   prefers-reduced-motion globally. */
+
+[data-reveal] {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+  will-change: opacity, transform;
+}
+
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-reveal="fade-up"] {
+  transform: translateY(20px);
+}
+
+[data-reveal="fade-up"].is-visible {
+  transform: translateY(0);
+}
+
+[data-reveal="fade-in"] {
+  transform: none;
+}
+
+[data-reveal="stagger"] > * {
+  opacity: 0;
+  transform: translateY(14px);
+  transition: opacity var(--dur-slow) var(--ease-out), transform var(--dur-slow) var(--ease-out);
+}
+
+[data-reveal="stagger"].is-visible > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+[data-reveal="stagger"].is-visible > *:nth-child(1) { transition-delay: 0ms; }
+[data-reveal="stagger"].is-visible > *:nth-child(2) { transition-delay: 70ms; }
+[data-reveal="stagger"].is-visible > *:nth-child(3) { transition-delay: 140ms; }
+[data-reveal="stagger"].is-visible > *:nth-child(4) { transition-delay: 210ms; }
+[data-reveal="stagger"].is-visible > *:nth-child(5) { transition-delay: 280ms; }
+[data-reveal="stagger"].is-visible > *:nth-child(n+6) { transition-delay: 320ms; }
 
 @media (min-width: 860px) {
   .split-grid,
@@ -300,5 +431,24 @@
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  /* Reveal animations: snap to final state, no movement. */
+  [data-reveal],
+  [data-reveal="fade-up"],
+  [data-reveal="fade-in"],
+  [data-reveal="stagger"] > * {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Disable ambient loops explicitly. */
+  .hero-logo {
+    animation: none !important;
+  }
+
+  .hero-console code:last-of-type::after {
+    animation: none !important;
+    opacity: 1 !important;
   }
 }

@@ -647,12 +647,12 @@ function downloadSection(lang = 'en') {
   const es = lang === 'es';
   return `<section class="section section-band" id="download" aria-labelledby="download-title">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header" data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Descarga' : 'Download'}</p>
       <h2 id="download-title">${es ? 'Instala Cocxy en macOS' : 'Install Cocxy on macOS'}</h2>
       <p>${es ? 'El sitio conserva placeholders de versión para que el release workflow los reescriba al publicar.' : 'The site keeps version placeholders so the release workflow can rewrite them when publishing.'}</p>
     </div>
-    <div class="download-grid">
+    <div class="download-grid" data-reveal="stagger">
       <article class="card">
         <h3>DMG</h3>
         <p>${es ? 'Descarga directa desde GitHub Releases.' : 'Direct download from GitHub Releases.'}</p>
@@ -709,14 +709,14 @@ function home(lang = 'en') {
     ${logoImage({ width: 92, height: 92, className: 'hero-logo' })}
     <p class="eyebrow">${es ? 'Nativa macOS · Local primero · MIT' : 'Native macOS · Local-first · MIT'}</p>
     <h1 id="hero-title">Cocxy Terminal</h1>
-    <p class="hero-lede">${es ? 'La terminal que entiende a los agentes de IA.' : 'The terminal that understands AI coding agents.'}</p>
-    <p>${es ? 'Detección en tiempo real, revisión de código en línea, Bóveda cifrada, Markdown nativo, espacios remotos y cero telemetría.' : 'Real-time detection, inline code review, encrypted Vault, native Markdown, remote workspaces, and zero telemetry.'}</p>
-    <div class="hero-actions">
+    <p class="hero-lede" data-reveal="fade-up">${es ? 'La terminal que entiende a los agentes de IA.' : 'The terminal that understands AI coding agents.'}</p>
+    <p data-reveal="fade-up">${es ? 'Detección en tiempo real, revisión de código en línea, Bóveda cifrada, Markdown nativo, espacios remotos y cero telemetría.' : 'Real-time detection, inline code review, encrypted Vault, native Markdown, remote workspaces, and zero telemetry.'}</p>
+    <div class="hero-actions" data-reveal="fade-up">
       <a class="button button-primary" href="#download">${es ? 'Descargar para macOS' : 'Download for macOS'}</a>
       <a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
-    <div class="hero-version"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>Zero telemetry</span></div>
-    <div class="hero-console glass" role="group" aria-label="${es ? 'Estado local de agentes' : 'Local agent state'}">
+    <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>Zero telemetry</span></div>
+    <div class="hero-console glass glass--edge" role="group" aria-label="${es ? 'Estado local de agentes' : 'Local agent state'}" data-reveal="fade-up">
       <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
       <strong>$ cocxy agents status</strong>
       <code>${es ? 'bóveda: cifrada · navegador: localhost:3000 · revisión: 3 archivos' : 'vault: encrypted · browser: localhost:3000 · review: 3 files'}</code>
@@ -730,7 +730,7 @@ function home(lang = 'en') {
   </picture>
 </section>
 <section class="stats-strip" aria-label="${es ? 'Datos clave' : 'Key facts'}">
-  <div class="container stats-grid">
+  <div class="container stats-grid" data-reveal="stagger">
     ${stat('11', es ? 'agentes' : 'agents')}
     ${stat('21', es ? 'idiomas' : 'languages')}
     ${stat('0', es ? 'telemetría' : 'telemetry')}
@@ -740,12 +740,12 @@ function home(lang = 'en') {
 </section>
 <section class="section" id="comparison" aria-labelledby="different-title">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header" data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Diferencia central' : 'What makes Cocxy different'}</p>
       <h2 id="different-title">${es ? 'Conciencia de agentes, privacidad local y motor nativo' : 'Agent awareness, local privacy, and a native engine'}</h2>
       <p>${es ? 'El sitio explica capacidades de Cocxy por sí mismas: estado de agentes visible, datos locales y una app nativa para macOS.' : 'The site explains Cocxy on its own terms: visible agent state, local data, and a native macOS app.'}</p>
     </div>
-    <div class="cards-3">
+    <div class="cards-3" data-reveal="stagger">
       <article class="card"><h3>${es ? 'Agentes en tiempo real' : 'Real-time agent awareness'}</h3><p>${es ? 'Cocxy entiende cuando un agente piensa, trabaja, espera input o termina.' : 'Cocxy understands when an agent is thinking, working, waiting for input, or done.'}</p></article>
       <article class="card"><h3>${es ? 'Local primero' : 'Local-first by design'}</h3><p>${es ? 'Bóveda, sesiones, configuración y revisión viven en tu Mac salvo acciones explícitas.' : 'Vault, sessions, configuration, and review state live on your Mac unless you start an explicit action.'}</p></article>
       <article class="card"><h3>${es ? 'Hecho para desarrollo' : 'Built for developers'}</h3><p>${es ? 'Swift, AppKit, SwiftUI, CocxyCore y Metal sostienen una experiencia nativa.' : 'Swift, AppKit, SwiftUI, CocxyCore, and Metal support a native workflow.'}</p></article>
@@ -754,24 +754,24 @@ function home(lang = 'en') {
 </section>
 <section class="section" id="features" aria-labelledby="features-title">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header" data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Funciones principales' : 'Flagship features'}</p>
       <h2 id="features-title">${es ? 'Todo conectado al flujo real de agentes' : 'Everything connects to real agent work'}</h2>
       <p>${es ? 'Cocxy junta terminal, revisión, Bóveda, navegador, Markdown y remotos sin enviar tu trabajo a un backend de Cocxy.' : 'Cocxy combines terminal, review, Vault, browser, Markdown, and remotes without sending your work to a Cocxy backend.'}</p>
     </div>
-    <div class="feature-grid">
+    <div class="feature-grid" data-reveal="stagger">
       ${featurePages.map((feature) => featureCard(feature, lang)).join('\n')}
     </div>
   </div>
 </section>
 <section class="section section-band" id="demo" aria-labelledby="demo-title">
   <div class="container split-grid">
-    <div>
+    <div data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Demo' : 'Demo'}</p>
       <h2 id="demo-title">${es ? 'Cocxy en acción' : 'See Cocxy in action'}</h2>
       <p>${es ? 'La demo muestra terminal, paneles, navegador, Bóveda y estados locales sin cargar scripts de terceros.' : 'The demo shows terminal panes, browser, Vault, and local state without loading third-party scripts.'}</p>
     </div>
-    <video controls muted loop playsinline preload="metadata" poster="${posterImage}" class="media-frame">
+    <video controls muted loop playsinline preload="metadata" poster="${posterImage}" class="media-frame" data-reveal="fade-up">
       <source src="/videos/cocxy-demo.webm" type="video/webm">
       <source src="/videos/cocxy-demo.mp4" type="video/mp4">
     </video>
@@ -779,24 +779,24 @@ function home(lang = 'en') {
 </section>
 <section class="section" aria-labelledby="architecture-teaser">
   <div class="container split-grid">
-    <div>
+    <div data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Arquitectura' : 'Architecture'}</p>
       <h2 id="architecture-teaser">${es ? 'Swift + Metal, impulsado por CocxyCore' : 'Swift + Metal, powered by CocxyCore'}</h2>
       <p>${es ? 'La app separa UI nativo, servicios de dominio, PTY, renderizado Metal y motor CocxyCore con ABI C.' : 'The app separates native UI, domain services, PTY handling, Metal rendering, and the CocxyCore C ABI.'}</p>
       <a class="text-link" href="${es ? '/es/architecture.html' : '/architecture.html'}">${es ? 'Ver arquitectura' : 'View architecture'} →</a>
     </div>
-    <img class="architecture-preview" src="/images/architecture-diagram.svg" width="920" height="520" alt="${es ? 'Diagrama estático de arquitectura de Cocxy' : 'Static Cocxy architecture diagram'}" loading="lazy">
+    <img class="architecture-preview" src="/images/architecture-diagram.svg" width="920" height="520" alt="${es ? 'Diagrama estático de arquitectura de Cocxy' : 'Static Cocxy architecture diagram'}" loading="lazy" data-reveal="fade-up">
   </div>
 </section>
 <section class="section section-split" aria-labelledby="privacy-title">
   <div class="container split-grid">
-    <div>
+    <div data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Privacidad verificable' : 'Verifiable privacy'}</p>
       <h2 id="privacy-title">${es ? 'Cero telemetría. Sin cuenta. Sin rastreo.' : 'Zero telemetry. No account. No tracking.'}</h2>
       <p>${es ? 'Cocxy no incluye analíticas, subida automática de fallos ni rastreo oculto. Las conexiones de red existen solo para acciones explícitas como updates, navegador, GitHub, SSH o plugins.' : 'Cocxy ships without analytics, automatic crash uploads, or hidden tracking. Network access exists only for explicit actions such as updates, browser sessions, GitHub, SSH, or plugins.'}</p>
       <a class="text-link" href="${es ? '/es/privacy.html' : '/privacy.html'}">${es ? 'Leer privacidad' : 'Read privacy'} →</a>
     </div>
-    <div class="terminal-panel" role="group" aria-label="${es ? 'Resumen de privacidad' : 'Privacy summary'}">
+    <div class="terminal-panel glass glass--tinted" role="group" aria-label="${es ? 'Resumen de privacidad' : 'Privacy summary'}" data-reveal="fade-up">
       <span>$ cocxy privacy status</span>
       <strong>${es ? 'telemetría: cero' : 'telemetry: zero'}</strong>
       <strong>${es ? 'analíticas: ninguna' : 'analytics: none'}</strong>
@@ -807,11 +807,11 @@ function home(lang = 'en') {
 </section>
 <section class="section" id="faq" aria-labelledby="home-faq-title">
   <div class="container">
-    <div class="section-header">
+    <div class="section-header" data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Preguntas clave' : 'Key questions'}</p>
       <h2 id="home-faq-title">${es ? 'Respuestas rápidas antes de instalar' : 'Fast answers before installing'}</h2>
     </div>
-    <div class="faq-list">
+    <div class="faq-list" data-reveal="stagger">
       <details class="faq-item"><summary>${es ? '¿Cocxy requiere cuenta?' : 'Does Cocxy require an account?'}</summary><p>${es ? 'No. La app funciona localmente sin cuenta obligatoria.' : 'No. The app works locally without a required account.'}</p></details>
       <details class="faq-item"><summary>${es ? '¿Mis sesiones salen de mi Mac?' : 'Do my sessions leave my Mac?'}</summary><p>${es ? 'No por telemetr&iacute;a. Solo hay red cuando tú abres navegador, SSH, GitHub, updates o plugins.' : 'Not through telemetry. Network access happens only when you open browser, SSH, GitHub, updates, or plugins.'}</p></details>
       <details class="faq-item"><summary>${es ? '¿Es 100% c&oacute;digo abierto?' : 'Is it open source?'}</summary><p>${es ? 'Sí. Cocxy es MIT y el código público se puede auditar.' : 'Yes. Cocxy is MIT licensed and the public source can be audited.'}</p></details>
@@ -821,7 +821,7 @@ function home(lang = 'en') {
 ${downloadSection(lang)}
 <section class="section" id="opensource" aria-labelledby="opensource-title">
   <div class="container split-grid">
-    <div>
+    <div data-reveal="fade-up">
       <p class="eyebrow">${es ? 'Comunidad' : 'Open source'}</p>
       <h2 id="opensource-title">${es ? '100% c&oacute;digo abierto, MIT y cero telemetr&iacute;a' : 'MIT licensed, local-first, and open source'}</h2>
       <p>${es ? 'Cocxy se puede inspeccionar, compilar y mejorar. La dirección pública se documenta sin exponer planes privados.' : 'Cocxy can be inspected, built, and improved. Public direction is documented without exposing private planning details.'}</p>
@@ -830,7 +830,7 @@ ${downloadSection(lang)}
         <a class="button button-secondary" href="${es ? '/es/docs/' : '/docs/'}">${es ? 'Leer documentación' : 'Read docs'}</a>
       </div>
     </div>
-    <div class="terminal-panel" role="group" aria-label="${es ? 'Resumen open source' : 'Open source summary'}">
+    <div class="terminal-panel glass glass--tinted" role="group" aria-label="${es ? 'Resumen open source' : 'Open source summary'}" data-reveal="fade-up">
       <span>$ cocxy project facts</span>
       <strong>agents: 11</strong>
       <strong>languages: 21</strong>
@@ -888,11 +888,11 @@ function featureHub(lang = 'en') {
   }) + `<section class="section"><div class="container docs-layout">
   <nav class="toc" aria-label="${es ? 'Mapa de funciones' : 'Feature map'}"><strong>${es ? 'Mapa' : 'Map'}</strong>${featureAnchors(lang).map((item) => `<a href="#${item.id}">${escapeHTML(item.label)}</a>`).join('')}</nav>
     <div>
-      <div class="section-header">
+      <div class="section-header" data-reveal="fade-up">
         <h2>${es ? 'Capacidades principales' : 'Primary capabilities'}</h2>
         <p>${es ? 'Cada bloque conecta a una página dedicada o a una sección verificable.' : 'Each block links to a dedicated page or a verifiable section.'}</p>
       </div>
-      <div class="feature-grid">${featurePages.map((feature) => featureCard(feature, lang)).join('\n')}</div>
+      <div class="feature-grid" data-reveal="stagger">${featurePages.map((feature) => featureCard(feature, lang)).join('\n')}</div>
       ${capabilityMap(lang)}
     </div>
   </div></section>${downloadSection(lang)}`;

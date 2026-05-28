@@ -101,31 +101,37 @@ h1,
 h2,
 h3 {
   line-height: var(--lh-tight);
-  letter-spacing: 0;
+}
+
+h1,
+h2 {
+  letter-spacing: var(--tracking-tight);
+}
+
+h3 {
+  letter-spacing: var(--tracking-normal);
 }
 
 h1 {
   max-width: 12ch;
-  font-size: var(--fs-3xl);
+  font-size: var(--fs-fluid-3xl);
   margin-block-end: var(--space-4);
+  font-weight: 800;
 }
 
 h2 {
-  font-size: var(--fs-2xl);
+  font-size: var(--fs-fluid-2xl);
   margin-block-end: var(--space-4);
+  font-weight: 700;
 }
 
 h3 {
   font-size: var(--fs-lg);
   margin-block-end: var(--space-3);
+  font-weight: 700;
 }
 
 p {
   color: var(--color-muted);
 }
 
-@media (min-width: 760px) {
-  h1 {
-    font-size: 4rem;
-  }
-}

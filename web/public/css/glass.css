@@ -1,25 +1,108 @@
+/* Liquid Glass material system — 5 variants with tokens-driven intensity.
+   Variants:
+   - .glass           default panel surface
+   - .glass--strong   foreground emphasis, more saturation, stronger highlight
+   - .glass--subtle   background accents, light blur, used for nested cards
+   - .glass--tinted   accent-tinted panel for inviting groups
+   - .glass--edge     panel with diagonal sheen reveal on hover
+   Fallbacks:
+   - @supports not (backdrop-filter): collapse to solid panel
+   - max-width 900px: collapse to solid panel for mobile performance
+   - prefers-reduced-motion: disable any animated sheen */
+
 .glass,
 .terminal-panel {
+  position: relative;
   border: 1px solid var(--color-border-strong);
   background: var(--color-panel);
-  backdrop-filter: blur(24px) saturate(145%);
-  -webkit-backdrop-filter: blur(24px) saturate(145%);
-  box-shadow: var(--shadow-2), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: var(--shadow-2), var(--shadow-inset-highlight);
 }
 
+.glass--strong {
+  backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate-strong));
+  -webkit-backdrop-filter: blur(var(--glass-blur-strong)) saturate(var(--glass-saturate-strong));
+  background: color-mix(in srgb, var(--color-panel) 80%, var(--color-bg));
+  box-shadow: var(--shadow-3), var(--shadow-inset-highlight);
+}
+
+.glass--subtle {
+  backdrop-filter: blur(var(--glass-blur-subtle)) saturate(var(--glass-saturate-subtle));
+  -webkit-backdrop-filter: blur(var(--glass-blur-subtle)) saturate(var(--glass-saturate-subtle));
+  background: color-mix(in srgb, var(--color-panel) 60%, transparent);
+  box-shadow: var(--shadow-1);
+}
+
+.glass--tinted {
+  background: color-mix(in srgb, var(--color-panel) calc(100% - var(--glass-tint-mix)), var(--color-accent));
+  border-color: color-mix(in srgb, var(--color-border-strong) 70%, var(--color-accent));
+  box-shadow: var(--shadow-2), var(--shadow-inset-highlight), var(--glow-soft);
+}
+
+.glass--edge {
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.glass--edge::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--glass-sheen);
+  transform: translateX(-110%);
+  transition: transform var(--dur-slower) var(--ease-out);
+  z-index: 1;
+}
+
+.glass--edge:hover::after,
+.glass--edge:focus-within::after {
+  transform: translateX(110%);
+}
+
+/* No-backdrop-filter fallback for older browsers */
 @supports not (backdrop-filter: blur(1px)) {
   .glass,
+  .glass--strong,
+  .glass--subtle,
+  .glass--tinted,
+  .glass--edge,
   .terminal-panel,
   .site-header {
     background: var(--color-panel-solid);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
   }
 }
 
+/* Mobile performance: drop backdrop-filter cost */
 @media (max-width: 900px) {
   .glass,
+  .glass--strong,
+  .glass--subtle,
+  .glass--tinted,
+  .glass--edge,
   .terminal-panel {
     background: var(--color-panel-solid);
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
+  }
+
+  .glass--tinted {
+    background: color-mix(in srgb, var(--color-panel-solid) 88%, var(--color-accent));
+  }
+}
+
+/* Respect reduced motion: disable sheen sweep */
+@media (prefers-reduced-motion: reduce) {
+  .glass--edge::after {
+    transition: none;
+    transform: translateX(-110%);
+  }
+
+  .glass--edge:hover::after,
+  .glass--edge:focus-within::after {
+    transform: translateX(-110%);
   }
 }
