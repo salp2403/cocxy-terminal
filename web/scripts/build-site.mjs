@@ -463,9 +463,7 @@ function head({ title, description, page, lang = 'en', type = 'website' }) {
   const ogLocale = lang === 'es' ? 'es_HN' : 'en_US';
   const url = canonicalFor(page, lang);
   const titleFull = `${title} - Cocxy Terminal`;
-  const previewPreload = page === '/'
-    ? `\n  <link rel="preload" as="image" href="${previewImage('avif')}" type="image/avif" media="(min-width: 721px)" fetchpriority="high">`
-    : '';
+  const previewPreload = '';
   return `<!DOCTYPE html>
 <html lang="${htmlLang}">
 <head>
@@ -706,7 +704,6 @@ function home(lang = 'en') {
   ];
   const body = `<section id="hero" class="hero hero-product" aria-labelledby="hero-title">
   <div class="container hero-inner">
-    ${logoImage({ width: 92, height: 92, className: 'hero-logo' })}
     <p class="eyebrow">${es ? 'Nativa macOS · Local primero · MIT' : 'Native macOS · Local-first · MIT'}</p>
     <h1 id="hero-title">Cocxy Terminal</h1>
     <p class="hero-lede" data-reveal="fade-up">${es ? 'La terminal que entiende a los agentes de IA.' : 'The terminal that understands AI coding agents.'}</p>
@@ -716,18 +713,43 @@ function home(lang = 'en') {
       <a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
     <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>Zero telemetry</span></div>
-    <div class="hero-console glass glass--edge" role="group" aria-label="${es ? 'Estado local de agentes' : 'Local agent state'}" data-reveal="fade-up">
-      <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
-      <strong>$ cocxy agents status</strong>
-      <code>${es ? 'bóveda: cifrada · navegador: localhost:3000 · revisión: 3 archivos' : 'vault: encrypted · browser: localhost:3000 · review: 3 files'}</code>
-      <code>${es ? 'agente: trabajando · estado: visible · telemetría: cero' : 'agent: working · state: visible · telemetry: zero'}</code>
+    <div class="cocxy-window" role="img" aria-label="${es ? 'Cocxy Terminal: barra lateral de espacios de trabajo con sesiones de agentes y barra de estado sin telemetría' : 'Cocxy Terminal showing a workspaces sidebar with agent sessions and a zero-telemetry status bar'}" data-reveal="fade-up">
+      <div class="cw-bar">
+        <span class="cw-traffic"><i class="is-c"></i><i class="is-m"></i><i class="is-x"></i></span>
+        <span class="cw-tabs"><span class="cw-tab is-on">cocxy 1</span><span class="cw-tab">cocxy 2</span></span>
+        <span class="cw-tools" aria-hidden="true">⌕ ⚙</span>
+      </div>
+      <div class="cw-body">
+        <div class="cw-side">
+          <div class="cw-side-h"><b>WORKSPACES</b><span aria-hidden="true">+</span></div>
+          <div class="cw-search" aria-hidden="true">⌕ ${es ? 'Filtrar sesiones' : 'Filter sessions'}</div>
+          <div class="cw-grp">▾ cocxy-demo</div>
+          <div class="cw-ses is-sel"><span class="cw-chip">Cl</span><span class="cw-info"><span class="cw-nm">claude · main</span><span class="cw-meta"><span class="cw-st is-work"></span> ${es ? 'trabajando' : 'working'} · 2</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Cx</span><span class="cw-info"><span class="cw-nm">codex · review</span><span class="cw-meta"><span class="cw-st is-wait"></span> ${es ? 'esperando' : 'waiting'} · 1</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">build · scripts</span><span class="cw-meta"><span class="cw-st is-done"></span> ${es ? 'listo' : 'done'} · 1</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">server · logs</span><span class="cw-meta"><span class="cw-st is-idle"></span> idle · 1</span></span></div>
+        </div>
+        <div class="cw-term">
+          <div><span class="u">galf</span><span class="m">@</span><span class="h">macbook</span> <span class="p">~/projects/cocxy</span></div>
+          <div><span class="pr">$</span> claude</div>
+          <div><span class="ag">●</span> <span class="ag">Claude</span> <span class="m">${es ? 'trabajando · editando' : 'working · editing'}</span> <span class="pk">TerminalView.swift</span></div>
+          <div><span class="m">&nbsp;&nbsp;↳ ${es ? 'detectado vía OSC + hooks de shell' : 'detected via OSC + shell hooks'}</span></div>
+          <div><span class="m">&nbsp;&nbsp;↳ ${es ? 'indexando 64 módulos de dominio' : 'indexing 64 domain modules'}</span></div>
+          <div><span class="m">&nbsp;&nbsp;↳ ${es ? 'corriendo 2,900 tests' : 'running 2,900 tests'}</span></div>
+          <div><span class="ok">✓ ${es ? 'todo en verde' : 'all checks passed'}</span> <span class="m">· 0 bytes ${es ? 'salieron del equipo' : 'left the device'}</span></div>
+          <div><span class="pr">$</span> <span class="cw-cur"></span></div>
+        </div>
+      </div>
+      <div class="cw-status">
+        <span><span class="chev">›</span> galf@macbook</span>
+        <span class="br">main</span>
+        <span class="cw-tel"><i></i> ${es ? 'sin telemetría' : 'no telemetry'}</span>
+        <span class="pt">:8080 :8081</span>
+        <span class="cw-sp"></span>
+        <span class="cw-ag"><i></i> Claude · ${es ? 'trabajando' : 'working'}</span>
+      </div>
     </div>
   </div>
-  <picture class="hero-media">
-    <source srcset="${previewImage('avif')}" type="image/avif">
-    <source srcset="${previewImage('webp')}" type="image/webp">
-    <img src="${previewImage('png')}" width="1574" height="808" alt="${es ? 'Cocxy Terminal con paneles, navegador y agentes locales' : 'Cocxy Terminal with panes, browser, and local agent state'}" loading="lazy" decoding="async" fetchpriority="low">
-  </picture>
 </section>
 <section class="stats-strip" aria-label="${es ? 'Datos clave' : 'Key facts'}">
   <div class="container stats-grid" data-reveal="stagger">
@@ -750,6 +772,10 @@ function home(lang = 'en') {
       <article class="card"><h3>${es ? 'Local primero' : 'Local-first by design'}</h3><p>${es ? 'Bóveda, sesiones, configuración y revisión viven en tu Mac salvo acciones explícitas.' : 'Vault, sessions, configuration, and review state live on your Mac unless you start an explicit action.'}</p></article>
       <article class="card"><h3>${es ? 'Hecho para desarrollo' : 'Built for developers'}</h3><p>${es ? 'Swift, AppKit, SwiftUI, CocxyCore y Metal sostienen una experiencia nativa.' : 'Swift, AppKit, SwiftUI, CocxyCore, and Metal support a native workflow.'}</p></article>
     </div>
+    <p class="agent-pills-label" data-reveal="fade-up">${es ? 'Compatible con tu stack de agentes' : 'Works with your whole agent stack'}</p>
+    <ul class="agent-pills" data-reveal="stagger">
+      ${agents.map((a) => `<li class="agent-pill"><i aria-hidden="true"></i>${escapeHTML(a[0])}</li>`).join('')}
+    </ul>
   </div>
 </section>
 <section class="section" id="features" aria-labelledby="features-title">

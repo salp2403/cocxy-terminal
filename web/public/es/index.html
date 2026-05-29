@@ -33,7 +33,6 @@
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Appcast" href="/appcast.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Updates" href="/feed.xml">
   <link rel="alternate" type="application/rss+xml" title="Cocxy Terminal Releases" href="/releases.xml">
-  <link rel="preload" as="image" href="/images/cocxy-preview.avif?v=0.0.0" type="image/avif" media="(min-width: 721px)" fetchpriority="high">
   <script>
   (() => {
     try {
@@ -74,7 +73,6 @@
 <main id="main">
 <section id="hero" class="hero hero-product" aria-labelledby="hero-title">
   <div class="container hero-inner">
-    <picture><source srcset="/images/icon.avif" type="image/avif"><source srcset="/images/icon.webp" type="image/webp"><img class="hero-logo" src="/images/icon.png" width="92" height="92" alt=""></picture>
     <p class="eyebrow">Nativa macOS · Local primero · MIT</p>
     <h1 id="hero-title">Cocxy Terminal</h1>
     <p class="hero-lede" data-reveal="fade-up">La terminal que entiende a los agentes de IA.</p>
@@ -84,18 +82,43 @@
       <a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
     <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>Zero telemetry</span></div>
-    <div class="hero-console glass glass--edge" role="group" aria-label="Estado local de agentes" data-reveal="fade-up">
-      <span class="console-dot"></span><span class="console-dot"></span><span class="console-dot"></span>
-      <strong>$ cocxy agents status</strong>
-      <code>bóveda: cifrada · navegador: localhost:3000 · revisión: 3 archivos</code>
-      <code>agente: trabajando · estado: visible · telemetría: cero</code>
+    <div class="cocxy-window" role="img" aria-label="Cocxy Terminal: barra lateral de espacios de trabajo con sesiones de agentes y barra de estado sin telemetría" data-reveal="fade-up">
+      <div class="cw-bar">
+        <span class="cw-traffic"><i class="is-c"></i><i class="is-m"></i><i class="is-x"></i></span>
+        <span class="cw-tabs"><span class="cw-tab is-on">cocxy 1</span><span class="cw-tab">cocxy 2</span></span>
+        <span class="cw-tools" aria-hidden="true">⌕ ⚙</span>
+      </div>
+      <div class="cw-body">
+        <div class="cw-side">
+          <div class="cw-side-h"><b>WORKSPACES</b><span aria-hidden="true">+</span></div>
+          <div class="cw-search" aria-hidden="true">⌕ Filtrar sesiones</div>
+          <div class="cw-grp">▾ cocxy-demo</div>
+          <div class="cw-ses is-sel"><span class="cw-chip">Cl</span><span class="cw-info"><span class="cw-nm">claude · main</span><span class="cw-meta"><span class="cw-st is-work"></span> trabajando · 2</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Cx</span><span class="cw-info"><span class="cw-nm">codex · review</span><span class="cw-meta"><span class="cw-st is-wait"></span> esperando · 1</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">build · scripts</span><span class="cw-meta"><span class="cw-st is-done"></span> listo · 1</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">server · logs</span><span class="cw-meta"><span class="cw-st is-idle"></span> idle · 1</span></span></div>
+        </div>
+        <div class="cw-term">
+          <div><span class="u">galf</span><span class="m">@</span><span class="h">macbook</span> <span class="p">~/projects/cocxy</span></div>
+          <div><span class="pr">$</span> claude</div>
+          <div><span class="ag">●</span> <span class="ag">Claude</span> <span class="m">trabajando · editando</span> <span class="pk">TerminalView.swift</span></div>
+          <div><span class="m">&nbsp;&nbsp;↳ detectado vía OSC + hooks de shell</span></div>
+          <div><span class="m">&nbsp;&nbsp;↳ indexando 64 módulos de dominio</span></div>
+          <div><span class="m">&nbsp;&nbsp;↳ corriendo 2,900 tests</span></div>
+          <div><span class="ok">✓ todo en verde</span> <span class="m">· 0 bytes salieron del equipo</span></div>
+          <div><span class="pr">$</span> <span class="cw-cur"></span></div>
+        </div>
+      </div>
+      <div class="cw-status">
+        <span><span class="chev">›</span> galf@macbook</span>
+        <span class="br">main</span>
+        <span class="cw-tel"><i></i> sin telemetría</span>
+        <span class="pt">:8080 :8081</span>
+        <span class="cw-sp"></span>
+        <span class="cw-ag"><i></i> Claude · trabajando</span>
+      </div>
     </div>
   </div>
-  <picture class="hero-media">
-    <source srcset="/images/cocxy-preview.avif?v=0.0.0" type="image/avif">
-    <source srcset="/images/cocxy-preview.webp?v=0.0.0" type="image/webp">
-    <img src="/images/cocxy-preview.png?v=0.0.0" width="1574" height="808" alt="Cocxy Terminal con paneles, navegador y agentes locales" loading="lazy" decoding="async" fetchpriority="low">
-  </picture>
 </section>
 <section class="stats-strip" aria-label="Datos clave">
   <div class="container stats-grid" data-reveal="stagger">
@@ -118,6 +141,10 @@
       <article class="card"><h3>Local primero</h3><p>Bóveda, sesiones, configuración y revisión viven en tu Mac salvo acciones explícitas.</p></article>
       <article class="card"><h3>Hecho para desarrollo</h3><p>Swift, AppKit, SwiftUI, CocxyCore y Metal sostienen una experiencia nativa.</p></article>
     </div>
+    <p class="agent-pills-label" data-reveal="fade-up">Compatible con tu stack de agentes</p>
+    <ul class="agent-pills" data-reveal="stagger">
+      <li class="agent-pill"><i aria-hidden="true"></i>Claude</li><li class="agent-pill"><i aria-hidden="true"></i>Codex</li><li class="agent-pill"><i aria-hidden="true"></i>OpenCode</li><li class="agent-pill"><i aria-hidden="true"></i>Pi</li><li class="agent-pill"><i aria-hidden="true"></i>Cursor</li><li class="agent-pill"><i aria-hidden="true"></i>Gemini</li><li class="agent-pill"><i aria-hidden="true"></i>Rovo</li><li class="agent-pill"><i aria-hidden="true"></i>Copilot</li><li class="agent-pill"><i aria-hidden="true"></i>CodeBuddy</li><li class="agent-pill"><i aria-hidden="true"></i>Factory</li><li class="agent-pill"><i aria-hidden="true"></i>Qoder</li>
+    </ul>
   </div>
 </section>
 <section class="section" id="features" aria-labelledby="features-title">
