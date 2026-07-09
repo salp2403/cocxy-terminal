@@ -65,6 +65,46 @@ final class AppDelegateBridgeTests: XCTestCase {
         )
     }
 
+    func testFirstLaunchSetupGuardRejectsExternalShellsBeforeLaunchingCLI() {
+        let guarded = AppDelegate.guardedHookCommand(
+            "'/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+        )
+
+        XCTAssertTrue(guarded.contains(#"${COCXY_CLAUDE_HOOKS:-0}"#))
+        XCTAssertTrue(guarded.contains(#"${COCXY_RESOURCES_DIR:-}"#))
+        XCTAssertTrue(guarded.contains(#"${COCXY_SHELL_INTEGRATION_DIR:-}"#))
+        XCTAssertTrue(guarded.contains("then exec '/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler; fi"))
+    }
+
+    func testFirstLaunchSetupMigratesOwnedUnguardedHookCommand() {
+        let legacyCommand = "'/Applications/Cocxy Terminal.app/Contents/Resources/cocxy' hook-handler"
+        let desiredCommand = AppDelegate.guardedHookCommand(legacyCommand)
+        let legacyEntry: [String: Any] = [
+            "matcher": "",
+            "hooks": [
+                ["type": "command", "command": legacyCommand]
+            ]
+        ]
+        let desiredEntry: [String: Any] = [
+            "matcher": "",
+            "hooks": [
+                ["type": "command", "command": desiredCommand]
+            ]
+        ]
+
+        let result = AppDelegate.reconciledHookEntries(
+            [legacyEntry],
+            desiredEntry: desiredEntry,
+            expectedCommand: desiredCommand,
+            rejectedCommands: [legacyCommand]
+        )
+
+        XCTAssertTrue(result.modified)
+        XCTAssertEqual(result.entries.count, 1)
+        let commands = result.entries[0]["hooks"] as? [[String: Any]]
+        XCTAssertEqual(commands?.first?["command"] as? String, desiredCommand)
+    }
+
     func testFirstLaunchSetupReconciliationPreservesCustomWrapperDuringRepair() {
         let wrapperCommand = "/usr/local/bin/cocxy-wrapper hook-handler"
         let staleCommand = "'/private/tmp/CocxyTerminalSmoke.app/Contents/Resources/cocxy' hook-handler"
