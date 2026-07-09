@@ -1192,24 +1192,29 @@ struct CITestGateScriptSwiftTestingTests {
                 .map { String($0.dropFirst(prefix.count)) }
         }
 
-        let isComplete = result.stdout.contains("status=complete")
+        let isComplete = result.stdout
+            .split(separator: "\n")
+            .contains("status=complete")
         #expect(result.terminationStatus == (isComplete ? 0 : 1))
         #expect(isComplete || result.stdout.contains("status=not-complete"))
 
-        let isCI = ProcessInfo.processInfo.environment["CI"] == "true"
         let privateCompletionEvidenceMissing = [
             "blocker=source plan missing:",
             "blocker=completion audit missing:",
             "blocker=completion final report missing:",
             "blocker=command instruction doc missing:",
         ].contains { result.stdout.contains($0) }
-        if isCI && privateCompletionEvidenceMissing {
+        if privateCompletionEvidenceMissing {
             #expect(result.terminationStatus == 1)
             #expect(result.stdout.contains("status=not-complete"))
             #expect(result.stdout.contains("check=browser-mcp-tools="))
             #expect(result.stdout.contains("check=agent-workspace-e2e-matrices=9"))
-            #expect(result.stdout.contains("blocker=completion final report missing:"))
-            #expect(result.stdout.contains("blocker=command instruction doc missing:"))
+            #expect(
+                result.stdout.contains("blocker=source plan missing:")
+                    || result.stdout.contains("blocker=completion audit missing:")
+                    || result.stdout.contains("blocker=completion final report missing:")
+                    || result.stdout.contains("blocker=command instruction doc missing:")
+            )
             return
         }
 
@@ -3441,6 +3446,9 @@ struct CITestGateScriptSwiftTestingTests {
             environment: [
                 "PATH": "\(setupBinRoot.path):/usr/bin:/bin",
                 "COCXY_AWS_SETUP_ARTIFACTS": setupArtifacts.path,
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(setupDryRun.terminationStatus == 0)
@@ -3458,6 +3466,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "PATH": "\(setupBinRoot.path):/usr/bin:/bin",
                 "COCXY_AWS_VERIFY_ARTIFACTS": verifyArtifacts.path,
                 "COCXY_AWS_IMAGE": "ami-fixture",
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(verifyDryRun.terminationStatus == 0)
@@ -3599,6 +3610,9 @@ struct CITestGateScriptSwiftTestingTests {
             environment: [
                 "PATH": "\(setupBinRoot.path):/usr/bin:/bin",
                 "COCXY_AWS_IMAGE": "ami-fixture",
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(generatedVerify.terminationStatus == 0)
@@ -3708,6 +3722,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_AWS_SETUP_APPLY": "1",
                 "COCXY_AWS_SETUP_ARTIFACTS": applyArtifacts.path,
                 "COCXY_AWS_IMAGE": "ami-fixture",
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
                 "COCXY_AWS_SIMULATE_PROFILE_PROPAGATION": "1",
                 "COCXY_AWS_SETUP_PROPAGATION_INTERVAL_SECONDS": "1",
                 "COCXY_AWS_SETUP_PROPAGATION_TIMEOUT_SECONDS": "5",
@@ -3776,6 +3793,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_AWS_FAKE_CALLS": deniedApplyCallLog.path,
                 "COCXY_AWS_SETUP_APPLY": "1",
                 "COCXY_AWS_SETUP_ARTIFACTS": deniedApplyArtifacts.path,
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(setupApplyDenied.terminationStatus == 1)
@@ -3795,6 +3815,7 @@ struct CITestGateScriptSwiftTestingTests {
             scriptURL,
             arguments: ["gcp"],
             environment: [
+                "COCXY_CELLS_CLOUD_E2E": "",
                 "COCXY_CELLS_CLOUD_ARTIFACTS": fixtureRoot
                     .appendingPathComponent("smoke-gcp")
                     .path,
@@ -3830,6 +3851,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_CELLS_CLOUD_ARTIFACT_ROOT": fixtureRoot
                     .appendingPathComponent("cloud-artifacts")
                     .path,
+                "COCXY_GCP_IMAGE": "",
+                "COCXY_GCP_PROJECT": "",
+                "COCXY_GCP_ZONE": "",
             ]
         )
         #expect(preflightResult.terminationStatus == 0 || preflightResult.terminationStatus == 1)
@@ -4372,6 +4396,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_CELLS_CLOUD_PREFLIGHT_ARTIFACTS": fixtureRoot
                     .appendingPathComponent("preflight")
                     .path,
+                "COCXY_GCP_IMAGE": "",
+                "COCXY_GCP_PROJECT": "",
+                "COCXY_GCP_ZONE": "",
             ]
         )
         #expect(result.terminationStatus == 1)
