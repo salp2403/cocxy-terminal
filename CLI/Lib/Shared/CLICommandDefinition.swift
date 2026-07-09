@@ -143,6 +143,7 @@ public enum CLICommand: String, CaseIterable {
     // MARK: - Browser (v2)
 
     case browserNavigate = "browser-navigate"
+    case browserSplit = "browser-split"
     case browserBack = "browser-back"
     case browserForward = "browser-forward"
     case browserReload = "browser-reload"
@@ -454,6 +455,7 @@ public enum CLICommand: String, CaseIterable {
 
         // Browser
         case .browserNavigate: return "Navigate the embedded browser to a URL"
+        case .browserSplit: return "Open a browser split pane alongside the active terminal"
         case .browserBack: return "Go back in browser history"
         case .browserForward: return "Go forward in browser history"
         case .browserReload: return "Reload the current browser page"
@@ -739,6 +741,7 @@ public enum CLICommand: String, CaseIterable {
 
         // Browser
         case .browserNavigate: return "cocxy browser navigate <url>"
+        case .browserSplit: return "cocxy browser split"
         case .browserBack: return "cocxy browser back"
         case .browserForward: return "cocxy browser forward"
         case .browserReload: return "cocxy browser reload"

@@ -17,6 +17,7 @@ struct BrowserAutomationMatrixScriptSwiftTestingTests {
         #expect(script.contains("BROWSER_MATRIX_MIN_SCENARIOS=80"))
         #expect(script.contains("scenario_count="))
         #expect(script.contains("scenario_count < BROWSER_MATRIX_MIN_SCENARIOS"))
+        #expect(script.contains("browser split"))
         #expect(!script.contains("pkill -x CocxyTerminal"))
 
         for command in [

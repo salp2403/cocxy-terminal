@@ -677,6 +677,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser navigate <url>`
     case browserNavigate(url: String)
 
+    /// `cocxy browser split`
+    case browserSplit
+
     /// `cocxy browser back`
     case browserBack
 
@@ -3534,6 +3537,15 @@ public enum CLIArgumentParser {
                 throw CLIError.missingArgument(command: "browser navigate", argument: "url")
             }
             return .browserNavigate(url: url)
+        case "split":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser split",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "Browser split does not take arguments."
+                )
+            }
+            return .browserSplit
         case "back":
             return .browserBack
         case "forward":
@@ -3745,7 +3757,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "browser",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, add, init, dialogs, dialog, text, tabs, snapshot, context, click, dblclick, hover, focus, fill, upload, type, press, keydown, keyup, check, uncheck, select, scroll, scroll-into-view, get, is, find, screenshot, console, wait, cookies, network, frames, downloads, storage, or import."
+                reason: "Unknown subcommand. Use navigate, split, back, forward, reload, state, eval, add, init, dialogs, dialog, text, tabs, snapshot, context, click, dblclick, hover, focus, fill, upload, type, press, keydown, keyup, check, uncheck, select, scroll, scroll-into-view, get, is, find, screenshot, console, wait, cookies, network, frames, downloads, storage, or import."
             )
         }
     }

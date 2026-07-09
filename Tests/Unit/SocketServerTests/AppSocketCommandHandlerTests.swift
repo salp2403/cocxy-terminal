@@ -2173,6 +2173,48 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         }
     }
 
+    func test_browserSplitDispatchesThroughProvider() {
+        let didOpenSplit = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserSplitProvider: {
+                didOpenSplit.withValue { $0 = true }
+                return true
+            }
+        )
+
+        let response = handler.handleCommand(
+            SocketRequest(id: "browser-split-1", command: "browser-split", params: nil)
+        )
+
+        XCTAssertTrue(response.success)
+        XCTAssertTrue(didOpenSplit.withValue { $0 })
+        XCTAssertEqual(response.data?["status"], "opened")
+    }
+
+    func test_browserSplitFailsWhenProviderIsUnavailableOrRejectsCreation() {
+        let unavailableHandler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let unavailableResponse = unavailableHandler.handleCommand(
+            SocketRequest(id: "browser-split-unavailable", command: "browser-split", params: nil)
+        )
+
+        XCTAssertFalse(unavailableResponse.success)
+        XCTAssertEqual(unavailableResponse.error, "Browser split is not available")
+
+        let rejectingHandler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserSplitProvider: { false }
+        )
+        let rejectedResponse = rejectingHandler.handleCommand(
+            SocketRequest(id: "browser-split-rejected", command: "browser-split", params: nil)
+        )
+
+        XCTAssertFalse(rejectedResponse.success)
+        XCTAssertEqual(rejectedResponse.error, "Browser split could not be opened")
+    }
+
     func test_coreSnapshotCommands_withProvidersReturnData() {
         let handler = AppSocketCommandHandler(
             tabManager: nil,

@@ -772,6 +772,12 @@ extension AppDelegate {
     }
 
     @MainActor
+    func openBrowserSplitForCLI() -> Bool {
+        guard let controller = focusedWindowController() ?? windowController else { return false }
+        return controller.openBrowserSplit()
+    }
+
+    @MainActor
     func duplicateFocusedTabForCLI() -> (id: String, title: String)? {
         guard let controller = focusedWindowController() ?? windowController else { return nil }
 

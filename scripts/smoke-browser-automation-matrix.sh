@@ -309,6 +309,7 @@ if [ -z "$APP_PID" ]; then
   exit 1
 fi
 
+run_success browser-split browser split
 run_success navigate browser navigate "http://127.0.0.1:${PORT}/index.html"
 wait_for_fixture_ready initial-ready
 run_success navigate-hash browser navigate "http://127.0.0.1:${PORT}/index.html#history"

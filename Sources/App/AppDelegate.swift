@@ -1887,6 +1887,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     delegateRef.value?.browserViewModelForExternalNavigationCLI()
                 }
             },
+            browserSplitProvider: {
+                syncOnMainActor {
+                    delegateRef.value?.openBrowserSplitForCLI() ?? false
+                }
+            },
             browserImportProvider: { kind, params in
                 let fallback: (Bool, [String: String]) = (
                     false,

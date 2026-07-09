@@ -63,7 +63,18 @@ extension MainWindowController {
     /// Opens a browser panel appended at the end of the split tree.
     /// The browser tab receives focus so it appears selected in the tab strip.
     @objc func splitWithBrowserAction(_ sender: Any?) {
-        performVisualSplitWithPanel(isVertical: true, panel: .browser(), appendToEnd: true, focusNewPanel: true)
+        _ = openBrowserSplit()
+    }
+
+    /// Opens a browser panel and reports whether the split was actually created.
+    @discardableResult
+    func openBrowserSplit() -> Bool {
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .browser(),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
     }
 
     /// Opens a markdown panel appended at the end of the split tree.

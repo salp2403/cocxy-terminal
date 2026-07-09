@@ -275,6 +275,8 @@ public enum OutputFormatter {
 
         case .browserNavigate:
             return "Navigated."
+        case .browserSplit:
+            return "Browser split opened."
         case .browserBack:
             return "Navigated back."
         case .browserForward:

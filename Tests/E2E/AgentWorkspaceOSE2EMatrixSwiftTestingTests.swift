@@ -44,7 +44,7 @@ struct AgentWorkspaceOSE2EMatrixSwiftTestingTests {
 
         if !isCIEnvironment {
             #expect(audit.stdout.contains("matrix=browser-automation\tstatus=ok"))
-            #expect(audit.stdout.contains("scenarios=95; target=80"))
+            #expect(audit.stdout.contains("scenarios=96; target=80"))
             #expect(audit.stdout.contains("matrix=visual-screenshot\tstatus=ok"))
             #expect(audit.stdout.contains("approved-golden-screenshots=20"))
         }

@@ -1354,6 +1354,9 @@ public struct CommandRunner {
                 id: requestID, command: "browser-navigate", params: ["url": url]
             )
 
+        case .browserSplit:
+            return CLISocketRequest(id: requestID, command: "browser-split", params: nil)
+
         case .browserBack:
             return CLISocketRequest(id: requestID, command: "browser-back", params: nil)
 

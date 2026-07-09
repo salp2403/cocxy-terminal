@@ -225,6 +225,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that provides or opens a browser view model for external navigation.
     /// Unlike the read-only provider above, this may create UI for `browser navigate`.
     private let browserNavigationViewModelProvider: @Sendable () -> BrowserViewModel?
+    /// Opens the full browser workspace split used by visual browser automation smokes.
+    private let browserSplitProvider: (@Sendable () -> Bool)?
     /// Routes browser import preview/run requests to the app-owned importer.
     private let browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
@@ -503,6 +505,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         browserViewModel: BrowserViewModel? = nil,
         browserViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
         browserNavigationViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        browserSplitProvider: (@Sendable () -> Bool)? = nil,
         browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         tabCountProviderOverride: (@Sendable () -> Int)? = nil,
         tabInfoProviderOverride: (@Sendable () -> [(id: String, title: String, isActive: Bool)])? = nil,
@@ -713,6 +716,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.browserViewModelProvider = resolvedBrowserViewModelProvider
         self.browserNavigationViewModelProvider = browserNavigationViewModelProviderOverride
             ?? resolvedBrowserViewModelProvider
+        self.browserSplitProvider = browserSplitProvider
         self.browserImportProvider = browserImportProvider
 
         // -- Tab count provider (read-only) --
@@ -969,6 +973,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // Browser commands
         case .browserNavigate:
             return handleBrowserNavigate(request)
+        case .browserSplit:
+            return handleBrowserSplit(request)
         case .browserBack:
             return handleBrowserBack(request)
         case .browserForward:
@@ -2331,6 +2337,19 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "navigated"])
+    }
+
+    /// Opens the full browser split pane used for wide browser automation evidence.
+    private func handleBrowserSplit(_ request: SocketRequest) -> SocketResponse {
+        guard let browserSplitProvider else {
+            return .failure(id: request.id, error: "Browser split is not available")
+        }
+
+        guard browserSplitProvider() else {
+            return .failure(id: request.id, error: "Browser split could not be opened")
+        }
+
+        return .ok(id: request.id, data: ["status": "opened"])
     }
 
     /// Navigates the browser backward in history.

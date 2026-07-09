@@ -771,6 +771,10 @@ final class RequestBuilderTests: XCTestCase {
     }
 
     func testBuildBrowserAutomationV2Requests() {
+        let split = runner.buildRequest(from: .browserSplit)
+        XCTAssertEqual(split.command, "browser-split")
+        XCTAssertNil(split.params)
+
         let dblClick = runner.buildRequest(from: .browserDblClick(ref: "button-1"))
         XCTAssertEqual(dblClick.command, "browser-dblclick")
         XCTAssertEqual(dblClick.params?["ref"], "button-1")
@@ -2088,7 +2092,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 230)
+        XCTAssertEqual(CLICommand.allCases.count, 231)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -2130,6 +2134,7 @@ final class CLICommandDefinitionTests: XCTestCase {
 
     func testBrowserUsageExamplesMatchPublicParserShape() throws {
         XCTAssertEqual(CLICommand.browserNavigate.usageExample, "cocxy browser navigate <url>")
+        XCTAssertEqual(CLICommand.browserSplit.usageExample, "cocxy browser split")
         XCTAssertEqual(CLICommand.browserBack.usageExample, "cocxy browser back")
         XCTAssertEqual(CLICommand.browserForward.usageExample, "cocxy browser forward")
         XCTAssertEqual(CLICommand.browserReload.usageExample, "cocxy browser reload")
@@ -2206,6 +2211,28 @@ final class CLICommandDefinitionTests: XCTestCase {
             return XCTFail("browser navigate should parse through the public CLI shape")
         }
         XCTAssertEqual(url, "https://example.com")
+
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "split"]),
+            .browserSplit
+        )
+        XCTAssertThrowsError(try CLIArgumentParser.parse(["browser", "split", "extra"])) { error in
+            XCTAssertEqual(
+                error as? CLIError,
+                .invalidArgument(
+                    command: "browser split",
+                    argument: "extra",
+                    reason: "Browser split does not take arguments."
+                )
+            )
+        }
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .browserSplit,
+                response: CLISocketResponse(id: "browser-split", success: true, data: nil, error: nil)
+            ),
+            "Browser split opened."
+        )
 
         guard case .browserEval(let script) = try CLIArgumentParser.parse(["browser", "eval", "document.title"]) else {
             return XCTFail("browser eval should parse through the public CLI shape")

@@ -1877,6 +1877,31 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testCLIBrowserSplitReportsFailureWhenPaneLimitPreventsCreation() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        setPanelTestCanvas(width: 2600, height: 760, on: controller)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        controller.window?.makeKeyAndOrderFront(nil)
+
+        for _ in 1..<MainWindowController.maxPaneCount {
+            XCTAssertTrue(delegate.openBrowserSplitForCLI())
+        }
+
+        XCTAssertEqual(controller.activeSplitManager?.rootNode.leafCount, MainWindowController.maxPaneCount)
+        XCTAssertNotNil(controller.activeBrowserViewModel())
+        XCTAssertFalse(
+            delegate.openBrowserSplitForCLI(),
+            "The CLI must not report success when the pane limit prevents a new browser split"
+        )
+    }
+
     func testTabSwitchPreservesFocusedMarkdownPanelSelection() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

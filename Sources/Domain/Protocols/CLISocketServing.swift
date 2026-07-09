@@ -242,6 +242,8 @@ enum CLICommandName: String, CaseIterable, Sendable {
 
     /// Navigate the embedded browser to a URL.
     case browserNavigate = "browser-navigate"
+    /// Open a browser split pane alongside the active terminal.
+    case browserSplit = "browser-split"
     /// Go back in browser history.
     case browserBack = "browser-back"
     /// Go forward in browser history.
