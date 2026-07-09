@@ -20,6 +20,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var notificationRingLayer: CAShapeLayer?
     private var eventDrainTimer: Timer?
 
+    private static let scrollSpeedFactor: CGFloat = 0.15
+
     init(viewModel: TerminalViewModel?) {
         self.viewModel = viewModel
         self.font = NSFont.monospacedSystemFont(
@@ -158,6 +160,20 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        guard let bridge, let surfaceID else {
+            super.scrollWheel(with: event)
+            return
+        }
+        let scaledDelta = event.scrollingDeltaY * Self.scrollSpeedFactor
+        guard scaledDelta != 0 else { return }
+        let steps = max(1, Int(abs(scaledDelta.rounded(.towardZero))))
+        bridge.scrollViewport(
+            surfaceID: surfaceID,
+            deltaRows: scaledDelta > 0 ? steps : -steps
+        )
     }
 
     override func insertText(_ insertString: Any) {

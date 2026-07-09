@@ -195,6 +195,16 @@ final class PTYDaemonSurface: @unchecked Sendable {
         }
     }
 
+    func scroll(by deltaRows: Int) -> Bool {
+        guard deltaRows != 0 else { return true }
+        return terminalLock.withLock {
+            cocxycore_terminal_history_scroll_viewport(
+                terminal,
+                Int32(max(Int(Int32.min), min(Int(Int32.max), deltaRows)))
+            )
+        }
+    }
+
     func search(query: String, caseSensitive: Bool, useRegex: Bool, maxResults: Int) -> [PTYDaemonSearchResult] {
         guard query.isEmpty == false else { return [] }
         return terminalLock.withLock {

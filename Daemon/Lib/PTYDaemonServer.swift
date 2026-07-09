@@ -103,9 +103,19 @@ public final class PTYDaemonServer {
                 return PTYDaemonResponse(id: request.id, ok: true, searchResults: results)
             case .surfaceScroll:
                 let surface = try requireSurface(payload)
+                if let deltaRows = payload.int("deltaRows") {
+                    let ok = surface.scroll(by: deltaRows)
+                    return PTYDaemonResponse(
+                        id: request.id,
+                        ok: ok,
+                        frame: ok ? surface.makeFrame() : nil
+                    )
+                }
+                let ok = surface.scroll(to: payload.int("lineNumber") ?? 0)
                 return PTYDaemonResponse(
                     id: request.id,
-                    ok: surface.scroll(to: payload.int("lineNumber") ?? 0)
+                    ok: ok,
+                    frame: ok ? surface.makeFrame() : nil
                 )
             case .surfaceProcess:
                 let surface = try requireSurface(payload)

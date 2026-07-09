@@ -180,6 +180,30 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.historyVisibleStart(for: surfaceID) == maxVisibleStart)
     }
 
+    @Test("PTY alt-screen transitions force host interaction metric sync")
+    func ptyAltScreenTransitionsForceHostInteractionMetricSync() async throws {
+        let bridge = try makeBridge()
+        let script = try makeAltScreenTransitionScript()
+        defer { try? FileManager.default.removeItem(at: script.rootDirectory) }
+        let hostView = InteractionMetricsTrackingHostView(
+            frame: NSRect(x: 0, y: 0, width: 800, height: 400)
+        )
+
+        let surfaceID = try bridge.createSurface(
+            in: hostView,
+            workingDirectory: script.rootDirectory,
+            command: script.scriptURL.path
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        let baseline = hostView.updateInteractionMetricsCount
+
+        try await waitUntil(timeoutNanoseconds: 3_000_000_000, pollNanoseconds: 10_000_000) {
+            hostView.updateInteractionMetricsCount >= baseline + 2
+        }
+
+        #expect(hostView.updateInteractionMetricsCount >= baseline + 2)
+    }
+
     @Test("visibleLineText returns nil for an unknown surface")
     func visibleLineTextReturnsNilForUnknownSurface() throws {
         let bridge = try makeBridge()
@@ -1344,9 +1368,52 @@ private func makeTemporaryDirectory(named prefix: String) throws -> URL {
     return directory
 }
 
+private func makeAltScreenTransitionScript() throws -> (rootDirectory: URL, scriptURL: URL) {
+    let rootDirectory = try makeTemporaryDirectory(named: "cocxy-alt-screen-transition")
+    let scriptURL = rootDirectory.appendingPathComponent("alt-screen.sh")
+    try """
+    #!/bin/sh
+    printf '\\033[?1049h'
+    sleep 0.15
+    printf '\\033[?1049l'
+    sleep 0.15
+    exec /bin/cat
+    """.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: scriptURL.path
+    )
+    return (rootDirectory, scriptURL)
+}
+
 private func feed(_ text: String, to terminal: OpaquePointer) {
     let bytes = Array(text.utf8)
     cocxycore_terminal_feed(terminal, bytes, bytes.count)
+}
+
+@MainActor
+private final class InteractionMetricsTrackingHostView: NSView, TerminalHostingView {
+    var terminalViewModel: TerminalViewModel?
+    var onFileDrop: (([URL]) -> Bool)?
+    var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
+    private(set) var updateInteractionMetricsCount = 0
+    private(set) var requestImmediateRedrawCount = 0
+
+    func syncSizeWithTerminal() {}
+    func showNotificationRing(color: NSColor) {}
+    func hideNotificationRing() {}
+    func handleShellPrompt(row: Int, column: Int) {}
+    func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {}
+    func refreshDisplayLinkAnchor() {}
+
+    func updateInteractionMetrics() {
+        updateInteractionMetricsCount += 1
+    }
+
+    func requestImmediateRedraw() {
+        requestImmediateRedrawCount += 1
+    }
 }
 
 func readPreedit(from terminal: OpaquePointer) -> String {

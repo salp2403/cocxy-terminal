@@ -27,6 +27,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var preeditTexts: [(surface: SurfaceID, text: String)] = []
     private(set) var resizedSurfaces: [(surface: SurfaceID, size: TerminalSize)] = []
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
+    private(set) var viewportScrollRequests: [(surface: SurfaceID, deltaRows: Int)] = []
     private(set) var focusNotifications: [(surface: SurfaceID, focused: Bool)] = []
     private(set) var nativeSearchRequests: [(surface: SurfaceID, options: SearchOptions)] = []
     private(set) var sessionReplayStartRequests: [SessionReplayStartRequest] = []
@@ -107,6 +108,10 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
         scrolledResults.append((surfaceID, lineNumber))
+    }
+
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {
+        viewportScrollRequests.append((surfaceID, deltaRows))
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {

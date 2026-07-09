@@ -387,6 +387,18 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         )
         #expect(scroll.ok == true)
 
+        let relativeScroll = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "relative-scroll",
+                command: .surfaceScroll,
+                payload: ["surfaceID": surfaceID, "deltaRows": "3"]
+            )
+        )
+        #expect(relativeScroll.ok == true)
+        #expect(relativeScroll.frame?.surfaceID == surfaceID)
+        #expect(relativeScroll.frame?.rows == 9)
+        #expect(relativeScroll.frame?.columns == 42)
+
         let signal = try helper.sendAndWait(
             PTYDaemonRequest(
                 id: "signal",

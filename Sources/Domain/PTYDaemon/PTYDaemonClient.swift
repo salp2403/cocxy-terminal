@@ -377,7 +377,12 @@ final class PTYDaemonClient: TerminalEngine {
     }
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
-        _ = try? sendSurfaceRequest(surfaceID, command: .surfaceScroll, payload: ["lineNumber": "\(lineNumber)"])
+        scrollSurface(surfaceID: surfaceID, payload: ["lineNumber": "\(lineNumber)"])
+    }
+
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {
+        guard deltaRows != 0 else { return }
+        scrollSurface(surfaceID: surfaceID, payload: ["deltaRows": "\(deltaRows)"])
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
@@ -452,6 +457,19 @@ final class PTYDaemonClient: TerminalEngine {
                 throw TerminalEngineError.initializationFailed(reason: "PTY daemon surface failed reattach")
             }
             return try connection.send(request)
+        }
+    }
+
+    private func scrollSurface(surfaceID: SurfaceID, payload: [String: String]) {
+        guard let response = try? sendSurfaceRequest(
+            surfaceID,
+            command: .surfaceScroll,
+            payload: payload
+        ), response.ok else {
+            return
+        }
+        if let frame = response.frame {
+            frameHandlers[surfaceID]?(frame)
         }
     }
 

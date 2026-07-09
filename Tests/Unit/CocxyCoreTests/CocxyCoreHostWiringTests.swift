@@ -52,6 +52,22 @@ struct CocxyCoreHostWiringTests {
         #expect(viewA !== viewC)
     }
 
+    @Test("daemon host view forwards scroll wheel as viewport scroll")
+    func daemonHostViewForwardsScrollWheelAsViewportScroll() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        #expect(engine.viewportScrollRequests.count == 1)
+        #expect(engine.viewportScrollRequests.first?.surface == surfaceID)
+        #expect(engine.viewportScrollRequests.first?.deltaRows == 18)
+    }
+
     @Test("terminal surface creation is centralized through TerminalHostViewFactory")
     func terminalSurfaceCreationCentralizedInFactory() throws {
         let projectRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

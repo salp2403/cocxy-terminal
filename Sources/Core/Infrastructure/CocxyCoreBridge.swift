@@ -3212,6 +3212,8 @@ final class CocxyCoreBridge: TerminalEngine {
             // point of view.
             terminalLock.lock()
 
+            let wasAltScreen = cocxycore_terminal_is_alt_screen(terminal)
+
             // Feed bytes through terminal pipeline (parser → executor → screen)
             cocxycore_terminal_feed(terminal, buf, bytesRead)
 
@@ -3233,12 +3235,18 @@ final class CocxyCoreBridge: TerminalEngine {
             // Poll process tracker (non-blocking kqueue check)
             cocxycore_terminal_poll_processes(terminal)
 
+            let altScreenChanged = wasAltScreen != cocxycore_terminal_is_alt_screen(terminal)
+
             terminalLock.unlock()
 
             // Notify output handler with raw bytes
             let data = Data(bytes: buf, count: bytesRead)
             DispatchQueue.main.async { [weak self] in
-                (self?.surfaces[surfaceID]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+                let hostView = self?.surfaces[surfaceID]?.hostView as? TerminalHostView
+                if altScreenChanged {
+                    hostView?.updateInteractionMetrics()
+                }
+                hostView?.requestImmediateRedraw()
                 self?.surfaces[surfaceID]?.outputHandler?(data)
                 self?.probeWorkingDirectoryAfterOutputIfNeeded(for: surfaceID)
             }

@@ -139,6 +139,41 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests[4].payload?["surfaceID"] == surfaceID.uuidString)
     }
 
+    @Test("scrollViewport serializes relative daemon scroll requests")
+    func scrollViewportSerializesRelativeDaemonScrollRequests() throws {
+        let surfaceID = UUID()
+        let scrollFrame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 3,
+            timestamp: 3,
+            columns: 2,
+            rows: 1,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 18
+        )
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+            PTYDaemonResponse(id: "scroll", ok: true, frame: scrollFrame),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredScrollbackTop = LockedBox<Int?>(nil)
+        client.setFrameHandler(for: surface) { frame in
+            deliveredScrollbackTop.withValue { $0 = frame.scrollbackTop }
+        }
+
+        client.scrollViewport(surfaceID: surface, deltaRows: 18)
+
+        #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceScroll])
+        #expect(connection.requests[2].payload?["surfaceID"] == surfaceID.uuidString)
+        #expect(connection.requests[2].payload?["deltaRows"] == "18")
+        #expect(connection.requests[2].payload?["lineNumber"] == nil)
+        #expect(deliveredScrollbackTop.withValue { $0 } == 18)
+    }
+
     @Test("search and process registration map daemon payloads to domain models")
     func searchAndProcessRegistrationMapPayloads() throws {
         let surfaceID = UUID()

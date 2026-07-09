@@ -129,6 +129,16 @@ protocol TerminalEngine: AnyObject {
     ///   - lineNumber: The zero-based line number in the scrollback buffer.
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int)
 
+    /// Scrolls the visible viewport by a signed row delta.
+    ///
+    /// Positive values move upward into older scrollback; negative values move
+    /// back toward the live bottom. Engines that cannot scroll locally may
+    /// ignore the request.
+    /// - Parameters:
+    ///   - surfaceID: The surface to scroll.
+    ///   - deltaRows: Signed number of rows to move.
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int)
+
     /// Notifies the engine that the host surface gained or lost focus.
     ///
     /// Engines can use this to forward focus changes to the PTY/terminal state,
@@ -270,6 +280,8 @@ extension TerminalEngine {
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {}
+
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {}
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
         nil
