@@ -4859,11 +4859,16 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         for homepage in [englishHome, spanishHome] {
-            #expect(homepage.contains(#"<div class="hero-version">"#))
+            #expect(homepage.contains(#"<div class="hero-version""#))
             #expect(homepage.contains(#"<span class="version-badge">v0.0.0</span>"#))
             #expect(homepage.contains(#""@type": "SoftwareApplication""#))
             #expect(homepage.contains(#""softwareVersion": "0.0.0""#))
         }
+        #expect(englishHome.contains(">Zero telemetry</span>"))
+        #expect(spanishHome.contains(">Cero telemetría</span>"))
+        #expect(spanishHome.contains("<b>ESPACIOS</b>"))
+        #expect(spanishHome.contains("> inactivo · 1</span>"))
+        #expect(!spanishHome.contains("<b>WORKSPACES</b>"))
 
         for releasePage in [englishReleases, spanishReleases] {
             #expect(releasePage.contains(#""@type": "BreadcrumbList""#))
@@ -4913,8 +4918,8 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
-    @Test("public marketing copy avoids named third-party agent brands")
-    func publicMarketingCopyAvoidsNamedThirdPartyAgentBrands() throws {
+    @Test("public marketing copy confines named agent brands to compatibility surfaces")
+    func publicMarketingCopyConfinesNamedAgentBrandsToCompatibilitySurfaces() throws {
         let root = repositoryRoot()
         let webRoot = root.appendingPathComponent("web/public", isDirectory: true)
         var files = [
@@ -4927,20 +4932,31 @@ struct CITestGateScriptSwiftTestingTests {
             pattern: #"\b(claude|codex|gemini|aider|kiro|opencode|anthropic|openai|warp)\b"#,
             options: [.caseInsensitive]
         )
+        let comparisonPattern = try NSRegularExpression(
+            pattern: #"\b(cocxy\s+vs\.?|vs\.?\s+cocxy|versus|better than|faster than|beats|mejor que|más rápido que|supera a)\b"#,
+            options: [.caseInsensitive]
+        )
+        let compatibilitySurfaces: Set<String> = [
+            "web/public/index.html",
+            "web/public/es/index.html",
+            "web/public/agents.html",
+            "web/public/es/agents.html",
+            "web/public/features/agents.html",
+            "web/public/es/features/agents.html",
+        ]
 
         for file in files {
             let relativePath = Self.relativePath(file, root: root)
-            if relativePath == "web/public/agents.html" ||
-                relativePath == "web/public/es/agents.html" ||
-                relativePath == "web/public/features/agents.html" ||
-                relativePath == "web/public/es/features/agents.html" {
-                continue
-            }
             let contents = try String(contentsOf: file, encoding: .utf8)
             let range = NSRange(location: 0, length: (contents as NSString).length)
             #expect(
+                comparisonPattern.firstMatch(in: contents, range: range) == nil,
+                "\(relativePath) should describe Cocxy without competitor comparisons"
+            )
+            guard !compatibilitySurfaces.contains(relativePath) else { continue }
+            #expect(
                 pattern.firstMatch(in: contents, range: range) == nil,
-                "\(relativePath) should describe bundled local agent profiles generically"
+                "\(relativePath) should reserve named agent brands for compatibility surfaces"
             )
         }
     }
@@ -5424,7 +5440,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(english.contains("/images/og-image.png"))
         #expect(english.contains("/images/cocxy-preview.png"))
         #expect(english.contains("/videos/cocxy-demo.mp4"))
-        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.png""#))
+        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.avif""#))
         #expect(english.contains("No telemetry pipeline"))
         #expect(english.contains(#""@type": "Article""#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
@@ -5475,6 +5491,23 @@ struct CITestGateScriptSwiftTestingTests {
         ] {
             #expect(!script.contains(restrictedTerm))
         }
+    }
+
+    @Test("public visual smoke covers both home locales and supported responsive widths")
+    func publicVisualSmokeCoversBothHomeLocalesAndSupportedResponsiveWidths() throws {
+        let root = repositoryRoot()
+        let script = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/visual-smoke.mjs"),
+            encoding: .utf8
+        )
+
+        #expect(script.contains("{ name: 'desktop', width: 1440, height: 1000 }"))
+        #expect(script.contains("{ name: 'tablet', width: 768, height: 1024 }"))
+        #expect(script.contains("{ name: 'mobile', width: 390, height: 844 }"))
+        #expect(script.contains("{ name: 'narrow', width: 320, height: 700 }"))
+        #expect(script.contains("for (const url of ['/', '/es/'"))
+        #expect(script.contains("url === '/' || url === '/es/'"))
+        #expect(script.contains("metrics.overflowX > 1"))
     }
 
     @Test("public website locale alternates are reciprocal for every public page")

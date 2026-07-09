@@ -712,7 +712,7 @@ function home(lang = 'en') {
       <a class="button button-primary" href="#download">${es ? 'Descargar para macOS' : 'Download for macOS'}</a>
       <a class="button button-secondary" href="https://github.com/salp2403/cocxy-terminal" target="_blank" rel="noopener noreferrer">GitHub</a>
     </div>
-    <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>Zero telemetry</span></div>
+    <div class="hero-version" data-reveal="fade-up"><span class="version-badge">v0.0.0</span><span>macOS 14.0+</span><span>${es ? 'Cero telemetría' : 'Zero telemetry'}</span></div>
     <div class="cocxy-window" role="img" aria-label="${es ? 'Cocxy Terminal: barra lateral de espacios de trabajo con sesiones de agentes y barra de estado sin telemetría' : 'Cocxy Terminal showing a workspaces sidebar with agent sessions and a zero-telemetry status bar'}" data-reveal="fade-up">
       <div class="cw-bar">
         <span class="cw-traffic"><i class="is-c"></i><i class="is-m"></i><i class="is-x"></i></span>
@@ -721,13 +721,13 @@ function home(lang = 'en') {
       </div>
       <div class="cw-body">
         <div class="cw-side">
-          <div class="cw-side-h"><b>WORKSPACES</b><span aria-hidden="true">+</span></div>
+          <div class="cw-side-h"><b>${es ? 'ESPACIOS' : 'WORKSPACES'}</b><span aria-hidden="true">+</span></div>
           <div class="cw-search" aria-hidden="true">⌕ ${es ? 'Filtrar sesiones' : 'Filter sessions'}</div>
           <div class="cw-grp">▾ cocxy-demo</div>
           <div class="cw-ses is-sel"><span class="cw-chip">Cl</span><span class="cw-info"><span class="cw-nm">claude · main</span><span class="cw-meta"><span class="cw-st is-work"></span> ${es ? 'trabajando' : 'working'} · 2</span></span></div>
           <div class="cw-ses"><span class="cw-chip">Cx</span><span class="cw-info"><span class="cw-nm">codex · review</span><span class="cw-meta"><span class="cw-st is-wait"></span> ${es ? 'esperando' : 'waiting'} · 1</span></span></div>
           <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">build · scripts</span><span class="cw-meta"><span class="cw-st is-done"></span> ${es ? 'listo' : 'done'} · 1</span></span></div>
-          <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">server · logs</span><span class="cw-meta"><span class="cw-st is-idle"></span> idle · 1</span></span></div>
+          <div class="cw-ses"><span class="cw-chip">Sh</span><span class="cw-info"><span class="cw-nm">server · logs</span><span class="cw-meta"><span class="cw-st is-idle"></span> ${es ? 'inactivo' : 'idle'} · 1</span></span></div>
         </div>
         <div class="cw-term">
           <div><span class="u">galf</span><span class="m">@</span><span class="h">macbook</span> <span class="p">~/projects/cocxy</span></div>
