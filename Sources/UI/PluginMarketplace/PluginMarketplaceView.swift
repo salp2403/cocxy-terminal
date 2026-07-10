@@ -35,6 +35,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
     @Published private(set) var bundledPlugins: [PluginManifest] = []
     @Published private(set) var plugins: [PluginState] = []
     @Published private(set) var availableUpdates: [PluginUpdateCandidate] = []
+    @Published private(set) var isCheckingForUpdates = false
     @Published private(set) var pendingCapabilityRequest: PluginCapabilityApprovalRequest?
 
     private var signatureStatusesByPluginID: [String: PluginSignatureStatus] = [:]
@@ -176,8 +177,11 @@ final class PluginMarketplaceViewModel: ObservableObject {
         pendingCapabilityRequest = nil
     }
 
-    func checkForPluginUpdates() {
-        availableUpdates = updater.availableUpdates(for: pluginManager.plugins.map(\.manifest))
+    func checkForPluginUpdates() async {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+        defer { isCheckingForUpdates = false }
+        availableUpdates = await updater.availableUpdates(for: pluginManager.plugins.map(\.manifest))
         setStatus(availableUpdates.isEmpty ? .noUpdates : .updatesFound(availableUpdates.count))
     }
 
@@ -413,9 +417,12 @@ struct PluginMarketplaceView: View {
                     pluginSection(localized("plugins.updates.section", fallback: "Updates")) {
                         PluginUpdatePicker(
                             updates: viewModel.availableUpdates,
+                            isRefreshing: viewModel.isCheckingForUpdates,
                             localizer: localizer,
                             onRefresh: {
-                                viewModel.checkForPluginUpdates()
+                                Task {
+                                    await viewModel.checkForPluginUpdates()
+                                }
                             }
                         )
                     }

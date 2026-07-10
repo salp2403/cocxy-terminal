@@ -292,6 +292,16 @@ struct PluginMarketplaceSwiftTestingTests {
             atomically: true,
             encoding: .utf8
         )
+        let sourceGitDirectory = repo.appendingPathComponent(".git", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: sourceGitDirectory,
+            withIntermediateDirectories: true
+        )
+        try "[core]\nsshCommand = /tmp/untrusted-command\n".write(
+            to: sourceGitDirectory.appendingPathComponent("config"),
+            atomically: true,
+            encoding: .utf8
+        )
 
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
         let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
@@ -306,6 +316,12 @@ struct PluginMarketplaceSwiftTestingTests {
                 .appendingPathComponent(PluginManifest.marketplaceManifestFileName)
                 .path
         ))
+        #expect(!FileManager.default.fileExists(
+            atPath: pluginsDirectory
+                .appendingPathComponent("repo/.git", isDirectory: true)
+                .path
+        ))
+        #expect(try PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory).source(for: "repo") == nil)
 
         let manager = PluginManager(pluginsDirectory: pluginsDirectory.path)
         manager.scanPlugins()
@@ -696,8 +712,38 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manifestsByID["cocxy-db-sqlite"]?.capabilities.contains(.filesystemRead) == true)
     }
 
-    @Test("plugin updater reports newer semver tags")
-    func pluginUpdaterReportsNewerSemverTags() {
+    @Test("plugin update source store records only credential-free remote provenance")
+    func pluginUpdateSourceStoreValidatesAndProtectsRemoteProvenance() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let store = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        let source = try #require(PluginUpdateSource.remoteRepository(
+            URL(string: "ssh://git@example.test/team/plugin.git")!
+        ))
+
+        try store.save(source, for: "tagged-plugin")
+
+        #expect(try store.source(for: "tagged-plugin") == source)
+        let attributes = try FileManager.default.attributesOfItem(
+            atPath: store.directoryURL.appendingPathComponent("tagged-plugin.json").path
+        )
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        #expect(PluginUpdateSource.remoteRepository(
+            URL(string: "https://token@example.test/team/plugin.git")!
+        ) == nil)
+        #expect(PluginUpdateSource.remoteRepository(
+            URL(string: "https://example.test/team/plugin.git?token=secret")!
+        ) == nil)
+    }
+
+    @Test("plugin updater reports newer semver tags from recorded remote source")
+    func pluginUpdaterReportsNewerSemverTags() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let pluginDirectory = pluginsDirectory.appendingPathComponent("tagged-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
         let manifest = PluginManifest(
             id: "tagged-plugin",
             name: "Tagged Plugin",
@@ -706,24 +752,33 @@ struct PluginMarketplaceSwiftTestingTests {
             author: "Dev",
             minCocxyVersion: nil,
             events: [],
-            directoryPath: "/tmp/tagged-plugin"
+            directoryPath: pluginDirectory.path
         )
-        let updater = PluginUpdater { _, arguments in
-            if arguments.first == "tag" {
-                return "v1.2.0\nv1.1.0\n"
-            }
-            return ""
+        let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        let repositoryURL = URL(string: "https://example.test/tagged-plugin.git")!
+        try sourceStore.save(
+            try #require(PluginUpdateSource.remoteRepository(repositoryURL)),
+            for: manifest.id
+        )
+        let updater = PluginUpdater(sourceStore: sourceStore) { sourceURL in
+            #expect(sourceURL == repositoryURL)
+            return "abc\trefs/tags/v1.1.0\ndef\trefs/tags/v1.2.0\n"
         }
 
-        let updates = updater.availableUpdates(for: [manifest])
+        let updates = await updater.availableUpdates(for: [manifest])
 
         #expect(updates.count == 1)
         #expect(updates[0].pluginID == "tagged-plugin")
         #expect(updates[0].latestVersion == "1.2.0")
     }
 
-    @Test("plugin updater ignores same or older tags")
-    func pluginUpdaterIgnoresSameOrOlderTags() {
+    @Test("plugin updater ignores same, older, and malformed tags")
+    func pluginUpdaterIgnoresSameOrOlderTags() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let pluginDirectory = pluginsDirectory.appendingPathComponent("current-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
         let manifest = PluginManifest(
             id: "current-plugin",
             name: "Current Plugin",
@@ -732,16 +787,43 @@ struct PluginMarketplaceSwiftTestingTests {
             author: "Dev",
             minCocxyVersion: nil,
             events: [],
-            directoryPath: "/tmp/current-plugin"
+            directoryPath: pluginDirectory.path
         )
-        let updater = PluginUpdater { _, arguments in
-            if arguments.first == "tag" {
-                return "v2.0.0\nv1.9.0\n"
-            }
-            return ""
+        let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        try sourceStore.save(
+            try #require(PluginUpdateSource.remoteRepository(
+                URL(string: "https://example.test/current-plugin.git")!
+            )),
+            for: manifest.id
+        )
+        let updater = PluginUpdater(sourceStore: sourceStore) { _ in
+            "abc\trefs/tags/v2.0.0\ndef\trefs/tags/v1.9.0\nghi\trefs/tags/not-semver\n"
         }
 
-        #expect(updater.availableUpdates(for: [manifest]).isEmpty)
+        #expect(await updater.availableUpdates(for: [manifest]).isEmpty)
+    }
+
+    @Test("plugin updater skips packages without installer-recorded remote provenance")
+    func pluginUpdaterSkipsUnrecordedPackages() async {
+        let manifest = PluginManifest(
+            id: "local-plugin",
+            name: "Local Plugin",
+            description: "Local plugin",
+            version: "1.0.0",
+            author: "Dev",
+            minCocxyVersion: nil,
+            events: [],
+            directoryPath: "/tmp/local-plugin"
+        )
+        let updater = PluginUpdater(
+            sourceStore: PluginUpdateSourceStore(
+                pluginsDirectory: URL(fileURLWithPath: "/tmp/no-recorded-plugin-sources")
+            )
+        ) { _ in
+            "abc\trefs/tags/v9.0.0\n"
+        }
+
+        #expect(await updater.availableUpdates(for: [manifest]).isEmpty)
     }
 
     @Test("sandbox rejects scripts outside plugin directory")

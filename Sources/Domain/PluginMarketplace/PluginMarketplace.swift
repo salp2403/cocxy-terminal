@@ -317,18 +317,22 @@ struct PluginInstaller {
     private let fileManager: FileManager
     private let validator: PluginValidator
     private let capabilityGrantStore: PluginCapabilityGrantStore
+    private let updateSourceStore: PluginUpdateSourceStore
 
     init(
         pluginsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/plugins"),
         fileManager: FileManager = .default,
         validator: PluginValidator = PluginValidator(),
-        capabilityGrantStore: PluginCapabilityGrantStore = PluginCapabilityGrantStore()
+        capabilityGrantStore: PluginCapabilityGrantStore = PluginCapabilityGrantStore(),
+        updateSourceStore: PluginUpdateSourceStore? = nil
     ) {
         self.pluginsDirectory = pluginsDirectory
         self.fileManager = fileManager
         self.validator = validator
         self.capabilityGrantStore = capabilityGrantStore
+        self.updateSourceStore = updateSourceStore
+            ?? PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
     }
 
     func install(from sourceURL: URL, replaceExisting: Bool = false) throws -> PluginInstallReceipt {
@@ -352,6 +356,7 @@ struct PluginInstaller {
         defer { try? fileManager.removeItem(at: stagingRoot) }
 
         try materialize(sourceURL: sourceURL, at: stagedPlugin)
+        try removeRepositoryMetadata(from: stagedPlugin)
 
         let stagedManifest = try PluginRegistry.loadManifest(
             from: stagedPlugin,
@@ -380,6 +385,17 @@ struct PluginInstaller {
 
         try fileManager.moveItem(at: stagedPlugin, to: finalURL)
         try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: finalURL.path)
+        do {
+            if let updateSource = PluginUpdateSource.remoteRepository(sourceURL) {
+                try updateSourceStore.save(updateSource, for: stagedManifest.id)
+            } else {
+                try updateSourceStore.removeSource(for: stagedManifest.id)
+            }
+        } catch {
+            try? fileManager.removeItem(at: finalURL)
+            try? updateSourceStore.removeSource(for: stagedManifest.id)
+            throw error
+        }
 
         let installedManifest = stagedManifest.relocated(to: finalURL.path)
         return PluginInstallReceipt(
@@ -397,6 +413,7 @@ struct PluginInstaller {
             throw PluginInstallerError.pluginNotInstalled(id)
         }
         try resetAuthorization(for: id)
+        try updateSourceStore.removeSource(for: id)
         try fileManager.removeItem(at: pluginURL)
     }
 
@@ -415,13 +432,19 @@ struct PluginInstaller {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
         process.arguments = ["clone", "--depth", "1", sourceURL.absoluteString, destination.path]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
         try process.run()
         process.waitUntilExit()
         guard process.terminationStatus == 0 else {
             throw PluginInstallerError.gitCloneFailed(process.terminationStatus)
         }
+    }
+
+    private func removeRepositoryMetadata(from pluginDirectory: URL) throws {
+        let gitMetadata = pluginDirectory.appendingPathComponent(".git", isDirectory: true)
+        guard fileManager.fileExists(atPath: gitMetadata.path) else { return }
+        try fileManager.removeItem(at: gitMetadata)
     }
 
     static func pluginIDCandidate(from sourceURL: URL) throws -> String {

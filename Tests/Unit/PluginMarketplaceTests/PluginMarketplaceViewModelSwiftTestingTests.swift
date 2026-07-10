@@ -173,7 +173,7 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
 
     @Test("Spanish localizer updates plugin marketplace statuses")
     @MainActor
-    func spanishLocalizerUpdatesPluginMarketplaceStatuses() throws {
+    func spanishLocalizerUpdatesPluginMarketplaceStatuses() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let bundle = try #require(localizationBundle())
@@ -186,7 +186,7 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
             localizer: spanish
         )
 
-        viewModel.checkForPluginUpdates()
+        await viewModel.checkForPluginUpdates()
 
         #expect(viewModel.statusMessage == "No se encontraron actualizaciones.")
         #expect(
