@@ -108,7 +108,7 @@ enum DBCloudHelperError: Error, LocalizedError, Equatable {
         case .invalidPostgreSQLDatabaseTarget:
             return "Enter a valid PostgreSQL URL or service name."
         case .unsupportedPostgreSQLCredentialFormat:
-            return "Use a PostgreSQL URL for password-protected connections."
+            return "Use a PostgreSQL URL or protected service credentials; inline password fields are not supported."
         case .unsupportedHelper(let id): return "\(id) does not have a local visual action yet."
         }
     }

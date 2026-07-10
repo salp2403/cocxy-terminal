@@ -545,7 +545,12 @@ struct DBCloudHelperSwiftTestingTests {
             manifestProvider: { manifests },
             runner: { command in
                 recorder.append(command)
-                return DBCloudHelperRunResult(exitCode: 0, stdout: "answer\n1\n", stderr: "")
+                return DBCloudHelperRunResult(
+                    exitCode: 0,
+                    stdout: "answer\n1\n",
+                    stderr: "",
+                    stdoutTruncated: true
+                )
             }
         )
 
@@ -563,6 +568,7 @@ struct DBCloudHelperSwiftTestingTests {
         #expect(commands[0].arguments == ["/tmp/cocxy-cc2-smoke.sqlite"])
         #expect(String(decoding: try #require(commands[0].standardInput), as: UTF8.self) == "select 1 as answer")
         #expect(viewModel.outputText == "answer\n1\n")
+        #expect(viewModel.outputWasTruncated)
         #expect(viewModel.statusText == "SQLite query finished.")
         #expect(!viewModel.isRunning)
     }
@@ -651,11 +657,24 @@ struct DBCloudHelperSwiftTestingTests {
         viewModel.sqlText = "select 1"
 
         let task = try #require(viewModel.runSelectedAction())
+        #expect(viewModel.statusText == "Ejecutando consulta SQLite...")
         await task.value
         #expect(viewModel.statusText == "Consulta SQLite finalizada.")
 
+        viewModel.recordFailure(
+            DBCloudHelperError.queryTooLarge(
+                limitBytes: DBCloudHelperCommand.maximumStandardInputBytes
+            )
+        )
+        #expect(viewModel.outputText.hasPrefix("La consulta supera el límite de entrada de "))
+
+        viewModel.recordFailure(DBCloudHelperExecutionError.timedOut(seconds: 2.5))
+        #expect(viewModel.statusText == "Tiempo de espera agotado")
+        #expect(viewModel.outputText == "El ayudante agotó el tiempo de espera después de 2.5 segundos.")
+
         viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
-        #expect(viewModel.statusText == "SQLite query finished.")
+        #expect(viewModel.statusText == "Timed out")
+        #expect(viewModel.outputText == "The helper timed out after 2.5 seconds.")
     }
 }
 

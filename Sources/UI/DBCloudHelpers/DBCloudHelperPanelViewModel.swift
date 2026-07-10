@@ -286,14 +286,30 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
                 ),
                 errorText
             )
-        case .running:
-            return localizer.string("agent.panel.status.running", fallback: "Running...")
+        case .running(let operation):
+            switch operation {
+            case .postgresQuery:
+                return localizer.string(
+                    "dbCloud.status.postgres.running",
+                    fallback: "Running PostgreSQL query..."
+                )
+            case .sqliteQuery:
+                return localizer.string(
+                    "dbCloud.status.sqlite.running",
+                    fallback: "Running SQLite query..."
+                )
+            case .s3ListBuckets:
+                return localizer.string(
+                    "dbCloud.status.s3.running",
+                    fallback: "Listing S3 buckets..."
+                )
+            }
         case .cancelling:
-            return localizer.string("common.cancel", fallback: "Cancel") + "..."
+            return localizer.string("dbCloud.status.cancelling", fallback: "Cancelling...")
         case .cancelled:
-            return localizer.string("github.pane.check.conclusion.cancelled", fallback: "Cancelled")
+            return localizer.string("dbCloud.status.cancelled", fallback: "Cancelled")
         case .timedOut:
-            return localizer.string("github.pane.check.conclusion.timedOut", fallback: "Timed out")
+            return localizer.string("dbCloud.status.timedOut", fallback: "Timed out")
         case .action(let operation, let succeeded):
             return localizedActionStatus(operation, succeeded: succeeded, localizer: localizer)
         case .actionFailed:
@@ -338,9 +354,12 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
                 return localizer.string("dbCloud.error.emptyQuery", fallback: "Enter a query.")
             case .queryTooLarge(let limitBytes):
                 let size = ByteCountFormatter.string(fromByteCount: Int64(limitBytes), countStyle: .file)
-                return localizer.string(
-                    "dbCloud.error.queryTooLarge",
-                    fallback: "The query exceeds the \(size) input limit."
+                return String(
+                    format: localizer.string(
+                        "dbCloud.error.queryTooLarge",
+                        fallback: "The query exceeds the %@ input limit."
+                    ),
+                    size
                 )
             case .invalidPostgreSQLDatabaseTarget:
                 return localizer.string(
@@ -350,7 +369,7 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
             case .unsupportedPostgreSQLCredentialFormat:
                 return localizer.string(
                     "dbCloud.error.unsupportedPostgresCredential",
-                    fallback: "Use a PostgreSQL URL for password-protected connections."
+                    fallback: "Use a PostgreSQL URL or protected service credentials; inline password fields are not supported."
                 )
             case .unsupportedHelper(let id):
                 return String(
@@ -362,6 +381,49 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
                 )
             }
         }
+        if let executionError = error as? DBCloudHelperExecutionError {
+            switch executionError {
+            case .invalidConfiguration:
+                return localizer.string(
+                    "dbCloud.error.execution.invalidConfiguration",
+                    fallback: "The helper execution limits are invalid."
+                )
+            case .timedOut(let seconds):
+                return String(
+                    format: localizer.string(
+                        "dbCloud.error.execution.timedOut",
+                        fallback: "The helper timed out after %@ seconds."
+                    ),
+                    formattedSeconds(seconds)
+                )
+            case .credentialStorageUnavailable:
+                return localizer.string(
+                    "dbCloud.error.execution.credentialStorageUnavailable",
+                    fallback: "A protected PostgreSQL credential file could not be prepared."
+                )
+            case .standardInputWriteFailed:
+                return localizer.string(
+                    "dbCloud.error.execution.standardInputWriteFailed",
+                    fallback: "The query could not be sent to the helper."
+                )
+            case .outputReadFailed:
+                return localizer.string(
+                    "dbCloud.error.execution.outputReadFailed",
+                    fallback: "The helper output could not be read safely."
+                )
+            case .processDidNotTerminate:
+                return localizer.string(
+                    "dbCloud.error.execution.processDidNotTerminate",
+                    fallback: "The helper process did not terminate cleanly."
+                )
+            }
+        }
         return error.localizedDescription
+    }
+
+    private static func formattedSeconds(_ seconds: TimeInterval) -> String {
+        seconds.rounded() == seconds
+            ? String(format: "%.0f", seconds)
+            : String(format: "%.1f", seconds)
     }
 }

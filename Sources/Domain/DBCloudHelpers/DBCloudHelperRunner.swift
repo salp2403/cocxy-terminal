@@ -30,7 +30,9 @@ enum DBCloudHelperExecutionError: Error, LocalizedError, Equatable, Sendable {
     }
 
     private static func formatted(_ seconds: TimeInterval) -> String {
-        seconds.rounded() == seconds ? String(Int(seconds)) : String(format: "%.1f", seconds)
+        seconds.rounded() == seconds
+            ? String(format: "%.0f", seconds)
+            : String(format: "%.1f", seconds)
     }
 }
 
