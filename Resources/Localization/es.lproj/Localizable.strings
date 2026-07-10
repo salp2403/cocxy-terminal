@@ -759,8 +759,15 @@
 "preferences.iCloud.masterPassword.notSaved" = "No hay contraseña maestra guardada.";
 "preferences.iCloud.masterPassword.saved.status" = "Contraseña maestra de sincronización iCloud guardada.";
 "preferences.iCloud.masterPassword.deleted.status" = "Contraseña maestra de sincronización iCloud eliminada.";
+"preferences.iCloud.masterPassword.check.failed" = "No se pudo comprobar la contraseña maestra guardada: %@";
 "preferences.iCloud.masterPassword.save.failed" = "No se pudo guardar la contraseña maestra: %@";
 "preferences.iCloud.masterPassword.delete.failed" = "No se pudo eliminar la contraseña maestra: %@";
+"preferences.iCloud.progress.checkingPassword" = "Comprobando Keychain...";
+"preferences.iCloud.progress.savingPassword" = "Guardando contraseña maestra...";
+"preferences.iCloud.progress.deletingPassword" = "Eliminando contraseña maestra...";
+"preferences.iCloud.progress.exporting" = "Exportando artefactos cifrados...";
+"preferences.iCloud.progress.importing" = "Importando artefactos cifrados...";
+"preferences.iCloud.progress.resolvingConflict" = "Resolviendo conflicto...";
 "preferences.iCloud.location.section" = "Ubicación";
 "preferences.iCloud.folderName" = "Nombre de carpeta";
 "preferences.iCloud.conflictPolicy" = "Política de conflictos";

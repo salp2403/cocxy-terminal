@@ -759,8 +759,15 @@
 "preferences.iCloud.masterPassword.notSaved" = "No master password is saved.";
 "preferences.iCloud.masterPassword.saved.status" = "iCloud Sync master password saved.";
 "preferences.iCloud.masterPassword.deleted.status" = "iCloud Sync master password deleted.";
+"preferences.iCloud.masterPassword.check.failed" = "Failed to check the saved master password: %@";
 "preferences.iCloud.masterPassword.save.failed" = "Failed to save master password: %@";
 "preferences.iCloud.masterPassword.delete.failed" = "Failed to delete master password: %@";
+"preferences.iCloud.progress.checkingPassword" = "Checking Keychain...";
+"preferences.iCloud.progress.savingPassword" = "Saving master password...";
+"preferences.iCloud.progress.deletingPassword" = "Deleting master password...";
+"preferences.iCloud.progress.exporting" = "Exporting encrypted artifacts...";
+"preferences.iCloud.progress.importing" = "Importing encrypted artifacts...";
+"preferences.iCloud.progress.resolvingConflict" = "Resolving conflict...";
 "preferences.iCloud.location.section" = "Location";
 "preferences.iCloud.folderName" = "Folder name";
 "preferences.iCloud.conflictPolicy" = "Conflict policy";
