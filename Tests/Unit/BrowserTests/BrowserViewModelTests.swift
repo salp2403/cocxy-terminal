@@ -446,6 +446,48 @@ final class BrowserViewModelTests: XCTestCase {
         cancellable.cancel()
     }
 
+    func testHandleDOMGrabPayloadRejectsInactiveMode() {
+        let vm = BrowserViewModel()
+        let payload = BrowserDOMGrabPayload(
+            selector: "button.primary",
+            pageURL: URL(string: "https://cocxy.dev")!,
+            pageTitle: "Cocxy",
+            visibleText: "Download"
+        )
+        var forwarded: [BrowserDOMGrabPayload] = []
+        vm.onDOMGrabPayload = { forwarded.append($0) }
+
+        let handled = vm.handleDOMGrabPayload(payload)
+
+        XCTAssertFalse(handled)
+        XCTAssertTrue(forwarded.isEmpty)
+        XCTAssertFalse(vm.isDOMGrabActive)
+    }
+
+    func testHandleDOMGrabPayloadConsumesAuthorizationBeforeCallback() {
+        let vm = BrowserViewModel()
+        let payload = BrowserDOMGrabPayload(
+            selector: "button.primary",
+            pageURL: URL(string: "https://cocxy.dev")!,
+            pageTitle: "Cocxy",
+            visibleText: "Download"
+        )
+        var forwarded: [BrowserDOMGrabPayload] = []
+        vm.onDOMGrabPayload = { received in
+            forwarded.append(received)
+            if forwarded.count == 1 {
+                vm.handleDOMGrabPayload(received)
+            }
+        }
+        vm.setDOMGrabMode(true)
+
+        let handled = vm.handleDOMGrabPayload(payload)
+
+        XCTAssertTrue(handled)
+        XCTAssertEqual(forwarded, [payload])
+        XCTAssertFalse(vm.isDOMGrabActive)
+    }
+
     func testDOMGrabSetEnabledScriptCallsExpectedHelper() {
         let enableScript = BrowserDOMGrabWebKitSupport.setEnabledScript(true)
         let disableScript = BrowserDOMGrabWebKitSupport.setEnabledScript(false)

@@ -2,6 +2,7 @@
 
 import Foundation
 import Testing
+import WebKit
 @testable import CocxyTerminal
 
 /// Unit coverage for `BrowserDOMGrabHandler.parsePayload`, the pure
@@ -112,5 +113,135 @@ struct BrowserDOMGrabHandlerSwiftTestingTests {
 
         #expect(payload != nil)
         #expect(payload?.visibleText == "")
+    }
+}
+
+@Suite("Browser DOM-grab WebKit isolation")
+@MainActor
+struct BrowserDOMGrabWebKitIsolationSwiftTestingTests {
+    @Test("native handler rejects subframe payloads")
+    func nativeHandlerRejectsSubframes() {
+        let handler = BrowserDOMGrabHandler()
+        var receivedCount = 0
+        handler.onPayload = { _ in receivedCount += 1 }
+        let body: [String: Any] = [
+            "selector": "button#login",
+            "url": "https://example.com",
+            "title": "Example",
+            "text": "Sign in",
+        ]
+
+        #expect(handler.receive(body, isMainFrame: false) == false)
+        #expect(receivedCount == 0)
+        #expect(handler.receive(body, isMainFrame: true))
+        #expect(receivedCount == 1)
+    }
+
+    @Test("page JavaScript cannot reach or synthetically trigger the isolated native handler")
+    func pageWorldCannotReachNativeHandler() async throws {
+        let configuration = WKWebViewConfiguration()
+        let handler = BrowserDOMGrabHandler()
+        var receivedPayload = false
+        handler.onPayload = { _ in receivedPayload = true }
+        let repositoryRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Resources/JS/dom-grab.js"),
+            encoding: .utf8
+        )
+        BrowserDOMGrabWebKitSupport.install(
+            on: configuration,
+            handler: handler,
+            sourceOverride: source
+        )
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let navigationWaiter = BrowserDOMGrabNavigationWaiter()
+        try await navigationWaiter.loadHTML(
+            "<html><body><button id='target'>Capture</button></body></html>",
+            in: webView
+        )
+
+        let pageWorldResult = try await webView.evaluateJavaScript("""
+        typeof window.webkit === 'undefined' ||
+        typeof window.webkit.messageHandlers.cocxyDOMGrab === 'undefined'
+        """)
+        let isolatedWorldResult = try await webView.evaluateJavaScript(
+            "typeof window.webkit.messageHandlers.cocxyDOMGrab === 'object' && typeof window.cocxyDOMGrab === 'object'",
+            in: nil,
+            contentWorld: BrowserDOMGrabWebKitSupport.contentWorld
+        )
+        let enabledResult = try await webView.evaluateJavaScript(
+            BrowserDOMGrabWebKitSupport.setEnabledScript(true),
+            in: nil,
+            contentWorld: BrowserDOMGrabWebKitSupport.contentWorld
+        )
+        let dispatchResult = try await webView.evaluateJavaScript("""
+        document.getElementById('target').dispatchEvent(
+            new MouseEvent('click', { bubbles: true, cancelable: true })
+        )
+        """)
+        try await Task.sleep(for: .milliseconds(20))
+        let remainsEnabled = try await webView.evaluateJavaScript(
+            "window.cocxyDOMGrab.isEnabled()",
+            in: nil,
+            contentWorld: BrowserDOMGrabWebKitSupport.contentWorld
+        )
+
+        #expect((pageWorldResult as? Bool) == true)
+        #expect((isolatedWorldResult as? Bool) == true)
+        #expect((enabledResult as? Bool) == true)
+        #expect((dispatchResult as? Bool) == true)
+        #expect((remainsEnabled as? Bool) == true)
+        #expect(receivedPayload == false)
+        #expect(configuration.userContentController.userScripts.count == 1)
+        let userScript = try #require(configuration.userContentController.userScripts.first)
+        #expect(userScript.isForMainFrameOnly)
+        #expect(source.contains("event.isTrusted"))
+    }
+}
+
+@MainActor
+private final class BrowserDOMGrabNavigationWaiter: NSObject, WKNavigationDelegate {
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    func loadHTML(_ html: String, in webView: WKWebView) async throws {
+        webView.navigationDelegate = self
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            webView.loadHTMLString(html, baseURL: URL(string: "https://example.com"))
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+        finish()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFail navigation: WKNavigation?,
+        withError error: Error
+    ) {
+        finish(error: error)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation?,
+        withError error: Error
+    ) {
+        finish(error: error)
+    }
+
+    private func finish(error: Error? = nil) {
+        guard let continuation else { return }
+        self.continuation = nil
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
+        }
     }
 }

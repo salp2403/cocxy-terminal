@@ -1,13 +1,14 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 //
-// dom-grab.js - In-page bridge for the browser panel's DOM grab feature.
+// dom-grab.js - Isolated-world helper for the browser panel's DOM grab feature.
 //
 // The host installs this script as a `WKUserScript` injected at document
 // start. When the user toggles "grab mode" from the toolbar the host
 // dispatches `cocxyDOMGrab.enable()` / `cocxyDOMGrab.disable()` via
 // `evaluateJavaScript`. While enabled, a click anywhere on the page is
 // captured (no navigation, no default submit) and reported back as a
-// structured payload through `window.webkit.messageHandlers.cocxyDOMGrab`.
+// structured payload through an isolated WebKit message handler that page
+// JavaScript cannot address directly.
 //
 // Zero dependencies: vanilla DOM + Webkit messageHandlers. No npm, no
 // bundler, no external script load. Drops in unchanged on any page.
@@ -159,7 +160,7 @@
     }
 
     function onClick(event) {
-        if (!enabled) return;
+        if (!enabled || !event.isTrusted) return;
         // Stop the page from interpreting the click — the user wants to
         // capture, not navigate.
         event.preventDefault();
@@ -179,6 +180,10 @@
         } catch (e) {
             // No host bridge present (e.g. running outside the Cocxy
             // browser panel). Fail silently so the page stays usable.
+        } finally {
+            // The JavaScript side is one-shot as well. Native state is
+            // consumed before its callback, so neither side admits a replay.
+            window.cocxyDOMGrab.disable();
         }
     }
 

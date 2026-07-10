@@ -812,11 +812,16 @@ final class BrowserViewModel: ObservableObject {
     }
 
     /// Receives a typed DOM grab from the WebKit message handler.
-    func handleDOMGrabPayload(_ payload: BrowserDOMGrabPayload) {
+    @discardableResult
+    func handleDOMGrabPayload(_ payload: BrowserDOMGrabPayload) -> Bool {
+        guard isDOMGrabActive else { return false }
+
+        // Consume the one-shot native authorization before invoking a
+        // callback. A reentrant or replayed message therefore observes an
+        // inactive mode and cannot trigger a second side effect.
+        setDOMGrabMode(false)
         onDOMGrabPayload?(payload)
-        if isDOMGrabActive {
-            setDOMGrabMode(false)
-        }
+        return true
     }
 
     /// Returns the current browser state as a dictionary of string values.

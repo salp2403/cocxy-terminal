@@ -12,23 +12,31 @@ import WebKit
 @MainActor
 enum BrowserDOMGrabWebKitSupport {
 
+    /// Keeps the privileged message handler and cooperative helper outside
+    /// the page JavaScript world. Page scripts can still render and receive
+    /// real user clicks, but cannot call the native bridge directly.
+    static let contentWorld = WKContentWorld.world(name: "com.cocxy.dom-grab")
+
     /// Registers the bundled DOM-grab script and message bridge.
     static func install(
         on configuration: WKWebViewConfiguration,
-        handler: BrowserDOMGrabHandler
+        handler: BrowserDOMGrabHandler,
+        sourceOverride: String? = nil
     ) {
-        let source = BrowserDOMGrabHandler.loadJavaScriptSource()
+        let source = sourceOverride ?? BrowserDOMGrabHandler.loadJavaScriptSource()
         if !source.isEmpty {
             let script = WKUserScript(
                 source: source,
                 injectionTime: .atDocumentStart,
-                forMainFrameOnly: false
+                forMainFrameOnly: true,
+                in: contentWorld
             )
             configuration.userContentController.addUserScript(script)
         }
 
         configuration.userContentController.add(
             ScriptMessageProxy(handler: handler),
+            contentWorld: contentWorld,
             name: BrowserDOMGrabHandler.messageName
         )
     }
@@ -36,7 +44,8 @@ enum BrowserDOMGrabWebKitSupport {
     /// Removes the script-message bridge from a web view before teardown.
     static func uninstall(from webView: WKWebView) {
         webView.configuration.userContentController.removeScriptMessageHandler(
-            forName: BrowserDOMGrabHandler.messageName
+            forName: BrowserDOMGrabHandler.messageName,
+            contentWorld: contentWorld
         )
     }
 
@@ -61,13 +70,18 @@ enum BrowserDOMGrabWebKitSupport {
         on webView: WKWebView,
         completion: (@MainActor @Sendable (Bool) -> Void)? = nil
     ) {
-        webView.evaluateJavaScript(setEnabledScript(enabled)) { result, error in
-            if let error {
+        webView.evaluateJavaScript(
+            setEnabledScript(enabled),
+            in: nil,
+            in: contentWorld
+        ) { result in
+            switch result {
+            case .success(let value):
+                completion?((value as? Bool) == true)
+            case .failure(let error):
                 NSLog("[Cocxy] DOM grab JS error: %@", error.localizedDescription)
                 completion?(false)
-                return
             }
-            completion?((result as? Bool) == true)
         }
     }
 }

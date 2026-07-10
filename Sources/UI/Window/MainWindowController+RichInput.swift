@@ -47,11 +47,12 @@ extension MainWindowController {
     func presentRichInputComposer(
         _ request: TerminalRichInputRequest,
         for surfaceView: CocxyCoreView,
-        tabID: TabID? = nil
+        tabID: TabID? = nil,
+        requiresExplicitReview: Bool = false
     ) -> Bool {
         guard let overlayContainer = overlayContainerView else { return false }
         let config = configService?.current.richInput ?? .defaults
-        guard config.enabled else { return false }
+        guard config.enabled || requiresExplicitReview else { return false }
 
         dismissRichInputComposer()
 
