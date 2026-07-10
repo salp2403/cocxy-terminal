@@ -18,6 +18,7 @@
 // - AgentState: all cases have unique accessibility descriptions
 
 import XCTest
+import CocxyShared
 @testable import CocxyTerminal
 @testable import CocxyCLILib
 
@@ -28,6 +29,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
 
     private var testSocketPath: String!
     private var testSocketDirectory: String!
+    private var authenticationStore: TestSocketAuthenticationStore!
 
     override func setUp() {
         super.setUp()
@@ -35,6 +37,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
         testSocketDirectory = NSTemporaryDirectory()
             .appending("cocxy-p7-\(uniqueID)")
         testSocketPath = testSocketDirectory.appending("/test.sock")
+        authenticationStore = TestSocketAuthenticationStore()
     }
 
     override func tearDown() {
@@ -42,6 +45,7 @@ final class Phase7SocketSecurityTests: XCTestCase {
         try? FileManager.default.removeItem(atPath: testSocketDirectory)
         testSocketPath = nil
         testSocketDirectory = nil
+        authenticationStore = nil
         super.tearDown()
     }
 
@@ -53,7 +57,8 @@ final class Phase7SocketSecurityTests: XCTestCase {
     ) throws -> (SocketServerImpl, MockSocketCommandHandler) {
         let server = SocketServerImpl(
             socketPath: testSocketPath,
-            commandHandler: handler
+            commandHandler: handler,
+            authenticationStore: authenticationStore
         )
         try server.start()
         try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
@@ -216,17 +221,24 @@ final class Phase7SocketSecurityTests: XCTestCase {
         var connectionErrors: [String] = []
         let resultsLock = NSLock()
         let group = DispatchGroup()
+        let authenticationToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
 
         for i in 0..<reconnectCount {
             group.enter()
-            DispatchQueue.global(qos: .userInitiated).async { [testSocketPath] in
+            DispatchQueue.global(qos: .userInitiated).async {
+                [testSocketPath, authenticationToken] in
                 defer { group.leave() }
                 do {
                     let fd = try SocketTestClient.connect(to: testSocketPath!)
                     defer { Darwin.close(fd) }
 
                     let req = SocketRequest(id: "rapid-\(i)", command: "status", params: nil)
-                    let resp = try SocketTestClient.sendRequest(req, on: fd)
+                    let resp = try SocketTestClient.sendRequest(
+                        req.authenticated(with: authenticationToken),
+                        on: fd
+                    )
 
                     resultsLock.lock()
                     if resp.success {
@@ -291,6 +303,42 @@ final class Phase7SocketSecurityTests: XCTestCase {
             XCTAssertTrue(response?.success == true,
                           "Command '\(command)' should produce a success response, got: \(response?.error ?? "nil")")
         }
+    }
+
+    @MainActor
+    func testRealCLIClientLoadsCredentialAndAuthenticates() throws {
+        let handler = MockSocketCommandHandler()
+        let (server, _) = try startServer(handler: handler)
+        defer { server.stop() }
+        let expectation = expectation(description: "Real CLI client round-trip")
+        let result = LockedValue<Result<CLISocketResponse, CLIError>?>(nil)
+
+        DispatchQueue.global(qos: .userInitiated).async { [testSocketPath] in
+            do {
+                let client = SocketClient(
+                    socketPath: testSocketPath!,
+                    timeoutSeconds: 2
+                )
+                let response = try client.send(CLISocketRequest(
+                    id: "real-cli-auth",
+                    command: "status",
+                    params: nil
+                ))
+                result.withLock { $0 = .success(response) }
+            } catch {
+                let cliError = error as? CLIError
+                    ?? .connectionFailed(reason: error.localizedDescription)
+                result.withLock { $0 = .failure(cliError) }
+            }
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+        let response = try XCTUnwrap(result.withLock { $0 }).get()
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.id, "real-cli-auth")
+        XCTAssertEqual(handler.receivedRequests.first?.id, "real-cli-auth")
+        XCTAssertNil(handler.receivedRequests.first?.authenticationToken)
     }
 
     // MARK: - TEST 7: Server rejects injected null bytes in command name
@@ -715,7 +763,11 @@ final class Phase7WireProtocolTests: XCTestCase {
         let cliRequest = CLISocketRequest(
             id: "compat-wire",
             command: "notify",
-            params: ["message": "hello from CLI"]
+            params: ["message": "hello from CLI"],
+            authenticationToken: String(
+                repeating: "a1",
+                count: SocketAuthenticationCredential.tokenByteCount
+            )
         )
 
         let encoder = JSONEncoder()
@@ -728,5 +780,6 @@ final class Phase7WireProtocolTests: XCTestCase {
         XCTAssertEqual(serverRequest.id, cliRequest.id)
         XCTAssertEqual(serverRequest.command, cliRequest.command)
         XCTAssertEqual(serverRequest.params?["message"], cliRequest.params?["message"])
+        XCTAssertEqual(serverRequest.authenticationToken, cliRequest.authenticationToken)
     }
 }

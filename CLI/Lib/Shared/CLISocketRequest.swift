@@ -11,7 +11,7 @@ import Foundation
 ///
 /// This is a standalone copy of the app's `SocketRequest` type.
 /// The CLI must not import the main app module.
-public struct CLISocketRequest: Codable, Equatable {
+public struct CLISocketRequest: Codable, Equatable, Sendable {
     /// Unique identifier for this request. Used to match responses.
     public let id: String
 
@@ -21,9 +21,28 @@ public struct CLISocketRequest: Codable, Equatable {
     /// Command-specific parameters. Nil when the command takes no arguments.
     public let params: [String: String]?
 
-    public init(id: String, command: String, params: [String: String]?) {
+    /// Per-app-session capability loaded by `SocketClient` immediately before
+    /// transmission. Callers normally leave this nil.
+    public let authenticationToken: String?
+
+    public init(
+        id: String,
+        command: String,
+        params: [String: String]?,
+        authenticationToken: String? = nil
+    ) {
         self.id = id
         self.command = command
         self.params = params
+        self.authenticationToken = authenticationToken
+    }
+
+    func authenticated(with token: String) -> CLISocketRequest {
+        CLISocketRequest(
+            id: id,
+            command: command,
+            params: params,
+            authenticationToken: token
+        )
     }
 }

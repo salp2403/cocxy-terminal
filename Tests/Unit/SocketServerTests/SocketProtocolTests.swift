@@ -64,6 +64,7 @@ final class SocketProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.id, "raw-1")
         XCTAssertEqual(decoded.command, "new-tab")
         XCTAssertEqual(decoded.params?["dir"], "/tmp")
+        XCTAssertNil(decoded.authenticationToken)
     }
 
     // MARK: - 2. SocketResponse Codable round-trip

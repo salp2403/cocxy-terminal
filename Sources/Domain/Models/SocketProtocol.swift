@@ -29,6 +29,35 @@ struct SocketRequest: Codable, Sendable, Equatable {
 
     /// Command-specific parameters. Nil when the command takes no arguments.
     let params: [String: String]?
+
+    /// Per-app-session capability read by the bundled CLI from the protected
+    /// credential file. The transport strips it before domain dispatch.
+    let authenticationToken: String?
+
+    init(
+        id: String,
+        command: String,
+        params: [String: String]?,
+        authenticationToken: String? = nil
+    ) {
+        self.id = id
+        self.command = command
+        self.params = params
+        self.authenticationToken = authenticationToken
+    }
+
+    func authenticated(with token: String) -> SocketRequest {
+        SocketRequest(
+            id: id,
+            command: command,
+            params: params,
+            authenticationToken: token
+        )
+    }
+
+    func removingAuthenticationToken() -> SocketRequest {
+        SocketRequest(id: id, command: command, params: params)
+    }
 }
 
 // MARK: - Socket Response

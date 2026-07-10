@@ -2,6 +2,7 @@
 // SocketClient.swift - Unix Domain Socket client for CLI companion.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Socket Client
 
@@ -14,13 +15,16 @@ import Foundation
 ///
 /// Connection lifecycle: connect, send request, read response, disconnect.
 /// The client does not maintain persistent connections.
-public struct SocketClient {
+public struct SocketClient: Sendable {
 
     /// Path to the Unix Domain Socket file.
     public let socketPath: String
 
     /// Connection timeout in seconds.
     public let timeoutSeconds: TimeInterval
+
+    /// Protected per-session credential path derived from `socketPath`.
+    public let authenticationTokenPath: String
 
     public static let defaultTimeoutSeconds: TimeInterval = 5
 
@@ -41,6 +45,9 @@ public struct SocketClient {
     ) {
         self.socketPath = socketPath
         self.timeoutSeconds = timeoutSeconds
+        self.authenticationTokenPath = SocketAuthenticationCredential.path(
+            forSocketPath: socketPath
+        )
     }
 
     /// Sends a request and returns the response.
@@ -52,7 +59,16 @@ public struct SocketClient {
         let fd = try connectToSocket()
         defer { Darwin.close(fd) }
 
-        try writeRequest(request, to: fd)
+        let token: String
+        do {
+            token = try SocketAuthenticationCredential.read(
+                from: authenticationTokenPath
+            )
+        } catch {
+            throw CLIError.authenticationUnavailable
+        }
+
+        try writeRequest(request.authenticated(with: token), to: fd)
         return try readResponse(from: fd)
     }
 
@@ -60,10 +76,27 @@ public struct SocketClient {
 
     /// Connects to the Unix Domain Socket.
     private func connectToSocket() throws -> Int32 {
+        try validateSocketEndpoint()
+
         let fd = socket(AF_UNIX, SOCK_STREAM, 0)
         guard fd >= 0 else {
             throw CLIError.connectionFailed(
                 reason: "Failed to create socket: \(String(cString: strerror(errno)))"
+            )
+        }
+
+        var noSigPipe: Int32 = 1
+        guard setsockopt(
+            fd,
+            SOL_SOCKET,
+            SO_NOSIGPIPE,
+            &noSigPipe,
+            socklen_t(MemoryLayout<Int32>.size)
+        ) == 0 else {
+            let errorCode = errno
+            Darwin.close(fd)
+            throw CLIError.connectionFailed(
+                reason: "Could not disable SIGPIPE: \(String(cString: strerror(errorCode)))"
             )
         }
 
@@ -118,6 +151,25 @@ public struct SocketClient {
         return fd
     }
 
+    /// Refuses filesystem substitutions before `connect(2)`. The server still
+    /// verifies peer UID after accept; this client-side check pins the expected
+    /// owner-only Unix-socket shape and rejects symlinks or regular files.
+    private func validateSocketEndpoint() throws {
+        var metadata = stat()
+        let result = lstat(socketPath, &metadata)
+        if result != 0, errno == ENOENT {
+            throw CLIError.appNotRunning
+        }
+        guard result == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK),
+              metadata.st_uid == geteuid(),
+              metadata.st_nlink == 1,
+              (metadata.st_mode & 0o777) == 0o600
+        else {
+            throw CLIError.permissionDenied
+        }
+    }
+
     // MARK: - Private: Write
 
     /// Writes a framed request to the socket, handling short writes.
@@ -131,8 +183,12 @@ public struct SocketClient {
                 let ptr = bufferPtr.baseAddress!.advanced(by: totalWritten)
                 return Darwin.write(fd, ptr, count - totalWritten)
             }
+            if written < 0, errno == EINTR { continue }
             guard written > 0 else {
-                throw CLIError.connectionFailed(reason: "Failed to write request to socket")
+                let reason = written < 0
+                    ? String(cString: strerror(errno))
+                    : "Connection closed while writing request"
+                throw CLIError.connectionFailed(reason: reason)
             }
             totalWritten += written
         }

@@ -188,5 +188,68 @@ final class SocketClientTests: XCTestCase {
         let client = SocketClient(socketPath: "/tmp/test.sock", timeoutSeconds: 10)
         XCTAssertEqual(client.socketPath, "/tmp/test.sock")
         XCTAssertEqual(client.timeoutSeconds, 10)
+        XCTAssertEqual(client.authenticationTokenPath, "/tmp/test.sock.token")
+    }
+
+    func testAuthenticationUnavailableErrorMessageIsActionable() {
+        XCTAssertEqual(
+            CLIError.authenticationUnavailable.userMessage,
+            "Error: Cocxy Terminal CLI authentication is unavailable. Restart the app and try again."
+        )
+    }
+
+    func testRegularFileCannotSubstituteForSocketEndpoint() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-cli-socket-\(UUID().uuidString)")
+        let path = directory.appendingPathComponent("cocxy.sock")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        XCTAssertTrue(FileManager.default.createFile(
+            atPath: path.path,
+            contents: Data(),
+            attributes: [.posixPermissions: 0o600]
+        ))
+
+        let client = SocketClient(socketPath: path.path, timeoutSeconds: 1)
+        XCTAssertThrowsError(try client.send(CLISocketRequest(
+            id: "regular-file",
+            command: "status",
+            params: nil
+        ))) { error in
+            XCTAssertEqual(error as? CLIError, .permissionDenied)
+        }
+    }
+
+    func testSymbolicLinkCannotSubstituteForSocketEndpoint() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-cli-link-\(UUID().uuidString)")
+        let target = directory.appendingPathComponent("target.sock")
+        let link = directory.appendingPathComponent("cocxy.sock")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        XCTAssertTrue(FileManager.default.createFile(
+            atPath: target.path,
+            contents: Data(),
+            attributes: [.posixPermissions: 0o600]
+        ))
+        try FileManager.default.createSymbolicLink(
+            at: link,
+            withDestinationURL: target
+        )
+
+        let client = SocketClient(socketPath: link.path, timeoutSeconds: 1)
+        XCTAssertThrowsError(try client.send(CLISocketRequest(
+            id: "symbolic-link",
+            command: "status",
+            params: nil
+        ))) { error in
+            XCTAssertEqual(error as? CLIError, .permissionDenied)
+        }
     }
 }

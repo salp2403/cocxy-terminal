@@ -11,10 +11,13 @@ import Foundation
 /// 1. Socket file permissions are `0600` (owner-only read/write).
 /// 2. Every connection is verified via `getpeereid()` — the peer's UID must
 ///    match the server's UID.
-/// 3. Commands are a closed enum — no arbitrary code execution.
+/// 3. Every request carries a cryptographically random per-session token,
+///    stored in Keychain and delivered to the bundled CLI through a protected
+///    no-follow `0600` credential file.
+/// 4. Commands are a closed enum — no arbitrary code execution.
 ///    `browser-eval` allows JS evaluation only in the embedded browser
-///    (max 10,000 chars), scoped to UID-authenticated local socket.
-/// 4. The socket path is `~/.config/cocxy/cocxy.sock`.
+///    (max 10,000 chars), scoped to the authenticated local socket.
+/// 5. The socket path is `~/.config/cocxy/cocxy.sock`.
 ///
 /// Protocol: Length-prefixed JSON messages.
 /// ```
