@@ -4,15 +4,33 @@
 import Foundation
 
 typealias DBCloudHelperManifestProvider = () throws -> [PluginManifest]
-typealias DBCloudHelperRunner = (DBCloudHelperCommand) throws -> DBCloudHelperRunResult
+typealias DBCloudHelperRunner = @Sendable (DBCloudHelperCommand) async throws -> DBCloudHelperRunResult
 
 @MainActor
 final class DBCloudHelperPanelViewModel: ObservableObject {
+    private enum Operation: Equatable {
+        case postgresQuery
+        case sqliteQuery
+        case s3ListBuckets
+
+        init(_ action: DBCloudHelperAction) {
+            switch action {
+            case .postgresQuery: self = .postgresQuery
+            case .sqliteQuery: self = .sqliteQuery
+            case .s3ListBuckets: self = .s3ListBuckets
+            }
+        }
+    }
+
     private enum StatusState: Equatable {
         case ready
         case loaded(Int)
         case loadFailed(String)
-        case action(DBCloudHelperAction, Bool)
+        case running(Operation)
+        case cancelling
+        case cancelled
+        case timedOut
+        case action(Operation, Bool)
         case actionFailed
     }
 
@@ -31,6 +49,9 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
     @Published var awsRegion: String = ""
     @Published private(set) var statusText: String
     @Published private(set) var outputText: String = ""
+    @Published private(set) var outputWasTruncated = false
+    @Published private(set) var isRunning = false
+    @Published private(set) var isCancelling = false
 
     private let manifestProvider: DBCloudHelperManifestProvider
     private let runner: DBCloudHelperRunner
@@ -38,13 +59,14 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
     private var localizer: AppLocalizer
     private var statusState: StatusState = .ready
     private var currentError: Error?
+    private var runTask: Task<Void, Never>?
 
     init(
         manifestProvider: @escaping DBCloudHelperManifestProvider = {
             try BundledPluginCatalog().loadManifests()
         },
         runner: @escaping DBCloudHelperRunner = { command in
-            try LocalDBCloudHelperRunner().run(command)
+            try await LocalDBCloudHelperRunner().run(command)
         },
         commandBuilder: DBCloudHelperCommandBuilder = DBCloudHelperCommandBuilder(),
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
@@ -55,6 +77,10 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
         self.localizer = localizer
         self.statusText = Self.localizedStatusText(.ready, localizer: localizer)
         refresh()
+    }
+
+    deinit {
+        runTask?.cancel()
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
@@ -89,6 +115,7 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
     }
 
     func refresh() {
+        guard !isRunning else { return }
         do {
             descriptors = DBCloudHelperCatalog.descriptors(from: try manifestProvider())
             if selectedHelperID == nil || !descriptors.contains(where: { $0.id == selectedHelperID }) {
@@ -109,23 +136,96 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
     }
 
     func select(_ descriptor: DBCloudHelperDescriptor) {
+        guard !isRunning else { return }
         selectedKind = descriptor.kind
         selectedHelperID = descriptor.id
     }
 
-    func runSelectedAction() throws {
-        let action = try makeAction()
-        let command = try commandBuilder.command(for: action)
-        let result = try runner(command)
-        outputText = result.stdout + result.stderr
-        setStatus(.action(action, result.succeeded))
+    @discardableResult
+    func runSelectedAction() -> Task<Void, Never>? {
+        if let runTask { return runTask }
+
+        let action: DBCloudHelperAction
+        let command: DBCloudHelperCommand
+        do {
+            action = try makeAction()
+            command = try commandBuilder.command(for: action)
+        } catch {
+            recordFailure(error)
+            return nil
+        }
+
+        let operation = Operation(action)
+        let runner = self.runner
+        isRunning = true
+        isCancelling = false
+        outputText = ""
+        outputWasTruncated = false
         currentError = nil
+        setStatus(.running(operation))
+
+        let task = Task { @MainActor [weak self] in
+            do {
+                let result = try await runner(command)
+                guard let self else { return }
+                if Task.isCancelled {
+                    self.finishCancelled()
+                } else {
+                    self.finish(result, operation: operation)
+                }
+            } catch is CancellationError {
+                self?.finishCancelled()
+            } catch {
+                self?.finishFailure(error)
+            }
+        }
+        runTask = task
+        return task
+    }
+
+    func cancelRunningAction() {
+        guard let runTask, isRunning else { return }
+        isCancelling = true
+        setStatus(.cancelling)
+        runTask.cancel()
     }
 
     func recordFailure(_ error: Error) {
         currentError = error
         outputText = Self.localizedErrorDescription(error, localizer: localizer)
-        setStatus(.actionFailed)
+        outputWasTruncated = false
+        isRunning = false
+        isCancelling = false
+        if case DBCloudHelperExecutionError.timedOut = error {
+            setStatus(.timedOut)
+        } else {
+            setStatus(.actionFailed)
+        }
+    }
+
+    private func finish(_ result: DBCloudHelperRunResult, operation: Operation) {
+        outputText = Self.joinedOutput(stdout: result.stdout, stderr: result.stderr)
+        outputWasTruncated = result.outputWasTruncated
+        currentError = nil
+        isRunning = false
+        isCancelling = false
+        runTask = nil
+        setStatus(.action(operation, result.succeeded))
+    }
+
+    private func finishFailure(_ error: Error) {
+        runTask = nil
+        recordFailure(error)
+    }
+
+    private func finishCancelled() {
+        currentError = nil
+        outputText = ""
+        outputWasTruncated = false
+        isRunning = false
+        isCancelling = false
+        runTask = nil
+        setStatus(.cancelled)
     }
 
     private func makeCommand() throws -> DBCloudHelperCommand {
@@ -133,7 +233,7 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
     }
 
     private func selectDefaultHelperForSelectedKind() {
-        guard selectedDescriptor?.kind != selectedKind else { return }
+        guard !isRunning, selectedDescriptor?.kind != selectedKind else { return }
         selectedHelperID = descriptors.first { $0.kind == selectedKind }?.id
     }
 
@@ -155,6 +255,12 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
     private func setStatus(_ status: StatusState) {
         statusState = status
         statusText = Self.localizedStatusText(status, localizer: localizer)
+    }
+
+    private static func joinedOutput(stdout: String, stderr: String) -> String {
+        guard !stdout.isEmpty else { return stderr }
+        guard !stderr.isEmpty else { return stdout }
+        return stdout.hasSuffix("\n") ? stdout + stderr : stdout + "\n" + stderr
     }
 
     private static func localizedStatusText(
@@ -180,20 +286,28 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
                 ),
                 errorText
             )
-        case .action(let action, let succeeded):
-            return localizedActionStatus(action, succeeded: succeeded, localizer: localizer)
+        case .running:
+            return localizer.string("agent.panel.status.running", fallback: "Running...")
+        case .cancelling:
+            return localizer.string("common.cancel", fallback: "Cancel") + "..."
+        case .cancelled:
+            return localizer.string("github.pane.check.conclusion.cancelled", fallback: "Cancelled")
+        case .timedOut:
+            return localizer.string("github.pane.check.conclusion.timedOut", fallback: "Timed out")
+        case .action(let operation, let succeeded):
+            return localizedActionStatus(operation, succeeded: succeeded, localizer: localizer)
         case .actionFailed:
             return localizer.string("dbCloud.status.actionFailed", fallback: "Helper action failed.")
         }
     }
 
     private static func localizedActionStatus(
-        _ action: DBCloudHelperAction,
+        _ operation: Operation,
         succeeded: Bool,
         localizer: AppLocalizer
     ) -> String {
         let keySuffix = succeeded ? "finished" : "failed"
-        switch action {
+        switch operation {
         case .postgresQuery:
             return localizer.string(
                 "dbCloud.status.postgres.\(keySuffix)",
@@ -222,6 +336,22 @@ final class DBCloudHelperPanelViewModel: ObservableObject {
                 return localizer.string("dbCloud.error.emptyDatabase", fallback: "Enter a database target.")
             case .emptyQuery:
                 return localizer.string("dbCloud.error.emptyQuery", fallback: "Enter a query.")
+            case .queryTooLarge(let limitBytes):
+                let size = ByteCountFormatter.string(fromByteCount: Int64(limitBytes), countStyle: .file)
+                return localizer.string(
+                    "dbCloud.error.queryTooLarge",
+                    fallback: "The query exceeds the \(size) input limit."
+                )
+            case .invalidPostgreSQLDatabaseTarget:
+                return localizer.string(
+                    "dbCloud.error.invalidPostgresTarget",
+                    fallback: "Enter a valid PostgreSQL URL or service name."
+                )
+            case .unsupportedPostgreSQLCredentialFormat:
+                return localizer.string(
+                    "dbCloud.error.unsupportedPostgresCredential",
+                    fallback: "Use a PostgreSQL URL for password-protected connections."
+                )
             case .unsupportedHelper(let id):
                 return String(
                     format: localizer.string(
