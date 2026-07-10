@@ -503,13 +503,19 @@ extension AppSocketCommandHandler {
         guard let provider = sshProvider else {
             return .failure(id: request.id, error: "SSH not available")
         }
-        guard let destination = request.params?["destination"], !destination.isEmpty else {
+        guard let rawDestination = request.params?["destination"], !rawDestination.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: destination (user@host)")
+        }
+        let destination: SSHConnectionDestination
+        do {
+            destination = try SSHConnectionDestination(rawDestination)
+        } catch {
+            return .failure(id: request.id, error: "Invalid SSH destination (expected host or user@host)")
         }
         let port = request.params?["port"].flatMap { Int($0) }
         let identityFile = request.params?["identity"]
 
-        guard let result = provider(destination, port, identityFile) else {
+        guard let result = provider(destination.value, port, identityFile) else {
             return .failure(id: request.id, error: "Failed to open SSH session")
         }
 
@@ -517,7 +523,7 @@ extension AppSocketCommandHandler {
             "status": "connected",
             "id": result.id,
             "title": result.title,
-            "destination": destination
+            "destination": destination.value
         ])
     }
 }

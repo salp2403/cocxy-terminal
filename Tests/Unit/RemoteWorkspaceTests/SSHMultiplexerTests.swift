@@ -131,27 +131,54 @@ struct SSHMultiplexerTests {
 
     // MARK: - New Session
 
-    @Test func newSessionReturnsCommandWithControlPath() {
+    @Test func newSessionReturnsCommandWithControlPath() throws {
         let profile = RemoteConnectionProfile(
             name: "dev", host: "server.com", user: "deploy", port: 22
         )
 
-        let command = multiplexer.newSession(profile: profile)
+        let command = try multiplexer.newSession(profile: profile)
 
         #expect(command.contains("-o ControlPath="))
+        #expect(command.contains(" -- deploy@server.com"))
         #expect(command.contains("deploy@server.com"))
     }
 
-    @Test func newSessionUsesExistingControlMaster() {
+    @Test func newSessionUsesExistingControlMaster() throws {
         let profile = RemoteConnectionProfile(
             name: "dev", host: "server.com", user: "root"
         )
 
-        let command = multiplexer.newSession(profile: profile)
+        let command = try multiplexer.newSession(profile: profile)
 
         #expect(command.hasPrefix("ssh "))
         #expect(command.contains("-o ControlMaster=no"))
         #expect(command.contains("root@server.com"))
+    }
+
+    @Test func rejectsOptionLikeDestinationBeforeExecution() {
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(
+            name: "unsafe",
+            host: "-oProxyCommand=/bin/true"
+        )
+
+        #expect(throws: SSHMultiplexerError.invalidDestination) {
+            try multiplexer.connect(profile: profile, executor: executor)
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func acceptsIPv6DestinationAndPlacesItAfterOptionBoundary() throws {
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(
+            name: "ipv6",
+            host: "2001:db8::10",
+            user: "deploy"
+        )
+
+        try multiplexer.connect(profile: profile, executor: executor)
+
+        #expect(executor.executedCommands[0].arguments.suffix(2) == ["--", "deploy@2001:db8::10"])
     }
 
     // MARK: - Is Alive
@@ -206,6 +233,39 @@ struct SSHMultiplexerTests {
             #expect(call.arguments.contains("StrictHostKeyChecking=no"))
             #expect(call.arguments.contains("UserKnownHostsFile=/tmp/cocxy-known-hosts"))
             #expect(call.arguments.contains("BatchMode=yes"))
+            let boundaryIndex = try #require(call.arguments.firstIndex(of: "--"))
+            #expect(call.arguments[call.arguments.index(after: boundaryIndex)] == "deploy@127.0.0.1")
+        }
+    }
+
+    @Test func everyOpenSSHOperationBoundsOptionsBeforeDestination() async throws {
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(
+            name: "lab",
+            host: "config_alias",
+            user: "deploy"
+        )
+        let forward = RemoteConnectionProfile.PortForward.local(
+            localPort: 8080,
+            remotePort: 80
+        )
+
+        try multiplexer.connect(profile: profile, executor: executor)
+        _ = try await multiplexer.isAlive(profile: profile, executor: executor)
+        try multiplexer.disconnect(profile: profile, executor: executor)
+        try multiplexer.forwardPort(forward, on: profile, executor: executor)
+        try multiplexer.cancelForward(forward, on: profile, executor: executor)
+        _ = try await multiplexer.executeRemoteCommand(
+            "printf ok",
+            on: profile,
+            executor: executor
+        )
+
+        #expect(executor.executedCommands.count == 6)
+        for call in executor.executedCommands {
+            let boundaryIndex = try #require(call.arguments.firstIndex(of: "--"))
+            let destinationIndex = call.arguments.index(after: boundaryIndex)
+            #expect(call.arguments[destinationIndex] == "deploy@config_alias")
         }
     }
 

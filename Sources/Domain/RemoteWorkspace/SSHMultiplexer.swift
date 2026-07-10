@@ -1,7 +1,149 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // SSHMultiplexer.swift - Manages OpenSSH ControlMaster sessions.
 
+import Darwin
 import Foundation
+
+// MARK: - SSH Destination
+
+enum SSHDestinationValidationError: Error, Equatable, Sendable {
+    case invalidDestination
+}
+
+/// A validated OpenSSH destination that remains data at every process boundary.
+///
+/// Host aliases intentionally allow underscores and plus signs because OpenSSH
+/// config names are not limited to DNS hostname grammar. IPv4 and IPv6 literals
+/// receive stricter validation to reject ambiguous address-like values.
+struct SSHConnectionDestination: Equatable, Sendable {
+    private static let maximumByteCount = 1_024
+    private static let nameCharacters = CharacterSet.alphanumerics.union(
+        CharacterSet(charactersIn: "._+-")
+    )
+    private static let zoneCharacters = CharacterSet.alphanumerics.union(
+        CharacterSet(charactersIn: "._-")
+    )
+
+    let user: String?
+    let host: String
+
+    var value: String {
+        user.map { "\($0)@\(host)" } ?? host
+    }
+
+    init(_ rawValue: String) throws {
+        guard !rawValue.isEmpty,
+              rawValue.utf8.count <= Self.maximumByteCount,
+              rawValue.unicodeScalars.allSatisfy({ scalar in
+                  !CharacterSet.whitespacesAndNewlines.contains(scalar)
+                      && !CharacterSet.controlCharacters.contains(scalar)
+              }) else {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+
+        let components = rawValue.split(separator: "@", omittingEmptySubsequences: false)
+        guard components.count == 1 || components.count == 2 else {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+
+        let parsedUser = components.count == 2 ? String(components[0]) : nil
+        let rawHost = String(components[components.count - 1])
+        if let parsedUser {
+            try Self.validateUser(parsedUser)
+        }
+
+        user = parsedUser
+        host = try Self.validateAndNormalizeHost(rawHost)
+    }
+
+    init(user: String?, host: String) throws {
+        try self.init(user.map { "\($0)@\(host)" } ?? host)
+    }
+
+    private static func validateUser(_ user: String) throws {
+        guard !user.isEmpty,
+              user.first != "-",
+              user.unicodeScalars.allSatisfy({ nameCharacters.contains($0) }) else {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+    }
+
+    private static func validateAndNormalizeHost(_ rawHost: String) throws -> String {
+        guard !rawHost.isEmpty, rawHost.first != "-" else {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+
+        let host: String
+        if rawHost.first == "[" || rawHost.last == "]" {
+            guard rawHost.first == "[", rawHost.last == "]", rawHost.count > 2 else {
+                throw SSHDestinationValidationError.invalidDestination
+            }
+            host = String(rawHost.dropFirst().dropLast())
+        } else {
+            host = rawHost
+        }
+
+        guard !host.isEmpty, host.first != "-" else {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+
+        if host.contains(":") {
+            guard isValidIPv6Literal(host) else {
+                throw SSHDestinationValidationError.invalidDestination
+            }
+            return host
+        }
+
+        guard !host.contains("[") && !host.contains("]"),
+              host != ".",
+              host != "..",
+              host.unicodeScalars.allSatisfy({ nameCharacters.contains($0) }) else {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+
+        let numericAddressCharacters = CharacterSet.decimalDigits.union(
+            CharacterSet(charactersIn: ".")
+        )
+        if host.contains("."),
+           host.unicodeScalars.allSatisfy({ numericAddressCharacters.contains($0) }),
+           !isCanonicalIPv4Literal(host) {
+            throw SSHDestinationValidationError.invalidDestination
+        }
+
+        return host
+    }
+
+    private static func isCanonicalIPv4Literal(_ value: String) -> Bool {
+        var address = in_addr()
+        guard value.withCString({ inet_pton(AF_INET, $0, &address) }) == 1 else {
+            return false
+        }
+
+        var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+        guard inet_ntop(AF_INET, &address, &buffer, socklen_t(buffer.count)) != nil else {
+            return false
+        }
+        return String(cString: buffer) == value
+    }
+
+    private static func isValidIPv6Literal(_ value: String) -> Bool {
+        let address: String
+        if let zoneSeparator = value.lastIndex(of: "%") {
+            let zone = value[value.index(after: zoneSeparator)...]
+            guard !zone.isEmpty,
+                  zone.first != "-",
+                  zone.unicodeScalars.allSatisfy({ zoneCharacters.contains($0) }) else {
+                return false
+            }
+            address = String(value[..<zoneSeparator])
+        } else {
+            address = value
+        }
+
+        var parsed = in6_addr()
+        return address.withCString { inet_pton(AF_INET6, $0, &parsed) } == 1
+    }
+}
 
 // MARK: - Process Executor Protocol
 
@@ -27,6 +169,7 @@ struct ProcessResult: Sendable {
 
 /// Errors that can occur during SSH multiplexing operations.
 enum SSHMultiplexerError: Error, Equatable, LocalizedError {
+    case invalidDestination
     case connectionFailed(String)
     case disconnectFailed(String)
     case forwardFailed(String)
@@ -34,6 +177,8 @@ enum SSHMultiplexerError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
+        case .invalidDestination:
+            return "Invalid SSH destination"
         case .connectionFailed(let message):
             return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? "SSH connection failed"
@@ -58,7 +203,7 @@ enum SSHMultiplexerError: Error, Equatable, LocalizedError {
 protocol SSHMultiplexing: Sendable {
     func controlPath(for profile: RemoteConnectionProfile) -> String
     func connect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws
-    func newSession(profile: RemoteConnectionProfile) -> String
+    func newSession(profile: RemoteConnectionProfile) throws -> String
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws
     func forwardPort(
@@ -116,11 +261,13 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
     /// - Parameters:
     ///   - profile: The connection profile to use.
     ///   - executor: The process executor for running SSH.
-    /// - Throws: `SSHMultiplexerError.connectionFailed` if SSH exits with a non-zero code.
+    /// - Throws: `SSHMultiplexerError.invalidDestination` for malformed destinations,
+    ///   or `SSHMultiplexerError.connectionFailed` if SSH exits with a non-zero code.
     func connect(
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        let destination = try destination(for: profile)
         try ensureControlPathDirectory(for: profile)
 
         var arguments = buildBaseArguments(for: profile)
@@ -129,7 +276,7 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         arguments.append(contentsOf: ["-o", "ControlPath=\(controlPath(for: profile))"])
         arguments.append("-f")
         arguments.append("-N")
-        arguments.append(destination(for: profile))
+        arguments.append(contentsOf: ["--", destination.value])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
         guard result.exitCode == 0 else {
@@ -143,7 +290,10 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
     ///
     /// The returned command uses `ControlMaster=no` to attach to (not replace)
     /// the existing master session.
-    func newSession(profile: RemoteConnectionProfile) -> String {
+    ///
+    /// - Throws: `SSHMultiplexerError.invalidDestination` for malformed destinations.
+    func newSession(profile: RemoteConnectionProfile) throws -> String {
+        let destination = try destination(for: profile)
         var parts: [String] = ["ssh"]
         parts.append("-o ControlMaster=no")
         parts.append("-o ControlPath=\(controlPath(for: profile))")
@@ -152,7 +302,8 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
             parts.append("-p \(port)")
         }
 
-        parts.append(destination(for: profile))
+        parts.append("--")
+        parts.append(destination.value)
         return parts.joined(separator: " ")
     }
 
@@ -167,11 +318,12 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> Bool {
+        let destination = try destination(for: profile)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-O", "check",
             "-o", "ControlPath=\(controlPath(for: profile))",
-            destination(for: profile),
+            "--", destination.value,
         ])
 
         let result = try await executor.executeAsync(
@@ -190,11 +342,12 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        let destination = try destination(for: profile)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-O", "exit",
             "-o", "ControlPath=\(controlPath(for: profile))",
-            destination(for: profile),
+            "--", destination.value,
         ])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
@@ -213,12 +366,13 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        let destination = try destination(for: profile)
         let forwardArgs = forwardArguments(for: forward)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-O", "forward",
             "-o", "ControlPath=\(controlPath(for: profile))",
-        ] + forwardArgs + [destination(for: profile)])
+        ] + forwardArgs + ["--", destination.value])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
         guard result.exitCode == 0 else {
@@ -234,12 +388,13 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        let destination = try destination(for: profile)
         let forwardArgs = forwardArguments(for: forward)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-O", "cancel",
             "-o", "ControlPath=\(controlPath(for: profile))",
-        ] + forwardArgs + [destination(for: profile)])
+        ] + forwardArgs + ["--", destination.value])
 
         let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
         guard result.exitCode == 0 else {
@@ -252,26 +407,28 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
     /// Executes a command on the remote host through the ControlMaster session.
     ///
     /// Reuses the existing multiplexed connection to avoid opening a new TCP
-    /// session. The command is passed via `--` to prevent SSH from interpreting
-    /// remote arguments as local flags.
+    /// session. An option boundary precedes the destination so OpenSSH cannot
+    /// reinterpret it as local configuration.
     ///
     /// - Parameters:
     ///   - command: The shell command to run on the remote host.
     ///   - profile: The connection profile whose ControlMaster to use.
     ///   - executor: The process executor for running SSH.
     /// - Returns: The result of the remote command execution.
-    /// - Throws: `SSHMultiplexerError.connectionFailed` if the command fails to execute.
+    /// - Throws: `SSHMultiplexerError.invalidDestination` for malformed destinations,
+    ///   or `SSHMultiplexerError.connectionFailed` if the command fails to execute.
     func executeRemoteCommand(
         _ command: String,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> ProcessResult {
+        let destination = try destination(for: profile)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-o", "ControlMaster=no",
             "-o", "ControlPath=\(controlPath(for: profile))",
-            destination(for: profile),
             "--",
+            destination.value,
             command,
         ])
 
@@ -328,12 +485,13 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         )
     }
 
-    /// Returns the SSH destination string: "user@host" or just "host".
-    private func destination(for profile: RemoteConnectionProfile) -> String {
-        if let user = profile.user {
-            return "\(user)@\(profile.host)"
+    /// Returns a validated SSH destination: "user@host" or just "host".
+    private func destination(for profile: RemoteConnectionProfile) throws -> SSHConnectionDestination {
+        do {
+            return try SSHConnectionDestination(user: profile.user, host: profile.host)
+        } catch {
+            throw SSHMultiplexerError.invalidDestination
         }
-        return profile.host
     }
 
     /// Converts a port forward spec into SSH command-line arguments.
