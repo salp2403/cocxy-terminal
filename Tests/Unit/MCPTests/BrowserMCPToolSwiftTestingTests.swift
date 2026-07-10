@@ -286,6 +286,41 @@ struct BrowserMCPToolSwiftTestingTests {
         #expect(await executor.commands.count == results.count)
     }
 
+    @Test("browser MCP handles exact Int64 boundaries without trapping")
+    func handlesInt64BoundariesWithoutTrapping() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+        let largestRepresentableInt64Double = Double(Int64.max).nextDown
+
+        let accepted = await provider.callTool(name: "browser_find_nth", arguments: [
+            "index": .number(largestRepresentableInt64Double),
+            "selector": .string(".row"),
+        ])
+        let rejected = await provider.callTool(name: "browser_find_nth", arguments: [
+            "index": .number(Double(Int64.max)),
+            "selector": .string(".row"),
+        ])
+
+        #expect(accepted.isError == false)
+        #expect(rejected.isError == true)
+        #expect(await executor.commands.count == 1)
+    }
+
+    @Test("browser MCP preserves fractional scalar formatting for text fields")
+    func preservesFractionalTextScalarFormatting() async throws {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        let result = await provider.callTool(name: "browser_fill", arguments: [
+            "ref": .string("input-1"),
+            "text": .number(1.5),
+        ])
+        let command = try #require(await executor.commands.first)
+
+        #expect(result.isError == false)
+        #expect(command.params["text"] == "1.5")
+    }
+
     @Test("browser MCP tools bridge to external Agent descriptors")
     func toolsBridgeToExternalAgentDescriptors() throws {
         let descriptor = MCPToolBridge.descriptor(

@@ -601,6 +601,30 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(requests.count == 1)
     }
 
+    @Test("retrying transport does not repeat deterministic response budget failures")
+    func retryingTransportDoesNotRetryResponseBudgetFailures() async throws {
+        let expectedError = AgentHTTPTransportError.responseTooLarge(maximumBytes: 8)
+        let base = SequencedAgentHTTPTransport(results: [
+            .failure(expectedError),
+            .success(AgentHTTPResponse(statusCode: 200, data: Data("unexpected".utf8))),
+        ])
+        let transport = RetryingAgentHTTPTransport(
+            base: base,
+            maxAttempts: 3,
+            sleep: { _ in }
+        )
+        let request = AgentHTTPRequest(
+            url: try #require(URL(string: "https://example.com/agent")),
+            headers: [:],
+            body: Data()
+        )
+
+        await #expect(throws: expectedError) {
+            _ = try await transport.send(request)
+        }
+        #expect(await base.requests.count == 1)
+    }
+
     @Test("factory wraps remote provider transport with retry")
     func factoryWrapsRemoteProviderTransportWithRetry() async throws {
         let secretStore = InMemoryAgentSecretStore()

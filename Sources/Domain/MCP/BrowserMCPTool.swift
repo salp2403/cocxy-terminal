@@ -100,12 +100,21 @@ struct BrowserMCPToolProvider: Sendable {
         case .string(let string):
             return string
         case .number(let number):
-            guard number.isFinite,
-                  number.rounded(.towardZero) == number,
-                  let integer = Int64(exactly: number) else {
+            guard number.isFinite else {
                 throw invalidIntegerError(argument: argument.name, toolName: toolName)
             }
-            return String(integer)
+            if argument.type == .number {
+                guard number.rounded(.towardZero) == number,
+                      let integer = Int64(exactly: number) else {
+                    throw invalidIntegerError(argument: argument.name, toolName: toolName)
+                }
+                return String(integer)
+            }
+            if number.rounded(.towardZero) == number,
+               let integer = Int64(exactly: number) {
+                return String(integer)
+            }
+            return String(number)
         case .bool(let bool):
             return bool ? "true" : "false"
         case .null, .array, .object:

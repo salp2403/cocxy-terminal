@@ -172,10 +172,10 @@ struct RetryingAgentHTTPTransport: AgentHTTPTransport {
                     return response
                 }
             } catch {
-                lastError = error
-                guard attempt < maxAttempts else {
+                guard shouldRetry(error: error), attempt < maxAttempts else {
                     throw error
                 }
+                lastError = error
             }
 
             await sleep(attempt)
@@ -193,6 +193,16 @@ struct RetryingAgentHTTPTransport: AgentHTTPTransport {
             || statusCode == 425
             || statusCode == 429
             || (500...599).contains(statusCode)
+    }
+
+    private func shouldRetry(error: Error) -> Bool {
+        if error is AgentHTTPTransportError || error is CancellationError {
+            return false
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return false
+        }
+        return true
     }
 
     private static let defaultSleep: @Sendable (Int) async -> Void = { attempt in
