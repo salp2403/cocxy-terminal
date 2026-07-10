@@ -34,7 +34,43 @@ protocol AgentHTTPTransport: Sendable {
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse
 }
 
+enum AgentHTTPTransportError: Error, Sendable, Equatable {
+    case invalidResponse
+    case invalidContentLength
+    case responseTooLarge(maximumBytes: Int)
+}
+
+extension AgentHTTPTransportError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Agent HTTP transport received a non-HTTP response."
+        case .invalidContentLength:
+            return "Agent HTTP transport received an invalid Content-Length header."
+        case .responseTooLarge(let maximumBytes):
+            return "Agent HTTP response exceeds the maximum size of \(maximumBytes) bytes."
+        }
+    }
+}
+
 struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
+    static let defaultMaximumResponseBytes = 16 * 1_024 * 1_024
+    private static let accumulationChunkBytes = 16 * 1_024
+
+    private let maximumResponseBytes: Int
+    private let session: URLSession
+
+    init(
+        maximumResponseBytes: Int = Self.defaultMaximumResponseBytes,
+        sessionConfiguration: URLSessionConfiguration = .default
+    ) {
+        precondition(maximumResponseBytes > 0, "Agent HTTP response budget must be positive")
+        self.maximumResponseBytes = maximumResponseBytes
+        let configuration = (sessionConfiguration.copy() as? URLSessionConfiguration)
+            ?? sessionConfiguration
+        self.session = URLSession(configuration: configuration)
+    }
+
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.httpMethod = request.method
@@ -43,9 +79,71 @@ struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        return AgentHTTPResponse(statusCode: statusCode, data: data)
+        let (bytes, response) = try await session.bytes(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            bytes.task.cancel()
+            throw AgentHTTPTransportError.invalidResponse
+        }
+
+        do {
+            try validateContentLength(of: httpResponse)
+            let data = try await receive(bytes)
+            return AgentHTTPResponse(statusCode: httpResponse.statusCode, data: data)
+        } catch {
+            bytes.task.cancel()
+            throw error
+        }
+    }
+
+    private func validateContentLength(of response: HTTPURLResponse) throws {
+        let headerLength = try response.value(forHTTPHeaderField: "Content-Length").map { rawValue in
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  trimmed.utf8.allSatisfy({ (48...57).contains($0) }),
+                  let parsed = UInt64(trimmed) else {
+                throw AgentHTTPTransportError.invalidContentLength
+            }
+            return parsed
+        }
+
+        let expectedLength = response.expectedContentLength
+        if expectedLength >= 0,
+           let headerLength,
+           UInt64(expectedLength) != headerLength {
+            throw AgentHTTPTransportError.invalidContentLength
+        }
+
+        if let headerLength, headerLength > UInt64(maximumResponseBytes) {
+            throw AgentHTTPTransportError.responseTooLarge(maximumBytes: maximumResponseBytes)
+        }
+        if expectedLength > Int64(maximumResponseBytes) {
+            throw AgentHTTPTransportError.responseTooLarge(maximumBytes: maximumResponseBytes)
+        }
+    }
+
+    private func receive(_ bytes: URLSession.AsyncBytes) async throws -> Data {
+        var data = Data()
+        var chunk: [UInt8] = []
+        chunk.reserveCapacity(Self.accumulationChunkBytes)
+        var receivedBytes = 0
+
+        for try await byte in bytes {
+            guard receivedBytes < maximumResponseBytes else {
+                throw AgentHTTPTransportError.responseTooLarge(
+                    maximumBytes: maximumResponseBytes
+                )
+            }
+            receivedBytes += 1
+            chunk.append(byte)
+
+            if chunk.count == Self.accumulationChunkBytes {
+                data.append(contentsOf: chunk)
+                chunk.removeAll(keepingCapacity: true)
+            }
+        }
+
+        data.append(contentsOf: chunk)
+        return data
     }
 }
 

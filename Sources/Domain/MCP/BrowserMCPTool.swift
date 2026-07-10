@@ -63,15 +63,16 @@ struct BrowserMCPToolProvider: Sendable {
 
         var params: [String: String] = [:]
         for argument in spec.required {
-            let value = try requiredScalar(argument.name, in: arguments)
-            try validate(argument: argument.name, value: value, toolName: toolName)
+            let value = try requiredScalar(argument, in: arguments, toolName: toolName)
+            try validate(argument: argument, value: value, toolName: toolName)
             params[argument.name] = value
         }
         for argument in spec.optional {
-            guard let value = optionalScalar(argument.name, in: arguments), !value.isEmpty else {
+            guard let value = try optionalScalar(argument, in: arguments, toolName: toolName),
+                  !value.isEmpty else {
                 continue
             }
-            try validate(argument: argument.name, value: value, toolName: toolName)
+            try validate(argument: argument, value: value, toolName: toolName)
             params[argument.name] = value
         }
 
@@ -79,28 +80,32 @@ struct BrowserMCPToolProvider: Sendable {
     }
 
     private static func requiredScalar(
-        _ name: String,
-        in arguments: [String: AgentJSONValue]
+        _ argument: Argument,
+        in arguments: [String: AgentJSONValue],
+        toolName: String
     ) throws -> String {
-        guard let value = optionalScalar(name, in: arguments) else {
-            throw BrowserMCPToolError.missingArgument(name)
+        guard let value = try optionalScalar(argument, in: arguments, toolName: toolName) else {
+            throw BrowserMCPToolError.missingArgument(argument.name)
         }
         return value
     }
 
     private static func optionalScalar(
-        _ name: String,
-        in arguments: [String: AgentJSONValue]
-    ) -> String? {
-        guard let value = arguments[name] else { return nil }
+        _ argument: Argument,
+        in arguments: [String: AgentJSONValue],
+        toolName: String
+    ) throws -> String? {
+        guard let value = arguments[argument.name] else { return nil }
         switch value {
         case .string(let string):
             return string
         case .number(let number):
-            if number.rounded() == number {
-                return String(Int64(number))
+            guard number.isFinite,
+                  number.rounded(.towardZero) == number,
+                  let integer = Int64(exactly: number) else {
+                throw invalidIntegerError(argument: argument.name, toolName: toolName)
             }
-            return String(number)
+            return String(integer)
         case .bool(let bool):
             return bool ? "true" : "false"
         case .null, .array, .object:
@@ -108,14 +113,38 @@ struct BrowserMCPToolProvider: Sendable {
         }
     }
 
-    private static func validate(argument: String, value: String, toolName: String) throws {
-        guard argument == "script" || argument == "css" || argument == "value" else { return }
+    private static func validate(argument: Argument, value: String, toolName: String) throws {
+        if argument.type == .number {
+            guard let integer = Int64(value) else {
+                throw invalidIntegerError(argument: argument.name, toolName: toolName)
+            }
+            if let range = argument.integerRange, !range.contains(integer) {
+                throw BrowserMCPToolError.invalidArgument(
+                    argument.name,
+                    "\(toolName) \(argument.name) must be between \(range.lowerBound) and \(range.upperBound)"
+                )
+            }
+        }
+
+        guard argument.name == "script" || argument.name == "css" || argument.name == "value" else {
+            return
+        }
         guard value.count <= maxEvalScriptLength else {
             throw BrowserMCPToolError.invalidArgument(
-                argument,
-                "\(toolName) \(argument) length \(value.count) exceeds maximum \(maxEvalScriptLength) characters"
+                argument.name,
+                "\(toolName) \(argument.name) length \(value.count) exceeds maximum \(maxEvalScriptLength) characters"
             )
         }
+    }
+
+    private static func invalidIntegerError(
+        argument: String,
+        toolName: String
+    ) -> BrowserMCPToolError {
+        BrowserMCPToolError.invalidArgument(
+            argument,
+            "\(toolName) \(argument) must be a finite, representable integer"
+        )
     }
 
     private static func jsonObject(from values: [String: String]) -> [String: AgentJSONValue] {
@@ -162,6 +191,7 @@ struct BrowserMCPToolProvider: Sendable {
         let name: String
         let type: ArgumentType
         let description: String
+        let integerRange: ClosedRange<Int64>?
     }
 
     private enum ArgumentType: String, Sendable {
@@ -173,9 +203,15 @@ struct BrowserMCPToolProvider: Sendable {
     private static func arg(
         _ name: String,
         _ description: String,
-        type: ArgumentType = .string
+        type: ArgumentType = .string,
+        integerRange: ClosedRange<Int64>? = nil
     ) -> Argument {
-        Argument(name: name, type: type, description: description)
+        Argument(
+            name: name,
+            type: type,
+            description: description,
+            integerRange: integerRange
+        )
     }
 
     private static func spec(
@@ -195,7 +231,18 @@ struct BrowserMCPToolProvider: Sendable {
     }
 
     private static let refArg = arg("ref", "Stable element ref from browser_snapshot.")
-    private static let timeoutArg = arg("timeout", "Optional timeout in milliseconds.", type: .number)
+    private static let timeoutArg = arg(
+        "timeout",
+        "Optional timeout in milliseconds.",
+        type: .number,
+        integerRange: 100...60_000
+    )
+    private static let waitTimeoutArg = arg(
+        "timeout",
+        "Optional timeout in milliseconds.",
+        type: .number,
+        integerRange: 0...30_000
+    )
 
     private static let toolSpecs: [ToolSpec] = [
         spec("browser_navigate", .browserNavigate, "Navigate the embedded browser to a URL.", required: [
@@ -237,9 +284,9 @@ struct BrowserMCPToolProvider: Sendable {
         spec("browser_snapshot", .browserSnapshot, "Capture the current browser snapshot with stable element refs."),
         spec("browser_context", .browserContext, "Capture an agent-ready browser context pack.", optional: [
             arg("target", "Optional target ref."),
-            arg("around", "Context lines around the target.", type: .number),
-            arg("console", "Console tail count.", type: .number),
-            arg("network", "Network tail count.", type: .number)
+            arg("around", "Context lines around the target.", type: .number, integerRange: 0...20),
+            arg("console", "Console tail count.", type: .number, integerRange: 0...100),
+            arg("network", "Network tail count.", type: .number, integerRange: 0...100)
         ]),
         spec("browser_click", .browserClick, "Click a browser element by snapshot ref.", required: [refArg], optional: [timeoutArg]),
         spec("browser_dblclick", .browserDblClick, "Double-click a browser element by snapshot ref.", required: [refArg], optional: [timeoutArg]),
@@ -272,8 +319,8 @@ struct BrowserMCPToolProvider: Sendable {
             arg("value", "Option value, label, or index.")
         ], optional: [timeoutArg]),
         spec("browser_scroll", .browserScroll, "Scroll the active browser page by pixel deltas.", required: [
-            arg("x", "Horizontal pixel delta.", type: .number),
-            arg("y", "Vertical pixel delta.", type: .number)
+            arg("x", "Horizontal pixel delta.", type: .number, integerRange: -100_000...100_000),
+            arg("y", "Vertical pixel delta.", type: .number, integerRange: -100_000...100_000)
         ], optional: [timeoutArg]),
         spec("browser_scroll_into_view", .browserScrollIntoView, "Scroll an element into view by snapshot ref.", required: [refArg], optional: [timeoutArg]),
         spec("browser_get_html", .browserGetHTML, "Get page or element HTML.", optional: [refArg]),
@@ -323,7 +370,7 @@ struct BrowserMCPToolProvider: Sendable {
             arg("selector", "CSS selector.")
         ]),
         spec("browser_find_nth", .browserFindNth, "Find the nth element matching a CSS selector.", required: [
-            arg("index", "Zero-based index.", type: .number),
+            arg("index", "Zero-based index.", type: .number, integerRange: 0...Int64.max),
             arg("selector", "CSS selector.")
         ]),
         spec("browser_screenshot", .browserScreenshot, "Capture a PNG screenshot of the active browser tab.", optional: [
@@ -332,7 +379,7 @@ struct BrowserMCPToolProvider: Sendable {
         spec("browser_console", .browserConsole, "List captured browser console entries."),
         spec("browser_wait", .browserWait, "Wait for a CSS selector in the active browser tab.", required: [
             arg("selector", "CSS selector.")
-        ], optional: [timeoutArg]),
+        ], optional: [waitTimeoutArg]),
         spec("browser_cookies_list", .browserCookiesList, "List script-visible cookies.", optional: [
             arg("domain", "Optional cookie domain filter.")
         ]),
@@ -344,7 +391,7 @@ struct BrowserMCPToolProvider: Sendable {
             arg("domain", "Optional cookie domain."),
             arg("secure", "Whether to set Secure.", type: .boolean),
             arg("same-site", "Optional SameSite value."),
-            arg("max-age", "Optional max age in seconds.", type: .number)
+            arg("max-age", "Optional max age in seconds.", type: .number, integerRange: 0...Int64.max)
         ]),
         spec("browser_cookies_delete", .browserCookiesDelete, "Delete a script-visible cookie.", required: [
             arg("name", "Cookie name.")
@@ -354,7 +401,7 @@ struct BrowserMCPToolProvider: Sendable {
         ]),
         spec("browser_network", .browserNetwork, "List recent resource timing entries.", optional: [
             arg("filter", "Optional URL/name filter."),
-            arg("tail", "Optional result tail count.", type: .number)
+            arg("tail", "Optional result tail count.", type: .number, integerRange: 1...Int64.max)
         ]),
         spec("browser_frames", .browserFrames, "List frame metadata for the current page."),
         spec("browser_downloads", .browserDownloads, "List active and completed browser downloads."),

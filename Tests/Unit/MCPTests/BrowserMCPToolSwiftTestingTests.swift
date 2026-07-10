@@ -185,6 +185,107 @@ struct BrowserMCPToolSwiftTestingTests {
         ])
     }
 
+    @Test("browser MCP rejects non-finite fractional and unrepresentable numbers without executing")
+    func rejectsUnsafeNumbersWithoutExecuting() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+        let invalidNumbers = [
+            Double.nan,
+            Double.infinity,
+            -Double.infinity,
+            1e300,
+            -1e300,
+            1.5,
+        ]
+
+        for number in invalidNumbers {
+            let result = await provider.callTool(name: "browser_scroll", arguments: [
+                "x": .number(number),
+                "y": .number(0),
+            ])
+
+            #expect(result.isError == true)
+            #expect(result.content == [
+                .text("browser_scroll x must be a finite, representable integer"),
+            ])
+        }
+        #expect(await executor.commands.isEmpty)
+    }
+
+    @Test("browser MCP enforces numeric domains before executing socket commands")
+    func enforcesNumericDomainsBeforeExecuting() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        let results = [
+            await provider.callTool(name: "browser_context", arguments: ["around": .number(21)]),
+            await provider.callTool(name: "browser_click", arguments: [
+                "ref": .string("button-1"),
+                "timeout": .number(99),
+            ]),
+            await provider.callTool(name: "browser_wait", arguments: [
+                "selector": .string(".ready"),
+                "timeout": .number(30_001),
+            ]),
+            await provider.callTool(name: "browser_scroll", arguments: [
+                "x": .number(100_001),
+                "y": .number(0),
+            ]),
+            await provider.callTool(name: "browser_find_nth", arguments: [
+                "index": .number(-1),
+                "selector": .string(".row"),
+            ]),
+            await provider.callTool(name: "browser_cookies_set", arguments: [
+                "name": .string("sid"),
+                "value": .string("abc"),
+                "max-age": .number(-1),
+            ]),
+            await provider.callTool(name: "browser_network", arguments: ["tail": .number(0)]),
+        ]
+
+        #expect(results.allSatisfy { $0.isError })
+        #expect(await executor.commands.isEmpty)
+    }
+
+    @Test("browser MCP accepts established numeric domain boundaries")
+    func acceptsEstablishedNumericDomainBoundaries() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        let results = [
+            await provider.callTool(name: "browser_context", arguments: [
+                "around": .number(20),
+                "console": .number(100),
+                "network": .number(100),
+            ]),
+            await provider.callTool(name: "browser_click", arguments: [
+                "ref": .string("button-1"),
+                "timeout": .number(60_000),
+            ]),
+            await provider.callTool(name: "browser_wait", arguments: [
+                "selector": .string(".ready"),
+                "timeout": .number(30_000),
+            ]),
+            await provider.callTool(name: "browser_scroll", arguments: [
+                "x": .number(-100_000),
+                "y": .number(100_000),
+            ]),
+            await provider.callTool(name: "browser_find_nth", arguments: [
+                "index": .number(0),
+                "selector": .string(".row"),
+            ]),
+            await provider.callTool(name: "browser_cookies_set", arguments: [
+                "name": .string("sid"),
+                "value": .string("abc"),
+                "max-age": .number(0),
+            ]),
+            await provider.callTool(name: "browser_network", arguments: ["tail": .number(1)]),
+        ]
+
+        #expect(results.allSatisfy { !$0.isError })
+        #expect(await executor.commands.count == results.count)
+    }
+
     @Test("browser MCP tools bridge to external Agent descriptors")
     func toolsBridgeToExternalAgentDescriptors() throws {
         let descriptor = MCPToolBridge.descriptor(
