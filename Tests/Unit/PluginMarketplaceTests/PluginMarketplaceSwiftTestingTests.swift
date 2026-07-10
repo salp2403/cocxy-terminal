@@ -299,6 +299,85 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manager.plugins[0].manifest.capabilities == [.environmentRead])
     }
 
+    @Test("installer rejects legacy manifests from marketplace sources")
+    func installerRejectsLegacyMarketplaceManifest() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repo = root.appendingPathComponent("legacy-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try "name = \"Legacy Plugin\"\n".write(
+            to: repo.appendingPathComponent(PluginManifest.legacyManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+
+        #expect(throws: PluginInstallerError.legacyManifestRequiresMigration("legacy-plugin")) {
+            _ = try PluginInstaller(pluginsDirectory: pluginsDirectory).install(from: repo)
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: pluginsDirectory.appendingPathComponent("legacy-plugin").path
+        ))
+    }
+
+    @Test("replacement clears enabled state and capability grants before installing new code")
+    func replacementClearsPriorAuthority() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let grantStore = PluginCapabilityGrantStore(
+            backend: MemoryPluginCapabilityGrantBackingStore()
+        )
+        let installer = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            capabilityGrantStore: grantStore
+        )
+
+        let original = root.appendingPathComponent("original-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        try "id = \"shared-plugin\"\nname = \"Original\"\n".write(
+            to: original.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo original\n".write(
+            to: original.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        _ = try installer.install(from: original)
+
+        let stateURL = root.appendingPathComponent("plugins.json")
+        try JSONEncoder().encode(["shared-plugin"]).write(to: stateURL, options: [.atomic])
+        try grantStore.grant(.networkClient, for: "shared-plugin", reason: "Approved original")
+
+        let replacement = root.appendingPathComponent("replacement-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        try "id = \"shared-plugin\"\nname = \"Replacement\"\n".write(
+            to: replacement.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo replacement\n".write(
+            to: replacement.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        _ = try installer.install(from: replacement, replaceExisting: true)
+
+        let enabled = try JSONDecoder().decode([String].self, from: Data(contentsOf: stateURL))
+        #expect(enabled.isEmpty)
+        #expect(try grantStore.grants(for: "shared-plugin").isEmpty)
+        let installedScript = try String(
+            contentsOf: pluginsDirectory
+                .appendingPathComponent("shared-plugin")
+                .appendingPathComponent("on-session-start.sh"),
+            encoding: .utf8
+        )
+        #expect(installedScript == "echo replacement\n")
+    }
+
     @Test("installed plugin can be enabled dispatched and uninstalled")
     @MainActor
     func installedPluginCanBeEnabledDispatchedAndUninstalled() throws {
@@ -478,7 +557,10 @@ struct PluginMarketplaceSwiftTestingTests {
         let sandbox = RecordingPluginSandbox()
         let manager = PluginManager(
             pluginsDirectory: pluginsDirectory.path,
-            sandbox: sandbox
+            sandbox: sandbox,
+            grantedCapabilitiesProvider: { pluginID in
+                pluginID == "rich-input-plugin" ? [.environmentRead] : []
+            }
         )
         manager.scanPlugins()
         try manager.enablePlugin(id: receipt.pluginID)
@@ -514,7 +596,13 @@ struct PluginMarketplaceSwiftTestingTests {
         )
 
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
-        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+        let grantStore = PluginCapabilityGrantStore(
+            backend: MemoryPluginCapabilityGrantBackingStore()
+        )
+        let installer = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            capabilityGrantStore: grantStore
+        )
         _ = try installer.install(from: repo)
 
         let stateURL = pluginsDirectory
@@ -522,6 +610,7 @@ struct PluginMarketplaceSwiftTestingTests {
             .appendingPathComponent("plugins.json")
         let enabledData = try JSONEncoder().encode(["stateful-plugin"])
         try enabledData.write(to: stateURL)
+        try grantStore.grant(.networkClient, for: "stateful-plugin", reason: nil)
 
         try installer.uninstall(id: "stateful-plugin")
 
@@ -529,6 +618,7 @@ struct PluginMarketplaceSwiftTestingTests {
         let updatedIDs = try JSONDecoder().decode([String].self, from: updatedData)
 
         #expect(updatedIDs.isEmpty)
+        #expect(try grantStore.grants(for: "stateful-plugin").isEmpty)
         #expect(!FileManager.default.fileExists(
             atPath: pluginsDirectory
                 .appendingPathComponent("stateful-plugin", isDirectory: true)
@@ -682,7 +772,7 @@ struct PluginMarketplaceSwiftTestingTests {
             ],
             pluginID: "safe-plugin",
             pluginDirectory: pluginDirectory.path,
-            capabilities: [.networkClient, .filesystemRead, .filesystemWrite]
+            capabilities: [.environmentRead, .networkClient, .filesystemRead, .filesystemWrite]
         )
 
         let resolvedScriptPath = scriptURL.resolvingSymlinksInPath().standardizedFileURL.path
@@ -694,7 +784,10 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(plan.environment["COCXY_EVENT"] == "session-start")
         #expect(plan.environment["COCXY_PLUGIN_ID"] == "safe-plugin")
         #expect(plan.environment["COCXY_SCRIPT_PATH"] == resolvedScriptPath)
-        #expect(plan.environment["COCXY_PLUGIN_CAPABILITIES"] == "filesystem-read,filesystem-write,network-client")
+        #expect(
+            plan.environment["COCXY_PLUGIN_CAPABILITIES"]
+                == "environment-read,filesystem-read,filesystem-write,network-client"
+        )
         #expect(plan.environment["COCXY_PLUGIN_SANDBOX_MODE"] == "kernel")
         #expect(plan.environment["PATH"] == "/usr/local/bin:/usr/bin:/bin")
         #expect(plan.environment["HOME"] == NSHomeDirectory())
@@ -707,6 +800,32 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(profile.contains(#"(subpath "\#(pluginDirectory.appendingPathComponent("state", isDirectory: true).resolvingSymlinksInPath().standardizedFileURL.path)")"#))
         #expect(profile.contains(#"(literal "/bin/sh")"#))
         #expect(profile.contains(#"(literal "/bin/bash")"#))
+    }
+
+    @Test("sandbox withholds event data without environment read capability")
+    func sandboxWithholdsEventDataWithoutEnvironmentRead() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginDirectory = root.appendingPathComponent("safe-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let scriptURL = pluginDirectory.appendingPathComponent("on-rich-input-submit.sh")
+        try "#!/bin/sh\nexit 0\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+
+        let plan = try PluginSandbox(kernelSandboxEnabled: false).makeExecutionPlan(
+            scriptPath: scriptURL.path,
+            environment: [
+                "COCXY_EVENT": "rich-input-submit",
+                "COCXY_RICH_INPUT_TEXT": "private prompt",
+                "COCXY_RICH_INPUT_ATTACHMENT_COUNT": "1",
+            ],
+            pluginID: "safe-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.networkClient]
+        )
+
+        #expect(plan.environment["COCXY_EVENT"] == "rich-input-submit")
+        #expect(plan.environment["COCXY_RICH_INPUT_TEXT"] == nil)
+        #expect(plan.environment["COCXY_RICH_INPUT_ATTACHMENT_COUNT"] == nil)
     }
 
     @Test("sandbox falls back explicitly when sandbox-exec is unavailable")

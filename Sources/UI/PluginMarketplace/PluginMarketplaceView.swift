@@ -244,7 +244,6 @@ final class PluginMarketplaceViewModel: ObservableObject {
     }
 
     private func missingCapabilities(for manifest: PluginManifest) -> [PluginCapability] {
-        guard !manifest.usesLegacyCompatibilityCapabilities else { return [] }
         return manifest.capabilities.filter { capability in
             !grantStore.isGrantedWithoutThrowing(capability, for: manifest.id)
         }

@@ -124,6 +124,20 @@ final class PluginCapabilityGrantStore: @unchecked Sendable {
         try backend.delete(account: account)
     }
 
+    /// Removes every persisted capability grant associated with a plugin ID.
+    /// This is used before plugin code is replaced or removed so authorization
+    /// cannot be inherited by a different package that reuses the same ID.
+    func revokeAll(for pluginID: String) throws {
+        for account in try backend.listAccounts() {
+            guard let decoded = PluginCapabilityGrant.decodeKeychainAccount(account),
+                  decoded.pluginID == pluginID
+            else {
+                continue
+            }
+            try backend.delete(account: account)
+        }
+    }
+
     func grants(for pluginID: String) throws -> [PluginCapabilityGrant] {
         try allGrants().filter { $0.pluginID == pluginID }
     }

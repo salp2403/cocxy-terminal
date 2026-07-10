@@ -4347,7 +4347,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 ]
             )
         } catch {
-            return .failure(id: request.id, error: "Failed to install plugin: \(error)")
+            return .failure(
+                id: request.id,
+                error: "Failed to install plugin: \(error.localizedDescription)"
+            )
         }
     }
 
@@ -4362,7 +4365,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             refreshPluginManager()
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "uninstalled"])
         } catch {
-            return .failure(id: request.id, error: "Failed to uninstall plugin: \(error)")
+            return .failure(
+                id: request.id,
+                error: "Failed to uninstall plugin: \(error.localizedDescription)"
+            )
         }
     }
 

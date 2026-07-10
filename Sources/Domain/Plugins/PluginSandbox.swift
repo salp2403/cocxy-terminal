@@ -38,7 +38,7 @@ protocol PluginSandboxing: Sendable {
 ///
 /// 1. Scripts run as the current user (no privilege escalation).
 /// 2. A timeout prevents runaway scripts from blocking the app.
-/// 3. Environment variables are explicitly allowed — no shell inheritance.
+/// 3. Event data requires `environment-read`; no shell environment is inherited.
 /// 4. Scripts cannot read Cocxy's internal state beyond what is passed.
 /// 5. Output is captured but not displayed (logged for debugging).
 ///
@@ -83,7 +83,7 @@ final class PluginSandbox: PluginSandboxing, @unchecked Sendable {
     /// Executes a plugin script with the given environment.
     ///
     /// The script is run via `/bin/sh` with:
-    /// - A clean environment (only the provided key-value pairs).
+    /// - A clean environment filtered by the plugin's capabilities.
     /// - `COCXY_PLUGIN_ID` set to identify the calling plugin.
     /// - A hard timeout that terminates the process if exceeded.
     ///
@@ -197,6 +197,9 @@ final class PluginSandbox: PluginSandboxing, @unchecked Sendable {
         for (key, value) in environment {
             guard Self.isAllowedEnvironmentKey(key) else {
                 throw PluginSandboxError.invalidEnvironmentKey(key)
+            }
+            guard capabilities.contains(.environmentRead) || key == "COCXY_EVENT" else {
+                continue
             }
             cleanEnvironment[key] = String(value.prefix(8_192))
         }

@@ -273,37 +273,53 @@ struct PluginManagerTests {
         #expect(state.lastTriggeredAt == nil)
     }
 
-    @Test func legacyManifestWithoutCapabilitiesUsesCompatibilityGrants() {
-        let manifest = PluginManifest(
-            id: "legacy-plugin",
-            name: "Legacy",
-            description: "Existing plugin",
-            version: "1.0.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: "/tmp/legacy",
-            manifestFileName: PluginManifest.legacyManifestFileName,
-            capabilities: []
+    @Test @MainActor func legacyManifestReceivesNoImplicitCapabilitiesOrSensitiveEnvironment() throws {
+        let (fs, basePath) = makeFS(plugins: [
+            (
+                id: "legacy-plugin",
+                manifest: "name = \"Legacy\"\nevents = [\"session-start\"]"
+            ),
+        ])
+        fs.files["\(basePath)/legacy-plugin/on-session-start.sh"] = "exit 0"
+        let sandbox = RecordingPluginManagerSandbox()
+        let manager = PluginManager(
+            fileSystem: fs,
+            pluginsDirectory: basePath,
+            sandbox: sandbox,
+            grantedCapabilitiesProvider: { _ in Set(PluginCapability.allCases) }
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: "legacy-plugin")
+
+        manager.dispatchEvent(
+            .sessionStart,
+            environment: ["COCXY_RICH_INPUT_TEXT": "do not disclose"]
         )
 
-        #expect(manifest.usesLegacyCompatibilityCapabilities)
+        #expect(sandbox.executions.count == 1)
+        #expect(sandbox.executions[0].capabilities.isEmpty)
+        #expect(sandbox.executions[0].environment == ["COCXY_EVENT": "session-start"])
+    }
+}
+
+private final class RecordingPluginManagerSandbox: PluginSandboxing, @unchecked Sendable {
+    struct Execution {
+        let environment: [String: String]
+        let capabilities: Set<PluginCapability>
     }
 
-    @Test func marketplaceManifestWithoutCapabilitiesDoesNotUseCompatibilityGrants() {
-        let manifest = PluginManifest(
-            id: "new-plugin",
-            name: "New",
-            description: "New plugin",
-            version: "1.0.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: "/tmp/new",
-            manifestFileName: PluginManifest.marketplaceManifestFileName,
-            capabilities: []
-        )
+    private(set) var executions: [Execution] = []
 
-        #expect(!manifest.usesLegacyCompatibilityCapabilities)
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>
+    ) {
+        executions.append(Execution(
+            environment: environment,
+            capabilities: capabilities
+        ))
     }
 }

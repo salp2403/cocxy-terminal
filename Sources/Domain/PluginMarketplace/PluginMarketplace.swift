@@ -291,12 +291,36 @@ enum PluginSignaturePayload {
 
 enum PluginInstallerError: Error, Equatable {
     case missingManifest(String)
+    case legacyManifestRequiresMigration(String)
     case pluginAlreadyInstalled(String)
     case pluginNotInstalled(String)
     case invalidSignature(String)
     case unsafeSourceName(String)
     case unsupportedLocalSource(String)
     case gitCloneFailed(Int32)
+}
+
+extension PluginInstallerError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .missingManifest(let path):
+            return "Plugin manifest not found in \(path)."
+        case .legacyManifestRequiresMigration(let pluginID):
+            return "Plugin \(pluginID) uses legacy manifest.toml. Add cocxy-plugin.toml with explicit capabilities before installing it."
+        case .pluginAlreadyInstalled(let pluginID):
+            return "Plugin \(pluginID) is already installed. Enable replacement to install different code."
+        case .pluginNotInstalled(let pluginID):
+            return "Plugin \(pluginID) is not installed."
+        case .invalidSignature(let pluginID):
+            return "Plugin \(pluginID) has an invalid signature."
+        case .unsafeSourceName(let source):
+            return "Plugin source has an unsafe name: \(source)."
+        case .unsupportedLocalSource(let path):
+            return "Plugin source is not a readable local directory: \(path)."
+        case .gitCloneFailed(let status):
+            return "Plugin source clone failed with exit code \(status)."
+        }
+    }
 }
 
 struct PluginInstallReceipt: Equatable, Sendable {
@@ -311,16 +335,19 @@ struct PluginInstaller {
     let pluginsDirectory: URL
     private let fileManager: FileManager
     private let validator: PluginValidator
+    private let capabilityGrantStore: PluginCapabilityGrantStore
 
     init(
         pluginsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/plugins"),
         fileManager: FileManager = .default,
-        validator: PluginValidator = PluginValidator()
+        validator: PluginValidator = PluginValidator(),
+        capabilityGrantStore: PluginCapabilityGrantStore = PluginCapabilityGrantStore()
     ) {
         self.pluginsDirectory = pluginsDirectory
         self.fileManager = fileManager
         self.validator = validator
+        self.capabilityGrantStore = capabilityGrantStore
     }
 
     func install(from sourceURL: URL, replaceExisting: Bool = false) throws -> PluginInstallReceipt {
@@ -349,6 +376,9 @@ struct PluginInstaller {
             from: stagedPlugin,
             fileManager: fileManager
         )
+        guard stagedManifest.manifestFileName == PluginManifest.marketplaceManifestFileName else {
+            throw PluginInstallerError.legacyManifestRequiresMigration(stagedManifest.id)
+        }
         let report = try validator.validate(
             manifest: stagedManifest,
             sourceURL: sourceURL,
@@ -363,6 +393,7 @@ struct PluginInstaller {
             guard replaceExisting else {
                 throw PluginInstallerError.pluginAlreadyInstalled(stagedManifest.id)
             }
+            try resetAuthorization(for: stagedManifest.id)
             try fileManager.removeItem(at: finalURL)
         }
 
@@ -384,8 +415,8 @@ struct PluginInstaller {
         guard fileManager.fileExists(atPath: pluginURL.path) else {
             throw PluginInstallerError.pluginNotInstalled(id)
         }
+        try resetAuthorization(for: id)
         try fileManager.removeItem(at: pluginURL)
-        try removeEnabledState(for: id)
     }
 
     private func materialize(sourceURL: URL, at destination: URL) throws {
@@ -442,5 +473,10 @@ struct PluginInstaller {
         let encoded = try JSONEncoder().encode(updatedIDs.sorted())
         try encoded.write(to: stateURL, options: [.atomic])
         try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: stateURL.path)
+    }
+
+    private func resetAuthorization(for id: String) throws {
+        try removeEnabledState(for: id)
+        try capabilityGrantStore.revokeAll(for: id)
     }
 }

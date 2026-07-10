@@ -245,12 +245,19 @@ final class PluginManager: ObservableObject {
             let scriptPath = "\(plugin.manifest.directoryPath)/\(event.scriptName)"
             guard fileSystem.fileExists(at: scriptPath) else { continue }
 
+            let capabilities = effectiveCapabilities(for: plugin.manifest)
+            var authorizedEnvironment: [String: String] = [:]
+            if capabilities.contains(.environmentRead) {
+                authorizedEnvironment = environment
+            }
+            authorizedEnvironment["COCXY_EVENT"] = event.rawValue
+
             sandbox.execute(
                 scriptPath: scriptPath,
-                environment: environment,
+                environment: authorizedEnvironment,
                 pluginID: plugin.id,
                 pluginDirectory: plugin.manifest.directoryPath,
-                capabilities: effectiveCapabilities(for: plugin.manifest)
+                capabilities: capabilities
             )
 
             // Update last triggered timestamp.
@@ -293,17 +300,7 @@ final class PluginManager: ObservableObject {
     }
 
     private func effectiveCapabilities(for manifest: PluginManifest) -> Set<PluginCapability> {
-        if manifest.usesLegacyCompatibilityCapabilities {
-            return Set(PluginCapability.allCases)
-        }
-
         let granted = grantedCapabilitiesProvider(manifest.id)
         return manifest.capabilities.intersection(granted)
-    }
-}
-
-extension PluginManifest {
-    var usesLegacyCompatibilityCapabilities: Bool {
-        manifestFileName == Self.legacyManifestFileName && capabilities.isEmpty
     }
 }
