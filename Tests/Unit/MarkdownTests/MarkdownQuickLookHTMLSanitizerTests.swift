@@ -54,8 +54,9 @@ struct MarkdownQuickLookHTMLSanitizerTests {
     }
 
     @Test("Data URIs remain untouched")
-    func dataURIsRemainUntouched() {
-        let html = #"<img src="data:image/png;base64,abc123" alt="Inline" />"#
+    func dataURIsRemainUntouched() throws {
+        let dataURI = "data:image/png;base64,\(try makePNGData().base64EncodedString())"
+        let html = "<img src=\"\(dataURI)\" alt=\"Inline\" />"
         let result = MarkdownQuickLookHTMLSanitizer.makeOfflinePreviewHTML(
             from: html,
             baseDirectory: FileManager.default.temporaryDirectory

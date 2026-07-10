@@ -253,6 +253,34 @@ struct MarkdownContentViewTests {
         #expect(buttons.allSatisfy { !($0.toolTip ?? "").isEmpty })
     }
 
+    @Test("Remote image approval installs a WebKit rule and resets with the document root")
+    @MainActor
+    func remoteImageApprovalIsDocumentScoped() async {
+        let preview = MarkdownPreviewView()
+        preview.baseDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("markdown-remote-policy-a", isDirectory: true)
+        preview.document = MarkdownDocument.parse(
+            "![Remote](https://tracker.example/pixel.png)"
+        )
+
+        #expect(preview.currentRemoteImageHosts == ["tracker.example"])
+        #expect(preview.unapprovedRemoteImageHosts == ["tracker.example"])
+
+        let installed = await withCheckedContinuation { continuation in
+            preview.approveRemoteImageHosts(["tracker.example"]) { succeeded in
+                continuation.resume(returning: succeeded)
+            }
+        }
+        #expect(installed)
+        #expect(preview.approvedRemoteImageHosts == ["tracker.example"])
+        #expect(preview.unapprovedRemoteImageHosts.isEmpty)
+
+        preview.baseDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("markdown-remote-policy-b", isDirectory: true)
+        #expect(preview.approvedRemoteImageHosts.isEmpty)
+        #expect(preview.unapprovedRemoteImageHosts == ["tracker.example"])
+    }
+
     @Test("Markdown chrome strings localize to Spanish")
     func markdownChromeStringsLocalize() throws {
         let bundle = try #require(localizationBundle())
@@ -264,6 +292,8 @@ struct MarkdownContentViewTests {
         #expect(toolbar.fileName == "Sin título.md")
         #expect(MarkdownToolbarView.localizedShowGitBlame(using: localizer) == "Mostrar autoría Git")
         #expect(MarkdownToolbarView.localizedShowGitDiff(using: localizer) == "Mostrar diferencias Git")
+        #expect(MarkdownToolbarView.localizedLoadRemoteImages(using: localizer) == "Cargar imágenes remotas")
+        #expect(MarkdownToolbarView.localizedDisableRemoteImages(using: localizer) == "Bloquear imágenes remotas")
         #expect(MarkdownToolbarView.localizedCopyAsMarkdown(using: localizer) == "Copiar como Markdown")
         #expect(MarkdownToolbarView.localizedExportSlides(using: localizer) == "Exportar diapositivas (Cmd+Shift+S)")
         #expect(MarkdownToolbarView.localizedMoreActions(using: localizer) == "Más acciones de Markdown")
@@ -311,6 +341,32 @@ struct MarkdownContentViewTests {
             MarkdownDiffView.localizedBlameSummary(lines: 2, authors: 1, commits: 2, using: localizer)
                 == "2 líneas · 1 autor · 2 commits"
         )
+    }
+
+    @Test("Remote image control exposes blocked and approved states without crowding compact toolbar")
+    func remoteImageToolbarStateIsResponsive() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let toolbar = MarkdownToolbarView(localizer: localizer)
+        toolbar.frame = NSRect(x: 0, y: 0, width: 900, height: MarkdownToolbarView.height)
+        toolbar.hasRemoteImages = true
+        toolbar.hasBlockedRemoteImages = true
+        toolbar.layoutSubtreeIfNeeded()
+
+        let buttons = descendants(of: toolbar, matching: NSButton.self)
+        let remoteButton = try #require(buttons.first {
+            $0.toolTip == "Cargar imágenes remotas"
+        })
+        #expect(!remoteButton.isHidden)
+        #expect(remoteButton.contentTintColor == CocxyColors.yellow)
+
+        toolbar.hasBlockedRemoteImages = false
+        #expect(remoteButton.toolTip == "Bloquear imágenes remotas")
+        #expect(remoteButton.contentTintColor == CocxyColors.green)
+
+        toolbar.frame = NSRect(x: 0, y: 0, width: 360, height: MarkdownToolbarView.height)
+        toolbar.layoutSubtreeIfNeeded()
+        #expect(remoteButton.isHidden)
     }
 
     @Test("Markdown Spanish mode switcher uses compact labels without changing full mode names")
@@ -426,6 +482,21 @@ struct MarkdownContentViewTests {
 
         view.copyAsRichText()
         #expect(pasteboard.data(forType: .rtf) != nil || pasteboard.string(forType: .string) != nil)
+    }
+
+    @Test("copied HTML never preserves active remote image URLs")
+    func copiedHTMLIsOffline() {
+        let url = createTempMarkdownFile(
+            content: "![Tracking pixel](https://tracker.example/pixel.png?id=recipient)"
+        )
+        defer { cleanup(url) }
+        let view = MarkdownContentView(filePath: url)
+
+        view.copyAsHTML()
+
+        let html = NSPasteboard.general.string(forType: .html) ?? ""
+        #expect(!html.contains("tracker.example"))
+        #expect(html.contains("data-cocxy-image-blocked=\"remote\""))
     }
 
     // MARK: - Concurrency Guard

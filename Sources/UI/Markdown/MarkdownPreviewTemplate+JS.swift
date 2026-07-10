@@ -311,7 +311,7 @@ extension MarkdownPreviewTemplate {
         function showLightbox(src, alt) {
             var overlay = document.getElementById('lightbox-overlay');
             var image = document.getElementById('lightbox-img');
-            if (!overlay || !image) return;
+            if (!overlay || !image || !src) return;
             image.src = src;
             image.alt = alt || '';
             overlay.hidden = false;
@@ -420,7 +420,7 @@ extension MarkdownPreviewTemplate {
                 var imageSourceLine = closestSourceLine(image);
                 if (imageSourceLine !== null) {
                     postPreviewMessage('clickToSource', { sourceLine: imageSourceLine });
-                } else {
+                } else if (!image.hasAttribute('data-cocxy-image-blocked')) {
                     showLightbox(image.getAttribute('src'), image.getAttribute('alt'));
                 }
                 return;

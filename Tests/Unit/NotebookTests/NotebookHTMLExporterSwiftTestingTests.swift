@@ -37,4 +37,21 @@ struct NotebookHTMLExporterSwiftTestingTests {
         #expect(html.contains("class=\"cell-output cell-output-stderr\""))
         #expect(!html.contains("<ok>\n"))
     }
+
+    @Test("standalone notebook HTML removes active image sources")
+    func standaloneNotebookImagesAreOffline() {
+        let notebook = NotebookDocument(
+            metadata: NotebookMetadata(title: "Offline", tags: []),
+            cells: [
+                .markdown("![Remote](https://tracker.example/pixel.png)\n\n![Local](../private.png)"),
+            ]
+        )
+
+        let html = NotebookHTMLExporter.render(notebook)
+
+        #expect(!html.contains("tracker.example"))
+        #expect(!html.contains("../private.png"))
+        #expect(!html.contains("<img src="))
+        #expect(html.components(separatedBy: "data-cocxy-image-blocked=").count - 1 == 2)
+    }
 }

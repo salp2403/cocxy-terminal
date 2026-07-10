@@ -51,21 +51,23 @@ struct MarkdownImageInlinerTests {
     }
 
     @Test("Data URIs are left unchanged")
-    func skipsDataURIs() {
+    func skipsDataURIs() throws {
         let dir = FileManager.default.temporaryDirectory
-        let html = "<img src=\"data:image/png;base64,abc123\" />"
+        let dataURI = "data:image/png;base64,\(try makePNGData().base64EncodedString())"
+        let html = "<img src=\"\(dataURI)\" />"
         let result = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: dir)
 
         #expect(result == html)
     }
 
-    @Test("Missing file leaves src unchanged")
-    func missingFileUnchanged() {
+    @Test("Missing file is neutralized instead of remaining load-bearing")
+    func missingFileIsNeutralized() {
         let dir = FileManager.default.temporaryDirectory
         let html = "<img src=\"nonexistent.png\" />"
         let result = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: dir)
 
-        #expect(result.contains("src=\"nonexistent.png\""))
+        #expect(!result.contains("src="))
+        #expect(result.contains("data-cocxy-image-blocked=\"local\""))
     }
 
     @Test("JPEG extension uses correct MIME type")
@@ -121,11 +123,10 @@ struct MarkdownImageInlinerTests {
         """
         let result = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: dir)
 
-        // None of these should be inlined — they must stay as-is
+        // None of these may remain as a load-bearing image source.
         #expect(!result.contains("data:"))
-        #expect(result.contains("src=\"key.pem\""))
-        #expect(result.contains("src=\"config.env\""))
-        #expect(result.contains("src=\"data.json\""))
+        #expect(!result.contains("src="))
+        #expect(result.components(separatedBy: "data-cocxy-image-blocked=\"local\"").count - 1 == 3)
     }
 
     @Test("SVG images ARE inlined with correct MIME type")
@@ -156,7 +157,7 @@ struct MarkdownImageInlinerTests {
         let result = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: dir)
 
         #expect(!result.contains("data:"))
-        #expect(result.contains("src=\"fake.svg\""))
+        #expect(!result.contains("src="))
     }
 
     @Test("File with image extension but wrong magic bytes is NOT inlined")
@@ -172,7 +173,7 @@ struct MarkdownImageInlinerTests {
 
         // Must NOT be inlined because magic bytes don't match PNG
         #expect(!result.contains("data:"))
-        #expect(result.contains("src=\"fake.png\""))
+        #expect(!result.contains("src="))
     }
 
     @Test("Real PNG with correct magic bytes IS inlined")
@@ -187,6 +188,130 @@ struct MarkdownImageInlinerTests {
         let result = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: dir)
 
         #expect(result.contains("data:image/png;base64,"))
+    }
+
+    @Test("Nested local images remain available inside the approved root")
+    func nestedContainedImageIsInlined() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+        let assets = dir.appendingPathComponent("assets", isDirectory: true)
+        try FileManager.default.createDirectory(at: assets, withIntermediateDirectories: true)
+        try makePNGData().write(to: assets.appendingPathComponent("diagram.png"))
+
+        let result = MarkdownImageInliner.makeSafeHTML(
+            in: #"<img src="assets/diagram.png" />"#,
+            baseDirectory: dir
+        )
+
+        #expect(result.html.contains("data:image/png;base64,"))
+        #expect(result.blockedLocalImageCount == 0)
+    }
+
+    @Test("Parent, absolute, and file URL escapes are neutralized")
+    func outsidePathsAreNeutralized() throws {
+        let root = createTempDir()
+        defer { cleanup(root) }
+        let documentDirectory = root.appendingPathComponent("document", isDirectory: true)
+        try FileManager.default.createDirectory(at: documentDirectory, withIntermediateDirectories: true)
+        let outside = root.appendingPathComponent("private.png")
+        try makePNGData().write(to: outside)
+        let html = """
+        <img src="../private.png" />
+        <img src="\(outside.path)" />
+        <img src="\(outside.absoluteString)" />
+        """
+
+        let result = MarkdownImageInliner.makeSafeHTML(
+            in: html,
+            baseDirectory: documentDirectory
+        )
+
+        #expect(!result.html.contains("private.png"))
+        #expect(!result.html.contains("data:image/png"))
+        #expect(result.blockedLocalImageCount == 3)
+    }
+
+    @Test("Symlinks cannot escape the approved image root")
+    func symlinkEscapeIsNeutralized() throws {
+        let root = createTempDir()
+        defer { cleanup(root) }
+        let documentDirectory = root.appendingPathComponent("document", isDirectory: true)
+        let outsideDirectory = root.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: documentDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outsideDirectory, withIntermediateDirectories: true)
+        try makePNGData().write(to: outsideDirectory.appendingPathComponent("private.png"))
+        try FileManager.default.createSymbolicLink(
+            at: documentDirectory.appendingPathComponent("assets"),
+            withDestinationURL: outsideDirectory
+        )
+
+        let result = MarkdownImageInliner.makeSafeHTML(
+            in: #"<img src="assets/private.png" />"#,
+            baseDirectory: documentDirectory
+        )
+
+        #expect(!result.html.contains("src="))
+        #expect(!result.html.contains("data:image/png"))
+        #expect(result.blockedLocalImageCount == 1)
+    }
+
+    @Test("Root prefix collisions do not satisfy containment")
+    func rootPrefixCollisionIsNeutralized() throws {
+        let root = createTempDir()
+        defer { cleanup(root) }
+        let approved = root.appendingPathComponent("doc", isDirectory: true)
+        let collision = root.appendingPathComponent("document", isDirectory: true)
+        try FileManager.default.createDirectory(at: approved, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: collision, withIntermediateDirectories: true)
+        let outside = collision.appendingPathComponent("private.png")
+        try makePNGData().write(to: outside)
+
+        let result = MarkdownImageInliner.makeSafeHTML(
+            in: "<img src=\"\(outside.path)\" />",
+            baseDirectory: approved
+        )
+
+        #expect(!result.html.contains("src="))
+        #expect(result.blockedLocalImageCount == 1)
+    }
+
+    @Test("Remote image URLs are blocked until their exact host is approved")
+    func remoteImagesRequireHostApproval() {
+        let html = """
+        <img src="HTTPS://Tracker.Example/pixel.png?id=1" alt="One" />
+        <img src="https://other.example/pixel.png" alt="Two" />
+        """
+
+        let blocked = MarkdownImageInliner.makeSafeHTML(in: html, baseDirectory: nil)
+        #expect(blocked.remoteHosts == ["tracker.example", "other.example"])
+        #expect(blocked.blockedRemoteHosts == blocked.remoteHosts)
+        #expect(!blocked.html.lowercased().contains("https://"))
+
+        let partiallyApproved = MarkdownImageInliner.makeSafeHTML(
+            in: html,
+            baseDirectory: nil,
+            approvedRemoteHosts: ["tracker.example"]
+        )
+        #expect(partiallyApproved.html.contains("HTTPS://Tracker.Example/pixel.png?id=1"))
+        #expect(!partiallyApproved.html.contains("https://other.example"))
+        #expect(partiallyApproved.blockedRemoteHosts == ["other.example"])
+    }
+
+    @Test("External SVG resources and invalid data images are neutralized")
+    func activeImagePayloadsAreNeutralized() throws {
+        let dir = createTempDir()
+        defer { cleanup(dir) }
+        try #"<svg><image href="https://tracker.example/pixel.png" /></svg>"#.write(
+            to: dir.appendingPathComponent("external.svg"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let html = #"<img src="external.svg" /><img src="data:image/png;base64,abc123" />"#
+
+        let result = MarkdownImageInliner.makeSafeHTML(in: html, baseDirectory: dir)
+
+        #expect(!result.html.contains("src="))
+        #expect(result.blockedLocalImageCount == 2)
     }
 
     // MARK: - Helpers

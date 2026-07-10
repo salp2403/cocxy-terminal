@@ -106,7 +106,10 @@ enum NotebookHTMLExporter {
         switch cell.kind {
         case .markdown:
             let result = MarkdownParser().parse(cell.source)
-            let html = MarkdownHTMLRenderer.render(result)
+            let html = MarkdownImageInliner.makeSafeHTML(
+                in: MarkdownHTMLRenderer.render(result),
+                baseDirectory: nil
+            ).html
             return """
             <section class="notebook-cell notebook-cell-markdown" data-cell-index="\(index)">
             \(html)

@@ -1697,6 +1697,8 @@
 "markdown.toolbar.mode.tooltip" = "Switch between Source, Preview, and Split view";
 "markdown.toolbar.gitBlame" = "Show Git Blame";
 "markdown.toolbar.gitDiff" = "Show Git Diff";
+"markdown.toolbar.loadRemoteImages" = "Load Remote Images";
+"markdown.toolbar.disableRemoteImages" = "Disable Remote Images";
 "markdown.toolbar.copyAs" = "Copy As";
 "markdown.toolbar.exportPDF" = "Export PDF (Cmd+Shift+E)";
 "markdown.toolbar.exportHTML" = "Export HTML (Cmd+Shift+H)";
@@ -1708,6 +1710,14 @@
 "markdown.exportPanel.html.message" = "Choose where to save the HTML export.";
 "markdown.exportPanel.slides.title" = "Export Markdown Slides";
 "markdown.exportPanel.slides.message" = "Choose where to save the slides export.";
+"markdown.remoteImages.load.title" = "Load Remote Images?";
+"markdown.remoteImages.load.message" = "This document requests images from:\n\n%@\n\nLoading them shares your network address and request metadata with those hosts.";
+"markdown.remoteImages.load.action" = "Load Images";
+"markdown.remoteImages.disable.title" = "Disable Remote Images?";
+"markdown.remoteImages.disable.message" = "Remote images will be blocked again for this document.";
+"markdown.remoteImages.disable.action" = "Disable";
+"markdown.remoteImages.failed.title" = "Remote Images Remain Blocked";
+"markdown.remoteImages.failed.message" = "Cocxy could not install the WebKit image policy for this document.";
 "markdown.toolbar.toggleSidebar" = "Toggle Sidebar (Cmd+Shift+O)";
 "markdown.toolbar.reloadFile" = "Reload File (Cmd+R)";
 "markdown.toolbar.copyAs.markdown" = "Copy as Markdown";

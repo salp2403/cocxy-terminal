@@ -1697,6 +1697,8 @@
 "markdown.toolbar.mode.tooltip" = "Cambiar entre Fuente, Previa y Dividida";
 "markdown.toolbar.gitBlame" = "Mostrar autoría Git";
 "markdown.toolbar.gitDiff" = "Mostrar diferencias Git";
+"markdown.toolbar.loadRemoteImages" = "Cargar imágenes remotas";
+"markdown.toolbar.disableRemoteImages" = "Bloquear imágenes remotas";
 "markdown.toolbar.copyAs" = "Copiar como";
 "markdown.toolbar.exportPDF" = "Exportar PDF (Cmd+Shift+E)";
 "markdown.toolbar.exportHTML" = "Exportar HTML (Cmd+Shift+H)";
@@ -1708,6 +1710,14 @@
 "markdown.exportPanel.html.message" = "Elige dónde guardar la exportación HTML.";
 "markdown.exportPanel.slides.title" = "Exportar diapositivas Markdown";
 "markdown.exportPanel.slides.message" = "Elige dónde guardar la exportación de diapositivas.";
+"markdown.remoteImages.load.title" = "¿Cargar imágenes remotas?";
+"markdown.remoteImages.load.message" = "Este documento solicita imágenes de:\n\n%@\n\nAl cargarlas, compartes tu dirección de red y metadatos de la solicitud con esos hosts.";
+"markdown.remoteImages.load.action" = "Cargar imágenes";
+"markdown.remoteImages.disable.title" = "¿Bloquear imágenes remotas?";
+"markdown.remoteImages.disable.message" = "Las imágenes remotas volverán a bloquearse para este documento.";
+"markdown.remoteImages.disable.action" = "Bloquear";
+"markdown.remoteImages.failed.title" = "Las imágenes remotas siguen bloqueadas";
+"markdown.remoteImages.failed.message" = "Cocxy no pudo instalar la política de imágenes de WebKit para este documento.";
 "markdown.toolbar.toggleSidebar" = "Alternar barra lateral (Cmd+Shift+O)";
 "markdown.toolbar.reloadFile" = "Recargar archivo (Cmd+R)";
 "markdown.toolbar.copyAs.markdown" = "Copiar como Markdown";
