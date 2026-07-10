@@ -213,15 +213,20 @@ struct PluginValidator: Sendable {
                 )
             }
 
-            let manifestURL = pluginDirectory.appendingPathComponent(manifest.manifestFileName)
-            guard let manifestContent = try? String(contentsOf: manifestURL, encoding: .utf8) else {
+            let payload: Data
+            do {
+                payload = try PluginPackageSignaturePayload.payload(
+                    at: pluginDirectory,
+                    manifestFileName: manifest.manifestFileName
+                )
+            } catch {
                 return PluginValidationReport(
-                    signatureStatus: .presentButUnverified,
-                    warnings: [.signaturePresentButUnverified]
+                    signatureStatus: .invalid,
+                    warnings: [.invalidSignature]
                 )
             }
             let verification = SignatureVerifier().verify(
-                payload: PluginSignaturePayload.canonicalManifestPayload(from: manifestContent),
+                payload: payload,
                 artifact: artifact,
                 publicKey: publicKey
             )
@@ -260,30 +265,6 @@ struct PluginValidator: Sendable {
         guard range != nil, !id.contains("..") else {
             throw PluginValidationError.unsafePluginID(id)
         }
-    }
-}
-
-enum PluginSignaturePayload {
-    private static let signatureKeys: Set<String> = [
-        "signature",
-        "signature-algorithm",
-        "signature-key-id",
-        "signature-author",
-        "signature-timestamp",
-        "signature-payload-sha256",
-    ]
-
-    static func canonicalManifestPayload(from content: String) -> Data {
-        var lines = content.components(separatedBy: .newlines).filter { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard let separator = trimmed.firstIndex(of: "=") else { return true }
-            let key = trimmed[..<separator].trimmingCharacters(in: .whitespaces)
-            return !signatureKeys.contains(key)
-        }
-        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
-            lines.removeLast()
-        }
-        return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 }
 

@@ -119,24 +119,11 @@ struct PluginMarketplaceSwiftTestingTests {
         capabilities = ["environment-read"]
         """
         let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
-        let artifact = try SignatureSigner().sign(
-            payload: Data((unsignedManifest + "\n").utf8),
-            author: "Cocxy",
+        _ = try writeSignedPluginManifest(
+            unsignedManifest,
+            to: pluginDirectory,
             keyPair: keyPair,
             timestamp: Date(timeIntervalSince1970: 1_800_000_000)
-        )
-        try (unsignedManifest + """
-
-        signature = "\(artifact.signature)"
-        signature-algorithm = "\(artifact.algorithm.rawValue)"
-        signature-key-id = "\(artifact.keyID)"
-        signature-author = "\(artifact.author)"
-        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
-        signature-payload-sha256 = "\(artifact.payloadSHA256)"
-        """).write(
-            to: pluginDirectory.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
-            atomically: true,
-            encoding: .utf8
         )
         let manifest = try PluginRegistry.loadManifest(from: pluginDirectory)
         var registry = TrustedAuthorRegistry()
@@ -166,23 +153,17 @@ struct PluginMarketplaceSwiftTestingTests {
         author = "Cocxy"
         """
         let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
-        let artifact = try SignatureSigner().sign(
-            payload: Data((unsignedManifest + "\n").utf8),
-            author: "Cocxy",
+        let artifact = try writeSignedPluginManifest(
+            unsignedManifest,
+            to: pluginDirectory,
             keyPair: keyPair,
             timestamp: Date(timeIntervalSince1970: 1_800_000_000)
         )
-        try """
+        try signedManifestContent("""
         name = "Tampered Helper"
         version = "2.0.0"
         author = "Cocxy"
-        signature = "\(artifact.signature)"
-        signature-algorithm = "\(artifact.algorithm.rawValue)"
-        signature-key-id = "\(artifact.keyID)"
-        signature-author = "\(artifact.author)"
-        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
-        signature-payload-sha256 = "\(artifact.payloadSHA256)"
-        """.write(
+        """, artifact: artifact).write(
             to: pluginDirectory.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
             atomically: true,
             encoding: .utf8
@@ -215,23 +196,17 @@ struct PluginMarketplaceSwiftTestingTests {
         author = "Cocxy"
         """
         let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
-        let artifact = try SignatureSigner().sign(
-            payload: Data((unsignedManifest + "\n").utf8),
-            author: "Cocxy",
+        let artifact = try writeSignedPluginManifest(
+            unsignedManifest,
+            to: repo,
             keyPair: keyPair,
             timestamp: Date(timeIntervalSince1970: 1_800_000_000)
         )
-        try """
+        try signedManifestContent("""
         name = "Signed Plugin"
         version = "9.9.9"
         author = "Cocxy"
-        signature = "\(artifact.signature)"
-        signature-algorithm = "\(artifact.algorithm.rawValue)"
-        signature-key-id = "\(artifact.keyID)"
-        signature-author = "\(artifact.author)"
-        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
-        signature-payload-sha256 = "\(artifact.payloadSHA256)"
-        """.write(
+        """, artifact: artifact).write(
             to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
             atomically: true,
             encoding: .utf8
@@ -250,6 +225,47 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(!FileManager.default.fileExists(
             atPath: pluginsDirectory.appendingPathComponent("signed-plugin").path
         ))
+    }
+
+    @Test("validator rejects a signed plugin after an event script changes")
+    func validatorRejectsTamperedEventScript() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginDirectory = root.appendingPathComponent("script-signed", isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try "echo trusted\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        _ = try writeSignedPluginManifest(
+            """
+            name = "Script Signed"
+            version = "1.0.0"
+            author = "Cocxy"
+            events = ["session-start"]
+            """,
+            to: pluginDirectory,
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: "Cocxy", publicKey: keyPair.publicKey)
+        let validator = PluginValidator(trustedAuthors: registry)
+        let manifest = try PluginRegistry.loadManifest(from: pluginDirectory)
+
+        #expect(try validator.validate(
+            manifest: manifest,
+            sourceURL: pluginDirectory,
+            pluginDirectory: pluginDirectory
+        ).signatureStatus == .verified)
+
+        try "echo substituted\n".write(to: scriptURL, atomically: true, encoding: .utf8)
+        let tampered = try validator.validate(
+            manifest: manifest,
+            sourceURL: pluginDirectory,
+            pluginDirectory: pluginDirectory
+        )
+        #expect(tampered.signatureStatus == .invalid)
+        #expect(!tampered.isInstallable)
     }
 
     @Test("installer stages local repo and installed plugin loads next scan")
@@ -1012,6 +1028,47 @@ struct PluginMarketplaceSwiftTestingTests {
             "safe-plugin|session-start|environment-read|\(expectedDirectory)",
             "safe-plugin|session-start|environment-read|\(privateVarDirectory)",
         ].contains(marker))
+    }
+
+    private func writeSignedPluginManifest(
+        _ unsignedManifest: String,
+        to pluginDirectory: URL,
+        keyPair: SignatureKeyPair,
+        timestamp: Date
+    ) throws -> SignedArtifact {
+        let manifestURL = pluginDirectory.appendingPathComponent(
+            PluginManifest.marketplaceManifestFileName
+        )
+        let normalized = unsignedManifest.trimmingCharacters(in: .newlines) + "\n"
+        try normalized.write(to: manifestURL, atomically: true, encoding: .utf8)
+        let payload = try PluginPackageSignaturePayload.payload(at: pluginDirectory)
+        let artifact = try SignatureSigner().sign(
+            payload: payload,
+            author: keyPair.author,
+            keyPair: keyPair,
+            timestamp: timestamp
+        )
+        try signedManifestContent(normalized, artifact: artifact).write(
+            to: manifestURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        return artifact
+    }
+
+    private func signedManifestContent(
+        _ unsignedManifest: String,
+        artifact: SignedArtifact
+    ) -> String {
+        let normalized = unsignedManifest.trimmingCharacters(in: .newlines) + "\n"
+        return normalized + """
+        signature = "\(artifact.signature)"
+        signature-algorithm = "\(artifact.algorithm.rawValue)"
+        signature-key-id = "\(artifact.keyID)"
+        signature-author = "\(artifact.author)"
+        signature-timestamp = "\(ISO8601DateFormatter.cocxySignature.string(from: artifact.timestamp))"
+        signature-payload-sha256 = "\(artifact.payloadSHA256)"
+        """
     }
 
     private func repositoryRoot() -> URL {

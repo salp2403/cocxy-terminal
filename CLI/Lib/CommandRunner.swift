@@ -769,34 +769,12 @@ public struct CommandRunner {
                 return try Data(contentsOf: manifestURL)
             }
             let pluginURL = url.appendingPathComponent("cocxy-plugin.toml")
-            if FileManager.default.fileExists(atPath: pluginURL.path),
-               let content = try? String(contentsOf: pluginURL, encoding: .utf8) {
-                return Self.canonicalPluginManifestPayload(from: content)
+            if FileManager.default.fileExists(atPath: pluginURL.path) {
+                return try PluginPackageSignaturePayload.payload(at: url)
             }
             throw CLIError.invalidArgument(command: "signatures", argument: url.path, reason: "Directory has no supported manifest")
         }
         return try Data(contentsOf: url)
-    }
-
-    private static func canonicalPluginManifestPayload(from content: String) -> Data {
-        let signatureKeys: Set<String> = [
-            "signature",
-            "signature-algorithm",
-            "signature-key-id",
-            "signature-author",
-            "signature-timestamp",
-            "signature-payload-sha256",
-        ]
-        var lines = content.components(separatedBy: .newlines).filter { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard let separator = trimmed.firstIndex(of: "=") else { return true }
-            let key = trimmed[..<separator].trimmingCharacters(in: .whitespaces)
-            return !signatureKeys.contains(key)
-        }
-        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
-            lines.removeLast()
-        }
-        return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 
     private func signatureSidecarURL(for url: URL) -> URL {
