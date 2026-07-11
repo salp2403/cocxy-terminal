@@ -665,20 +665,11 @@ struct AgentSessionRunnerSwiftTestingTests {
                 "content": .string("let value = 2\n"),
             ]
         )
-        let request = AgentToolApprovalRequest(
-            call: call,
-            reason: .diffPreviewRequired(toolID: "write_file"),
-            preview: AgentToolApprovalPreview(
-                kind: .diff,
-                title: "Review changes to Sources/App.swift",
-                body: "--- a/Sources/App.swift\n+++ b/Sources/App.swift\n"
-            )
-        )
-        let history = [
-            AgentMessage(id: "u1", role: .user, content: "Update the file"),
-            AgentMessage(id: "a1", role: .assistant, content: "I need to edit Sources/App.swift."),
-        ]
         let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "I need to edit Sources/App.swift.",
+                toolCalls: [call]
+            ),
             AgentLLMResponse(content: "Updated Sources/App.swift.", toolCalls: []),
         ])
         let runner = AgentSessionRunner(
@@ -686,16 +677,27 @@ struct AgentSessionRunnerSwiftTestingTests {
             workspaceRootProvider: { workspace },
             conversationID: "agent-approval-test"
         )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            maxIterations: 4,
+            conversationStorageDir: conversationRoot.path
+        )
+
+        let pending = try await runner.run(
+            prompt: "Update the file",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a bound write approval request")
+            return
+        }
 
         let result = try await runner.approve(
             request: request,
-            history: history,
-            configuration: AgentModeConfig(
-                enabled: true,
-                preferredProvider: .openai,
-                maxIterations: 4,
-                conversationStorageDir: conversationRoot.path
-            )
+            history: pending.messages,
+            configuration: configuration
         )
         let persisted = try AgentConversationStore(rootDirectory: conversationRoot)
             .load(conversationID: "agent-approval-test")
@@ -704,7 +706,573 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(try String(contentsOf: target, encoding: .utf8) == "let value = 2\n")
         #expect(result.messages.map(\.role) == [.user, .assistant, .tool, .assistant])
         #expect(result.messages.last?.content == "Updated Sources/App.swift.")
-        #expect(persisted.map(\.role) == [.tool, .assistant])
+        #expect(request.binding != nil)
+        #expect(persisted.map(\.role) == [.user, .assistant, .tool, .assistant])
+    }
+
+    @Test("write approval fails closed when the active workspace changes")
+    @MainActor
+    func writeApprovalRejectsActiveWorkspaceChange() async throws {
+        let workspaceA = temporaryDirectory(named: "write-drift-a")
+        let workspaceB = temporaryDirectory(named: "write-drift-b")
+        let conversationRoot = temporaryDirectory(named: "write-drift-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspaceA)
+            try? FileManager.default.removeItem(at: workspaceB)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let targetA = workspaceA.appendingPathComponent("target.txt")
+        let targetB = workspaceB.appendingPathComponent("target.txt")
+        try "workspace-a\n".write(to: targetA, atomically: true, encoding: .utf8)
+        try "workspace-b\n".write(to: targetB, atomically: true, encoding: .utf8)
+        let call = AgentToolCall(
+            id: "call-write-drift",
+            toolID: "write_file",
+            arguments: [
+                "path": .string("target.txt"),
+                "content": .string("approved\n"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this write.", toolCalls: [call]),
+            AgentLLMResponse(content: "Write completed."),
+        ])
+        let selection = MutableSessionWorkspaceRoot(workspaceA)
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { selection.rootURL },
+            conversationID: "write-workspace-drift"
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+
+        let pending = try await runner.run(
+            prompt: "Update target.txt",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a write approval request")
+            return
+        }
+        #expect(request.preview.body.contains("-workspace-a"))
+        selection.rootURL = workspaceB
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(try String(contentsOf: targetA, encoding: .utf8) == "workspace-a\n")
+        #expect(try String(contentsOf: targetB, encoding: .utf8) == "workspace-b\n")
+    }
+
+    @Test("approval call ID cannot authorize changed file arguments")
+    func approvalCallIDCannotAuthorizeChangedArguments() async throws {
+        let workspace = temporaryDirectory(named: "write-call-identity-workspace")
+        let conversationRoot = temporaryDirectory(named: "write-call-identity-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let target = workspace.appendingPathComponent("target.txt")
+        try "original\n".write(to: target, atomically: true, encoding: .utf8)
+        let call = AgentToolCall(
+            id: "call-write-identity",
+            toolID: "write_file",
+            arguments: [
+                "path": .string("target.txt"),
+                "content": .string("previewed-change\n"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this write.", toolCalls: [call]),
+            AgentLLMResponse(content: "Write completed."),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "write-call-identity"
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
+            prompt: "Update target.txt",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a write approval request")
+            return
+        }
+        let changedCall = AgentToolCall(
+            id: request.call.id,
+            toolID: request.call.toolID,
+            arguments: [
+                "path": .string("target.txt"),
+                "content": .string("different-change\n"),
+            ]
+        )
+        let changedRequest = AgentToolApprovalRequest(
+            call: changedCall,
+            reason: request.reason,
+            preview: request.preview,
+            binding: request.binding
+        )
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: changedRequest,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(try String(contentsOf: target, encoding: .utf8) == "original\n")
+    }
+
+    @Test("apply_diff approval fails closed when the active workspace changes")
+    @MainActor
+    func applyDiffApprovalRejectsActiveWorkspaceChange() async throws {
+        let workspaceA = temporaryDirectory(named: "apply-drift-a")
+        let workspaceB = temporaryDirectory(named: "apply-drift-b")
+        let conversationRoot = temporaryDirectory(named: "apply-drift-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspaceA)
+            try? FileManager.default.removeItem(at: workspaceB)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let targetA = workspaceA.appendingPathComponent("target.txt")
+        let targetB = workspaceB.appendingPathComponent("target.txt")
+        try "alpha-a\n".write(to: targetA, atomically: true, encoding: .utf8)
+        try "alpha-b\n".write(to: targetB, atomically: true, encoding: .utf8)
+        let call = AgentToolCall(
+            id: "call-apply-drift",
+            toolID: "apply_diff",
+            arguments: [
+                "path": .string("target.txt"),
+                "oldText": .string("alpha-a"),
+                "newText": .string("approved"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this diff.", toolCalls: [call]),
+            AgentLLMResponse(content: "Diff completed."),
+        ])
+        let selection = MutableSessionWorkspaceRoot(workspaceA)
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { selection.rootURL },
+            conversationID: "apply-workspace-drift"
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+
+        let pending = try await runner.run(
+            prompt: "Apply the change",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected an apply_diff approval request")
+            return
+        }
+        selection.rootURL = workspaceB
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(try String(contentsOf: targetA, encoding: .utf8) == "alpha-a\n")
+        #expect(try String(contentsOf: targetB, encoding: .utf8) == "alpha-b\n")
+    }
+
+    @Test("command approval binds both implicit and explicit cwd to the preview workspace")
+    @MainActor
+    func commandApprovalRejectsWorkspaceChangeForImplicitAndExplicitCWD() async throws {
+        let cwdValues: [String?] = [nil, "Sources"]
+        for (index, rawCWD) in cwdValues.enumerated() {
+            let workspaceA = temporaryDirectory(named: "command-drift-a-\(index)")
+            let workspaceB = temporaryDirectory(named: "command-drift-b-\(index)")
+            let conversationRoot = temporaryDirectory(named: "command-drift-conversations-\(index)")
+            defer {
+                try? FileManager.default.removeItem(at: workspaceA)
+                try? FileManager.default.removeItem(at: workspaceB)
+                try? FileManager.default.removeItem(at: conversationRoot)
+            }
+            try FileManager.default.createDirectory(
+                at: workspaceA.appendingPathComponent("Sources", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: workspaceB.appendingPathComponent("Sources", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            var arguments: [String: AgentJSONValue] = ["command": .string("printf approved")]
+            if let rawCWD {
+                arguments["cwd"] = .string(rawCWD)
+            }
+            let call = AgentToolCall(
+                id: "call-command-drift-\(index)",
+                toolID: "run_command",
+                arguments: arguments
+            )
+            let provider = ScriptedSessionRunnerClient(responses: [
+                AgentLLMResponse(content: "Review this command.", toolCalls: [call]),
+                AgentLLMResponse(content: "Command completed."),
+            ])
+            let processRunner = RecordingSessionProcessRunner(results: [
+                AgentProcessResult(exitCode: 0, stdout: "approved", stderr: ""),
+            ])
+            let selection = MutableSessionWorkspaceRoot(workspaceA)
+            let runner = AgentSessionRunner(
+                clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+                workspaceRootProvider: { selection.rootURL },
+                conversationID: "command-workspace-drift-\(index)",
+                processRunner: processRunner
+            )
+            let configuration = AgentModeConfig(
+                enabled: true,
+                preferredProvider: .openai,
+                conversationStorageDir: conversationRoot.path
+            )
+
+            let pending = try await runner.run(
+                prompt: "Run the command",
+                history: [],
+                configuration: configuration
+            )
+            guard case .permissionRequired(let request) = pending.stopReason else {
+                Issue.record("Expected a command approval request")
+                continue
+            }
+            selection.rootURL = workspaceB
+
+            await #expect(throws: AgentToolApprovalError.staleContext) {
+                _ = try await runner.approve(
+                    request: request,
+                    history: pending.messages,
+                    configuration: configuration
+                )
+            }
+            #expect(processRunner.calls.isEmpty)
+        }
+    }
+
+    @Test("write approval rejects a retargeted relative symlink in the same workspace")
+    func writeApprovalRejectsRetargetedFile() async throws {
+        let workspace = temporaryDirectory(named: "write-retarget-workspace")
+        let conversationRoot = temporaryDirectory(named: "write-retarget-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let firstTarget = workspace.appendingPathComponent("first.txt")
+        let secondTarget = workspace.appendingPathComponent("second.txt")
+        let link = workspace.appendingPathComponent("target.txt")
+        try "first\n".write(to: firstTarget, atomically: true, encoding: .utf8)
+        try "second\n".write(to: secondTarget, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: firstTarget)
+        let call = AgentToolCall(
+            id: "call-write-retarget",
+            toolID: "write_file",
+            arguments: [
+                "path": .string("target.txt"),
+                "content": .string("approved\n"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this write.", toolCalls: [call]),
+            AgentLLMResponse(content: "Write completed."),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "write-retarget"
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
+            prompt: "Update target.txt",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a write approval request")
+            return
+        }
+        try FileManager.default.removeItem(at: link)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: secondTarget)
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(try String(contentsOf: firstTarget, encoding: .utf8) == "first\n")
+        #expect(try String(contentsOf: secondTarget, encoding: .utf8) == "second\n")
+    }
+
+    @Test("command approval rejects a retargeted cwd in the same workspace")
+    func commandApprovalRejectsRetargetedCWD() async throws {
+        let workspace = temporaryDirectory(named: "command-retarget-workspace")
+        let conversationRoot = temporaryDirectory(named: "command-retarget-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let firstDirectory = workspace.appendingPathComponent("First", isDirectory: true)
+        let secondDirectory = workspace.appendingPathComponent("Second", isDirectory: true)
+        let link = workspace.appendingPathComponent("Current", isDirectory: true)
+        try FileManager.default.createDirectory(at: firstDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: firstDirectory)
+        let call = AgentToolCall(
+            id: "call-command-retarget",
+            toolID: "run_command",
+            arguments: [
+                "command": .string("printf approved"),
+                "cwd": .string("Current"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this command.", toolCalls: [call]),
+            AgentLLMResponse(content: "Command completed."),
+        ])
+        let processRunner = RecordingSessionProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "approved", stderr: ""),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "command-retarget",
+            processRunner: processRunner
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
+            prompt: "Run the command",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a command approval request")
+            return
+        }
+        try FileManager.default.removeItem(at: link)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: secondDirectory)
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(processRunner.calls.isEmpty)
+    }
+
+    @Test("write approval rejects file content changed after preview")
+    func writeApprovalRejectsChangedFileContents() async throws {
+        let workspace = temporaryDirectory(named: "write-content-workspace")
+        let conversationRoot = temporaryDirectory(named: "write-content-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let target = workspace.appendingPathComponent("target.txt")
+        try "previewed\n".write(to: target, atomically: true, encoding: .utf8)
+        let call = AgentToolCall(
+            id: "call-write-content",
+            toolID: "write_file",
+            arguments: [
+                "path": .string("target.txt"),
+                "content": .string("approved\n"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this write.", toolCalls: [call]),
+            AgentLLMResponse(content: "Write completed."),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "write-content-change"
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
+            prompt: "Update target.txt",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a write approval request")
+            return
+        }
+        let handle = try FileHandle(forWritingTo: target)
+        try handle.truncate(atOffset: 0)
+        try handle.write(contentsOf: Data("changed-after-preview\n".utf8))
+        try handle.close()
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(try String(contentsOf: target, encoding: .utf8) == "changed-after-preview\n")
+    }
+
+    @Test("equivalent canonical workspace root resumes an approved explicit cwd")
+    @MainActor
+    func equivalentCanonicalWorkspaceRootResumesCommand() async throws {
+        let container = temporaryDirectory(named: "canonical-root-container")
+        let conversationRoot = temporaryDirectory(named: "canonical-root-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: container)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let workspace = container.appendingPathComponent("Workspace", isDirectory: true)
+        let sources = workspace.appendingPathComponent("Sources", isDirectory: true)
+        let alias = container.appendingPathComponent("WorkspaceAlias", isDirectory: true)
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: workspace)
+        let call = AgentToolCall(
+            id: "call-canonical-root",
+            toolID: "run_command",
+            arguments: [
+                "command": .string("printf approved"),
+                "cwd": .string("Sources"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this command.", toolCalls: [call]),
+            AgentLLMResponse(content: "Command completed."),
+        ])
+        let processRunner = RecordingSessionProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "approved", stderr: ""),
+        ])
+        let selection = MutableSessionWorkspaceRoot(workspace)
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { selection.rootURL },
+            conversationID: "canonical-root",
+            processRunner: processRunner,
+            securitySandboxConfigProvider: {
+                SecuritySandboxConfig(
+                    pluginsStrict: true,
+                    agentsIsolated: false,
+                    mcpIsolated: true,
+                    auditLogEnabled: false,
+                    warnOnGrant: true
+                )
+            }
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
+            prompt: "Run the command",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected a command approval request")
+            return
+        }
+        selection.rootURL = alias
+
+        let result = try await runner.approve(
+            request: request,
+            history: pending.messages,
+            configuration: configuration
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(processRunner.calls.map(\.workingDirectory) == [
+            sources.standardizedFileURL.resolvingSymlinksInPath(),
+        ])
+    }
+
+    @Test("runner approval normally resumes a pending apply_diff")
+    func runnerApprovalResumesPendingApplyDiff() async throws {
+        let workspace = temporaryDirectory(named: "apply-normal-workspace")
+        let conversationRoot = temporaryDirectory(named: "apply-normal-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        let target = workspace.appendingPathComponent("target.txt")
+        try "before\n".write(to: target, atomically: true, encoding: .utf8)
+        let call = AgentToolCall(
+            id: "call-apply-normal",
+            toolID: "apply_diff",
+            arguments: [
+                "path": .string("target.txt"),
+                "oldText": .string("before"),
+                "newText": .string("after"),
+            ]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "Review this diff.", toolCalls: [call]),
+            AgentLLMResponse(content: "Diff completed."),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "apply-normal"
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
+            prompt: "Apply the change",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected an apply_diff approval request")
+            return
+        }
+
+        let result = try await runner.approve(
+            request: request,
+            history: pending.messages,
+            configuration: configuration
+        )
+
+        #expect(result.stopReason == .completed)
+        #expect(try String(contentsOf: target, encoding: .utf8) == "after\n")
     }
 
     @Test("runner approval resumes a pending user question with the human answer")
@@ -839,6 +1407,15 @@ struct AgentSessionRunnerSwiftTestingTests {
 
         \(body)
         """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+}
+
+@MainActor
+private final class MutableSessionWorkspaceRoot {
+    var rootURL: URL?
+
+    init(_ rootURL: URL?) {
+        self.rootURL = rootURL
     }
 }
 

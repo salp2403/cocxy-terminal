@@ -117,6 +117,9 @@ struct AgentLoopSwiftTestingTests {
 
     @Test("loop stops before executing a command that requires approval")
     func loopStopsBeforeExecutingCommandThatRequiresApproval() async throws {
+        let workspaceRoot = temporaryDirectory()
+        try FileManager.default.createDirectory(at: workspaceRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: workspaceRoot) }
         let provider = ScriptedAgentLLMClient(responses: [
             AgentLLMResponse(
                 content: "I need to run tests.",
@@ -133,6 +136,9 @@ struct AgentLoopSwiftTestingTests {
         let loop = AgentLoop(
             provider: provider,
             toolExecutor: executor,
+            toolPreviewer: AgentLocalToolExecutor(
+                workspace: AgentWorkspace(rootURL: workspaceRoot)
+            ),
             idGenerator: StableAgentIDGenerator(prefix: "approval")
         )
 
@@ -154,6 +160,7 @@ struct AgentLoopSwiftTestingTests {
         ))
         #expect(request.preview.kind == .command)
         #expect(request.preview.body.contains("swift test --filter AgentLoopSwiftTestingTests"))
+        #expect(request.binding != nil)
         #expect(calls.isEmpty)
         #expect(result.messages.map(\.role) == [.user, .assistant])
     }
@@ -242,6 +249,38 @@ struct AgentLoopSwiftTestingTests {
 
         #expect(result.stopReason == .denied(.previewUnavailable(toolID: "write_file")))
         #expect(calls.isEmpty)
+    }
+
+    @Test("loop denies workspace-bound approval when preview has no identity binding")
+    func loopDeniesUnboundWorkspaceApprovalPreview() async throws {
+        let provider = ScriptedAgentLLMClient(responses: [
+            AgentLLMResponse(
+                content: "I need to run tests.",
+                toolCalls: [
+                    AgentToolCall(
+                        id: "call-unbound",
+                        toolID: "run_command",
+                        arguments: ["command": .string("swift test --filter AgentLoop")]
+                    ),
+                ]
+            ),
+        ])
+        let executor = RecordingAgentToolExecutor(results: [])
+        let loop = AgentLoop(
+            provider: provider,
+            toolExecutor: executor,
+            toolPreviewer: UnboundAgentToolPreviewer(),
+            idGenerator: StableAgentIDGenerator(prefix: "unbound")
+        )
+
+        let result = try await loop.run(
+            conversationID: "conv",
+            userPrompt: "Run tests",
+            configuration: AgentModeConfig(maxIterations: 4)
+        )
+
+        #expect(result.stopReason == .denied(.previewUnavailable(toolID: "run_command")))
+        #expect(await executor.calls.isEmpty)
     }
 
     @Test("loop denies dangerous commands before executor is called")
@@ -357,6 +396,16 @@ private struct ThrowingAgentToolPreviewer: AgentToolPreviewing {
 
     private enum PreviewError: Error {
         case failed
+    }
+}
+
+private struct UnboundAgentToolPreviewer: AgentToolPreviewing {
+    func preview(for call: AgentToolCall) async throws -> AgentToolApprovalPreview {
+        AgentToolApprovalPreview(
+            kind: .command,
+            title: "Approve command",
+            body: call.arguments["command"]?.stringValue ?? ""
+        )
     }
 }
 

@@ -36,19 +36,29 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Sources/App.swift")
         try "let value = 1\n".write(to: target, atomically: true, encoding: .utf8)
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: ["call-write"])
-        )
-
-        let result = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
             id: "call-write",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/App.swift"),
                 "content": .string("let value = 2\n"),
             ]
-        ))
+        )
+        let binding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: call)
+                .binding
+        )
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: [call.id],
+                workspaceBindingsByCallID: [call.id: binding]
+            )
+        )
+
+        let result = try await executor.execute(call)
         let content = try contentObject(result)
 
         #expect(result.status == .success)
@@ -63,24 +73,16 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let createdURL = root.appendingPathComponent("Sources/NewFile.swift")
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: [
-                "call-missing",
-                "call-create",
-                "call-sensitive",
-            ])
-        )
-
-        let missing = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let missingCall = AgentToolCall(
             id: "call-missing",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/NewFile.swift"),
                 "content": .string("let created = true\n"),
             ]
-        ))
-        let created = try await executor.execute(AgentToolCall(
+        )
+        let createCall = AgentToolCall(
             id: "call-create",
             toolID: "write_file",
             arguments: [
@@ -88,8 +90,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "content": .string("let created = true\n"),
                 "create": .bool(true),
             ]
-        ))
-        let sensitive = try await executor.execute(AgentToolCall(
+        )
+        let sensitiveCall = AgentToolCall(
             id: "call-sensitive",
             toolID: "write_file",
             arguments: [
@@ -97,7 +99,31 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "content": .string("API_KEY=secret\n"),
                 "create": .bool(true),
             ]
-        ))
+        )
+        let bindings: [String: AgentToolApprovalBinding] = try [missingCall, createCall, sensitiveCall]
+            .reduce(into: [:]) { result, call in
+            let target = call.id == sensitiveCall.id
+                ? root.appendingPathComponent(".env")
+                : createdURL
+            result[call.id] = try testBinding(
+                for: call,
+                workspace: workspace,
+                targetURL: target,
+                targetKind: .writeFile,
+                observedFileContents: Data()
+            )
+        }
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: Set(bindings.keys),
+                workspaceBindingsByCallID: bindings
+            )
+        )
+
+        let missing = try await executor.execute(missingCall)
+        let created = try await executor.execute(createCall)
+        let sensitive = try await executor.execute(sensitiveCall)
 
         #expect(missing.status == .failure)
         #expect(missing.error?.code == "workspace_not_found")
@@ -113,13 +139,10 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Sources/App.swift")
-        try "alpha\nbeta\nalpha\n".write(to: target, atomically: true, encoding: .utf8)
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: ["call-ambiguous", "call-apply"])
-        )
-
-        let ambiguous = try await executor.execute(AgentToolCall(
+        let originalContent = "alpha\nbeta\nalpha\n"
+        try originalContent.write(to: target, atomically: true, encoding: .utf8)
+        let workspace = AgentWorkspace(rootURL: root)
+        let ambiguousCall = AgentToolCall(
             id: "call-ambiguous",
             toolID: "apply_diff",
             arguments: [
@@ -127,8 +150,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "oldText": .string("alpha"),
                 "newText": .string("gamma"),
             ]
-        ))
-        let applied = try await executor.execute(AgentToolCall(
+        )
+        let applyCall = AgentToolCall(
             id: "call-apply",
             toolID: "apply_diff",
             arguments: [
@@ -136,7 +159,27 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "oldText": .string("beta"),
                 "newText": .string("delta"),
             ]
-        ))
+        )
+        let bindings: [String: AgentToolApprovalBinding] = try [ambiguousCall, applyCall]
+            .reduce(into: [:]) { result, call in
+            result[call.id] = try testBinding(
+                for: call,
+                workspace: workspace,
+                targetURL: target,
+                targetKind: .applyDiffFile,
+                observedFileContents: Data(originalContent.utf8)
+            )
+        }
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: Set(bindings.keys),
+                workspaceBindingsByCallID: bindings
+            )
+        )
+
+        let ambiguous = try await executor.execute(ambiguousCall)
+        let applied = try await executor.execute(applyCall)
         let content = try contentObject(applied)
 
         #expect(ambiguous.status == .failure)
@@ -153,12 +196,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Sources/App.swift")
         try "alpha\nbeta\n".write(to: target, atomically: true, encoding: .utf8)
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: ["call-delete", "call-empty"])
-        )
-
-        let delete = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let deleteCall = AgentToolCall(
             id: "call-delete",
             toolID: "apply_diff",
             arguments: [
@@ -166,15 +205,40 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "oldText": .string("beta\n"),
                 "newText": .string(""),
             ]
-        ))
-        let empty = try await executor.execute(AgentToolCall(
+        )
+        let deleteBinding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: deleteCall)
+                .binding
+        )
+        let delete = try await AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: [deleteCall.id],
+                workspaceBindingsByCallID: [deleteCall.id: deleteBinding]
+            )
+        ).execute(deleteCall)
+
+        let emptyCall = AgentToolCall(
             id: "call-empty",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/App.swift"),
                 "content": .string(""),
             ]
-        ))
+        )
+        let emptyBinding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: emptyCall)
+                .binding
+        )
+        let empty = try await AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: [emptyCall.id],
+                workspaceBindingsByCallID: [emptyCall.id: emptyBinding]
+            )
+        ).execute(emptyCall)
 
         #expect(delete.status == .success)
         #expect(empty.status == .success)
@@ -188,14 +252,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let runner = RecordingLocalAgentProcessRunner(results: [
             AgentProcessResult(exitCode: 0, stdout: "ok\n", stderr: ""),
         ])
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedCommandCallIDs: ["call-run"]),
-            processRunner: runner,
-            shellExecutableURL: URL(fileURLWithPath: "/bin/zsh")
-        )
-
-        let result = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
             id: "call-run",
             toolID: "run_command",
             arguments: [
@@ -203,7 +261,23 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "cwd": .string("Sources"),
                 "timeoutSeconds": .number(5),
             ]
-        ))
+        )
+        let binding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: call)
+                .binding
+        )
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedCommandCallIDs: [call.id],
+                workspaceBindingsByCallID: [call.id: binding]
+            ),
+            processRunner: runner,
+            shellExecutableURL: URL(fileURLWithPath: "/bin/zsh")
+        )
+
+        let result = try await executor.execute(call)
         let content = try contentObject(result)
 
         #expect(result.status == .success)
@@ -239,10 +313,31 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let outsideWriteURL = sandboxRoot.appendingPathComponent("outside-write.txt")
         let allowedURL = root.appendingPathComponent("allowed.txt")
         try "outside-secret\n".write(to: outsideReadURL, atomically: true, encoding: .utf8)
-
+        let command = [
+            "cat ../\(outsideReadURL.lastPathComponent)",
+            "printf ok > allowed.txt",
+            "printf denied > ../\(outsideWriteURL.lastPathComponent)",
+        ].joined(separator: "; ")
+        let call = AgentToolCall(
+            id: "call-run",
+            toolID: "run_command",
+            arguments: [
+                "command": .string(command),
+                "timeoutSeconds": .number(5),
+            ]
+        )
+        let workspace = AgentWorkspace(rootURL: root)
+        let binding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: call)
+                .binding
+        )
         let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedCommandCallIDs: ["call-run"]),
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedCommandCallIDs: [call.id],
+                workspaceBindingsByCallID: [call.id: binding]
+            ),
             processRunner: AgentSandboxedProcessRunner(
                 base: AgentProcessRunner(),
                 workspaceURL: root
@@ -250,19 +345,7 @@ struct AgentLocalToolExecutorSwiftTestingTests {
             shellExecutableURL: URL(fileURLWithPath: "/bin/sh")
         )
 
-        let command = [
-            "cat ../\(outsideReadURL.lastPathComponent)",
-            "printf ok > allowed.txt",
-            "printf denied > ../\(outsideWriteURL.lastPathComponent)",
-        ].joined(separator: "; ")
-        let result = try await executor.execute(AgentToolCall(
-            id: "call-run",
-            toolID: "run_command",
-            arguments: [
-                "command": .string(command),
-                "timeoutSeconds": .number(5),
-            ]
-        ))
+        let result = try await executor.execute(call)
         let content = try contentObject(result)
 
         #expect(result.status == .success)
@@ -535,6 +618,27 @@ struct AgentLocalToolExecutorSwiftTestingTests {
             throw AgentLocalToolExecutorTestError.missingObjectContent
         }
         return object
+    }
+
+    private func testBinding(
+        for call: AgentToolCall,
+        workspace: AgentWorkspace,
+        targetURL: URL,
+        targetKind: AgentToolApprovalTargetKind,
+        observedFileContents: Data? = nil
+    ) throws -> AgentToolApprovalBinding {
+        try AgentToolApprovalBinding(
+            call: call,
+            preview: AgentToolApprovalPreview(
+                kind: targetKind == .commandWorkingDirectory ? .command : .diff,
+                title: "Test approval",
+                body: "Bound test preview"
+            ),
+            workspace: workspace,
+            targetURL: targetURL,
+            targetKind: targetKind,
+            observedFileContents: observedFileContents
+        )
     }
 }
 

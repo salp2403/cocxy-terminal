@@ -535,6 +535,10 @@ final class AgentPanelViewModel: ObservableObject {
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {
+            if error as? AgentToolApprovalError == .staleContext {
+                pendingApproval = nil
+                pendingApprovalResponseDraft = ""
+            }
             let description = AgentErrorPresentation.message(for: error)
             state = .failed(description)
             statusText = description

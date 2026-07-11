@@ -6,6 +6,7 @@ import Foundation
 struct AgentToolApprovalContext: Sendable, Equatable {
     let approvedWriteCallIDs: Set<String>
     let approvedCommandCallIDs: Set<String>
+    let workspaceBindingsByCallID: [String: AgentToolApprovalBinding]
     let approvedComputerUseCallIDs: Set<String>
     let computerUseAllowedWithoutApproval: Bool
     let approvedExternalToolCallIDs: Set<String>
@@ -15,6 +16,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
     init(
         approvedWriteCallIDs: Set<String> = [],
         approvedCommandCallIDs: Set<String> = [],
+        workspaceBindingsByCallID: [String: AgentToolApprovalBinding] = [:],
         approvedComputerUseCallIDs: Set<String> = [],
         computerUseAllowedWithoutApproval: Bool = false,
         approvedExternalToolCallIDs: Set<String> = [],
@@ -23,6 +25,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
     ) {
         self.approvedWriteCallIDs = approvedWriteCallIDs
         self.approvedCommandCallIDs = approvedCommandCallIDs
+        self.workspaceBindingsByCallID = workspaceBindingsByCallID
         self.approvedComputerUseCallIDs = approvedComputerUseCallIDs
         self.computerUseAllowedWithoutApproval = computerUseAllowedWithoutApproval
         self.approvedExternalToolCallIDs = approvedExternalToolCallIDs
@@ -37,6 +40,14 @@ struct AgentToolApprovalContext: Sendable, Equatable {
     func approvesCommand(callID: String, command: String) -> Bool {
         approvedCommandCallIDs.contains(callID)
             || commandAllowRules.contains { $0.allowsAutomaticApproval(for: command) }
+    }
+
+    func explicitlyApprovesCommand(callID: String) -> Bool {
+        approvedCommandCallIDs.contains(callID)
+    }
+
+    func workspaceBinding(callID: String) -> AgentToolApprovalBinding? {
+        workspaceBindingsByCallID[callID]
     }
 
     func approvesComputerUse(callID: String) -> Bool {
@@ -55,6 +66,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         AgentToolApprovalContext(
             approvedWriteCallIDs: approvedWriteCallIDs,
             approvedCommandCallIDs: approvedCommandCallIDs,
+            workspaceBindingsByCallID: workspaceBindingsByCallID,
             approvedComputerUseCallIDs: approvedComputerUseCallIDs,
             computerUseAllowedWithoutApproval: computerUseAllowedWithoutApproval,
             approvedExternalToolCallIDs: approvedExternalToolCallIDs,
@@ -67,6 +79,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         AgentToolApprovalContext(
             approvedWriteCallIDs: approvedWriteCallIDs,
             approvedCommandCallIDs: approvedCommandCallIDs,
+            workspaceBindingsByCallID: workspaceBindingsByCallID,
             approvedComputerUseCallIDs: approvedComputerUseCallIDs,
             computerUseAllowedWithoutApproval: computerUseAllowedWithoutApproval || allowed,
             approvedExternalToolCallIDs: approvedExternalToolCallIDs,
@@ -165,6 +178,8 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                     message: "Local executor does not support tool: \(call.toolID)"
                 )
             }
+        } catch let error as AgentToolApprovalError {
+            throw error
         } catch let error as AgentWorkspaceError {
             return failure(call, code: error.code, message: error.message)
         } catch let error as AgentLocalToolError {
@@ -177,6 +192,10 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
     }
 
     func preview(for call: AgentToolCall) async throws -> AgentToolApprovalPreview {
+        try await approvalPreview(for: call).preview
+    }
+
+    func approvalPreview(for call: AgentToolCall) async throws -> AgentToolApprovalPreviewContext {
         switch call.toolID {
         case "write_file":
             return try writeFilePreview(call)
@@ -190,17 +209,21 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
              "computer_type_text":
             return try computerUsePreview(call)
         case "ask_user":
-            return AgentToolApprovalPreview(
-                kind: .userInput,
-                title: "Agent requested input",
-                body: call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
+            return AgentToolApprovalPreviewContext(
+                preview: AgentToolApprovalPreview(
+                    kind: .userInput,
+                    title: "Agent requested input",
+                    body: call.arguments["prompt"]?.stringValue ?? "The agent requested user input."
+                )
             )
         default:
             if MCPToolBridge.parseToolID(call.toolID) != nil {
-                return AgentToolApprovalPreview(
-                    kind: .externalTool,
-                    title: "Approve external MCP tool",
-                    body: "Allow \(call.toolID) to call a configured local MCP server."
+                return AgentToolApprovalPreviewContext(
+                    preview: AgentToolApprovalPreview(
+                        kind: .externalTool,
+                        title: "Approve external MCP tool",
+                        body: "Allow \(call.toolID) to call a configured local MCP server."
+                    )
                 )
             }
             throw AgentLocalToolError.unsupportedTool(call.toolID)
@@ -218,6 +241,12 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         let url = try workspace.resolveWritableFile(path, allowCreate: create)
         let relativePath = workspace.relativePath(for: url)
         let oldContent = try existingTextContent(at: url, relativePath: relativePath)
+        try requireMatchingApprovalBinding(
+            for: call,
+            targetURL: url,
+            targetKind: .writeFile,
+            observedFileContents: Data(oldContent.utf8)
+        )
 
         try content.write(to: url, atomically: true, encoding: .utf8)
 
@@ -232,7 +261,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         )
     }
 
-    private func writeFilePreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+    private func writeFilePreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreviewContext {
         let path = try requiredStringArgument("path", in: call)
         let content = try stringArgument("content", in: call, allowEmpty: true)
         let create = call.arguments["create"]?.boolValue ?? false
@@ -240,10 +269,21 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         let relativePath = workspace.relativePath(for: url)
         let oldContent = try existingTextContent(at: url, relativePath: relativePath)
 
-        return AgentToolApprovalPreview(
+        let preview = AgentToolApprovalPreview(
             kind: .diff,
             title: "Review changes to \(relativePath)",
             body: unifiedDiff(path: relativePath, oldContent: oldContent, newContent: content)
+        )
+        return AgentToolApprovalPreviewContext(
+            preview: preview,
+            binding: try AgentToolApprovalBinding(
+                call: call,
+                preview: preview,
+                workspace: workspace,
+                targetURL: url,
+                targetKind: .writeFile,
+                observedFileContents: Data(oldContent.utf8)
+            )
         )
     }
 
@@ -258,6 +298,12 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         let url = try workspace.requireRegularFile(path)
         let relativePath = workspace.relativePath(for: url)
         let oldContent = try existingTextContent(at: url, relativePath: relativePath)
+        try requireMatchingApprovalBinding(
+            for: call,
+            targetURL: url,
+            targetKind: .applyDiffFile,
+            observedFileContents: Data(oldContent.utf8)
+        )
         let ranges = matchingRanges(of: oldText, in: oldContent)
 
         guard !ranges.isEmpty else {
@@ -282,7 +328,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         )
     }
 
-    private func applyDiffPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+    private func applyDiffPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreviewContext {
         let path = try requiredStringArgument("path", in: call)
         let oldText = try requiredStringArgument("oldText", in: call)
         let newText = try stringArgument("newText", in: call, allowEmpty: true)
@@ -300,10 +346,21 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
 
         var nextContent = oldContent
         nextContent.replaceSubrange(range, with: newText)
-        return AgentToolApprovalPreview(
+        let preview = AgentToolApprovalPreview(
             kind: .diff,
             title: "Review changes to \(relativePath)",
             body: unifiedDiff(path: relativePath, oldContent: oldContent, newContent: nextContent)
+        )
+        return AgentToolApprovalPreviewContext(
+            preview: preview,
+            binding: try AgentToolApprovalBinding(
+                call: call,
+                preview: preview,
+                workspace: workspace,
+                targetURL: url,
+                targetKind: .applyDiffFile,
+                observedFileContents: Data(oldContent.utf8)
+            )
         )
     }
 
@@ -317,6 +374,13 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         }
 
         let cwd = try workspace.requireDirectory(call.arguments["cwd"]?.stringValue ?? ".")
+        if approvals.explicitlyApprovesCommand(callID: call.id) {
+            try requireMatchingApprovalBinding(
+                for: call,
+                targetURL: cwd,
+                targetKind: .commandWorkingDirectory
+            )
+        }
         let timeout = boundedTimeout(from: call)
         let result = try processRunner.run(
             executableURL: shellExecutableURL,
@@ -339,7 +403,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         )
     }
 
-    private func runCommandPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+    private func runCommandPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreviewContext {
         let command = try requiredStringArgument("command", in: call)
         guard !AgentShellCommandSafety.isDangerous(command) else {
             throw AgentLocalToolError.dangerousCommand(command)
@@ -349,7 +413,7 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         let timeoutText = timeout.rounded(.down) == timeout
             ? "\(Int(timeout))"
             : "\(timeout)"
-        return AgentToolApprovalPreview(
+        let preview = AgentToolApprovalPreview(
             kind: .command,
             title: "Approve command",
             body: [
@@ -357,6 +421,16 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                 "cwd: \(workspace.relativePath(for: cwd))",
                 "timeout: \(timeoutText)s",
             ].joined(separator: "\n")
+        )
+        return AgentToolApprovalPreviewContext(
+            preview: preview,
+            binding: try AgentToolApprovalBinding(
+                call: call,
+                preview: preview,
+                workspace: workspace,
+                targetURL: cwd,
+                targetKind: .commandWorkingDirectory
+            )
         )
     }
 
@@ -385,13 +459,34 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         return .success(callID: call.id, toolID: call.toolID, content: computerUseContent(for: result))
     }
 
-    private func computerUsePreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreview {
+    private func computerUsePreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreviewContext {
         let action = try computerUseAction(from: call)
-        return AgentToolApprovalPreview(
-            kind: .computerUse,
-            title: "Approve computer action",
-            body: computerUsePreviewBody(toolID: call.toolID, action: action)
+        return AgentToolApprovalPreviewContext(
+            preview: AgentToolApprovalPreview(
+                kind: .computerUse,
+                title: "Approve computer action",
+                body: computerUsePreviewBody(toolID: call.toolID, action: action)
+            )
         )
+    }
+
+    private func requireMatchingApprovalBinding(
+        for call: AgentToolCall,
+        targetURL: URL,
+        targetKind: AgentToolApprovalTargetKind,
+        observedFileContents: Data? = nil
+    ) throws {
+        guard let binding = approvals.workspaceBinding(callID: call.id),
+              binding.validatesExecution(
+                  call: call,
+                  workspace: workspace,
+                  targetURL: targetURL,
+                  targetKind: targetKind,
+                  observedFileContents: observedFileContents
+              )
+        else {
+            throw AgentToolApprovalError.staleContext
+        }
     }
 
     private func askUser(_ call: AgentToolCall) throws -> AgentToolResult {

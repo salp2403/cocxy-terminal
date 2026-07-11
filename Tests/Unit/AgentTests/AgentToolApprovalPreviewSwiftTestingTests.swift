@@ -15,20 +15,41 @@ struct AgentToolApprovalPreviewSwiftTestingTests {
         let target = root.appendingPathComponent("Sources/App.swift")
         try "let value = 1\n".write(to: target, atomically: true, encoding: .utf8)
         let executor = AgentLocalToolExecutor(workspace: AgentWorkspace(rootURL: root))
-
-        let preview = try await executor.preview(for: AgentToolCall(
+        let call = AgentToolCall(
             id: "call-write",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/App.swift"),
                 "content": .string("let value = 2\n"),
             ]
-        ))
+        )
+
+        let previewContext = try await executor.approvalPreview(for: call)
+        let preview = previewContext.preview
+        let binding = try #require(previewContext.binding)
+        let changedCall = AgentToolCall(
+            id: call.id,
+            toolID: call.toolID,
+            arguments: [
+                "path": .string("Sources/App.swift"),
+                "content": .string("let value = 3\n"),
+            ]
+        )
+        let changedPreview = AgentToolApprovalPreview(
+            kind: preview.kind,
+            title: preview.title,
+            body: preview.body + "tampered"
+        )
 
         #expect(preview.kind == .diff)
         #expect(preview.title == "Review changes to Sources/App.swift")
         #expect(preview.body.contains("-let value = 1"))
         #expect(preview.body.contains("+let value = 2"))
+        #expect(binding.validatesRequest(call: call, preview: preview))
+        #expect(!binding.validatesRequest(call: changedCall, preview: preview))
+        #expect(!binding.validatesRequest(call: call, preview: changedPreview))
+        #expect(!String(reflecting: binding).contains(root.path))
+        #expect(!String(reflecting: binding).contains("let value = 1"))
         #expect(try String(contentsOf: target, encoding: .utf8) == "let value = 1\n")
     }
 

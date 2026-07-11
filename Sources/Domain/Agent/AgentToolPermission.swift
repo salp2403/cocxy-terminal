@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // AgentToolPermission.swift - Agent Mode permission decisions.
 
+import CryptoKit
 import Foundation
 
 /// A single tool request before execution.
@@ -38,26 +39,277 @@ struct AgentToolApprovalPreview: Sendable, Equatable {
     let body: String
 }
 
+enum AgentToolApprovalTargetKind: String, Sendable, Equatable {
+    case writeFile
+    case applyDiffFile
+    case commandWorkingDirectory
+}
+
+enum AgentToolApprovalError: Error, Sendable, Equatable {
+    case staleContext
+    case identityUnavailable
+}
+
+extension AgentToolApprovalError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .staleContext:
+            return "This approval is no longer valid because its workspace context changed. Review the tool request again."
+        case .identityUnavailable:
+            return "The tool approval context could not be verified. Review the tool request again."
+        }
+    }
+}
+
+/// Opaque identity captured with a tool preview and revalidated before execution.
+/// Only digests are retained so local paths and file contents cannot leak through logs.
+struct AgentToolApprovalBinding: Sendable, Equatable {
+    private let targetKind: AgentToolApprovalTargetKind
+    private let callDigest: String
+    private let previewDigest: String
+    private let workspaceDigest: String
+    private let targetDigest: String
+
+    init(
+        call: AgentToolCall,
+        preview: AgentToolApprovalPreview,
+        workspace: AgentWorkspace,
+        targetURL: URL,
+        targetKind: AgentToolApprovalTargetKind,
+        observedFileContents: Data? = nil,
+        fileManager: FileManager = .default
+    ) throws {
+        guard Self.targetKind(for: call) == targetKind,
+              workspace.contains(targetURL)
+        else {
+            throw AgentToolApprovalError.identityUnavailable
+        }
+
+        self.targetKind = targetKind
+        self.callDigest = try Self.callDigest(for: call)
+        self.previewDigest = Self.previewDigest(for: preview)
+        self.workspaceDigest = try Self.workspaceDigest(for: workspace, fileManager: fileManager)
+        self.targetDigest = try Self.targetDigest(
+            for: targetURL,
+            kind: targetKind,
+            observedFileContents: observedFileContents,
+            fileManager: fileManager
+        )
+    }
+
+    static func targetKind(for call: AgentToolCall) -> AgentToolApprovalTargetKind? {
+        switch call.toolID {
+        case "write_file":
+            return .writeFile
+        case "apply_diff":
+            return .applyDiffFile
+        case "run_command":
+            return .commandWorkingDirectory
+        default:
+            return nil
+        }
+    }
+
+    func validatesRequest(call: AgentToolCall, preview: AgentToolApprovalPreview) -> Bool {
+        guard Self.targetKind(for: call) == targetKind,
+              let currentCallDigest = try? Self.callDigest(for: call)
+        else {
+            return false
+        }
+
+        return currentCallDigest == callDigest
+            && Self.previewDigest(for: preview) == previewDigest
+    }
+
+    func validatesWorkspace(_ workspace: AgentWorkspace, fileManager: FileManager = .default) -> Bool {
+        guard let currentDigest = try? Self.workspaceDigest(for: workspace, fileManager: fileManager) else {
+            return false
+        }
+        return currentDigest == workspaceDigest
+    }
+
+    func validatesExecution(
+        call: AgentToolCall,
+        workspace: AgentWorkspace,
+        targetURL: URL,
+        targetKind: AgentToolApprovalTargetKind,
+        observedFileContents: Data? = nil,
+        fileManager: FileManager = .default
+    ) -> Bool {
+        guard self.targetKind == targetKind,
+              Self.targetKind(for: call) == targetKind,
+              workspace.contains(targetURL),
+              let currentCallDigest = try? Self.callDigest(for: call),
+              let currentWorkspaceDigest = try? Self.workspaceDigest(for: workspace, fileManager: fileManager),
+              let currentTargetDigest = try? Self.targetDigest(
+                  for: targetURL,
+                  kind: targetKind,
+                  observedFileContents: observedFileContents,
+                  fileManager: fileManager
+              )
+        else {
+            return false
+        }
+
+        return currentCallDigest == callDigest
+            && currentWorkspaceDigest == workspaceDigest
+            && currentTargetDigest == targetDigest
+    }
+
+    private static func callDigest(for call: AgentToolCall) throws -> String {
+        digest([try AgentToolProtocolCodec.encode(call)])
+    }
+
+    private static func previewDigest(for preview: AgentToolApprovalPreview) -> String {
+        digest([
+            Data(preview.kind.rawValue.utf8),
+            Data(preview.title.utf8),
+            Data(preview.body.utf8),
+        ])
+    }
+
+    private static func workspaceDigest(
+        for workspace: AgentWorkspace,
+        fileManager: FileManager
+    ) throws -> String {
+        try fileSystemIdentityDigest(
+            for: workspace.rootURL,
+            namespace: "workspace",
+            fileManager: fileManager
+        )
+    }
+
+    private static func targetDigest(
+        for targetURL: URL,
+        kind: AgentToolApprovalTargetKind,
+        observedFileContents: Data?,
+        fileManager: FileManager
+    ) throws -> String {
+        var parts = [
+            Data(kind.rawValue.utf8),
+            Data(try fileSystemIdentityDigest(
+                for: targetURL,
+                namespace: "target",
+                fileManager: fileManager
+            ).utf8),
+        ]
+        if let observedFileContents {
+            parts.append(Data("file-contents".utf8))
+            parts.append(observedFileContents)
+        } else {
+            parts.append(Data("metadata-only".utf8))
+        }
+        return digest(parts)
+    }
+
+    private static func fileSystemIdentityDigest(
+        for url: URL,
+        namespace: String,
+        fileManager: FileManager
+    ) throws -> String {
+        let standardized = url.standardizedFileURL
+        var isDirectory: ObjCBool = false
+
+        if fileManager.fileExists(atPath: standardized.path, isDirectory: &isDirectory) {
+            let resolved = standardized.resolvingSymlinksInPath()
+            let attributes = try fileManager.attributesOfItem(atPath: resolved.path)
+            let objectIdentity = try fileSystemObjectIdentity(from: attributes)
+            return digest([
+                Data(namespace.utf8),
+                Data("present".utf8),
+                Data(resolved.path.utf8),
+                Data(isDirectory.boolValue ? "directory".utf8 : "file".utf8),
+                Data(objectIdentity.utf8),
+            ])
+        }
+
+        let resolvedParent = standardized
+            .deletingLastPathComponent()
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        var parentIsDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: resolvedParent.path, isDirectory: &parentIsDirectory),
+              parentIsDirectory.boolValue
+        else {
+            throw AgentToolApprovalError.identityUnavailable
+        }
+        let parentAttributes = try fileManager.attributesOfItem(atPath: resolvedParent.path)
+        let parentIdentity = try fileSystemObjectIdentity(from: parentAttributes)
+        let resolvedTarget = resolvedParent.appendingPathComponent(standardized.lastPathComponent).standardizedFileURL
+        return digest([
+            Data(namespace.utf8),
+            Data("absent".utf8),
+            Data(resolvedTarget.path.utf8),
+            Data(resolvedParent.path.utf8),
+            Data(parentIdentity.utf8),
+        ])
+    }
+
+    private static func fileSystemObjectIdentity(
+        from attributes: [FileAttributeKey: Any]
+    ) throws -> String {
+        guard let device = (attributes[.systemNumber] as? NSNumber)?.uint64Value,
+              let inode = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
+        else {
+            throw AgentToolApprovalError.identityUnavailable
+        }
+        return "\(device):\(inode)"
+    }
+
+    private static func digest(_ parts: [Data]) -> String {
+        var payload = Data()
+        for part in parts {
+            payload.append(contentsOf: String(part.count).utf8)
+            payload.append(0x3A)
+            payload.append(part)
+            payload.append(0)
+        }
+        return SHA256.hash(data: payload)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+}
+
+struct AgentToolApprovalPreviewContext: Sendable, Equatable {
+    let preview: AgentToolApprovalPreview
+    let binding: AgentToolApprovalBinding?
+
+    init(preview: AgentToolApprovalPreview, binding: AgentToolApprovalBinding? = nil) {
+        self.preview = preview
+        self.binding = binding
+    }
+}
+
 struct AgentToolApprovalRequest: Identifiable, Sendable, Equatable {
     let id: String
     let call: AgentToolCall
     let reason: AgentToolPromptReason
     let preview: AgentToolApprovalPreview
+    let binding: AgentToolApprovalBinding?
 
     init(
         call: AgentToolCall,
         reason: AgentToolPromptReason,
-        preview: AgentToolApprovalPreview
+        preview: AgentToolApprovalPreview,
+        binding: AgentToolApprovalBinding? = nil
     ) {
         self.id = call.id
         self.call = call
         self.reason = reason
         self.preview = preview
+        self.binding = binding
     }
 }
 
 protocol AgentToolPreviewing {
     func preview(for call: AgentToolCall) async throws -> AgentToolApprovalPreview
+    func approvalPreview(for call: AgentToolCall) async throws -> AgentToolApprovalPreviewContext
+}
+
+extension AgentToolPreviewing {
+    func approvalPreview(for call: AgentToolCall) async throws -> AgentToolApprovalPreviewContext {
+        AgentToolApprovalPreviewContext(preview: try await preview(for: call))
+    }
 }
 
 enum AgentToolDenyReason: Sendable, Equatable {

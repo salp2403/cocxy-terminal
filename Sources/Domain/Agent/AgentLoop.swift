@@ -273,17 +273,30 @@ struct AgentLoop {
         for call: AgentToolCall,
         reason: AgentToolPromptReason
     ) async -> AgentToolApprovalRequest? {
-        let preview: AgentToolApprovalPreview
+        let previewContext: AgentToolApprovalPreviewContext
         if let toolPreviewer {
             do {
-                preview = try await toolPreviewer.preview(for: call)
+                previewContext = try await toolPreviewer.approvalPreview(for: call)
             } catch {
                 return nil
             }
         } else {
-            preview = defaultPreview(for: call, reason: reason)
+            previewContext = AgentToolApprovalPreviewContext(
+                preview: defaultPreview(for: call, reason: reason)
+            )
         }
-        return AgentToolApprovalRequest(call: call, reason: reason, preview: preview)
+
+        if AgentToolApprovalBinding.targetKind(for: call) != nil,
+           previewContext.binding == nil {
+            return nil
+        }
+
+        return AgentToolApprovalRequest(
+            call: call,
+            reason: reason,
+            preview: previewContext.preview,
+            binding: previewContext.binding
+        )
     }
 
     private func defaultPreview(

@@ -450,6 +450,43 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(await runner.approvedUserInputs == [nil])
     }
 
+    @Test("stale workspace approval is discarded and requires a fresh preview")
+    func staleWorkspaceApprovalIsDiscarded() async throws {
+        let request = AgentToolApprovalRequest(
+            call: AgentToolCall(
+                id: "call-stale",
+                toolID: "run_command",
+                arguments: ["command": .string("swift test")]
+            ),
+            reason: .commandApprovalRequired(command: "swift test"),
+            preview: AgentToolApprovalPreview(
+                kind: .command,
+                title: "Approve command",
+                body: "command: swift test\ncwd: .\ntimeout: 60s"
+            )
+        )
+        let runner = RecordingApprovalAgentPromptRunner(
+            result: AgentLoopResult(messages: [], stopReason: .permissionRequired(request)),
+            approvedResult: AgentLoopResult(messages: [], stopReason: .completed),
+            approvalError: .staleContext
+        )
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: runner
+        )
+
+        viewModel.promptDraft = "Run tests"
+        await viewModel.submitPrompt()
+        await viewModel.approvePendingTool()
+
+        #expect(viewModel.pendingApproval == nil)
+        #expect(viewModel.pendingApprovalResponseDraft.isEmpty)
+        #expect(viewModel.state == .failed(
+            "This approval is no longer valid because its workspace context changed. Review the tool request again."
+        ))
+        #expect(await runner.approvedRequests == [request])
+    }
+
     @Test("answering pending user question resumes runner with typed response")
     func answeringPendingUserQuestionResumesRunnerWithTypedResponse() async throws {
         let request = AgentToolApprovalRequest(
@@ -625,12 +662,18 @@ private actor RecordingAttachmentAgentPromptRunner: AgentAttachmentPromptRunning
 private actor RecordingApprovalAgentPromptRunner: AgentApprovalRunning {
     private let result: AgentLoopResult
     private let approvedResult: AgentLoopResult
+    private let approvalError: AgentToolApprovalError?
     private(set) var approvedRequests: [AgentToolApprovalRequest] = []
     private(set) var approvedUserInputs: [String?] = []
 
-    init(result: AgentLoopResult, approvedResult: AgentLoopResult) {
+    init(
+        result: AgentLoopResult,
+        approvedResult: AgentLoopResult,
+        approvalError: AgentToolApprovalError? = nil
+    ) {
         self.result = result
         self.approvedResult = approvedResult
+        self.approvalError = approvalError
     }
 
     func run(
@@ -649,6 +692,9 @@ private actor RecordingApprovalAgentPromptRunner: AgentApprovalRunning {
     ) async throws -> AgentLoopResult {
         approvedRequests.append(request)
         approvedUserInputs.append(userInput)
+        if let approvalError {
+            throw approvalError
+        }
         return approvedResult
     }
 }
