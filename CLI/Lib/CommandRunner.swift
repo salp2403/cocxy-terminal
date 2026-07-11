@@ -21,6 +21,7 @@ public struct CommandRunner {
     static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 65
     public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
     static let extendedCellSocketTimeoutSeconds: TimeInterval = 300
+    static let browserInitScriptApprovalSocketTimeoutSeconds: TimeInterval = 605
     static let defaultBrowserActionTimeoutMilliseconds = 5_000
     static let browserActionSocketGraceSeconds: TimeInterval = 3
 
@@ -1387,6 +1388,13 @@ public struct CommandRunner {
                 params: ["script": script]
             )
 
+        case .browserInitScriptRemove(let id):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-init-script-remove",
+                params: ["id": id]
+            )
+
         case .browserInitScriptsList:
             return CLISocketRequest(id: requestID, command: "browser-init-scripts-list", params: nil)
 
@@ -2100,6 +2108,8 @@ public struct CommandRunner {
              .cellLogs,
              .cellStatus:
             return extendedCellSocketTimeoutSeconds
+        case .browserInitScriptAdd:
+            return browserInitScriptApprovalSocketTimeoutSeconds
         case .browserClick(_, let timeoutMilliseconds),
              .browserDblClick(_, let timeoutMilliseconds),
              .browserHover(_, let timeoutMilliseconds),

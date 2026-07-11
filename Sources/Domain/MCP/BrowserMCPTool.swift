@@ -276,8 +276,11 @@ struct BrowserMCPToolProvider: Sendable {
         spec("browser_add_style", .browserAddStyle, "Inject an inline stylesheet in the active page.", required: [
             arg("css", "CSS source, up to 10000 characters.")
         ]),
-        spec("browser_init_script_add", .browserInitScriptAdd, "Register a document-start init script for future page loads.", required: [
-            arg("script", "JavaScript source, up to 10000 characters.")
+        spec("browser_init_script_add", .browserInitScriptAdd, "Request approval for a 10-minute main-frame init-script grant on future loads of the active tab origin.", required: [
+            arg("script", "JavaScript source, up to 10000 UTF-8 bytes.")
+        ]),
+        spec("browser_init_script_remove", .browserInitScriptRemove, "Prevent future injections from a registered document-start init script.", required: [
+            arg("id", "Init script id returned by browser_init_script_add.")
         ]),
         spec("browser_init_scripts_list", .browserInitScriptsList, "List registered document-start init scripts."),
         spec("browser_dialogs", .browserDialogs, "List pending and recently handled JavaScript dialogs."),

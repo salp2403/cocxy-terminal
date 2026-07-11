@@ -710,6 +710,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser init scripts add <script>`
     case browserInitScriptAdd(script: String)
 
+    /// `cocxy browser init scripts remove <id>`
+    case browserInitScriptRemove(id: String)
+
     /// `cocxy browser init scripts list`
     case browserInitScriptsList
 
@@ -3863,12 +3866,12 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "browser init",
                 argument: arguments.first ?? "",
-                reason: "Use scripts add <script> or scripts list."
+                reason: "Use scripts add <script>, scripts remove <id>, or scripts list."
             )
         }
         let rest = Array(arguments.dropFirst())
         guard let action = rest.first else {
-            throw CLIError.missingArgument(command: "browser init scripts", argument: "add|list")
+            throw CLIError.missingArgument(command: "browser init scripts", argument: "add|remove|list")
         }
         switch action {
         case "add":
@@ -3877,6 +3880,22 @@ public enum CLIArgumentParser {
                 throw CLIError.missingArgument(command: "browser init scripts add", argument: "script")
             }
             return .browserInitScriptAdd(script: script)
+        case "remove":
+            let removeArguments = Array(rest.dropFirst())
+            guard let id = removeArguments.first else {
+                throw CLIError.missingArgument(
+                    command: "browser init scripts remove",
+                    argument: "id"
+                )
+            }
+            guard removeArguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser init scripts remove",
+                    argument: removeArguments.dropFirst().joined(separator: " "),
+                    reason: "Remove requires exactly one script id."
+                )
+            }
+            return .browserInitScriptRemove(id: id)
         case "list":
             guard rest.count == 1 else {
                 throw CLIError.invalidArgument(
@@ -3890,7 +3909,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "browser init scripts",
                 argument: action,
-                reason: "Use add <script> or list."
+                reason: "Use add <script>, remove <id>, or list."
             )
         }
     }

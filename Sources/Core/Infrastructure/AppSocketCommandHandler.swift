@@ -222,6 +222,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that provides the browser view model for scriptable browser commands.
     /// Returns nil when no browser panel is open.
     private let browserViewModelProvider: @Sendable () -> BrowserViewModel?
+    /// Returns every live browser model for global init-script list and revocation operations.
+    private let browserViewModelsProvider: @Sendable () -> [BrowserViewModel]
     /// Closure that provides or opens a browser view model for external navigation.
     /// Unlike the read-only provider above, this may create UI for `browser navigate`.
     private let browserNavigationViewModelProvider: @Sendable () -> BrowserViewModel?
@@ -229,6 +231,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private let browserSplitProvider: (@Sendable () -> Bool)?
     /// Routes browser import preview/run requests to the app-owned importer.
     private let browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+    /// Presents a native, exact-context approval before retaining an init script.
+    private let browserInitScriptAuthorizationProvider: (@Sendable (BrowserInitScriptAuthorizationRequest) -> Bool)?
+    /// Identifies whether the request came from the local CLI or Agent Mode.
+    private let browserInitScriptRequestSource: BrowserInitScriptRequestSource
 
     /// Closure that returns the current live configuration snapshot.
     /// Falls back to defaults when ConfigService is unavailable.
@@ -504,9 +510,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         hookEventReceiver: HookEventReceiverImpl?,
         browserViewModel: BrowserViewModel? = nil,
         browserViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        browserViewModelsProviderOverride: (@Sendable () -> [BrowserViewModel])? = nil,
         browserNavigationViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
         browserSplitProvider: (@Sendable () -> Bool)? = nil,
         browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        browserInitScriptAuthorizationProvider: (@Sendable (BrowserInitScriptAuthorizationRequest) -> Bool)? = nil,
+        browserInitScriptRequestSource: BrowserInitScriptRequestSource = .localCLI,
         tabCountProviderOverride: (@Sendable () -> Int)? = nil,
         tabInfoProviderOverride: (@Sendable () -> [(id: String, title: String, isActive: Bool)])? = nil,
         tabFocusProviderOverride: (@Sendable (String) -> Bool)? = nil,
@@ -714,10 +723,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             }
         }
         self.browserViewModelProvider = resolvedBrowserViewModelProvider
+        self.browserViewModelsProvider = browserViewModelsProviderOverride ?? {
+            resolvedBrowserViewModelProvider().map { [$0] } ?? []
+        }
         self.browserNavigationViewModelProvider = browserNavigationViewModelProviderOverride
             ?? resolvedBrowserViewModelProvider
         self.browserSplitProvider = browserSplitProvider
         self.browserImportProvider = browserImportProvider
+        self.browserInitScriptAuthorizationProvider = browserInitScriptAuthorizationProvider
+        self.browserInitScriptRequestSource = browserInitScriptRequestSource
 
         // -- Tab count provider (read-only) --
         if let tabCountProviderOverride {
@@ -995,6 +1009,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserAddStyle(request)
         case .browserInitScriptAdd:
             return handleBrowserInitScriptAdd(request)
+        case .browserInitScriptRemove:
+            return handleBrowserInitScriptRemove(request)
         case .browserInitScriptsList:
             return handleBrowserInitScriptsList(request)
         case .browserDialogs:
@@ -2604,55 +2620,201 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let script = request.params?["script"], !script.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: script")
         }
-        guard script.count <= Self.maxBrowserEvalLength else {
+        let scriptByteCount = script.utf8.count
+        guard scriptByteCount <= BrowserInitScriptSecurity.maximumSourceByteCount else {
             return .failure(
                 id: request.id,
-                error: "Script length \(script.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+                error: "Script size \(scriptByteCount) exceeds maximum \(BrowserInitScriptSecurity.maximumSourceByteCount) UTF-8 bytes"
             )
         }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-
-        let initScript: BrowserInitScript
+        let hasCapacity: Bool
         if Thread.isMainThread {
-            initScript = MainActor.assumeIsolated {
-                viewModel.addInitScript(script)
+            hasCapacity = MainActor.assumeIsolated {
+                viewModel.canAddInitScript()
             }
         } else {
-            initScript = DispatchQueue.main.sync {
+            hasCapacity = DispatchQueue.main.sync {
                 MainActor.assumeIsolated {
-                    viewModel.addInitScript(script)
+                    viewModel.canAddInitScript()
                 }
             }
         }
+        guard hasCapacity else {
+            return .failure(
+                id: request.id,
+                error: "Maximum active browser init scripts reached (\(BrowserInitScriptSecurity.maximumActiveScripts))"
+            )
+        }
 
-        let installResult = viewModel.automationBridge.installInitScript(script, timeout: 3)
-        var data: [String: String] = [
+        let authorizationRequest: BrowserInitScriptAuthorizationRequest?
+        if Thread.isMainThread {
+            authorizationRequest = MainActor.assumeIsolated {
+                viewModel.makeInitScriptAuthorizationRequest(
+                    source: browserInitScriptRequestSource,
+                    script: script
+                )
+            }
+        } else {
+            authorizationRequest = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.makeInitScriptAuthorizationRequest(
+                        source: browserInitScriptRequestSource,
+                        script: script
+                    )
+                }
+            }
+        }
+        guard let authorizationRequest else {
+            let readiness: (bridgeAvailable: Bool, remoteAuthorityAvailable: Bool)
+            if Thread.isMainThread {
+                readiness = MainActor.assumeIsolated {
+                    (
+                        viewModel.isInitScriptBridgeAvailable,
+                        viewModel.isInitScriptRemoteAuthorityAvailable
+                    )
+                }
+            } else {
+                readiness = DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        (
+                            viewModel.isInitScriptBridgeAvailable,
+                            viewModel.isInitScriptRemoteAuthorityAvailable
+                        )
+                    }
+                }
+            }
+            let error: String
+            if !readiness.bridgeAvailable {
+                error = "Browser page is not ready for init scripts"
+            } else if !readiness.remoteAuthorityAvailable {
+                error = "Browser remote connection or forward is no longer active"
+            } else {
+                error = "Browser init scripts require an active HTTP or HTTPS page"
+            }
+            return .failure(
+                id: request.id,
+                error: error
+            )
+        }
+        guard let browserInitScriptAuthorizationProvider else {
+            return .failure(id: request.id, error: "Browser init script approval is unavailable")
+        }
+        guard browserInitScriptAuthorizationProvider(authorizationRequest) else {
+            return .failure(id: request.id, error: "Browser init script approval was denied")
+        }
+        guard let currentViewModel = browserViewModelProvider(), currentViewModel === viewModel else {
+            return .failure(id: request.id, error: "Browser context changed during approval")
+        }
+        guard let finalViewModel = browserViewModelProvider(), finalViewModel === currentViewModel else {
+            return .failure(id: request.id, error: "Browser context changed during approval")
+        }
+
+        let registration: Result<BrowserInitScript, BrowserInitScriptRegistrationError>
+        if Thread.isMainThread {
+            registration = MainActor.assumeIsolated {
+                Self.registerInitScript(authorizationRequest, in: finalViewModel)
+            }
+        } else {
+            registration = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    Self.registerInitScript(authorizationRequest, in: finalViewModel)
+                }
+            }
+        }
+        let initScript: BrowserInitScript
+        switch registration {
+        case .success(let registeredScript):
+            initScript = registeredScript
+        case .failure(let error):
+            return .failure(id: request.id, error: Self.initScriptRegistrationMessage(for: error))
+        }
+        guard browserViewModelProvider() === finalViewModel else {
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    _ = finalViewModel.removeInitScript(id: initScript.id)
+                }
+            } else {
+                DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        _ = finalViewModel.removeInitScript(id: initScript.id)
+                    }
+                }
+            }
+            return .failure(id: request.id, error: "Browser context changed during approval")
+        }
+
+        let formatter = ISO8601DateFormatter()
+        let data: [String: String] = [
             "status": "added",
             "id": initScript.id.uuidString,
             "length": "\(initScript.length)",
-            "installed": installResult?.error == nil ? "true" : "false"
+            "installed": "true",
+            "browserViewID": initScript.browserViewID.uuidString,
+            "tabID": initScript.tabID.uuidString,
+            "origin": initScript.origin.serialized,
+            "browserProfileID": initScript.browserProfileID?.uuidString ?? "default",
+            "remoteBrowserProfileID": initScript.remoteBrowserProfileID?.uuidString ?? "local",
+            "remoteConnectionProfileID": initScript.remoteConnectionProfileID?.uuidString ?? "local",
+            "expiresAt": formatter.string(from: initScript.expiresAt),
+            "mainFrameOnly": "true"
         ]
-        if let error = installResult?.error {
-            data["installError"] = error
-        }
         return .ok(id: request.id, data: data)
     }
 
+    private func handleBrowserInitScriptRemove(_ request: SocketRequest) -> SocketResponse {
+        guard let rawID = request.params?["id"], !rawID.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: id")
+        }
+        guard let scriptID = UUID(uuidString: rawID) else {
+            return .failure(id: request.id, error: "Invalid browser init script id")
+        }
+        let viewModels = browserInitScriptViewModels()
+        guard !viewModels.isEmpty else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let removed: Bool
+        if Thread.isMainThread {
+            removed = MainActor.assumeIsolated {
+                viewModels.reduce(false) { wasRemoved, viewModel in
+                    viewModel.removeInitScript(id: scriptID) || wasRemoved
+                }
+            }
+        } else {
+            removed = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModels.reduce(false) { wasRemoved, viewModel in
+                        viewModel.removeInitScript(id: scriptID) || wasRemoved
+                    }
+                }
+            }
+        }
+        guard removed else {
+            return .failure(id: request.id, error: "Browser init script not found")
+        }
+        return .ok(id: request.id, data: [
+            "status": "removed",
+            "id": scriptID.uuidString
+        ])
+    }
+
     private func handleBrowserInitScriptsList(_ request: SocketRequest) -> SocketResponse {
-        guard let viewModel = browserViewModelProvider() else {
+        let viewModels = browserInitScriptViewModels()
+        guard !viewModels.isEmpty else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
         let scripts: [[String: String]]
         if Thread.isMainThread {
             scripts = MainActor.assumeIsolated {
-                viewModel.getInitScriptList()
+                Self.sortedInitScriptMetadata(viewModels.flatMap { $0.getInitScriptList() })
             }
         } else {
             scripts = DispatchQueue.main.sync {
                 MainActor.assumeIsolated {
-                    viewModel.getInitScriptList()
+                    Self.sortedInitScriptMetadata(viewModels.flatMap { $0.getInitScriptList() })
                 }
             }
         }
@@ -2664,9 +2826,70 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         for (index, script) in scripts.prefix(50).enumerated() {
             data["script_\(index)_id"] = script["id"] ?? ""
             data["script_\(index)_length"] = script["length"] ?? "0"
+            data["script_\(index)_browserViewID"] = script["browserViewID"] ?? ""
+            data["script_\(index)_tabID"] = script["tabID"] ?? ""
+            data["script_\(index)_origin"] = script["origin"] ?? ""
+            data["script_\(index)_browserProfileID"] = script["browserProfileID"] ?? "default"
+            data["script_\(index)_remoteBrowserProfileID"] = script["remoteBrowserProfileID"] ?? "local"
+            data["script_\(index)_remoteConnectionProfileID"] = script["remoteConnectionProfileID"] ?? "local"
             data["script_\(index)_createdAt"] = script["createdAt"] ?? ""
+            data["script_\(index)_expiresAt"] = script["expiresAt"] ?? ""
+            data["script_\(index)_mainFrameOnly"] = script["mainFrameOnly"] ?? "true"
         }
         return .ok(id: request.id, data: data)
+    }
+
+    @MainActor
+    private static func registerInitScript(
+        _ authorization: BrowserInitScriptAuthorizationRequest,
+        in viewModel: BrowserViewModel
+    ) -> Result<BrowserInitScript, BrowserInitScriptRegistrationError> {
+        do {
+            return .success(try viewModel.addInitScript(authorization: authorization))
+        } catch let error as BrowserInitScriptRegistrationError {
+            return .failure(error)
+        } catch {
+            return .failure(.synchronizationFailed(error.localizedDescription))
+        }
+    }
+
+    private static func initScriptRegistrationMessage(
+        for error: BrowserInitScriptRegistrationError
+    ) -> String {
+        switch error {
+        case .invalidSource:
+            return "Browser init script source is invalid"
+        case .authorizationConsumed:
+            return "Browser init script approval was already used"
+        case .contextChanged:
+            return "Browser context changed during approval"
+        case .capacityReached:
+            return "Maximum active browser init scripts reached (\(BrowserInitScriptSecurity.maximumActiveScripts))"
+        case .bridgeUnavailable:
+            return "Browser page is not ready for init scripts"
+        case .synchronizationFailed(let message):
+            return message
+        }
+    }
+
+    private func browserInitScriptViewModels() -> [BrowserViewModel] {
+        var seen: Set<ObjectIdentifier> = []
+        return browserViewModelsProvider().filter {
+            seen.insert(ObjectIdentifier($0)).inserted
+        }
+    }
+
+    private static func sortedInitScriptMetadata(
+        _ scripts: [[String: String]]
+    ) -> [[String: String]] {
+        scripts.sorted { lhs, rhs in
+            let lhsCreatedAt = lhs["createdAt"] ?? ""
+            let rhsCreatedAt = rhs["createdAt"] ?? ""
+            if lhsCreatedAt != rhsCreatedAt {
+                return lhsCreatedAt < rhsCreatedAt
+            }
+            return (lhs["id"] ?? "") < (rhs["id"] ?? "")
+        }
     }
 
     private func handleBrowserDialogs(_ request: SocketRequest) -> SocketResponse {

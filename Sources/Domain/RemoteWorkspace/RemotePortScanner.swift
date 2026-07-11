@@ -126,8 +126,16 @@ final class RemotePortScanner: ObservableObject {
         scanTimer = nil
         isScanning = false
 
-        if let profileID = activeProfileID {
-            for (remotePort, localPort) in forwardedPortMappings.sorted(by: { $0.key < $1.key }) {
+        let profileID = activeProfileID
+        let ownedForwardMappings = forwardedPortMappings
+        activeProfileID = nil
+        detectedPorts = []
+        forwardedPorts = []
+        forwardedPortMappings = [:]
+        browserOpenSuggestions = []
+
+        if let profileID {
+            for (remotePort, localPort) in ownedForwardMappings.sorted(by: { $0.key < $1.key }) {
                 let forward = RemoteConnectionProfile.PortForward.local(
                     localPort: localPort,
                     remotePort: remotePort
@@ -135,12 +143,6 @@ final class RemotePortScanner: ObservableObject {
                 try? connectionManager.cancelForward(forward, for: profileID)
             }
         }
-
-        activeProfileID = nil
-        detectedPorts = []
-        forwardedPorts = []
-        forwardedPortMappings = [:]
-        browserOpenSuggestions = []
     }
 
     // MARK: - Explicit Forwarding

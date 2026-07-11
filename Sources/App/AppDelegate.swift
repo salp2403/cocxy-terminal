@@ -1889,6 +1889,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     delegateRef.value?.activeBrowserViewModelForCLI()
                 }
             },
+            browserViewModelsProviderOverride: {
+                syncOnMainActor {
+                    delegateRef.value?.allWindowControllers.flatMap { $0.allBrowserViewModels() } ?? []
+                }
+            },
             browserNavigationViewModelProviderOverride: {
                 syncOnMainActor {
                     delegateRef.value?.browserViewModelForExternalNavigationCLI()
@@ -1908,6 +1913,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return fallback
                 }
                 return delegate.handleBrowserImportCLIRequest(kind: kind, params: params)
+            },
+            browserInitScriptAuthorizationProvider: { request in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let controller = delegate.allWindowControllers.first(where: { controller in
+                              controller.allBrowserViewModels().contains { viewModel in
+                                  ObjectIdentifier(viewModel) == request.context.viewModelIdentifier
+                              }
+                          }) else {
+                        return false
+                    }
+                    return controller.authorizeBrowserInitScript(request)
+                }
             },
             tabCountProviderOverride: {
                 syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {

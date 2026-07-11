@@ -29,6 +29,7 @@ struct BrowserMCPToolSwiftTestingTests {
         #expect(try #require(tools.first { $0.name == "browser_scroll" })
             .inputSchema.properties["x"]?.type == "number")
         #expect(try #require(tools.first { $0.name == "browser_eval" }).inputSchema.required == ["script"])
+        #expect(try #require(tools.first { $0.name == "browser_init_script_remove" }).inputSchema.required == ["id"])
         #expect(try #require(tools.first { $0.name == "browser_cookies_set" }).inputSchema.required == ["name", "value"])
         #expect(try #require(tools.first { $0.name == "browser_cookies_set" })
             .inputSchema.properties["secure"]?.type == "boolean")
@@ -162,9 +163,27 @@ struct BrowserMCPToolSwiftTestingTests {
         let provider = BrowserMCPToolProvider(executor: RecordingBrowserMCPCommandExecutor(response: [:]))
 
         let result = await provider.callTool(name: "browser_fill", arguments: ["ref": .string("input-1")])
+        let remove = await provider.callTool(name: "browser_init_script_remove", arguments: [:])
 
         #expect(result.isError == true)
         #expect(result.content == [.text("Missing required argument: text")])
+        #expect(remove.isError == true)
+        #expect(remove.content == [.text("Missing required argument: id")])
+    }
+
+    @Test("browser MCP routes init-script revocation to the shared socket handler")
+    func routesInitScriptRevocation() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: ["status": "removed"])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        _ = await provider.callTool(
+            name: "browser_init_script_remove",
+            arguments: ["id": .string("grant-id")]
+        )
+
+        #expect(await executor.commands == [
+            BrowserMCPCommand(socketCommand: .browserInitScriptRemove, params: ["id": "grant-id"]),
+        ])
     }
 
     @Test("browser MCP rejects oversized script and style payloads")
@@ -416,6 +435,7 @@ private let expectedBrowserMCPToolNames = [
     "browser_add_script",
     "browser_add_style",
     "browser_init_script_add",
+    "browser_init_script_remove",
     "browser_init_scripts_list",
     "browser_dialogs",
     "browser_dialog_accept",

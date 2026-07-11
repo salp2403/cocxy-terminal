@@ -111,13 +111,13 @@ final class Phase11CLIEdgeCaseTests: XCTestCase {
 
     // MARK: - EC-12: All CLICommand cases have non-empty helpDescription
 
-    func testEC12_AllThirtyCommandsHaveNonEmptyHelpDescription() {
+    func testEC12_AllCommandsHaveNonEmptyHelpDescription() {
         // "80% de cobertura no es suficiente si el 20% restante es el login."
         // Every command must be self-documenting.
         let allCases = CLICommand.allCases
 
-        XCTAssertEqual(allCases.count, 231,
-                       "EC-12: CLICommand must have exactly 231 catalog commands")
+        XCTAssertEqual(allCases.count, 232,
+                       "EC-12: CLICommand must have exactly 232 catalog commands")
 
         for command in allCases {
             XCTAssertFalse(

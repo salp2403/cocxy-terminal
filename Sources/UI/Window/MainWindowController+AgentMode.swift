@@ -165,11 +165,22 @@ extension MainWindowController {
                     controllerRef.value?.browserViewModelForExternalNavigation()
                 }
             },
+            browserViewModelsProviderOverride: {
+                syncOnMainActor {
+                    controllerRef.value?.allBrowserViewModels() ?? []
+                }
+            },
             browserNavigationViewModelProviderOverride: {
                 syncOnMainActor {
                     controllerRef.value?.browserViewModelForExternalNavigation()
                 }
-            }
+            },
+            browserInitScriptAuthorizationProvider: { request in
+                syncOnMainActor {
+                    controllerRef.value?.authorizeBrowserInitScript(request) ?? false
+                }
+            },
+            browserInitScriptRequestSource: .agentMode
         )
         let request = SocketRequest(
             id: "browser-mcp-\(UUID().uuidString)",

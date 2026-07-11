@@ -17,7 +17,9 @@ import Foundation
 /// 4. Commands are a closed enum — no arbitrary code execution.
 ///    `browser-eval` allows JS evaluation only in the embedded browser
 ///    (max 10,000 chars), scoped to the authenticated local socket.
-/// 5. The socket path is `~/.config/cocxy/cocxy.sock`.
+/// 5. Persistent browser init scripts additionally require visible approval,
+///    an exact view/origin/main-frame grant, expiration, and revocation.
+/// 6. The socket path is `~/.config/cocxy/cocxy.sock`.
 ///
 /// Protocol: Length-prefixed JSON messages.
 /// ```
@@ -265,8 +267,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case browserAddScript = "browser-add-script"
     /// Add an inline stylesheet to the active browser page.
     case browserAddStyle = "browser-add-style"
-    /// Register a script to run at document start on future browser page loads.
+    /// Request a 10-minute, origin-scoped main-frame init script grant.
     case browserInitScriptAdd = "browser-init-script-add"
+    /// Revoke a registered browser document-start init script.
+    case browserInitScriptRemove = "browser-init-script-remove"
     /// List registered browser document-start init scripts.
     case browserInitScriptsList = "browser-init-scripts-list"
     /// List pending and recently handled JavaScript dialogs.

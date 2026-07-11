@@ -297,6 +297,8 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .browserInitScriptAdd:
             return formatDataOrJSON(response: response)
+        case .browserInitScriptRemove:
+            return formatDataOrJSON(response: response)
         case .browserInitScriptsList:
             return formatDataOrJSON(response: response)
         case .browserDialogs:

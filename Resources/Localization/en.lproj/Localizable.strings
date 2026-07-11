@@ -3005,6 +3005,15 @@
 "browser.dialog.alert.title" = "JavaScript Alert";
 "browser.dialog.confirm.title" = "JavaScript Confirm";
 "browser.dialog.prompt.title" = "JavaScript Prompt";
+"browser.initScriptApproval.title" = "Allow Browser Init Script?";
+"browser.initScriptApproval.message" = "Requested by: %@\nTab: %@\nBrowser profile: %@\nOrigin: %@\nRemote route: %@\n\nFor the next 10 minutes, this JavaScript will be injected into the main frame at document start on future loads, limited to this tab, profile, origin, and remote route. Expiration or revocation prevents future injections; it cannot undo changes or activity from code that already ran. It can read and change the signed-in page with your authority. Review the exact source below; invisible controls are shown as Unicode escapes.";
+"browser.initScriptApproval.approve" = "Allow Future Loads";
+"browser.initScriptApproval.source.localCLI" = "Local process (CLI socket)";
+"browser.initScriptApproval.source.agentMode" = "Agent Mode";
+"browser.initScriptApproval.source.accessibility" = "JavaScript source for approval";
+"browser.initScriptApproval.profile.default" = "Default";
+"browser.initScriptApproval.profile.unknown" = "Profile %@";
+"browser.initScriptApproval.remote.local" = "Local";
 
 "cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No cells";

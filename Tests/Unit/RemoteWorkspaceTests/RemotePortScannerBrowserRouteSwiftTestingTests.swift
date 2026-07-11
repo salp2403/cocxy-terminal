@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // RemotePortScannerBrowserRouteSwiftTestingTests.swift - Browser routing tests for remote port discovery.
 
+import Combine
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -9,6 +10,7 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
     var attemptedForwards: [RemoteConnectionProfile.PortForward] = []
     var forwarded: [RemoteConnectionProfile.PortForward] = []
     var cancelled: [RemoteConnectionProfile.PortForward] = []
+    var lifecycleEvents: [String] = []
     var failingLocalPorts: Set<Int> = []
     var remoteCommandResults: [String: ProcessResult] = [:]
 
@@ -45,6 +47,7 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        lifecycleEvents.append("cancel")
         cancelled.append(forward)
     }
 
@@ -327,8 +330,8 @@ struct RemotePortScannerBrowserRouteSwiftTestingTests {
         #expect(scanner.browserOpenSuggestions.isEmpty)
     }
 
-    @Test("Stopping cancels every scanner-owned forward before clearing state")
-    @MainActor func stopCancelsOwnedForwardsBeforeClearingState() async {
+    @Test("Stopping clears browser leases before cancelling scanner-owned forwards")
+    @MainActor func stopClearsBrowserLeasesBeforeCancellingOwnedForwards() async {
         let multiplexer = RemotePortScannerMultiplexer()
         let manager = Self.makeConnectionManager(multiplexer: multiplexer)
         let profile = RemoteConnectionProfile(
@@ -360,9 +363,21 @@ struct RemotePortScannerBrowserRouteSwiftTestingTests {
         await scanner.refreshNow()
         await scanner.forwardDetectedPort(3000)
         await scanner.forwardDetectedPort(5173)
+        let leaseObserver = scanner.$forwardedPortMappings
+            .dropFirst()
+            .sink { mappings in
+                if mappings.isEmpty {
+                    multiplexer.lifecycleEvents.append("leases-cleared")
+                }
+            }
 
         scanner.stopScanning()
 
+        #expect(multiplexer.lifecycleEvents == [
+            "leases-cleared",
+            "cancel",
+            "cancel",
+        ])
         #expect(multiplexer.cancelled == [
             .local(localPort: 53_000, remotePort: 3000),
             .local(localPort: 55_173, remotePort: 5173),
@@ -372,5 +387,6 @@ struct RemotePortScannerBrowserRouteSwiftTestingTests {
         #expect(scanner.forwardedPorts.isEmpty)
         #expect(scanner.forwardedPortMappings.isEmpty)
         #expect(scanner.browserOpenSuggestions.isEmpty)
+        _ = leaseObserver
     }
 }

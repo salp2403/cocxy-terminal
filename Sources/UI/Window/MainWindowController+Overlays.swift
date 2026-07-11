@@ -2267,6 +2267,7 @@ extension MainWindowController {
     }
 
     func dismissBrowser() {
+        browserViewModel?.revokeAllInitScripts()
         guard let hostingView = browserHostingView,
               let overlayContainer = overlayContainerView else {
             browserHostingView?.removeFromSuperview()

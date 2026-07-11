@@ -646,6 +646,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// not close a split before the user confirms.
     var focusedPaneCloseConfirmationPresenter: ((String, String, @escaping (Bool) -> Void) -> Void)?
 
+    /// Optional test seam for exact browser init-script approval.
+    var browserInitScriptAuthorizationPresenter: ((BrowserInitScriptAuthorizationRequest) -> Bool)?
+    var isBrowserInitScriptAuthorizationPresented = false
+
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
     var inlineImageRenderers: [ObjectIdentifier: InlineImageRenderer] = [:]
@@ -1699,6 +1703,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         notificationPanelViewModel = nil
         remoteBrowserProxyStateCancellable?.cancel()
         remoteBrowserProxyStateCancellable = nil
+        browserViewModel?.revokeAllInitScripts()
+        revokeBrowserInitScripts(in: Array(panelContentViews.values))
+        for panelViews in savedTabPanelContentViews.values {
+            revokeBrowserInitScripts(in: Array(panelViews.values))
+        }
         browserViewModel = nil
         timelineHostingView?.removeFromSuperview()
         timelineHostingView = nil

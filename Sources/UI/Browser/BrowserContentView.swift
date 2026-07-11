@@ -134,16 +134,19 @@ final class BrowserContentView: NSView {
         let monitor = networkMonitor
         let capture = consoleCapture
         let wv = webView
+        let model = viewModel
         // Schedule cleanup on main actor since deinit is nonisolated.
         // observations and cancellables are released by ARC (KVO observations
         // are invalidated on dealloc; AnyCancellable cancels on dealloc).
         Task { @MainActor in
+            model.revokeAllInitScripts()
             monitor?.stopMonitoring()
             wv?.navigationDelegate = nil
             wv?.uiDelegate = nil
             if let wv {
                 capture?.uninstall(from: wv)
                 BrowserDOMGrabWebKitSupport.uninstall(from: wv)
+                BrowserInitScriptWebKitSupport.uninstall(from: wv, viewModel: model)
             }
         }
     }
@@ -358,8 +361,10 @@ final class BrowserContentView: NSView {
     private func installWebViewForActiveProfile(loadCurrentURL: Bool) {
         let previousWebView = webView
         if let previousWebView {
+            viewModel.revokeAllInitScripts()
             consoleCapture?.uninstall(from: previousWebView)
             BrowserDOMGrabWebKitSupport.uninstall(from: previousWebView)
+            BrowserInitScriptWebKitSupport.uninstall(from: previousWebView, viewModel: viewModel)
         }
         networkMonitor?.stopMonitoring()
         observations.removeAll()
@@ -388,7 +393,6 @@ final class BrowserContentView: NSView {
         BrowserWebViewAppearance.configure(wv)
         addSubview(wv, positioned: .below, relativeTo: toolbarContainer)
         webView = wv
-        BrowserWebKitAutomationBridge.install(on: viewModel, webView: wv)
 
         let topAnchor = findBarHostingView?.bottomAnchor ?? toolbarContainer?.bottomAnchor ?? self.topAnchor
         let bottomAnchor = devToolsHostingView?.topAnchor ?? downloadsHostingView?.topAnchor ?? self.bottomAnchor
@@ -424,6 +428,7 @@ final class BrowserContentView: NSView {
         })
 
         installBrowserInstrumentation()
+        BrowserWebKitAutomationBridge.install(on: viewModel, webView: wv)
 
         if loadCurrentURL, let url = viewModel.currentURL {
             wv.load(URLRequest(url: url))
@@ -734,6 +739,22 @@ extension BrowserContentView: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: navigationAction.request.url,
+            isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+        )
+        decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+    ) {
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: navigationResponse.response.url,
+            isMainFrame: navigationResponse.isForMainFrame
+        )
         decisionHandler(.allow)
     }
 

@@ -8,6 +8,7 @@ import WebKit
 enum BrowserWebKitAutomationBridge {
     @MainActor
     static func install(on viewModel: BrowserViewModel, webView: WKWebView) {
+        BrowserInitScriptWebKitSupport.install(on: webView, viewModel: viewModel)
         viewModel.scriptEvaluator = { [weak webView] script, timeout in
             guard let webView else {
                 return .failure("Browser web view is not available")
@@ -26,15 +27,6 @@ enum BrowserWebKitAutomationBridge {
                 profileID: profileID,
                 timeout: timeout
             )
-        }
-        viewModel.initScriptInstaller = { [weak webView] script, timeout in
-            guard let webView else {
-                return .failure("Browser web view is not available")
-            }
-            return installInitScript(script, in: webView, timeout: timeout)
-        }
-        for script in viewModel.initScripts {
-            addInitScript(script.source, to: webView)
         }
         installPendingCookies(on: webView, profileID: viewModel.activeProfileID)
     }
@@ -153,46 +145,6 @@ enum BrowserWebKitAutomationBridge {
             return string
         }
         return String(describing: value)
-    }
-
-    private static func installInitScript(
-        _ source: String,
-        in webView: WKWebView,
-        timeout: TimeInterval
-    ) -> BrowserScriptEvaluationResult {
-        if Thread.isMainThread {
-            return MainActor.assumeIsolated {
-                addInitScript(source, to: webView)
-                return .success("installed")
-            }
-        }
-
-        let semaphore = DispatchSemaphore(value: 0)
-        final class Box: @unchecked Sendable {
-            var result: BrowserScriptEvaluationResult = .failure("Browser init script installation did not complete")
-        }
-        let box = Box()
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated {
-                addInitScript(source, to: webView)
-            }
-            box.result = .success("installed")
-            semaphore.signal()
-        }
-        guard semaphore.wait(timeout: .now() + timeout) == .success else {
-            return .failure("Browser init script installation timed out")
-        }
-        return box.result
-    }
-
-    @MainActor
-    private static func addInitScript(_ source: String, to webView: WKWebView) {
-        let script = WKUserScript(
-            source: source,
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: false
-        )
-        webView.configuration.userContentController.addUserScript(script)
     }
 
     private static func pngData(for image: NSImage) -> Data? {

@@ -18,6 +18,9 @@ struct BrowserAutomationMatrixScriptSwiftTestingTests {
         #expect(script.contains("scenario_count="))
         #expect(script.contains("scenario_count < BROWSER_MATRIX_MIN_SCENARIOS"))
         #expect(script.contains("browser split"))
+        #expect(script.contains("INIT_SCRIPT_BASELINE_COUNT"))
+        #expect(script.contains("INIT_SCRIPT_BASELINE_COUNT + 1"))
+        #expect(script.contains("init-scripts-list-after-remove"))
         #expect(!script.contains("pkill -x CocxyTerminal"))
 
         for command in [
@@ -56,6 +59,7 @@ struct BrowserAutomationMatrixScriptSwiftTestingTests {
             "browser storage set",
             "browser add script",
             "browser init scripts add",
+            "browser init scripts remove",
             "browser focus",
             "browser fill",
             "browser type",

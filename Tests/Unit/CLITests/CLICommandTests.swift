@@ -879,6 +879,14 @@ final class RequestBuilderTests: XCTestCase {
         let initScriptAdd = runner.buildRequest(from: .browserInitScriptAdd(script: "window.ready = true"))
         XCTAssertEqual(initScriptAdd.command, "browser-init-script-add")
         XCTAssertEqual(initScriptAdd.params?["script"], "window.ready = true")
+        XCTAssertEqual(
+            runner.socketClient(for: .browserInitScriptAdd(script: "window.ready = true")).timeoutSeconds,
+            CommandRunner.browserInitScriptApprovalSocketTimeoutSeconds
+        )
+
+        let initScriptRemove = runner.buildRequest(from: .browserInitScriptRemove(id: "script-id"))
+        XCTAssertEqual(initScriptRemove.command, "browser-init-script-remove")
+        XCTAssertEqual(initScriptRemove.params?["id"], "script-id")
 
         let initScriptsList = runner.buildRequest(from: .browserInitScriptsList)
         XCTAssertEqual(initScriptsList.command, "browser-init-scripts-list")
@@ -2142,7 +2150,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 231)
+        XCTAssertEqual(CLICommand.allCases.count, 232)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -2195,6 +2203,7 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.browserAddScript.usageExample, "cocxy browser add script <script>")
         XCTAssertEqual(CLICommand.browserAddStyle.usageExample, "cocxy browser add style <css>")
         XCTAssertEqual(CLICommand.browserInitScriptAdd.usageExample, "cocxy browser init scripts add <script>")
+        XCTAssertEqual(CLICommand.browserInitScriptRemove.usageExample, "cocxy browser init scripts remove <id>")
         XCTAssertEqual(CLICommand.browserInitScriptsList.usageExample, "cocxy browser init scripts list")
         XCTAssertEqual(CLICommand.browserDialogs.usageExample, "cocxy browser dialogs")
         XCTAssertEqual(CLICommand.browserDialogAccept.usageExample, "cocxy browser dialog accept [id] [--text <text>]")
@@ -2301,6 +2310,18 @@ final class CLICommandDefinitionTests: XCTestCase {
             try CLIArgumentParser.parse(["browser", "init", "scripts", "add", "window.ready", "=", "true"]),
             .browserInitScriptAdd(script: "window.ready = true")
         )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "init", "scripts", "remove", "script-id"]),
+            .browserInitScriptRemove(id: "script-id")
+        )
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["browser", "init", "scripts", "remove"])
+        ) { error in
+            XCTAssertEqual(
+                error as? CLIError,
+                .missingArgument(command: "browser init scripts remove", argument: "id")
+            )
+        }
         XCTAssertEqual(
             try CLIArgumentParser.parse(["browser", "init", "scripts", "list"]),
             .browserInitScriptsList

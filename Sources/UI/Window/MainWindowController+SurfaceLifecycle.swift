@@ -452,6 +452,9 @@ extension MainWindowController {
         savedTabSplitViews.removeAll()
         savedTabSplitSurfaceViews.removeAll()
         savedTabSplitViewModels.removeAll()
+        for panelViews in savedTabPanelContentViews.values {
+            revokeBrowserInitScripts(in: Array(panelViews.values))
+        }
         savedTabPanelContentViews.removeAll()
 
         // Gather all tab surfaces (includes the primary surface since
@@ -505,6 +508,7 @@ extension MainWindowController {
         deferredRestoredTabLoader = nil
         surfaceImageDetectors.removeAll()
         surfaceOutputDispatchers.removeAll()
+        revokeBrowserInitScripts(in: Array(panelContentViews.values))
         panelContentViews.removeAll()
 
         // Clear all inline image overlays before releasing surface views.

@@ -402,8 +402,24 @@ run_json storage-session-list ok browser storage list --area session
 run_json storage-session-delete deleted browser storage delete session-key --area session
 run_json add-script added browser add script "window.__matrixAddedScript = true;"
 run_json add-style added browser add style "body { outline: 0 solid transparent; }"
+run_json init-scripts-list-before ok browser init scripts list
+INIT_SCRIPT_BASELINE_COUNT="$(json_field count "${ARTIFACT_ROOT}/init-scripts-list-before.json")"
+case "$INIT_SCRIPT_BASELINE_COUNT" in
+  ''|*[!0-9]*)
+    fail_with_output "init-scripts-list-before returned an invalid count" "${ARTIFACT_ROOT}/init-scripts-list-before.json"
+    ;;
+esac
+echo "Approve the exact browser init script in Cocxy Terminal to continue the matrix."
 run_json init-script-add added browser init scripts add "window.__matrixInitScript = true;"
 run_json init-scripts-list ok browser init scripts list
+require_json_field init-scripts-list count "$((INIT_SCRIPT_BASELINE_COUNT + 1))"
+INIT_SCRIPT_ID="$(json_field id "${ARTIFACT_ROOT}/init-script-add.json")"
+if [ -z "$INIT_SCRIPT_ID" ]; then
+  fail_with_output "init-script-add did not return an id" "${ARTIFACT_ROOT}/init-script-add.json"
+fi
+run_json init-script-remove removed browser init scripts remove "$INIT_SCRIPT_ID"
+run_json init-scripts-list-after-remove ok browser init scripts list
+require_json_field init-scripts-list-after-remove count "$INIT_SCRIPT_BASELINE_COUNT"
 
 run_action focus focused browser focus id-name --timeout 2000
 run_action fill filled browser fill id-name Matrix --timeout 2000

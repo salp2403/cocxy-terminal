@@ -97,6 +97,42 @@ extension AppDelegate {
             controller.remotePortScanner = portScanner
         }
 
+        // Browser init-script grants are bound to live remote connection and
+        // scanner-owned forward leases. These sinks intentionally stay on the
+        // publishing main actor so revocation happens before teardown frees a
+        // local port for reuse.
+        connectionManager.$connections
+            .sink { [weak self] connections in
+                let activeProfileIDs = Set(connections.compactMap { profileID, state in
+                    if case .connected = state {
+                        return profileID
+                    }
+                    return nil
+                })
+                for viewModel in self?.allWindowControllers.flatMap({
+                    $0.allBrowserViewModels()
+                }) ?? [] {
+                    viewModel.updateInitScriptRemoteConnectionAvailability(
+                        activeConnectionProfileIDs: activeProfileIDs
+                    )
+                }
+            }
+            .store(in: &hookCancellables)
+
+        portScanner.$forwardedPortMappings
+            .sink { [weak self, weak portScanner] forwardedPortMappings in
+                let scanningProfileID = portScanner?.scanningProfileID
+                for viewModel in self?.allWindowControllers.flatMap({
+                    $0.allBrowserViewModels()
+                }) ?? [] {
+                    viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+                        scanningProfileID: scanningProfileID,
+                        forwardedPortMappings: forwardedPortMappings
+                    )
+                }
+            }
+            .store(in: &hookCancellables)
+
         // Auto-start/stop port scanning when managed connections change.
         connectionManager.$connections
             .receive(on: DispatchQueue.main)

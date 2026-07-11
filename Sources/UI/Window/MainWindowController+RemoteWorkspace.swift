@@ -114,14 +114,18 @@ extension MainWindowController {
         profile: RemoteConnectionProfile,
         suggestion: RemoteBrowserOpenSuggestion
     ) {
+        guard let remoteConnectionManager,
+              case .connected = remoteConnectionManager.connections[profile.id],
+              let remotePortScanner,
+              remotePortScanner.scanningProfileID == profile.id,
+              remotePortScanner.forwardedPortMappings[suggestion.remotePort]
+                == suggestion.localPort else {
+            return
+        }
         guard let viewModel = browserViewModelForExternalNavigation() else { return }
-        let proxyState = remoteConnectionManager?.proxyManager?.state ?? .off
-        let remoteProfile = remotePortScanner?.browserProfile(
+        let proxyState = remoteConnectionManager.proxyManager?.state ?? .off
+        let remoteProfile = remotePortScanner.browserProfile(
             for: profile,
-            proxyState: proxyState
-        ) ?? RemoteBrowserProfile(
-            remoteConnectionProfile: profile,
-            localForwardedPorts: [suggestion.remotePort: suggestion.localPort],
             proxyState: proxyState
         )
 
@@ -132,6 +136,13 @@ extension MainWindowController {
             viewModel.attachRemoteBrowserProfile(remoteProfile)
             viewModel.navigate(to: suggestion.localURL.absoluteString)
         }
+        viewModel.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: Set([profile.id])
+        )
+        viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: remotePortScanner.scanningProfileID,
+            forwardedPortMappings: remotePortScanner.forwardedPortMappings
+        )
         bindRemoteBrowserProxyState(to: viewModel, profileID: profile.id)
     }
 

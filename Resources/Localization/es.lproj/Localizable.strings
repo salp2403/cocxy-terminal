@@ -3005,6 +3005,15 @@
 "browser.dialog.alert.title" = "Alerta de JavaScript";
 "browser.dialog.confirm.title" = "Confirmación de JavaScript";
 "browser.dialog.prompt.title" = "Prompt de JavaScript";
+"browser.initScriptApproval.title" = "¿Permitir script de inicio del navegador?";
+"browser.initScriptApproval.message" = "Solicitado por: %@\nPestaña: %@\nPerfil de navegador: %@\nSitio: %@\nRuta remota: %@\n\nDurante los próximos 10 minutos, este JavaScript se inyectará en el marco principal al iniciar el documento en cargas futuras, limitado a esta pestaña, perfil, sitio y ruta remota. La expiración o revocación impide inyecciones futuras; no puede deshacer cambios ni actividad del código que ya se ejecutó. Puede leer y modificar la página con tu sesión iniciada y tus permisos. Revisa el código exacto a continuación; los controles invisibles se muestran como escapes Unicode.";
+"browser.initScriptApproval.approve" = "Permitir cargas futuras";
+"browser.initScriptApproval.source.localCLI" = "Proceso local (socket de CLI)";
+"browser.initScriptApproval.source.agentMode" = "Modo agente";
+"browser.initScriptApproval.source.accessibility" = "Código JavaScript para autorizar";
+"browser.initScriptApproval.profile.default" = "Predeterminado";
+"browser.initScriptApproval.profile.unknown" = "Perfil %@";
+"browser.initScriptApproval.remote.local" = "Local";
 
 "cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No hay cells";

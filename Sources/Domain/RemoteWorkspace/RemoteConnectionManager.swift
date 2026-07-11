@@ -169,6 +169,10 @@ final class RemoteConnectionManager: ObservableObject {
     func disconnect(profileID: UUID) async {
         guard let profile = knownProfiles[profileID] else { return }
 
+        // Publish the trust-boundary change before the SSH listener is torn
+        // down so browser grants cannot outlive the connection lease.
+        connections[profileID] = .disconnected
+
         do {
             try multiplexer.disconnect(profile: profile, executor: executor)
         } catch {
@@ -177,7 +181,6 @@ final class RemoteConnectionManager: ObservableObject {
 
         await cleanupSubsystems(profileID: profileID)
         tunnelManager.removeAllTunnels(for: profileID)
-        connections[profileID] = .disconnected
     }
 
     /// Cleans up relay channels, proxy, and daemon state for a profile.

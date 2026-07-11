@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @testable import CocxyTerminal
 
-@Suite("DB and cloud helper panel")
+@Suite("DB and cloud helper panel", .serialized)
 struct DBCloudHelperSwiftTestingTests {
     @Test("catalog exposes bundled database cloud and container helpers")
     func catalogExposesBundledHelpers() throws {

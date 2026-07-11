@@ -970,6 +970,12 @@ struct WebViewRepresentable: NSViewRepresentable {
         // not by SwiftUI diffs. This avoids re-entrant navigation loops.
     }
 
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        coordinator.uninstallInitScripts(from: nsView)
+        nsView.navigationDelegate = nil
+        nsView.uiDelegate = nil
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(viewModel: viewModel, localizer: localizer)
     }
@@ -995,6 +1001,14 @@ struct WebViewRepresentable: NSViewRepresentable {
             self.domGrabHandler.onPayload = { [weak viewModel] payload in
                 viewModel?.handleDOMGrabPayload(payload)
             }
+        }
+
+        func revokeInitScripts() {
+            viewModel.revokeAllInitScripts()
+        }
+
+        func uninstallInitScripts(from webView: WKWebView) {
+            BrowserInitScriptWebKitSupport.uninstall(from: webView, viewModel: viewModel)
         }
 
         func installInstrumentationIfNeeded(
@@ -1126,6 +1140,22 @@ struct WebViewRepresentable: NSViewRepresentable {
                 decisionHandler(.cancel)
                 return
             }
+            viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+                url: navigationAction.request.url,
+                isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+            )
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+        ) {
+            viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+                url: navigationResponse.response.url,
+                isMainFrame: navigationResponse.isForMainFrame
+            )
             decisionHandler(.allow)
         }
 
