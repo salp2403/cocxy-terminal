@@ -6,11 +6,15 @@ import Testing
 @Suite("Update channel workflows")
 struct ChannelWorkflowSwiftTestingTests {
 
-    @Test("stable release workflow does not consume preview tags")
-    func stableReleaseWorkflowDoesNotConsumePreviewTags() throws {
+    @Test("stable release workflow is dispatched from the trusted default branch")
+    func stableReleaseWorkflowUsesTrustedRepositoryDispatch() throws {
         let workflow = try workflowContents("release.yml")
 
-        #expect(workflow.contains("if: ${{ !contains(github.ref_name, '-preview.') }}"))
+        #expect(workflow.contains("repository_dispatch:"))
+        #expect(workflow.contains("- stable-release"))
+        #expect(workflow.contains("if: github.ref == 'refs/heads/main'"))
+        #expect(workflow.contains("github.event.client_payload.version"))
+        #expect(!workflow.contains("push:\n    tags:"))
         #expect(workflow.contains("./scripts/build-app.sh release --version \"$VERSION\""))
         #expect(!workflow.contains("--channel preview"))
     }
@@ -19,8 +23,10 @@ struct ChannelWorkflowSwiftTestingTests {
     func previewWorkflowBuildsPreviewAppAndPublishesPreviewAppcast() throws {
         let workflow = try workflowContents("preview.yml")
 
-        #expect(workflow.contains("tags:"))
-        #expect(workflow.contains("'v*-preview.*'"))
+        #expect(workflow.contains("- preview-release"))
+        #expect(workflow.contains("event_type=preview-release"))
+        #expect(workflow.contains("github.event.client_payload.version"))
+        #expect(!workflow.contains("'v*-preview.*'"))
         #expect(workflow.contains("./scripts/build-app.sh release --version \"$VERSION\" --channel preview"))
         #expect(workflow.contains("mv build/CocxyTerminalPreview.app \"$APP_DIR\""))
         #expect(workflow.contains("https://cocxy.dev/appcast-preview.xml"))

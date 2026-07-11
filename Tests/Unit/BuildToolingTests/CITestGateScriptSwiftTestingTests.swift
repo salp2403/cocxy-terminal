@@ -44,6 +44,255 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(pullRequestTemplate.contains("`./scripts/run-tests.sh` passes locally"))
     }
 
+    @Test("workflow actions use reviewed immutable commits and checkouts drop credentials")
+    func workflowActionsUseImmutableCommits() throws {
+        let workflowDirectory = repositoryRoot().appendingPathComponent(".github/workflows", isDirectory: true)
+        let workflowURLs = try FileManager.default.contentsOfDirectory(
+            at: workflowDirectory,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "yml" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let allowedPins: [String: Set<String>] = [
+            "actions/checkout": [
+                "34e114876b0b11c390a56381ad16ebd13914f8d5", // v4.3.1
+                "df4cb1c069e1874edd31b4311f1884172cec0e10", // v6.0.3
+            ],
+            "actions/setup-node": [
+                "49933ea5288caeca8642d1e84afbd3f7d6820020", // v4.4.0
+                "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e", // v6.4.0
+            ],
+            "goto-bus-stop/setup-zig": [
+                "abea47f85e598557f500fa1fd2ab7464fcb39406", // v2.2.1
+            ],
+            "softprops/action-gh-release": [
+                "3bb12739c298aeb8a4eeaf626c5b8d85266b0e65", // v2.6.2
+            ],
+        ]
+        var observedActions = Set<String>()
+
+        for workflowURL in workflowURLs {
+            let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
+            let lines = workflow.components(separatedBy: .newlines)
+            for (index, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("uses:") else { continue }
+                let token = String(trimmed.dropFirst("uses:".count))
+                    .trimmingCharacters(in: .whitespaces)
+                    .split(whereSeparator: { $0.isWhitespace })
+                    .first
+                    .map(String.init) ?? ""
+                let separator = try #require(token.lastIndex(of: "@"))
+                let action = String(token[..<separator])
+                let revision = String(token[token.index(after: separator)...])
+
+                #expect(revision.count == 40, "\(workflowURL.lastPathComponent): \(token)")
+                #expect(revision.allSatisfy { $0.isHexDigit && !$0.isUppercase })
+                #expect(allowedPins[action]?.contains(revision) == true, "Unreviewed action pin: \(token)")
+                observedActions.insert(action)
+
+                if action == "actions/checkout" {
+                    var blockEnd = index + 1
+                    while blockEnd < lines.count,
+                          !lines[blockEnd].trimmingCharacters(in: .whitespaces).hasPrefix("- name:") {
+                        blockEnd += 1
+                    }
+                    let block = lines[index..<blockEnd].joined(separator: "\n")
+                    #expect(
+                        block.contains("persist-credentials: false"),
+                        "Checkout must remove credentials before the next step in \(workflowURL.lastPathComponent)"
+                    )
+                }
+            }
+        }
+
+        #expect(observedActions == Set(allowedPins.keys))
+    }
+
+    @Test("pull request workflows never share private CocxyCore authority")
+    func pullRequestWorkflowsDoNotSharePrivateAuthority() throws {
+        let root = repositoryRoot()
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let performance = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/performance.yml"),
+            encoding: .utf8
+        )
+        let trustedJob = try #require(ci.range(of: "  trusted-bundle-audit:"))
+        let unprivilegedJob = String(ci[..<trustedJob.lowerBound])
+        let trustedJobBody = String(ci[trustedJob.lowerBound...])
+
+        #expect(unprivilegedJob.contains("Build & Test (Unprivileged)"))
+        #expect(unprivilegedJob.contains("prepare-ci-cocxycore-fixture.sh"))
+        #expect(unprivilegedJob.contains("COCXY_CI_REMOTE_DAEMON_FIXTURE: \"1\""))
+        #expect(!unprivilegedJob.contains("COCXYCORE_DEPLOY_KEY"))
+        #expect(!unprivilegedJob.contains("repository: salp2403/cocxycore"))
+
+        #expect(trustedJobBody.contains("if: github.event_name == 'push' && github.ref == 'refs/heads/main'"))
+        #expect(trustedJobBody.contains("repository: salp2403/cocxycore"))
+        #expect(trustedJobBody.contains("COCXYCORE_DEPLOY_KEY"))
+
+        #expect(performance.contains("pull_request:"))
+        #expect(performance.contains("prepare-ci-cocxycore-fixture.sh"))
+        #expect(performance.contains("COCXY_CI_REMOTE_DAEMON_FIXTURE: \"1\""))
+        #expect(!performance.contains("COCXYCORE_DEPLOY_KEY"))
+        #expect(!performance.contains("repository: salp2403/cocxycore"))
+        #expect(!performance.contains("cocxycore-source"))
+    }
+
+    @Test("private CocxyCore builds use one pinned source after pinned tooling")
+    func privateCocxyCoreBuildsUsePinnedSourceAfterTooling() throws {
+        let root = repositoryRoot()
+        let pinnedCocxyCore = "5b1a6ecf1c96bb74a2921e92bad1e52664f83673"
+        let workflowNames = ["ci.yml", "release.yml", "nightly.yml", "preview.yml"]
+
+        for workflowName in workflowNames {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+            let privateCheckout = try #require(workflow.range(of: "repository: salp2403/cocxycore"))
+            let zigSetup = try #require(workflow.range(of: "goto-bus-stop/setup-zig@"))
+            let xcodeGenSetup = try #require(workflow.range(of: "- name: Install pinned XcodeGen"))
+            let privateTail = String(workflow[privateCheckout.lowerBound...])
+
+            #expect(zigSetup.lowerBound < privateCheckout.lowerBound, "\(workflowName) installs Zig too late")
+            #expect(xcodeGenSetup.lowerBound < privateCheckout.lowerBound, "\(workflowName) installs XcodeGen too late")
+            #expect(privateTail.contains("ref: \(pinnedCocxyCore)"), "\(workflowName) has mutable CocxyCore provenance")
+            #expect(privateTail.contains("persist-credentials: false"))
+            #expect(!workflow.contains("brew install xcodegen"))
+            #expect(!workflow.contains("ref: main\n          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}"))
+        }
+    }
+
+    @Test("release channels authenticate source provenance before secrets")
+    func releaseChannelsAuthenticateSourceProvenance() throws {
+        let root = repositoryRoot()
+        let release = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+        let preview = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/preview.yml"),
+            encoding: .utf8
+        )
+        let prepareRelease = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/prepare-release.yml"),
+            encoding: .utf8
+        )
+        let deployWebsite = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+
+        let releaseProvenance = try #require(release.range(of: "- name: Verify release provenance"))
+        let releasePrivateKey = try #require(release.range(of: "COCXYCORE_DEPLOY_KEY"))
+        let releaseCertificate = try #require(release.range(of: "CERTIFICATE_P12"))
+        #expect(releaseProvenance.lowerBound < releasePrivateKey.lowerBound)
+        #expect(releaseProvenance.lowerBound < releaseCertificate.lowerBound)
+        #expect(release.contains("repository_dispatch:"))
+        #expect(release.contains("- stable-release"))
+        #expect(!release.contains("push:\n    tags:"))
+        #expect(release.contains(#"^[0-9]+\.[0-9]+\.[0-9]+$"#))
+        #expect(release.contains("EXPECTED_COMMIT"))
+        #expect(!release.contains("VERSION=\"${{ github.event.client_payload"))
+        #expect(!release.contains("TAG=\"${{ github.event.client_payload"))
+        #expect(!release.contains("EXPECTED_COMMIT=\"${{ github.event.client_payload"))
+        #expect(release.contains("Stable releases require an annotated tag."))
+        #expect(release.contains("git merge-base --is-ancestor \"$TAG_COMMIT\" refs/remotes/origin/main"))
+        #expect(release.contains("git checkout --detach \"$TAG_COMMIT\""))
+        #expect(release.contains("CFBundleShortVersionString"))
+
+        let previewProvenance = try #require(preview.range(of: "- name: Verify preview provenance"))
+        let previewPrivateKey = try #require(preview.range(of: "COCXYCORE_DEPLOY_KEY"))
+        let previewCertificate = try #require(preview.range(of: "CERTIFICATE_P12"))
+        #expect(previewProvenance.lowerBound < previewPrivateKey.lowerBound)
+        #expect(previewProvenance.lowerBound < previewCertificate.lowerBound)
+        #expect(preview.contains("- preview-release"))
+        #expect(preview.contains("if: github.event_name == 'repository_dispatch' && github.ref == 'refs/heads/main'"))
+        #expect(preview.contains(#"^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$"#))
+        #expect(preview.contains("Manual preview requests must run from main."))
+        #expect(!preview.contains("VERSION=\"${{ github.event.client_payload"))
+        #expect(preview.contains("git merge-base --is-ancestor \"$GITHUB_SHA\" refs/remotes/origin/main"))
+
+        #expect(prepareRelease.contains("if: github.ref == 'refs/heads/main'"))
+        #expect(prepareRelease.contains("- prepare-stable-release"))
+        #expect(prepareRelease.contains("-f event_type=stable-release"))
+        #expect(!prepareRelease.contains("VERSION=\"${{ github.event.client_payload"))
+        #expect(prepareRelease.contains("persist-credentials: false"))
+        #expect(!prepareRelease.contains("token: ${{ secrets.RELEASE_PUSH_TOKEN }}"))
+        #expect(prepareRelease.contains("GIT_ASKPASS=\"$ASKPASS\" GIT_TERMINAL_PROMPT=0 git push"))
+        #expect(deployWebsite.contains("if: github.ref == 'refs/heads/main'"))
+        #expect(deployWebsite.contains("ref: main"))
+    }
+
+    @Test("CI tool installers are immutable and remote-daemon fixtures are inert")
+    func ciToolInstallersAreImmutableAndFixturesAreInert() throws {
+        let root = repositoryRoot()
+        let installerURL = root.appendingPathComponent("scripts/install-pinned-xcodegen.sh")
+        let fixtureScriptURL = root.appendingPathComponent("scripts/prepare-ci-cocxycore-fixture.sh")
+        let installer = try String(contentsOf: installerURL, encoding: .utf8)
+        let fixtureScript = try String(contentsOf: fixtureScriptURL, encoding: .utf8)
+
+        #expect(FileManager.default.isExecutableFile(atPath: installerURL.path))
+        #expect(FileManager.default.isExecutableFile(atPath: fixtureScriptURL.path))
+        #expect(installer.contains("XCODEGEN_VERSION=\"2.45.3\""))
+        #expect(installer.contains("0c90f4d28ca57335f9fa78cf5bf6dabfe20a232036dabe36de2eef79cb7c0878"))
+        #expect(installer.contains("--proto '=https'"))
+        #expect(installer.contains("shasum -a 256 -c -"))
+        #expect(!installer.contains("brew install"))
+        #expect(fixtureScript.contains("COCXY_CI_REMOTE_DAEMON_FIXTURE"))
+        #expect(fixtureScript.contains("x86_64-linux-musl"))
+        #expect(fixtureScript.contains("aarch64-linux-musl"))
+        #expect(fixtureScript.contains("xcrun clang -arch arm64"))
+
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/xcrun"),
+              let path = ProcessInfo.processInfo.environment["PATH"],
+              path.split(separator: ":").contains(where: {
+                  FileManager.default.isExecutableFile(atPath: String($0) + "/zig")
+              }) else {
+            return
+        }
+
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-ci-core-fixture-\(UUID().uuidString)", isDirectory: true)
+        let fixtureRoot = temporaryRoot.appendingPathComponent("cocxycore", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let prepare = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [fixtureScriptURL.path, fixtureRoot.path]
+        )
+        #expect(prepare.terminationStatus == 0, "CI fixture preparation failed")
+
+        let buildScript = fixtureRoot.appendingPathComponent("scripts/build.sh")
+        let withoutOptIn = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [buildScript.path, "build"]
+        )
+        #expect(withoutOptIn.terminationStatus == 77)
+
+        let build = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [buildScript.path, "build"],
+            environment: ["COCXY_CI_REMOTE_DAEMON_FIXTURE": "1"]
+        )
+        #expect(build.terminationStatus == 0, "CI fixture compilation failed")
+
+        let binaries = fixtureRoot.appendingPathComponent("zig-out/bin", isDirectory: true)
+        let macOSMagic = try Data(
+            contentsOf: binaries.appendingPathComponent("cocxyd-remote-macos-arm64")
+        ).prefix(4)
+        let linuxMagic = try Data(
+            contentsOf: binaries.appendingPathComponent("cocxyd-remote-linux-x86_64")
+        ).prefix(4)
+        #expect(macOSMagic == Data([0xCF, 0xFA, 0xED, 0xFE]))
+        #expect(linuxMagic == Data([0x7F, 0x45, 0x4C, 0x46]))
+    }
+
     @Test("performance workflow enforces benchmark regression baselines")
     func performanceWorkflowEnforcesBenchmarkRegressionBaselines() throws {
         let root = repositoryRoot()
@@ -148,22 +397,26 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("GH_BIN="))
         #expect(script.contains("version_greater_than()"))
         #expect(script.contains("CFBundleShortVersionString"))
-        #expect(script.contains("must be greater than current Info.plist version"))
+        #expect(script.contains("must not be older than current Info.plist version"))
         #expect(script.contains("/opt/homebrew/bin/gh /usr/local/bin/gh"))
         #expect(script.contains("cd \"$ROOT_DIR\""))
         #expect(script.contains("git ls-remote --tags origin"))
         #expect(script.contains("already exists on origin"))
         #expect(script.contains("\"$GH_BIN\" auth status"))
-        #expect(script.contains("\"$GH_BIN\" workflow run prepare-release.yml"))
+        #expect(script.contains("\"$GH_BIN\" api --method POST"))
+        #expect(script.contains("event_type=prepare-stable-release"))
         #expect(script.contains(".github/workflows/prepare-release.yml"))
         #expect(script.contains("DRY_RUN=1"))
         #expect(script.contains("No GitHub workflow was triggered."))
         #expect(workflow.contains("git config user.name \"Said Arturo Lopez\""))
         #expect(workflow.contains("git config user.email \"dev@cocxy.dev\""))
+        #expect(workflow.contains("git push origin HEAD:main"))
+        #expect(workflow.contains("Target version ${VERSION} is older than current Info.plist version ${CURRENT}."))
+        #expect(workflow.contains("github.event.client_payload.version"))
         #expect(!workflow.contains("git config user.name \"said lopez\""))
 
         let dryRunRange = try #require(script.range(of: "if [ \"$DRY_RUN\" -eq 1 ]; then"))
-        let dispatchRange = try #require(script.range(of: "\"$GH_BIN\" workflow run prepare-release.yml"))
+        let dispatchRange = try #require(script.range(of: "\"$GH_BIN\" api --method POST"))
         #expect(dryRunRange.lowerBound < dispatchRange.lowerBound)
     }
 
@@ -348,8 +601,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("npm audit signatures"))
         #expect(workflow.contains("npm run smoke:visual"))
         #expect(workflow.contains("npm run audit:quality:full"))
+        #expect(workflow.contains("request-preview:"))
+        #expect(workflow.contains("event_type=preview-release"))
         #expect(workflow.contains("build-preview:"))
-        #expect(workflow.contains("if: github.event_name != 'pull_request'"))
+        #expect(workflow.contains("if: github.event_name == 'repository_dispatch' && github.ref == 'refs/heads/main'"))
         #expect(workflow.contains("contents: write"))
     }
 

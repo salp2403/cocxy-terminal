@@ -5,15 +5,15 @@ on:
     paths:
       - '.github/workflows/preview.yml'
       - 'web/**'
-  push:
-    tags:
-      - 'v*-preview.*'
   workflow_dispatch:
     inputs:
       version:
         description: 'Preview version, for example 1.1.0-preview.1'
         required: true
         type: string
+  repository_dispatch:
+    types:
+      - preview-release
 
 permissions:
   contents: read
@@ -21,6 +21,7 @@ permissions:
 jobs:
   website-quality:
     name: Website Quality
+    if: github.event_name != 'workflow_dispatch'
     runs-on: macos-15
     timeout-minutes: 45
     permissions:
@@ -28,9 +29,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           lfs: true
+          persist-credentials: false
 
       - name: Install website dependencies
         working-directory: web
@@ -45,9 +47,36 @@ jobs:
           npm run smoke:visual
           npm run audit:quality:full
 
+  request-preview:
+    name: Dispatch Trusted Preview
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15
+    timeout-minutes: 5
+    permissions:
+      contents: write
+
+    steps:
+      - name: Validate and dispatch preview request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Manual preview requests must run from main."
+            exit 1
+          fi
+          if ! [[ "$REQUESTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$ ]]; then
+            echo "::error::Preview versions must match X.Y.Z-preview.N exactly."
+            exit 1
+          fi
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+            -f event_type=preview-release \
+            -f "client_payload[version]=${REQUESTED_VERSION}"
+
   build-preview:
     name: Build Preview
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'repository_dispatch' && github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 60
     environment: production
@@ -56,40 +85,60 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          ref: ${{ github.sha }}
           lfs: true
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Checkout cocxycore for cocxyd-remote build
-        uses: actions/checkout@v4
-        with:
-          repository: salp2403/cocxycore
-          path: cocxycore-source
-          ref: main
-          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
+      - name: Verify preview provenance
+        id: version
+        env:
+          DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+        run: |
+          set -euo pipefail
+          VERSION="$DISPATCH_VERSION"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$ ]]; then
+            echo "::error::Preview dispatch payload is invalid."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Preview workflow is not running from its default-branch event commit."
+            exit 1
+          fi
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "::error::Preview commit is not reachable from origin/main."
+            exit 1
+          fi
+          BASE_VERSION="${VERSION%%-preview.*}"
+          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)"
+          if [ "$PLIST_VERSION" != "$BASE_VERSION" ]; then
+            echo "::error::Info.plist version ${PLIST_VERSION} does not match preview base ${BASE_VERSION}."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Preview version: $VERSION"
 
-      - name: Install Zig 0.15.2 for cocxyd-remote build
-        uses: goto-bus-stop/setup-zig@v2
+      - name: Install Zig 0.15.2
+        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
         with:
           version: 0.15.2
 
-      - name: Resolve preview version
-        id: version
+      - name: Install pinned XcodeGen
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${GITHUB_REF_NAME#v}"
-          fi
-          case "$VERSION" in
-            *-preview.*) ;;
-            *)
-              echo "::error::Preview versions must match X.Y.Z-preview.N"
-              exit 1
-              ;;
-          esac
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "Preview version: $VERSION"
+          XCODEGEN_BIN="$(./scripts/install-pinned-xcodegen.sh "$RUNNER_TEMP/xcodegen-2.45.3")"
+          echo "$XCODEGEN_BIN" >> "$GITHUB_PATH"
+
+      - name: Checkout pinned CocxyCore source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: salp2403/cocxycore
+          path: cocxycore-source
+          ref: 5b1a6ecf1c96bb74a2921e92bad1e52664f83673
+          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
+          persist-credentials: false
 
       - name: Import Developer ID certificate
         env:
@@ -111,9 +160,6 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
           rm $RUNNER_TEMP/certificate.p12
-
-      - name: Install xcodegen
-        run: brew install xcodegen
 
       - name: Create app bundle (preview)
         env:
@@ -319,9 +365,10 @@ jobs:
           APPCAST
 
       - name: Create GitHub Release (preview)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ steps.version.outputs.VERSION }}
+          target_commitish: ${{ github.sha }}
           name: Cocxy Terminal Preview ${{ steps.version.outputs.VERSION }}
           files: |
             build/CocxyTerminal-Preview-*.dmg

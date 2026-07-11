@@ -12,28 +12,27 @@ permissions:
 jobs:
   build-nightly:
     name: Build Nightly
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/nightly'
     runs-on: macos-15
     timeout-minutes: 60
     environment: production
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           lfs: true
+          persist-credentials: false
 
-      - name: Checkout cocxycore for cocxyd-remote build
-        uses: actions/checkout@v4
-        with:
-          repository: salp2403/cocxycore
-          path: cocxycore-source
-          ref: main
-          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
-
-      - name: Install Zig 0.15.2 for cocxyd-remote build
-        uses: goto-bus-stop/setup-zig@v2
+      - name: Install Zig 0.15.2
+        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
         with:
           version: 0.15.2
+
+      - name: Install pinned XcodeGen
+        run: |
+          XCODEGEN_BIN="$(./scripts/install-pinned-xcodegen.sh "$RUNNER_TEMP/xcodegen-2.45.3")"
+          echo "$XCODEGEN_BIN" >> "$GITHUB_PATH"
 
       - name: Generate nightly version
         id: version
@@ -42,6 +41,15 @@ jobs:
           NIGHTLY_VERSION="${BASE_VERSION}-nightly.$(date +%Y%m%d)"
           echo "VERSION=$NIGHTLY_VERSION" >> "$GITHUB_OUTPUT"
           echo "Nightly version: $NIGHTLY_VERSION"
+
+      - name: Checkout pinned CocxyCore source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: salp2403/cocxycore
+          path: cocxycore-source
+          ref: 5b1a6ecf1c96bb74a2921e92bad1e52664f83673
+          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
+          persist-credentials: false
 
       - name: Import Developer ID certificate
         env:
@@ -63,9 +71,6 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
           rm $RUNNER_TEMP/certificate.p12
-
-      - name: Install xcodegen
-        run: brew install xcodegen
 
       - name: Create app bundle (nightly)
         env:
@@ -275,7 +280,7 @@ jobs:
           APPCAST
 
       - name: Create GitHub Release (nightly)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: nightly-${{ steps.version.outputs.VERSION }}
           prerelease: true

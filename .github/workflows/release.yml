@@ -1,9 +1,9 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  repository_dispatch:
+    types:
+      - stable-release
 
 permissions:
   contents: write
@@ -11,38 +11,88 @@ permissions:
 jobs:
   build-release:
     name: Build, Sign & Release
-    if: ${{ !contains(github.ref_name, '-preview.') }}
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 60
     environment: production
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
+          ref: ${{ github.sha }}
           lfs: true
+          fetch-depth: 0
+          persist-credentials: false
 
-      - name: Checkout cocxycore for cocxyd-remote build
-        uses: actions/checkout@v4
-        with:
-          repository: salp2403/cocxycore
-          path: cocxycore-source
-          ref: main
-          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
+      - name: Verify release provenance
+        id: version
+        env:
+          DISPATCH_VERSION: ${{ github.event.client_payload.version }}
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+          DISPATCH_COMMIT: ${{ github.event.client_payload.commit }}
+        run: |
+          set -euo pipefail
+          VERSION="$DISPATCH_VERSION"
+          TAG="$DISPATCH_TAG"
+          EXPECTED_COMMIT="$DISPATCH_COMMIT"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+              || [ "$TAG" != "v${VERSION}" ] \
+              || ! [[ "$EXPECTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Stable release dispatch payload is invalid."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Release workflow is not running from its default-branch event commit."
+            exit 1
+          fi
+          git fetch --force --no-tags origin \
+            '+refs/heads/main:refs/remotes/origin/main' \
+            "+refs/tags/${TAG}:refs/tags/${TAG}"
+          if [ "$(git cat-file -t "refs/tags/${TAG}" 2>/dev/null || true)" != "tag" ]; then
+            echo "::error::Stable releases require an annotated tag."
+            exit 1
+          fi
+          TAG_COMMIT="$(git rev-list -n 1 "refs/tags/${TAG}")"
+          if [ "$TAG_COMMIT" != "$EXPECTED_COMMIT" ]; then
+            echo "::error::Release tag does not match the commit authorized by preparation."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$TAG_COMMIT" refs/remotes/origin/main; then
+            echo "::error::Release tag commit is not reachable from origin/main."
+            exit 1
+          fi
+          git checkout --detach "$TAG_COMMIT"
+          PLIST_VERSION="$(plutil -extract CFBundleShortVersionString raw Resources/Info.plist)"
+          if [ "$PLIST_VERSION" != "$VERSION" ]; then
+            echo "::error::Info.plist version ${PLIST_VERSION} does not match tag ${TAG}."
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Install Zig 0.15.2 for cocxyd-remote build
-        uses: goto-bus-stop/setup-zig@v2
+      - name: Install Zig 0.15.2
+        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
         with:
           version: 0.15.2
 
       - name: Setup Node.js for website build
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
 
-      - name: Extract version from tag
-        id: version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - name: Install pinned XcodeGen
+        run: |
+          XCODEGEN_BIN="$(./scripts/install-pinned-xcodegen.sh "$RUNNER_TEMP/xcodegen-2.45.3")"
+          echo "$XCODEGEN_BIN" >> "$GITHUB_PATH"
+
+      - name: Checkout pinned CocxyCore source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          repository: salp2403/cocxycore
+          path: cocxycore-source
+          ref: 5b1a6ecf1c96bb74a2921e92bad1e52664f83673
+          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
+          persist-credentials: false
 
       - name: Import Developer ID certificate
         env:
@@ -64,9 +114,6 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
           rm $RUNNER_TEMP/certificate.p12
-
-      - name: Install xcodegen
-        run: brew install xcodegen
 
       - name: Build app bundle
         env:
@@ -300,8 +347,9 @@ jobs:
           APPCAST
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
+          tag_name: v${{ steps.version.outputs.VERSION }}
           files: |
             build/CocxyTerminal-*.dmg
           body: |
@@ -483,7 +531,18 @@ jobs:
             echo "No CHANGELOG changes to commit"
           else
             git commit -m "docs: update CHANGELOG for v${VERSION}"
-            git push origin HEAD:main
+            ASKPASS="$RUNNER_TEMP/cocxy-release-git-askpass"
+            cat > "$ASKPASS" <<'ASKPASS_EOF'
+          #!/bin/bash
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS_EOF
+            chmod 700 "$ASKPASS"
+            trap 'rm -f "$ASKPASS"' EXIT
+            GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 git push origin HEAD:main
           fi
 
       - name: Deploy website
