@@ -72,10 +72,23 @@ struct CodebaseSemanticIndex {
     }
 
     func rebuildIfNeeded() throws -> CodebaseSemanticIndexStats? {
-        guard try store.recordCount() == 0 else {
-            return nil
+        let cleanup = try purgeProtectedRecords()
+        guard cleanup.remainingRecordCount == 0 else {
+            guard cleanup.removedPathCount > 0 else { return nil }
+            return CodebaseSemanticIndexStats(
+                indexedFiles: 0,
+                indexedChunks: 0,
+                removedPaths: cleanup.removedPathCount,
+                truncated: false
+            )
         }
-        return try rebuild()
+        let stats = try rebuild()
+        return CodebaseSemanticIndexStats(
+            indexedFiles: stats.indexedFiles,
+            indexedChunks: stats.indexedChunks,
+            removedPaths: cleanup.removedPathCount,
+            truncated: stats.truncated
+        )
     }
 
     func rebuild() throws -> CodebaseSemanticIndexStats {
@@ -152,6 +165,7 @@ struct CodebaseSemanticIndex {
 
         let stalePaths = Set(changes.changedFiles + changes.removedFiles)
         try store.remove(paths: stalePaths)
+        let protectedCleanup = try purgeProtectedRecords()
 
         let scanner = CodebaseIndexFileScanner(workspace: workspace, maxFileBytes: maxFileBytes)
         var indexedFiles = 0
@@ -185,7 +199,7 @@ struct CodebaseSemanticIndex {
         return CodebaseSemanticIndexStats(
             indexedFiles: indexedFiles,
             indexedChunks: records.count,
-            removedPaths: stalePaths.count,
+            removedPaths: stalePaths.count + protectedCleanup.removedPathCount,
             truncated: truncated
         )
     }
@@ -202,14 +216,27 @@ struct CodebaseSemanticIndex {
             pathPrefix: normalizedScopePrefix(scopePath)
         )
 
-        return vectorResults.filter { $0.score > 0 }.map { result in
-            CodebaseSearchResult(
-                path: result.record.path,
-                line: result.record.startLine,
-                preview: preview(for: result.record),
-                score: result.score,
-                matchKind: .content
-            )
+        return vectorResults
+            .filter {
+                $0.score > 0 && !AgentSensitivePathPolicy.isProtected(
+                    relativePath: $0.record.path,
+                    isDirectory: false
+                )
+            }
+            .map { result in
+                CodebaseSearchResult(
+                    path: result.record.path,
+                    line: result.record.startLine,
+                    preview: preview(for: result.record),
+                    score: result.score,
+                    matchKind: .content
+                )
+            }
+    }
+
+    private func purgeProtectedRecords() throws -> CodebaseVectorStorePathRemoval {
+        try store.removePaths {
+            AgentSensitivePathPolicy.isProtected(relativePath: $0, isDirectory: false)
         }
     }
 

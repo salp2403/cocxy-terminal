@@ -134,6 +134,13 @@ struct CodebaseIndexSwiftTestingTests {
         try "ignored\n".write(to: root.appendingPathComponent("debug.log"), atomically: true, encoding: .utf8)
         try "generated\n".write(to: root.appendingPathComponent("Generated/File.swift"), atomically: true, encoding: .utf8)
         try "indexed\n".write(to: root.appendingPathComponent("Sources/App.swift"), atomically: true, encoding: .utf8)
+        let secretsDirectory = root.appendingPathComponent("secrets", isDirectory: true)
+        try FileManager.default.createDirectory(at: secretsDirectory, withIntermediateDirectories: true)
+        try "DEMO_CREDENTIAL=synthetic-placeholder\n".write(
+            to: secretsDirectory.appendingPathComponent("demo.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
 
         let service = CodebaseIndexSyncService(workspace: AgentWorkspace(rootURL: root))
         let initial = try service.refresh()
@@ -142,6 +149,7 @@ struct CodebaseIndexSwiftTestingTests {
         #expect(!initial.changedFiles.contains(".env"))
         #expect(!initial.changedFiles.contains("debug.log"))
         #expect(!initial.changedFiles.contains("Generated/File.swift"))
+        #expect(!initial.changedFiles.contains("secrets/demo.txt"))
     }
 
     @Test("vector store persists chunks and ranks by cosine similarity")
@@ -190,6 +198,48 @@ struct CodebaseIndexSwiftTestingTests {
 
         let results = try store.search(embedding: [1, 0], limit: 10)
         #expect(results.map(\.record.path) == ["Sources/Other.swift"])
+    }
+
+    @Test("semantic index purges protected paths from existing vector stores")
+    func semanticIndexPurgesProtectedPathsFromExistingVectorStores() throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+        let store = CodebaseVectorStore(
+            storageURL: root.appendingPathComponent(".cocxy-index", isDirectory: true)
+        )
+        let protectedRecord = CodebaseVectorRecord(
+            path: "secrets/token.txt",
+            startLine: 1,
+            endLine: 1,
+            text: "token synthetic-placeholder",
+            embedding: [1, 0]
+        )
+        try store.upsert([
+            protectedRecord,
+            CodebaseVectorRecord(
+                path: "Sources/Auth.swift",
+                startLine: 1,
+                endLine: 1,
+                text: "token session",
+                embedding: [1, 0]
+            ),
+        ])
+        let semanticIndex = CodebaseSemanticIndex(
+            workspace: workspace,
+            store: store,
+            embeddingProvider: MockCodebaseEmbeddingProvider()
+        )
+
+        let cleanup = try semanticIndex.rebuildIfNeeded()
+        #expect(cleanup?.removedPaths == 1)
+        #expect(try store.recordCount() == 1)
+        #expect(try store.search(embedding: [1, 0], limit: 10).map(\.record.path) == ["Sources/Auth.swift"])
+
+        try store.upsert([protectedRecord])
+        let results = try semanticIndex.search(query: "authentication", limit: 10)
+        #expect(results.map(\.path) == ["Sources/Auth.swift"])
+        #expect(try store.recordCount() == 2)
     }
 
     @Test("vector store rejects non-finite embeddings")

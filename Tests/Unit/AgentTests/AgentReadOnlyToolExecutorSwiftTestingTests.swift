@@ -138,6 +138,93 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         #expect(!searchedPaths.contains("id_rsa"))
     }
 
+    @Test("protected directory roots and descendants are denied across read tools")
+    func protectedDirectoryRootsAndDescendantsAreDeniedAcrossReadTools() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let secretsDirectory = root.appendingPathComponent("secrets", isDirectory: true)
+        let nestedSecretsDirectory = root.appendingPathComponent("Sources/Secrets", isDirectory: true)
+        try FileManager.default.createDirectory(at: secretsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nestedSecretsDirectory, withIntermediateDirectories: true)
+        try "DEMO_CREDENTIAL=synthetic-placeholder\n".write(
+            to: secretsDirectory.appendingPathComponent("demo.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "NESTED_CREDENTIAL=synthetic-placeholder\n".write(
+            to: nestedSecretsDirectory.appendingPathComponent("nested.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let executor = AgentReadOnlyToolExecutor(workspace: workspace)
+        let directRead = try await executor.execute(AgentToolCall(
+            id: "call-read-protected-descendant",
+            toolID: "read_file",
+            arguments: ["path": .string("secrets/demo.txt")]
+        ))
+        let nestedRead = try await executor.execute(AgentToolCall(
+            id: "call-read-nested-protected-descendant",
+            toolID: "read_file",
+            arguments: ["path": .string("Sources/Secrets/nested.txt")]
+        ))
+        let scopedList = try await executor.execute(AgentToolCall(
+            id: "call-list-protected-root",
+            toolID: "list_directory",
+            arguments: ["path": .string("secrets")]
+        ))
+        let scopedGrep = try await executor.execute(AgentToolCall(
+            id: "call-grep-protected-root",
+            toolID: "grep",
+            arguments: [
+                "path": .string("secrets"),
+                "pattern": .string("CREDENTIAL"),
+            ]
+        ))
+        let rootList = try await executor.execute(AgentToolCall(
+            id: "call-list-root-with-protected-directory",
+            toolID: "list_directory",
+            arguments: ["path": .string(".")]
+        ))
+        let rootGrep = try await executor.execute(AgentToolCall(
+            id: "call-grep-root-with-protected-directory",
+            toolID: "grep",
+            arguments: ["pattern": .string("synthetic-placeholder")]
+        ))
+        let fileSearch = try await executor.execute(AgentToolCall(
+            id: "call-search-files-with-protected-directory",
+            toolID: "search_files",
+            arguments: ["pattern": .string("*.txt")]
+        ))
+        let codebaseSearch = try await executor.execute(AgentToolCall(
+            id: "call-search-codebase-with-protected-directory",
+            toolID: "search_codebase",
+            arguments: ["query": .string("synthetic-placeholder")]
+        ))
+
+        for result in [directRead, nestedRead, scopedList, scopedGrep] {
+            #expect(result.status == AgentToolResultStatus.failure)
+            #expect(result.error?.code == "workspace_sensitive_path")
+        }
+        let listedPaths = try arrayValue(contentObject(rootList)["entries"]).compactMap { entry -> String? in
+            guard case .object(let object) = entry else { return nil }
+            return object["path"]?.stringValue
+        }
+        #expect(!listedPaths.contains("secrets"))
+        #expect(try arrayValue(contentObject(rootGrep)["matches"]).isEmpty)
+        #expect(try arrayValue(contentObject(fileSearch)["paths"]).isEmpty)
+        #expect(try arrayValue(contentObject(codebaseSearch)["results"]).isEmpty)
+
+        #expect(throws: AgentWorkspaceError.protectedSensitivePath("secrets/new.txt")) {
+            try workspace.resolveWritableFile("secrets/new.txt", allowCreate: true)
+        }
+        #expect(AgentSensitivePathPolicy.isProtected(relativePath: "secrets", isDirectory: true))
+        #expect(!AgentSensitivePathPolicy.isProtected(relativePath: "secrets", isDirectory: false))
+        #expect(AgentSensitivePathPolicy.isProtected(relativePath: "secrets/demo.txt", isDirectory: false))
+        #expect(AgentSensitivePathPolicy.isProtected(relativePath: "Sources/Secrets/nested.txt", isDirectory: false))
+    }
+
     @Test("search_files matches glob patterns and skips hidden and gitignored files")
     func searchFilesMatchesGlobAndSkipsIgnoredFiles() async throws {
         let root = try makeWorkspace()
