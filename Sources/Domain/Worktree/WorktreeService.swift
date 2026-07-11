@@ -102,6 +102,11 @@ actor WorktreeService {
     /// throws `collisionAfterRetries`.
     static let maximumCollisionRetries: Int = 3
 
+    private static let gitSafetyOverrides = [
+        "-c", "core.hooksPath=/dev/null",
+        "-c", "core.fsmonitor=false",
+    ]
+
     // MARK: Dependencies (injectable for tests)
 
     private let gitExecutableURLProvider: @Sendable () -> URL?
@@ -615,7 +620,7 @@ actor WorktreeService {
         do {
             return try CodeReviewGit.run(
                 workingDirectory: workingDirectory,
-                arguments: arguments,
+                arguments: Self.gitSafetyOverrides + arguments,
                 gitExecutableURLOverride: gitURL
             )
         } catch {

@@ -92,6 +92,18 @@ struct WorktreeServiceTests {
 
     private enum TestError: Error { case gitUnavailable }
 
+    private func installExecutableScript(at url: URL, contents: String) throws {
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
+    }
+
     private func makeConfig(
         enabled: Bool = true,
         basePath: String,
@@ -166,6 +178,16 @@ struct WorktreeServiceTests {
             arguments: ["worktree", "list", "--porcelain"]
         )
         #expect(gitList.stdout.contains(entry.path.path))
+    }
+
+    @Test("add disables the repository's default post-checkout hook")
+    func addDisablesDefaultPostCheckoutHook() async throws {
+        try await verifyAddDisablesPostCheckoutHook(customHooksPath: false)
+    }
+
+    @Test("add overrides a repository-configured post-checkout hook path")
+    func addDisablesConfiguredPostCheckoutHook() async throws {
+        try await verifyAddDisablesPostCheckoutHook(customHooksPath: true)
     }
 
     @Test("add refuses when the feature is disabled")
@@ -423,6 +445,92 @@ struct WorktreeServiceTests {
         #expect(snapshot.porcelainLines.first?.hasSuffix("README.md") == true)
     }
 
+    @Test("status removal and cleanup disable repository-configured fsmonitor hooks")
+    func worktreeInspectionsDisableFSMonitorHooks() async throws {
+        guard gitAvailable() else { return }
+
+        let tempRoot = try makeTempRoot()
+        defer { removeTempRoot(tempRoot) }
+        let origin = try initOriginRepo(under: tempRoot)
+        let storagePath = tempRoot.appendingPathComponent("worktrees").path
+        let service = WorktreeService()
+        let store = makeStore(originRepoPath: origin, basePath: storagePath)
+        let config = makeConfig(basePath: storagePath)
+
+        let first = try await service.add(
+            originRepoPath: origin,
+            agent: "status",
+            tabID: nil,
+            config: config,
+            store: store
+        )
+        let second = try await service.add(
+            originRepoPath: origin,
+            agent: "plan",
+            tabID: nil,
+            config: config,
+            store: store
+        )
+        let third = try await service.add(
+            originRepoPath: origin,
+            agent: "cleanup",
+            tabID: nil,
+            config: config,
+            store: store
+        )
+
+        let marker = tempRoot.appendingPathComponent("fsmonitor-ran")
+        let monitor = tempRoot.appendingPathComponent("fsmonitor.sh")
+        try installExecutableScript(
+            at: monitor,
+            contents: """
+            #!/bin/sh
+            printf invoked >> \(shellSingleQuoted(marker.path))
+            printf '\\n'
+            """
+        )
+        try runGitCommand(
+            at: origin,
+            arguments: ["config", "core.fsmonitor", monitor.path]
+        )
+
+        // Positive control: an ordinary status command executes the configured monitor.
+        let rawStatus = try runGitCommand(
+            at: first.path,
+            arguments: ["status", "--porcelain"]
+        )
+        #expect(rawStatus.terminationStatus == 0)
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+        try FileManager.default.removeItem(at: marker)
+
+        _ = try await service.status(id: first.id, store: store)
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+
+        _ = try await service.remove(
+            id: first.id,
+            force: false,
+            originRepoPath: origin,
+            store: store
+        )
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+
+        let plan = try await service.mergedCleanupPlan(
+            originRepoPath: origin,
+            baseRef: "HEAD",
+            store: store
+        )
+        #expect(Set(plan.removable.map(\.id)) == Set([second.id, third.id]))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+
+        let cleanup = try await service.cleanupMergedWorktrees(
+            originRepoPath: origin,
+            baseRef: "HEAD",
+            store: store
+        )
+        #expect(Set(cleanup.removed.map(\.id)) == Set([second.id, third.id]))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
     // MARK: - batch cleanup
 
     @Test("merged cleanup removes clean merged worktrees in one batch")
@@ -609,6 +717,71 @@ struct WorktreeServiceTests {
         )
         #expect(entry.id != forcedIDs[0])
         #expect(entry.id == forcedIDs[1])
+    }
+
+    private func verifyAddDisablesPostCheckoutHook(
+        customHooksPath: Bool
+    ) async throws {
+        guard gitAvailable() else { return }
+
+        let tempRoot = try makeTempRoot()
+        defer { removeTempRoot(tempRoot) }
+        let origin = try initOriginRepo(under: tempRoot)
+        let hooksDirectory = customHooksPath
+            ? tempRoot.appendingPathComponent("configured-hooks", isDirectory: true)
+            : origin.appendingPathComponent(".git/hooks", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: hooksDirectory,
+            withIntermediateDirectories: true
+        )
+        if customHooksPath {
+            try runGitCommand(
+                at: origin,
+                arguments: ["config", "core.hooksPath", hooksDirectory.path]
+            )
+        }
+
+        let marker = tempRoot.appendingPathComponent("post-checkout-ran")
+        try installExecutableScript(
+            at: hooksDirectory.appendingPathComponent("post-checkout"),
+            contents: """
+            #!/bin/sh
+            printf invoked > \(shellSingleQuoted(marker.path))
+            """
+        )
+
+        // Positive control: raw worktree creation executes the repository-selected hook.
+        let rawPath = tempRoot.appendingPathComponent("raw-worktree", isDirectory: true)
+        let rawAdd = try runGitCommand(
+            at: origin,
+            arguments: [
+                "worktree", "add",
+                "-b", "raw-hook-control",
+                rawPath.path,
+                "HEAD",
+            ]
+        )
+        #expect(rawAdd.terminationStatus == 0)
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+        try runGitCommand(
+            at: origin,
+            arguments: ["worktree", "remove", "--force", rawPath.path]
+        )
+        try FileManager.default.removeItem(at: marker)
+
+        let storagePath = tempRoot.appendingPathComponent("worktrees").path
+        let service = WorktreeService()
+        let store = makeStore(originRepoPath: origin, basePath: storagePath)
+        let entry = try await service.add(
+            originRepoPath: origin,
+            agent: nil,
+            tabID: nil,
+            config: makeConfig(basePath: storagePath),
+            store: store
+        )
+
+        #expect(FileManager.default.fileExists(atPath: entry.path.path))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
     }
 }
 
