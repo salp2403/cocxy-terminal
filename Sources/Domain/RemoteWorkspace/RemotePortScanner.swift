@@ -36,8 +36,8 @@ struct RemoteBrowserOpenSuggestion: Identifiable, Equatable, Sendable {
 /// and parses the output to detect dev servers and other services.
 /// Results are published via Combine for reactive UI updates.
 ///
-/// When ports are detected, the scanner can auto-create SSH -L local forwards
-/// so the browser pane can reach remote localhost without manual port forwarding.
+/// Discovery never creates a client-facing local listener. Callers must request
+/// a specific forward explicitly after presenting the detected service.
 @MainActor
 final class RemotePortScanner: ObservableObject {
     typealias LocalPortCandidateProvider = @MainActor (_ remotePort: Int, _ usedLocalPorts: Set<Int>) -> [Int]
@@ -46,10 +46,10 @@ final class RemotePortScanner: ObservableObject {
     /// Currently detected remote ports.
     @Published private(set) var detectedPorts: [RemotePortInfo] = []
 
-    /// Ports that have been auto-forwarded.
+    /// Ports that have been explicitly forwarded during this scan session.
     @Published private(set) var forwardedPorts: Set<Int> = []
 
-    /// Mapping of remote dev server port -> local forwarded port.
+    /// Mapping of explicitly selected remote port -> local forwarded port.
     @Published private(set) var forwardedPortMappings: [Int: Int] = [:]
 
     /// Browser-ready suggestions for detected remote dev servers.
@@ -125,6 +125,17 @@ final class RemotePortScanner: ObservableObject {
         scanTimer?.invalidate()
         scanTimer = nil
         isScanning = false
+
+        if let profileID = activeProfileID {
+            for (remotePort, localPort) in forwardedPortMappings.sorted(by: { $0.key < $1.key }) {
+                let forward = RemoteConnectionProfile.PortForward.local(
+                    localPort: localPort,
+                    remotePort: remotePort
+                )
+                try? connectionManager.cancelForward(forward, for: profileID)
+            }
+        }
+
         activeProfileID = nil
         detectedPorts = []
         forwardedPorts = []
@@ -132,14 +143,15 @@ final class RemotePortScanner: ObservableObject {
         browserOpenSuggestions = []
     }
 
-    // MARK: - Auto-Forward
+    // MARK: - Explicit Forwarding
 
-    /// Auto-forwards a detected remote port to the same local port.
+    /// Forwards one user-selected remote port to an available local port.
     ///
     /// Creates an SSH `-L localPort:localhost:remotePort` tunnel via the
     /// existing ControlMaster connection.
-    func autoForward(port: Int) async {
+    func forwardDetectedPort(_ port: Int) async {
         guard let profileID = activeProfileID else { return }
+        guard detectedPorts.contains(where: { $0.port == port }) else { return }
         guard forwardedPortMappings[port] == nil else { return }
 
         let usedLocalPorts = Set(forwardedPortMappings.values)
@@ -165,13 +177,6 @@ final class RemotePortScanner: ObservableObject {
         }
     }
 
-    /// Auto-forwards all detected dev server ports.
-    func autoForwardAllDevPorts() async {
-        for portInfo in detectedPorts where Self.devPorts.contains(portInfo.port) {
-            await autoForward(port: portInfo.port)
-        }
-    }
-
     /// Runs an immediate scan for the active profile.
     func refreshNow() async {
         await performScan()
@@ -191,13 +196,6 @@ final class RemotePortScanner: ObservableObject {
         let ports = parseListeningPorts(output)
         detectedPorts = ports
         refreshBrowserOpenSuggestions()
-
-        // Auto-forward any new dev server ports.
-        for portInfo in ports where Self.devPorts.contains(portInfo.port) {
-            if forwardedPortMappings[portInfo.port] == nil {
-                await autoForward(port: portInfo.port)
-            }
-        }
     }
 
     private func refreshBrowserOpenSuggestions() {
@@ -324,7 +322,7 @@ final class RemotePortScanner: ObservableObject {
 
             // Extract process name if available.
             let process = extractProcess(from: lineStr)
-            let address = extractAddress(from: lineStr)
+            let address = extractAddress(from: lineStr, port: port)
 
             ports.append(RemotePortInfo(port: port, process: process, address: address))
         }
@@ -385,12 +383,24 @@ final class RemotePortScanner: ObservableObject {
         return nil
     }
 
-    private func extractAddress(from line: String) -> String {
-        if line.contains("0.0.0.0") || line.contains("*:") || line.contains(":::") {
-            return "0.0.0.0"
-        }
-        if line.contains("127.0.0.1") {
+    private func extractAddress(from line: String, port: Int) -> String {
+        if line.contains("127.0.0.1:\(port)") {
             return "127.0.0.1"
+        }
+        if let range = line.range(
+            of: #"\[[^\]]+\]:\#(port)"#,
+            options: .regularExpression
+        ) {
+            let endpoint = line[range]
+            if let closeBracket = endpoint.firstIndex(of: "]") {
+                return String(endpoint[endpoint.index(after: endpoint.startIndex)..<closeBracket])
+            }
+        }
+        if line.contains(":::\(port)") {
+            return "::"
+        }
+        if line.contains("0.0.0.0:\(port)") || line.contains("*:\(port)") {
+            return "0.0.0.0"
         }
         return "0.0.0.0"
     }
