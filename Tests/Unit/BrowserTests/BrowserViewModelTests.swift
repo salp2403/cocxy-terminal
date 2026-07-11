@@ -405,15 +405,16 @@ final class BrowserViewModelTests: XCTestCase {
         vm.toggleDOMGrabMode()
 
         XCTAssertTrue(vm.isDOMGrabActive)
-        if case .setDOMGrabEnabled(let enabled) = received {
-            XCTAssertTrue(enabled)
+        if case .setDOMGrabAuthorization(let authorizationID) = received {
+            XCTAssertEqual(authorizationID, vm.domGrabAuthorizationID)
+            XCTAssertNotNil(authorizationID)
         } else {
-            XCTFail("Expected DOM grab toggle to emit .setDOMGrabEnabled(true)")
+            XCTFail("Expected DOM grab toggle to emit an exact one-shot grant")
         }
         cancellable.cancel()
     }
 
-    func testHandleDOMGrabPayloadForwardsPayloadAndDisablesSingleShotMode() {
+    func testHandleDOMGrabPayloadForwardsPayloadAndDisablesSingleShotMode() throws {
         let vm = BrowserViewModel()
         let payload = BrowserDOMGrabPayload(
             selector: "button.primary",
@@ -428,7 +429,8 @@ final class BrowserViewModelTests: XCTestCase {
         let cancellable = vm.navigationActionSubject.sink { actions.append($0) }
 
         vm.setDOMGrabMode(true)
-        vm.handleDOMGrabPayload(payload)
+        let authorizationID = try XCTUnwrap(vm.domGrabAuthorizationID)
+        vm.handleDOMGrabPayload(payload, authorizationID: authorizationID)
 
         XCTAssertEqual(forwarded, payload)
         XCTAssertFalse(vm.isDOMGrabActive)
@@ -437,11 +439,13 @@ final class BrowserViewModelTests: XCTestCase {
             cancellable.cancel()
             return
         }
-        if case .setDOMGrabEnabled(true) = actions[0] {} else {
-            XCTFail("Expected first action to enable DOM grab")
+        if case .setDOMGrabAuthorization(let installedID) = actions[0] {
+            XCTAssertEqual(installedID, authorizationID)
+        } else {
+            XCTFail("Expected first action to install the exact DOM-grab grant")
         }
-        if case .setDOMGrabEnabled(false) = actions[1] {} else {
-            XCTFail("Expected second action to disable DOM grab")
+        if case .setDOMGrabAuthorization(nil) = actions[1] {} else {
+            XCTFail("Expected second action to revoke DOM grab")
         }
         cancellable.cancel()
     }
@@ -457,14 +461,14 @@ final class BrowserViewModelTests: XCTestCase {
         var forwarded: [BrowserDOMGrabPayload] = []
         vm.onDOMGrabPayload = { forwarded.append($0) }
 
-        let handled = vm.handleDOMGrabPayload(payload)
+        let handled = vm.handleDOMGrabPayload(payload, authorizationID: UUID())
 
         XCTAssertFalse(handled)
         XCTAssertTrue(forwarded.isEmpty)
         XCTAssertFalse(vm.isDOMGrabActive)
     }
 
-    func testHandleDOMGrabPayloadConsumesAuthorizationBeforeCallback() {
+    func testHandleDOMGrabPayloadConsumesAuthorizationBeforeCallback() throws {
         let vm = BrowserViewModel()
         let payload = BrowserDOMGrabPayload(
             selector: "button.primary",
@@ -473,26 +477,175 @@ final class BrowserViewModelTests: XCTestCase {
             visibleText: "Download"
         )
         var forwarded: [BrowserDOMGrabPayload] = []
+        var authorizationID: UUID?
         vm.onDOMGrabPayload = { received in
             forwarded.append(received)
-            if forwarded.count == 1 {
-                vm.handleDOMGrabPayload(received)
+            if forwarded.count == 1, let authorizationID {
+                vm.handleDOMGrabPayload(received, authorizationID: authorizationID)
             }
         }
         vm.setDOMGrabMode(true)
+        authorizationID = vm.domGrabAuthorizationID
 
-        let handled = vm.handleDOMGrabPayload(payload)
+        let handled = vm.handleDOMGrabPayload(
+            payload,
+            authorizationID: try XCTUnwrap(authorizationID)
+        )
 
         XCTAssertTrue(handled)
         XCTAssertEqual(forwarded, [payload])
         XCTAssertFalse(vm.isDOMGrabActive)
     }
 
-    func testDOMGrabSetEnabledScriptCallsExpectedHelper() {
-        let enableScript = BrowserDOMGrabWebKitSupport.setEnabledScript(true)
-        let disableScript = BrowserDOMGrabWebKitSupport.setEnabledScript(false)
+    func testDOMGrabRejectsStaleGrantWithoutConsumingCurrentGrant() throws {
+        let vm = BrowserViewModel()
+        let payload = BrowserDOMGrabPayload(
+            selector: "button.primary",
+            pageURL: URL(string: "https://cocxy.dev")!,
+            pageTitle: "Cocxy",
+            visibleText: "Download"
+        )
+        var forwarded: [BrowserDOMGrabPayload] = []
+        vm.onDOMGrabPayload = { forwarded.append($0) }
+
+        vm.setDOMGrabMode(true)
+        let staleID = try XCTUnwrap(vm.domGrabAuthorizationID)
+        vm.revokeDOMGrabAuthorization()
+        vm.setDOMGrabMode(true)
+        let currentID = try XCTUnwrap(vm.domGrabAuthorizationID)
+
+        XCTAssertNotEqual(staleID, currentID)
+        XCTAssertFalse(vm.handleDOMGrabPayload(payload, authorizationID: staleID))
+        XCTAssertTrue(vm.isDOMGrabActive)
+        XCTAssertEqual(vm.domGrabAuthorizationID, currentID)
+        XCTAssertTrue(vm.handleDOMGrabPayload(payload, authorizationID: currentID))
+        XCTAssertEqual(forwarded, [payload])
+    }
+
+    func testDOMGrabRevokesForMainFrameNavigationOnly() throws {
+        let vm = BrowserViewModel()
+        vm.setDOMGrabMode(true)
+        let authorizationID = try XCTUnwrap(vm.domGrabAuthorizationID)
+
+        vm.revokeDOMGrabAuthorizationForNavigation(isMainFrame: false)
+        XCTAssertTrue(vm.isDOMGrabActive)
+        XCTAssertEqual(vm.domGrabAuthorizationID, authorizationID)
+
+        vm.revokeDOMGrabAuthorizationForNavigation(isMainFrame: true)
+        XCTAssertFalse(vm.isDOMGrabActive)
+        XCTAssertNil(vm.domGrabAuthorizationID)
+    }
+
+    func testDOMGrabCannotArmUntilMainFrameNavigationCompletes() throws {
+        let vm = BrowserViewModel()
+
+        let generation = try XCTUnwrap(
+            vm.revokeDOMGrabAuthorizationForNavigation(isMainFrame: true)
+        )
+        vm.setDOMGrabMode(true)
+        XCTAssertFalse(vm.isDOMGrabActive)
+        XCTAssertNil(vm.domGrabAuthorizationID)
+
+        vm.completeDOMGrabNavigation(generation: generation)
+        vm.setDOMGrabMode(true)
+        XCTAssertTrue(vm.isDOMGrabActive)
+        XCTAssertNotNil(vm.domGrabAuthorizationID)
+    }
+
+    func testStaleNavigationCompletionCannotUnlockNewerNavigation() throws {
+        let vm = BrowserViewModel()
+        let firstGeneration = try XCTUnwrap(
+            vm.revokeDOMGrabAuthorizationForNavigation(isMainFrame: true)
+        )
+        let secondGeneration = try XCTUnwrap(
+            vm.revokeDOMGrabAuthorizationForNavigation(isMainFrame: true)
+        )
+
+        vm.completeDOMGrabNavigation(generation: firstGeneration)
+        vm.setDOMGrabMode(true)
+        XCTAssertFalse(vm.isDOMGrabActive)
+        XCTAssertNil(vm.domGrabAuthorizationID)
+
+        vm.completeDOMGrabNavigation(generation: secondGeneration)
+        vm.setDOMGrabMode(true)
+        XCTAssertTrue(vm.isDOMGrabActive)
+        XCTAssertNotNil(vm.domGrabAuthorizationID)
+    }
+
+    func testDOMGrabRevokesAcrossNavigationTabAndProfileChanges() throws {
+        let vm = BrowserViewModel()
+
+        vm.setDOMGrabMode(true)
+        vm.navigate(to: "https://cocxy.dev")
+        XCTAssertFalse(vm.isDOMGrabActive)
+
+        vm.setDOMGrabMode(true)
+        vm.reload()
+        XCTAssertFalse(vm.isDOMGrabActive)
+
+        vm.setDOMGrabMode(true)
+        vm.selectBrowserTab(try XCTUnwrap(vm.activeTabID))
+        XCTAssertFalse(vm.isDOMGrabActive)
+
+        vm.setDOMGrabMode(true)
+        vm.addBrowserTab()
+        XCTAssertFalse(vm.isDOMGrabActive)
+
+        vm.setDOMGrabMode(true)
+        vm.activeProfileID = UUID()
+        XCTAssertFalse(vm.isDOMGrabActive)
+    }
+
+    func testDOMGrabEnableFailureRevokesOnlyMatchingGrant() throws {
+        let vm = BrowserViewModel()
+        vm.setDOMGrabMode(true)
+        let authorizationID = try XCTUnwrap(vm.domGrabAuthorizationID)
+
+        vm.handleDOMGrabWebKitUpdate(authorizationID: UUID(), applied: false)
+        XCTAssertEqual(vm.domGrabAuthorizationID, authorizationID)
+
+        vm.handleDOMGrabWebKitUpdate(authorizationID: authorizationID, applied: true)
+        XCTAssertEqual(vm.domGrabAuthorizationID, authorizationID)
+
+        vm.handleDOMGrabWebKitUpdate(authorizationID: authorizationID, applied: false)
+        XCTAssertFalse(vm.isDOMGrabActive)
+        XCTAssertNil(vm.domGrabAuthorizationID)
+    }
+
+    func testDOMGrabAuthorizationExpiresAndRevokesWebKitGrant() async throws {
+        let vm = BrowserViewModel()
+        vm.setDOMGrabMode(true, lifetime: 0.02)
+        XCTAssertNotNil(vm.domGrabAuthorizationID)
+
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertFalse(vm.isDOMGrabActive)
+        XCTAssertNil(vm.domGrabAuthorizationID)
+    }
+
+    func testStaleDOMGrabExpirationCannotRevokeReplacementGrant() async throws {
+        let vm = BrowserViewModel()
+        vm.setDOMGrabMode(true, lifetime: 0.02)
+        let staleID = try XCTUnwrap(vm.domGrabAuthorizationID)
+        vm.revokeDOMGrabAuthorization()
+        vm.setDOMGrabMode(true, lifetime: 0.3)
+        let replacementID = try XCTUnwrap(vm.domGrabAuthorizationID)
+
+        try await Task.sleep(for: .milliseconds(80))
+
+        XCTAssertNotEqual(staleID, replacementID)
+        XCTAssertTrue(vm.isDOMGrabActive)
+        XCTAssertEqual(vm.domGrabAuthorizationID, replacementID)
+        vm.revokeDOMGrabAuthorization()
+    }
+
+    func testDOMGrabAuthorizationScriptCarriesExactGrant() {
+        let authorizationID = UUID()
+        let enableScript = BrowserDOMGrabWebKitSupport.setAuthorizationScript(authorizationID)
+        let disableScript = BrowserDOMGrabWebKitSupport.setAuthorizationScript(nil)
 
         XCTAssertTrue(enableScript.contains("cocxyDOMGrab.enable"))
+        XCTAssertTrue(enableScript.contains(authorizationID.uuidString.lowercased()))
         XCTAssertTrue(disableScript.contains("cocxyDOMGrab.disable"))
     }
 

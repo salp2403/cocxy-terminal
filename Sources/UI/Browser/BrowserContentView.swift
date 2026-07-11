@@ -56,6 +56,7 @@ final class BrowserContentView: NSView {
 
     /// Handler retained while the current WKWebView is alive.
     private var domGrabHandler: BrowserDOMGrabHandler?
+    private var domGrabNavigationGenerations: [ObjectIdentifier: UInt64] = [:]
 
     /// The URL text field.
     private var urlField: NSTextField?
@@ -139,6 +140,7 @@ final class BrowserContentView: NSView {
         // observations and cancellables are released by ARC (KVO observations
         // are invalidated on dealloc; AnyCancellable cancels on dealloc).
         Task { @MainActor in
+            model.revokeDOMGrabAuthorization()
             model.revokeAllInitScripts()
             monitor?.stopMonitoring()
             wv?.navigationDelegate = nil
@@ -361,6 +363,7 @@ final class BrowserContentView: NSView {
     private func installWebViewForActiveProfile(loadCurrentURL: Bool) {
         let previousWebView = webView
         if let previousWebView {
+            viewModel.revokeDOMGrabAuthorization()
             viewModel.revokeAllInitScripts()
             consoleCapture?.uninstall(from: previousWebView)
             BrowserDOMGrabWebKitSupport.uninstall(from: previousWebView)
@@ -379,8 +382,8 @@ final class BrowserContentView: NSView {
             config.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
         }
         let domGrabHandler = BrowserDOMGrabHandler()
-        domGrabHandler.onPayload = { [weak viewModel] payload in
-            viewModel?.handleDOMGrabPayload(payload)
+        domGrabHandler.onPayload = { [weak viewModel] authorizationID, payload in
+            viewModel?.handleDOMGrabPayload(payload, authorizationID: authorizationID)
         }
         BrowserDOMGrabWebKitSupport.install(on: config, handler: domGrabHandler)
         self.domGrabHandler = domGrabHandler
@@ -433,7 +436,6 @@ final class BrowserContentView: NSView {
         if loadCurrentURL, let url = viewModel.currentURL {
             wv.load(URLRequest(url: url))
         }
-        BrowserDOMGrabWebKitSupport.setEnabled(viewModel.isDOMGrabActive, on: wv)
     }
 
     // MARK: - ViewModel Binding
@@ -495,8 +497,17 @@ final class BrowserContentView: NSView {
                     NSLog("[Cocxy] JS eval error: %@", error.localizedDescription)
                 }
             }
-        case .setDOMGrabEnabled(let enabled):
-            BrowserDOMGrabWebKitSupport.setEnabled(enabled, on: webView)
+        case .setDOMGrabAuthorization(let authorizationID):
+            BrowserDOMGrabWebKitSupport.setAuthorization(
+                authorizationID,
+                on: webView
+            ) { [weak viewModel] applied in
+                guard let authorizationID else { return }
+                viewModel?.handleDOMGrabWebKitUpdate(
+                    authorizationID: authorizationID,
+                    applied: applied
+                )
+            }
         }
     }
 
@@ -739,6 +750,9 @@ extension BrowserContentView: WKNavigationDelegate {
             decisionHandler(.cancel)
             return
         }
+        viewModel.revokeDOMGrabAuthorizationForNavigation(
+            isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+        )
         viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
             url: navigationAction.request.url,
             isMainFrame: navigationAction.targetFrame?.isMainFrame == true
@@ -773,39 +787,59 @@ extension BrowserContentView: WKNavigationDelegate {
         completionHandler(.performDefaultHandling, nil)
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.viewModel.isLoading = false
-            self.viewModel.recordRemoteBrowserNavigationSucceeded(url: webView.url)
-            if let url = webView.url?.absoluteString {
-                self.viewModel.recordPageVisit(url: url, title: webView.title)
-            }
-            BrowserDOMGrabWebKitSupport.setEnabled(
-                self.viewModel.isDOMGrabActive,
-                on: webView
-            )
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        trackDOMGrabNavigation(navigation)
+        viewModel.isLoading = true
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+    ) {
+        trackDOMGrabNavigation(navigation)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        completeDOMGrabNavigation(navigation)
+        viewModel.isLoading = false
+        viewModel.recordRemoteBrowserNavigationSucceeded(url: webView.url)
+        if let url = webView.url?.absoluteString {
+            viewModel.recordPageVisit(url: url, title: webView.title)
         }
     }
 
-    nonisolated func webView(
+    func webView(
         _ webView: WKWebView,
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: Error
     ) {
-        Task { @MainActor [weak self] in
-            self?.showErrorPage(error: error, failedURL: webView.url)
-        }
+        completeDOMGrabNavigation(navigation)
+        showErrorPage(error: error, failedURL: webView.url)
     }
 
-    nonisolated func webView(
+    func webView(
         _ webView: WKWebView,
         didFail navigation: WKNavigation!,
         withError error: Error
     ) {
-        Task { @MainActor [weak self] in
-            self?.showErrorPage(error: error, failedURL: webView.url)
-        }
+        completeDOMGrabNavigation(navigation)
+        showErrorPage(error: error, failedURL: webView.url)
+    }
+
+    private func completeDOMGrabNavigation(_ navigation: WKNavigation?) {
+        guard let navigation,
+              let generation = domGrabNavigationGenerations.removeValue(
+                  forKey: ObjectIdentifier(navigation)
+              ) else { return }
+        viewModel.completeDOMGrabNavigation(generation: generation)
+    }
+
+    private func trackDOMGrabNavigation(_ navigation: WKNavigation?) {
+        let generation = viewModel.revokeDOMGrabAuthorizationForNavigation(
+            isMainFrame: true
+        )
+        guard let navigation, let generation else { return }
+        domGrabNavigationGenerations[ObjectIdentifier(navigation)] = generation
     }
 }
 

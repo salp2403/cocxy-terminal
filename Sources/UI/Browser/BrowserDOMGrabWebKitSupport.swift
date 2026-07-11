@@ -49,29 +49,35 @@ enum BrowserDOMGrabWebKitSupport {
         )
     }
 
-    /// JavaScript used to flip the in-page DOM-grab state.
-    nonisolated static func setEnabledScript(_ enabled: Bool) -> String {
-        let method = enabled ? "enable" : "disable"
+    /// JavaScript used to install or revoke one exact isolated-world grant.
+    nonisolated static func setAuthorizationScript(_ authorizationID: UUID?) -> String {
+        let operation: String
+        if let authorizationID {
+            operation = "return window.cocxyDOMGrab.enable(\"\(authorizationID.uuidString.lowercased())\") === true;"
+        } else {
+            operation = "window.cocxyDOMGrab.disable(); return true;"
+        }
         return """
         (function() {
-            if (window.cocxyDOMGrab && typeof window.cocxyDOMGrab.\(method) === 'function') {
-                window.cocxyDOMGrab.\(method)();
-                return true;
+            if (window.cocxyDOMGrab &&
+                typeof window.cocxyDOMGrab.enable === 'function' &&
+                typeof window.cocxyDOMGrab.disable === 'function') {
+                \(operation)
             }
             return false;
         })();
         """
     }
 
-    /// Applies the current state to a live web view. Safe when the page has
-    /// not loaded the helper yet; the script simply returns false.
-    static func setEnabled(
-        _ enabled: Bool,
+    /// Applies the current one-shot grant to a live web view. Safe when the
+    /// page has not loaded the helper yet; the script simply returns false.
+    static func setAuthorization(
+        _ authorizationID: UUID?,
         on webView: WKWebView,
         completion: (@MainActor @Sendable (Bool) -> Void)? = nil
     ) {
         webView.evaluateJavaScript(
-            setEnabledScript(enabled),
+            setAuthorizationScript(authorizationID),
             in: nil,
             in: contentWorld
         ) { result in

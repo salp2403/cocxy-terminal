@@ -2267,6 +2267,7 @@ extension MainWindowController {
     }
 
     func dismissBrowser() {
+        browserViewModel?.revokeDOMGrabAuthorization()
         browserViewModel?.revokeAllInitScripts()
         guard let hostingView = browserHostingView,
               let overlayContainer = overlayContainerView else {

@@ -25,6 +25,7 @@ import WebKit
 ///
 /// ```js
 /// window.webkit.messageHandlers.cocxyDOMGrab.postMessage({
+///     authorizationID: "one-shot-native-grant",
 ///     selector: "button#login",
 ///     url: location.href,
 ///     title: document.title,
@@ -43,7 +44,7 @@ final class BrowserDOMGrabHandler: NSObject, WKScriptMessageHandler {
     /// Closure invoked on the main actor whenever a complete main-frame
     /// payload is received. The surface lifecycle wires this to the native
     /// one-shot authorization gate and explicit Rich Input review.
-    var onPayload: ((BrowserDOMGrabPayload) -> Void)?
+    var onPayload: ((UUID, BrowserDOMGrabPayload) -> Void)?
 
     // MARK: - WKScriptMessageHandler
 
@@ -61,8 +62,10 @@ final class BrowserDOMGrabHandler: NSObject, WKScriptMessageHandler {
     func receive(_ body: Any, isMainFrame: Bool) -> Bool {
         guard isMainFrame,
               let dictionary = body as? [String: Any],
+              let authorizationIDString = dictionary["authorizationID"] as? String,
+              let authorizationID = UUID(uuidString: authorizationIDString),
               let payload = Self.parsePayload(dictionary) else { return false }
-        onPayload?(payload)
+        onPayload?(authorizationID, payload)
         return true
     }
 

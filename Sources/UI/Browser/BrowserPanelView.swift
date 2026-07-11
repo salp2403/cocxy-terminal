@@ -971,6 +971,8 @@ struct WebViewRepresentable: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        coordinator.revokeDOMGrabAuthorization()
+        BrowserDOMGrabWebKitSupport.uninstall(from: nsView)
         coordinator.uninstallInitScripts(from: nsView)
         nsView.navigationDelegate = nil
         nsView.uiDelegate = nil
@@ -990,6 +992,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         private var cancellables = Set<AnyCancellable>()
         private weak var installedConsoleCapture: BrowserConsoleCapture?
         private weak var installedNetworkMonitor: BrowserNetworkMonitor?
+        private var domGrabNavigationGenerations: [ObjectIdentifier: UInt64] = [:]
         let domGrabHandler: BrowserDOMGrabHandler
         weak var webView: WKWebView?
 
@@ -998,13 +1001,17 @@ struct WebViewRepresentable: NSViewRepresentable {
             self.localizer = localizer
             self.domGrabHandler = BrowserDOMGrabHandler()
             super.init()
-            self.domGrabHandler.onPayload = { [weak viewModel] payload in
-                viewModel?.handleDOMGrabPayload(payload)
+            self.domGrabHandler.onPayload = { [weak viewModel] authorizationID, payload in
+                viewModel?.handleDOMGrabPayload(payload, authorizationID: authorizationID)
             }
         }
 
         func revokeInitScripts() {
             viewModel.revokeAllInitScripts()
+        }
+
+        func revokeDOMGrabAuthorization() {
+            viewModel.revokeDOMGrabAuthorization()
         }
 
         func uninstallInitScripts(from webView: WKWebView) {
@@ -1065,8 +1072,17 @@ struct WebViewRepresentable: NSViewRepresentable {
                                 NSLog("[Cocxy] JS eval error: %@", error.localizedDescription)
                             }
                         }
-                    case .setDOMGrabEnabled(let enabled):
-                        BrowserDOMGrabWebKitSupport.setEnabled(enabled, on: webView)
+                    case .setDOMGrabAuthorization(let authorizationID):
+                        BrowserDOMGrabWebKitSupport.setAuthorization(
+                            authorizationID,
+                            on: webView
+                        ) { [weak self] applied in
+                            guard let authorizationID else { return }
+                            self?.viewModel.handleDOMGrabWebKitUpdate(
+                                authorizationID: authorizationID,
+                                applied: applied
+                            )
+                        }
                     }
                 }
                 .store(in: &cancellables)
@@ -1075,13 +1091,22 @@ struct WebViewRepresentable: NSViewRepresentable {
         // MARK: - WKNavigationDelegate
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            trackDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = true
                 self.syncNavigationState(from: webView)
             }
         }
 
+        func webView(
+            _ webView: WKWebView,
+            didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+        ) {
+            trackDOMGrabNavigation(navigation)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            completeDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
@@ -1089,14 +1114,11 @@ struct WebViewRepresentable: NSViewRepresentable {
                 if let url = webView.url?.absoluteString {
                     self.viewModel.recordPageVisit(url: url, title: webView.title)
                 }
-                BrowserDOMGrabWebKitSupport.setEnabled(
-                    self.viewModel.isDOMGrabActive,
-                    on: webView
-                )
             }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            completeDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
@@ -1116,6 +1138,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
+            completeDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
@@ -1140,6 +1163,9 @@ struct WebViewRepresentable: NSViewRepresentable {
                 decisionHandler(.cancel)
                 return
             }
+            viewModel.revokeDOMGrabAuthorizationForNavigation(
+                isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+            )
             viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
                 url: navigationAction.request.url,
                 isMainFrame: navigationAction.targetFrame?.isMainFrame == true
@@ -1167,9 +1193,26 @@ struct WebViewRepresentable: NSViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             if navigationAction.targetFrame == nil {
+                viewModel.revokeDOMGrabAuthorizationForNavigation(isMainFrame: true)
                 webView.load(navigationAction.request)
             }
             return nil
+        }
+
+        private func completeDOMGrabNavigation(_ navigation: WKNavigation?) {
+            guard let navigation,
+                  let generation = domGrabNavigationGenerations.removeValue(
+                      forKey: ObjectIdentifier(navigation)
+                  ) else { return }
+            viewModel.completeDOMGrabNavigation(generation: generation)
+        }
+
+        private func trackDOMGrabNavigation(_ navigation: WKNavigation?) {
+            let generation = viewModel.revokeDOMGrabAuthorizationForNavigation(
+                isMainFrame: true
+            )
+            guard let navigation, let generation else { return }
+            domGrabNavigationGenerations[ObjectIdentifier(navigation)] = generation
         }
 
         func webView(

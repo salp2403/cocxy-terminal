@@ -4,7 +4,7 @@
 //
 // The host installs this script as a `WKUserScript` injected at document
 // start. When the user toggles "grab mode" from the toolbar the host
-// dispatches `cocxyDOMGrab.enable()` / `cocxyDOMGrab.disable()` via
+// dispatches `cocxyDOMGrab.enable(grantID)` / `cocxyDOMGrab.disable()` via
 // `evaluateJavaScript`. While enabled, a click anywhere on the page is
 // captured (no navigation, no default submit) and reported back as a
 // structured payload through an isolated WebKit message handler that page
@@ -23,6 +23,7 @@
     }
 
     var enabled = false;
+    var authorizationID = null;
     var overlay = null;
     var hoveredElement = null;
 
@@ -160,22 +161,23 @@
     }
 
     function onClick(event) {
-        if (!enabled || !event.isTrusted) return;
+        if (!enabled || typeof authorizationID !== "string" || !event.isTrusted) return;
+        var consumedAuthorizationID = authorizationID;
         // Stop the page from interpreting the click — the user wants to
         // capture, not navigate.
         event.preventDefault();
         event.stopPropagation();
         event.stopImmediatePropagation();
 
-        var el = event.target;
-        var payload = {
-            selector: buildSelector(el),
-            url: location.href,
-            title: document.title || "",
-            text: visibleText(el),
-        };
-
         try {
+            var el = event.target;
+            var payload = {
+                authorizationID: consumedAuthorizationID,
+                selector: buildSelector(el),
+                url: location.href,
+                title: document.title || "",
+                text: visibleText(el),
+            };
             window.webkit.messageHandlers.cocxyDOMGrab.postMessage(payload);
         } catch (e) {
             // No host bridge present (e.g. running outside the Cocxy
@@ -200,20 +202,25 @@
     // ----- Public API -----
 
     window.cocxyDOMGrab = {
-        enable: function () {
-            if (enabled) return;
+        enable: function (grantID) {
+            if (typeof grantID !== "string" || grantID.length === 0) return false;
+            authorizationID = grantID;
+            if (enabled) return true;
             enabled = true;
             attachListeners();
+            return true;
         },
         disable: function () {
-            if (!enabled) return;
+            authorizationID = null;
+            if (!enabled) return true;
             enabled = false;
             detachListeners();
             hideOverlay();
             hoveredElement = null;
+            return true;
         },
         isEnabled: function () {
-            return enabled;
+            return enabled && typeof authorizationID === "string";
         },
     };
 })();

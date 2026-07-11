@@ -773,6 +773,7 @@ extension MainWindowController {
         let viewToRemove: NSView
         if let panelView = closingPanelView {
             viewToRemove = panelView
+            browserViewModel(containedIn: panelView)?.revokeDOMGrabAuthorization()
             browserViewModel(containedIn: panelView)?.revokeAllInitScripts()
             if let editorView = panelView as? EditorView {
                 closeEditorLSPIfNeeded(editorView: editorView, tabID: currentTabID)

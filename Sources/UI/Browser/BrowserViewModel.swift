@@ -262,6 +262,7 @@ final class BrowserViewModel: ObservableObject {
         didSet {
             if oldValue != activeTabID {
                 revokeAllInitScripts()
+                revokeDOMGrabAuthorization()
             }
         }
     }
@@ -291,6 +292,15 @@ final class BrowserViewModel: ObservableObject {
     /// Whether click-to-capture mode is active in the current browser page.
     @Published var isDOMGrabActive: Bool = false
 
+    /// Exact one-shot grant installed only in the isolated WebKit world.
+    private(set) var domGrabAuthorizationID: UUID?
+    private var domGrabAuthorizationGeneration: UInt64?
+    private var domGrabNavigationGeneration: UInt64 = 0
+    private var isDOMGrabNavigationInProgress = false
+    private var domGrabExpirationTask: Task<Void, Never>?
+
+    static let domGrabAuthorizationLifetime: TimeInterval = 60
+
     /// Optional remote workspace context for the active browser surface.
     ///
     /// Nil means the browser is local. Non-nil is metadata only; proxy
@@ -311,7 +321,7 @@ final class BrowserViewModel: ObservableObject {
         case goForward
         case reload
         case evaluateJS(String)
-        case setDOMGrabEnabled(Bool)
+        case setDOMGrabAuthorization(UUID?)
     }
 
     /// Publisher that emits navigation actions for the web view coordinator to observe.
@@ -376,6 +386,7 @@ final class BrowserViewModel: ObservableObject {
         didSet {
             if oldValue != activeProfileID {
                 revokeAllInitScripts()
+                revokeDOMGrabAuthorization()
             }
         }
     }
@@ -644,6 +655,7 @@ final class BrowserViewModel: ObservableObject {
         let normalized = normalizeURLString(trimmed)
         guard let url = URL(string: normalized) else { return }
 
+        revokeDOMGrabAuthorization()
         urlString = normalized
         currentURL = url
 
@@ -657,16 +669,19 @@ final class BrowserViewModel: ObservableObject {
 
     /// Navigates the web view backward in history.
     func goBack() {
+        revokeDOMGrabAuthorization()
         navigationActionSubject.send(.goBack)
     }
 
     /// Navigates the web view forward in history.
     func goForward() {
+        revokeDOMGrabAuthorization()
         navigationActionSubject.send(.goForward)
     }
 
     /// Reloads the current page in the web view.
     func reload() {
+        revokeDOMGrabAuthorization()
         navigationActionSubject.send(.reload)
     }
 
@@ -723,6 +738,7 @@ final class BrowserViewModel: ObservableObject {
     /// - Parameter tabID: The ID of the tab to activate. No-op if not found.
     func selectBrowserTab(_ tabID: UUID) {
         guard let tab = browserTabs.first(where: { $0.id == tabID }) else { return }
+        revokeDOMGrabAuthorization()
         activeTabID = tab.id
         urlString = tab.url.absoluteString
         currentURL = tab.url
@@ -1161,19 +1177,75 @@ final class BrowserViewModel: ObservableObject {
     }
 
     /// Sets click-to-capture mode and notifies the active WebKit host.
-    func setDOMGrabMode(_ enabled: Bool) {
-        guard isDOMGrabActive != enabled else {
-            navigationActionSubject.send(.setDOMGrabEnabled(enabled))
+    func setDOMGrabMode(
+        _ enabled: Bool,
+        lifetime: TimeInterval = BrowserViewModel.domGrabAuthorizationLifetime
+    ) {
+        if enabled {
+            if let domGrabAuthorizationID {
+                navigationActionSubject.send(.setDOMGrabAuthorization(domGrabAuthorizationID))
+                return
+            }
+            guard !isDOMGrabNavigationInProgress else { return }
+            let authorizationID = UUID()
+            domGrabAuthorizationID = authorizationID
+            domGrabAuthorizationGeneration = domGrabNavigationGeneration
+            isDOMGrabActive = true
+            scheduleDOMGrabExpiration(authorizationID: authorizationID, lifetime: lifetime)
+            navigationActionSubject.send(.setDOMGrabAuthorization(authorizationID))
             return
         }
-        isDOMGrabActive = enabled
-        navigationActionSubject.send(.setDOMGrabEnabled(enabled))
+
+        domGrabExpirationTask?.cancel()
+        domGrabExpirationTask = nil
+        domGrabAuthorizationID = nil
+        domGrabAuthorizationGeneration = nil
+        isDOMGrabActive = false
+        navigationActionSubject.send(.setDOMGrabAuthorization(nil))
+    }
+
+    /// Revokes the one-shot capture capability without emitting redundant
+    /// WebKit work when no capture is armed.
+    func revokeDOMGrabAuthorization() {
+        guard domGrabAuthorizationID != nil || isDOMGrabActive else { return }
+        setDOMGrabMode(false)
+    }
+
+    /// A DOM-grab capability belongs to one main-frame document. Subframe
+    /// navigations do not replace that document and must not disturb the UI.
+    @discardableResult
+    func revokeDOMGrabAuthorizationForNavigation(isMainFrame: Bool) -> UInt64? {
+        guard isMainFrame else { return nil }
+        domGrabNavigationGeneration &+= 1
+        isDOMGrabNavigationInProgress = true
+        revokeDOMGrabAuthorization()
+        return domGrabNavigationGeneration
+    }
+
+    /// Marks the current main-frame navigation as settled. A new user action
+    /// is required after this point; an old grant is never replayed.
+    func completeDOMGrabNavigation(generation: UInt64) {
+        guard generation == domGrabNavigationGeneration else { return }
+        isDOMGrabNavigationInProgress = false
+    }
+
+    /// Keeps native authorization fail-closed when the isolated helper could
+    /// not apply an enable request to the live WebKit document.
+    func handleDOMGrabWebKitUpdate(authorizationID: UUID, applied: Bool) {
+        guard !applied, domGrabAuthorizationID == authorizationID else { return }
+        revokeDOMGrabAuthorization()
     }
 
     /// Receives a typed DOM grab from the WebKit message handler.
     @discardableResult
-    func handleDOMGrabPayload(_ payload: BrowserDOMGrabPayload) -> Bool {
-        guard isDOMGrabActive else { return false }
+    func handleDOMGrabPayload(
+        _ payload: BrowserDOMGrabPayload,
+        authorizationID: UUID
+    ) -> Bool {
+        guard isDOMGrabActive,
+              domGrabAuthorizationID == authorizationID,
+              domGrabAuthorizationGeneration == domGrabNavigationGeneration,
+              !isDOMGrabNavigationInProgress else { return false }
 
         // Consume the one-shot native authorization before invoking a
         // callback. A reentrant or replayed message therefore observes an
@@ -1181,6 +1253,23 @@ final class BrowserViewModel: ObservableObject {
         setDOMGrabMode(false)
         onDOMGrabPayload?(payload)
         return true
+    }
+
+    private func scheduleDOMGrabExpiration(
+        authorizationID: UUID,
+        lifetime: TimeInterval
+    ) {
+        domGrabExpirationTask?.cancel()
+        domGrabExpirationTask = Task { @MainActor [weak self] in
+            let boundedLifetime = lifetime.isFinite
+                ? min(max(0, lifetime), BrowserViewModel.domGrabAuthorizationLifetime)
+                : BrowserViewModel.domGrabAuthorizationLifetime
+            let duration = Duration.milliseconds(Int64(boundedLifetime * 1_000))
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled,
+                  self?.domGrabAuthorizationID == authorizationID else { return }
+            self?.revokeDOMGrabAuthorization()
+        }
     }
 
     /// Returns the current browser state as a dictionary of string values.

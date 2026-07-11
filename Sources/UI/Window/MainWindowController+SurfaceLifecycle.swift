@@ -453,7 +453,7 @@ extension MainWindowController {
         savedTabSplitSurfaceViews.removeAll()
         savedTabSplitViewModels.removeAll()
         for panelViews in savedTabPanelContentViews.values {
-            revokeBrowserInitScripts(in: Array(panelViews.values))
+            revokeBrowserAuthorizations(in: Array(panelViews.values))
         }
         savedTabPanelContentViews.removeAll()
 
@@ -508,7 +508,7 @@ extension MainWindowController {
         deferredRestoredTabLoader = nil
         surfaceImageDetectors.removeAll()
         surfaceOutputDispatchers.removeAll()
-        revokeBrowserInitScripts(in: Array(panelContentViews.values))
+        revokeBrowserAuthorizations(in: Array(panelContentViews.values))
         panelContentViews.removeAll()
 
         // Clear all inline image overlays before releasing surface views.

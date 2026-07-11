@@ -122,9 +122,14 @@ struct BrowserDOMGrabWebKitIsolationSwiftTestingTests {
     @Test("native handler rejects subframe payloads")
     func nativeHandlerRejectsSubframes() {
         let handler = BrowserDOMGrabHandler()
+        let authorizationID = UUID()
         var receivedCount = 0
-        handler.onPayload = { _ in receivedCount += 1 }
+        handler.onPayload = { receivedAuthorizationID, _ in
+            #expect(receivedAuthorizationID == authorizationID)
+            receivedCount += 1
+        }
         let body: [String: Any] = [
+            "authorizationID": authorizationID.uuidString,
             "selector": "button#login",
             "url": "https://example.com",
             "title": "Example",
@@ -137,12 +142,33 @@ struct BrowserDOMGrabWebKitIsolationSwiftTestingTests {
         #expect(receivedCount == 1)
     }
 
+    @Test("native handler rejects missing and malformed one-shot grants")
+    func nativeHandlerRejectsInvalidAuthorizationIDs() {
+        let handler = BrowserDOMGrabHandler()
+        var receivedCount = 0
+        handler.onPayload = { _, _ in receivedCount += 1 }
+        let body: [String: Any] = [
+            "selector": "button#login",
+            "url": "https://example.com",
+            "title": "Example",
+            "text": "Sign in",
+        ]
+
+        #expect(handler.receive(body, isMainFrame: true) == false)
+        #expect(handler.receive(
+            body.merging(["authorizationID": "not-a-uuid"]) { _, new in new },
+            isMainFrame: true
+        ) == false)
+        #expect(receivedCount == 0)
+    }
+
     @Test("page JavaScript cannot reach or synthetically trigger the isolated native handler")
     func pageWorldCannotReachNativeHandler() async throws {
         let configuration = WKWebViewConfiguration()
         let handler = BrowserDOMGrabHandler()
         var receivedPayload = false
-        handler.onPayload = { _ in receivedPayload = true }
+        handler.onPayload = { _, _ in receivedPayload = true }
+        let authorizationID = UUID()
         let repositoryRoot = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -174,7 +200,7 @@ struct BrowserDOMGrabWebKitIsolationSwiftTestingTests {
             contentWorld: BrowserDOMGrabWebKitSupport.contentWorld
         )
         let enabledResult = try await webView.evaluateJavaScript(
-            BrowserDOMGrabWebKitSupport.setEnabledScript(true),
+            BrowserDOMGrabWebKitSupport.setAuthorizationScript(authorizationID),
             in: nil,
             contentWorld: BrowserDOMGrabWebKitSupport.contentWorld
         )
@@ -200,6 +226,7 @@ struct BrowserDOMGrabWebKitIsolationSwiftTestingTests {
         let userScript = try #require(configuration.userContentController.userScripts.first)
         #expect(userScript.isForMainFrameOnly)
         #expect(source.contains("event.isTrusted"))
+        #expect(source.contains("authorizationID"))
     }
 }
 

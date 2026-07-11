@@ -553,6 +553,18 @@ final class RichInputIntegrationTests: XCTestCase {
         XCTAssertNotNil(controller.richInputHostingView)
     }
 
+    func testBrowserDismissRevokesOutstandingDOMGrabAuthorization() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let viewModel = BrowserViewModel()
+        controller.browserViewModel = viewModel
+        viewModel.setDOMGrabMode(true)
+
+        controller.dismissBrowser()
+
+        XCTAssertFalse(viewModel.isDOMGrabActive)
+        XCTAssertNil(viewModel.domGrabAuthorizationID)
+    }
+
     func testDismissActiveOverlayCancelsRichInputAndPersistsDraft() throws {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

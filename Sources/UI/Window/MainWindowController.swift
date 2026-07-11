@@ -1703,10 +1703,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         notificationPanelViewModel = nil
         remoteBrowserProxyStateCancellable?.cancel()
         remoteBrowserProxyStateCancellable = nil
+        browserViewModel?.revokeDOMGrabAuthorization()
         browserViewModel?.revokeAllInitScripts()
-        revokeBrowserInitScripts(in: Array(panelContentViews.values))
+        revokeBrowserAuthorizations(in: Array(panelContentViews.values))
         for panelViews in savedTabPanelContentViews.values {
-            revokeBrowserInitScripts(in: Array(panelViews.values))
+            revokeBrowserAuthorizations(in: Array(panelViews.values))
         }
         browserViewModel = nil
         timelineHostingView?.removeFromSuperview()
@@ -2219,6 +2220,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // 1. Save the outgoing tab's split state.
         if let outgoing = displayedTabID, outgoing != tabID {
             // Persist the live split hierarchy for the outgoing tab.
+            browserViewModel?.revokeDOMGrabAuthorization()
+            for panelView in panelContentViews.values {
+                browserViewModel(containedIn: panelView)?.revokeDOMGrabAuthorization()
+            }
             if let splitView = activeSplitView {
                 splitView.removeFromSuperview()
                 savedTabSplitViews[outgoing] = splitView
