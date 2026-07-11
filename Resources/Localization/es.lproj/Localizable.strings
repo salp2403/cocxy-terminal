@@ -1456,6 +1456,10 @@
 "terminal.clipboardRead.message" = "Un programa de terminal solicitó acceso al portapapeles del sistema mediante OSC 52. Permitirlo enviará el contenido actual del portapapeles al shell en ejecución.";
 "terminal.clipboardRead.allow" = "Permitir";
 "terminal.clipboardRead.deny" = "Denegar";
+"terminal.clipboardWrite.title" = "¿Permitir cambio del portapapeles?";
+"terminal.clipboardWrite.message" = "Un programa de terminal solicitó permiso para reemplazar el portapapeles del sistema mediante OSC 52. Permítelo solo si confías en el programa en ejecución y esperabas esta solicitud.";
+"terminal.clipboardWrite.allow" = "Permitir una vez";
+"terminal.clipboardWrite.deny" = "Bloquear";
 "activity.deleteAll.title" = "¿Eliminar todos los datos de actividad?";
 "activity.deleteAll.message" = "Esto elimina los registros locales de actividad y tokens de esta Mac.";
 "activity.deleteAll.button" = "Eliminar";

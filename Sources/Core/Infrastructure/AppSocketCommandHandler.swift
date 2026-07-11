@@ -2047,6 +2047,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.clipboardPasteProtection)"
         case "terminal.clipboard-read-access":
             return config.terminal.clipboardReadAccess.rawValue
+        case "terminal.clipboard-write-access":
+            return config.terminal.clipboardWriteAccess.rawValue
         case "terminal.image-memory-limit-mb":
             return "\(config.terminal.imageMemoryLimitMB)"
         case "terminal.image-file-transfer":
@@ -2210,6 +2212,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "appearance.app-language":
             guard let language = AppLanguage.normalized(rawValue) else { return nil }
             return AppSocketConfigTOMLUpdater.renderedScalarValue(language.rawValue)
+        case "terminal.clipboard-read-access":
+            let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard ClipboardReadAccess(rawValue: normalized) != nil else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(normalized)
+        case "terminal.clipboard-write-access":
+            let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard ClipboardWriteAccess(rawValue: normalized) != nil else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(normalized)
         case "ux-polish.always-show-shortcut-hints",
              "ux-polish.shortcut-hint-debug-overlay":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
@@ -5392,6 +5402,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
             "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
+            "terminal.clipboard-write-access",
             "terminal.image-memory-limit-mb", "terminal.image-file-transfer",
             "terminal.enable-sixel-images", "terminal.enable-kitty-images",
             "terminal.enable-iterm2-images", "terminal.image-disk-cache-directory",

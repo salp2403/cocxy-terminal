@@ -341,6 +341,8 @@ struct TerminalEngineConfig: Sendable {
     let windowPaddingY: Double
     /// Policy for OSC 52 clipboard reads initiated by terminal programs.
     let clipboardReadAccess: ClipboardReadAccess
+    /// Policy for OSC 52 clipboard writes initiated by terminal programs.
+    let clipboardWriteAccess: ClipboardWriteAccess
     /// App language used for terminal-engine-owned UI prompts.
     let appLanguage: AppLanguage
     /// Hook forwarding environment inherited by new shells.
@@ -374,6 +376,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingX: Double = 8,
         windowPaddingY: Double = 4,
         clipboardReadAccess: ClipboardReadAccess = .prompt,
+        clipboardWriteAccess: ClipboardWriteAccess = .prompt,
         appLanguage: AppLanguage = .system,
         hookIntegration: HookIntegrationConfig = .defaults,
         ligaturesEnabled: Bool = true,
@@ -395,6 +398,7 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
         self.clipboardReadAccess = clipboardReadAccess
+        self.clipboardWriteAccess = clipboardWriteAccess
         self.appLanguage = appLanguage
         self.hookIntegration = hookIntegration
         self.ligaturesEnabled = ligaturesEnabled
@@ -418,6 +422,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
+        clipboardWriteAccess: ClipboardWriteAccess? = nil,
         appLanguage: AppLanguage? = nil,
         hookIntegration: HookIntegrationConfig? = nil,
         ligaturesEnabled: Bool? = nil,
@@ -441,6 +446,7 @@ struct TerminalEngineConfig: Sendable {
             windowPaddingX: windowPaddingX ?? self.windowPaddingX,
             windowPaddingY: windowPaddingY ?? self.windowPaddingY,
             clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess,
+            clipboardWriteAccess: clipboardWriteAccess ?? self.clipboardWriteAccess,
             appLanguage: appLanguage ?? self.appLanguage,
             hookIntegration: hookIntegration ?? self.hookIntegration,
             ligaturesEnabled: ligaturesEnabled ?? self.ligaturesEnabled,

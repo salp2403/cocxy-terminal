@@ -350,7 +350,10 @@ final class ConfigService: ConfigProviding {
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
+        # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
+        # to the terminal program; writes replace the system clipboard.
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
+        clipboard-write-access = "\(defaults.terminal.clipboardWriteAccess.rawValue)"
         image-memory-limit-mb = \(defaults.terminal.imageMemoryLimitMB)
         image-file-transfer = \(defaults.terminal.imageFileTransfer)
         enable-sixel-images = \(defaults.terminal.enableSixelImages)
@@ -1078,6 +1081,9 @@ final class ConfigService: ConfigProviding {
             clipboardReadAccess: stringValue(table["clipboard-read-access"])
                 .flatMap { ClipboardReadAccess(rawValue: $0) }
                 ?? defaults.clipboardReadAccess,
+            clipboardWriteAccess: stringValue(table["clipboard-write-access"])
+                .flatMap { ClipboardWriteAccess(rawValue: $0) }
+                ?? defaults.clipboardWriteAccess,
             imageMemoryLimitMB: validatedImageMemoryLimit,
             imageFileTransfer: boolValue(table["image-file-transfer"]) ?? defaults.imageFileTransfer,
             enableSixelImages: boolValue(table["enable-sixel-images"]) ?? defaults.enableSixelImages,

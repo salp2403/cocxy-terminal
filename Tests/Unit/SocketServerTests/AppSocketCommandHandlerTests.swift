@@ -1076,6 +1076,19 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertNotNil(response.data?["value"])
     }
 
+    func test_configGet_clipboardWriteAccess_returnsSafeDefault() {
+        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cg-clipboard-write",
+            command: "config-get",
+            params: ["key": "terminal.clipboard-write-access"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "terminal.clipboard-write-access")
+        XCTAssertEqual(response.data?["value"], ClipboardWriteAccess.prompt.rawValue)
+    }
+
     func test_configGet_withMissingKey_returnsError() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "cg-2", command: "config-get", params: nil)
@@ -1247,6 +1260,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(
             response.data?["rate-limit.oauth-refresh-interval-minutes"],
             "\(RateLimitConfig.defaults.oauthRefreshIntervalMinutes)"
+        )
+        XCTAssertEqual(
+            response.data?["terminal.clipboard-write-access"],
+            TerminalConfig.defaults.clipboardWriteAccess.rawValue
         )
         XCTAssertEqual(
             response.data?["appearance.quickswitch-mode"],
@@ -1441,6 +1458,8 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             let cases = [
                 ("appearance.app-language", "es-HN"),
                 ("appearance.aurora-enabled", "FALSE"),
+                ("terminal.clipboard-read-access", " DENY "),
+                ("terminal.clipboard-write-access", "ALLOW"),
                 ("command-corrections.enabled", "FALSE"),
                 ("command-corrections.edit-distance-threshold", "1"),
                 ("command-corrections.max-suggestions-shown", "5"),
@@ -1466,6 +1485,24 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 .appendingPathComponent(".config/cocxy/config.toml")
             let written = (try? String(contentsOf: configURL, encoding: .utf8)) ?? ""
             XCTAssertTrue(written.contains("[experimental.remote-browser]\nenabled = true"))
+            XCTAssertTrue(written.contains("clipboard-read-access = \"deny\""))
+            XCTAssertTrue(written.contains("clipboard-write-access = \"allow\""))
+        }
+    }
+
+    func test_configSet_rejectsUnknownClipboardAccessPolicy() {
+        preservingUserConfig {
+            let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+            for key in ["terminal.clipboard-read-access", "terminal.clipboard-write-access"] {
+                let response = handler.handleCommand(SocketRequest(
+                    id: "cs-invalid-clipboard-policy",
+                    command: "config-set",
+                    params: ["key": key, "value": "sometimes"]
+                ))
+
+                XCTAssertFalse(response.success)
+                XCTAssertEqual(response.error, "Invalid value for config key: \(key)")
+            }
         }
     }
 

@@ -1918,6 +1918,7 @@ final class PreferencesViewModel: ObservableObject {
                 copyOnSelect: savedConfig.terminal.copyOnSelect,
                 clipboardPasteProtection: savedConfig.terminal.clipboardPasteProtection,
                 clipboardReadAccess: savedConfig.terminal.clipboardReadAccess,
+                clipboardWriteAccess: savedConfig.terminal.clipboardWriteAccess,
                 imageMemoryLimitMB: clampedImageMemoryLimitMB,
                 imageFileTransfer: imageFileTransfer,
                 enableSixelImages: enableSixelImages,
@@ -2730,7 +2731,10 @@ final class PreferencesViewModel: ObservableObject {
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
+        # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
+        # to the terminal program; writes replace the system clipboard.
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
+        clipboard-write-access = "\(defaults.terminal.clipboardWriteAccess.rawValue)"
         image-memory-limit-mb = \(clampedImageMemoryLimitMB)
         image-file-transfer = \(imageFileTransfer)
         enable-sixel-images = \(enableSixelImages)

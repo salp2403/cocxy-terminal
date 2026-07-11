@@ -1456,6 +1456,10 @@
 "terminal.clipboardRead.message" = "A terminal program requested access to the system clipboard via OSC 52. Allowing this will send your current clipboard contents to the running shell.";
 "terminal.clipboardRead.allow" = "Allow";
 "terminal.clipboardRead.deny" = "Deny";
+"terminal.clipboardWrite.title" = "Allow clipboard change?";
+"terminal.clipboardWrite.message" = "A terminal program requested permission to replace the system clipboard via OSC 52. Allow only if you trust the running program and expected this request.";
+"terminal.clipboardWrite.allow" = "Allow Once";
+"terminal.clipboardWrite.deny" = "Block";
 "activity.deleteAll.title" = "Delete all Activity data?";
 "activity.deleteAll.message" = "This removes local Activity and token records from this Mac.";
 "activity.deleteAll.button" = "Delete";

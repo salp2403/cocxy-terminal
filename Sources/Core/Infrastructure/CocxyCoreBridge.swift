@@ -26,6 +26,33 @@ private let cocxyInputLog = Logger(
     category: "input"
 )
 
+enum OSC52ClipboardLimits {
+    static let maximumWriteBytes = 1024 * 1024
+}
+
+private enum CapturedClipboardEvent: Sendable {
+    case write(Data)
+    case read(selection: UInt8)
+}
+
+private func captureClipboardEvent(
+    _ event: cocxycore_clipboard_event
+) -> CapturedClipboardEvent? {
+    switch event.event_type {
+    case 0:
+        guard event.text_len > 0,
+              event.text_len <= OSC52ClipboardLimits.maximumWriteBytes,
+              let pointer = event.text_ptr else {
+            return nil
+        }
+        return .write(Data(bytes: pointer, count: event.text_len))
+    case 1:
+        return .read(selection: event.selection)
+    default:
+        return nil
+    }
+}
+
 struct TerminalLigatureDiagnostics: Equatable, Sendable, Encodable {
     let enabled: Bool
     let cacheHits: UInt32
@@ -475,6 +502,7 @@ final class CocxyCoreBridge: TerminalEngine {
     private var nativeSemanticPatterns: [TerminalSemanticNativePattern] = []
     var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
     var clipboardReadAuthorizationHandler: ((NSWindow?) -> Bool)?
+    var clipboardWriteAuthorizationHandler: ((NSWindow?) -> Bool)?
 
     /// Observer fired by `sendKeyEvent` / `sendText` for every input
     /// attempt, with either `.delivered` (bytes reached the PTY) or
@@ -2686,6 +2714,7 @@ final class CocxyCoreBridge: TerminalEngine {
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
+        clipboardWriteAccess: ClipboardWriteAccess? = nil,
         appLanguage: AppLanguage? = nil,
         hookIntegration: HookIntegrationConfig? = nil,
         ligaturesEnabled: Bool? = nil,
@@ -2709,6 +2738,7 @@ final class CocxyCoreBridge: TerminalEngine {
             windowPaddingX: windowPaddingX,
             windowPaddingY: windowPaddingY,
             clipboardReadAccess: clipboardReadAccess,
+            clipboardWriteAccess: clipboardWriteAccess,
             appLanguage: appLanguage,
             hookIntegration: hookIntegration,
             ligaturesEnabled: ligaturesEnabled,
@@ -3315,11 +3345,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // Clipboard (OSC 52)
         cocxycore_terminal_set_clipboard_callback(terminal, { event, ctx in
-            guard let ctx = ctx, let event = event else { return }
-            let eventCopy = event.pointee
+            guard let ctx = ctx,
+                  let event = event,
+                  let capturedEvent = captureClipboardEvent(event.pointee) else { return }
             let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
             DispatchQueue.main.async {
-                box.bridge?.handleClipboardEvent(eventCopy, for: box.surfaceID)
+                box.bridge?.handleClipboardEvent(capturedEvent, for: box.surfaceID)
             }
         }, context)
 
@@ -3427,34 +3458,55 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func handleClipboardEvent(
-        _ event: cocxycore_clipboard_event,
+        _ event: CapturedClipboardEvent,
         for surfaceID: SurfaceID
     ) {
         guard let state = surfaces[surfaceID] else { return }
 
-        if event.event_type == 0 {
-            // Set clipboard (OSC 52 write)
-            if let ptr = event.text_ptr, event.text_len > 0 {
-                let text = String(
-                    bytes: UnsafeBufferPointer(start: ptr, count: event.text_len),
-                    encoding: .utf8
-                ) ?? ""
-                if !text.isEmpty {
-                    clipboardService.write(text)
-                }
-            }
-        } else {
-            handleClipboardReadRequest(event, surfaceID: surfaceID, window: state.hostView?.window)
+        switch event {
+        case .write(let data):
+            writeOSC52ClipboardContent(data, for: state.hostView?.window)
+        case .read(let selection):
+            handleClipboardReadRequest(
+                selection: selection,
+                surfaceID: surfaceID,
+                window: state.hostView?.window
+            )
         }
     }
 
     private func handleClipboardReadRequest(
-        _ event: cocxycore_clipboard_event,
+        selection: UInt8,
         surfaceID: SurfaceID,
         window: NSWindow?
     ) {
         let content = resolvedClipboardReadContent(for: window)
-        sendClipboardResponse(selection: event.selection, content: content, to: surfaceID)
+        sendClipboardResponse(selection: selection, content: content, to: surfaceID)
+    }
+
+    @discardableResult
+    func writeOSC52ClipboardContent(_ data: Data, for window: NSWindow?) -> Bool {
+        guard !data.isEmpty,
+              data.count <= OSC52ClipboardLimits.maximumWriteBytes,
+              let text = String(data: data, encoding: .utf8),
+              !text.isEmpty,
+              isClipboardWriteAuthorized(for: window) else {
+            return false
+        }
+
+        clipboardService.write(text)
+        return true
+    }
+
+    private func isClipboardWriteAuthorized(for window: NSWindow?) -> Bool {
+        switch config?.clipboardWriteAccess ?? .prompt {
+        case .allow:
+            return true
+        case .deny:
+            return false
+        case .prompt:
+            return requestClipboardWriteAuthorization(for: window)
+        }
     }
 
     func resolvedClipboardReadContent(for window: NSWindow?) -> String {
@@ -3505,6 +3557,52 @@ final class CocxyCoreBridge: TerminalEngine {
             ),
             primaryButton: localizer.string("terminal.clipboardRead.allow", fallback: "Allow"),
             secondaryButton: localizer.string("terminal.clipboardRead.deny", fallback: "Deny")
+        )
+    }
+
+    private func requestClipboardWriteAuthorization(for window: NSWindow?) -> Bool {
+        if let handler = clipboardWriteAuthorizationHandler {
+            return handler(window)
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        let copy = Self.localizedClipboardWriteAuthorizationCopy(
+            localizer: AppLocalizer(languagePreference: config?.appLanguage ?? .system)
+        )
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
+
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+        }
+
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    static func localizedClipboardWriteAuthorizationCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string(
+                "terminal.clipboardWrite.title",
+                fallback: "Allow clipboard change?"
+            ),
+            informativeText: localizer.string(
+                "terminal.clipboardWrite.message",
+                fallback: """
+                A terminal program requested permission to replace the system clipboard via OSC 52. \
+                Allow only if you trust the running program and expected this request.
+                """
+            ),
+            primaryButton: localizer.string(
+                "terminal.clipboardWrite.allow",
+                fallback: "Allow Once"
+            ),
+            secondaryButton: localizer.string(
+                "terminal.clipboardWrite.deny",
+                fallback: "Block"
+            )
         )
     }
 

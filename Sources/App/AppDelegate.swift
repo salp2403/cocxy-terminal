@@ -690,6 +690,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
                 ?? TerminalConfig.defaults.clipboardReadAccess,
+            clipboardWriteAccess: configService?.current.terminal.clipboardWriteAccess
+                ?? TerminalConfig.defaults.clipboardWriteAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
             hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
@@ -804,6 +806,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
                 ?? TerminalConfig.defaults.clipboardReadAccess,
+            clipboardWriteAccess: configService?.current.terminal.clipboardWriteAccess
+                ?? TerminalConfig.defaults.clipboardWriteAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
             hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
@@ -940,6 +944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingX: newConfig.appearance.effectivePaddingX,
             windowPaddingY: newConfig.appearance.effectivePaddingY,
             clipboardReadAccess: newConfig.terminal.clipboardReadAccess,
+            clipboardWriteAccess: newConfig.terminal.clipboardWriteAccess,
             appLanguage: newConfig.appearance.appLanguage,
             hookIntegration: newConfig.hooks,
             ligaturesEnabled: newConfig.appearance.ligatures,
@@ -1060,6 +1065,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
                 ?? TerminalConfig.defaults.clipboardReadAccess,
+            clipboardWriteAccess: configService?.current.terminal.clipboardWriteAccess
+                ?? TerminalConfig.defaults.clipboardWriteAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
             hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,

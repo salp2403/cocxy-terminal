@@ -965,6 +965,89 @@ struct CocxyCoreBridgeTests {
         #expect(clipboard.readCallCount == 1)
     }
 
+    @Test("OSC 52 clipboard writes require an explicit allow policy")
+    func osc52ClipboardWritesHonorAllowPolicy() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .allow)
+
+        let didWrite = bridge.writeOSC52ClipboardContent(Data("replacement".utf8), for: nil)
+
+        #expect(didWrite)
+        #expect(clipboard.writtenTexts == ["replacement"])
+    }
+
+    @Test("OSC 52 deny policy preserves the existing clipboard")
+    func osc52ClipboardWritesHonorDenyPolicy() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .deny)
+
+        let didWrite = bridge.writeOSC52ClipboardContent(Data("replacement".utf8), for: nil)
+
+        #expect(!didWrite)
+        #expect(clipboard.writtenTexts.isEmpty)
+    }
+
+    @Test("OSC 52 prompt writes only after one explicit approval")
+    func osc52ClipboardPromptHonorsDecision() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .prompt)
+        var approvals = [false, true]
+        bridge.clipboardWriteAuthorizationHandler = { _ in approvals.removeFirst() }
+
+        let denied = bridge.writeOSC52ClipboardContent(Data("blocked".utf8), for: nil)
+        let allowed = bridge.writeOSC52ClipboardContent(Data("approved".utf8), for: nil)
+
+        #expect(!denied)
+        #expect(allowed)
+        #expect(clipboard.writtenTexts == ["approved"])
+    }
+
+    @Test("OSC 52 malformed and oversized writes fail before authorization")
+    func osc52ClipboardWritesRejectInvalidPayloads() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .prompt)
+        var authorizationCalls = 0
+        bridge.clipboardWriteAuthorizationHandler = { _ in
+            authorizationCalls += 1
+            return true
+        }
+
+        #expect(!bridge.writeOSC52ClipboardContent(Data(), for: nil))
+        #expect(!bridge.writeOSC52ClipboardContent(Data([0xFF]), for: nil))
+        #expect(!bridge.writeOSC52ClipboardContent(
+            Data(repeating: 0x61, count: OSC52ClipboardLimits.maximumWriteBytes + 1),
+            for: nil
+        ))
+        #expect(authorizationCalls == 0)
+        #expect(clipboard.writtenTexts.isEmpty)
+    }
+
+    @Test("native OSC 52 parser callback enforces clipboard write policy")
+    func nativeOSC52ParserCallbackEnforcesWritePolicy() async throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .allow)
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}]52;c;ZnJvbS1uYXRpdmUtcGFyc2Vy\u{07}", to: state.terminal)
+
+        try await waitUntil {
+            clipboard.writtenTexts == ["from-native-parser"]
+        }
+        #expect(clipboard.writtenTexts == ["from-native-parser"])
+    }
+
     @Test("clipboard read authorization copy follows configured app language")
     func clipboardReadAuthorizationCopyFollowsConfiguredAppLanguage() throws {
         let localizer = AppLocalizer(
@@ -978,6 +1061,21 @@ struct CocxyCoreBridgeTests {
         #expect(copy.informativeText.contains("OSC 52"))
         #expect(copy.primaryButton == "Permitir")
         #expect(copy.secondaryButton == "Denegar")
+    }
+
+    @Test("clipboard write authorization copy follows configured app language")
+    func clipboardWriteAuthorizationCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        let copy = CocxyCoreBridge.localizedClipboardWriteAuthorizationCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Permitir cambio del portapapeles?")
+        #expect(copy.informativeText.contains("OSC 52"))
+        #expect(copy.primaryButton == "Permitir una vez")
+        #expect(copy.secondaryButton == "Bloquear")
     }
 
     @Test("parseWorkingDirectoryURL accepts file URLs and plain paths")
@@ -1324,6 +1422,7 @@ private func makeUXPolishPalette() -> ThemePalette {
 private final class RecordingClipboardService: ClipboardServiceProtocol {
     private let content: String?
     private(set) var readCallCount = 0
+    private(set) var writtenTexts: [String] = []
 
     init(content: String?) {
         self.content = content
@@ -1334,7 +1433,9 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
         return content
     }
 
-    func write(_ text: String) {}
+    func write(_ text: String) {
+        writtenTexts.append(text)
+    }
 
     func clear() {}
 }
