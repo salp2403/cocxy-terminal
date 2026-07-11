@@ -1296,10 +1296,38 @@ struct CocxyCoreBridgeTests {
         }
 
         let output = bridge.latestCommandBlockOutputs(for: surfaceID, limit: 3)
+        let blockReferences = bridge.completedCommandBlockReferences(for: surfaceID, limit: 3)
 
         #expect(output == "line-1\nline-2\nline-3")
+        #expect(blockReferences.count == 3)
+        #expect(blockReferences.map(\.id) == bridge.commandBlocks(for: surfaceID, limit: 3).map(\.id))
+        #expect(bridge.completedCommandBlockReferences(for: surfaceID, limit: 0).isEmpty)
+        #expect(bridge.completedCommandBlockReferences(for: SurfaceID(), limit: 3).isEmpty)
         #expect(bridge.latestCommandBlockOutputs(for: surfaceID, limit: 0) == "")
         #expect(bridge.latestCommandBlockOutputs(for: SurfaceID(), limit: 3) == "")
+    }
+
+    @Test("command block references expose only completed immutable command blocks")
+    func commandBlockReferencesExposeOnlyCompletedBlocks() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "\u{1B}]133;B\u{7}" +
+            "echo pending\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "pending output\r\n",
+            to: state.terminal
+        )
+
+        #expect(bridge.completedCommandBlockReferences(for: surfaceID, limit: 3).isEmpty)
+
+        feed("\u{1B}]133;D;0\u{7}", to: state.terminal)
+
+        #expect(bridge.completedCommandBlockReferences(for: surfaceID, limit: 3).count == 1)
     }
 
     @Test("shell integration env injects zsh wrapper when resources are available")

@@ -374,6 +374,8 @@ struct AgentPanelView: View {
             return "cursorarrow.click"
         case .externalTool:
             return "point.3.connected.trianglepath.dotted"
+        case .sensitiveData:
+            return "eye"
         case .userInput:
             return "questionmark.bubble"
         }
@@ -403,6 +405,8 @@ enum AgentPanelLocalization {
             return localizer.string("agent.panel.approval.title.externalTool", fallback: text)
         case "Approve external MCP tool":
             return localizer.string("agent.panel.approval.title.externalMCPTool", fallback: text)
+        case "Share terminal output":
+            return localizer.string("agent.panel.approval.title.terminalOutput", fallback: text)
         case "Agent requested input":
             return localizer.string("agent.panel.approval.title.userInput", fallback: text)
         default:
@@ -411,6 +415,19 @@ enum AgentPanelLocalization {
     }
 
     static func approvalBody(_ text: String, using localizer: AppLocalizer) -> String {
+        if text.contains("\n"), text.hasPrefix("Destination: ") {
+            let lines = text.components(separatedBy: .newlines)
+            if lines.count == 5,
+               lines[1].hasPrefix("Terminal: "),
+               lines[2].hasPrefix("Command blocks: "),
+               lines[3] == "Terminal text has not been read yet. Approval reads only these selected blocks, redacts common secret patterns locally, and shares the bounded result once.",
+               lines[4] == "Unknown secret formats may remain. Review the selected terminal before approving." {
+                return lines.map { line in
+                    localizedSensitiveDataLine(line, using: localizer)
+                }.joined(separator: "\n")
+            }
+        }
+
         if text == "The agent requested user input." {
             return localizer.string("agent.panel.approval.body.userInput", fallback: text)
         }
@@ -451,6 +468,82 @@ enum AgentPanelLocalization {
         return text
     }
 
+    private static func localizedSensitiveDataLine(_ line: String, using localizer: AppLocalizer) -> String {
+        if line.hasPrefix("Destination: ") {
+            let provider = String(line.dropFirst("Destination: ".count))
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.body.destination",
+                    fallback: "Destination: %@"
+                ),
+                provider
+            )
+        }
+        if line.hasPrefix("Terminal: ") {
+            let source = localizedTerminalSource(
+                String(line.dropFirst("Terminal: ".count)),
+                using: localizer
+            )
+            return String(
+                format: localizer.string(
+                    "agent.panel.approval.body.terminal",
+                    fallback: "Terminal: %@"
+                ),
+                source
+            )
+        }
+        if line.hasPrefix("Command blocks: ") {
+            let values = String(line.dropFirst("Command blocks: ".count))
+                .components(separatedBy: " of at most ")
+            if values.count == 2,
+               let count = Int(values[0]),
+               let limit = Int(values[1]) {
+                return String(
+                    format: localizer.string(
+                        "agent.panel.approval.body.commandBlocks",
+                        fallback: "Command blocks: %d of at most %d"
+                    ),
+                    count,
+                    limit
+                )
+            }
+        }
+        if line == "Terminal text has not been read yet. Approval reads only these selected blocks, redacts common secret patterns locally, and shares the bounded result once." {
+            return localizer.string(
+                "agent.panel.approval.body.terminalOutputNotice",
+                fallback: line
+            )
+        }
+        if line == "Unknown secret formats may remain. Review the selected terminal before approving." {
+            return localizer.string(
+                "agent.panel.approval.body.terminalOutputWarning",
+                fallback: line
+            )
+        }
+        return line
+    }
+
+    private static func localizedTerminalSource(_ source: String, using localizer: AppLocalizer) -> String {
+        let mappings = [
+            ("Focused split", "agent.panel.approval.source.focusedSplit"),
+            ("Active terminal", "agent.panel.approval.source.activeTerminal"),
+        ]
+        for (prefix, key) in mappings where source == prefix || source.hasPrefix(prefix + " (") {
+            let identifier = String(source.dropFirst(prefix.count))
+            return String(
+                format: localizer.string(key, fallback: prefix + "%@"),
+                identifier
+            )
+        }
+        if source == "No active terminal" {
+            return localizer.string(
+                "agent.panel.approval.source.unavailable",
+                fallback: source
+            )
+        }
+        return source
+    }
+
     static func statusText(_ text: String, using localizer: AppLocalizer) -> String {
         switch text {
         case "Ready.":
@@ -471,6 +564,11 @@ enum AgentPanelLocalization {
             return localizer.string("agent.panel.status.completed", fallback: "Completed.")
         case "Request rejected.":
             return localizer.string("agent.panel.status.rejected", fallback: "Request rejected.")
+        case "Review terminal output before sharing.":
+            return localizer.string(
+                "agent.panel.status.reviewTerminalOutput",
+                fallback: text
+            )
         case "Stopped at max iterations.":
             return localizer.string(
                 "agent.panel.status.maxIterations",

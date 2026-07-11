@@ -85,6 +85,23 @@ struct AgentHTTPTransportSwiftTestingTests {
         #expect(await waitForCancellation(of: id))
     }
 
+    @Test("transport refuses HTTP redirects instead of changing the approved destination")
+    func refusesRedirects() async throws {
+        let scenario = BoundedHTTPTestScenario.redirect
+        let id = scenarioID(for: scenario)
+        BoundedHTTPTestURLProtocol.recorder.reset(id)
+
+        do {
+            _ = try await transport().send(request(for: scenario, id: id))
+        } catch {
+            // Cancellation of a denied redirect is an acceptable fail-closed result.
+        }
+
+        let snapshot = BoundedHTTPTestURLProtocol.recorder.snapshot(id)
+        #expect(snapshot.requestsByPath[BoundedHTTPTestScenario.redirect.rawValue] == 1)
+        #expect(snapshot.requestsByPath[BoundedHTTPTestScenario.redirectSink.rawValue] == nil)
+    }
+
     private func transport() -> URLSessionAgentHTTPTransport {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.protocolClasses = [BoundedHTTPTestURLProtocol.self]
@@ -126,6 +143,8 @@ private enum BoundedHTTPTestScenario: String {
     case announcedExcess = "announced-excess"
     case chunkedExcess = "chunked-excess"
     case malformedLength = "malformed-length"
+    case redirect
+    case redirectSink = "redirect-sink"
 }
 
 private final class BoundedHTTPTestURLProtocol: URLProtocol, @unchecked Sendable {
@@ -150,6 +169,7 @@ private final class BoundedHTTPTestURLProtocol: URLProtocol, @unchecked Sendable
             client?.urlProtocol(self, didFailWithError: URLError(.badURL))
             return
         }
+        Self.recorder.recordRequest(path: scenario.rawValue, id: id)
 
         switch scenario {
         case .exactLimit:
@@ -171,6 +191,24 @@ private final class BoundedHTTPTestURLProtocol: URLProtocol, @unchecked Sendable
             sendResponse(url: url, headers: ["Content-Length": "eight"])
             send(Data("1".utf8), id: id, after: 0.050)
             finish(after: 0.100)
+        case .redirect:
+            let destination = URL(string: "https://bounded-http.test/redirect-sink?id=\(id)")!
+            let redirectRequest = URLRequest(url: destination)
+            let response = HTTPURLResponse(
+                url: url,
+                statusCode: 307,
+                httpVersion: "HTTP/1.1",
+                headerFields: ["Location": destination.absoluteString]
+            )!
+            client?.urlProtocol(
+                self,
+                wasRedirectedTo: redirectRequest,
+                redirectResponse: response
+            )
+            client?.urlProtocolDidFinishLoading(self)
+        case .redirectSink:
+            sendResponse(url: url, headers: ["Content-Length": "0"])
+            finish(after: 0.001)
         }
     }
 
@@ -224,6 +262,7 @@ private final class BoundedHTTPTestRecorder: @unchecked Sendable {
     struct Snapshot {
         var bytesSent = 0
         var stopped = false
+        var requestsByPath: [String: Int] = [:]
     }
 
     private let lock = NSLock()
@@ -244,6 +283,12 @@ private final class BoundedHTTPTestRecorder: @unchecked Sendable {
     func recordStop(_ id: String) {
         lock.withLock {
             snapshots[id, default: Snapshot()].stopped = true
+        }
+    }
+
+    func recordRequest(path: String, id: String) {
+        lock.withLock {
+            snapshots[id, default: Snapshot()].requestsByPath[path, default: 0] += 1
         }
     }
 

@@ -309,8 +309,8 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(processRunner.calls.map(\.arguments) == [["-lc", command]])
     }
 
-    @Test("runner wires terminal output provider into read_terminal_output tool")
-    func runnerWiresTerminalOutputProvider() async throws {
+    @Test("runner requires bound consent before sharing redacted terminal output")
+    func runnerRequiresBoundConsentForTerminalOutput() async throws {
         let workspace = temporaryDirectory(named: "terminal-output-workspace")
         let conversationRoot = temporaryDirectory(named: "terminal-output-conversations")
         defer {
@@ -332,7 +332,7 @@ struct AgentSessionRunnerSwiftTestingTests {
             AgentLLMResponse(content: "I saw the recent command output.", toolCalls: []),
         ])
         let terminalOutputProvider = RecordingSessionTerminalOutputProvider(
-            output: "recent command output\n"
+            output: "recent command output\nAPI_KEY=synthetic-secret-value\n"
         )
         let runner = AgentSessionRunner(
             clientFactory: RecordingSessionRunnerClientFactory(client: provider),
@@ -341,23 +341,86 @@ struct AgentSessionRunnerSwiftTestingTests {
             terminalOutputProvider: terminalOutputProvider
         )
 
-        let result = try await runner.run(
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            maxIterations: 4,
+            conversationStorageDir: conversationRoot.path
+        )
+        let pending = try await runner.run(
             prompt: "Read terminal output",
             history: [],
-            configuration: AgentModeConfig(
-                enabled: true,
-                preferredProvider: .openai,
-                maxIterations: 4,
-                conversationStorageDir: conversationRoot.path
-            )
+            configuration: configuration
         )
-        let terminalToolMessage = try #require(result.messages.first { message in
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected terminal output approval")
+            return
+        }
+
+        #expect(request.reason == .sensitiveDataAccessRequired(toolID: "read_terminal_output"))
+        #expect(request.preview.kind == .sensitiveData)
+        #expect(request.preview.body.contains("Destination: OpenAI"))
+        #expect(!request.preview.body.contains("synthetic-secret-value"))
+        #expect(request.sensitiveReadBinding != nil)
+        #expect(!pending.messages.contains { $0.toolName == "read_terminal_output" })
+        #expect(terminalOutputProvider.limits == [3])
+        #expect(terminalOutputProvider.capturedSelections.isEmpty)
+
+        let changedProviderConfiguration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .google,
+            maxIterations: 4,
+            conversationStorageDir: conversationRoot.path
+        )
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: changedProviderConfiguration
+            )
+        }
+        #expect(await provider.snapshots.count == 1)
+        #expect(terminalOutputProvider.capturedSelections.isEmpty)
+
+        let result = try await runner.approve(
+            request: request,
+            history: pending.messages,
+            configuration: configuration
+        )
+        let providerSnapshots = await provider.snapshots
+        let approvedSnapshot = try #require(providerSnapshots.dropFirst().first)
+        let terminalToolMessage = try #require(approvedSnapshot.first { message in
             message.role == .tool && message.toolName == "read_terminal_output"
         })
 
         #expect(result.stopReason == .completed)
-        #expect(terminalOutputProvider.limits == [3])
+        #expect(providerSnapshots.count == 2)
         #expect(terminalToolMessage.content.contains("recent command output"))
+        #expect(!terminalToolMessage.content.contains("synthetic-secret-value"))
+        #expect(terminalToolMessage.content.contains("[redacted]"))
+        #expect(terminalToolMessage.sensitiveDataConsent?.provider == .openai)
+        #expect(terminalOutputProvider.capturedSelections.count == 1)
+        let omittedMessage = try #require(result.messages.first { $0.toolName == "read_terminal_output" })
+        #expect(omittedMessage.content.contains(AgentSensitiveDataPolicy.omittedTerminalOutput))
+        #expect(!omittedMessage.content.contains("recent command output"))
+        #expect(omittedMessage.sensitiveDataConsent == nil)
+        #expect(!result.messages.contains { $0.content.contains("synthetic-secret-value") })
+        let persisted = try AgentConversationStore(rootDirectory: conversationRoot)
+            .load(conversationID: "agent-terminal-output-test")
+        let persistedOmitted = try #require(persisted.first { $0.toolName == "read_terminal_output" })
+        #expect(persistedOmitted.content.contains(AgentSensitiveDataPolicy.omittedTerminalOutput))
+        #expect(!persistedOmitted.content.contains("recent command output"))
+        #expect(!persisted.contains { $0.content.contains("synthetic-secret-value") })
+
+        await #expect(throws: AgentToolApprovalError.staleContext) {
+            _ = try await runner.approve(
+                request: request,
+                history: pending.messages,
+                configuration: configuration
+            )
+        }
+        #expect(await provider.snapshots.count == 2)
+        #expect(terminalOutputProvider.capturedSelections.count == 1)
     }
 
     @Test("runner wires LSP diagnostics provider into read_lsp_diagnostics tool")
@@ -1614,14 +1677,35 @@ private struct AgentSessionProcessCall: Equatable {
 private final class RecordingSessionTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
     private let output: String
     private(set) var limits: [Int] = []
+    private(set) var capturedSelections: [AgentTerminalOutputSelection] = []
 
     init(output: String) {
         self.output = output
     }
 
-    func latestCommandBlockOutputs(limit: Int) -> String {
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection {
         limits.append(limit)
-        return output
+        return AgentTerminalOutputSelection(
+            source: .focusedSplit,
+            surfaceID: "00000000-0000-0000-0000-000000000002",
+            blockLimit: limit,
+            blockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 100),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+    }
+
+    func captureCommandBlockOutputs(selection: AgentTerminalOutputSelection) -> AgentTerminalOutputSnapshot {
+        capturedSelections.append(selection)
+        return AgentTerminalOutputSnapshot(
+            source: selection.source,
+            surfaceID: selection.surfaceID,
+            blockLimit: selection.blockLimit,
+            blockCount: selection.blockCount,
+            blockReferences: selection.blockReferences,
+            output: output
+        )
     }
 }
 

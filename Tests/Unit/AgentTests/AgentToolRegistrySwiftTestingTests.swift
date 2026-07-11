@@ -40,6 +40,7 @@ struct AgentToolRegistrySwiftTestingTests {
         #expect(registry.descriptor(for: "computer_type_text")?.capability == .computerUse)
         #expect(registry.descriptor(for: "list_skills")?.capability == .read)
         #expect(registry.descriptor(for: "use_skill")?.capability == .read)
+        #expect(registry.descriptor(for: "read_terminal_output")?.capability == .read)
 
         let readFileSchema = try #require(registry.descriptor(for: "read_file")?.inputSchema)
         #expect(readFileSchema.required == ["path"])

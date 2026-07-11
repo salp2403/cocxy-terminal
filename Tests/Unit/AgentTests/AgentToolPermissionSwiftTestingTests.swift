@@ -15,7 +15,6 @@ struct AgentToolPermissionSwiftTestingTests {
             "list_directory",
             "search_files",
             "grep",
-            "read_terminal_output",
             "git_status",
             "git_diff",
             "read_lsp_diagnostics",
@@ -25,6 +24,18 @@ struct AgentToolPermissionSwiftTestingTests {
             let invocation = AgentToolInvocation(toolID: toolID, capability: .read)
             #expect(policy.decision(for: invocation) == .allow)
         }
+    }
+
+    @Test("terminal output always requires per-call sensitive data approval")
+    func terminalOutputRequiresSensitiveDataApproval() {
+        let invocation = AgentToolInvocation(toolID: "read_terminal_output", capability: .read)
+
+        #expect(AgentToolPermissionPolicy().decision(for: invocation) == .prompt(
+            .sensitiveDataAccessRequired(toolID: "read_terminal_output")
+        ))
+        #expect(AgentToolPermissionPolicy(autoModeEnabled: true).decision(for: invocation) == .prompt(
+            .sensitiveDataAccessRequired(toolID: "read_terminal_output")
+        ))
     }
 
     @Test("write tools require diff preview even when auto mode is enabled")

@@ -501,7 +501,7 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     func approvePendingTool() async {
-        guard let request = pendingApproval else { return }
+        guard state != .running, let request = pendingApproval else { return }
         let response = pendingApprovalResponseDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if request.preview.kind == .userInput, response.isEmpty {
             return
@@ -641,6 +641,8 @@ final class AgentPanelViewModel: ObservableObject {
             return "Approve computer action \(toolID)."
         case .externalToolApprovalRequired(let toolID):
             return "Approve external tool \(toolID)."
+        case .sensitiveDataAccessRequired:
+            return "Review terminal output before sharing."
         case .userInputRequired(let toolID):
             return "Agent requested input for \(toolID)."
         }

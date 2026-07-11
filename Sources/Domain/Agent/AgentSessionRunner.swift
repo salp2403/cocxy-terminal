@@ -176,10 +176,14 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
         let workspace = try await currentWorkspace()
-        try validateApprovalRequest(request, in: workspace)
+        try validateApprovalRequest(request, in: workspace, configuration: configuration)
         let loop = try await makeLoop(
             configuration: configuration,
-            approvals: approvalContext(for: request, userInput: userInput),
+            approvals: try approvalContext(
+                for: request,
+                userInput: userInput,
+                configuration: configuration
+            ),
             workspace: workspace
         )
 
@@ -223,7 +227,9 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider,
             mcpManager: mcpManager,
-            computerUseController: computerUseController
+            computerUseController: computerUseController,
+            providerKind: configuration.preferredProvider,
+            approvalScopeID: conversationID
         )
         let store = AgentConversationStore(
             rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir),
@@ -263,8 +269,27 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
 
     private func validateApprovalRequest(
         _ request: AgentToolApprovalRequest,
-        in workspace: AgentWorkspace
+        in workspace: AgentWorkspace,
+        configuration: AgentModeConfig
     ) throws {
+        if request.call.toolID == "read_terminal_output" {
+            guard request.binding == nil,
+                  let sensitiveBinding = request.sensitiveReadBinding,
+                  sensitiveBinding.validatesRequest(
+                      call: request.call,
+                      preview: request.preview,
+                      provider: configuration.preferredProvider,
+                      approvalScopeID: conversationID
+                  )
+            else {
+                throw AgentToolApprovalError.staleContext
+            }
+            return
+        }
+        guard request.sensitiveReadBinding == nil else {
+            throw AgentToolApprovalError.staleContext
+        }
+
         let requiresWorkspaceBinding = AgentToolApprovalBinding.targetKind(for: request.call) != nil
         guard let binding = request.binding else {
             if requiresWorkspaceBinding {
@@ -294,8 +319,9 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
 
     private func approvalContext(
         for request: AgentToolApprovalRequest,
-        userInput: String?
-    ) -> AgentToolApprovalContext {
+        userInput: String?,
+        configuration: AgentModeConfig
+    ) throws -> AgentToolApprovalContext {
         let workspaceBindings = request.binding.map { [request.call.id: $0] } ?? [:]
         switch request.call.toolID {
         case "write_file", "apply_diff":
@@ -307,6 +333,18 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
             return AgentToolApprovalContext(
                 approvedCommandCallIDs: [request.call.id],
                 workspaceBindingsByCallID: workspaceBindings
+            )
+        case "read_terminal_output":
+            guard let approvedRead = request.sensitiveReadBinding?.approvedRead(
+                call: request.call,
+                preview: request.preview,
+                provider: configuration.preferredProvider,
+                approvalScopeID: conversationID
+            ) else {
+                throw AgentToolApprovalError.staleContext
+            }
+            return AgentToolApprovalContext(
+                approvedSensitiveReadsByCallID: [request.call.id: approvedRead]
             )
         case "computer_move_mouse", "computer_click", "computer_screenshot", "computer_type_text":
             return AgentToolApprovalContext(approvedComputerUseCallIDs: [request.call.id])

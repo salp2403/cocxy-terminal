@@ -96,9 +96,19 @@ extension MainWindowController {
                 self?.currentAgentModeWorkingDirectory()
             },
             conversationID: "window-\(windowID.rawValue.uuidString)",
-            terminalOutputProvider: MainActorAgentTerminalOutputProvider { [weak self] limit in
-                self?.latestAgentModeTerminalOutput(limit: limit) ?? ""
-            },
+            terminalOutputProvider: MainActorAgentTerminalOutputProvider(
+                selectionProvider: { [weak self] limit in
+                    self?.latestAgentModeTerminalOutputSelection(limit: limit)
+                        ?? .unavailable(blockLimit: min(
+                            max(limit, 1),
+                            AgentTerminalOutputSnapshot.maximumBlockLimit
+                        ))
+                },
+                snapshotProvider: { [weak self] selection in
+                    self?.captureAgentModeTerminalOutput(selection: selection)
+                        ?? .unavailable(blockLimit: selection.blockLimit)
+                }
+            ),
             lspDiagnosticsProvider: MainActorAgentLSPDiagnosticsProvider { [weak self] limit in
                 self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
             },
@@ -199,20 +209,71 @@ extension MainWindowController {
         return tabManager.tab(for: tabID)?.workingDirectory
     }
 
-    func latestAgentModeTerminalOutput(limit: Int) -> String {
-        let boundedLimit = UInt32(min(max(limit, 1), 64))
-        guard let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-                ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge else {
-            return ""
+    func latestAgentModeTerminalOutputSelection(limit: Int) -> AgentTerminalOutputSelection {
+        let boundedLimit = min(max(limit, 1), AgentTerminalOutputSnapshot.maximumBlockLimit)
+        let selectedSurface: (id: SurfaceID, source: AgentTerminalOutputSource)?
+        if let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID {
+            selectedSurface = (surfaceID, .focusedSplit)
+        } else if let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID {
+            selectedSurface = (surfaceID, .activeTerminal)
+        } else {
+            selectedSurface = nil
+        }
+        guard let selectedSurface,
+              let cocxyBridge = terminalEngine(for: selectedSurface.id).cocxyCoreBridge else {
+            return .unavailable(blockLimit: boundedLimit)
         }
 
-        let blocks = availableCommandBlocks(
-            surfaceID: surfaceID,
-            liveBlocks: cocxyBridge.commandBlocks(for: surfaceID, limit: boundedLimit),
+        let blockReferences = TerminalBlockRestoration.blockReferencesForDisplay(
+            live: cocxyBridge.completedCommandBlockReferences(
+                for: selectedSurface.id,
+                limit: UInt32(boundedLimit)
+            ),
+            restored: restoredCommandBlocksBySurfaceID[selectedSurface.id] ?? [],
             limit: boundedLimit
         )
-        return TerminalBlockOutputContextFormatter.text(for: blocks)
+        return AgentTerminalOutputSelection(
+            source: selectedSurface.source,
+            surfaceID: selectedSurface.id.rawValue.uuidString,
+            blockLimit: boundedLimit,
+            blockReferences: blockReferences
+        )
+    }
+
+    func captureAgentModeTerminalOutput(
+        selection: AgentTerminalOutputSelection
+    ) -> AgentTerminalOutputSnapshot {
+        guard selection.source != .unavailable,
+              let rawSurfaceID = selection.surfaceID,
+              let surfaceUUID = UUID(uuidString: rawSurfaceID) else {
+            return .unavailable(blockLimit: selection.blockLimit)
+        }
+        let surfaceID = SurfaceID(rawValue: surfaceUUID)
+        guard let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge else {
+            return .unavailable(blockLimit: selection.blockLimit)
+        }
+
+        let blocks = selection.blockReferences.compactMap { reference in
+            availableCommandBlock(
+                surfaceID: surfaceID,
+                liveBlock: cocxyBridge.commandBlock(for: surfaceID, blockID: reference.id),
+                blockID: reference.id
+            )
+        }
+        let capturedReferences = blocks.map {
+            TerminalCommandBlockReference(id: $0.id, endTimeNs: $0.endTimeNs)
+        }
+        guard capturedReferences == selection.blockReferences else {
+            return .unavailable(blockLimit: selection.blockLimit)
+        }
+        return AgentTerminalOutputSnapshot(
+            source: selection.source,
+            surfaceID: rawSurfaceID,
+            blockLimit: selection.blockLimit,
+            blockCount: blocks.count,
+            blockReferences: capturedReferences,
+            output: TerminalBlockOutputContextFormatter.text(for: blocks)
+        )
     }
 
     func currentAgentModeLSPDiagnostics(limit: Int) -> [AgentLSPDiagnostic] {

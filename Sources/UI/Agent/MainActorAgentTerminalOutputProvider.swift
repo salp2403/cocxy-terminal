@@ -4,15 +4,32 @@
 import Foundation
 
 final class MainActorAgentTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
-    private let outputProvider: @MainActor @Sendable (Int) -> String
+    private let selectionProvider: @MainActor @Sendable (Int) -> AgentTerminalOutputSelection
+    private let snapshotProvider: @MainActor @Sendable (
+        AgentTerminalOutputSelection
+    ) -> AgentTerminalOutputSnapshot
 
-    init(outputProvider: @escaping @MainActor @Sendable (Int) -> String) {
-        self.outputProvider = outputProvider
+    init(
+        selectionProvider: @escaping @MainActor @Sendable (Int) -> AgentTerminalOutputSelection,
+        snapshotProvider: @escaping @MainActor @Sendable (
+            AgentTerminalOutputSelection
+        ) -> AgentTerminalOutputSnapshot
+    ) {
+        self.selectionProvider = selectionProvider
+        self.snapshotProvider = snapshotProvider
     }
 
-    func latestCommandBlockOutputs(limit: Int) -> String {
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection {
         syncOnMainActor {
-            self.outputProvider(limit)
+            self.selectionProvider(limit)
+        }
+    }
+
+    func captureCommandBlockOutputs(
+        selection: AgentTerminalOutputSelection
+    ) -> AgentTerminalOutputSnapshot {
+        syncOnMainActor {
+            self.snapshotProvider(selection)
         }
     }
 }

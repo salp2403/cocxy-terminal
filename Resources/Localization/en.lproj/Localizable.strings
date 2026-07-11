@@ -284,6 +284,7 @@
 "agent.panel.approval.title.computerAction" = "Approve computer action";
 "agent.panel.approval.title.externalTool" = "Approve external tool";
 "agent.panel.approval.title.externalMCPTool" = "Approve external MCP tool";
+"agent.panel.approval.title.terminalOutput" = "Share terminal output";
 "agent.panel.approval.title.userInput" = "Agent requested input";
 "agent.panel.approval.title.reviewChangesTo" = "Review changes to %@";
 "agent.panel.approval.title.reviewChangesFor" = "Review changes for %@";
@@ -291,6 +292,14 @@
 "agent.panel.approval.body.allowComputerAction" = "Allow %@ to control this Mac locally.";
 "agent.panel.approval.body.allowMCPTool" = "Allow %@ to call a configured local MCP server.";
 "agent.panel.approval.body.diffUnavailable" = "Diff preview is unavailable for call %@.";
+"agent.panel.approval.body.destination" = "Destination: %@";
+"agent.panel.approval.body.terminal" = "Terminal: %@";
+"agent.panel.approval.body.commandBlocks" = "Command blocks: %d of at most %d";
+"agent.panel.approval.body.terminalOutputNotice" = "Terminal text has not been read yet. Approval reads only these selected blocks, redacts common secret patterns locally, and shares the bounded result once.";
+"agent.panel.approval.body.terminalOutputWarning" = "Unknown secret formats may remain. Review the selected terminal before approving.";
+"agent.panel.approval.source.focusedSplit" = "Focused split%@";
+"agent.panel.approval.source.activeTerminal" = "Active terminal%@";
+"agent.panel.approval.source.unavailable" = "No active terminal";
 "agent.panel.message.system" = "System";
 "agent.panel.message.you" = "You";
 "agent.panel.message.agent" = "Agent";
@@ -298,6 +307,7 @@
 "agent.panel.message.toolNamed" = "Tool: %@";
 "agent.panel.status.ready" = "Ready.";
 "agent.panel.status.disabled" = "Agent Mode is disabled.";
+"agent.panel.status.reviewTerminalOutput" = "Review terminal output before sharing.";
 "agent.panel.status.running" = "Running...";
 "agent.panel.status.runningApprovedTool" = "Running approved tool...";
 "agent.panel.status.completed" = "Completed.";

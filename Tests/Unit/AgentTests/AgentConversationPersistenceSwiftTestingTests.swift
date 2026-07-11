@@ -38,10 +38,11 @@ struct AgentConversationPersistenceSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let store = AgentConversationStore(rootDirectory: root)
         let contextDigest = "synthetic-context-digest-not-for-persistence"
-        let consent = AgentSensitiveDataConsent(
+        let consent = AgentSensitiveDataPolicy.consent(
             toolCallID: "terminal-call-1",
             provider: .openai,
-            contextDigest: contextDigest
+            contextDigest: contextDigest,
+            encodedToolResult: #"{"limit":1,"output":"synthetic terminal output"}"#
         )
         let message = AgentMessage(
             id: "terminal-result-1",

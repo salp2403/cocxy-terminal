@@ -284,6 +284,7 @@
 "agent.panel.approval.title.computerAction" = "Aprobar acción de computadora";
 "agent.panel.approval.title.externalTool" = "Aprobar herramienta externa";
 "agent.panel.approval.title.externalMCPTool" = "Aprobar herramienta MCP externa";
+"agent.panel.approval.title.terminalOutput" = "Compartir salida del terminal";
 "agent.panel.approval.title.userInput" = "El agente solicitó entrada";
 "agent.panel.approval.title.reviewChangesTo" = "Revisar cambios en %@";
 "agent.panel.approval.title.reviewChangesFor" = "Revisar cambios para %@";
@@ -291,6 +292,14 @@
 "agent.panel.approval.body.allowComputerAction" = "Permitir que %@ controle esta Mac localmente.";
 "agent.panel.approval.body.allowMCPTool" = "Permitir que %@ llame a un servidor MCP local configurado.";
 "agent.panel.approval.body.diffUnavailable" = "La vista previa del diff no está disponible para la llamada %@.";
+"agent.panel.approval.body.destination" = "Destino: %@";
+"agent.panel.approval.body.terminal" = "Terminal: %@";
+"agent.panel.approval.body.commandBlocks" = "Bloques de comandos: %d de un máximo de %d";
+"agent.panel.approval.body.terminalOutputNotice" = "El texto del terminal aún no se ha leído. La aprobación lee solo estos bloques seleccionados, oculta localmente patrones comunes de secretos y comparte una vez el resultado limitado.";
+"agent.panel.approval.body.terminalOutputWarning" = "Los formatos de secretos desconocidos pueden permanecer. Revisa el terminal seleccionado antes de aprobar.";
+"agent.panel.approval.source.focusedSplit" = "División enfocada%@";
+"agent.panel.approval.source.activeTerminal" = "Terminal activa%@";
+"agent.panel.approval.source.unavailable" = "No hay un terminal activo";
 "agent.panel.message.system" = "Sistema";
 "agent.panel.message.you" = "Tú";
 "agent.panel.message.agent" = "Agente";
@@ -298,6 +307,7 @@
 "agent.panel.message.toolNamed" = "Herramienta: %@";
 "agent.panel.status.ready" = "Listo.";
 "agent.panel.status.disabled" = "Modo agente está desactivado.";
+"agent.panel.status.reviewTerminalOutput" = "Revisa la salida del terminal antes de compartirla.";
 "agent.panel.status.running" = "Ejecutando...";
 "agent.panel.status.runningApprovedTool" = "Ejecutando herramienta aprobada...";
 "agent.panel.status.completed" = "Completado.";

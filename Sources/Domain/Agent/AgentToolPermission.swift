@@ -22,6 +22,7 @@ enum AgentToolPromptReason: Sendable, Equatable {
     case commandApprovalRequired(command: String)
     case computerUseApprovalRequired(toolID: String)
     case externalToolApprovalRequired(toolID: String)
+    case sensitiveDataAccessRequired(toolID: String)
     case userInputRequired(toolID: String)
 }
 
@@ -30,6 +31,7 @@ enum AgentToolApprovalPreviewKind: String, Sendable, Equatable {
     case command
     case computerUse
     case externalTool
+    case sensitiveData
     case userInput
 }
 
@@ -270,13 +272,205 @@ struct AgentToolApprovalBinding: Sendable, Equatable {
     }
 }
 
+struct AgentApprovedSensitiveRead: Sendable, Equatable {
+    let callID: String
+    let provider: AgentProviderKind
+    let selection: AgentTerminalOutputSelection
+    let contextDigest: String
+}
+
+private final class AgentSensitiveReadApprovalState: @unchecked Sendable {
+    private enum Phase {
+        case pending
+        case approved
+        case disclosed
+    }
+
+    private let lock = NSLock()
+    private var phase: Phase = .pending
+
+    func approve() -> Bool {
+        lock.withLock {
+            guard phase == .pending else { return false }
+            phase = .approved
+            return true
+        }
+    }
+
+    func issueDisclosure() -> Bool {
+        lock.withLock {
+            guard phase == .approved else { return false }
+            phase = .disclosed
+            return true
+        }
+    }
+}
+
+struct AgentSensitiveReadApprovalBinding: Sendable, Equatable {
+    private let bindingID: UUID
+    private let callID: String
+    private let callDigest: String
+    private let previewDigest: String
+    private let scopeDigest: String
+    private let provider: AgentProviderKind
+    private let selection: AgentTerminalOutputSelection
+    private let contextDigest: String
+    private let state: AgentSensitiveReadApprovalState
+
+    init(
+        call: AgentToolCall,
+        preview: AgentToolApprovalPreview,
+        provider: AgentProviderKind,
+        approvalScopeID: String,
+        selection: AgentTerminalOutputSelection
+    ) throws {
+        let normalizedScope = approvalScopeID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard call.toolID == "read_terminal_output",
+              preview.kind == .sensitiveData,
+              !normalizedScope.isEmpty,
+              selection.source != .unavailable,
+              selection.surfaceID != nil,
+              !selection.blockReferences.isEmpty,
+              selection.blockLimit > 0
+        else {
+            throw AgentToolApprovalError.identityUnavailable
+        }
+
+        let bindingID = UUID()
+        let callDigest = try Self.callDigest(for: call)
+        let previewDigest = Self.previewDigest(for: preview)
+        let scopeDigest = Self.digest([Data(normalizedScope.utf8)])
+        self.bindingID = bindingID
+        self.callID = call.id
+        self.callDigest = callDigest
+        self.previewDigest = previewDigest
+        self.scopeDigest = scopeDigest
+        self.provider = provider
+        self.selection = selection
+        self.state = AgentSensitiveReadApprovalState()
+        self.contextDigest = Self.digest([
+            Data(bindingID.uuidString.utf8),
+            Data(callDigest.utf8),
+            Data(previewDigest.utf8),
+            Data(scopeDigest.utf8),
+            Data(provider.rawValue.utf8),
+            Data(selection.source.rawValue.utf8),
+            Data((selection.surfaceID ?? "unavailable").utf8),
+            Data(String(selection.blockLimit).utf8),
+            Data(selection.blockReferences.map {
+                "\($0.id):\($0.endTimeNs)"
+            }.joined(separator: ",").utf8),
+        ])
+    }
+
+    func validatesRequest(
+        call: AgentToolCall,
+        preview: AgentToolApprovalPreview,
+        provider: AgentProviderKind,
+        approvalScopeID: String
+    ) -> Bool {
+        let normalizedScope = approvalScopeID.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard call.toolID == "read_terminal_output",
+              call.id == callID,
+              preview.kind == .sensitiveData,
+              provider == self.provider,
+              !normalizedScope.isEmpty,
+              let currentCallDigest = try? Self.callDigest(for: call)
+        else {
+            return false
+        }
+
+        return currentCallDigest == callDigest
+            && Self.previewDigest(for: preview) == previewDigest
+            && Self.digest([Data(normalizedScope.utf8)]) == scopeDigest
+    }
+
+    func approvedRead(
+        call: AgentToolCall,
+        preview: AgentToolApprovalPreview,
+        provider: AgentProviderKind,
+        approvalScopeID: String
+    ) -> AgentApprovedSensitiveRead? {
+        guard validatesRequest(
+            call: call,
+            preview: preview,
+            provider: provider,
+            approvalScopeID: approvalScopeID
+        ), state.approve() else {
+            return nil
+        }
+        return AgentApprovedSensitiveRead(
+            callID: call.id,
+            provider: provider,
+            selection: selection,
+            contextDigest: contextDigest
+        )
+    }
+
+    func consent(for toolResult: AgentToolResult, encodedToolResult: String) -> AgentSensitiveDataConsent? {
+        guard toolResult.callID == callID,
+              toolResult.toolID == AgentSensitiveDataPolicy.terminalOutputToolID,
+              state.issueDisclosure() else {
+            return nil
+        }
+        return AgentSensitiveDataPolicy.consent(
+            toolCallID: callID,
+            provider: provider,
+            contextDigest: contextDigest,
+            encodedToolResult: encodedToolResult
+        )
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.bindingID == rhs.bindingID
+            && lhs.callID == rhs.callID
+            && lhs.callDigest == rhs.callDigest
+            && lhs.previewDigest == rhs.previewDigest
+            && lhs.scopeDigest == rhs.scopeDigest
+            && lhs.provider == rhs.provider
+            && lhs.selection == rhs.selection
+            && lhs.contextDigest == rhs.contextDigest
+    }
+
+    private static func callDigest(for call: AgentToolCall) throws -> String {
+        digest([try AgentToolProtocolCodec.encode(call)])
+    }
+
+    private static func previewDigest(for preview: AgentToolApprovalPreview) -> String {
+        digest([
+            Data(preview.kind.rawValue.utf8),
+            Data(preview.title.utf8),
+            Data(preview.body.utf8),
+        ])
+    }
+
+    private static func digest(_ parts: [Data]) -> String {
+        var payload = Data()
+        for part in parts {
+            payload.append(contentsOf: String(part.count).utf8)
+            payload.append(0x3A)
+            payload.append(part)
+            payload.append(0)
+        }
+        return SHA256.hash(data: payload)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+}
+
 struct AgentToolApprovalPreviewContext: Sendable, Equatable {
     let preview: AgentToolApprovalPreview
     let binding: AgentToolApprovalBinding?
+    let sensitiveReadBinding: AgentSensitiveReadApprovalBinding?
 
-    init(preview: AgentToolApprovalPreview, binding: AgentToolApprovalBinding? = nil) {
+    init(
+        preview: AgentToolApprovalPreview,
+        binding: AgentToolApprovalBinding? = nil,
+        sensitiveReadBinding: AgentSensitiveReadApprovalBinding? = nil
+    ) {
         self.preview = preview
         self.binding = binding
+        self.sensitiveReadBinding = sensitiveReadBinding
     }
 }
 
@@ -286,18 +480,21 @@ struct AgentToolApprovalRequest: Identifiable, Sendable, Equatable {
     let reason: AgentToolPromptReason
     let preview: AgentToolApprovalPreview
     let binding: AgentToolApprovalBinding?
+    let sensitiveReadBinding: AgentSensitiveReadApprovalBinding?
 
     init(
         call: AgentToolCall,
         reason: AgentToolPromptReason,
         preview: AgentToolApprovalPreview,
-        binding: AgentToolApprovalBinding? = nil
+        binding: AgentToolApprovalBinding? = nil,
+        sensitiveReadBinding: AgentSensitiveReadApprovalBinding? = nil
     ) {
         self.id = call.id
         self.call = call
         self.reason = reason
         self.preview = preview
         self.binding = binding
+        self.sensitiveReadBinding = sensitiveReadBinding
     }
 }
 
@@ -363,6 +560,9 @@ struct AgentToolPermissionPolicy: Sendable, Equatable {
     func decision(for invocation: AgentToolInvocation) -> AgentToolPermissionDecision {
         switch invocation.capability {
         case .read:
+            if invocation.toolID == "read_terminal_output" {
+                return .prompt(.sensitiveDataAccessRequired(toolID: invocation.toolID))
+            }
             return .allow
         case .write:
             return .prompt(.diffPreviewRequired(toolID: invocation.toolID))

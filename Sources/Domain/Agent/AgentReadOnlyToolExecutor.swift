@@ -34,8 +34,153 @@ extension AgentProcessRunning {
     }
 }
 
+enum AgentTerminalOutputSource: String, Sendable, Equatable {
+    case focusedSplit = "focused-split"
+    case activeTerminal = "active-terminal"
+    case unavailable
+}
+
+struct AgentTerminalOutputSelection: Sendable, Equatable {
+    let source: AgentTerminalOutputSource
+    let surfaceID: String?
+    let blockLimit: Int
+    let blockReferences: [TerminalCommandBlockReference]
+
+    init(
+        source: AgentTerminalOutputSource,
+        surfaceID: String?,
+        blockLimit: Int,
+        blockReferences: [TerminalCommandBlockReference]
+    ) {
+        let boundedLimit = min(max(0, blockLimit), AgentTerminalOutputSnapshot.maximumBlockLimit)
+        self.source = source
+        self.surfaceID = surfaceID
+        self.blockLimit = boundedLimit
+        var seenBlockIDs: Set<UInt64> = []
+        let uniqueReferences = blockReferences.filter { seenBlockIDs.insert($0.id).inserted }
+        self.blockReferences = Array(uniqueReferences.suffix(boundedLimit))
+    }
+
+    static func unavailable(blockLimit: Int) -> AgentTerminalOutputSelection {
+        AgentTerminalOutputSelection(
+            source: .unavailable,
+            surfaceID: nil,
+            blockLimit: blockLimit,
+            blockReferences: []
+        )
+    }
+
+    var blockCount: Int {
+        blockReferences.count
+    }
+
+    var blockIDs: [UInt64] {
+        blockReferences.map(\.id)
+    }
+
+    var previewSourceDescription: String {
+        AgentTerminalOutputSnapshot.previewSourceDescription(source: source, surfaceID: surfaceID)
+    }
+}
+
+struct AgentTerminalOutputSnapshot: Sendable, Equatable {
+    static let maximumBlockLimit = 64
+    static let maximumOutputBytes = 32 * 1_024
+    static let truncationMarker = "\n[terminal output truncated]"
+
+    let source: AgentTerminalOutputSource
+    let surfaceID: String?
+    let blockLimit: Int
+    let blockCount: Int
+    let blockReferences: [TerminalCommandBlockReference]
+    let output: String
+
+    init(
+        source: AgentTerminalOutputSource,
+        surfaceID: String?,
+        blockLimit: Int,
+        blockCount: Int,
+        blockReferences: [TerminalCommandBlockReference] = [],
+        output: String
+    ) {
+        let boundedLimit = min(max(0, blockLimit), Self.maximumBlockLimit)
+        self.source = source
+        self.surfaceID = surfaceID
+        self.blockLimit = boundedLimit
+        self.blockCount = min(max(0, blockCount), boundedLimit)
+        self.blockReferences = Array(blockReferences.suffix(boundedLimit))
+        self.output = Self.boundedOutput(output)
+    }
+
+    static func unavailable(blockLimit: Int) -> AgentTerminalOutputSnapshot {
+        AgentTerminalOutputSnapshot(
+            source: .unavailable,
+            surfaceID: nil,
+            blockLimit: min(max(0, blockLimit), Self.maximumBlockLimit),
+            blockCount: 0,
+            output: ""
+        )
+    }
+
+    var previewSourceDescription: String {
+        Self.previewSourceDescription(source: source, surfaceID: surfaceID)
+    }
+
+    fileprivate static func previewSourceDescription(
+        source: AgentTerminalOutputSource,
+        surfaceID: String?
+    ) -> String {
+        let shortID = surfaceID.map { String($0.prefix(8)).uppercased() }
+        switch source {
+        case .focusedSplit:
+            return shortID.map { "Focused split (\($0))" } ?? "Focused split"
+        case .activeTerminal:
+            return shortID.map { "Active terminal (\($0))" } ?? "Active terminal"
+        case .unavailable:
+            return "No active terminal"
+        }
+    }
+
+    var outputByteCount: Int {
+        output.utf8.count
+    }
+
+    var blockIDs: [UInt64] {
+        blockReferences.map(\.id)
+    }
+
+    func replacingOutput(_ output: String) -> AgentTerminalOutputSnapshot {
+        AgentTerminalOutputSnapshot(
+            source: source,
+            surfaceID: surfaceID,
+            blockLimit: blockLimit,
+            blockCount: blockCount,
+            blockReferences: blockReferences,
+            output: output
+        )
+    }
+
+    private static func boundedOutput(_ output: String) -> String {
+        let data = Data(output.utf8)
+        guard data.count > maximumOutputBytes else { return output }
+
+        let markerBytes = Data(truncationMarker.utf8)
+        var prefixCount = maximumOutputBytes - markerBytes.count
+        while prefixCount > 0 {
+            if let prefix = String(data: data.prefix(prefixCount), encoding: .utf8) {
+                return prefix + truncationMarker
+            }
+            prefixCount -= 1
+        }
+        return truncationMarker
+    }
+}
+
 protocol AgentTerminalOutputProviding: Sendable {
-    func latestCommandBlockOutputs(limit: Int) -> String
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection
+    func captureCommandBlockOutputs(
+        selection: AgentTerminalOutputSelection
+    ) -> AgentTerminalOutputSnapshot
 }
 
 struct AgentLSPDiagnostic: Sendable, Equatable {
@@ -205,7 +350,11 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
             case "git_diff":
                 return try gitDiff(call)
             case "read_terminal_output":
-                return readTerminalOutput(call)
+                return failure(
+                    call,
+                    code: "sensitive_read_approval_required",
+                    message: "Terminal output requires per-call user approval."
+                )
             case "read_lsp_diagnostics":
                 return readLSPDiagnostics(call)
             default:
@@ -432,24 +581,38 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
         )
     }
 
-    private func readTerminalOutput(_ call: AgentToolCall) -> AgentToolResult {
+    func terminalOutputSelection(for call: AgentToolCall) throws -> AgentTerminalOutputSelection {
         guard let terminalOutputProvider else {
-            return failure(
-                call,
-                code: "terminal_output_unavailable",
-                message: "No terminal output provider is available for this Agent run."
-            )
+            throw AgentReadOnlyToolError.terminalOutputUnavailable
         }
 
         let limit = boundedLimit(from: call)
-        return .success(
-            callID: call.id,
-            toolID: call.toolID,
-            content: .object([
-                "limit": .number(Double(limit)),
-                "output": .string(terminalOutputProvider.latestCommandBlockOutputs(limit: limit)),
-            ])
-        )
+        let selection = terminalOutputProvider.latestCommandBlockSelection(limit: limit)
+        guard selection.source != .unavailable,
+              selection.surfaceID != nil,
+              !selection.blockReferences.isEmpty,
+              selection.blockLimit == min(limit, AgentTerminalOutputSnapshot.maximumBlockLimit)
+        else {
+            throw AgentReadOnlyToolError.terminalOutputUnavailable
+        }
+        return selection
+    }
+
+    func terminalOutputSnapshot(
+        for selection: AgentTerminalOutputSelection
+    ) throws -> AgentTerminalOutputSnapshot {
+        guard let terminalOutputProvider else {
+            throw AgentReadOnlyToolError.terminalOutputUnavailable
+        }
+        let snapshot = terminalOutputProvider.captureCommandBlockOutputs(selection: selection)
+        guard snapshot.source == selection.source,
+              snapshot.surfaceID == selection.surfaceID,
+              snapshot.blockLimit == selection.blockLimit,
+              snapshot.blockReferences == selection.blockReferences,
+              snapshot.blockCount == selection.blockCount else {
+            throw AgentReadOnlyToolError.terminalOutputUnavailable
+        }
+        return snapshot
     }
 
     private func readLSPDiagnostics(_ call: AgentToolCall) -> AgentToolResult {
@@ -621,6 +784,7 @@ private enum AgentReadOnlyToolError: Error, Sendable, Equatable {
     case invalidRegex(String)
     case skippedBinary(String)
     case skippedNonUTF8(String)
+    case terminalOutputUnavailable
 
     var code: String {
         switch self {
@@ -632,6 +796,8 @@ private enum AgentReadOnlyToolError: Error, Sendable, Equatable {
             return "binary_file"
         case .skippedNonUTF8:
             return "non_utf8_file"
+        case .terminalOutputUnavailable:
+            return "terminal_output_unavailable"
         }
     }
 
@@ -645,6 +811,8 @@ private enum AgentReadOnlyToolError: Error, Sendable, Equatable {
             return "Skipped binary file: \(path)"
         case .skippedNonUTF8(let path):
             return "Skipped non-UTF-8 file: \(path)"
+        case .terminalOutputUnavailable:
+            return "No terminal output provider or active terminal is available for this Agent run."
         }
     }
 }

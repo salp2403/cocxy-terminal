@@ -12,6 +12,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
     let approvedExternalToolCallIDs: Set<String>
     let commandAllowRules: [AgentCommandAllowRule]
     let userInputResponsesByCallID: [String: String]
+    let approvedSensitiveReadsByCallID: [String: AgentApprovedSensitiveRead]
 
     init(
         approvedWriteCallIDs: Set<String> = [],
@@ -21,7 +22,8 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         computerUseAllowedWithoutApproval: Bool = false,
         approvedExternalToolCallIDs: Set<String> = [],
         commandAllowRules: [AgentCommandAllowRule] = [],
-        userInputResponsesByCallID: [String: String] = [:]
+        userInputResponsesByCallID: [String: String] = [:],
+        approvedSensitiveReadsByCallID: [String: AgentApprovedSensitiveRead] = [:]
     ) {
         self.approvedWriteCallIDs = approvedWriteCallIDs
         self.approvedCommandCallIDs = approvedCommandCallIDs
@@ -31,6 +33,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
         self.approvedExternalToolCallIDs = approvedExternalToolCallIDs
         self.commandAllowRules = commandAllowRules
         self.userInputResponsesByCallID = userInputResponsesByCallID
+        self.approvedSensitiveReadsByCallID = approvedSensitiveReadsByCallID
     }
 
     func approvesWrite(callID: String) -> Bool {
@@ -71,7 +74,8 @@ struct AgentToolApprovalContext: Sendable, Equatable {
             computerUseAllowedWithoutApproval: computerUseAllowedWithoutApproval,
             approvedExternalToolCallIDs: approvedExternalToolCallIDs,
             commandAllowRules: commandAllowRules + rules,
-            userInputResponsesByCallID: userInputResponsesByCallID
+            userInputResponsesByCallID: userInputResponsesByCallID,
+            approvedSensitiveReadsByCallID: approvedSensitiveReadsByCallID
         )
     }
 
@@ -84,8 +88,24 @@ struct AgentToolApprovalContext: Sendable, Equatable {
             computerUseAllowedWithoutApproval: computerUseAllowedWithoutApproval || allowed,
             approvedExternalToolCallIDs: approvedExternalToolCallIDs,
             commandAllowRules: commandAllowRules,
-            userInputResponsesByCallID: userInputResponsesByCallID
+            userInputResponsesByCallID: userInputResponsesByCallID,
+            approvedSensitiveReadsByCallID: approvedSensitiveReadsByCallID
         )
+    }
+}
+
+private final class AgentSensitiveReadApprovalStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private var approvalsByCallID: [String: AgentApprovedSensitiveRead]
+
+    init(approvalsByCallID: [String: AgentApprovedSensitiveRead]) {
+        self.approvalsByCallID = approvalsByCallID
+    }
+
+    func consume(callID: String) -> AgentApprovedSensitiveRead? {
+        lock.lock()
+        defer { lock.unlock() }
+        return approvalsByCallID.removeValue(forKey: callID)
     }
 }
 
@@ -97,9 +117,12 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
     let readOnlyExecutor: AgentReadOnlyToolExecutor
     let mcpManager: (any MCPManaging)?
     let computerUseController: any ComputerUseControlling
+    let providerKind: AgentProviderKind
+    let approvalScopeID: String
     let maxFileBytes: Int
     let defaultCommandTimeoutSeconds: TimeInterval
     let maxCommandTimeoutSeconds: TimeInterval
+    private let sensitiveReadApprovalStore: AgentSensitiveReadApprovalStore
 
     init(
         workspace: AgentWorkspace,
@@ -110,6 +133,8 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         skillRegistry: SkillRegistry? = nil,
         mcpManager: (any MCPManaging)? = nil,
         computerUseController: any ComputerUseControlling = ComputerUseActor.liveDefault(),
+        providerKind: AgentProviderKind = .foundationModelsOnDevice,
+        approvalScopeID: String = "standalone-agent-tool-executor",
         gitExecutableURL: URL = URL(fileURLWithPath: "/usr/bin/git"),
         shellExecutableURL: URL = URL(fileURLWithPath: "/bin/zsh"),
         maxFileBytes: Int = 1_000_000,
@@ -125,6 +150,11 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         self.maxCommandTimeoutSeconds = maxCommandTimeoutSeconds
         self.mcpManager = mcpManager
         self.computerUseController = computerUseController
+        self.providerKind = providerKind
+        self.approvalScopeID = approvalScopeID
+        self.sensitiveReadApprovalStore = AgentSensitiveReadApprovalStore(
+            approvalsByCallID: approvals.approvedSensitiveReadsByCallID
+        )
         self.readOnlyExecutor = AgentReadOnlyToolExecutor(
             workspace: workspace,
             processRunner: processRunner,
@@ -152,9 +182,10 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                  "grep",
                  "git_status",
                  "git_diff",
-                 "read_terminal_output",
                  "read_lsp_diagnostics":
                 return try await readOnlyExecutor.execute(call)
+            case "read_terminal_output":
+                return try readTerminalOutput(call)
             case "write_file":
                 return try writeFile(call)
             case "apply_diff":
@@ -203,6 +234,8 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             return try applyDiffPreview(call)
         case "run_command":
             return try runCommandPreview(call)
+        case "read_terminal_output":
+            return try terminalOutputPreview(call)
         case "computer_move_mouse",
              "computer_click",
              "computer_screenshot",
@@ -228,6 +261,54 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
             }
             throw AgentLocalToolError.unsupportedTool(call.toolID)
         }
+    }
+
+    private func terminalOutputPreview(_ call: AgentToolCall) throws -> AgentToolApprovalPreviewContext {
+        let selection = try readOnlyExecutor.terminalOutputSelection(for: call)
+        let preview = AgentToolApprovalPreview(
+            kind: .sensitiveData,
+            title: "Share terminal output",
+            body: [
+                "Destination: \(providerKind.displayName)",
+                "Terminal: \(selection.previewSourceDescription)",
+                "Command blocks: \(selection.blockCount) of at most \(selection.blockLimit)",
+                "Terminal text has not been read yet. Approval reads only these selected blocks, redacts common secret patterns locally, and shares the bounded result once.",
+                "Unknown secret formats may remain. Review the selected terminal before approving.",
+            ].joined(separator: "\n")
+        )
+        return AgentToolApprovalPreviewContext(
+            preview: preview,
+            sensitiveReadBinding: try AgentSensitiveReadApprovalBinding(
+                call: call,
+                preview: preview,
+                provider: providerKind,
+                approvalScopeID: approvalScopeID,
+                selection: selection
+            )
+        )
+    }
+
+    private func readTerminalOutput(_ call: AgentToolCall) throws -> AgentToolResult {
+        guard let approval = sensitiveReadApprovalStore.consume(callID: call.id),
+              approval.callID == call.id,
+              approval.provider == providerKind
+        else {
+            throw AgentLocalToolError.approvalRequired(toolID: call.toolID)
+        }
+        let capturedSnapshot = try readOnlyExecutor.terminalOutputSnapshot(for: approval.selection)
+        let redactedSnapshot = capturedSnapshot.replacingOutput(
+            AgentSensitiveOutputRedactor.redacted(capturedSnapshot.output)
+        )
+
+        return .success(
+            callID: call.id,
+            toolID: call.toolID,
+            content: .object([
+                "limit": .number(Double(redactedSnapshot.blockLimit)),
+                "blocks": .number(Double(redactedSnapshot.blockCount)),
+                "output": .string(redactedSnapshot.output),
+            ])
+        )
     }
 
     private func writeFile(_ call: AgentToolCall) throws -> AgentToolResult {

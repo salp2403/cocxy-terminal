@@ -3,6 +3,11 @@
 
 import Foundation
 
+struct TerminalCommandBlockReference: Codable, Equatable, Sendable {
+    let id: UInt64
+    let endTimeNs: UInt64
+}
+
 struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
     static let currentSchemaVersion: UInt8 = 2
 
@@ -189,6 +194,37 @@ enum TerminalBlockOutputContextFormatter {
 }
 
 enum TerminalBlockRestoration {
+    static func blockReferencesForDisplay(
+        live: [TerminalCommandBlockReference],
+        restored: [TerminalCommandBlock],
+        limit: Int
+    ) -> [TerminalCommandBlockReference] {
+        guard limit > 0 else { return [] }
+        let source: [TerminalCommandBlockReference]
+        if live.isEmpty {
+            var newestMetadataByID: [UInt64: (
+                reference: TerminalCommandBlockReference,
+                startTimeNs: UInt64
+            )] = [:]
+            for block in restored where block.endTimeNs > 0 {
+                newestMetadataByID[block.id] = (
+                    TerminalCommandBlockReference(id: block.id, endTimeNs: block.endTimeNs),
+                    block.startTimeNs
+                )
+            }
+            source = newestMetadataByID.values.sorted { lhs, rhs in
+                if lhs.startTimeNs != rhs.startTimeNs {
+                    return lhs.startTimeNs < rhs.startTimeNs
+                }
+                return lhs.reference.id < rhs.reference.id
+            }.map(\.reference)
+        } else {
+            source = live
+        }
+        guard source.count > limit else { return source }
+        return Array(source.suffix(limit))
+    }
+
     static func blocksForDisplay(
         live: [TerminalCommandBlock],
         restored: [TerminalCommandBlock],

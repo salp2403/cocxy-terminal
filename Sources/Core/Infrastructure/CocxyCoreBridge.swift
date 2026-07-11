@@ -2127,6 +2127,38 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? []
     }
 
+    func completedCommandBlockReferences(
+        for surface: SurfaceID,
+        limit: UInt32
+    ) -> [TerminalCommandBlockReference] {
+        withTerminalLock(surface) { state in
+            guard limit > 0, let iterator = cocxycore_block_iterator_create(state.terminal) else {
+                return []
+            }
+            defer { cocxycore_block_iterator_destroy(iterator) }
+
+            var references: [TerminalCommandBlockReference] = []
+            while cocxycore_block_iterator_next(iterator) {
+                let blockID = cocxycore_block_iterator_current_id(iterator)
+                guard blockID != 0 else { continue }
+                var metadata = cocxycore_block_metadata()
+                guard cocxycore_block_get_metadata(state.terminal, blockID, &metadata),
+                      metadata.id == blockID,
+                      metadata.end_time_ns > 0,
+                      Self.isCommandBlockType(metadata.block_type) else {
+                    continue
+                }
+                references.append(TerminalCommandBlockReference(
+                    id: blockID,
+                    endTimeNs: metadata.end_time_ns
+                ))
+            }
+
+            let maxCount = Int(min(limit, 64))
+            return references.count > maxCount ? Array(references.suffix(maxCount)) : references
+        } ?? []
+    }
+
     func commandBlock(for surface: SurfaceID, blockID: UInt64) -> TerminalCommandBlock? {
         let block: TerminalCommandBlock?? = withTerminalLock(surface) { state in
             Self.commandBlock(from: state.terminal, blockID: blockID)
@@ -2156,9 +2188,7 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         let blockType = metadata.block_type
-        let isCommandBlock = blockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue)
-            || blockType == UInt8(COCXYCORE_BLOCK_ERROR_OUTPUT.rawValue)
-        guard isCommandBlock else { return nil }
+        guard isCommandBlockType(blockType) else { return nil }
 
         return TerminalCommandBlock(
             id: metadata.id,
@@ -2174,6 +2204,11 @@ final class CocxyCoreBridge: TerminalEngine {
             streamID: metadata.stream_id,
             blockType: blockType
         )
+    }
+
+    private static func isCommandBlockType(_ blockType: UInt8) -> Bool {
+        blockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue)
+            || blockType == UInt8(COCXYCORE_BLOCK_ERROR_OUTPUT.rawValue)
     }
 
     private static func optionalString(from pointer: UnsafePointer<CChar>?, length: Int) -> String? {

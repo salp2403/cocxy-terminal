@@ -564,8 +564,8 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         #expect(result.error?.message.contains("fatal: not a git repository") == true)
     }
 
-    @Test("read_terminal_output uses injected terminal output provider")
-    func readTerminalOutputUsesInjectedProvider() async throws {
+    @Test("read_terminal_output requires approval before capturing terminal state")
+    func readTerminalOutputRequiresApprovalBeforeCapture() async throws {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let terminalProvider = RecordingTerminalOutputProvider(output: "block one\nblock two\n")
@@ -579,11 +579,9 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
             toolID: "read_terminal_output",
             arguments: ["limit": .number(2)]
         ))
-        let resultContent = try contentObject(result)
-
-        #expect(result.status == AgentToolResultStatus.success)
-        #expect(resultContent["output"]?.stringValue == "block one\nblock two\n")
-        #expect(terminalProvider.requestedLimits == [2])
+        #expect(result.status == AgentToolResultStatus.failure)
+        #expect(result.error?.code == "sensitive_read_approval_required")
+        #expect(terminalProvider.requestedLimits.isEmpty)
     }
 
     @Test("read_terminal_output fails closed without terminal provider")
@@ -598,7 +596,7 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         ))
 
         #expect(result.status == AgentToolResultStatus.failure)
-        #expect(result.error?.code == "terminal_output_unavailable")
+        #expect(result.error?.code == "sensitive_read_approval_required")
     }
 
     @Test("read_lsp_diagnostics uses injected diagnostics provider with limit")
@@ -764,15 +762,36 @@ private struct AgentProcessCall: Equatable {
 
 private final class RecordingTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
     private(set) var requestedLimits: [Int] = []
+    private(set) var capturedSelections: [AgentTerminalOutputSelection] = []
     private let output: String
 
     init(output: String) {
         self.output = output
     }
 
-    func latestCommandBlockOutputs(limit: Int) -> String {
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection {
         requestedLimits.append(limit)
-        return output
+        return AgentTerminalOutputSelection(
+            source: .activeTerminal,
+            surfaceID: "test-surface",
+            blockLimit: limit,
+            blockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 100),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+    }
+
+    func captureCommandBlockOutputs(selection: AgentTerminalOutputSelection) -> AgentTerminalOutputSnapshot {
+        capturedSelections.append(selection)
+        return AgentTerminalOutputSnapshot(
+            source: selection.source,
+            surfaceID: selection.surfaceID,
+            blockLimit: selection.blockLimit,
+            blockCount: selection.blockCount,
+            blockReferences: selection.blockReferences,
+            output: output
+        )
     }
 }
 

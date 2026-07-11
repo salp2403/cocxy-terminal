@@ -526,6 +526,208 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         #expect(content["answer"]?.stringValue == "Use main.")
     }
 
+    @Test("terminal output approval is bound redacted and consumed once")
+    func terminalOutputApprovalIsBoundRedactedAndConsumedOnce() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
+            id: "call-terminal-output",
+            toolID: "read_terminal_output",
+            arguments: ["limit": .number(70)]
+        )
+        let provider = StaticLocalTerminalOutputProvider(output: """
+        build completed
+        API_KEY=synthetic-secret-value
+        ghp_abcdefghijklmnopqrstuvwxyz123456
+        """)
+        let previewExecutor = AgentLocalToolExecutor(
+            workspace: workspace,
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-consent-test"
+        )
+        let previewContext = try await previewExecutor.approvalPreview(for: call)
+        let binding = try #require(previewContext.sensitiveReadBinding)
+        let changedCall = AgentToolCall(
+            id: call.id,
+            toolID: call.toolID,
+            arguments: ["limit": .number(2)]
+        )
+
+        #expect(previewContext.preview.kind == .sensitiveData)
+        #expect(previewContext.preview.body.contains("Destination: OpenAI"))
+        #expect(previewContext.preview.body.contains("Command blocks: 2 of at most 64"))
+        #expect(previewContext.preview.body.contains("Terminal text has not been read yet."))
+        #expect(!previewContext.preview.body.contains("build completed"))
+        #expect(!previewContext.preview.body.contains("synthetic-secret-value"))
+        #expect(!previewContext.preview.body.contains("ghp_abcdefghijklmnopqrstuvwxyz123456"))
+        #expect(provider.requestedLimits == [70])
+        #expect(provider.capturedSelections.isEmpty)
+        #expect(binding.approvedRead(
+            call: changedCall,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-consent-test"
+        ) == nil)
+        #expect(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .google,
+            approvalScopeID: "terminal-consent-test"
+        ) == nil)
+        #expect(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "different-session"
+        ) == nil)
+        let approvedRead = try #require(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-consent-test"
+        ))
+        #expect(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-consent-test"
+        ) == nil)
+
+        let unapproved = try await previewExecutor.execute(call)
+        #expect(unapproved.status == .failure)
+        #expect(unapproved.error?.code == "approval_required")
+        #expect(provider.capturedSelections.isEmpty)
+
+        let approvedExecutor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedSensitiveReadsByCallID: [call.id: approvedRead]
+            ),
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-consent-test"
+        )
+        let result = try await approvedExecutor.execute(call)
+        let content = try contentObject(result)
+        let redactedOutput = try #require(content["output"]?.stringValue)
+
+        #expect(result.status == .success)
+        #expect(content["limit"]?.numberValue == 64)
+        #expect(content["blocks"]?.numberValue == 2)
+        #expect(redactedOutput.contains("build completed"))
+        #expect(!redactedOutput.contains("synthetic-secret-value"))
+        #expect(!redactedOutput.contains("ghp_abcdefghijklmnopqrstuvwxyz123456"))
+        #expect(redactedOutput.contains("[redacted]"))
+        #expect(redactedOutput.contains("[redacted-token]"))
+        #expect(provider.capturedSelections == [approvedRead.selection])
+
+        let replay = try await approvedExecutor.execute(call)
+        #expect(replay.status == .failure)
+        #expect(replay.error?.code == "approval_required")
+        #expect(provider.requestedLimits == [70])
+        #expect(provider.capturedSelections.count == 1)
+    }
+
+    @Test("terminal output snapshot enforces a UTF-8 byte budget without splitting characters")
+    func terminalOutputSnapshotEnforcesUTF8Budget() {
+        let prefixBudget = AgentTerminalOutputSnapshot.maximumOutputBytes
+            - AgentTerminalOutputSnapshot.truncationMarker.utf8.count
+        let oversized = String(repeating: "a", count: prefixBudget - 1)
+            + "é"
+            + String(repeating: "b", count: 64)
+        let snapshot = AgentTerminalOutputSnapshot(
+            source: .activeTerminal,
+            surfaceID: "surface-budget",
+            blockLimit: 1,
+            blockCount: 1,
+            output: oversized
+        )
+
+        #expect(snapshot.outputByteCount <= AgentTerminalOutputSnapshot.maximumOutputBytes)
+        #expect(snapshot.output.hasSuffix(AgentTerminalOutputSnapshot.truncationMarker))
+        #expect(!snapshot.output.contains("�"))
+    }
+
+    @Test("terminal output capture fails closed when selected block identity changes")
+    func terminalOutputCaptureRejectsChangedBlockIdentity() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
+            id: "call-terminal-retargeted",
+            toolID: "read_terminal_output",
+            arguments: ["limit": .number(2)]
+        )
+        let provider = StaticLocalTerminalOutputProvider(
+            output: "synthetic-secret-output",
+            capturedBlockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 999),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+        let previewExecutor = AgentLocalToolExecutor(
+            workspace: workspace,
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-retarget-test"
+        )
+        let previewContext = try await previewExecutor.approvalPreview(for: call)
+        let binding = try #require(previewContext.sensitiveReadBinding)
+        let approvedRead = try #require(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-retarget-test"
+        ))
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedSensitiveReadsByCallID: [call.id: approvedRead]
+            ),
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-retarget-test"
+        )
+
+        let result = try await executor.execute(call)
+
+        #expect(result.status == .failure)
+        #expect(result.content == nil)
+        #expect(result.error?.code == "tool_execution_failed")
+        #expect(result.error?.message.contains("synthetic-secret-output") == false)
+        #expect(provider.capturedSelections.count == 1)
+    }
+
+    @Test("terminal output redactor removes common credential shapes and preserves ordinary text")
+    func terminalOutputRedactorRemovesCredentialShapes() {
+        let input = """
+        build completed
+        Authorization: Bearer synthetic-bearer-value
+        password="synthetic password"
+        AKIA1234567890ABCDEF
+        eyJheader.payload.signature
+        https://demo-user:demo-password@example.invalid/path
+        -----BEGIN PRIVATE KEY-----
+        synthetic-private-key-material
+        -----END PRIVATE KEY-----
+        tokenization completed
+        """
+
+        let output = AgentSensitiveOutputRedactor.redacted(input)
+
+        #expect(output.contains("build completed"))
+        #expect(output.contains("tokenization completed"))
+        #expect(!output.contains("synthetic-bearer-value"))
+        #expect(!output.contains("synthetic password"))
+        #expect(!output.contains("AKIA1234567890ABCDEF"))
+        #expect(!output.contains("eyJheader.payload.signature"))
+        #expect(!output.contains("demo-password"))
+        #expect(!output.contains("synthetic-private-key-material"))
+        #expect(output.contains("[redacted-private-key]"))
+    }
+
     @Test("computer use tools refuse execution until the call is approved")
     func computerUseToolsRequireApproval() async throws {
         let root = try makeWorkspace()
@@ -669,6 +871,47 @@ private final class RecordingLocalAgentProcessRunner: AgentProcessRunning, @unch
         return results.isEmpty
             ? AgentProcessResult(exitCode: 0, stdout: "", stderr: "")
             : results.removeFirst()
+    }
+}
+
+private final class StaticLocalTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
+    private let output: String
+    private let capturedBlockReferences: [TerminalCommandBlockReference]?
+    private(set) var requestedLimits: [Int] = []
+    private(set) var capturedSelections: [AgentTerminalOutputSelection] = []
+
+    init(
+        output: String,
+        capturedBlockReferences: [TerminalCommandBlockReference]? = nil
+    ) {
+        self.output = output
+        self.capturedBlockReferences = capturedBlockReferences
+    }
+
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection {
+        requestedLimits.append(limit)
+        return AgentTerminalOutputSelection(
+            source: .focusedSplit,
+            surfaceID: "00000000-0000-0000-0000-000000000001",
+            blockLimit: limit,
+            blockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 100),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+    }
+
+    func captureCommandBlockOutputs(selection: AgentTerminalOutputSelection) -> AgentTerminalOutputSnapshot {
+        capturedSelections.append(selection)
+        let blockReferences = capturedBlockReferences ?? selection.blockReferences
+        return AgentTerminalOutputSnapshot(
+            source: selection.source,
+            surfaceID: selection.surfaceID,
+            blockLimit: selection.blockLimit,
+            blockCount: blockReferences.count,
+            blockReferences: blockReferences,
+            output: output
+        )
     }
 }
 

@@ -7,21 +7,29 @@ import FoundationModels
 #endif
 
 struct AgentHTTPRequest: Sendable, Equatable {
+    enum RetryPolicy: Sendable, Equatable {
+        case standard
+        case singleAttempt
+    }
+
     let url: URL
     let method: String
     let headers: [String: String]
     let body: Data
+    let retryPolicy: RetryPolicy
 
     init(
         url: URL,
         method: String = "POST",
         headers: [String: String],
-        body: Data
+        body: Data,
+        retryPolicy: RetryPolicy = .standard
     ) {
         self.url = url
         self.method = method
         self.headers = headers
         self.body = body
+        self.retryPolicy = retryPolicy
     }
 }
 
@@ -53,11 +61,24 @@ extension AgentHTTPTransportError: LocalizedError {
     }
 }
 
+private final class AgentHTTPRedirectDenyingDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+}
+
 struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
     static let defaultMaximumResponseBytes = 16 * 1_024 * 1_024
     private static let accumulationChunkBytes = 16 * 1_024
 
     private let maximumResponseBytes: Int
+    private let redirectDelegate: AgentHTTPRedirectDenyingDelegate
     private let session: URLSession
 
     init(
@@ -68,7 +89,13 @@ struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
         self.maximumResponseBytes = maximumResponseBytes
         let configuration = (sessionConfiguration.copy() as? URLSessionConfiguration)
             ?? sessionConfiguration
-        self.session = URLSession(configuration: configuration)
+        let redirectDelegate = AgentHTTPRedirectDenyingDelegate()
+        self.redirectDelegate = redirectDelegate
+        self.session = URLSession(
+            configuration: configuration,
+            delegate: redirectDelegate,
+            delegateQueue: nil
+        )
     }
 
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
@@ -164,15 +191,16 @@ struct RetryingAgentHTTPTransport: AgentHTTPTransport {
 
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
         var lastError: Error?
+        let attemptLimit = request.retryPolicy == .singleAttempt ? 1 : maxAttempts
 
-        for attempt in 1...maxAttempts {
+        for attempt in 1...attemptLimit {
             do {
                 let response = try await base.send(request)
-                guard shouldRetry(statusCode: response.statusCode), attempt < maxAttempts else {
+                guard shouldRetry(statusCode: response.statusCode), attempt < attemptLimit else {
                     return response
                 }
             } catch {
-                guard shouldRetry(error: error), attempt < maxAttempts else {
+                guard shouldRetry(error: error), attempt < attemptLimit else {
                     throw error
                 }
                 lastError = error
@@ -936,7 +964,8 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
                 "messages": requestMessages,
                 "tools": openAITools(from: toolRegistry.descriptors),
                 "tool_choice": "auto",
-            ])
+            ]),
+            retryPolicy: sensitiveRequestRetryPolicy(for: messages)
         )
         let response = try await transport.send(request)
         try validate(response)
@@ -992,7 +1021,8 @@ struct AnthropicAgentLLMClient: AgentLLMClient {
                 "anthropic-version": "2023-06-01",
                 "Content-Type": "application/json",
             ],
-            body: jsonData(body)
+            body: jsonData(body),
+            retryPolicy: sensitiveRequestRetryPolicy(for: messages)
         )
         let response = try await transport.send(request)
         try validate(response)
@@ -1034,7 +1064,8 @@ struct GoogleAgentLLMClient: AgentLLMClient {
             body: jsonData([
                 "contents": requestContents,
                 "tools": googleTools(from: toolRegistry.descriptors),
-            ])
+            ]),
+            retryPolicy: sensitiveRequestRetryPolicy(for: messages)
         )
         let response = try await transport.send(request)
         try validate(response)
@@ -1046,15 +1077,29 @@ private func validateSensitiveDataConsent(
     in messages: [AgentMessage],
     provider: AgentProviderKind
 ) throws {
+    var hasActiveDisclosure = false
     for message in messages
     where message.role == .tool && message.toolName == "read_terminal_output" {
-        guard let toolCallID = message.toolCallID,
+        if AgentSensitiveDataPolicy.isSafeOmittedTerminalOutput(message) {
+            continue
+        }
+        guard !hasActiveDisclosure,
               let consent = message.sensitiveDataConsent,
-              consent.toolCallID == toolCallID,
-              consent.provider == provider else {
+              AgentSensitiveDataPolicy.validatesConsent(
+                  consent,
+                  for: message,
+                  provider: provider
+              ) else {
             throw AgentProviderClientError.sensitiveDataConsentRequired
         }
+        hasActiveDisclosure = true
     }
+}
+
+private func sensitiveRequestRetryPolicy(
+    for messages: [AgentMessage]
+) -> AgentHTTPRequest.RetryPolicy {
+    messages.contains { $0.sensitiveDataConsent != nil } ? .singleAttempt : .standard
 }
 
 private func validate(_ response: AgentHTTPResponse) throws {

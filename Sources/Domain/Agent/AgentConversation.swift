@@ -15,6 +15,7 @@ struct AgentSensitiveDataConsent: Sendable, Equatable {
     let toolCallID: String
     let provider: AgentProviderKind
     let contextDigest: String
+    let payloadDigest: String
 }
 
 /// Append-only message record for a built-in Agent Mode conversation.
