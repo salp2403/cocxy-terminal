@@ -900,8 +900,8 @@ public enum ParsedCommand: Equatable {
 
     // MARK: - Web Terminal (v5)
 
-    /// `cocxy web start [--bind <address>] [--port <port>] [--token <token>] [--fps <n>]`
-    case webStart(bindAddress: String?, port: Int?, token: String?, fps: Int?)
+    /// `cocxy web start [--bind <loopback-address>] [--port <port>] [--fps <n>]`
+    case webStart(bindAddress: String?, port: Int?, fps: Int?)
 
     /// `cocxy web stop`
     case webStop
@@ -4874,7 +4874,6 @@ public enum CLIArgumentParser {
             let rest = Array(arguments.dropFirst())
             var bindAddress: String?
             var port: Int?
-            var token: String?
             var fps: Int?
             var index = 0
             while index < rest.count {
@@ -4888,9 +4887,6 @@ public enum CLIArgumentParser {
                     }
                     port = parsed
                     index += 2
-                case "--token" where index + 1 < rest.count:
-                    token = rest[index + 1]
-                    index += 2
                 case "--fps" where index + 1 < rest.count:
                     guard let parsed = Int(rest[index + 1]) else {
                         throw CLIError.invalidArgument(command: "web start", argument: rest[index + 1], reason: "fps must be an integer")
@@ -4901,7 +4897,7 @@ public enum CLIArgumentParser {
                     throw CLIError.invalidArgument(command: "web start", argument: rest[index], reason: "unknown option")
                 }
             }
-            return .webStart(bindAddress: bindAddress, port: port, token: token, fps: fps)
+            return .webStart(bindAddress: bindAddress, port: port, fps: fps)
 
         case "stop":
             return .webStop

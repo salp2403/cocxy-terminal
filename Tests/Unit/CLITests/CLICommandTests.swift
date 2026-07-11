@@ -416,15 +416,20 @@ final class CLIArgumentParserTests: XCTestCase {
     func testParseWebStartWithOptions() throws {
         let result = try CLIArgumentParser.parse([
             "web", "start",
-            "--bind", "0.0.0.0",
+            "--bind", "127.0.0.1",
             "--port", "9000",
-            "--token", "secret",
             "--fps", "30"
         ])
         XCTAssertEqual(
             result,
-            .webStart(bindAddress: "0.0.0.0", port: 9000, token: "secret", fps: 30)
+            .webStart(bindAddress: "127.0.0.1", port: 9000, fps: 30)
         )
+    }
+
+    func testParseWebStartRejectsCallerSuppliedToken() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "web", "start", "--token", "caller-selected"
+        ]))
     }
 
     func testParseWebStatus() throws {
@@ -1060,13 +1065,13 @@ final class RequestBuilderTests: XCTestCase {
 
     func testBuildWebStartRequest() {
         let request = runner.buildRequest(
-            from: .webStart(bindAddress: "127.0.0.1", port: 7770, token: "abc", fps: 60)
+            from: .webStart(bindAddress: "127.0.0.1", port: 7770, fps: 60)
         )
 
         XCTAssertEqual(request.command, "web-start")
         XCTAssertEqual(request.params?["bind"], "127.0.0.1")
         XCTAssertEqual(request.params?["port"], "7770")
-        XCTAssertEqual(request.params?["token"], "abc")
+        XCTAssertNil(request.params?["token"])
         XCTAssertEqual(request.params?["fps"], "60")
     }
 
@@ -1287,6 +1292,51 @@ final class RequestBuilderTests: XCTestCase {
 
 /// Tests for `OutputFormatter`: verify correct output for each command type.
 final class OutputFormatterTests: XCTestCase {
+
+    func testFormatWebStartShowsUsableGeneratedCredentialOnce() {
+        let response = CLISocketResponse(
+            id: "web-start",
+            success: true,
+            data: [
+                "running": "true",
+                "bind": "127.0.0.1",
+                "port": "7770",
+                "auth_required": "true",
+                "authorization": "Bearer generated-token",
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .webStart(bindAddress: nil, port: nil, fps: nil),
+            response: response
+        )
+
+        XCTAssertTrue(output.contains("URL: http://127.0.0.1:7770/"))
+        XCTAssertTrue(output.contains("Access token (shown once): generated-token"))
+        XCTAssertFalse(output.contains("Access token (shown once): Bearer "))
+    }
+
+    func testFormatWebStatusBracketsIPv6LoopbackURL() {
+        let response = CLISocketResponse(
+            id: "web-status",
+            success: true,
+            data: [
+                "running": "true",
+                "bind": "::1",
+                "port": "7770",
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .webStatus,
+            response: response
+        )
+
+        XCTAssertTrue(output.contains("URL: http://[::1]:7770/"))
+        XCTAssertTrue(output.contains("Bind: [::1]:7770"))
+    }
 
     // MARK: - 23. Notify success message
 

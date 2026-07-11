@@ -251,6 +251,52 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
     }
 
+    @Test("web terminal rejects empty malformed and non-loopback configurations")
+    func webTerminalRejectsUnsafeConfigurations() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let unsafeConfigurations = [
+            WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "",
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+            WebTerminalConfiguration(
+                bindAddress: "0.0.0.0",
+                port: 0,
+                authToken: "valid-token",
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+            WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: String(repeating: "a", count: 128),
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+            WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "line\nbreak",
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+        ]
+
+        for configuration in unsafeConfigurations {
+            #expect(bridge.startWebTerminal(
+                for: surfaceID,
+                configuration: configuration
+            ) == nil)
+        }
+        #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
+    }
+
     @Test("one-shot web terminal rejects bad bearer token before consuming first connection")
     func oneShotWebTerminalRejectsBadBearerBeforeConsumingFirstConnection() async throws {
         let bridge = try makeBridge()
@@ -305,6 +351,88 @@ struct CocxyCoreBridgeTests {
         }
 
         #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
+    }
+
+    @Test("repeated one-shot disconnects stop streaming before terminal detach")
+    func repeatedOneShotDisconnectsRemainRaceFree() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        for iteration in 0..<12 {
+            let token = "race-token-\(iteration)"
+            let status = try #require(bridge.startWebTerminal(
+                for: surfaceID,
+                configuration: WebTerminalConfiguration(
+                    bindAddress: "127.0.0.1",
+                    port: 0,
+                    authToken: token,
+                    maxConnections: 1,
+                    maxFrameRate: 240,
+                    stopAfterFirstConnection: true
+                )
+            ))
+
+            let probe = try WebSocketTestProbe(port: status.port, bearerToken: token)
+            _ = try await probe.receive(containing: "\"type\":\"auth_ok\"")
+            probe.close()
+
+            try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+                bridge.webTerminalStatus(for: surfaceID) == nil
+            }
+        }
+    }
+
+    @Test("web terminal rejects a foreign browser origin before WebSocket upgrade")
+    func webTerminalRejectsForeignOriginBeforeUpgrade() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let status = try #require(bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "origin-token",
+                maxConnections: 1,
+                maxFrameRate: 30
+            )
+        ))
+
+        let foreignOriginProbe = try WebSocketTestProbe(
+            port: status.port,
+            bearerToken: "origin-token",
+            origin: "https://attacker.example"
+        )
+        defer { foreignOriginProbe.close() }
+
+        do {
+            _ = try await foreignOriginProbe.receive(
+                containing: "\"type\":\"auth_ok\"",
+                timeoutNanoseconds: 2_000_000_000
+            )
+            Issue.record("Foreign Origin unexpectedly completed the WebSocket upgrade")
+        } catch {
+            #expect(foreignOriginProbe.responseStatusCode == 403)
+        }
+
+        let afterForeignOrigin = try #require(bridge.webTerminalStatus(for: surfaceID))
+        #expect(afterForeignOrigin.connectionCount == 0)
+        #expect(afterForeignOrigin.lastEventType == nil)
+
+        let allowedOriginProbe = try WebSocketTestProbe(
+            port: status.port,
+            bearerToken: "origin-token",
+            origin: "http://127.0.0.1:\(status.port)"
+        )
+        defer { allowedOriginProbe.close() }
+        _ = try await allowedOriginProbe.receive(containing: "\"type\":\"auth_ok\"")
+
+        try await waitUntil {
+            bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "auth_ok"
+        }
+        #expect(bridge.webTerminalStatus(for: surfaceID)?.connectionCount == 1)
     }
 
     @Test("TUI status glyphs stay narrow so incremental redraws do not smear text")
@@ -1559,14 +1687,21 @@ private final class WebSocketTestProbe: @unchecked Sendable {
     private let session: URLSession
     private let task: URLSessionWebSocketTask
 
-    init(port: UInt16, bearerToken: String) throws {
+    init(port: UInt16, bearerToken: String, origin: String? = nil) throws {
         let url = try #require(URL(string: "ws://127.0.0.1:\(port)/"))
         var request = URLRequest(url: url)
         request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        if let origin {
+            request.setValue(origin, forHTTPHeaderField: "Origin")
+        }
         let configuration = URLSessionConfiguration.ephemeral
         self.session = URLSession(configuration: configuration)
         self.task = session.webSocketTask(with: request)
         task.resume()
+    }
+
+    var responseStatusCode: Int? {
+        (task.response as? HTTPURLResponse)?.statusCode
     }
 
     func receive(

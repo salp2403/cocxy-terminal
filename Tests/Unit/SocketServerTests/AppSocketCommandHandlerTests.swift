@@ -1951,7 +1951,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                     "running": "true",
                     "bind": "127.0.0.1",
                     "port": "7770",
-                    "connections": "2"
+                    "connections": "2",
+                    "AUTH_TOKEN": "must-not-survive",
+                    "authorization": "Bearer must-not-survive",
+                    "generated-credential": "must-not-survive",
                 ]
             }
         )
@@ -1960,12 +1963,120 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "running")
         XCTAssertEqual(response.data?["connections"], "2")
+        XCTAssertNil(response.data?["AUTH_TOKEN"])
+        XCTAssertNil(response.data?["authorization"])
+        XCTAssertNil(response.data?["generated-credential"])
     }
 
     func test_webStartCommand_withoutProvider_returnsFailure() {
         let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "web-2", command: "web-start", params: nil))
         XCTAssertFalse(response.success)
+    }
+
+    func test_webStartCommand_generatesCredentialAndKeepsProviderStatusTokenFree() {
+        let calls = LockedBox<[(bind: String, token: String)]>([])
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            webStartProvider: { bind, _, token, _, _ in
+                calls.withValue { $0.append((bind, token)) }
+                return [
+                    "status": "started",
+                    "auth_required": "true",
+                    "token": "must-not-survive",
+                ]
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "web-generated-token",
+            command: "web-start",
+            params: nil
+        ))
+
+        XCTAssertTrue(response.success)
+        let call = calls.withValue { $0.first }
+        XCTAssertEqual(call?.bind, "127.0.0.1")
+        XCTAssertEqual(call?.token.count, 64)
+        XCTAssertTrue(call?.token.allSatisfy { $0.isHexDigit && !$0.isUppercase } == true)
+        XCTAssertEqual(response.data?["authorization"], call.map { "Bearer \($0.token)" })
+        XCTAssertNil(response.data?["token"])
+        XCTAssertNil(response.data?["auth_token"])
+        XCTAssertNil(response.data?["auth-token"])
+    }
+
+    func test_webStartCommand_rejectsCallerCredentialAndNonLoopbackBindBeforeProvider() {
+        let callCount = LockedBox(0)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            webStartProvider: { _, _, _, _, _ in
+                callCount.withValue { $0 += 1 }
+                return ["status": "started"]
+            }
+        )
+
+        let callerCredential = handler.handleCommand(SocketRequest(
+            id: "web-caller-token",
+            command: "web-start",
+            params: ["token": "known"]
+        ))
+        XCTAssertFalse(callerCredential.success)
+
+        let alternateCallerCredential = handler.handleCommand(SocketRequest(
+            id: "web-caller-authorization",
+            command: "web-start",
+            params: ["Authorization": "Bearer known"]
+        ))
+        XCTAssertFalse(alternateCallerCredential.success)
+
+        for bind in ["0.0.0.0", "::", "localhost", "192.168.1.10"] {
+            let response = handler.handleCommand(SocketRequest(
+                id: "web-bind-\(bind)",
+                command: "web-start",
+                params: ["bind": bind]
+            ))
+            XCTAssertFalse(response.success)
+        }
+        XCTAssertEqual(callCount.withValue { $0 }, 0)
+    }
+
+    func test_webStartCommand_acceptsIPv6LoopbackAndRejectsMalformedNumbers() {
+        let calls = LockedBox<[(bind: String, port: UInt16, fps: UInt32)]>([])
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            webStartProvider: { bind, port, _, _, fps in
+                calls.withValue { $0.append((bind, port, fps)) }
+                return ["status": "started"]
+            }
+        )
+
+        let ipv6 = handler.handleCommand(SocketRequest(
+            id: "web-ipv6-loopback",
+            command: "web-start",
+            params: ["bind": "  ::1  ", "port": "0", "fps": "60"]
+        ))
+        XCTAssertTrue(ipv6.success)
+        XCTAssertEqual(calls.withValue { $0.first?.bind }, "::1")
+
+        for params in [
+            ["port": "-1"],
+            ["port": "65536"],
+            ["port": "not-a-port"],
+            ["fps": "-1"],
+            ["fps": "4294967296"],
+            ["fps": "not-a-rate"],
+        ] {
+            let response = handler.handleCommand(SocketRequest(
+                id: "web-malformed-number",
+                command: "web-start",
+                params: params
+            ))
+            XCTAssertFalse(response.success)
+        }
+        XCTAssertEqual(calls.withValue { $0.count }, 1)
     }
 
     func test_streamListCommand_withProvider_returnsData() {
@@ -2801,11 +2912,13 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let webStart = handler.handleCommand(SocketRequest(
             id: "web-start-2",
             command: "web-start",
-            params: ["bind": "127.0.0.1", "port": "8787", "token": "local", "fps": "45"]
+            params: ["bind": "127.0.0.1", "port": "8787", "fps": "45"]
         ))
         XCTAssertTrue(webStart.success)
         XCTAssertEqual(webStart.data?["port"], "8787")
         XCTAssertEqual(webStart.data?["fps"], "45")
+        XCTAssertTrue(webStart.data?["authorization"]?.hasPrefix("Bearer ") == true)
+        XCTAssertNil(webStart.data?["token"])
 
         let webStop = handler.handleCommand(SocketRequest(id: "web-stop-2", command: "web-stop", params: nil))
         XCTAssertTrue(webStop.success)

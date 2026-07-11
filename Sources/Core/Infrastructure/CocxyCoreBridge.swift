@@ -372,13 +372,30 @@ struct WebTerminalConfiguration: Equatable, Sendable {
         self.firstConnectionHandler = firstConnectionHandler
     }
 
-    static let `default` = WebTerminalConfiguration(
-        bindAddress: "127.0.0.1",
-        port: 7770,
-        authToken: "",
-        maxConnections: 4,
-        maxFrameRate: 60
-    )
+    static let defaultBindAddress = "127.0.0.1"
+    static let defaultPort: UInt16 = 7770
+    static let defaultMaxConnections: UInt16 = 4
+    static let defaultMaxFrameRate: UInt32 = 60
+    static let maximumAuthenticationTokenByteCount = 127
+
+    static func normalizedLoopbackBindAddress(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch trimmed {
+        case "127.0.0.1", "::1":
+            return trimmed
+        default:
+            return nil
+        }
+    }
+
+    static func isValidAuthenticationToken(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard !bytes.isEmpty,
+              bytes.count <= maximumAuthenticationTokenByteCount else {
+            return false
+        }
+        return bytes.allSatisfy { (0x21...0x7E).contains($0) }
+    }
 
     static func == (lhs: WebTerminalConfiguration, rhs: WebTerminalConfiguration) -> Bool {
         lhs.bindAddress == rhs.bindAddress
@@ -2406,8 +2423,16 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     func startWebTerminal(
         for surface: SurfaceID,
-        configuration: WebTerminalConfiguration = .default
+        configuration: WebTerminalConfiguration
     ) -> WebTerminalStatus? {
+        guard WebTerminalConfiguration.normalizedLoopbackBindAddress(
+            configuration.bindAddress
+        ) == configuration.bindAddress,
+        WebTerminalConfiguration.isValidAuthenticationToken(
+            configuration.authToken
+        ) else {
+            return nil
+        }
         guard var state = surfaces[surface] else { return nil }
 
         if let existing = state.webServer {
@@ -3738,7 +3763,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         let acceptsOneShotConnection = webState.stopAfterFirstConnection
             && webState.oneShotAcceptedConnectionID == nil
-            && (eventType == 3 || (eventType == 0 && webState.authToken.isEmpty))
+            && eventType == 3
         if acceptsOneShotConnection {
             webState.oneShotAcceptedConnectionID = connectionID
             firstConnectionHandler?()
@@ -3882,8 +3907,8 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func destroyWebServer(_ webState: SurfaceState.WebServerState) {
-        cocxycore_web_detach_terminal(webState.handle)
         cocxycore_web_stop(webState.handle)
+        cocxycore_web_detach_terminal(webState.handle)
         cocxycore_web_destroy(webState.handle)
     }
 

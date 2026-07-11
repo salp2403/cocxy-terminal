@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.15.0 (stable API bundle)
+ * Version: 0.15.1 (stable API bundle)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 15
-#define COCXYCORE_VERSION_PATCH 0
-#define COCXYCORE_VERSION_STRING "0.15.0"
+#define COCXYCORE_VERSION_PATCH 1
+#define COCXYCORE_VERSION_STRING "0.15.1"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -2430,11 +2430,11 @@ void cocxycore_plugin_unregister(
 
 /** Server configuration. */
 typedef struct {
-    char bind_address[64];       /**< IP to bind (default: "127.0.0.1") */
-    uint32_t bind_address_len;   /**< Length of bind_address string */
+    char bind_address[64];       /**< IP address to bind */
+    uint32_t bind_address_len;   /**< Required length of bind_address (1..64) */
     uint16_t port;               /**< TCP port (default: 7770, 0 = OS assigns) */
-    char auth_token[128];        /**< Bearer token (empty = no auth) */
-    uint32_t auth_token_len;     /**< Length of auth_token string */
+    char auth_token[128];        /**< Required non-empty Bearer token */
+    uint32_t auth_token_len;     /**< Required length of auth_token (1..128) */
     uint16_t max_connections;    /**< Max simultaneous connections (default: 4) */
     uint32_t max_frame_rate;     /**< Max frame rate in fps (default: 60) */
 } cocxycore_web_config;
@@ -2446,13 +2446,15 @@ typedef struct cocxycore_web_server cocxycore_web_server;
 
 /**
  * Create a web terminal server.
- * Returns NULL if config is invalid (e.g., remote bind without auth token).
+ * Returns NULL if config is invalid, either length is out of range, or the
+ * authentication token is empty. Authentication is mandatory for all binds,
+ * including loopback addresses.
  */
 cocxycore_web_server* cocxycore_web_create(
     const cocxycore_web_config* config
 );
 
-/** Destroy the server. Stops it and frees all resources. */
+/** Destroy the server. Stops it, waits for streaming to exit, and frees resources. */
 void cocxycore_web_destroy(cocxycore_web_server* server);
 
 /**
@@ -2461,7 +2463,7 @@ void cocxycore_web_destroy(cocxycore_web_server* server);
  */
 bool cocxycore_web_start(cocxycore_web_server* server);
 
-/** Stop the server. Closes all active connections. */
+/** Stop the server. Closes connections and waits for the server thread to exit. */
 void cocxycore_web_stop(cocxycore_web_server* server);
 
 /**
@@ -2474,7 +2476,12 @@ bool cocxycore_web_attach_terminal(
     cocxycore_terminal* terminal
 );
 
-/** Detach the terminal from the server. */
+/**
+ * Detach the terminal from the server.
+ * Safe while the server is running: waits for in-flight terminal streaming
+ * and callbacks to finish before releasing attachment resources. The terminal
+ * must remain alive until this function returns.
+ */
 void cocxycore_web_detach_terminal(cocxycore_web_server* server);
 
 /* -- Connection management -- */

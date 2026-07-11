@@ -78,11 +78,11 @@ extension AppDelegate {
            let cocxyBridge = controller.cocxyCoreBridge(forSurface: surfaceID),
            let token = trimmedNonEmpty(attachData["lease-token"]) {
             let configuration = WebTerminalConfiguration(
-                bindAddress: WebTerminalConfiguration.default.bindAddress,
+                bindAddress: WebTerminalConfiguration.defaultBindAddress,
                 port: 0,
                 authToken: token,
                 maxConnections: 1,
-                maxFrameRate: WebTerminalConfiguration.default.maxFrameRate,
+                maxFrameRate: WebTerminalConfiguration.defaultMaxFrameRate,
                 stopAfterFirstConnection: true,
                 firstConnectionHandler: { [attachData] in
                     _ = Self.sharedCellCLIService.consumeAttachLease(fields: attachData)

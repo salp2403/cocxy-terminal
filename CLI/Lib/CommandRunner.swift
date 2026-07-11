@@ -1756,11 +1756,10 @@ public struct CommandRunner {
 
         // MARK: Web Terminal (v5)
 
-        case .webStart(let bindAddress, let port, let token, let fps):
+        case .webStart(let bindAddress, let port, let fps):
             var params: [String: String] = [:]
             if let bindAddress { params["bind"] = bindAddress }
             if let port { params["port"] = "\(port)" }
-            if let token { params["token"] = token }
             if let fps { params["fps"] = "\(fps)" }
             return CLISocketRequest(id: requestID, command: "web-start", params: params.isEmpty ? nil : params)
 
