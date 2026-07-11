@@ -137,24 +137,89 @@ final class DiskSSHKeyFileSystem: SSHKeyFileSystem {
         let expandedPath = NSString(string: path).expandingTildeInPath
         return FileManager.default.fileExists(atPath: expandedPath)
     }
+
+    func createDirectory(at path: String) throws {
+        let expandedPath = NSString(string: path).expandingTildeInPath
+        try FileManager.default.createDirectory(
+            atPath: expandedPath,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: expandedPath
+        )
+    }
+
+    func removeFile(at path: String) throws {
+        let expandedPath = NSString(string: path).expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: expandedPath) else { return }
+        try FileManager.default.removeItem(atPath: expandedPath)
+    }
 }
 
 // MARK: - System SSH Key Executor
 
 /// Production implementation of `SSHKeyExecuting` using real processes.
 final class SystemSSHKeyExecutor: SSHKeyExecuting {
+    private let askpassExecutableURL: URL?
+
+    init(askpassExecutableURL: URL? = Bundle.main.executableURL) {
+        self.askpassExecutableURL = askpassExecutableURL
+    }
 
     func execute(command: String, arguments: [String]) throws -> ProcessResult {
+        try run(command: command, arguments: arguments, stdinData: nil, environment: nil)
+    }
+
+    func execute(command: String, arguments: [String], stdinData: Data) throws -> ProcessResult {
+        guard let askpassExecutableURL,
+              FileManager.default.isExecutableFile(atPath: askpassExecutableURL.path) else {
+            throw SSHKeyManagerError.generationFailed("Secure SSH passphrase helper is unavailable.")
+        }
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["SSH_ASKPASS"] = askpassExecutableURL.path
+        environment["SSH_ASKPASS_REQUIRE"] = "force"
+        environment["DISPLAY"] = environment["DISPLAY"] ?? "cocxy"
+        environment[SSHAskpassContract.environmentKey] = SSHAskpassContract.environmentValue
+        return try run(
+            command: command,
+            arguments: arguments,
+            stdinData: stdinData,
+            environment: environment
+        )
+    }
+
+    private func run(
+        command: String,
+        arguments: [String],
+        stdinData: Data?,
+        environment: [String: String]?
+    ) throws -> ProcessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
+        process.environment = environment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        let stdinPipe = stdinData.map { _ in Pipe() }
+        process.standardInput = stdinPipe
 
         try process.run()
+        if let stdinData, let stdinPipe {
+            do {
+                try stdinPipe.fileHandleForWriting.write(contentsOf: stdinData)
+                try stdinPipe.fileHandleForWriting.close()
+            } catch {
+                process.terminate()
+                process.waitUntilExit()
+                throw error
+            }
+        }
         process.waitUntilExit()
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
