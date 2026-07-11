@@ -155,8 +155,7 @@ extension RemoteFileEntry {
         // Name is everything from component 8 onwards (handles names with spaces).
         let name = components[8...].joined(separator: " ")
 
-        // Skip "." and ".." entries.
-        guard name != "." && name != ".." else { return nil }
+        guard isSafePathComponent(name) else { return nil }
 
         // Build a rough modification date from month/day/time.
         let dateString = "\(components[5]) \(components[6]) \(components[7])"
@@ -173,6 +172,19 @@ extension RemoteFileEntry {
             modifiedDate: modifiedDate,
             permissions: permissions
         )
+    }
+
+    static func isSafePathComponent(_ name: String) -> Bool {
+        guard !name.isEmpty,
+              name != ".",
+              name != "..",
+              !name.contains("/"),
+              !name.contains("\\"),
+              !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+        else {
+            return false
+        }
+        return (name as NSString).lastPathComponent == name
     }
 
     /// Formatter for recent files: "Jan 15 10:30" style.

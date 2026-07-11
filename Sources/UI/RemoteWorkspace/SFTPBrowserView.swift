@@ -24,12 +24,25 @@ final class SFTPBrowserViewModel: ObservableObject {
 
     private let sftpClient: SFTPClient
     private let profile: RemoteConnectionProfile
+    private let downloadsDirectory: URL
+    private let fileManager: FileManager
+    private let localizer: AppLocalizer
 
     // MARK: - Initialization
 
-    init(sftpClient: SFTPClient, profile: RemoteConnectionProfile) {
+    init(
+        sftpClient: SFTPClient,
+        profile: RemoteConnectionProfile,
+        downloadsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Downloads", isDirectory: true),
+        fileManager: FileManager = .default,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.sftpClient = sftpClient
         self.profile = profile
+        self.downloadsDirectory = downloadsDirectory
+        self.fileManager = fileManager
+        self.localizer = localizer
     }
 
     // MARK: - Navigation
@@ -68,18 +81,25 @@ final class SFTPBrowserViewModel: ObservableObject {
 
     func downloadFile(_ entry: RemoteFileEntry) {
         guard !entry.isDirectory else { return }
+        errorMessage = nil
 
-        let downloadsPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Downloads")
-            .appendingPathComponent(entry.name)
-            .path
+        guard RemoteFileEntry.isSafePathComponent(entry.name) else {
+            errorMessage = localizer.string(
+                "remoteWorkspace.sftp.download.unsafeName",
+                fallback: "The remote file name cannot be downloaded safely."
+            )
+            return
+        }
 
         do {
+            let destination = try downloadDestination(for: entry.name)
             try sftpClient.download(
                 remotePath: entry.id,
-                localPath: downloadsPath,
+                localPath: destination.path,
                 on: profile
             )
+        } catch let error as DownloadValidationError {
+            errorMessage = downloadValidationMessage(for: error)
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -104,6 +124,54 @@ final class SFTPBrowserViewModel: ObservableObject {
             }
             return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
         }
+    }
+
+    private func downloadDestination(for filename: String) throws -> URL {
+        let configuredRoot = downloadsDirectory.standardizedFileURL
+        try fileManager.createDirectory(
+            at: configuredRoot,
+            withIntermediateDirectories: true
+        )
+        let root = configuredRoot.resolvingSymlinksInPath().standardizedFileURL
+        let candidate = root.appendingPathComponent(filename, isDirectory: false)
+            .standardizedFileURL
+
+        guard candidate != root,
+              candidate.deletingLastPathComponent() == root,
+              candidate.resolvingSymlinksInPath()
+                .standardizedFileURL
+                .deletingLastPathComponent() == root else {
+            throw DownloadValidationError.unsafeDestination
+        }
+
+        let isExistingSymbolicLink = (try? fileManager.destinationOfSymbolicLink(
+            atPath: candidate.path
+        )) != nil
+        guard !fileManager.fileExists(atPath: candidate.path),
+              !isExistingSymbolicLink else {
+            throw DownloadValidationError.destinationExists
+        }
+        return candidate
+    }
+
+    private func downloadValidationMessage(for error: DownloadValidationError) -> String {
+        switch error {
+        case .unsafeDestination:
+            return localizer.string(
+                "remoteWorkspace.sftp.download.unsafeDestination",
+                fallback: "The download destination is outside Downloads."
+            )
+        case .destinationExists:
+            return localizer.string(
+                "remoteWorkspace.sftp.download.destinationExists",
+                fallback: "A file with this name already exists in Downloads."
+            )
+        }
+    }
+
+    private enum DownloadValidationError: Error {
+        case unsafeDestination
+        case destinationExists
     }
 }
 

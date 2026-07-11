@@ -98,6 +98,24 @@ struct SFTPClientTests {
         #expect(entries.first?.name == "file.txt")
     }
 
+    @Test func listDirectoryRejectsNamesThatAreNotSinglePathComponents() throws {
+        let executor = MockSFTPExecutor()
+        executor.stubbedOutput = """
+        -rw-r--r-- 1 user user 1 Jan 01 00:00 ../target
+        -rw-r--r-- 1 user user 1 Jan 01 00:00 subdir/target
+        -rw-r--r-- 1 user user 1 Jan 01 00:00 /absolute
+        -rw-r--r-- 1 user user 1 Jan 01 00:00 ..\\target
+        -rw-r--r-- 1 user user 1 Jan 01 00:00 safe file.txt
+        """
+
+        let entries = try makeClient(executor: executor).listDirectory(
+            path: "/home",
+            on: makeProfile()
+        )
+
+        #expect(entries.map(\.name) == ["safe file.txt"])
+    }
+
     @Test func listDirectorySendsCorrectCommand() throws {
         let executor = MockSFTPExecutor()
         executor.stubbedOutput = ""
@@ -291,5 +309,116 @@ struct SFTPClientTests {
 
         #expect(entry.id == "/home/deploy/file.txt")
         #expect(entry.name == "file.txt")
+    }
+
+    @Test func safePathComponentRejectsControlsAndTraversalForms() {
+        let invalidNames = [
+            "",
+            ".",
+            "..",
+            "../target",
+            "subdir/target",
+            "/absolute",
+            "..\\target",
+            "line\nbreak",
+            "nul\u{0000}byte",
+        ]
+
+        for name in invalidNames {
+            #expect(!RemoteFileEntry.isSafePathComponent(name))
+        }
+        #expect(RemoteFileEntry.isSafePathComponent("report final.txt"))
+    }
+}
+
+@Suite("SFTP browser download containment")
+struct SFTPBrowserDownloadContainmentTests {
+    private func profile() -> RemoteConnectionProfile {
+        RemoteConnectionProfile(name: "dev", host: "server.com", user: "deploy")
+    }
+
+    private func entry(name: String, remotePath: String? = nil) -> RemoteFileEntry {
+        RemoteFileEntry(
+            id: remotePath ?? "/remote/\(name)",
+            name: name,
+            isDirectory: false,
+            size: 1,
+            modifiedDate: .distantPast,
+            permissions: "-rw-r--r--"
+        )
+    }
+
+    private func temporaryDownloadsDirectory() throws -> URL {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-sftp-download-tests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        return root
+    }
+
+    @Test("direct traversal-bearing entries never reach the SFTP executor")
+    @MainActor func directUnsafeEntriesAreRejected() throws {
+        let downloads = try temporaryDownloadsDirectory()
+        defer { try? FileManager.default.removeItem(at: downloads) }
+        let executor = MockSFTPExecutor()
+        let viewModel = SFTPBrowserViewModel(
+            sftpClient: SFTPClient(executor: executor),
+            profile: profile(),
+            downloadsDirectory: downloads
+        )
+
+        for name in ["../target", "subdir/target", "/absolute", "..\\target", ".", ".."] {
+            viewModel.downloadFile(entry(name: name))
+        }
+
+        #expect(executor.executedCommands.isEmpty)
+        #expect(viewModel.errorMessage != nil)
+    }
+
+    @Test("normal filename with spaces targets one strict child of Downloads")
+    @MainActor func normalFilenameTargetsDownloadsChild() throws {
+        let downloads = try temporaryDownloadsDirectory()
+        defer { try? FileManager.default.removeItem(at: downloads) }
+        let executor = MockSFTPExecutor()
+        let viewModel = SFTPBrowserViewModel(
+            sftpClient: SFTPClient(executor: executor),
+            profile: profile(),
+            downloadsDirectory: downloads
+        )
+
+        viewModel.downloadFile(entry(
+            name: "report final.txt",
+            remotePath: "/remote/report final.txt"
+        ))
+
+        #expect(executor.executedCommands.count == 1)
+        #expect(executor.executedCommands.first?.sftpCommand ==
+            "get '/remote/report final.txt' '\(downloads.path)/report final.txt'")
+        #expect(viewModel.errorMessage == nil)
+    }
+
+    @Test("existing symlink destination is rejected without touching its target")
+    @MainActor func symbolicLinkDestinationIsRejected() throws {
+        let root = try temporaryDownloadsDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let downloads = root.appendingPathComponent("Downloads", isDirectory: true)
+        try FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
+        let external = root.appendingPathComponent("external.txt")
+        try "original".write(to: external, atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(
+            at: downloads.appendingPathComponent("report.txt"),
+            withDestinationURL: external
+        )
+        let executor = MockSFTPExecutor()
+        let viewModel = SFTPBrowserViewModel(
+            sftpClient: SFTPClient(executor: executor),
+            profile: profile(),
+            downloadsDirectory: downloads
+        )
+
+        viewModel.downloadFile(entry(name: "report.txt"))
+
+        #expect(executor.executedCommands.isEmpty)
+        #expect(try String(contentsOf: external, encoding: .utf8) == "original")
+        #expect(viewModel.errorMessage != nil)
     }
 }

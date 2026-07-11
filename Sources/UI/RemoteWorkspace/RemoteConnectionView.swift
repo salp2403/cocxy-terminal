@@ -895,7 +895,11 @@ struct RemoteConnectionView: View {
                       let executor = sftpExecutor {
                 Color.clear.onAppear {
                     let client = SFTPClient(executor: executor)
-                    let vm = SFTPBrowserViewModel(sftpClient: client, profile: profile)
+                    let vm = SFTPBrowserViewModel(
+                        sftpClient: client,
+                        profile: profile,
+                        localizer: localizer
+                    )
                     sftpBrowserVM = vm
                     vm.loadDirectory()
                 }

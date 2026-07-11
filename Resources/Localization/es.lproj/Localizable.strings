@@ -2937,6 +2937,9 @@
 "remoteWorkspace.sftp.entry.folder" = "Carpeta";
 "remoteWorkspace.sftp.entry.file" = "Archivo";
 "remoteWorkspace.sftp.entry.accessibility" = "%@: %@, %@";
+"remoteWorkspace.sftp.download.unsafeName" = "El nombre del archivo remoto no permite una descarga segura.";
+"remoteWorkspace.sftp.download.unsafeDestination" = "El destino de descarga está fuera de Descargas.";
+"remoteWorkspace.sftp.download.destinationExists" = "Ya existe un archivo con este nombre en Descargas.";
 
 "shortcuts.open-app.title" = "Abrir Cocxy";
 "shortcuts.open-app.summary" = "Traer al frente la ventana local de terminal.";
