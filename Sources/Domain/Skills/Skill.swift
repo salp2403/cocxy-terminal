@@ -3,10 +3,15 @@
 
 import Foundation
 
-enum SkillSource: String, Codable, Sendable {
+enum SkillSource: String, Codable, Hashable, Sendable {
     case builtIn = "built-in"
     case user
     case project
+}
+
+struct SkillIdentity: Hashable, Sendable {
+    let id: String
+    let source: SkillSource
 }
 
 struct Skill: Equatable, Sendable {
@@ -16,6 +21,10 @@ struct Skill: Equatable, Sendable {
     let body: String
     let source: SkillSource
     let fileURL: URL
+
+    var identity: SkillIdentity {
+        SkillIdentity(id: id, source: source)
+    }
 }
 
 struct SkillDirectory: Equatable, Sendable {

@@ -3527,6 +3527,18 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(installResponse.success)
         XCTAssertEqual(installResponse.data?["skill"], "local-review")
 
+        let replaceResponse = handler.handleCommand(SocketRequest(
+            id: "skill-install-replace-1",
+            command: "skill-install",
+            params: [
+                "url": sourceRoot.appendingPathComponent("local-review", isDirectory: true).path,
+                "replace": "true",
+            ]
+        ))
+        XCTAssertTrue(replaceResponse.success)
+        XCTAssertEqual(replaceResponse.data?["replaced_skill"], "local-review")
+        XCTAssertEqual(replaceResponse.data?["replaced_source"], "user")
+
         let listResponse = handler.handleCommand(SocketRequest(
             id: "skill-list-1",
             command: "skill-list",

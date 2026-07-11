@@ -5,6 +5,7 @@ import Foundation
 
 struct SkillInvocation: Equatable, Sendable {
     let skillIDs: [String]
+    let skillIdentities: [SkillIdentity]
     let instructions: String
 }
 
@@ -21,6 +22,23 @@ struct SkillInvoker: Sendable {
             return skill
         }
 
+        return makeInvocation(skills: skills)
+    }
+
+    func makeInvocation(skillIdentities: [SkillIdentity]) throws -> SkillInvocation {
+        let requestedIdentities = Array(Set(skillIdentities)).sorted(by: Self.identitySort)
+        let skillsByIdentity = try registry.skillMapByIdentity()
+        let skills = try requestedIdentities.map { identity -> Skill in
+            guard let skill = skillsByIdentity[identity] else {
+                throw SkillError.missingSkill("\(identity.id) [\(identity.source.rawValue)]")
+            }
+            return skill
+        }
+
+        return makeInvocation(skills: skills)
+    }
+
+    private func makeInvocation(skills: [Skill]) -> SkillInvocation {
         let blocks = skills.map { skill in
             """
             ## \(skill.name)
@@ -35,7 +53,15 @@ struct SkillInvoker: Sendable {
 
         return SkillInvocation(
             skillIDs: skills.map(\.id),
+            skillIdentities: skills.map(\.identity),
             instructions: blocks.joined(separator: "\n\n")
         )
+    }
+
+    private static func identitySort(_ lhs: SkillIdentity, _ rhs: SkillIdentity) -> Bool {
+        if lhs.id != rhs.id {
+            return lhs.id < rhs.id
+        }
+        return lhs.source.rawValue < rhs.source.rawValue
     }
 }

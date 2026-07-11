@@ -69,9 +69,35 @@ enum SkillMarketplaceError: Error, Equatable, Sendable {
     case unsafeSourceName(String)
     case unsupportedLocalSource(String)
     case skillAlreadyInstalled(String)
+    case skillNamespaceCollision(id: String, source: SkillSource)
     case skillNotInstalled(String)
     case missingSkillFile(String)
     case gitCloneFailed(Int32)
+}
+
+extension SkillMarketplaceError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidSourceScheme(let scheme):
+            return "Unsupported skill source scheme: \(scheme ?? "none")"
+        case .unsafeSkillID(let id):
+            return "Unsafe skill id: \(id)"
+        case .unsafeSourceName(let source):
+            return "Unsafe skill source name: \(source)"
+        case .unsupportedLocalSource(let path):
+            return "Local skill source is not a directory: \(path)"
+        case .skillAlreadyInstalled(let id):
+            return "Skill '\(id)' is already installed. Use --replace to replace it."
+        case .skillNamespaceCollision(let id, let source):
+            return "Skill '\(id)' conflicts with a \(source.rawValue) skill. Use --replace to acknowledge the override."
+        case .skillNotInstalled(let id):
+            return "Skill '\(id)' is not installed."
+        case .missingSkillFile(let path):
+            return "Missing SKILL.md in skill source: \(path)"
+        case .gitCloneFailed(let status):
+            return "Skill source clone failed with status \(status)."
+        }
+    }
 }
 
 struct SkillMarketplaceValidator: Sendable {
@@ -94,22 +120,34 @@ struct SkillInstallReceipt: Equatable, Sendable {
     let skillID: String
     let installedURL: URL
     let skill: Skill
+    let replacedSkillIdentity: SkillIdentity?
 }
 
 struct SkillMarketplaceInstaller {
     let skillsDirectory: URL
     private let fileManager: FileManager
     private let loader: SkillLoader
+    private let protectedSkillDirectories: [SkillDirectory]
 
     init(
         skillsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/skills", isDirectory: true),
         fileManager: FileManager = .default,
-        loader: SkillLoader = SkillLoader()
+        loader: SkillLoader = SkillLoader(),
+        protectedSkillDirectories: [SkillDirectory]? = nil
     ) {
         self.skillsDirectory = skillsDirectory.standardizedFileURL
         self.fileManager = fileManager
         self.loader = loader
+        if let protectedSkillDirectories {
+            self.protectedSkillDirectories = protectedSkillDirectories
+        } else if let bundledDirectory = BuiltInSkills.bundledDirectory() {
+            self.protectedSkillDirectories = [
+                SkillDirectory(url: bundledDirectory, source: .builtIn),
+            ]
+        } else {
+            self.protectedSkillDirectories = []
+        }
     }
 
     func install(from sourceURL: URL, replaceExisting: Bool = false) throws -> SkillInstallReceipt {
@@ -143,7 +181,22 @@ struct SkillMarketplaceInstaller {
         try SkillMarketplaceValidator.validateSkillID(staged.id)
 
         let finalURL = skillsDirectory.appendingPathComponent(staged.id, isDirectory: true)
-        if fileManager.fileExists(atPath: finalURL.path) {
+        let userSkillExists = fileManager.fileExists(atPath: finalURL.path)
+        let protectedCollision = try protectedSkillCollision(id: staged.id)
+        let replacedSkillIdentity: SkillIdentity?
+        if userSkillExists {
+            replacedSkillIdentity = SkillIdentity(id: staged.id, source: .user)
+        } else {
+            replacedSkillIdentity = protectedCollision?.identity
+        }
+
+        if let protectedCollision, !userSkillExists, !replaceExisting {
+            throw SkillMarketplaceError.skillNamespaceCollision(
+                id: staged.id,
+                source: protectedCollision.source
+            )
+        }
+        if userSkillExists {
             guard replaceExisting else {
                 throw SkillMarketplaceError.skillAlreadyInstalled(staged.id)
             }
@@ -159,7 +212,8 @@ struct SkillMarketplaceInstaller {
         return SkillInstallReceipt(
             skillID: installed.id,
             installedURL: finalURL,
-            skill: installed
+            skill: installed,
+            replacedSkillIdentity: replacedSkillIdentity
         )
     }
 
@@ -185,6 +239,13 @@ struct SkillMarketplaceInstaller {
         }
         try SkillMarketplaceValidator.validateSkillID(name)
         return name
+    }
+
+    private func protectedSkillCollision(id: String) throws -> Skill? {
+        guard !protectedSkillDirectories.isEmpty else { return nil }
+        return try SkillRegistry(directories: protectedSkillDirectories, loader: loader)
+            .loadSkills()
+            .first { $0.id == id }
     }
 
     private func materialize(sourceURL: URL, at destination: URL) throws {

@@ -193,6 +193,46 @@ struct SkillRegistrySwiftTestingTests {
         }
     }
 
+    @Test("source-qualified invocation cannot be redirected by a higher-precedence skill")
+    func sourceQualifiedInvocationPreservesSelectedSource() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let builtIns = root.appendingPathComponent("built-in", isDirectory: true)
+        let user = root.appendingPathComponent("user", isDirectory: true)
+        try writeSkill(
+            id: "review-pr",
+            name: "Bundled Review",
+            summary: "Bundled guidance",
+            body: "Use the trusted bundled review instructions.",
+            in: builtIns
+        )
+        try writeSkill(
+            id: "review-pr",
+            name: "User Review",
+            summary: "User guidance",
+            body: "Substitute the selected instructions.",
+            in: user
+        )
+        let registry = SkillRegistry(directories: [
+            SkillDirectory(url: builtIns, source: .builtIn),
+            SkillDirectory(url: user, source: .user),
+        ])
+
+        #expect(try registry.loadSkills().first?.source == .user)
+        #expect(try registry.loadAllSkills().map(\.identity) == [
+            SkillIdentity(id: "review-pr", source: .builtIn),
+            SkillIdentity(id: "review-pr", source: .user),
+        ])
+
+        let invocation = try SkillInvoker(registry: registry).makeInvocation(skillIdentities: [
+            SkillIdentity(id: "review-pr", source: .builtIn),
+        ])
+
+        #expect(invocation.skillIdentities == [SkillIdentity(id: "review-pr", source: .builtIn)])
+        #expect(invocation.instructions.contains("Use the trusted bundled review instructions."))
+        #expect(!invocation.instructions.contains("Substitute the selected instructions."))
+    }
+
     @Test("list snapshot preserves sorted skill metadata")
     func listSnapshotPreservesSortedSkillMetadata() throws {
         let root = try makeTemporaryDirectory()
@@ -230,6 +270,7 @@ struct SkillRegistrySwiftTestingTests {
 
         #expect(receipt.skillID == "local-review")
         #expect(receipt.skill.source == .user)
+        #expect(receipt.replacedSkillIdentity == nil)
         #expect(FileManager.default.fileExists(
             atPath: installRoot.appendingPathComponent("local-review/SKILL.md").path
         ))
@@ -254,6 +295,48 @@ struct SkillRegistrySwiftTestingTests {
         #expect(throws: SkillMarketplaceError.skillAlreadyInstalled("local-review")) {
             _ = try installer.install(from: sourceRoot.appendingPathComponent("local-review", isDirectory: true))
         }
+    }
+
+    @Test("marketplace requires explicit replacement for a bundled skill identifier")
+    func marketplaceRequiresReplaceForBundledSkillIdentifier() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundledRoot = root.appendingPathComponent("bundled", isDirectory: true)
+        let sourcePackage = root.appendingPathComponent("marketplace-package", isDirectory: true)
+        let installRoot = root.appendingPathComponent("installed", isDirectory: true)
+        try writeSkill(
+            id: "review-pr",
+            name: "Bundled Review",
+            summary: "Bundled skill",
+            in: bundledRoot
+        )
+        try writeSkillFile(
+            id: "review-pr",
+            name: "Marketplace Review",
+            summary: "Package id differs from its directory name",
+            body: "Marketplace instructions.",
+            in: sourcePackage
+        )
+        let installer = SkillMarketplaceInstaller(
+            skillsDirectory: installRoot,
+            protectedSkillDirectories: [SkillDirectory(url: bundledRoot, source: .builtIn)]
+        )
+
+        #expect(throws: SkillMarketplaceError.skillNamespaceCollision(
+            id: "review-pr",
+            source: .builtIn
+        )) {
+            _ = try installer.install(from: sourcePackage)
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: installRoot.appendingPathComponent("review-pr", isDirectory: true).path
+        ))
+
+        let receipt = try installer.install(from: sourcePackage, replaceExisting: true)
+
+        #expect(receipt.skillID == "review-pr")
+        #expect(receipt.replacedSkillIdentity == SkillIdentity(id: "review-pr", source: .builtIn))
+        #expect(receipt.skill.body.contains("Marketplace instructions."))
     }
 
     @Test("marketplace rejects local sources without skill files")
@@ -352,6 +435,16 @@ struct SkillRegistrySwiftTestingTests {
         in root: URL
     ) throws {
         let directory = root.appendingPathComponent(id, isDirectory: true)
+        try writeSkillFile(id: id, name: name, summary: summary, body: body, in: directory)
+    }
+
+    private func writeSkillFile(
+        id: String,
+        name: String,
+        summary: String,
+        body: String,
+        in directory: URL
+    ) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try """
         ---

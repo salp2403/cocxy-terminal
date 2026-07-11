@@ -36,6 +36,33 @@ struct SkillRegistry: Sendable {
         Dictionary(uniqueKeysWithValues: try loadSkills().map { ($0.id, $0) })
     }
 
+    func loadAllSkills() throws -> [Skill] {
+        var discovered: [SkillIdentity: Skill] = [:]
+
+        for directory in directories {
+            for skillDirectory in skillDirectories(in: directory.url) {
+                do {
+                    if let skill = try loader.loadSkill(from: skillDirectory, source: directory.source) {
+                        discovered[skill.identity] = skill
+                    }
+                } catch SkillError.invalidIdentifier {
+                    continue
+                }
+            }
+        }
+
+        return discovered.values.sorted { lhs, rhs in
+            if lhs.id != rhs.id {
+                return lhs.id.localizedStandardCompare(rhs.id) == .orderedAscending
+            }
+            return lhs.source.rawValue < rhs.source.rawValue
+        }
+    }
+
+    func skillMapByIdentity() throws -> [SkillIdentity: Skill] {
+        Dictionary(uniqueKeysWithValues: try loadAllSkills().map { ($0.identity, $0) })
+    }
+
     private func skillDirectories(in root: URL) -> [URL] {
         let standardized = root.standardizedFileURL
         var isDirectory: ObjCBool = false

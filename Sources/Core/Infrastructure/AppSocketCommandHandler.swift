@@ -4528,16 +4528,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let replace = request.params?["replace"] == "true"
         do {
             let receipt = try skillInstallerProvider().install(from: url, replaceExisting: replace)
+            var data = [
+                "skill": receipt.skillID,
+                "path": receipt.installedURL.path,
+                "status": "installed",
+            ]
+            if let replaced = receipt.replacedSkillIdentity {
+                data["replaced_skill"] = replaced.id
+                data["replaced_source"] = replaced.source.rawValue
+            }
             return .ok(
                 id: request.id,
-                data: [
-                    "skill": receipt.skillID,
-                    "path": receipt.installedURL.path,
-                    "status": "installed",
-                ]
+                data: data
             )
         } catch {
-            return .failure(id: request.id, error: "Failed to install skill: \(error)")
+            return .failure(id: request.id, error: "Failed to install skill: \(error.localizedDescription)")
         }
     }
 
