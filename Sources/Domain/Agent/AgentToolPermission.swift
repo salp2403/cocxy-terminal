@@ -76,13 +76,14 @@ enum AgentCommandAllowRule: Sendable, Equatable {
     case exact(String)
     case prefix(String)
 
-    func matches(_ command: String) -> Bool {
-        let normalizedCommand = AgentShellCommandSafety.normalized(command)
+    /// Returns whether this rule may bypass the per-call command approval.
+    /// Prefix entries remain parseable for compatibility, but always prompt.
+    func allowsAutomaticApproval(for command: String) -> Bool {
         switch self {
         case .exact(let allowed):
-            return normalizedCommand == AgentShellCommandSafety.normalized(allowed)
-        case .prefix(let allowedPrefix):
-            return normalizedCommand.hasPrefix(AgentShellCommandSafety.normalized(allowedPrefix))
+            return command.utf8.elementsEqual(allowed.utf8)
+        case .prefix:
+            return false
         }
     }
 }
@@ -127,8 +128,8 @@ struct AgentToolPermissionPolicy: Sendable, Equatable {
     }
 
     private func commandDecision(for invocation: AgentToolInvocation) -> AgentToolPermissionDecision {
-        guard let command = invocation.command?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !command.isEmpty
+        guard let command = invocation.command,
+              !command.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         else {
             return .deny(.missingCommand(toolID: invocation.toolID))
         }
@@ -137,7 +138,7 @@ struct AgentToolPermissionPolicy: Sendable, Equatable {
             return .deny(.dangerousCommand(command: command))
         }
 
-        if commandAllowRules.contains(where: { $0.matches(command) }) {
+        if commandAllowRules.contains(where: { $0.allowsAutomaticApproval(for: command) }) {
             return .allow
         }
 

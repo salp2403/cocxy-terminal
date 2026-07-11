@@ -171,8 +171,8 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(decrypted.map(\.content) == ["Persist this secret prompt", "Stored locally."])
     }
 
-    @Test("runner applies local command allowlist before prompting")
-    func runnerAppliesCommandAllowlistBeforePrompting() async throws {
+    @Test("runner applies local exact command allowlist before prompting")
+    func runnerAppliesExactCommandAllowlistBeforePrompting() async throws {
         let workspace = temporaryDirectory(named: "allowlist-workspace")
         let conversationRoot = temporaryDirectory(named: "allowlist-conversations")
         defer {
@@ -202,7 +202,7 @@ struct AgentSessionRunnerSwiftTestingTests {
             conversationID: "agent-allowlist-test",
             processRunner: processRunner,
             commandAllowlist: StaticAgentCommandAllowlist(rules: [
-                .prefix("swift test --filter"),
+                .exact("swift test --filter AgentSessionRunner"),
             ]),
             securitySandboxConfigProvider: {
                 SecuritySandboxConfig(
@@ -231,6 +231,82 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(processRunner.calls.map(\.arguments) == [
             ["-lc", "swift test --filter AgentSessionRunner"],
         ])
+    }
+
+    @Test("runner previews prefix-matched commands and executes only after approval")
+    func runnerPromptsForPrefixMatchedCommands() async throws {
+        let workspace = temporaryDirectory(named: "prefix-prompt-workspace")
+        let conversationRoot = temporaryDirectory(named: "prefix-prompt-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let command = "printf allowed; printf appended"
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(
+                content: "I will run the command.",
+                toolCalls: [
+                    AgentToolCall(
+                        id: "call-prefix",
+                        toolID: "run_command",
+                        arguments: ["command": .string(command)]
+                    ),
+                ]
+            ),
+            AgentLLMResponse(content: "Command completed.", toolCalls: []),
+        ])
+        let processRunner = RecordingSessionProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: "allowedappended", stderr: ""),
+        ])
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-prefix-prompt-test",
+            processRunner: processRunner,
+            commandAllowlist: StaticAgentCommandAllowlist(rules: [
+                .prefix("printf allowed"),
+            ]),
+            securitySandboxConfigProvider: {
+                SecuritySandboxConfig(
+                    pluginsStrict: true,
+                    agentsIsolated: false,
+                    mcpIsolated: true,
+                    auditLogEnabled: false,
+                    warnOnGrant: true
+                )
+            }
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            maxIterations: 4,
+            conversationStorageDir: conversationRoot.path
+        )
+
+        let pending = try await runner.run(
+            prompt: "Run the command",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected command approval for a preserved prefix rule")
+            return
+        }
+
+        #expect(request.reason == .commandApprovalRequired(command: command))
+        #expect(request.preview.kind == .command)
+        #expect(request.preview.body.contains("command: \(command)"))
+        #expect(processRunner.calls.isEmpty)
+
+        let completed = try await runner.approve(
+            request: request,
+            history: pending.messages,
+            configuration: configuration
+        )
+
+        #expect(completed.stopReason == .completed)
+        #expect(processRunner.calls.map(\.arguments) == [["-lc", command]])
     }
 
     @Test("runner wires terminal output provider into read_terminal_output tool")

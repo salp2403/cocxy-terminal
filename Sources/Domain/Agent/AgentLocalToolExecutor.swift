@@ -36,7 +36,7 @@ struct AgentToolApprovalContext: Sendable, Equatable {
 
     func approvesCommand(callID: String, command: String) -> Bool {
         approvedCommandCallIDs.contains(callID)
-            || commandAllowRules.contains { $0.matches(command) }
+            || commandAllowRules.contains { $0.allowsAutomaticApproval(for: command) }
     }
 
     func approvesComputerUse(callID: String) -> Bool {

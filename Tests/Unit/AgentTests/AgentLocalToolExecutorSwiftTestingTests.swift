@@ -295,6 +295,72 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         #expect(runner.calls.isEmpty)
     }
 
+    @Test("run_command auto executes only byte-identical exact allow rules")
+    func runCommandExactAllowRuleRequiresSameText() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingLocalAgentProcessRunner(results: [.init(exitCode: 0, stdout: "allowed\n", stderr: "")])
+        let allowedCommand = "printf allowed"
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(commandAllowRules: [.exact(allowedCommand)]),
+            processRunner: runner
+        )
+        let allowed = try await executor.execute(AgentToolCall(
+            id: "call-exact",
+            toolID: "run_command",
+            arguments: ["command": .string(allowedCommand)]
+        ))
+        let differentWhitespace = try await executor.execute(AgentToolCall(
+            id: "call-not-exact",
+            toolID: "run_command",
+            arguments: ["command": .string("printf  allowed")]
+        ))
+        #expect(allowed.status == .success)
+        #expect(differentWhitespace.status == .failure)
+        #expect(differentWhitespace.error?.code == "approval_required")
+        #expect(runner.calls.map(\.arguments) == [["-lc", allowedCommand]])
+    }
+
+    @Test("run_command prefix allow rules never bypass approval")
+    func runCommandPrefixAllowRulesNeverBypassApproval() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingLocalAgentProcessRunner(results: [])
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(commandAllowRules: [.prefix("printf allowed")]),
+            processRunner: runner
+        )
+        let commands = [
+            "printf allowed",
+            "printf allowed extra",
+            "printf allowed; printf appended",
+            "printf allowed && printf appended",
+            "printf allowed || printf appended",
+            "printf allowed | cat",
+            "printf allowed\nprintf appended",
+            "printf allowed > result.txt",
+            "printf allowed >> result.txt",
+            "printf allowed < input.txt",
+            "printf allowed 2> error.log",
+            "printf allowed $(printf appended)",
+            "printf allowed `printf appended`",
+            "printf allowed & printf appended",
+            "printf allowedness",
+        ]
+        for (index, command) in commands.enumerated() {
+            let result = try await executor.execute(AgentToolCall(
+                id: "call-prefix-\(index)",
+                toolID: "run_command",
+                arguments: ["command": .string(command)]
+            ))
+            #expect(result.status == .failure)
+            #expect(result.error?.code == "approval_required")
+        }
+        #expect(runner.calls.isEmpty)
+    }
+
     @Test("run_command denies dangerous commands before invoking the runner")
     func runCommandDeniesDangerousCommandsBeforeRunner() async throws {
         let root = try makeWorkspace()

@@ -8,7 +8,7 @@ import Testing
 @Suite("AgentCommandAllowlist")
 struct AgentCommandAllowlistSwiftTestingTests {
 
-    @Test("allowlist loads exact and prefix command rules")
+    @Test("allowlist loads exact rules and preserves prefix entries")
     func allowlistLoadsExactAndPrefixRules() throws {
         let allowlist = AgentCommandAllowlist(fileProvider: InMemoryAgentCommandAllowlistFileProvider(content: """
         # User-controlled local allowlist for non-destructive commands.
@@ -24,6 +24,18 @@ struct AgentCommandAllowlistSwiftTestingTests {
             .prefix("swift test --filter"),
             .prefix("git diff --"),
         ])
+    }
+
+    @Test("preserved prefix entries cannot grant automatic approval")
+    func preservedPrefixEntriesCannotGrantAutomaticApproval() throws {
+        let allowlist = AgentCommandAllowlist(fileProvider: InMemoryAgentCommandAllowlistFileProvider(content: """
+        prefix = ["swift test --filter"]
+        """))
+
+        let rule = try #require(allowlist.loadRules().first)
+
+        #expect(rule == .prefix("swift test --filter"))
+        #expect(!rule.allowsAutomaticApproval(for: "swift test --filter AgentTests"))
     }
 
     @Test("allowlist ignores empty strings unsupported keys and malformed arrays")
