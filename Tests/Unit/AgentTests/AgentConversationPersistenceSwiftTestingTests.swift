@@ -32,6 +32,53 @@ struct AgentConversationPersistenceSwiftTestingTests {
         #expect(decoded == message)
     }
 
+    @Test("sensitive data consent is transient across JSON and persistence")
+    func sensitiveDataConsentIsTransientAcrossJSONAndPersistence() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = AgentConversationStore(rootDirectory: root)
+        let contextDigest = "synthetic-context-digest-not-for-persistence"
+        let consent = AgentSensitiveDataConsent(
+            toolCallID: "terminal-call-1",
+            provider: .openai,
+            contextDigest: contextDigest
+        )
+        let message = AgentMessage(
+            id: "terminal-result-1",
+            role: .tool,
+            content: #"{"limit":1,"output":"synthetic terminal output"}"#,
+            createdAt: Date(timeIntervalSince1970: 1_776_000_000),
+            toolName: "read_terminal_output",
+            toolCallID: "terminal-call-1",
+            sensitiveDataConsent: consent
+        )
+
+        let line = try AgentMessageSerializer.encodeLine(message)
+        let exportedJSON = try #require(String(
+            data: AgentConversationExporter.export([message], format: .json),
+            encoding: .utf8
+        ))
+        try store.append(message, conversationID: "transient-consent")
+        let persistedJSON = try String(
+            contentsOf: store.fileURL(forConversationID: "transient-consent"),
+            encoding: .utf8
+        )
+        let decoded = try AgentMessageSerializer.decodeLine(line)
+        let reloaded = try #require(store.load(conversationID: "transient-consent").first)
+
+        #expect(message.sensitiveDataConsent == consent)
+        #expect(!line.contains("sensitiveDataConsent"))
+        #expect(!line.contains(contextDigest))
+        #expect(!exportedJSON.contains("sensitiveDataConsent"))
+        #expect(!exportedJSON.contains(contextDigest))
+        #expect(!persistedJSON.contains("sensitiveDataConsent"))
+        #expect(!persistedJSON.contains(contextDigest))
+        #expect(decoded.sensitiveDataConsent == nil)
+        #expect(reloaded.sensitiveDataConsent == nil)
+        #expect(reloaded.toolCallID == "terminal-call-1")
+        #expect(reloaded.content == message.content)
+    }
+
     @Test("JSONL serializer round-trips thread metadata")
     func jsonlSerializerRoundTripsThreadMetadata() throws {
         let message = AgentMessage(

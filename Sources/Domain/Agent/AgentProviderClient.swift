@@ -217,6 +217,7 @@ enum AgentProviderClientError: Error, Sendable, Equatable {
     case invalidResponseBody
     case httpStatus(Int, String)
     case attachmentUnavailable(String)
+    case sensitiveDataConsentRequired
     case missingResponseChoice
 }
 
@@ -231,6 +232,8 @@ extension AgentProviderClientError: LocalizedError {
             return "Agent provider request failed with HTTP \(statusCode): \(message)"
         case .attachmentUnavailable(let displayName):
             return "Image attachment is unavailable: \(displayName)."
+        case .sensitiveDataConsentRequired:
+            return "Sensitive terminal output requires consent for the current provider and tool call."
         case .missingResponseChoice:
             return "Agent provider response did not include a usable message."
         }
@@ -920,6 +923,7 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        try validateSensitiveDataConsent(in: messages, provider: .openai)
         let requestMessages = try openAIMessages(from: messages)
         let request = try AgentHTTPRequest(
             url: endpointURL,
@@ -965,6 +969,7 @@ struct AnthropicAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        try validateSensitiveDataConsent(in: messages, provider: .anthropic)
         let requestMessages = try anthropicMessages(from: messages)
         var body: [String: Any] = [
             "model": model,
@@ -1017,6 +1022,7 @@ struct GoogleAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        try validateSensitiveDataConsent(in: messages, provider: .google)
         let escapedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
         let requestContents = try googleContents(from: messages)
         let request = try AgentHTTPRequest(
@@ -1033,6 +1039,21 @@ struct GoogleAgentLLMClient: AgentLLMClient {
         let response = try await transport.send(request)
         try validate(response)
         return try parseGoogleResponse(response.data, fallbackModel: model)
+    }
+}
+
+private func validateSensitiveDataConsent(
+    in messages: [AgentMessage],
+    provider: AgentProviderKind
+) throws {
+    for message in messages
+    where message.role == .tool && message.toolName == "read_terminal_output" {
+        guard let toolCallID = message.toolCallID,
+              let consent = message.sensitiveDataConsent,
+              consent.toolCallID == toolCallID,
+              consent.provider == provider else {
+            throw AgentProviderClientError.sensitiveDataConsentRequired
+        }
     }
 }
 

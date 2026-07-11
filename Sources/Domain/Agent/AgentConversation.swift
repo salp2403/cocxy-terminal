@@ -10,6 +10,13 @@ enum AgentMessageRole: String, Codable, Sendable, Equatable, CaseIterable {
     case tool
 }
 
+/// One-shot authorization for sending a sensitive tool result to an Agent provider.
+struct AgentSensitiveDataConsent: Sendable, Equatable {
+    let toolCallID: String
+    let provider: AgentProviderKind
+    let contextDigest: String
+}
+
 /// Append-only message record for a built-in Agent Mode conversation.
 struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
     let id: String
@@ -18,6 +25,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
     let createdAt: Date
     let toolName: String?
     let toolCallID: String?
+    let sensitiveDataConsent: AgentSensitiveDataConsent?
     let toolCalls: [AgentToolCall]
     let imageAttachments: [AgentImageAttachment]
     let threadID: String?
@@ -33,7 +41,8 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         toolCalls: [AgentToolCall] = [],
         imageAttachments: [AgentImageAttachment] = [],
         threadID: String? = nil,
-        parentMessageID: String? = nil
+        parentMessageID: String? = nil,
+        sensitiveDataConsent: AgentSensitiveDataConsent? = nil
     ) {
         self.id = id
         self.role = role
@@ -41,6 +50,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.toolName = toolName
         self.toolCallID = toolCallID
+        self.sensitiveDataConsent = sensitiveDataConsent
         self.toolCalls = toolCalls
         self.imageAttachments = imageAttachments
         self.threadID = Self.normalizedOptionalString(threadID)
@@ -68,6 +78,7 @@ struct AgentMessage: Codable, Sendable, Equatable, Identifiable {
         self.createdAt = try container.decode(Date.self, forKey: .createdAt)
         self.toolName = try container.decodeIfPresent(String.self, forKey: .toolName)
         self.toolCallID = try container.decodeIfPresent(String.self, forKey: .toolCallID)
+        self.sensitiveDataConsent = nil
         self.toolCalls = try container.decodeIfPresent([AgentToolCall].self, forKey: .toolCalls) ?? []
         self.imageAttachments = try container.decodeIfPresent(
             [AgentImageAttachment].self,
