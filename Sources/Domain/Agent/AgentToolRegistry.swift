@@ -294,7 +294,10 @@ enum AgentBuiltInTools {
             capability: .computerUse,
             inputSchema: AgentToolInputSchema(
                 properties: [
-                    "text": AgentToolInputProperty(.string, description: "Text to type. Approval previews redact the content."),
+                    "text": AgentToolInputProperty(
+                        .string,
+                        description: "Text to type. Approval shows the exact escaped text and its global-focus destination."
+                    ),
                 ],
                 required: ["text"]
             )

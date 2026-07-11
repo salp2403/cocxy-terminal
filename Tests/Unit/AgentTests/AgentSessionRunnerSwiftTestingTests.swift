@@ -585,6 +585,64 @@ struct AgentSessionRunnerSwiftTestingTests {
         #expect(await controller.actions.isEmpty)
     }
 
+    @Test("runner discloses the exact keyboard payload before approved execution")
+    func runnerDisclosesExactKeyboardPayloadBeforeExecution() async throws {
+        let workspace = temporaryDirectory(named: "computer-type-preview-workspace")
+        let conversationRoot = temporaryDirectory(named: "computer-type-preview-conversations")
+        defer {
+            try? FileManager.default.removeItem(at: workspace)
+            try? FileManager.default.removeItem(at: conversationRoot)
+        }
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        let payload = "printf safe-preview\n"
+        let call = AgentToolCall(
+            id: "type-1",
+            toolID: "computer_type_text",
+            arguments: ["text": .string(payload)]
+        )
+        let provider = ScriptedSessionRunnerClient(responses: [
+            AgentLLMResponse(content: "I need to type text.", toolCalls: [call]),
+            AgentLLMResponse(content: "Text typed.", toolCalls: []),
+        ])
+        let controller = RecordingSessionComputerUseController(
+            result: .keyboardTyped(characters: payload.count)
+        )
+        let runner = AgentSessionRunner(
+            clientFactory: RecordingSessionRunnerClientFactory(client: provider),
+            workspaceRootProvider: { workspace },
+            conversationID: "agent-computer-type-preview-test",
+            computerUseController: controller
+        )
+        let configuration = AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai,
+            conversationStorageDir: conversationRoot.path
+        )
+
+        let pending = try await runner.run(
+            prompt: "Type locally",
+            history: [],
+            configuration: configuration
+        )
+        guard case .permissionRequired(let request) = pending.stopReason else {
+            Issue.record("Expected computer type approval request")
+            return
+        }
+        #expect(request.call == call)
+        #expect(request.preview.body.contains("current global keyboard focus"))
+        #expect(request.preview.body.contains(#""printf\u{20}safe-preview\n""#))
+        #expect(await controller.actions.isEmpty)
+
+        let completed = try await runner.approve(
+            request: request,
+            history: pending.messages,
+            configuration: configuration
+        )
+
+        #expect(completed.stopReason == .completed)
+        #expect(await controller.actions == [.keyboard(.typeText(payload))])
+    }
+
     @Test("runner executes computer use without prompt only when config disables per-action confirmation")
     func runnerExecutesComputerUseWhenConfirmationDisabled() async throws {
         let workspace = temporaryDirectory(named: "computer-use-run-workspace")

@@ -577,10 +577,65 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
         case .mouse(.click(let x, let y, let button, let clickCount)):
             return "\(toolID)\nx: \(x)\ny: \(y)\nbutton: \(button.rawValue)\nclicks: \(clickCount)"
         case .keyboard(.typeText(let text)):
-            return "\(toolID)\ntext: \(text.count) characters"
+            return keyboardApprovalPreviewBody(toolID: toolID, text: text)
         case .screenshot(.mainDisplay):
             return "\(toolID)\ntarget: main display\nresult: local screenshot file metadata only"
         }
+    }
+
+    private func keyboardApprovalPreviewBody(toolID: String, text: String) -> String {
+        let scalars = Array(text.unicodeScalars)
+        var lines = [
+            toolID,
+            "target: current global keyboard focus (not bound to an app or field)",
+            "text: \(text.count) characters; \(scalars.count) Unicode scalars",
+        ]
+        if scalars.contains(where: { $0.value == 0x0A || $0.value == 0x0D }) {
+            lines.append("WARNING: Contains a newline or carriage return that the focused app may submit or execute.")
+        }
+        if scalars.contains(where: { scalar in
+            scalar.value != 0x0A
+                && scalar.value != 0x0D
+                && isControlOrInvisibleApprovalScalar(scalar)
+        }) {
+            lines.append("WARNING: Contains control, invisible, or bidirectional Unicode scalars.")
+        }
+        lines.append("exact text (escaped):")
+        lines.append("\"\(scalars.map(visibleApprovalScalar).joined())\"")
+        return lines.joined(separator: "\n")
+    }
+
+    private func visibleApprovalScalar(_ scalar: UnicodeScalar) -> String {
+        switch scalar.value {
+        case 0x09:
+            return "\\t"
+        case 0x0A:
+            return "\\n"
+        case 0x0D:
+            return "\\r"
+        case 0x20:
+            return "\\u{20}"
+        case 0x22:
+            return "\\\""
+        case 0x5C:
+            return "\\\\"
+        case 0x21...0x7E:
+            return String(scalar)
+        default:
+            return "\\u{\(String(scalar.value, radix: 16, uppercase: true))}"
+        }
+    }
+
+    private func isControlOrInvisibleApprovalScalar(_ scalar: UnicodeScalar) -> Bool {
+        let value = scalar.value
+        return value < 0x20
+            || (0x7F...0x9F).contains(value)
+            || (0x200B...0x200F).contains(value)
+            || (0x2028...0x202E).contains(value)
+            || (0x2060...0x206F).contains(value)
+            || value == 0xFEFF
+            || (0xFFF9...0xFFFB).contains(value)
+            || (0xE0000...0xE007F).contains(value)
     }
 
     private func existingTextContent(at url: URL, relativePath: String) throws -> String {

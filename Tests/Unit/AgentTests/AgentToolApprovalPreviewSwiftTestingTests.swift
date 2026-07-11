@@ -103,23 +103,51 @@ struct AgentToolApprovalPreviewSwiftTestingTests {
         #expect(runner.calls == 0)
     }
 
-    @Test("computer use preview describes the action without exposing typed text")
-    func computerUsePreviewRedactsTypedText() async throws {
+    @Test("computer use preview discloses exact escaped text and global focus destination")
+    func computerUsePreviewDisclosesExactEscapedText() async throws {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let executor = AgentLocalToolExecutor(workspace: AgentWorkspace(rootURL: root))
+        let bidiControl = String(UnicodeScalar(0x202E)!)
+        let payload = "secret token\n\t\"\\cafe" + bidiControl
 
         let preview = try await executor.preview(for: AgentToolCall(
             id: "call-computer",
             toolID: "computer_type_text",
-            arguments: ["text": .string("secret-token")]
+            arguments: ["text": .string(payload)]
         ))
 
         #expect(preview.kind == .computerUse)
         #expect(preview.title == "Approve computer action")
         #expect(preview.body.contains("computer_type_text"))
-        #expect(preview.body.contains("12 characters"))
-        #expect(!preview.body.contains("secret-token"))
+        #expect(preview.body.contains("current global keyboard focus"))
+        #expect(preview.body.contains("WARNING: Contains a newline or carriage return"))
+        #expect(preview.body.contains("WARNING: Contains control, invisible, or bidirectional"))
+        #expect(preview.body.contains(#""secret\u{20}token\n\t\"\\cafe\u{202E}""#))
+        #expect(!preview.body.contains("secret token\n"))
+    }
+
+    @Test("same-length keyboard payloads have distinct approval representations")
+    func sameLengthKeyboardPayloadsHaveDistinctApprovalRepresentations() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executor = AgentLocalToolExecutor(workspace: AgentWorkspace(rootURL: root))
+
+        let first = try await executor.preview(for: AgentToolCall(
+            id: "call-first",
+            toolID: "computer_type_text",
+            arguments: ["text": .string("approve now")]
+        ))
+        let second = try await executor.preview(for: AgentToolCall(
+            id: "call-second",
+            toolID: "computer_type_text",
+            arguments: ["text": .string("delete all!")]
+        ))
+
+        #expect("approve now".count == "delete all!".count)
+        #expect(first.body != second.body)
+        #expect(first.body.contains(#""approve\u{20}now""#))
+        #expect(second.body.contains(#""delete\u{20}all!""#))
     }
 
     private func makeWorkspace() throws -> URL {
