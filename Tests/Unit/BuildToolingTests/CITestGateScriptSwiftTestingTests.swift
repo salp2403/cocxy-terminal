@@ -32,7 +32,9 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("set -euo pipefail"))
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks"))
+        #expect(script.contains("--disable-automatic-resolution"))
         #expect(script.contains("./scripts/run-swift-testing-serial.sh"))
+        #expect(serialScript.contains("--disable-automatic-resolution"))
         #expect(script.contains("web/scripts/build-site.mjs"))
         #expect(script.contains("Node.js 18+ is required to generate public website test fixtures"))
         #expect(serialScript.contains("swift-testing-serial-profraw"))
@@ -291,6 +293,99 @@ struct CITestGateScriptSwiftTestingTests {
         ).prefix(4)
         #expect(macOSMagic == Data([0xCF, 0xFA, 0xED, 0xFE]))
         #expect(linuxMagic == Data([0x7F, 0x45, 0x4C, 0x46]))
+    }
+
+    @Test("SwiftPM release inputs are tracked exact and fail closed")
+    func swiftPMReleaseInputsAreTrackedExactAndFailClosed() throws {
+        let root = repositoryRoot()
+        let manifest = try String(
+            contentsOf: root.appendingPathComponent("Package.swift"),
+            encoding: .utf8
+        )
+        let lockURL = root.appendingPathComponent("Package.resolved")
+        let lock = try JSONSerialization.jsonObject(with: Data(contentsOf: lockURL)) as? [String: Any]
+        let pins = lock?["pins"] as? [[String: Any]]
+        let sparkle = pins?.first { $0["identity"] as? String == "sparkle" }
+        let state = sparkle?["state"] as? [String: Any]
+        let gitignore = try String(
+            contentsOf: root.appendingPathComponent(".gitignore"),
+            encoding: .utf8
+        )
+        let verifierURL = root.appendingPathComponent("scripts/verify-swiftpm-resolution.sh")
+        let verifier = try String(contentsOf: verifierURL, encoding: .utf8)
+        let buildScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/build-app.sh"),
+            encoding: .utf8
+        )
+        let bundleVerifier = try String(
+            contentsOf: root.appendingPathComponent("scripts/verify-app-bundle.sh"),
+            encoding: .utf8
+        )
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let automatedScripts = [
+            "scripts/run-tests.sh",
+            "scripts/run-swift-testing-serial.sh",
+            "scripts/run-performance-benchmarks.sh",
+            "scripts/run-cocxycore-benchmarks.sh",
+            "scripts/run-security-audit.sh",
+        ]
+        let releaseWorkflows = ["release.yml", "preview.yml", "nightly.yml"]
+
+        #expect(manifest.contains(#".package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")"#))
+        #expect(!manifest.contains(#"Sparkle", from:"#))
+        #expect(lock?["version"] as? Int == 3)
+        #expect(pins?.filter { $0["identity"] as? String == "sparkle" }.count == 1)
+        #expect(sparkle?["kind"] as? String == "remoteSourceControl")
+        #expect(sparkle?["location"] as? String == "https://github.com/sparkle-project/Sparkle")
+        #expect(state?["version"] as? String == "2.9.4")
+        #expect(state?["revision"] as? String == "b6496a74a087257ef5e6da1c5b29a447a60f5bd7")
+        #expect(!gitignore.components(separatedBy: .newlines).contains("Package.resolved"))
+
+        #expect(FileManager.default.isExecutableFile(atPath: verifierURL.path))
+        #expect(verifier.contains("cb6fdbdc8884f15d62a616e79face92b08322410fd2d425edc6596ccbf4ba3b0"))
+        #expect(verifier.contains("bfb52400c3da18bb4c251ac4818c2c2e1e31c2e649a45b31c11109b6e57b34ad"))
+        #expect(verifier.contains("ls-files --error-unmatch Package.resolved"))
+        #expect(verifier.contains("lipo \"${SPARKLE_TOOL}\" -verify_arch x86_64 arm64"))
+        #expect(buildScript.contains("SWIFT_FLAGS=\"--disable-automatic-resolution -c release\""))
+        #expect(buildScript.contains("SWIFT_FLAGS=\"--disable-automatic-resolution\""))
+        #expect(buildScript.contains("verify-swiftpm-resolution.sh\" --lock-only"))
+        #expect(buildScript.contains("verify-swiftpm-resolution.sh\" --verify-artifacts"))
+        #expect(buildScript.contains(".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"))
+        #expect(!buildScript.contains("find \"${PROJECT_ROOT}/.build\" -name \"Sparkle.framework\""))
+        #expect(bundleVerifier.contains("CFBundleShortVersionString\" \"2.9.4\" \"Reviewed Sparkle version"))
+        #expect(bundleVerifier.contains("check_codesign_valid \"$SPARKLE_FRAMEWORK\" \"Sparkle.framework signature\""))
+        #expect(ci.contains("swift build --disable-automatic-resolution -c debug"))
+        #expect(ci.contains("swift build --disable-automatic-resolution -c release"))
+
+        for path in automatedScripts {
+            let contents = try String(
+                contentsOf: root.appendingPathComponent(path),
+                encoding: .utf8
+            )
+            #expect(contents.contains("--disable-automatic-resolution"), "Unlocked SwiftPM automation: \(path)")
+        }
+        for workflowName in releaseWorkflows {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+            #expect(workflow.contains("verify-swiftpm-resolution.sh --print-sign-update"))
+            #expect(!workflow.contains("find .build -name \"sign_update\""))
+        }
+
+        let lockVerification = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [verifierURL.path, "--lock-only"]
+        )
+        #expect(lockVerification.terminationStatus == 0)
+        let artifactVerification = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [verifierURL.path, "--verify-artifacts"]
+        )
+        #expect(artifactVerification.terminationStatus == 0)
     }
 
     @Test("performance workflow enforces benchmark regression baselines")

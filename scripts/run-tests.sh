@@ -26,7 +26,8 @@ if [[ -f web/scripts/build-site.mjs ]]; then
 fi
 
 echo "Running XCTest suite..."
-swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks
+swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks \
+  --disable-automatic-resolution
 
 echo "Running Swift Testing suite..."
 ./scripts/run-swift-testing-serial.sh

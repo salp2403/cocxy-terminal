@@ -76,10 +76,10 @@ if [ "$RUN_TESTS" -eq 1 ]; then
     first_filter=1
     for filter in "${security_filters[@]}"; do
         if [ "$first_filter" -eq 1 ]; then
-            swift test --filter "$filter"
+            swift test --disable-automatic-resolution --filter "$filter"
             first_filter=0
         else
-            swift test --skip-build --filter "$filter"
+            swift test --disable-automatic-resolution --skip-build --filter "$filter"
         fi
     done
 fi

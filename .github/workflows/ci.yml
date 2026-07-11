@@ -37,13 +37,13 @@ jobs:
           echo "$XCODEGEN_BIN" >> "$GITHUB_PATH"
 
       - name: Build
-        run: swift build -c debug
+        run: swift build --disable-automatic-resolution -c debug
 
       - name: Test
         run: ./scripts/run-tests.sh
 
       - name: Build Release
-        run: swift build -c release
+        run: swift build --disable-automatic-resolution -c release
 
       - name: Prepare inert CI remote-daemon fixture
         run: ./scripts/prepare-ci-cocxycore-fixture.sh "$RUNNER_TEMP/cocxycore-ci-fixture"

@@ -305,7 +305,7 @@ jobs:
           DMG_URL="https://github.com/salp2403/cocxy-terminal/releases/download/v${VERSION}/CocxyTerminal-${VERSION}.dmg"
 
           # Sign DMG with Sparkle's EdDSA key via stdin (no temp file on disk)
-          SPARKLE_BIN=$(find .build -name "sign_update" -type f 2>/dev/null | head -1)
+          SPARKLE_BIN="$(./scripts/verify-swiftpm-resolution.sh --print-sign-update)"
 
           if [ -z "$SPARKLE_BIN" ] || [ ! -f "$SPARKLE_BIN" ]; then
             echo "ERROR: sign_update not found. Cannot generate Sparkle signature."

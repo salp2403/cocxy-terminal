@@ -114,10 +114,10 @@ fi
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then
-    SWIFT_FLAGS="-c release"
+    SWIFT_FLAGS="--disable-automatic-resolution -c release"
     BUILD_DIR="${PROJECT_ROOT}/.build/arm64-apple-macosx/release"
 else
-    SWIFT_FLAGS=""
+    SWIFT_FLAGS="--disable-automatic-resolution"
     BUILD_DIR="${PROJECT_ROOT}/.build/arm64-apple-macosx/debug"
 fi
 APPINTENTS_WORK_DIR="${BUILD_DIR}/AppIntents"
@@ -141,6 +141,7 @@ echo "==> Building ${BUNDLE_NAME} (${BUILD_MODE})..."
 
 # Step 1: Build the Swift package.
 cd "${PROJECT_ROOT}"
+"${PROJECT_ROOT}/scripts/verify-swiftpm-resolution.sh" --lock-only
 mkdir -p "${APPINTENTS_WORK_DIR}"
 TOOLCHAIN_USR="$(cd "$(dirname "$(xcrun -find swiftc)")/.." && pwd)"
 TOOLCHAIN_DIR="$(cd "${TOOLCHAIN_USR}/.." && pwd)"
@@ -245,15 +246,11 @@ mkdir -p "${LAUNCH_SERVICES}"
 # Step 3: Copy binary.
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
 
-# Step 3b: Copy Sparkle.framework into bundle.
-SPARKLE_FW=$(find "${PROJECT_ROOT}/.build/artifacts" -name "Sparkle.framework" -path "*/macos-*" -type d 2>/dev/null | head -1)
-if [ -z "${SPARKLE_FW}" ]; then
-    SPARKLE_FW=$(find "${PROJECT_ROOT}/.build" -name "Sparkle.framework" -type d 2>/dev/null | head -1)
-fi
-if [ -n "${SPARKLE_FW}" ]; then
-    cp -R "${SPARKLE_FW}" "${FRAMEWORKS}/"
-    echo "    Sparkle.framework: ${FRAMEWORKS}/Sparkle.framework"
-fi
+# Step 3b: Copy only the reviewed Sparkle.framework artifact.
+"${PROJECT_ROOT}/scripts/verify-swiftpm-resolution.sh" --verify-artifacts
+SPARKLE_FW="${PROJECT_ROOT}/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+cp -R "${SPARKLE_FW}" "${FRAMEWORKS}/"
+echo "    Sparkle.framework: ${FRAMEWORKS}/Sparkle.framework"
 
 # Step 3c: Set rpath for Sparkle.
 install_name_tool -add_rpath @executable_path/../Frameworks "${MACOS}/${APP_NAME}" 2>/dev/null || true

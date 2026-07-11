@@ -7,6 +7,7 @@ set -euo pipefail
 # while preventing AppKit/Dispatch-heavy suites from over-parallelizing.
 
 common_args=(
+  --disable-automatic-resolution
   --disable-xctest
   --skip PerformanceTests
   --skip CocxyCorePerformanceBenchmarks
@@ -58,7 +59,7 @@ profile_dir=""
 merged_profile=""
 coverage_json=""
 if [[ "$coverage_enabled" == true ]]; then
-  build_dir="$(swift build --show-bin-path)"
+  build_dir="$(swift build --disable-automatic-resolution --show-bin-path)"
   coverage_dir="$build_dir/codecov"
   profile_dir="$build_dir/swift-testing-serial-profraw"
   merged_profile="$coverage_dir/swift-testing-serial.profdata"

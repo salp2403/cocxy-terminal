@@ -19,6 +19,8 @@ LAUNCH_SERVICES="${CONTENTS}/Library/LaunchServices"
 PTY_DAEMON_APP="${LAUNCH_SERVICES}/cocxyd.app"
 PTY_DAEMON_PLIST="${PTY_DAEMON_APP}/Contents/Info.plist"
 PTY_DAEMON_EXECUTABLE="${PTY_DAEMON_APP}/Contents/MacOS/cocxyd"
+SPARKLE_FRAMEWORK="${CONTENTS}/Frameworks/Sparkle.framework"
+SPARKLE_INFO_PLIST="${SPARKLE_FRAMEWORK}/Versions/B/Resources/Info.plist"
 
 ERRORS=0
 
@@ -169,7 +171,10 @@ check_plist_string "$CONTENTS/Info.plist" "CFBundleDocumentTypes.0.LSItemContent
 # 2. Frameworks
 echo ""
 echo "[Frameworks]"
-check_exists "$CONTENTS/Frameworks/Sparkle.framework" "Sparkle.framework"
+check_exists "$SPARKLE_FRAMEWORK" "Sparkle.framework"
+check_exists "$SPARKLE_INFO_PLIST" "Sparkle Info.plist"
+check_plist_string "$SPARKLE_INFO_PLIST" "CFBundleShortVersionString" "2.9.4" "Reviewed Sparkle version"
+check_codesign_valid "$SPARKLE_FRAMEWORK" "Sparkle.framework signature"
 
 # 3. Fonts (critical — crash in v0.1.53 was caused by missing fonts
 #    triggering a Bundle.module fatalError)

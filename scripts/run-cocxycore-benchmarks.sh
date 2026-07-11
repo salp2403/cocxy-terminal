@@ -9,4 +9,4 @@ cd "$ROOT_DIR"
 export COCXY_RUN_COCXYCORE_BENCHMARKS=1
 
 echo "Running gated CocxyCore benchmarks..."
-swift test --filter CocxyTerminalTests.CocxyCorePerformanceBenchmarks "$@"
+swift test --disable-automatic-resolution --filter CocxyTerminalTests.CocxyCorePerformanceBenchmarks "$@"
