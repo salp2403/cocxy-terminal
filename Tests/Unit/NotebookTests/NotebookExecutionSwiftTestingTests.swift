@@ -243,7 +243,7 @@ private struct EnvironmentInjectingNotebookProcessRunner: AgentProcessRunning {
         }.map { key, value in
             "\(key)=\(value)"
         }
-        return try AgentProcessRunner().run(
+        return try NotebookProcessRunner().run(
             executableURL: URL(fileURLWithPath: "/usr/bin/env"),
             arguments: assignments + [executableURL.path] + arguments,
             workingDirectory: workingDirectory,

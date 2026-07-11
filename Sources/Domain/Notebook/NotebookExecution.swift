@@ -47,7 +47,7 @@ struct NotebookExecutionSummary: Sendable, Equatable {
 struct NotebookExecutor: Sendable {
     private let processRunner: any AgentProcessRunning
 
-    init(processRunner: any AgentProcessRunning = AgentProcessRunner()) {
+    init(processRunner: any AgentProcessRunning = NotebookProcessRunner()) {
         self.processRunner = processRunner
     }
 
