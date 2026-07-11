@@ -116,7 +116,7 @@ actor GitHubService {
         let normalizedState = Self.normalizeState(state, allowed: ["open", "closed", "merged", "all"], fallback: "open")
         let args = [
             "pr", "list",
-            "--json", "number,title,state,author,headRefName,baseRefName,labels,isDraft,reviewDecision,url,updatedAt",
+            "--json", GitHubPullRequest.ghJSONFields,
             "--state", normalizedState,
             "--limit", "\(clampedLimit)",
         ]
@@ -147,7 +147,7 @@ actor GitHubService {
     ) async throws -> GitHubPullRequest {
         let args = [
             "pr", "view", "\(number)",
-            "--json", "number,title,state,author,headRefName,baseRefName,labels,isDraft,reviewDecision,url,updatedAt",
+            "--json", GitHubPullRequest.ghJSONFields,
         ]
         let result = try runner(directory, args, timeoutSeconds)
         if result.terminationStatus != 0 {
@@ -737,7 +737,9 @@ actor GitHubService {
         let baseRef = merged.baseRefName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard merged.state == .merged,
               !headRef.isEmpty,
-              headRef != baseRef else {
+              headRef != baseRef,
+              merged.isCrossRepository == false,
+              let headRepository = merged.headRepository else {
             return
         }
 
@@ -756,6 +758,9 @@ actor GitHubService {
             return
         }
         let repo = try GitHubJSONDecoder.decode(RepoIdentity.self, from: repoResult.stdout)
+        guard headRepository.matches(ownerLogin: repo.owner.login, name: repo.name) else {
+            return
+        }
 
         let encodedRef = headRef.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? headRef
         let endpoint = "repos/\(repo.owner.login)/\(repo.name)/git/refs/heads/\(encodedRef)"

@@ -84,9 +84,17 @@ struct PullRequestProvidersSwiftTestingTests {
         )
 
         #expect(pr.number == 42)
+        #expect(pr.headRepository == GitHubRepositoryIdentity(ownerLogin: "owner", name: "repo"))
+        #expect(pr.isCrossRepository == false)
         #expect(spy.invocations.map(\.args).count == 2)
         #expect(spy.invocations.map(\.args)[0].contains("--base"))
         #expect(spy.invocations.map(\.args)[1].contains("view"))
+        let fields = try #require(
+            spy.invocations.map(\.args)[1].first(where: { $0.contains("headRefName") })
+        )
+        #expect(fields.contains("headRepository"))
+        #expect(fields.contains("headRepositoryOwner"))
+        #expect(fields.contains("isCrossRepository"))
     }
 
     @Test("PullRequestCreator maps gh failures through GitHubCLI classifier")
@@ -164,6 +172,9 @@ private func samplePullRequestJSON(number: Int) -> String {
       "state": "OPEN",
       "author": {"login": "said"},
       "headRefName": "feature/source-control",
+      "headRepository": {"name": "repo"},
+      "headRepositoryOwner": {"login": "owner"},
+      "isCrossRepository": false,
       "baseRefName": "main",
       "labels": [],
       "isDraft": false,

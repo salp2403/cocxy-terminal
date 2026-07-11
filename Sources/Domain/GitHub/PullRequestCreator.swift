@@ -97,7 +97,7 @@ struct PullRequestCreator {
 
         let viewArgs = [
             "pr", "view", "\(number)",
-            "--json", "number,title,state,author,headRefName,baseRefName,labels,isDraft,reviewDecision,url,updatedAt",
+            "--json", GitHubPullRequest.ghJSONFields,
         ]
         let viewResult = try runner(workingDirectory, viewArgs, timeoutSeconds)
         if viewResult.terminationStatus != 0 {

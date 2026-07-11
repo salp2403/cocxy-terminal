@@ -239,6 +239,29 @@ struct GitCommit: Equatable, Sendable, Identifiable {
 
 // MARK: - Pull request
 
+/// Repository identity retained alongside a pull-request head ref so
+/// destructive operations never combine a branch name with unrelated
+/// repository authority.
+struct GitHubRepositoryIdentity: Codable, Equatable, Sendable {
+    let ownerLogin: String
+    let name: String
+
+    func matches(ownerLogin otherOwner: String, name otherName: String) -> Bool {
+        let owner = ownerLogin.trimmingCharacters(in: .whitespacesAndNewlines)
+        let repository = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidateOwner = otherOwner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let candidateRepository = otherName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !owner.isEmpty,
+              !repository.isEmpty,
+              !candidateOwner.isEmpty,
+              !candidateRepository.isEmpty else {
+            return false
+        }
+        return owner.caseInsensitiveCompare(candidateOwner) == .orderedSame
+            && repository.caseInsensitiveCompare(candidateRepository) == .orderedSame
+    }
+}
+
 /// High-level state for a pull request.
 ///
 /// The raw values match the uppercase strings `gh` emits in `--json state`
@@ -319,11 +342,17 @@ enum GitHubPullRequestReviewAction: String, Equatable, Sendable {
 
 /// Pull request summary as returned by `gh pr list --json`.
 struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
+    private struct HeadRepository: Codable, Equatable, Sendable {
+        let name: String
+    }
+
     let number: Int
     let title: String
     let state: GitHubPullRequestState
     let author: GitHubUser
     let headRefName: String
+    let headRepository: GitHubRepositoryIdentity?
+    let isCrossRepository: Bool?
     let baseRefName: String
     let labels: [GitHubLabel]
     let isDraft: Bool
@@ -333,12 +362,19 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
 
     var id: Int { number }
 
+    /// Shared `gh pr list/view --json` projection. Keeping provenance fields
+    /// beside the model prevents one hydration path from silently dropping the
+    /// repository identity required by destructive post-merge operations.
+    static let ghJSONFields = "number,title,state,author,headRefName,headRepository,headRepositoryOwner,isCrossRepository,baseRefName,labels,isDraft,reviewDecision,url,updatedAt"
+
     init(
         number: Int,
         title: String,
         state: GitHubPullRequestState,
         author: GitHubUser,
         headRefName: String,
+        headRepository: GitHubRepositoryIdentity? = nil,
+        isCrossRepository: Bool? = nil,
         baseRefName: String,
         labels: [GitHubLabel] = [],
         isDraft: Bool = false,
@@ -351,6 +387,8 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
         self.state = state
         self.author = author
         self.headRefName = headRefName
+        self.headRepository = headRepository
+        self.isCrossRepository = isCrossRepository
         self.baseRefName = baseRefName
         self.labels = labels
         self.isDraft = isDraft
@@ -360,7 +398,8 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case number, title, state, author, headRefName, baseRefName
+        case number, title, state, author, headRefName, headRepository
+        case headRepositoryOwner, isCrossRepository, baseRefName
         case labels, isDraft, reviewDecision, url, updatedAt
     }
 
@@ -371,12 +410,52 @@ struct GitHubPullRequest: Codable, Equatable, Sendable, Identifiable {
         self.state = try container.decodeIfPresent(GitHubPullRequestState.self, forKey: .state) ?? .unknown
         self.author = try container.decodeIfPresent(GitHubUser.self, forKey: .author) ?? GitHubUser(login: "—")
         self.headRefName = try container.decodeIfPresent(String.self, forKey: .headRefName) ?? ""
+        let decodedHeadRepository = try container.decodeIfPresent(
+            HeadRepository.self,
+            forKey: .headRepository
+        )
+        let decodedHeadOwner = try container.decodeIfPresent(
+            GitHubUser.self,
+            forKey: .headRepositoryOwner
+        )
+        if let owner = decodedHeadOwner?.login.trimmingCharacters(in: .whitespacesAndNewlines),
+           let name = decodedHeadRepository?.name.trimmingCharacters(in: .whitespacesAndNewlines),
+           !owner.isEmpty,
+           !name.isEmpty {
+            self.headRepository = GitHubRepositoryIdentity(ownerLogin: owner, name: name)
+        } else {
+            self.headRepository = nil
+        }
+        self.isCrossRepository = try container.decodeIfPresent(Bool.self, forKey: .isCrossRepository)
         self.baseRefName = try container.decodeIfPresent(String.self, forKey: .baseRefName) ?? ""
         self.labels = try container.decodeIfPresent([GitHubLabel].self, forKey: .labels) ?? []
         self.isDraft = try container.decodeIfPresent(Bool.self, forKey: .isDraft) ?? false
         self.reviewDecision = try container.decodeIfPresent(GitHubReviewDecision.self, forKey: .reviewDecision) ?? .none
         self.url = try container.decode(URL.self, forKey: .url)
         self.updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(number, forKey: .number)
+        try container.encode(title, forKey: .title)
+        try container.encode(state, forKey: .state)
+        try container.encode(author, forKey: .author)
+        try container.encode(headRefName, forKey: .headRefName)
+        if let headRepository {
+            try container.encode(HeadRepository(name: headRepository.name), forKey: .headRepository)
+            try container.encode(
+                GitHubUser(login: headRepository.ownerLogin),
+                forKey: .headRepositoryOwner
+            )
+        }
+        try container.encodeIfPresent(isCrossRepository, forKey: .isCrossRepository)
+        try container.encode(baseRefName, forKey: .baseRefName)
+        try container.encode(labels, forKey: .labels)
+        try container.encode(isDraft, forKey: .isDraft)
+        try container.encode(reviewDecision, forKey: .reviewDecision)
+        try container.encode(url, forKey: .url)
+        try container.encode(updatedAt, forKey: .updatedAt)
     }
 }
 

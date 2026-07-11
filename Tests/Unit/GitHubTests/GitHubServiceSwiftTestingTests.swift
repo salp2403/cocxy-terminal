@@ -164,6 +164,12 @@ struct GitHubServiceSwiftTestingTests {
         let service = GitHubService(runner: spy.runner)
         let prs = try await service.listPullRequests(at: URL(fileURLWithPath: "/tmp"))
         #expect(prs.isEmpty)
+        let fields = try #require(
+            spy.allInvocations.first?.args.first(where: { $0.contains("headRefName") })
+        )
+        #expect(fields.contains("headRepository"))
+        #expect(fields.contains("headRepositoryOwner"))
+        #expect(fields.contains("isCrossRepository"))
     }
 
     @Test("listPullRequests decodes a multi-entry payload")
