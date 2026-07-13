@@ -5,10 +5,14 @@
 #   1. direct key-based SSH
 #   2. ProxyJump through a second sshd
 #   3. local port forwarding to an HTTP server
+#   4. reverse port forwarding back to the same HTTP server
+#   5. pipe-owned ControlMaster teardown and reverse-listener removal
 #
 # No external network, system service changes, or persistent keys are used.
 
 set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 require_tool() {
     local tool="$1"
@@ -61,10 +65,13 @@ TARGET_PORT="$(pick_port)"
 JUMP_PORT="$(pick_port)"
 HTTP_PORT="$(pick_port)"
 FORWARD_PORT="$(pick_port)"
+REVERSE_PORT="$(pick_port)"
+SUPERVISED_REVERSE_PORT="$(pick_port)"
 
 cleanup() {
     set +e
     [ -f "$ROOT/forward.pid" ] && kill "$(cat "$ROOT/forward.pid")" 2>/dev/null
+    [ -f "$ROOT/reverse.pid" ] && kill "$(cat "$ROOT/reverse.pid")" 2>/dev/null
     [ -f "$ROOT/http.pid" ] && kill "$(cat "$ROOT/http.pid")" 2>/dev/null
     [ -f "$ROOT/sshd_target.pid" ] && kill "$(cat "$ROOT/sshd_target.pid")" 2>/dev/null
     [ -f "$ROOT/sshd_jump.pid" ] && kill "$(cat "$ROOT/sshd_jump.pid")" 2>/dev/null
@@ -186,5 +193,40 @@ if [ "$forward_result" != "forward-ok" ]; then
     exit 1
 fi
 echo "forward-ok"
+
+ssh -F "$ROOT/ssh_config" -N -o ExitOnForwardFailure=yes \
+    -R "127.0.0.1:$REVERSE_PORT:127.0.0.1:$HTTP_PORT" cocxy-target \
+    > "$ROOT/reverse.log" 2>&1 &
+echo $! > "$ROOT/reverse.pid"
+
+reverse_result=""
+for _ in 1 2 3 4 5; do
+    reverse_result="$(
+        ssh -F "$ROOT/ssh_config" cocxy-target \
+            "curl -fsS http://127.0.0.1:$REVERSE_PORT" 2>/dev/null || true
+    )"
+    [ "$reverse_result" = "forward-ok" ] && break
+    sleep 1
+done
+
+if [ "$reverse_result" != "forward-ok" ]; then
+    echo "error: reverse port forwarding smoke failed: $reverse_result" >&2
+    cat "$ROOT/reverse.log" >&2
+    exit 1
+fi
+echo "reverse-forward-ok"
+
+(
+    cd "$REPO_ROOT"
+    COCXY_RUN_SUPERVISED_SSH_SMOKE=1 \
+    COCXY_SSH_SMOKE_PORT="$TARGET_PORT" \
+    COCXY_SSH_SMOKE_USER="$USER_NAME" \
+    COCXY_SSH_SMOKE_IDENTITY="$ROOT/client_key" \
+    COCXY_SSH_SMOKE_KNOWN_HOSTS="$ROOT/known_hosts" \
+    COCXY_SSH_SMOKE_HTTP_PORT="$HTTP_PORT" \
+    COCXY_SSH_SMOKE_REVERSE_PORT="$SUPERVISED_REVERSE_PORT" \
+        swift test --filter supervisedControlMasterLiveSmoke
+)
+echo "supervised-control-master-ok"
 
 echo "Local SSH smoke passed"

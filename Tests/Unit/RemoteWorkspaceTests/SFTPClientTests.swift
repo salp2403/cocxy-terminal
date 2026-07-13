@@ -134,11 +134,11 @@ struct SFTPClientTests {
         executor.stubbedOutput = ""
 
         let client = makeClient(executor: executor)
-        _ = try client.listDirectory(path: "/tmp", on: makeProfile())
+        let profile = makeProfile()
+        _ = try client.listDirectory(path: "/tmp", on: profile)
 
         let call = executor.executedCommands[0]
-        let home = NSHomeDirectory()
-        #expect(call.controlPath == "\(home)/.config/cocxy/sockets/deploy@server.com:22")
+        #expect(call.controlPath == profile.controlPath)
     }
 
     @Test func listDirectoryThrowsOnError() {

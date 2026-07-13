@@ -138,6 +138,12 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
 
 extension RemoteConnectionProfile {
 
+    /// Per-process namespace prevents stale or foreign ControlMaster sockets
+    /// from colliding with a new Cocxy launch.
+    private static let controlSocketSessionID = String(
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(8)
+    )
+
     /// Defines a port forwarding rule for an SSH connection.
     enum PortForward: Codable, Equatable, Sendable {
 
@@ -198,11 +204,21 @@ extension RemoteConnectionProfile {
         return result
     }
 
-    /// Unique socket path for SSH ControlMaster multiplexing.
+    /// Profile-isolated socket path for SSH ControlMaster multiplexing.
     ///
     /// Returns an absolute path by expanding the home directory.
     /// SSH ControlMaster requires a fully resolved path for socket files.
     var controlPath: String {
+        let home = NSHomeDirectory()
+        let profileID = id.uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+            .prefix(20)
+        return "\(home)/.config/cocxy/sockets/\(Self.controlSocketSessionID)/\(profileID).sock"
+    }
+
+    /// Socket layout used before profiles were isolated by UUID.
+    var legacyControlPath: String {
         let effectivePort = port ?? 22
         let home = NSHomeDirectory()
         if let user {

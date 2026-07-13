@@ -9,19 +9,32 @@ import Testing
 
 final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
     var connectCalled = false
+    var connectCallCount = 0
     var disconnectCalled = false
-    var isAliveResult = true
+    var isAliveResult = false
+    var controlMasterProcessAliveResult: Bool?
     var shouldThrowOnConnect = false
     var shouldThrowOnDisconnect = false
+    var shouldThrowOnCancelForward = false
+    var forwardedPorts: [RemoteConnectionProfile.PortForward] = []
+    var disconnectedProfileIDs: [UUID] = []
+    var terminatedControlPaths: [String] = []
+    var lifecycleEvents: [String] = []
 
     func connect(
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
-    ) throws {
+    ) throws -> SSHControlMasterIdentity {
         connectCalled = true
+        connectCallCount += 1
+        lifecycleEvents.append("connect")
         if shouldThrowOnConnect {
             throw SSHMultiplexerError.connectionFailed("mock failure")
         }
+        return SSHControlMasterIdentity(
+            processID: 12_345,
+            controlPath: profile.controlPath
+        )
     }
 
     func disconnect(
@@ -29,6 +42,8 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         executor: any ProcessExecutor
     ) throws {
         disconnectCalled = true
+        disconnectedProfileIDs.append(profile.id)
+        lifecycleEvents.append("disconnect")
         if shouldThrowOnDisconnect {
             throw SSHMultiplexerError.disconnectFailed("mock failure")
         }
@@ -38,7 +53,19 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> Bool {
-        isAliveResult
+        lifecycleEvents.append("check")
+        return isAliveResult
+    }
+
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool {
+        _ = identity
+        lifecycleEvents.append("check")
+        return controlMasterProcessAliveResult ?? isAliveResult
+    }
+
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity) {
+        terminatedControlPaths.append(identity.controlPath)
+        lifecycleEvents.append("terminate")
     }
 
     func controlPath(for profile: RemoteConnectionProfile) -> String {
@@ -53,13 +80,21 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         _ forward: RemoteConnectionProfile.PortForward,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
-    ) throws {}
+    ) throws {
+        forwardedPorts.append(forward)
+        lifecycleEvents.append("forward")
+    }
 
     func cancelForward(
         _ forward: RemoteConnectionProfile.PortForward,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
-    ) throws {}
+    ) throws {
+        lifecycleEvents.append("cancel")
+        if shouldThrowOnCancelForward {
+            throw SSHMultiplexerError.forwardFailed("mock cancellation failure")
+        }
+    }
 
     var remoteCommandResults: [String: ProcessResult] = [:]
 
@@ -86,15 +121,21 @@ final class TrackingSSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     func connect(
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
-    ) throws {
+    ) throws -> SSHControlMasterIdentity {
         connectAttempts += 1
         if connectAttempts < failUntilAttempt {
             throw SSHMultiplexerError.connectionFailed("temporary failure #\(connectAttempts)")
         }
+        return SSHControlMasterIdentity(
+            processID: 23_456,
+            controlPath: profile.controlPath
+        )
     }
 
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool { true }
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool { false }
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity) {}
     func controlPath(for profile: RemoteConnectionProfile) -> String { profile.controlPath }
     func newSession(profile: RemoteConnectionProfile) -> String { "ssh mock" }
     func forwardPort(_ forward: RemoteConnectionProfile.PortForward, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
@@ -134,6 +175,25 @@ final class MockRemoteProfileStore: RemoteProfileStoring, @unchecked Sendable {
     }
 }
 
+private actor RemoteReconnectDelayGate {
+    private var continuation: CheckedContinuation<Void, any Error>?
+
+    func wait() async throws {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func isWaiting() -> Bool {
+        continuation != nil
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 // MARK: - Remote Connection Manager Tests
 
 @Suite("RemoteConnectionManager")
@@ -163,6 +223,25 @@ struct RemoteConnectionManagerTests {
         await manager.connect(profile: profile)
 
         #expect(multiplexer.connectCalled)
+        #expect(manager.connections[profile.id] == .connected(latencyMs: nil))
+    }
+
+    @Test @MainActor func duplicateConnectPreservesControlMasterLease() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let originalLeaseID = try #require(manager.connectionLeaseID(for: profile.id))
+
+        await manager.connect(profile: profile)
+
+        #expect(multiplexer.connectCallCount == 1)
+        #expect(manager.connectionLeaseID(for: profile.id) == originalLeaseID)
         #expect(manager.connections[profile.id] == .connected(latencyMs: nil))
     }
 
@@ -202,6 +281,7 @@ struct RemoteConnectionManagerTests {
         await manager.disconnect(profileID: profile.id)
 
         #expect(multiplexer.disconnectCalled)
+        #expect(multiplexer.lifecycleEvents.contains("check"))
         #expect(manager.connections[profile.id] == .disconnected)
     }
 
@@ -283,6 +363,290 @@ struct RemoteConnectionManagerTests {
         #expect(manager.connections[profile.id] == .connected(latencyMs: nil))
     }
 
+    @Test @MainActor func forwardingRequiresCurrentConnectedState() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let forward = RemoteConnectionProfile.PortForward.local(
+            localPort: 8080,
+            remotePort: 80,
+            remoteHost: "127.0.0.1"
+        )
+        await manager.connect(profile: profile)
+
+        try manager.forwardPort(forward, for: profile.id)
+        #expect(multiplexer.forwardedPorts == [forward])
+
+        await manager.disconnect(profileID: profile.id)
+        do {
+            try manager.forwardPort(forward, for: profile.id)
+            Issue.record("Expected disconnected forwarding to fail")
+        } catch {
+            #expect(error as? SSHMultiplexerError == .connectionFailed(
+                "No active connection for profile"
+            ))
+        }
+    }
+
+    @Test @MainActor func brokerFailureRevocationDisconnectsTheProfile() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.isAliveResult = false
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let connectionLeaseID = try #require(manager.connectionLeaseID(for: profile.id))
+
+        let terminated = await manager.revokeForwardingSession(
+            profileID: profile.id,
+            expectedLeaseID: connectionLeaseID
+        )
+
+        #expect(multiplexer.disconnectCalled)
+        #expect(terminated)
+        #expect(manager.connections[profile.id] == .disconnected)
+    }
+
+    @Test @MainActor func staleLeaseCannotRevokeReconnectedProfile() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let staleLeaseID = try #require(manager.connectionLeaseID(for: profile.id))
+        await manager.disconnect(profileID: profile.id)
+        await manager.connect(profile: profile)
+        let currentLeaseID = try #require(manager.connectionLeaseID(for: profile.id))
+        multiplexer.disconnectCalled = false
+
+        let terminated = await manager.revokeForwardingSession(
+            profileID: profile.id,
+            expectedLeaseID: staleLeaseID
+        )
+
+        #expect(!terminated)
+        #expect(!multiplexer.disconnectCalled)
+        #expect(currentLeaseID != staleLeaseID)
+        #expect(manager.connectionLeaseID(for: profile.id) == currentLeaseID)
+        #expect(manager.connections[profile.id] == .connected(latencyMs: nil))
+    }
+
+    @Test @MainActor func disconnectCancelsRelayBeforeControlMasterExit() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let tunnelManager = SSHTunnelManager()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor()
+        )
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: manager
+        )
+        manager.relayManager = relayManager
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        _ = try await relayManager.openChannel(
+            config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
+            profileID: profile.id
+        )
+
+        await manager.disconnect(profileID: profile.id)
+
+        let cancelIndex = try #require(multiplexer.lifecycleEvents.firstIndex(of: "cancel"))
+        let disconnectIndex = try #require(
+            multiplexer.lifecycleEvents.lastIndex(of: "disconnect")
+        )
+        #expect(cancelIndex < disconnectIndex)
+        #expect(relayManager.listChannels(profileID: profile.id).isEmpty)
+    }
+
+    @Test @MainActor func successfulDisconnectReleasesQuarantinedRelay() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.isAliveResult = false
+        let tunnelManager = SSHTunnelManager()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor()
+        )
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: manager
+        )
+        manager.relayManager = relayManager
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        _ = try await relayManager.openChannel(
+            config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
+            profileID: profile.id
+        )
+        multiplexer.shouldThrowOnCancelForward = true
+
+        await manager.disconnect(profileID: profile.id)
+
+        #expect(multiplexer.disconnectCalled)
+        #expect(relayManager.listChannels(profileID: profile.id).isEmpty)
+        #expect(tunnelManager.listTunnels(for: profile.id).isEmpty)
+    }
+
+    @Test @MainActor func exitAcknowledgementDoesNotReleaseLiveSessionQuarantine() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.isAliveResult = false
+        multiplexer.controlMasterProcessAliveResult = true
+        let tunnelManager = SSHTunnelManager()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor(),
+            delaySleep: Self.instantDelay
+        )
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: manager
+        )
+        manager.relayManager = relayManager
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        _ = try await relayManager.openChannel(
+            config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
+            profileID: profile.id
+        )
+        multiplexer.shouldThrowOnCancelForward = true
+
+        await manager.disconnect(profileID: profile.id)
+
+        #expect(multiplexer.disconnectCalled)
+        #expect(multiplexer.lifecycleEvents.filter { $0 == "check" }.count == 5)
+        #expect(manager.connectionLeaseID(for: profile.id) != nil)
+        let retained = try #require(relayManager.listChannels(profileID: profile.id).first)
+        guard case .closeFailed = retained.status else {
+            Issue.record("Expected quarantined close failure")
+            return
+        }
+    }
+
+    @Test @MainActor func applicationShutdownReleasesQuarantineAfterProcessExit() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.controlMasterProcessAliveResult = false
+        let tunnelManager = SSHTunnelManager()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor()
+        )
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: manager
+        )
+        manager.relayManager = relayManager
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        _ = try await relayManager.openChannel(
+            config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
+            profileID: profile.id
+        )
+        multiplexer.shouldThrowOnCancelForward = true
+
+        manager.shutdownForApplicationTermination()
+
+        #expect(multiplexer.disconnectedProfileIDs.isEmpty)
+        #expect(multiplexer.terminatedControlPaths == [profile.controlPath])
+        #expect(manager.connections[profile.id] == .disconnected)
+        #expect(manager.connectionLeaseID(for: profile.id) == nil)
+        #expect(relayManager.listChannels(profileID: profile.id).isEmpty)
+        #expect(tunnelManager.listTunnels(for: profile.id).isEmpty)
+    }
+
+    @Test @MainActor func applicationShutdownSkipsProfilesWithoutActiveLease() async {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let activeProfile = RemoteConnectionProfile(
+            name: "active",
+            host: "active.example",
+            autoReconnect: false
+        )
+        await manager.connect(profile: activeProfile)
+        let failedProfile = RemoteConnectionProfile(
+            name: "failed",
+            host: "failed.example",
+            autoReconnect: false
+        )
+        multiplexer.shouldThrowOnConnect = true
+        await manager.connect(profile: failedProfile)
+        multiplexer.shouldThrowOnConnect = false
+
+        manager.shutdownForApplicationTermination()
+
+        #expect(multiplexer.disconnectedProfileIDs.isEmpty)
+        #expect(multiplexer.terminatedControlPaths == [activeProfile.controlPath])
+        #expect(manager.connections[activeProfile.id] == .disconnected)
+        #expect(manager.connections[failedProfile.id] == .disconnected)
+    }
+
+    @Test @MainActor func applicationShutdownTerminatesAllPipesWithoutControlCommands() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.controlMasterProcessAliveResult = false
+        let tunnelManager = SSHTunnelManager()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor()
+        )
+        let relayManager = RelayManagerImpl(
+            tunnelManager: tunnelManager,
+            forwarder: manager
+        )
+        manager.relayManager = relayManager
+        let profiles = [
+            RemoteConnectionProfile(name: "first", host: "first.example"),
+            RemoteConnectionProfile(name: "second", host: "second.example"),
+        ]
+        for (index, profile) in profiles.enumerated() {
+            await manager.connect(profile: profile)
+            _ = try await relayManager.openChannel(
+                config: RelayChannelConfig(
+                    name: "relay-\(index)",
+                    localPort: 3_000 + index,
+                    remotePort: 9_000 + index
+                ),
+                profileID: profile.id
+            )
+        }
+        multiplexer.lifecycleEvents.removeAll()
+
+        manager.shutdownForApplicationTermination()
+
+        #expect(Set(multiplexer.terminatedControlPaths) == Set(profiles.map(\.controlPath)))
+        #expect(!multiplexer.lifecycleEvents.contains("disconnect"))
+        #expect(!multiplexer.lifecycleEvents.contains("cancel"))
+        #expect(profiles.allSatisfy { relayManager.listChannels(profileID: $0.id).isEmpty })
+        #expect(profiles.allSatisfy { manager.connectionLeaseID(for: $0.id) == nil })
+    }
+
     // MARK: - Auto-Reconnect
 
     /// No-op delay for tests to avoid real waiting during reconnect backoff.
@@ -331,6 +695,40 @@ struct RemoteConnectionManagerTests {
 
         #expect(manager.connections[profile.id] == .connected(latencyMs: nil))
         #expect(trackingMultiplexer.connectAttempts >= 3)
+    }
+
+    @Test @MainActor func disconnectInvalidatesPendingAutoReconnect() async {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.shouldThrowOnConnect = true
+        let gate = RemoteReconnectDelayGate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor(),
+            delaySleep: { _ in try await gate.wait() }
+        )
+        let profile = RemoteConnectionProfile(
+            name: "dev",
+            host: "flaky.com",
+            autoReconnect: true
+        )
+        let connectTask = Task { @MainActor in
+            await manager.connect(profile: profile)
+        }
+        for _ in 0..<50 {
+            if await gate.isWaiting() { break }
+            await Task.yield()
+        }
+        #expect(await gate.isWaiting())
+
+        await manager.disconnect(profileID: profile.id)
+        await gate.resume()
+        await connectTask.value
+
+        #expect(multiplexer.connectCallCount == 1)
+        #expect(manager.connections[profile.id] == .disconnected)
+        #expect(manager.connectionLeaseID(for: profile.id) == nil)
     }
 
     @Test @MainActor func noAutoReconnectWhenDisabled() async {

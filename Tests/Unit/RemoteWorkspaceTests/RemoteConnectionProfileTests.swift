@@ -315,31 +315,38 @@ struct RemoteConnectionProfileTests {
 
     // MARK: - Control Path
 
+    private func expectSessionScopedControlPath(_ profile: RemoteConnectionProfile) {
+        let root = "\(NSHomeDirectory())/.config/cocxy/sockets/"
+        let profileFile = profile.id.uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+            .prefix(20) + ".sock"
+        #expect(profile.controlPath.hasPrefix(root))
+        #expect(profile.controlPath.hasSuffix("/\(profileFile)"))
+        #expect(profile.controlPath.utf8.count < 104)
+        let relativePath = profile.controlPath.dropFirst(root.count)
+        #expect(relativePath.split(separator: "/").first?.count == 8)
+    }
+
     @Test func controlPathWithUserAndPort() {
         let profile = RemoteConnectionProfile(
             name: "dev", host: "server.com", user: "root", port: 2222
         )
-        let home = NSHomeDirectory()
-
-        #expect(profile.controlPath == "\(home)/.config/cocxy/sockets/root@server.com:2222")
+        expectSessionScopedControlPath(profile)
     }
 
     @Test func controlPathWithoutUser() {
         let profile = RemoteConnectionProfile(
             name: "dev", host: "server.com"
         )
-        let home = NSHomeDirectory()
-
-        #expect(profile.controlPath == "\(home)/.config/cocxy/sockets/server.com:22")
+        expectSessionScopedControlPath(profile)
     }
 
     @Test func controlPathDefaultsPort22() {
         let profile = RemoteConnectionProfile(
             name: "dev", host: "server.com", user: "admin"
         )
-        let home = NSHomeDirectory()
-
-        #expect(profile.controlPath == "\(home)/.config/cocxy/sockets/admin@server.com:22")
+        expectSessionScopedControlPath(profile)
     }
 
     @Test func controlPathIsAbsoluteNotTilde() {
@@ -349,6 +356,22 @@ struct RemoteConnectionProfileTests {
 
         #expect(!profile.controlPath.contains("~"))
         #expect(profile.controlPath.hasPrefix("/"))
+    }
+
+    @Test func controlPathIsIsolatedForProfilesSharingAnEndpoint() {
+        let first = RemoteConnectionProfile(
+            name: "first",
+            host: "server.com",
+            user: "deploy"
+        )
+        let second = RemoteConnectionProfile(
+            name: "second",
+            host: "server.com",
+            user: "deploy"
+        )
+
+        #expect(first.controlPath != second.controlPath)
+        #expect(first.legacyControlPath == second.legacyControlPath)
     }
 
     // MARK: - Port Forward SSH Flags

@@ -1072,7 +1072,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("--app build/CocxyTerminal.app"))
     }
 
-    @Test("local SSH smoke script covers direct jump and forward gates without CI flakiness")
+    @Test("local SSH smoke covers direct jump and bidirectional forwarding without CI flakiness")
     func localSSHSmokeScriptCoversDirectJumpAndForwardGates() throws {
         let root = repositoryRoot()
         let scriptURL = root.appendingPathComponent("scripts/smoke-local-ssh.sh")
@@ -1094,9 +1094,13 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("/usr/sbin/sshd"))
         #expect(script.contains("ProxyJump cocxy-jump"))
         #expect(script.contains("-N -L"))
+        #expect(script.contains("-R \"127.0.0.1:$REVERSE_PORT"))
         #expect(script.contains("direct-ok"))
         #expect(script.contains("jump-ok"))
         #expect(script.contains("forward-ok"))
+        #expect(script.contains("reverse-forward-ok"))
+        #expect(script.contains("supervisedControlMasterLiveSmoke"))
+        #expect(script.contains("supervised-control-master-ok"))
         #expect(script.contains("No external network, system service changes, or persistent keys are used."))
         #expect(!ci.contains("smoke-local-ssh.sh"))
         #expect(!nightly.contains("smoke-local-ssh.sh"))

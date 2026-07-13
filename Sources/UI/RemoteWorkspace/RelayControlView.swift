@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // RelayControlView.swift - UI for multi-channel relay management.
 
+import AppKit
 import SwiftUI
 
 // MARK: - Relay Control View
@@ -10,6 +11,11 @@ import SwiftUI
 /// Connected to `RelayManagerImpl` for real reverse tunnel operations.
 /// Shows channel list, add form, per-channel controls, and token management.
 struct RelayControlView: View {
+
+    private enum CopiedItem: Equatable {
+        case command(UUID)
+        case token(UUID)
+    }
 
     let profileID: UUID
     @ObservedObject var viewModel: RemoteConnectionViewModel
@@ -23,9 +29,9 @@ struct RelayControlView: View {
     @State private var showingAuditFor: UUID?
     @State private var auditEntries: [String] = []
     @State private var editingACLFor: UUID?
-    @State private var aclProcesses: String = ""
     @State private var aclMaxConn: String = "10"
-    @State private var aclHosts: String = "127.0.0.1"
+    @State private var isOpeningChannel = false
+    @State private var copiedItem: CopiedItem?
 
     // MARK: - Body
 
@@ -50,6 +56,14 @@ struct RelayControlView: View {
                 Divider()
                 errorSection(errorMessage)
             }
+        } else if !relayManager.listChannels(profileID: profileID).isEmpty {
+            relayStatsSection
+            Divider()
+            channelListSection
+            if let errorMessage {
+                Divider()
+                errorSection(errorMessage)
+            }
         } else {
             VStack(spacing: 8) {
                 Spacer()
@@ -69,7 +83,7 @@ struct RelayControlView: View {
 
     private var channelListSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(localized("remoteWorkspace.relay.activeChannels", fallback: "Active Channels"))
+            Text(localized("remoteWorkspace.relay.activeChannels", fallback: "Relay Channels"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
 
@@ -91,7 +105,7 @@ struct RelayControlView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Circle()
-                    .fill(channel.isExpired ? Color.orange : Color.green)
+                    .fill(channelStatusColor(channel))
                     .frame(width: 6, height: 6)
                 Text(channel.name)
                     .font(.system(size: 11, weight: .medium))
@@ -103,6 +117,10 @@ struct RelayControlView: View {
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 }
                 .buttonStyle(.plain)
+                .help(localized("remoteWorkspace.relay.close", fallback: "Close relay channel"))
+                .accessibilityLabel(
+                    localized("remoteWorkspace.relay.close", fallback: "Close relay channel")
+                )
             }
 
             HStack(spacing: 8) {
@@ -151,28 +169,109 @@ struct RelayControlView: View {
                     .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
 
+            if let statusMessage = channelStatusMessage(channel.status) {
+                Text(statusMessage)
+                    .font(.system(size: 8))
+                    .foregroundColor(.red)
+                    .lineLimit(2)
+            }
+
             // Action buttons.
             HStack(spacing: 8) {
-                Button(localized("remoteWorkspace.relay.rotateToken", fallback: "Rotate Token")) {
-                    relayManager.rotateToken(channelID: channel.id)
+                Button(action: { copyClientCommand(channelID: channel.id) }) {
+                    Image(systemName: copiedItem == .command(channel.id) ? "checkmark" : "terminal")
+                        .font(.system(size: 9))
+                        .frame(width: 12, height: 12)
                 }
-                .font(.system(size: 9))
                 .buttonStyle(.plain)
-                .foregroundColor(Color(nsColor: CocxyColors.mauve))
+                .foregroundColor(Color(nsColor: CocxyColors.green))
+                .disabled(!channel.status.isActive)
+                .help(
+                    localized(
+                        "remoteWorkspace.relay.copyClientCommand",
+                        fallback: "Copy authenticated client command"
+                    )
+                )
+                .accessibilityLabel(
+                    localized(
+                        "remoteWorkspace.relay.copyClientCommand",
+                        fallback: "Copy authenticated client command"
+                    )
+                )
 
-                Button(localized("remoteWorkspace.relay.viewAudit", fallback: "View Audit")) {
-                    loadAuditEntries(for: channel.id)
+                Button(action: { copyClientToken(channelID: channel.id) }) {
+                    Image(systemName: copiedItem == .token(channel.id) ? "checkmark" : "key.horizontal")
+                        .font(.system(size: 9))
+                        .frame(width: 12, height: 12)
                 }
-                .font(.system(size: 9))
-                .buttonStyle(.plain)
-                .foregroundColor(Color(nsColor: CocxyColors.blue))
-
-                Button(localized("remoteWorkspace.relay.editACL", fallback: "Edit ACL")) {
-                    beginEditingACL(channel)
-                }
-                .font(.system(size: 9))
                 .buttonStyle(.plain)
                 .foregroundColor(Color(nsColor: CocxyColors.yellow))
+                .disabled(!channel.status.isActive)
+                .help(
+                    localized(
+                        "remoteWorkspace.relay.copyClientToken",
+                        fallback: "Copy relay token"
+                    )
+                )
+                .accessibilityLabel(
+                    localized(
+                        "remoteWorkspace.relay.copyClientToken",
+                        fallback: "Copy relay token"
+                    )
+                )
+
+                Button {
+                    do {
+                        try relayManager.rotateToken(channelID: channel.id)
+                    } catch {
+                        errorMessage = error.localizedDescription
+                    }
+                } label: {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 9))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.mauve))
+                .disabled(!channel.status.isActive)
+                .help(localized("remoteWorkspace.relay.rotateToken", fallback: "Rotate token"))
+                .accessibilityLabel(
+                    localized("remoteWorkspace.relay.rotateToken", fallback: "Rotate token")
+                )
+
+                Button {
+                    loadAuditEntries(for: channel.id)
+                } label: {
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 9))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.blue))
+                .help(localized("remoteWorkspace.relay.viewAudit", fallback: "View audit log"))
+                .accessibilityLabel(
+                    localized("remoteWorkspace.relay.viewAudit", fallback: "View audit log")
+                )
+
+                Button {
+                    beginEditingACL(channel)
+                } label: {
+                    Image(systemName: "shield.lefthalf.filled")
+                        .font(.system(size: 9))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.yellow))
+                .disabled(!channel.status.isActive)
+                .help(
+                    localized(
+                        "remoteWorkspace.relay.editACL",
+                        fallback: "Edit connection limit"
+                    )
+                )
+                .accessibilityLabel(
+                    localized(
+                        "remoteWorkspace.relay.editACL",
+                        fallback: "Edit connection limit"
+                    )
+                )
             }
 
             // Inline audit log viewer.
@@ -193,16 +292,43 @@ struct RelayControlView: View {
     }
 
     private func aclSummary(_ acl: RelayACL) -> String {
-        let hosts = acl.allowedRemoteHosts.joined(separator: ", ")
-        let procs = acl.allowedProcesses.isEmpty
-            ? localized("remoteWorkspace.relay.aclAllProcesses", fallback: "all")
-            : acl.allowedProcesses.joined(separator: ", ")
         return String(
-            format: localized("remoteWorkspace.relay.aclSummary", fallback: "Hosts: %@ | Procs: %@ | Max: %d"),
-            hosts,
-            procs,
+            format: localized("remoteWorkspace.relay.connectionLimit", fallback: "Max connections: %d"),
             acl.maxConnections
         )
+    }
+
+    private func channelStatusColor(_ channel: RelayChannel) -> Color {
+        if channel.isExpired { return .orange }
+        switch channel.status {
+        case .active:
+            return .green
+        case .closeFailed, .brokerFailed:
+            return .red
+        }
+    }
+
+    private func channelStatusMessage(_ status: RelayChannelStatus) -> String? {
+        switch status {
+        case .active:
+            return nil
+        case .closeFailed(let reason):
+            return String(
+                format: localized(
+                    "remoteWorkspace.relay.closeFailed",
+                    fallback: "Could not close the SSH listener. Access is blocked locally; retry close. %@"
+                ),
+                reason
+            )
+        case .brokerFailed(let reason):
+            return String(
+                format: localized(
+                    "remoteWorkspace.relay.brokerFailed",
+                    fallback: "Authentication broker failed and remote forwarding may still exist. Retry close. %@"
+                ),
+                reason
+            )
+        }
     }
 
     // MARK: - Audit Log Viewer
@@ -220,6 +346,18 @@ struct RelayControlView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                .help(
+                    localized(
+                        "remoteWorkspace.relay.closeAudit",
+                        fallback: "Close audit log"
+                    )
+                )
+                .accessibilityLabel(
+                    localized(
+                        "remoteWorkspace.relay.closeAudit",
+                        fallback: "Close audit log"
+                    )
+                )
             }
 
             let filtered = auditEntries.filter { $0.contains(channelID.uuidString) }
@@ -248,7 +386,12 @@ struct RelayControlView: View {
     private func aclEditor(channelID: UUID) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(localized("remoteWorkspace.relay.editACL", fallback: "Edit ACL"))
+                Text(
+                    localized(
+                        "remoteWorkspace.relay.editACL",
+                        fallback: "Edit Connection Limit"
+                    )
+                )
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
@@ -258,27 +401,20 @@ struct RelayControlView: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                .help(
+                    localized(
+                        "remoteWorkspace.relay.closeLimitEditor",
+                        fallback: "Close connection limit editor"
+                    )
+                )
+                .accessibilityLabel(
+                    localized(
+                        "remoteWorkspace.relay.closeLimitEditor",
+                        fallback: "Close connection limit editor"
+                    )
+                )
             }
 
-            HStack(spacing: 4) {
-                Text(localized("remoteWorkspace.relay.hosts", fallback: "Hosts:"))
-                    .font(.system(size: 9))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                TextField("127.0.0.1", text: $aclHosts)
-                    .font(.system(size: 9, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-            }
-            HStack(spacing: 4) {
-                Text(localized("remoteWorkspace.relay.processes", fallback: "Procs:"))
-                    .font(.system(size: 9))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                TextField(
-                    localized("remoteWorkspace.relay.processes.placeholder", fallback: "(empty = all)"),
-                    text: $aclProcesses
-                )
-                    .font(.system(size: 9, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-            }
             HStack(spacing: 4) {
                 Text(localized("remoteWorkspace.relay.max", fallback: "Max:"))
                     .font(.system(size: 9))
@@ -289,18 +425,12 @@ struct RelayControlView: View {
                     .frame(width: 40)
             }
 
-            HStack(spacing: 8) {
-                Button(localized("remoteWorkspace.relay.saveACL", fallback: "Save ACL")) {
-                    saveACL(channelID: channelID)
-                }
-                .font(.system(size: 9, weight: .medium))
-                .buttonStyle(.plain)
-                .foregroundColor(Color(nsColor: CocxyColors.green))
-
-                Text(localized("remoteWorkspace.relay.aclChangeNote", fallback: "Changes apply to new connections only."))
-                    .font(.system(size: 8))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            Button(localized("remoteWorkspace.relay.saveACL", fallback: "Save Limit")) {
+                saveACL(channelID: channelID)
             }
+            .font(.system(size: 9, weight: .medium))
+            .buttonStyle(.plain)
+            .foregroundColor(Color(nsColor: CocxyColors.green))
         }
         .padding(4)
         .background(
@@ -342,15 +472,25 @@ struct RelayControlView: View {
 
             Button(action: addChannel) {
                 HStack(spacing: 4) {
-                    Image(systemName: "plus.circle.fill")
-                        .font(.system(size: 10))
+                    if isOpeningChannel {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "plus.circle.fill")
+                            .font(.system(size: 10))
+                    }
                     Text(localized("remoteWorkspace.relay.openChannel", fallback: "Open Channel"))
                         .font(.system(size: 10, weight: .medium))
                 }
             }
             .buttonStyle(.plain)
             .foregroundColor(Color(nsColor: CocxyColors.mauve))
-            .disabled(newChannelName.isEmpty || newLocalPort.isEmpty || newRemotePort.isEmpty)
+            .disabled(
+                isOpeningChannel
+                    || newChannelName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    || newLocalPort.isEmpty
+                    || newRemotePort.isEmpty
+            )
         }
     }
 
@@ -426,35 +566,76 @@ struct RelayControlView: View {
             editingACLFor = nil
             return
         }
-        aclProcesses = channel.acl.allowedProcesses.joined(separator: ", ")
         aclMaxConn = "\(channel.acl.maxConnections)"
-        aclHosts = channel.acl.allowedRemoteHosts.joined(separator: ", ")
         editingACLFor = channel.id
     }
 
     private func saveACL(channelID: UUID) {
-        let hosts = aclHosts
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        let processes = aclProcesses
-            .split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        let maxConn = Int(aclMaxConn) ?? 10
+        guard let channel = relayManager.channels[channelID] else {
+            editingACLFor = nil
+            return
+        }
+        guard let maxConn = Int(aclMaxConn), maxConn > 0 else {
+            errorMessage = localized(
+                "remoteWorkspace.relay.error.invalidConnectionLimit",
+                fallback: "Connection limit must be a positive whole number"
+            )
+            return
+        }
 
         let newACL = RelayACL(
-            allowedProcesses: processes,
-            maxConnections: max(1, maxConn),
-            allowedRemoteHosts: hosts.isEmpty ? ["127.0.0.1"] : hosts
+            allowedProcesses: channel.acl.allowedProcesses,
+            maxConnections: maxConn,
+            maxBandwidthBytesPerSec: channel.acl.maxBandwidthBytesPerSec,
+            allowedRemoteHosts: channel.acl.allowedRemoteHosts
         )
         relayManager.updateACL(channelID: channelID, acl: newACL)
+        errorMessage = nil
         editingACLFor = nil
     }
 
     // MARK: - Channel Actions
 
+    private func copyClientCommand(channelID: UUID) {
+        guard let command = relayManager.clientCommand(for: channelID) else { return }
+        copySensitiveText(command, item: .command(channelID))
+    }
+
+    private func copyClientToken(channelID: UUID) {
+        guard let token = relayManager.clientToken(for: channelID) else { return }
+        copySensitiveText(token, item: .token(channelID))
+    }
+
+    private func copySensitiveText(_ value: String, item: CopiedItem) {
+        let pasteboard = NSPasteboard.general
+        pasteboard.clearContents()
+        pasteboard.setString(value, forType: .string)
+        let changeCount = pasteboard.changeCount
+        copiedItem = item
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if copiedItem == item {
+                copiedItem = nil
+            }
+        }
+
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            guard pasteboard.changeCount == changeCount else { return }
+            pasteboard.clearContents()
+        }
+    }
+
     private func addChannel() {
+        let channelName = newChannelName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !channelName.isEmpty else {
+            errorMessage = localized(
+                "remoteWorkspace.relay.error.invalidName",
+                fallback: "Channel name is required"
+            )
+            return
+        }
         guard let localPort = Int(newLocalPort), (1...65535).contains(localPort),
               let remotePort = Int(newRemotePort), (1...65535).contains(remotePort)
         else {
@@ -464,18 +645,22 @@ struct RelayControlView: View {
 
         errorMessage = nil
         let config = RelayChannelConfig(
-            name: newChannelName.trimmingCharacters(in: .whitespaces),
+            name: channelName,
             localPort: localPort,
             remotePort: remotePort
         )
 
-        do {
-            try relayManager.openChannel(config: config, profileID: profileID)
-            newChannelName = ""
-            newLocalPort = ""
-            newRemotePort = ""
-        } catch {
-            errorMessage = error.localizedDescription
+        isOpeningChannel = true
+        Task { @MainActor in
+            defer { isOpeningChannel = false }
+            do {
+                try await relayManager.openChannel(config: config, profileID: profileID)
+                newChannelName = ""
+                newLocalPort = ""
+                newRemotePort = ""
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 

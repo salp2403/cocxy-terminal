@@ -102,6 +102,17 @@ enum HTTPConnectParser {
         "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request"
 }
 
+enum HTTPConnectProxyError: Error, LocalizedError {
+    case connectionLeaseChanged
+
+    var errorDescription: String? {
+        switch self {
+        case .connectionLeaseChanged:
+            return "SSH connection changed before HTTP proxy cleanup completed"
+        }
+    }
+}
+
 // MARK: - Relay Close Flag
 
 /// Thread-safe flag ensuring a relay connection count is decremented exactly once.
@@ -153,6 +164,16 @@ struct ForwardCache: Sendable {
 
 // MARK: - HTTP Connect Proxy
 
+@MainActor
+protocol HTTPConnectProxyLifecycle: AnyObject {
+    var port: Int { get }
+    var activeConnectionCount: Int { get }
+    func start() async throws
+    func activate()
+    func stop() throws
+    func releaseAfterSessionTermination()
+}
+
 /// HTTP CONNECT proxy server using Network.framework.
 ///
 /// Listens on a local port and handles CONNECT requests by creating
@@ -166,7 +187,7 @@ struct ForwardCache: Sendable {
 ///
 /// Forward caching avoids duplicate SSH forwards for the same destination.
 @MainActor
-final class HTTPConnectProxy {
+final class HTTPConnectProxy: HTTPConnectProxyLifecycle {
 
     private final class ListenerStartupGate: @unchecked Sendable {
         private let lock = NSLock()
@@ -190,14 +211,27 @@ final class HTTPConnectProxy {
     /// The profile whose SSH session carries the forwards.
     private let profileID: UUID
 
+    /// Exact SSH session that owns every local forward created by this proxy.
+    private let connectionLeaseID: UUID
+
     /// Network listener for incoming connections.
     private var listener: NWListener?
 
     /// Cache of active SSH local forwards.
     private var forwardCache = ForwardCache()
 
+    /// Exact forwards remain owned until cancellation succeeds or SSH death is proven.
+    private var activeForwards: [String: RemoteConnectionProfile.PortForward] = [:]
+
+    /// Accepted client and upstream sockets are retained so stop is revocable.
+    private var trackedConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var clientConnectionIDs: Set<ObjectIdentifier> = []
+
     /// Number of currently active connections.
     private(set) var activeConnectionCount: Int = 0
+
+    /// A ready listener rejects traffic until ProxyManager commits ownership.
+    private var acceptsConnections = false
 
     /// Creates an HTTP CONNECT proxy.
     ///
@@ -205,10 +239,21 @@ final class HTTPConnectProxy {
     ///   - listenPort: Local port to listen on (default 8888).
     ///   - forwarder: SSH port forwarding abstraction.
     ///   - profileID: Remote profile for SSH tunnel creation.
-    init(listenPort: Int = 8888, forwarder: any PortForwarding, profileID: UUID) {
+    ///   - connectionLeaseID: Exact SSH session that owns generated forwards.
+    init(
+        listenPort: Int = 8888,
+        forwarder: any PortForwarding,
+        profileID: UUID,
+        connectionLeaseID: UUID
+    ) {
         self.port = listenPort
         self.forwarder = forwarder
         self.profileID = profileID
+        self.connectionLeaseID = connectionLeaseID
+    }
+
+    func activate() {
+        acceptsConnections = true
     }
 
     /// Starts the proxy listener and waits until the listener is either ready or failed.
@@ -251,12 +296,48 @@ final class HTTPConnectProxy {
         }
     }
 
-    /// Stops the proxy listener and cleans up.
-    func stop() {
+    /// Stops local traffic and cancels every exact SSH local forward.
+    func stop() throws {
+        stopLocalTraffic()
+
+        var firstError: (any Error)?
+        for (key, forward) in Array(activeForwards) {
+            do {
+                try requireCurrentConnectionLease()
+                try forwarder.cancelForward(forward, for: profileID)
+                activeForwards.removeValue(forKey: key)
+                if case let .local(_, remotePort, remoteHost) = forward {
+                    forwardCache.remove(host: remoteHost, port: remotePort)
+                }
+            } catch {
+                if firstError == nil { firstError = error }
+            }
+        }
+        if activeForwards.isEmpty {
+            forwardCache.clear()
+        }
+        if let firstError { throw firstError }
+    }
+
+    /// Clears forwarding ownership only after the ControlMaster process died.
+    func releaseAfterSessionTermination() {
+        stopLocalTraffic()
+        activeForwards.removeAll()
+        forwardCache.clear()
+    }
+
+    private func stopLocalTraffic() {
+        acceptsConnections = false
         listener?.cancel()
         listener = nil
-        forwardCache.clear()
+        let connections = Array(trackedConnections.values)
+        trackedConnections.removeAll()
+        clientConnectionIDs.removeAll()
         activeConnectionCount = 0
+        for connection in connections {
+            connection.stateUpdateHandler = nil
+            connection.cancel()
+        }
     }
 
     // MARK: - Connection Handling
@@ -266,7 +347,11 @@ final class HTTPConnectProxy {
     /// Reads the first line, parses the CONNECT request, creates an SSH
     /// forward if needed, and sets up bidirectional relay.
     private func handleConnection(_ connection: NWConnection) {
-        activeConnectionCount += 1
+        guard acceptsConnections else {
+            connection.cancel()
+            return
+        }
+        trackConnection(connection, isClient: true)
         connection.start(queue: .main)
 
         // Read the HTTP request line.
@@ -275,6 +360,7 @@ final class HTTPConnectProxy {
 
             Task { @MainActor in
                 guard let self else { return }
+                guard self.isTracked(connection), self.acceptsConnections else { return }
 
                 if let error {
                     NSLog("[HTTPConnectProxy] Read error: \(error)")
@@ -307,6 +393,21 @@ final class HTTPConnectProxy {
         _ target: HTTPConnectParser.ConnectTarget,
         clientConnection: NWConnection
     ) {
+        guard acceptsConnections, isTracked(clientConnection) else {
+            closeConnection(clientConnection)
+            return
+        }
+        do {
+            try requireCurrentConnectionLease()
+        } catch {
+            sendResponse(
+                HTTPConnectParser.badGatewayResponse(reason: error.localizedDescription),
+                on: clientConnection
+            )
+            closeConnection(clientConnection)
+            return
+        }
+
         // Determine the local forward port (cached or new).
         let localPort: Int
         if let cached = forwardCache.lookup(host: target.host, port: target.port) {
@@ -321,6 +422,7 @@ final class HTTPConnectProxy {
             do {
                 try forwarder.forwardPort(forward, for: profileID)
                 forwardCache.store(host: target.host, port: target.port, localPort: localPort)
+                activeForwards[forwardKey(host: target.host, port: target.port)] = forward
             } catch {
                 let reason = "Failed to create SSH forward: \(error.localizedDescription)"
                 sendResponse(HTTPConnectParser.badGatewayResponse(reason: reason), on: clientConnection)
@@ -336,12 +438,21 @@ final class HTTPConnectProxy {
             port: upstreamPort,
             using: .tcp
         )
+        trackConnection(upstream, isClient: false)
 
         upstream.stateUpdateHandler = { [weak self] newState in
             Task { @MainActor in
                 guard let self else { return }
                 switch newState {
                 case .ready:
+                    guard self.acceptsConnections,
+                          self.isTracked(clientConnection),
+                          self.isTracked(upstream)
+                    else {
+                        self.closeConnection(upstream)
+                        self.closeConnection(clientConnection)
+                        return
+                    }
                     // Send 200 and start bidirectional relay.
                     self.sendResponse(
                         HTTPConnectParser.connectionEstablishedResponse,
@@ -352,11 +463,14 @@ final class HTTPConnectProxy {
                         upstream: upstream
                     )
                 case .failed, .cancelled:
-                    let reason = "Upstream connection failed"
-                    self.sendResponse(
-                        HTTPConnectParser.badGatewayResponse(reason: reason),
-                        on: clientConnection
-                    )
+                    if self.acceptsConnections, self.isTracked(clientConnection) {
+                        let reason = "Upstream connection failed"
+                        self.sendResponse(
+                            HTTPConnectParser.badGatewayResponse(reason: reason),
+                            on: clientConnection
+                        )
+                    }
+                    self.closeConnection(upstream)
                     self.closeConnection(clientConnection)
                 default:
                     break
@@ -374,14 +488,28 @@ final class HTTPConnectProxy {
         // Shared flag to ensure we only decrement the connection count once,
         // regardless of which direction closes first.
         let closed = RelayCloseFlag()
-        relayData(from: client, to: upstream, closeFlag: closed)
-        relayData(from: upstream, to: client, closeFlag: closed)
+        relayData(
+            from: client,
+            to: upstream,
+            client: client,
+            upstream: upstream,
+            closeFlag: closed
+        )
+        relayData(
+            from: upstream,
+            to: client,
+            client: client,
+            upstream: upstream,
+            closeFlag: closed
+        )
     }
 
     /// Continuously reads from `source` and writes to `dest`.
     private func relayData(
         from source: NWConnection,
         to dest: NWConnection,
+        client: NWConnection,
+        upstream: NWConnection,
         closeFlag: RelayCloseFlag
     ) {
         source.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
@@ -389,22 +517,41 @@ final class HTTPConnectProxy {
             if let data, !data.isEmpty {
                 dest.send(content: data, completion: .contentProcessed { sendError in
                     if sendError != nil {
-                        source.cancel()
-                        dest.cancel()
                         Task { @MainActor [weak self] in
-                            self?.finishRelay(closeFlag)
+                            self?.finishRelay(
+                                closeFlag,
+                                client: client,
+                                upstream: upstream
+                            )
                         }
                         return
                     }
                     Task { @MainActor [weak self] in
-                        self?.relayData(from: source, to: dest, closeFlag: closeFlag)
+                        guard let self else { return }
+                        guard self.isTracked(source), self.isTracked(dest) else {
+                            self.finishRelay(
+                                closeFlag,
+                                client: client,
+                                upstream: upstream
+                            )
+                            return
+                        }
+                        self.relayData(
+                            from: source,
+                            to: dest,
+                            client: client,
+                            upstream: upstream,
+                            closeFlag: closeFlag
+                        )
                     }
                 })
             } else if isComplete || error != nil {
-                source.cancel()
-                dest.cancel()
                 Task { @MainActor [weak self] in
-                    self?.finishRelay(closeFlag)
+                    self?.finishRelay(
+                        closeFlag,
+                        client: client,
+                        upstream: upstream
+                    )
                 }
             }
         }
@@ -418,13 +565,46 @@ final class HTTPConnectProxy {
     }
 
     private func closeConnection(_ connection: NWConnection) {
+        let identifier = ObjectIdentifier(connection)
+        trackedConnections.removeValue(forKey: identifier)
+        if clientConnectionIDs.remove(identifier) != nil {
+            activeConnectionCount = clientConnectionIDs.count
+        }
+        connection.stateUpdateHandler = nil
         connection.cancel()
-        activeConnectionCount = max(0, activeConnectionCount - 1)
     }
 
-    private func finishRelay(_ closeFlag: RelayCloseFlag) {
+    private func finishRelay(
+        _ closeFlag: RelayCloseFlag,
+        client: NWConnection,
+        upstream: NWConnection
+    ) {
         guard closeFlag.close() else { return }
-        activeConnectionCount = max(0, activeConnectionCount - 1)
+        closeConnection(client)
+        closeConnection(upstream)
+    }
+
+    private func trackConnection(_ connection: NWConnection, isClient: Bool) {
+        let identifier = ObjectIdentifier(connection)
+        trackedConnections[identifier] = connection
+        if isClient {
+            clientConnectionIDs.insert(identifier)
+            activeConnectionCount = clientConnectionIDs.count
+        }
+    }
+
+    private func isTracked(_ connection: NWConnection) -> Bool {
+        trackedConnections[ObjectIdentifier(connection)] != nil
+    }
+
+    private func requireCurrentConnectionLease() throws {
+        guard forwarder.connectionLeaseID(for: profileID) == connectionLeaseID else {
+            throw HTTPConnectProxyError.connectionLeaseChanged
+        }
+    }
+
+    private func forwardKey(host: String, port: Int) -> String {
+        "\(host):\(port)"
     }
 
     /// Returns an ephemeral port in the dynamic range.

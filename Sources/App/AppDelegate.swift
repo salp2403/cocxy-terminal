@@ -439,6 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pluginManager = nil
         remotePortScanner?.stopScanning()
         remotePortScanner = nil
+        remoteConnectionManager?.shutdownForApplicationTermination()
         cocxydRemoteSSHBootstrapper = nil
         daemonDeployAdapter = nil
         remoteConnectionManager = nil

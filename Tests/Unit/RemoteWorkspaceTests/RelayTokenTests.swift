@@ -115,26 +115,35 @@ struct ReplayTrackerTests {
     func firstAllowed() {
         var tracker = ReplayTracker(windowSeconds: 60)
         let ts = UInt64(Date().timeIntervalSince1970)
-        let result = tracker.isAllowed(ts)
+        let result = tracker.isAllowed(
+            timestamp: ts,
+            nonce: Data(repeating: 1, count: RelayHandshake.nonceSize)
+        )
         #expect(result)
     }
 
-    @Test("Replayed timestamp is rejected")
+    @Test("Replayed nonce is rejected")
     func replayRejected() {
         var tracker = ReplayTracker(windowSeconds: 60)
         let ts = UInt64(Date().timeIntervalSince1970)
-        _ = tracker.isAllowed(ts)
-        let result = tracker.isAllowed(ts)
+        let nonce = Data(repeating: 2, count: RelayHandshake.nonceSize)
+        _ = tracker.isAllowed(timestamp: ts, nonce: nonce)
+        let result = tracker.isAllowed(timestamp: ts, nonce: nonce)
         #expect(!result)
     }
 
-    @Test("Different timestamps are allowed")
+    @Test("Distinct nonces in the same second are allowed")
     func differentAllowed() {
         var tracker = ReplayTracker(windowSeconds: 60)
-        let ts1 = UInt64(Date().timeIntervalSince1970)
-        let ts2 = ts1 + 1
-        let r1 = tracker.isAllowed(ts1)
-        let r2 = tracker.isAllowed(ts2)
+        let timestamp = UInt64(Date().timeIntervalSince1970)
+        let r1 = tracker.isAllowed(
+            timestamp: timestamp,
+            nonce: Data(repeating: 3, count: RelayHandshake.nonceSize)
+        )
+        let r2 = tracker.isAllowed(
+            timestamp: timestamp,
+            nonce: Data(repeating: 4, count: RelayHandshake.nonceSize)
+        )
         #expect(r1)
         #expect(r2)
     }
@@ -143,7 +152,10 @@ struct ReplayTrackerTests {
     func outsideWindow() {
         var tracker = ReplayTracker(windowSeconds: 60)
         let old = UInt64(Date().timeIntervalSince1970) - 120
-        let result = tracker.isAllowed(old)
+        let result = tracker.isAllowed(
+            timestamp: old,
+            nonce: Data(repeating: 5, count: RelayHandshake.nonceSize)
+        )
         #expect(!result)
     }
 
@@ -151,7 +163,10 @@ struct ReplayTrackerTests {
     func futureWithinTolerance() {
         var tracker = ReplayTracker(windowSeconds: 60)
         let future = UInt64(Date().timeIntervalSince1970) + 30
-        let result = tracker.isAllowed(future)
+        let result = tracker.isAllowed(
+            timestamp: future,
+            nonce: Data(repeating: 6, count: RelayHandshake.nonceSize)
+        )
         #expect(result)
     }
 
@@ -159,7 +174,43 @@ struct ReplayTrackerTests {
     func farFutureRejected() {
         var tracker = ReplayTracker(windowSeconds: 60)
         let farFuture = UInt64(Date().timeIntervalSince1970) + 120
-        let result = tracker.isAllowed(farFuture)
+        let result = tracker.isAllowed(
+            timestamp: farFuture,
+            nonce: Data(repeating: 7, count: RelayHandshake.nonceSize)
+        )
         #expect(!result)
+    }
+
+    @Test("Extreme timestamp is rejected without unsigned overflow")
+    func extremeTimestampRejected() {
+        var tracker = ReplayTracker(windowSeconds: 60)
+        let result = tracker.isAllowed(
+            timestamp: .max,
+            nonce: Data(repeating: 11, count: RelayHandshake.nonceSize)
+        )
+        #expect(!result)
+    }
+
+    @Test("Replay window fails closed when its bounded capacity is exhausted")
+    func boundedCapacity() {
+        var tracker = ReplayTracker(windowSeconds: 60, maxEntries: 2)
+        let timestamp = UInt64(Date().timeIntervalSince1970)
+
+        let firstAccepted = tracker.isAllowed(
+            timestamp: timestamp,
+            nonce: Data(repeating: 8, count: RelayHandshake.nonceSize)
+        )
+        let secondAccepted = tracker.isAllowed(
+            timestamp: timestamp,
+            nonce: Data(repeating: 9, count: RelayHandshake.nonceSize)
+        )
+        let overCapacityAccepted = tracker.isAllowed(
+            timestamp: timestamp,
+            nonce: Data(repeating: 10, count: RelayHandshake.nonceSize)
+        )
+
+        #expect(firstAccepted)
+        #expect(secondAccepted)
+        #expect(!overCapacityAccepted)
     }
 }

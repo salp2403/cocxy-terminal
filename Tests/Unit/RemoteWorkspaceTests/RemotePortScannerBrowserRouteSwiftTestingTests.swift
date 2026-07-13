@@ -14,13 +14,24 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
     var failingLocalPorts: Set<Int> = []
     var remoteCommandResults: [String: ProcessResult] = [:]
 
-    func connect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
+    func connect(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) throws -> SSHControlMasterIdentity {
+        SSHControlMasterIdentity(processID: 56_789, controlPath: profile.controlPath)
+    }
 
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
 
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool {
         true
     }
+
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool {
+        false
+    }
+
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity) {}
 
     func controlPath(for profile: RemoteConnectionProfile) -> String {
         profile.controlPath

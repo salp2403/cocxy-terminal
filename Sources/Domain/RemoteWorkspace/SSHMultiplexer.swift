@@ -2,6 +2,7 @@
 // SSHMultiplexer.swift - Manages OpenSSH ControlMaster sessions.
 
 import Darwin
+import CryptoKit
 import Foundation
 
 // MARK: - SSH Destination
@@ -154,6 +155,28 @@ struct SSHConnectionDestination: Equatable, Sendable {
 protocol ProcessExecutor: Sendable {
     func execute(command: String, arguments: [String]) throws -> ProcessResult
     func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult
+    func start(command: String, arguments: [String]) throws -> any ManagedProcess
+}
+
+enum ProcessExecutorError: Error, Equatable {
+    case managedProcessUnsupported
+}
+
+extension ProcessExecutor {
+    func start(command: String, arguments: [String]) throws -> any ManagedProcess {
+        _ = command
+        _ = arguments
+        throw ProcessExecutorError.managedProcessUnsupported
+    }
+}
+
+protocol ManagedProcess: AnyObject, Sendable {
+    var processIdentifier: Int32 { get }
+    var isRunning: Bool { get }
+    var diagnosticOutput: String { get }
+    func closeStandardInput() throws
+    func waitForExit(timeout: TimeInterval) -> Bool
+    func terminate()
 }
 
 // MARK: - Process Result
@@ -163,6 +186,18 @@ struct ProcessResult: Sendable {
     let exitCode: Int32
     let stdout: String
     let stderr: String
+}
+
+struct SSHControlMasterIdentity: Equatable, Sendable {
+    let processID: Int32
+    let controlPath: String
+    let supervisorID: UUID?
+
+    init(processID: Int32, controlPath: String, supervisorID: UUID? = nil) {
+        self.processID = processID
+        self.controlPath = controlPath
+        self.supervisorID = supervisorID
+    }
 }
 
 // MARK: - Multiplexer Errors
@@ -202,9 +237,15 @@ enum SSHMultiplexerError: Error, Equatable, LocalizedError {
 /// connection management.
 protocol SSHMultiplexing: Sendable {
     func controlPath(for profile: RemoteConnectionProfile) -> String
-    func connect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws
+    @discardableResult
+    func connect(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) throws -> SSHControlMasterIdentity
     func newSession(profile: RemoteConnectionProfile) throws -> String
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity)
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
@@ -237,11 +278,96 @@ protocol SSHMultiplexing: Sendable {
 ///
 /// ```
 /// ~/.config/cocxy/sockets/
-/// ├── root@server.com:22
-/// ├── deploy@staging.com:2222
-/// └── admin@db.internal:22
+/// └── <process-session>/
+///     └── <profile-uuid>.sock
 /// ```
-struct SSHMultiplexer: SSHMultiplexing, Sendable {
+final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
+
+    private final class LifecycleLockRegistry: @unchecked Sendable {
+        private let registryLock = NSLock()
+        private var locks: [String: NSLock] = [:]
+
+        func lock(for controlPath: String) -> NSLock {
+            registryLock.lock()
+            defer { registryLock.unlock() }
+            if let existing = locks[controlPath] { return existing }
+            let created = NSLock()
+            locks[controlPath] = created
+            return created
+        }
+    }
+
+    private struct ControlSocketFileIdentity: Equatable {
+        let device: dev_t
+        let inode: ino_t
+    }
+
+    private struct SupervisedProcessEntry {
+        let operationID: UUID
+        let process: any ManagedProcess
+        var childProcessID: Int32?
+        var terminationRequested = false
+    }
+
+    private enum ControlSocketProbe {
+        case active(processID: Int32)
+        case stale
+        case indeterminate
+    }
+
+    private enum StaleSocketPolicy: Equatable {
+        case retain
+        case removeOnlyWhenSupervised
+    }
+
+    static let supervisorScript = """
+    ssh_path="$1"
+    shift
+    exec 3<&0
+    ssh_pid=""
+    watcher_pid=""
+    cleanup() {
+        trap - EXIT HUP INT TERM PIPE
+        /usr/bin/pkill -TERM -P "$$" -x ssh 2>/dev/null || true
+        /usr/bin/pkill -TERM -P "$$" -x sh 2>/dev/null || true
+        [ -n "$ssh_pid" ] && wait "$ssh_pid" 2>/dev/null || true
+        [ -n "$watcher_pid" ] && wait "$watcher_pid" 2>/dev/null || true
+        exec 3<&-
+    }
+    trap cleanup EXIT
+    trap 'exit 129' HUP
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+    trap 'exit 141' PIPE
+    "$ssh_path" "$@" </dev/null &
+    ssh_pid=$!
+    printf 'COCXY_SSH_CHILD_PID=%s\n' "$ssh_pid" >&2
+    /bin/sh -c '
+        parent_pid="$1"
+        while IFS= read -r _; do :; done
+        set -- $(/bin/ps -o ppid= -p "$$")
+        [ "${1:-}" = "$parent_pid" ] && kill -TERM "$parent_pid" 2>/dev/null || true
+    ' cocxy-ssh-stdin-watch "$$" <&3 &
+    watcher_pid=$!
+    wait "$ssh_pid"
+    """
+
+    private static let lifecycleLocks = LifecycleLockRegistry()
+    private let processLock = NSLock()
+    private var supervisedProcesses: [String: SupervisedProcessEntry] = [:]
+
+    deinit {
+        processLock.lock()
+        let processes = supervisedProcesses.values.map(\.process)
+        processLock.unlock()
+        for process in processes {
+            try? process.closeStandardInput()
+        }
+        for process in processes where !process.waitForExit(timeout: 0.5) {
+            process.terminate()
+            _ = process.waitForExit(timeout: 0.5)
+        }
+    }
 
     // MARK: - Control Path
 
@@ -254,34 +380,139 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
 
     /// Starts a ControlMaster session for the given profile.
     ///
-    /// Runs `ssh -o ControlMaster=auto -o ControlPersist=yes -o ControlPath=... -N`
-    /// to establish a persistent background connection that subsequent sessions
-    /// can reuse.
+    /// Runs a foreground `ssh -N` master under a pipe-bound local supervisor.
+    /// Closing Cocxy's side of that pipe terminates the master, including after
+    /// abrupt app termination, so reverse forwards cannot outlive their brokers.
     ///
     /// - Parameters:
     ///   - profile: The connection profile to use.
     ///   - executor: The process executor for running SSH.
     /// - Throws: `SSHMultiplexerError.invalidDestination` for malformed destinations,
     ///   or `SSHMultiplexerError.connectionFailed` if SSH exits with a non-zero code.
+    @discardableResult
     func connect(
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
-    ) throws {
+    ) throws -> SSHControlMasterIdentity {
         let destination = try destination(for: profile)
         try ensureControlPathDirectory(for: profile)
 
+        let currentPath = controlPath(for: profile)
+        let legacyPath = profile.legacyControlPath
+        if legacyPath != currentPath {
+            try withLifecycleLock(controlPath: legacyPath, executor: executor) {
+                try retireExistingControlMaster(
+                    profile: profile,
+                    controlPath: legacyPath,
+                    staleSocketPolicy: .retain,
+                    requiresSupervisorOwnership: false,
+                    executor: executor
+                )
+            }
+        }
+        return try withLifecycleLock(controlPath: currentPath, executor: executor) {
+            try startControlMaster(
+                profile: profile,
+                destination: destination,
+                currentPath: currentPath,
+                executor: executor
+            )
+        }
+    }
+
+    private func startControlMaster(
+        profile: RemoteConnectionProfile,
+        destination: SSHConnectionDestination,
+        currentPath: String,
+        executor: any ProcessExecutor
+    ) throws -> SSHControlMasterIdentity {
+        if try controlSocketFileIdentity(at: currentPath) == nil {
+            try retireRegisteredSupervisorWithoutSocket(controlPath: currentPath)
+        }
+        try retireExistingControlMaster(
+            profile: profile,
+            controlPath: currentPath,
+            staleSocketPolicy: .removeOnlyWhenSupervised,
+            requiresSupervisorOwnership: true,
+            executor: executor
+        )
+
         var arguments = buildBaseArguments(for: profile)
-        arguments.append(contentsOf: ["-o", "ControlMaster=auto"])
-        arguments.append(contentsOf: ["-o", "ControlPersist=yes"])
-        arguments.append(contentsOf: ["-o", "ControlPath=\(controlPath(for: profile))"])
-        arguments.append("-f")
+        arguments.append(contentsOf: ["-o", "ControlMaster=yes"])
+        arguments.append(contentsOf: ["-o", "ControlPersist=no"])
+        arguments.append(contentsOf: ["-o", "ControlPath=\(currentPath)"])
         arguments.append("-N")
         arguments.append(contentsOf: ["--", destination.value])
 
-        let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
-        guard result.exitCode == 0 else {
-            throw SSHMultiplexerError.connectionFailed(result.stderr)
+        let process = try executor.start(
+            command: "/bin/sh",
+            arguments: [
+                "-c",
+                Self.supervisorScript,
+                "cocxy-ssh-supervisor",
+                "/usr/bin/ssh",
+            ] + arguments
+        )
+        let operationID = UUID()
+        do {
+            try registerSupervisedProcess(
+                process,
+                operationID: operationID,
+                controlPath: currentPath
+            )
+        } catch {
+            try? process.closeStandardInput()
+            if !process.waitForExit(timeout: 0.5) {
+                process.terminate()
+                _ = process.waitForExit(timeout: 0.5)
+            }
+            throw error
         }
+        var verified = false
+        defer {
+            if !verified {
+                finishFailedSupervisedProcess(
+                    controlPath: currentPath,
+                    operationID: operationID
+                )
+            }
+        }
+
+        for _ in 0..<50 {
+            let childProcessID = Self.supervisedChildProcessID(
+                from: process.diagnosticOutput
+            )
+            if let childProcessID,
+               let identity = try controlMasterIdentity(
+                profile: profile,
+                controlPath: currentPath,
+                executor: executor
+               ), identity.processID == childProcessID {
+                guard bindSupervisedProcess(
+                    operationID: operationID,
+                    childProcessID: childProcessID,
+                    controlPath: currentPath
+                ) else {
+                    throw SSHMultiplexerError.connectionFailed(
+                        "SSH ControlMaster supervisor ownership changed during startup"
+                    )
+                }
+                verified = true
+                return SSHControlMasterIdentity(
+                    processID: identity.processID,
+                    controlPath: identity.controlPath,
+                    supervisorID: operationID
+                )
+            }
+            if !process.isRunning { break }
+            usleep(100_000)
+        }
+
+        let diagnostic = process.diagnosticOutput
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        throw SSHMultiplexerError.connectionFailed(
+            diagnostic.isEmpty ? "SSH ControlMaster identity could not be verified" : diagnostic
+        )
     }
 
     // MARK: - New Session
@@ -332,27 +563,60 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
         return result.exitCode == 0
     }
 
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool {
+        guard identity.processID > 0 else { return false }
+        if let supervisorID = identity.supervisorID {
+            processLock.lock()
+            guard let entry = supervisedProcesses[identity.controlPath],
+                  entry.operationID == supervisorID,
+                  entry.childProcessID == identity.processID else {
+                processLock.unlock()
+                return false
+            }
+            let supervisorIsRunning = entry.process.isRunning
+            if !supervisorIsRunning {
+                supervisedProcesses.removeValue(forKey: identity.controlPath)
+            }
+            processLock.unlock()
+            return supervisorIsRunning
+        }
+        if Darwin.kill(identity.processID, 0) == 0 { return true }
+        return errno == EPERM
+    }
+
+    /// Closes only the supervisor pipe owned by the exact verified master.
+    /// The supervisor's EOF trap terminates the foreground SSH child without
+    /// running another potentially blocking OpenSSH control command.
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity) {
+        guard let supervisorID = identity.supervisorID else { return }
+        requestSupervisedProcessTermination(
+            controlPath: identity.controlPath,
+            operationID: supervisorID,
+            childProcessID: identity.processID
+        )
+    }
+
     // MARK: - Disconnect
 
-    /// Terminates the ControlMaster session.
-    ///
-    /// Runs `ssh -O exit` to gracefully shut down the master connection
-    /// and remove the control socket.
+    /// Terminates only the exact ControlMaster supervisor owned by this instance.
     func disconnect(
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
-        let destination = try destination(for: profile)
-        var arguments = buildBaseArguments(for: profile)
-        arguments.append(contentsOf: [
-            "-O", "exit",
-            "-o", "ControlPath=\(controlPath(for: profile))",
-            "--", destination.value,
-        ])
-
-        let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
-        guard result.exitCode == 0 else {
-            throw SSHMultiplexerError.disconnectFailed(result.stderr)
+        let currentPath = controlPath(for: profile)
+        try withLifecycleLock(controlPath: currentPath, executor: executor) {
+            guard let supervisedIdentity = supervisedControlMasterIdentity(
+                controlPath: currentPath
+            ) else {
+                throw SSHMultiplexerError.notConnected
+            }
+            guard isControlMasterProcessAlive(supervisedIdentity) else {
+                throw SSHMultiplexerError.notConnected
+            }
+            try terminateAndWaitForControlMaster(
+                supervisedIdentity,
+                failureMessage: "SSH ControlMaster did not terminate"
+            )
         }
     }
 
@@ -440,6 +704,409 @@ struct SSHMultiplexer: SSHMultiplexing, Sendable {
 
     // MARK: - Helpers
 
+    private func controlMasterIdentity(
+        profile: RemoteConnectionProfile,
+        controlPath: String,
+        executor: any ProcessExecutor
+    ) throws -> SSHControlMasterIdentity? {
+        let destination = try destination(for: profile)
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
+            "-O", "check",
+            "-o", "ControlPath=\(controlPath)",
+            "--", destination.value,
+        ])
+        let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
+        guard result.exitCode == 0 else { return nil }
+        let output = result.stdout + "\n" + result.stderr
+        guard let processID = Self.controlMasterProcessID(from: output) else {
+            return nil
+        }
+        return SSHControlMasterIdentity(processID: processID, controlPath: controlPath)
+    }
+
+    private func retireExistingControlMaster(
+        profile: RemoteConnectionProfile,
+        controlPath: String,
+        staleSocketPolicy: StaleSocketPolicy,
+        requiresSupervisorOwnership: Bool,
+        executor: any ProcessExecutor
+    ) throws {
+        guard let originalFileIdentity = try controlSocketFileIdentity(at: controlPath) else {
+            return
+        }
+
+        let checkedIdentity = try controlMasterIdentity(
+            profile: profile,
+            controlPath: controlPath,
+            executor: executor
+        )
+        let identity: SSHControlMasterIdentity
+        if let checkedIdentity {
+            identity = checkedIdentity
+        } else {
+            switch probeControlSocket(at: controlPath) {
+            case .active(let processID):
+                identity = SSHControlMasterIdentity(
+                    processID: processID,
+                    controlPath: controlPath
+                )
+            case .stale:
+                guard staleSocketPolicy == .removeOnlyWhenSupervised else {
+                    return
+                }
+                guard let supervisedProcessID = supervisedChildProcessID(
+                    controlPath: controlPath
+                ), !isControlMasterProcessAlive(
+                    SSHControlMasterIdentity(
+                        processID: supervisedProcessID,
+                        controlPath: controlPath
+                    )
+                ) else {
+                    throw SSHMultiplexerError.connectionFailed(
+                        "Stale SSH control socket is not owned by this Cocxy process"
+                    )
+                }
+                guard try controlSocketFileIdentity(at: controlPath) == originalFileIdentity else {
+                    throw SSHMultiplexerError.connectionFailed(
+                        "Existing SSH control socket changed during stale-file verification"
+                    )
+                }
+                guard Darwin.unlink(controlPath) == 0 else {
+                    throw SSHMultiplexerError.connectionFailed(
+                        "Existing stale SSH control socket could not be removed"
+                    )
+                }
+                return
+            case .indeterminate:
+                throw SSHMultiplexerError.connectionFailed(
+                    "Existing SSH control socket ownership could not be verified"
+                )
+            }
+        }
+
+        guard requiresSupervisorOwnership else {
+            throw SSHMultiplexerError.connectionFailed(
+                "An existing legacy SSH ControlMaster is active and was left untouched"
+            )
+        }
+
+        guard identity.processID > 0 else {
+            throw SSHMultiplexerError.connectionFailed(
+                "Existing SSH control socket identity is invalid"
+            )
+        }
+        if requiresSupervisorOwnership {
+            guard supervisedChildProcessID(controlPath: controlPath) == identity.processID else {
+                throw SSHMultiplexerError.connectionFailed(
+                    "Existing SSH control socket is not owned by this Cocxy process"
+                )
+            }
+        }
+        guard try controlSocketFileIdentity(at: controlPath) == originalFileIdentity else {
+            throw SSHMultiplexerError.connectionFailed(
+                "Existing SSH control socket changed during ownership verification"
+            )
+        }
+
+        guard let supervisedIdentity = supervisedControlMasterIdentity(
+            controlPath: controlPath,
+            childProcessID: identity.processID
+        ) else {
+            throw SSHMultiplexerError.connectionFailed(
+                "Existing SSH control socket is not owned by its registered supervisor"
+            )
+        }
+        try terminateAndWaitForControlMaster(
+            supervisedIdentity,
+            failureMessage: "Existing SSH ControlMaster did not terminate"
+        )
+    }
+
+    private func terminateAndWaitForControlMaster(
+        _ identity: SSHControlMasterIdentity,
+        failureMessage: String
+    ) throws {
+        terminateControlMaster(identity)
+        for _ in 0..<20 {
+            if !isControlMasterProcessAlive(identity) { return }
+            usleep(50_000)
+        }
+        throw SSHMultiplexerError.disconnectFailed(failureMessage)
+    }
+
+    private func registerSupervisedProcess(
+        _ process: any ManagedProcess,
+        operationID: UUID,
+        controlPath: String
+    ) throws {
+        processLock.lock()
+        if let previous = supervisedProcesses[controlPath], previous.process.isRunning {
+            processLock.unlock()
+            throw SSHMultiplexerError.connectionFailed(
+                "Previous SSH ControlMaster supervisor termination is not confirmed"
+            )
+        }
+        supervisedProcesses.removeValue(forKey: controlPath)
+        let entry = SupervisedProcessEntry(
+            operationID: operationID,
+            process: process,
+            childProcessID: nil
+        )
+        supervisedProcesses[controlPath] = entry
+        processLock.unlock()
+    }
+
+    private func retireRegisteredSupervisorWithoutSocket(
+        controlPath: String
+    ) throws {
+        guard let identity = supervisedControlMasterIdentity(controlPath: controlPath) else {
+            return
+        }
+        terminateControlMaster(identity)
+        for _ in 0..<20 {
+            if !isControlMasterProcessAlive(identity) { return }
+            usleep(50_000)
+        }
+        throw SSHMultiplexerError.disconnectFailed(
+            "Previous SSH ControlMaster supervisor did not terminate"
+        )
+    }
+
+    private func bindSupervisedProcess(
+        operationID: UUID,
+        childProcessID: Int32,
+        controlPath: String
+    ) -> Bool {
+        processLock.lock()
+        defer { processLock.unlock() }
+        guard var entry = supervisedProcesses[controlPath],
+              entry.operationID == operationID else { return false }
+        entry.childProcessID = childProcessID
+        supervisedProcesses[controlPath] = entry
+        return true
+    }
+
+    private func supervisedChildProcessID(controlPath: String) -> Int32? {
+        processLock.lock()
+        defer { processLock.unlock() }
+        return supervisedProcesses[controlPath]?.childProcessID
+    }
+
+    private func supervisedControlMasterIdentity(
+        controlPath: String,
+        childProcessID: Int32? = nil
+    ) -> SSHControlMasterIdentity? {
+        processLock.lock()
+        defer { processLock.unlock() }
+        guard let entry = supervisedProcesses[controlPath],
+              let registeredChildProcessID = entry.childProcessID,
+              childProcessID.map({ registeredChildProcessID == $0 }) ?? true else {
+            return nil
+        }
+        return SSHControlMasterIdentity(
+            processID: registeredChildProcessID,
+            controlPath: controlPath,
+            supervisorID: entry.operationID
+        )
+    }
+
+    @discardableResult
+    private func requestSupervisedProcessTermination(
+        controlPath: String,
+        operationID: UUID,
+        childProcessID: Int32? = nil
+    ) -> Bool {
+        processLock.lock()
+        guard var entry = supervisedProcesses[controlPath],
+              entry.operationID == operationID,
+              childProcessID.map({ entry.childProcessID == $0 }) ?? true else {
+            processLock.unlock()
+            return false
+        }
+        entry.terminationRequested = true
+        supervisedProcesses[controlPath] = entry
+        processLock.unlock()
+
+        do {
+            try entry.process.closeStandardInput()
+            return true
+        } catch {
+            entry.process.terminate()
+            return false
+        }
+    }
+
+    private func finishFailedSupervisedProcess(
+        controlPath: String,
+        operationID: UUID
+    ) {
+        processLock.lock()
+        let entry = supervisedProcesses[controlPath].flatMap { current in
+            current.operationID == operationID ? current : nil
+        }
+        processLock.unlock()
+        guard let entry else { return }
+
+        _ = requestSupervisedProcessTermination(
+            controlPath: controlPath,
+            operationID: operationID
+        )
+        if !entry.process.waitForExit(timeout: 0.5) {
+            entry.process.terminate()
+            _ = entry.process.waitForExit(timeout: 0.5)
+        }
+
+        guard !entry.process.isRunning else { return }
+        processLock.lock()
+        if supervisedProcesses[controlPath]?.operationID == operationID {
+            supervisedProcesses.removeValue(forKey: controlPath)
+        }
+        processLock.unlock()
+    }
+
+    private func withLifecycleLock<T>(
+        controlPath: String,
+        executor: any ProcessExecutor,
+        operation: () throws -> T
+    ) throws -> T {
+        let lifecycleLock = Self.lifecycleLocks.lock(for: controlPath)
+        lifecycleLock.lock()
+        defer { lifecycleLock.unlock() }
+
+        var lockDescriptor: Int32 = -1
+        if executor is SystemProcessExecutor {
+            let lockPath = lifecycleLockPath(for: controlPath)
+            lockDescriptor = lockPath.withCString { path in
+                Darwin.open(
+                    path,
+                    O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC,
+                    mode_t(0o600)
+                )
+            }
+            guard lockDescriptor >= 0 else {
+                throw SSHMultiplexerError.connectionFailed(
+                    "SSH ControlMaster lifecycle lock could not be opened"
+                )
+            }
+
+            var metadata = stat()
+            guard Darwin.fstat(lockDescriptor, &metadata) == 0,
+                  (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+                  metadata.st_uid == geteuid(),
+                  metadata.st_nlink == 1,
+                  (metadata.st_mode & 0o077) == 0,
+                  Darwin.lockf(lockDescriptor, F_TLOCK, 0) == 0 else {
+                Darwin.close(lockDescriptor)
+                throw SSHMultiplexerError.connectionFailed(
+                    "Another Cocxy SSH lifecycle operation owns the control directory"
+                )
+            }
+        }
+        defer {
+            if lockDescriptor >= 0 {
+                _ = Darwin.lockf(lockDescriptor, F_ULOCK, 0)
+                Darwin.close(lockDescriptor)
+            }
+        }
+
+        return try operation()
+    }
+
+    private func lifecycleLockPath(for controlPath: String) -> String {
+        let directory = URL(fileURLWithPath: controlPath).deletingLastPathComponent()
+        let digest = SHA256.hash(data: Data(controlPath.utf8))
+            .prefix(16)
+            .map { String(format: "%02x", $0) }
+            .joined()
+        return directory.appendingPathComponent(".lifecycle-\(digest).lock").path
+    }
+
+    private func controlSocketFileIdentity(
+        at path: String
+    ) throws -> ControlSocketFileIdentity? {
+        var metadata = stat()
+        let result = path.withCString { Darwin.lstat($0, &metadata) }
+        guard result == 0 else {
+            if errno == ENOENT { return nil }
+            throw SSHMultiplexerError.connectionFailed(
+                "Existing SSH control path could not be inspected"
+            )
+        }
+        guard (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK),
+              metadata.st_uid == geteuid(),
+              metadata.st_nlink == 1,
+              (metadata.st_mode & 0o077) == 0 else {
+            throw SSHMultiplexerError.connectionFailed(
+                "Existing SSH control path is not a protected owner socket"
+            )
+        }
+        return ControlSocketFileIdentity(
+            device: metadata.st_dev,
+            inode: metadata.st_ino
+        )
+    }
+
+    private static func controlMasterProcessID(from output: String) -> Int32? {
+        guard let marker = output.range(of: "pid=") else { return nil }
+        let digits = output[marker.upperBound...].prefix { $0.isNumber }
+        guard !digits.isEmpty else { return nil }
+        return Int32(digits)
+    }
+
+    private static func supervisedChildProcessID(from output: String) -> Int32? {
+        guard let marker = output.range(of: "COCXY_SSH_CHILD_PID=") else { return nil }
+        let digits = output[marker.upperBound...].prefix { $0.isNumber }
+        guard !digits.isEmpty else { return nil }
+        return Int32(digits)
+    }
+
+    private func probeControlSocket(at path: String) -> ControlSocketProbe {
+        let descriptor = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { return .indeterminate }
+        defer { Darwin.close(descriptor) }
+
+        var address = sockaddr_un()
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        address.sun_family = sa_family_t(AF_UNIX)
+        let pathBytes = Array(path.utf8CString)
+        let pathCapacity = MemoryLayout.size(ofValue: address.sun_path)
+        guard pathBytes.count <= pathCapacity else { return .indeterminate }
+        path.withCString { source in
+            withUnsafeMutablePointer(to: &address.sun_path) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: pathCapacity) { destination in
+                    _ = memset(destination, 0, pathCapacity)
+                    _ = memcpy(destination, source, pathBytes.count)
+                }
+            }
+        }
+
+        let connectResult = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                Darwin.connect(
+                    descriptor,
+                    socketAddress,
+                    socklen_t(MemoryLayout<sockaddr_un>.size)
+                )
+            }
+        }
+        if connectResult != 0 {
+            return errno == ECONNREFUSED || errno == ENOENT ? .stale : .indeterminate
+        }
+
+        var processID: pid_t = 0
+        var processIDLength = socklen_t(MemoryLayout<pid_t>.size)
+        let peerResult = Darwin.getsockopt(
+            descriptor,
+            SOL_LOCAL,
+            LOCAL_PEERPID,
+            &processID,
+            &processIDLength
+        )
+        guard peerResult == 0, processID > 0 else { return .indeterminate }
+        return .active(processID: processID)
+    }
+
     /// Builds the base SSH arguments from a profile (port, identity, etc.).
     private func buildBaseArguments(for profile: RemoteConnectionProfile) -> [String] {
         var arguments: [String] = []
@@ -517,6 +1184,103 @@ private extension String {
 
 // MARK: - System Process Executor
 
+private final class SystemManagedProcess: ManagedProcess, @unchecked Sendable {
+    private static let maximumDiagnosticBytes = 65_536
+
+    private let process: Process
+    private let standardInputPipe: Pipe
+    private let outputPipe: Pipe
+    private let lock = NSLock()
+    private var standardInputClosed = false
+    private var diagnosticData = Data()
+
+    var processIdentifier: Int32 {
+        process.processIdentifier
+    }
+
+    var isRunning: Bool {
+        process.isRunning
+    }
+
+    var diagnosticOutput: String {
+        lock.lock()
+        let data = diagnosticData
+        lock.unlock()
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    init(command: String, arguments: [String]) throws {
+        process = Process()
+        standardInputPipe = Pipe()
+        outputPipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: command)
+        process.arguments = arguments
+        process.standardInput = standardInputPipe
+        process.standardOutput = outputPipe
+        process.standardError = outputPipe
+
+        outputPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else {
+                handle.readabilityHandler = nil
+                return
+            }
+            self?.appendDiagnosticData(data)
+        }
+
+        do {
+            try process.run()
+        } catch {
+            outputPipe.fileHandleForReading.readabilityHandler = nil
+            throw error
+        }
+    }
+
+    func closeStandardInput() throws {
+        lock.lock()
+        guard !standardInputClosed else {
+            lock.unlock()
+            return
+        }
+        do {
+            try standardInputPipe.fileHandleForWriting.close()
+            standardInputClosed = true
+            lock.unlock()
+        } catch {
+            lock.unlock()
+            throw error
+        }
+    }
+
+    func waitForExit(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(max(0, timeout))
+        while process.isRunning, Date() < deadline {
+            usleep(10_000)
+        }
+        return !process.isRunning
+    }
+
+    func terminate() {
+        try? closeStandardInput()
+        if process.isRunning {
+            process.terminate()
+        }
+    }
+
+    deinit {
+        try? closeStandardInput()
+        outputPipe.fileHandleForReading.readabilityHandler = nil
+    }
+
+    private func appendDiagnosticData(_ data: Data) {
+        lock.lock()
+        defer { lock.unlock() }
+        let remaining = Self.maximumDiagnosticBytes - diagnosticData.count
+        guard remaining > 0 else { return }
+        diagnosticData.append(data.prefix(remaining))
+    }
+}
+
 /// Production implementation that runs real system processes.
 struct SystemProcessExecutor: ProcessExecutor {
 
@@ -547,6 +1311,10 @@ struct SystemProcessExecutor: ProcessExecutor {
             stdout: String(data: stdoutData, encoding: .utf8) ?? "",
             stderr: String(data: stderrData, encoding: .utf8) ?? ""
         )
+    }
+
+    func start(command: String, arguments: [String]) throws -> any ManagedProcess {
+        try SystemManagedProcess(command: command, arguments: arguments)
     }
 
     func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult {

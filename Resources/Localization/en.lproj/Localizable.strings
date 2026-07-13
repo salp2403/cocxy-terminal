@@ -2920,14 +2920,14 @@
 "remoteWorkspace.relay.aclAllProcesses" = "all";
 "remoteWorkspace.relay.rotateToken" = "Rotate Token";
 "remoteWorkspace.relay.viewAudit" = "View Audit";
-"remoteWorkspace.relay.editACL" = "Edit ACL";
+"remoteWorkspace.relay.editACL" = "Edit Connection Limit";
 "remoteWorkspace.relay.auditLog" = "Audit Log";
 "remoteWorkspace.relay.noAuditEntries" = "No audit entries for this channel";
 "remoteWorkspace.relay.hosts" = "Hosts:";
 "remoteWorkspace.relay.processes" = "Procs:";
 "remoteWorkspace.relay.processes.placeholder" = "(empty = all)";
 "remoteWorkspace.relay.max" = "Max:";
-"remoteWorkspace.relay.saveACL" = "Save ACL";
+"remoteWorkspace.relay.saveACL" = "Save Limit";
 "remoteWorkspace.relay.aclChangeNote" = "Changes apply to new connections only.";
 "remoteWorkspace.relay.newChannel" = "New Channel";
 "remoteWorkspace.relay.name.placeholder" = "Name";
@@ -2936,6 +2936,16 @@
 "remoteWorkspace.relay.openChannel" = "Open Channel";
 "remoteWorkspace.relay.channels" = "Channels";
 "remoteWorkspace.relay.connections" = "Connections";
+"remoteWorkspace.relay.close" = "Close relay channel";
+"remoteWorkspace.relay.closeAudit" = "Close audit log";
+"remoteWorkspace.relay.closeLimitEditor" = "Close connection limit editor";
+"remoteWorkspace.relay.copyClientCommand" = "Copy authenticated client command";
+"remoteWorkspace.relay.copyClientToken" = "Copy relay token";
+"remoteWorkspace.relay.connectionLimit" = "Max connections: %d";
+"remoteWorkspace.relay.closeFailed" = "Could not close the SSH listener. Access is blocked locally; retry close. %@";
+"remoteWorkspace.relay.brokerFailed" = "Authentication broker failed and remote forwarding may still exist. Retry close. %@";
+"remoteWorkspace.relay.error.invalidConnectionLimit" = "Connection limit must be a positive whole number";
+"remoteWorkspace.relay.error.invalidName" = "Channel name is required";
 "remoteWorkspace.relay.error.invalidPorts" = "Invalid port numbers";
 
 "remoteWorkspace.sftp.currentPath.accessibility" = "Current path: %@";

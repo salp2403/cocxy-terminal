@@ -864,6 +864,35 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func relayControlsAndFailureStatesAreLocalizedInEnglishAndSpanish() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let expectedKeys: Set<String> = [
+            "remoteWorkspace.relay.close",
+            "remoteWorkspace.relay.copyClientCommand",
+            "remoteWorkspace.relay.copyClientToken",
+            "remoteWorkspace.relay.connectionLimit",
+            "remoteWorkspace.relay.closeFailed",
+            "remoteWorkspace.relay.brokerFailed",
+            "remoteWorkspace.relay.error.invalidName",
+        ]
+
+        #expect(expectedKeys.isSubset(of: Set(english.keys)))
+        #expect(expectedKeys.isSubset(of: Set(spanish.keys)))
+        #expect(english["remoteWorkspace.relay.connectionLimit"]?.contains("%d") == true)
+        #expect(spanish["remoteWorkspace.relay.connectionLimit"]?.contains("%d") == true)
+        for key in ["remoteWorkspace.relay.closeFailed", "remoteWorkspace.relay.brokerFailed"] {
+            #expect(english[key]?.contains("%@") == true)
+            #expect(spanish[key]?.contains("%@") == true)
+        }
+    }
+
+    @Test
     func plannedVaultLocalizationResourcesExposeVaultKeys() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)

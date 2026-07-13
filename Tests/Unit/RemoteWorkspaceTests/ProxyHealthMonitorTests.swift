@@ -25,6 +25,25 @@ final class MockHealthProbe: HealthProbing {
     }
 }
 
+@MainActor
+private final class SuspendedHealthProbe: HealthProbing {
+    private var continuation: CheckedContinuation<Bool, Never>?
+    private(set) var isWaiting = false
+
+    func probe() async -> Bool {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            isWaiting = true
+        }
+    }
+
+    func resume(returning result: Bool) {
+        isWaiting = false
+        continuation?.resume(returning: result)
+        continuation = nil
+    }
+}
+
 // MARK: - Mock Proxy State Delegate
 
 /// Records state change notifications from the health monitor.
@@ -154,6 +173,32 @@ struct ProxyHealthMonitorTests {
         #expect(delegate.stateChanges.count == 4)
         #expect(delegate.stateChanges[0] == .healthy)
         #expect(delegate.stateChanges[3] == .failing)
+    }
+
+    @Test("stopped monitor ignores an in-flight probe result")
+    @MainActor func stoppedMonitorIgnoresInFlightProbe() async {
+        let probe = SuspendedHealthProbe()
+        let delegate = MockProxyStateDelegate()
+        let monitor = ProxyHealthMonitor(
+            probe: probe,
+            consecutiveFailuresThreshold: 1
+        )
+        monitor.delegate = delegate
+
+        let check = Task { @MainActor in
+            await monitor.checkOnce()
+        }
+        for _ in 0..<50 where !probe.isWaiting {
+            await Task.yield()
+        }
+        #expect(probe.isWaiting)
+
+        monitor.stopMonitoring()
+        probe.resume(returning: false)
+        await check.value
+
+        #expect(monitor.state == .unknown)
+        #expect(delegate.stateChanges.isEmpty)
     }
 
     @Test("ProxyHealthState equality")

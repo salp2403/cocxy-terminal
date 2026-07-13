@@ -69,6 +69,7 @@ final class ProxyHealthMonitor {
     private let probe: any HealthProbing
     private var consecutiveFailures = 0
     private var monitoringTask: Task<Void, Never>?
+    private var monitoringGeneration: UInt64 = 0
 
     // MARK: - Initialization
 
@@ -94,7 +95,9 @@ final class ProxyHealthMonitor {
     ///
     /// This is the core logic, used by both manual and automatic modes.
     func checkOnce() async {
+        let generation = monitoringGeneration
         let isHealthy = await probe.probe()
+        guard generation == monitoringGeneration, !Task.isCancelled else { return }
         let previousState = state
 
         if isHealthy {
@@ -130,6 +133,7 @@ final class ProxyHealthMonitor {
 
     /// Stops periodic health checks.
     func stopMonitoring() {
+        monitoringGeneration &+= 1
         monitoringTask?.cancel()
         monitoringTask = nil
     }

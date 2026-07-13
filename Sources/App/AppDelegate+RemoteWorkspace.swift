@@ -48,10 +48,18 @@ extension AppDelegate {
         connectionManager.proxyManager = proxyManager
 
         // Relay manager — optional, zero overhead when unused.
+        let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
         let relayManager = RelayManagerImpl(
             tunnelManager: tunnelManager,
             forwarder: connectionManager,
-            tokenStore: RelayKeychainStore()
+            tokenStore: RelayKeychainStore(),
+            auditLog: relayAuditLog,
+            profileSessionRevoker: { [weak connectionManager] profileID, leaseID in
+                await connectionManager?.revokeForwardingSession(
+                    profileID: profileID,
+                    expectedLeaseID: leaseID
+                ) ?? false
+            }
         )
         connectionManager.relayManager = relayManager
 

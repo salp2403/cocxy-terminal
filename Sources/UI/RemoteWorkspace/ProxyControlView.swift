@@ -129,8 +129,7 @@ struct ProxyControlView: View {
     }
 
     private var isSOCKSActive: Bool {
-        if case .active = proxyManager.state { return true }
-        return false
+        proxyManager.hasTrackedSOCKSForward
     }
 
     // MARK: - SOCKS Section

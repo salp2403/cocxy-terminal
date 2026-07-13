@@ -2920,14 +2920,14 @@
 "remoteWorkspace.relay.aclAllProcesses" = "todos";
 "remoteWorkspace.relay.rotateToken" = "Rotar token";
 "remoteWorkspace.relay.viewAudit" = "Ver auditoría";
-"remoteWorkspace.relay.editACL" = "Editar ACL";
+"remoteWorkspace.relay.editACL" = "Editar límite de conexiones";
 "remoteWorkspace.relay.auditLog" = "Log de auditoría";
 "remoteWorkspace.relay.noAuditEntries" = "No hay entradas de auditoría para este canal";
 "remoteWorkspace.relay.hosts" = "Servidores:";
 "remoteWorkspace.relay.processes" = "Procesos:";
 "remoteWorkspace.relay.processes.placeholder" = "(vacío = todos)";
 "remoteWorkspace.relay.max" = "Máx:";
-"remoteWorkspace.relay.saveACL" = "Guardar ACL";
+"remoteWorkspace.relay.saveACL" = "Guardar límite";
 "remoteWorkspace.relay.aclChangeNote" = "Los cambios aplican solo a conexiones nuevas.";
 "remoteWorkspace.relay.newChannel" = "Nuevo canal";
 "remoteWorkspace.relay.name.placeholder" = "Nombre";
@@ -2936,6 +2936,16 @@
 "remoteWorkspace.relay.openChannel" = "Abrir canal";
 "remoteWorkspace.relay.channels" = "Canales";
 "remoteWorkspace.relay.connections" = "Conexiones";
+"remoteWorkspace.relay.close" = "Cerrar canal relay";
+"remoteWorkspace.relay.closeAudit" = "Cerrar registro de auditoría";
+"remoteWorkspace.relay.closeLimitEditor" = "Cerrar editor del límite de conexiones";
+"remoteWorkspace.relay.copyClientCommand" = "Copiar comando de cliente autenticado";
+"remoteWorkspace.relay.copyClientToken" = "Copiar token del canal relay";
+"remoteWorkspace.relay.connectionLimit" = "Conexiones máximas: %d";
+"remoteWorkspace.relay.closeFailed" = "No se pudo cerrar el puerto de escucha SSH. El acceso está bloqueado localmente; vuelve a intentar el cierre. %@";
+"remoteWorkspace.relay.brokerFailed" = "Falló el intermediario de autenticación y la redirección remota podría seguir activa. Vuelve a intentar el cierre. %@";
+"remoteWorkspace.relay.error.invalidConnectionLimit" = "El límite de conexiones debe ser un número entero positivo";
+"remoteWorkspace.relay.error.invalidName" = "El nombre del canal es obligatorio";
 "remoteWorkspace.relay.error.invalidPorts" = "Números de puerto inválidos";
 
 "remoteWorkspace.sftp.currentPath.accessibility" = "Ruta actual: %@";
