@@ -82,6 +82,45 @@ struct SandboxFoundationSwiftTestingTests {
         #expect(profile.contains(#"(allow file-read* (subpath "/private/var/folders/cocxy"))"#))
     }
 
+    @Test("system baseline excludes shared temporary directory subpaths")
+    func systemBaselineExcludesSharedTemporaryDirectorySubpaths() {
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .processExec],
+            readablePaths: [],
+            writablePaths: [],
+            executablePaths: [URL(fileURLWithPath: "/bin/sh")],
+            includeSystemReadBaseline: true
+        )
+
+        #expect(!profile.contains(#"(allow file-read* (subpath "/tmp"))"#))
+        #expect(!profile.contains(#"(allow file-read* (subpath "/private/tmp"))"#))
+        #expect(profile.contains(#"(allow file-read* (literal "/tmp"))"#))
+        #expect(profile.contains(#"(allow file-read* (literal "/private/tmp"))"#))
+    }
+
+    @Test("profile denies protected control credentials after broader grants")
+    func profileDeniesProtectedControlCredentialsLast() throws {
+        let root = URL(fileURLWithPath: "/tmp/cocxy-protected-profile", isDirectory: true)
+        let credential = root.appendingPathComponent("control.token")
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .filesystemWrite],
+            readablePaths: [root],
+            writablePaths: [root],
+            executablePaths: [],
+            additionalDeniedLiteralPaths: [credential]
+        )
+        let canonicalRoot = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let canonicalCredential = credential.resolvingSymlinksInPath().standardizedFileURL.path
+        let allowRead = #"(allow file-read* (subpath "\#(canonicalRoot)"))"#
+        let denyRead = #"(deny file-read* (literal "\#(canonicalCredential)"))"#
+        let denyWrite = #"(deny file-write* (literal "\#(canonicalCredential)"))"#
+        let allowReadRange = try #require(profile.range(of: allowRead))
+        let denyReadRange = try #require(profile.range(of: denyRead))
+
+        #expect(allowReadRange.lowerBound < denyReadRange.lowerBound)
+        #expect(profile.contains(denyWrite))
+    }
+
     @Test("executor launch plan wraps command with sandbox-exec when available")
     func executorLaunchPlanUsesSandboxExecWhenAvailable() throws {
         let executor = SandboxExecutor(
@@ -240,6 +279,122 @@ struct SandboxFoundationSwiftTestingTests {
         #expect(deniedProbe.status != 0)
     }
 
+    @Test("kernel sandbox blocks protected credential reads and hard links")
+    func kernelSandboxBlocksProtectedCredentialAliases() throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec"),
+              FileManager.default.isExecutableFile(atPath: "/bin/sh"),
+              FileManager.default.isExecutableFile(atPath: "/bin/ln")
+        else {
+            return
+        }
+
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-protected-credential-\(UUID().uuidString)", isDirectory: true)
+        let ordinaryFile = root.appendingPathComponent("config.toml")
+        let credentialFile = root.appendingPathComponent("cocxy.sock.token")
+        let linkedCredential = root.appendingPathComponent("linked-token")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("ordinary\n".utf8).write(to: ordinaryFile)
+        try Data("protected\n".utf8).write(to: credentialFile)
+
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .filesystemWrite, .processExec],
+            readablePaths: [root],
+            writablePaths: [root],
+            executablePaths: [
+                URL(fileURLWithPath: "/bin/sh"),
+                URL(fileURLWithPath: "/bin/bash"),
+                URL(fileURLWithPath: "/bin/ln"),
+            ],
+            readableLiteralPaths: SandboxProfileBuilder.parentDirectoryLiterals(for: root),
+            includeSystemReadBaseline: true,
+            additionalDeniedLiteralPaths: [credentialFile]
+        )
+
+        let ordinaryResult = try runSandboxedProcess(
+            commandURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "exec 3< \"$1\"", "sh", ordinaryFile.path],
+            profile: profile,
+            workingDirectory: root
+        )
+        let credentialResult = try runSandboxedProcess(
+            commandURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "exec 3< \"$1\"", "sh", credentialFile.path],
+            profile: profile,
+            workingDirectory: root
+        )
+        let hardLinkResult = try runSandboxedProcess(
+            commandURL: URL(fileURLWithPath: "/bin/ln"),
+            arguments: [credentialFile.path, linkedCredential.path],
+            profile: profile,
+            workingDirectory: root
+        )
+
+        #expect(ordinaryResult.status == 0, "\(ordinaryResult.stderr)")
+        #expect(credentialResult.status != 0)
+        #expect(hardLinkResult.status != 0)
+        #expect(!FileManager.default.fileExists(atPath: linkedCredential.path))
+    }
+
+    @Test("kernel sandbox grants only an explicitly owned temporary subtree")
+    func kernelSandboxScopesTemporaryDirectoryReads() throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec"),
+              FileManager.default.isExecutableFile(atPath: "/bin/sh")
+        else {
+            return
+        }
+
+        let sharedRoot = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+            .appendingPathComponent("cocxy-sandbox-scope-\(UUID().uuidString)", isDirectory: true)
+        let ownedRoot = sharedRoot.appendingPathComponent("owned", isDirectory: true)
+        let ownedFile = ownedRoot.appendingPathComponent("owned.txt")
+        let foreignFile = sharedRoot.appendingPathComponent("foreign.txt")
+        let foreignAlias = URL(fileURLWithPath: foreignFile.path.replacingOccurrences(
+            of: "/private/tmp/",
+            with: "/tmp/"
+        ))
+        try FileManager.default.createDirectory(at: ownedRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sharedRoot) }
+        try Data("owned\n".utf8).write(to: ownedFile)
+        try Data("foreign\n".utf8).write(to: foreignFile)
+
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .processExec],
+            readablePaths: [ownedRoot],
+            writablePaths: [],
+            executablePaths: [
+                URL(fileURLWithPath: "/bin/sh"),
+                URL(fileURLWithPath: "/bin/bash"),
+            ],
+            readableLiteralPaths: SandboxProfileBuilder.parentDirectoryLiterals(for: ownedRoot),
+            includeSystemReadBaseline: true
+        )
+
+        let ownedResult = try runSandboxedProcess(
+            commandURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "exec 3< \"$1\"", "sh", ownedFile.path],
+            profile: profile,
+            workingDirectory: ownedRoot
+        )
+        let foreignResult = try runSandboxedProcess(
+            commandURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "exec 3< \"$1\"", "sh", foreignFile.path],
+            profile: profile,
+            workingDirectory: ownedRoot
+        )
+        let aliasResult = try runSandboxedProcess(
+            commandURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", "exec 3< \"$1\"", "sh", foreignAlias.path],
+            profile: profile,
+            workingDirectory: ownedRoot
+        )
+
+        #expect(ownedResult.status == 0, "\(ownedResult.stderr)")
+        #expect(foreignResult.status != 0)
+        #expect(aliasResult.status != 0)
+    }
+
     private func sampleAuditEntry(detail: String = "ok") -> SandboxAuditEntry {
         SandboxAuditEntry(
             timestamp: Date(timeIntervalSince1970: 1_234),
@@ -249,6 +404,36 @@ struct SandboxFoundationSwiftTestingTests {
             capability: .network,
             decision: .denied,
             detail: detail
+        )
+    }
+
+    private func runSandboxedProcess(
+        commandURL: URL,
+        arguments: [String],
+        profile: String,
+        workingDirectory: URL
+    ) throws -> (status: Int32, stderr: String) {
+        let plan = try SandboxExecutor().launchPlan(
+            commandURL: commandURL,
+            arguments: arguments,
+            profile: profile,
+            environment: ["PATH": "/usr/bin:/bin"],
+            currentDirectoryURL: workingDirectory
+        )
+        let process = Process()
+        process.executableURL = plan.executableURL
+        process.arguments = plan.arguments
+        process.environment = plan.environment
+        process.currentDirectoryURL = plan.currentDirectoryURL
+        process.standardOutput = FileHandle.nullDevice
+        let stderrPipe = Pipe()
+        process.standardError = stderrPipe
+        try process.run()
+        process.waitUntilExit()
+        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+        return (
+            process.terminationStatus,
+            String(data: stderrData, encoding: .utf8) ?? ""
         )
     }
 

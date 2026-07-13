@@ -898,6 +898,8 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(profile.contains(#"(subpath "\#(pluginDirectory.appendingPathComponent("state", isDirectory: true).resolvingSymlinksInPath().standardizedFileURL.path)")"#))
         #expect(profile.contains(#"(literal "/bin/sh")"#))
         #expect(profile.contains(#"(literal "/bin/bash")"#))
+        #expect(!profile.contains(#"(allow file-read* (subpath "/tmp"))"#))
+        #expect(!profile.contains(#"(allow file-read* (subpath "/private/tmp"))"#))
     }
 
     @Test("sandbox withholds event data without environment read capability")

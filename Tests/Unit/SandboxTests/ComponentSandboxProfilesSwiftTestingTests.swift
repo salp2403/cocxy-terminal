@@ -17,8 +17,12 @@ struct ComponentSandboxProfilesSwiftTestingTests {
 
         #expect(profile.contains(#"(allow file-read* (subpath "/tmp/project"))"#))
         #expect(profile.contains(#"(allow file-read* (subpath "/tmp/cocxy/config"))"#))
+        let credentialPath = SandboxProfileBuilder.controlCredentialLiteralPaths[0]
+            .resolvingSymlinksInPath().standardizedFileURL.path
+        #expect(profile.contains(#"(deny file-read* (literal "\#(credentialPath)"))"#))
         #expect(!profile.contains("network-outbound"))
         #expect(!profile.contains("/Users/test/Documents"))
+        assertNoSharedTemporaryDirectoryGrant(profile)
     }
 
     @Test("remote agent profile opts into network while keeping filesystem scoped")
@@ -42,7 +46,6 @@ struct ComponentSandboxProfilesSwiftTestingTests {
         let runner = AgentSandboxedProcessRunner(
             base: base,
             workspaceURL: URL(fileURLWithPath: "/tmp/project", isDirectory: true),
-            configURL: URL(fileURLWithPath: "/tmp/cocxy/config", isDirectory: true),
             sandboxExecutor: SandboxExecutor(
                 sandboxExecURL: URL(fileURLWithPath: "/usr/bin/sandbox-exec"),
                 fileManager: StubComponentSandboxFileManager(executablePaths: ["/usr/bin/sandbox-exec"])
@@ -64,7 +67,9 @@ struct ComponentSandboxProfilesSwiftTestingTests {
         #expect(profile.contains(#"(allow file-write* (subpath "/tmp/project"))"#))
         #expect(profile.contains(#"(allow process-exec (literal "/bin/sh"))"#))
         #expect(profile.contains(#"(allow process-exec (subpath "/usr/bin"))"#))
+        #expect(!profile.contains(#"(allow file-read* (subpath "/tmp/cocxy/config"))"#))
         #expect(!profile.contains("/Users/test/Documents"))
+        assertNoSharedTemporaryDirectoryGrant(profile)
     }
 
     @Test("MCP stdio profile permits the launcher and configured working directory")
@@ -84,6 +89,7 @@ struct ComponentSandboxProfilesSwiftTestingTests {
         #expect(profile.contains(#"(allow process-exec (literal "/usr/bin/env"))"#))
         #expect(profile.contains(#"(allow file-read* (subpath "/tmp/mcp-server"))"#))
         #expect(!profile.contains("network-outbound"))
+        assertNoSharedTemporaryDirectoryGrant(profile)
     }
 
     @Test("MCP stdio file arguments stay literal while directory arguments are recursive")
@@ -260,6 +266,11 @@ struct ComponentSandboxProfilesSwiftTestingTests {
         #expect(sandbox.capabilities == [.network])
         #expect(profile.contains("(allow network-outbound)"))
         #expect(!profile.contains("process-exec"))
+    }
+
+    private func assertNoSharedTemporaryDirectoryGrant(_ profile: String) {
+        #expect(!profile.contains(#"(allow file-read* (subpath "/tmp"))"#))
+        #expect(!profile.contains(#"(allow file-read* (subpath "/private/tmp"))"#))
     }
 }
 
