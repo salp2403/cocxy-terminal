@@ -1892,6 +1892,11 @@
 "codeReview.editor.reload" = "Recargar";
 "codeReview.editor.close" = "Cerrar editor";
 "codeReview.editor.error.outsideWorkingDirectory" = "El archivo seleccionado está fuera del directorio de trabajo de la revisión.";
+"codeReview.editor.error.unsafePath" = "No se pudo acceder al archivo de forma segura porque su ruta cambió o usa un enlace simbólico.";
+"codeReview.editor.error.fileChanged" = "El archivo cambió en el disco. Recárgalo antes de guardar o aplicar sugerencias.";
+"codeReview.editor.error.fileTooLarge" = "El archivo seleccionado es demasiado grande para abrirlo de forma segura.";
+"codeReview.editor.error.invalidUTF8" = "El archivo seleccionado no contiene texto UTF-8 válido.";
+"codeReview.editor.error.writeFailed" = "No se pudo guardar el archivo de forma segura. Recárgalo e inténtalo de nuevo.";
 "codeReview.editor.accessibility" = "Editor en línea de revisión de código";
 "codeReview.editor.resize.stacked" = "Redimensionar editor y diff apilados";
 "codeReview.editor.resize.sideBySide" = "Redimensionar editor y diff lado a lado";
@@ -1946,6 +1951,7 @@
 "codeReview.toolbar.shortcuts.cancel" = "Cancelar comentario / cerrar panel";
 "codeReview.suggestions.none" = "No hay sugerencias pendientes para aplicar.";
 "codeReview.suggestions.editorDirty" = "Guarda o descarta los cambios del editor en línea antes de aplicar sugerencias.";
+"codeReview.suggestions.rollbackFailed" = "Falló una escritura de sugerencias y no se pudo restaurar de forma segura un archivo anterior. Recarga la revisión antes de volver a intentarlo.";
 "codeReview.suggestions.conflicts" = "No se pudieron aplicar las sugerencias: %d conflictos.";
 "codeReview.suggestions.applied.one" = "1 sugerencia aplicada.";
 "codeReview.suggestions.applied.many" = "%d sugerencias aplicadas.";

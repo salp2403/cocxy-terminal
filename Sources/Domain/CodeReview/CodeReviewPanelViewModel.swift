@@ -92,6 +92,8 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     @Published private(set) var editorErrorMessage: String?
     @Published private(set) var editorOriginalContent = ""
     @Published private(set) var reviewAgentSessions: [AgentSessionInfo] = []
+    private var editorFileAccess: CodeReviewWorkspaceFileAccess?
+    private var editorFileVersion: CodeReviewWorkspaceFileVersion?
 
     // MARK: - PR merge state (v0.1.86)
     //
@@ -205,6 +207,9 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     var refreshDelay: TimeInterval = 2.0
     var onDiffsUpdated: (([FileDiff]) -> Void)?
+#if DEBUG
+    var suggestionPlansPreparedTestHandler: (() -> Void)?
+#endif
 
     private let tracker: SessionDiffTracking
     private var cancellables = Set<AnyCancellable>()
@@ -490,10 +495,12 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         }
 
         do {
-            let plans = try suggestionsByFile.keys.sorted().map { filePath in
+            let fileAccess = try currentWorkspaceFileAccess()
+            var plans = try suggestionsByFile.keys.sorted().map { filePath in
                 try suggestionApplyPlan(
                     filePath: filePath,
-                    suggestions: suggestionsByFile[filePath] ?? []
+                    suggestions: suggestionsByFile[filePath] ?? [],
+                    fileAccess: fileAccess
                 )
             }
             let conflicts = plans.flatMap(\.report.conflicts)
@@ -506,25 +513,52 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                 return
             }
 
-            var writtenPlans: [SuggestionApplyPlan] = []
+#if DEBUG
+            suggestionPlansPreparedTestHandler?()
+#endif
+
+            var writtenPlans: [(index: Int, version: CodeReviewWorkspaceFileVersion)] = []
             do {
-                for plan in plans where plan.originalContent != plan.report.updatedContent {
-                    try plan.report.updatedContent.write(
-                        to: plan.fileURL,
-                        atomically: true,
-                        encoding: .utf8
+                for index in plans.indices {
+                    if plans[index].originalContent == plans[index].report.updatedContent {
+                        let snapshot = try fileAccess.read(relativePath: plans[index].filePath)
+                        guard snapshot.version == plans[index].originalVersion,
+                              snapshot.content == plans[index].originalContent else {
+                            throw CodeReviewWorkspaceFileError.fileChanged(plans[index].filePath)
+                        }
+                        plans[index].resultingVersion = snapshot.version
+                        continue
+                    }
+
+                    let version = try fileAccess.write(
+                        plans[index].report.updatedContent,
+                        relativePath: plans[index].filePath,
+                        expectedVersion: plans[index].originalVersion
                     )
-                    writtenPlans.append(plan)
+                    plans[index].resultingVersion = version
+                    writtenPlans.append((index: index, version: version))
                 }
             } catch {
-                for plan in writtenPlans.reversed() {
-                    try? plan.originalContent.write(to: plan.fileURL, atomically: true, encoding: .utf8)
+                var rollbackError: Error?
+                for written in writtenPlans.reversed() {
+                    do {
+                        _ = try fileAccess.write(
+                            plans[written.index].originalContent,
+                            relativePath: plans[written.index].filePath,
+                            expectedVersion: written.version
+                        )
+                    } catch {
+                        rollbackError = rollbackError ?? error
+                    }
+                }
+                if rollbackError != nil {
+                    throw SuggestionApplyError.rollbackFailed
                 }
                 throw error
             }
 
             removeSuggestionDraftComments()
-            syncEditorAfterSuggestionApply(plans)
+            syncEditorAfterSuggestionApply(plans, fileAccess: fileAccess)
             selectedLineForComment = nil
             refreshDiffs()
             lastErrorMessage = nil
@@ -738,19 +772,14 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     }
 
     func openFileInEditor(_ filePath: String) {
-        guard let fileURL = resolvedFileURL(for: filePath) else {
-            editorErrorMessage = localizedString(
-                "codeReview.editor.error.outsideWorkingDirectory",
-                fallback: "The selected file is outside the review working directory."
-            )
-            return
-        }
-
         do {
-            let content = try String(contentsOf: fileURL, encoding: .utf8)
+            let fileAccess = try currentWorkspaceFileAccess()
+            let snapshot = try fileAccess.read(relativePath: filePath)
             editorFilePath = filePath
-            editorContent = content
-            editorOriginalContent = content
+            editorFileAccess = fileAccess
+            editorFileVersion = snapshot.version
+            editorContent = snapshot.content
+            editorOriginalContent = snapshot.content
             editorLanguage = Self.languageName(for: filePath)
             editorErrorMessage = nil
             isEditorVisible = true
@@ -766,7 +795,8 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     @discardableResult
     private func writeEditorContent(refreshAfterSave: Bool) -> Bool {
         guard let editorFilePath,
-              let fileURL = resolvedFileURL(for: editorFilePath) else {
+              let editorFileAccess,
+              let editorFileVersion else {
             editorErrorMessage = localizedString(
                 "codeReview.editor.error.outsideWorkingDirectory",
                 fallback: "The selected file is outside the review working directory."
@@ -775,7 +805,11 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         }
 
         do {
-            try editorContent.write(to: fileURL, atomically: true, encoding: .utf8)
+            self.editorFileVersion = try editorFileAccess.write(
+                editorContent,
+                relativePath: editorFilePath,
+                expectedVersion: editorFileVersion
+            )
             editorOriginalContent = editorContent
             editorErrorMessage = nil
             if refreshAfterSave {
@@ -796,6 +830,8 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
     func closeEditor() {
         isEditorVisible = false
         editorFilePath = nil
+        editorFileAccess = nil
+        editorFileVersion = nil
         editorContent = ""
         editorOriginalContent = ""
         editorLanguage = "Plain Text"
@@ -1071,35 +1107,35 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     private struct SuggestionApplyPlan {
         let filePath: String
-        let fileURL: URL
         let originalContent: String
+        let originalVersion: CodeReviewWorkspaceFileVersion
         let report: PRSuggestionApplyReport
+        var resultingVersion: CodeReviewWorkspaceFileVersion
     }
 
     private enum SuggestionApplyError: LocalizedError {
-        case invalidTarget(String)
+        case rollbackFailed
 
         var errorDescription: String? {
             switch self {
-            case .invalidTarget(let filePath):
-                return "The suggestion target is outside the review working directory: \(filePath)"
+            case .rollbackFailed:
+                return "A suggestion write failed and an earlier file could not be restored safely."
             }
         }
     }
 
     private func suggestionApplyPlan(
         filePath: String,
-        suggestions: [PRSuggestion]
+        suggestions: [PRSuggestion],
+        fileAccess: CodeReviewWorkspaceFileAccess
     ) throws -> SuggestionApplyPlan {
-        guard let fileURL = resolvedFileURL(for: filePath) else {
-            throw SuggestionApplyError.invalidTarget(filePath)
-        }
-        let originalContent = try String(contentsOf: fileURL, encoding: .utf8)
+        let snapshot = try fileAccess.read(relativePath: filePath)
         return SuggestionApplyPlan(
             filePath: filePath,
-            fileURL: fileURL,
-            originalContent: originalContent,
-            report: PRSuggestionApplier.apply(suggestions, to: originalContent)
+            originalContent: snapshot.content,
+            originalVersion: snapshot.version,
+            report: PRSuggestionApplier.apply(suggestions, to: snapshot.content),
+            resultingVersion: snapshot.version
         )
     }
 
@@ -1112,13 +1148,18 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         }
     }
 
-    private func syncEditorAfterSuggestionApply(_ plans: [SuggestionApplyPlan]) {
+    private func syncEditorAfterSuggestionApply(
+        _ plans: [SuggestionApplyPlan],
+        fileAccess: CodeReviewWorkspaceFileAccess
+    ) {
         guard let editorFilePath,
+              editorFileAccess == fileAccess,
               let plan = plans.first(where: { $0.filePath == editorFilePath }) else {
             return
         }
         editorContent = plan.report.updatedContent
         editorOriginalContent = plan.report.updatedContent
+        editorFileVersion = plan.resultingVersion
         editorErrorMessage = nil
     }
 
@@ -1199,14 +1240,11 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         }
     }
 
-    private func resolvedFileURL(for filePath: String) -> URL? {
-        guard let root = activeWorkingDirectory ?? resolvedWorkingDirectory else { return nil }
-        let candidate = URL(fileURLWithPath: filePath, relativeTo: root).standardizedFileURL
-        let rootPath = root.standardizedFileURL.path
-        guard candidate.path == rootPath || candidate.path.hasPrefix(rootPath + "/") else {
-            return nil
+    private func currentWorkspaceFileAccess() throws -> CodeReviewWorkspaceFileAccess {
+        guard let root = activeWorkingDirectory ?? resolvedWorkingDirectory else {
+            throw CodeReviewWorkspaceFileError.invalidPath(".")
         }
-        return candidate
+        return try CodeReviewWorkspaceFileAccess(rootURL: root)
     }
 
     private func bindHookEvents() {
@@ -1346,6 +1384,49 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
 
     private func userFacingErrorMessage(for error: Error?) -> String? {
         guard let error else { return nil }
+        if let suggestionError = error as? SuggestionApplyError {
+            switch suggestionError {
+            case .rollbackFailed:
+                return localizedString(
+                    "codeReview.suggestions.rollbackFailed",
+                    fallback: "A suggestion write failed and an earlier file could not be restored safely. Reload the review before retrying."
+                )
+            }
+        }
+        if let fileError = error as? CodeReviewWorkspaceFileError {
+            switch fileError {
+            case .invalidPath:
+                return localizedString(
+                    "codeReview.editor.error.outsideWorkingDirectory",
+                    fallback: "The selected file is outside the review working directory."
+                )
+            case .unsafePath:
+                return localizedString(
+                    "codeReview.editor.error.unsafePath",
+                    fallback: "The selected file could not be accessed safely because its path changed or uses a symbolic link."
+                )
+            case .fileChanged:
+                return localizedString(
+                    "codeReview.editor.error.fileChanged",
+                    fallback: "The file changed on disk. Reload it before saving or applying suggestions."
+                )
+            case .fileTooLarge:
+                return localizedString(
+                    "codeReview.editor.error.fileTooLarge",
+                    fallback: "The selected file is too large to open safely."
+                )
+            case .invalidUTF8:
+                return localizedString(
+                    "codeReview.editor.error.invalidUTF8",
+                    fallback: "The selected file is not valid UTF-8 text."
+                )
+            case .writeFailed:
+                return localizedString(
+                    "codeReview.editor.error.writeFailed",
+                    fallback: "The file could not be saved safely. Reload it and try again."
+                )
+            }
+        }
         let message = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !message.isEmpty else {
             return localizedString(

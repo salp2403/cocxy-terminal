@@ -308,6 +308,7 @@ struct CodeReviewInlineEditorSwiftTestingTests {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("CodeReviewEditor-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
         let fileURL = root.appendingPathComponent("Example.swift")
         try "let value = 1\n".write(to: fileURL, atomically: true, encoding: .utf8)
 

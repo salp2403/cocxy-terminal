@@ -1892,6 +1892,11 @@
 "codeReview.editor.reload" = "Reload";
 "codeReview.editor.close" = "Close editor";
 "codeReview.editor.error.outsideWorkingDirectory" = "The selected file is outside the review working directory.";
+"codeReview.editor.error.unsafePath" = "The selected file could not be accessed safely because its path changed or uses a symbolic link.";
+"codeReview.editor.error.fileChanged" = "The file changed on disk. Reload it before saving or applying suggestions.";
+"codeReview.editor.error.fileTooLarge" = "The selected file is too large to open safely.";
+"codeReview.editor.error.invalidUTF8" = "The selected file is not valid UTF-8 text.";
+"codeReview.editor.error.writeFailed" = "The file could not be saved safely. Reload it and try again.";
 "codeReview.editor.accessibility" = "Code review inline editor";
 "codeReview.editor.resize.stacked" = "Resize stacked editor and diff";
 "codeReview.editor.resize.sideBySide" = "Resize side-by-side editor and diff";
@@ -1946,6 +1951,7 @@
 "codeReview.toolbar.shortcuts.cancel" = "Cancel comment / close panel";
 "codeReview.suggestions.none" = "No pending suggestions to apply.";
 "codeReview.suggestions.editorDirty" = "Save or discard inline editor changes before applying suggestions.";
+"codeReview.suggestions.rollbackFailed" = "A suggestion write failed and an earlier file could not be restored safely. Reload the review before retrying.";
 "codeReview.suggestions.conflicts" = "Suggestions could not be applied: %d conflicts.";
 "codeReview.suggestions.applied.one" = "Applied 1 suggestion.";
 "codeReview.suggestions.applied.many" = "Applied %d suggestions.";

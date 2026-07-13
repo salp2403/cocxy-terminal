@@ -294,16 +294,16 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 }
 
                 let existingPaths = Set(diffs.map(\.filePath))
+                let fileAccess = try? CodeReviewWorkspaceFileAccess(rootURL: diffWorkingDirectory)
                 for (path, status) in statusMap where !existingPaths.contains(path) {
                     guard status == .untracked || status == .added else { continue }
-                    let fileURL = diffWorkingDirectory.appendingPathComponent(path)
-                    guard let data = try? Data(contentsOf: fileURL),
-                          let content = String(data: data, encoding: .utf8) else {
+                    guard let fileAccess,
+                          let fileSnapshot = try? fileAccess.read(relativePath: path) else {
                         continue
                     }
                     let synthetic = DiffParser.makeSyntheticAddedFileDiff(
                         filePath: path,
-                        fileContent: content,
+                        fileContent: fileSnapshot.content,
                         agentName: snapshot.fileAgentNames[path]
                     )
                     diffs.append(

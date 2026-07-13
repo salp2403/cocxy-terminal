@@ -307,6 +307,51 @@ struct SessionDiffTrackerSwiftTestingTests {
         #expect(diffs[0].additions == 1)
     }
 
+    @Test("computeDiff does not synthesize an untracked file through a swapped directory symlink")
+    func computeDiffRejectsUntrackedSymlinkSwap() async throws {
+        let container = try makeTemporaryDirectory(named: "code-review-untracked-link-swap")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let root = container.appendingPathComponent("workspace", isDirectory: true)
+        let linkedDirectory = root.appendingPathComponent("linked", isDirectory: true)
+        let retainedDirectory = root.appendingPathComponent("linked-retained", isDirectory: true)
+        let outside = container.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: linkedDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try "inside\n".write(
+            to: linkedDirectory.appendingPathComponent("secret.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let outsideTarget = outside.appendingPathComponent("secret.swift")
+        try "outside secret\n".write(to: outsideTarget, atomically: true, encoding: .utf8)
+
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, arguments in
+            if arguments.first == "diff" {
+                return ""
+            }
+            if arguments == ["status", "--porcelain"] {
+                try FileManager.default.moveItem(at: linkedDirectory, to: retainedDirectory)
+                try FileManager.default.createSymbolicLink(
+                    atPath: linkedDirectory.path,
+                    withDestinationPath: outside.path
+                )
+                return "?? linked/secret.swift\n"
+            }
+            return ""
+        })
+        tracker.recordSnapshot(sessionId: "link-swap", ref: "abc123", workingDirectory: root)
+
+        let diffs = try await diffResult(
+            from: tracker,
+            sessionId: "link-swap",
+            mode: .sinceSessionStart,
+            reference: nil
+        )
+
+        #expect(diffs.isEmpty)
+        #expect(try String(contentsOf: outsideTarget, encoding: .utf8) == "outside secret\n")
+    }
+
     @Test("session end records tracked files into local edit history once")
     func sessionEndRecordsTrackedFilesIntoEditHistoryOnce() async throws {
         let recorder = CapturingEditHistoryRecorder()
