@@ -18,7 +18,10 @@ import CocxyVault
 /// - Output formatting to `OutputFormatter`.
 public struct CommandRunner {
     static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
-    static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 65
+    // Worst-case approved merge path is 265s: repo/branch/PR resolution,
+    // the 60s approval window, merge, refresh, and optional branch deletion.
+    // Keep a response margin without allowing an unbounded socket wait.
+    static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 300
     public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
     static let extendedCellSocketTimeoutSeconds: TimeInterval = 300
     static let browserInitScriptApprovalSocketTimeoutSeconds: TimeInterval = 605
@@ -2090,11 +2093,11 @@ public struct CommandRunner {
         switch command {
         case .githubStatus,
              .githubPRs,
-             .githubIssues,
+             .githubIssues:
+            return extendedGitHubReadSocketTimeoutSeconds
+        case .githubPRMerge,
              .reviewApprove,
              .reviewRequestChanges:
-            return extendedGitHubReadSocketTimeoutSeconds
-        case .githubPRMerge:
             return extendedGitHubMutationSocketTimeoutSeconds
         case .gitAssistantCommitMessage,
              .gitAssistantPRDraft,

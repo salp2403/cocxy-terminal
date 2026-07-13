@@ -1655,6 +1655,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.windowController = controller
     }
 
+    /// Installs an already-loaded config service for focused integration tests.
+    func installConfigServiceForTesting(_ service: ConfigService?) {
+        self.configService = service
+    }
+
     /// Exposes main-window construction for tests that verify launch ordering
     /// without bootstrapping the full app delegate.
     func createMainWindowForTesting(deferSurfaceBootstrap: Bool) {

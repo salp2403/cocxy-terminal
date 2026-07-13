@@ -1032,7 +1032,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy worktree list`
     case worktreeList
 
-    /// `cocxy worktree remove <id> [--force]`
+    /// `cocxy worktree remove <id>`
     case worktreeRemove(id: String, force: Bool)
 
     /// `cocxy worktree focus <id>`
@@ -1041,7 +1041,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy worktree prune`
     case worktreePrune
 
-    /// `cocxy worktree cleanup-merged [--base-ref <ref>] [--force] [--dry-run]`
+    /// `cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]`
     case worktreeCleanupMerged(baseRef: String?, force: Bool, dryRun: Bool)
 
     /// `cocxy github status` — auth + repository summary JSON.
@@ -1062,7 +1062,8 @@ public enum ParsedCommand: Equatable {
     case githubRefresh
 
     /// `cocxy github pr-merge --squash|--merge|--rebase
-    /// [--pr <n>] [--no-delete-branch] [--subject <s>] [--body <b>]`
+    /// [--pr <n>] [--delete-branch|--no-delete-branch]
+    /// [--subject <s>] [--body <b>]`
     /// — merges a pull request via gh.
     case githubPRMerge(
         method: GitHubMergeMethodCLI,
@@ -5774,27 +5775,35 @@ public enum CLIArgumentParser {
                     argument: "id"
                 )
             }
-            var force = false
-            for token in rest.dropFirst() {
-                if token == "--force" || token == "-f" {
-                    force = true
-                } else {
-                    throw CLIError.invalidArgument(
-                        command: "worktree remove",
-                        argument: token,
-                        reason: "Unknown option. Only --force / -f is supported."
-                    )
-                }
+            if let forceFlag = rest.first(where: { $0 == "--force" || $0 == "-f" }) {
+                throw CLIError.invalidArgument(
+                    command: "worktree remove",
+                    argument: forceFlag,
+                    reason: "Forced worktree removal is not authorized over IPC"
+                )
             }
-            return .worktreeRemove(id: id, force: force)
+            guard rest.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "worktree remove",
+                    argument: rest[1],
+                    reason: "Unknown option. This command accepts only a worktree id."
+                )
+            }
+            return .worktreeRemove(id: id, force: false)
 
         case "prune":
             return .worktreePrune
 
         case "cleanup-merged", "cleanup":
             var baseRef: String?
-            var force = false
             var dryRun = false
+            if let forceFlag = rest.first(where: { $0 == "--force" || $0 == "-f" }) {
+                throw CLIError.invalidArgument(
+                    command: "worktree cleanup-merged",
+                    argument: forceFlag,
+                    reason: "Forced worktree cleanup is not authorized over IPC"
+                )
+            }
             var index = 0
             while index < rest.count {
                 let token = rest[index]
@@ -5808,9 +5817,6 @@ public enum CLIArgumentParser {
                     }
                     baseRef = rest[index + 1]
                     index += 2
-                case "--force":
-                    force = true
-                    index += 1
                 case "--dry-run":
                     dryRun = true
                     index += 1
@@ -5818,11 +5824,17 @@ public enum CLIArgumentParser {
                     throw CLIError.invalidArgument(
                         command: "worktree cleanup-merged",
                         argument: token,
-                        reason: "Unknown option. Valid flags: --base-ref, --force, --dry-run."
+                        reason: "Unknown option. Valid flags: --dry-run, --base-ref."
                     )
                 }
             }
-            return .worktreeCleanupMerged(baseRef: baseRef, force: force, dryRun: dryRun)
+            guard dryRun else {
+                throw CLIError.missingArgument(
+                    command: "worktree cleanup-merged",
+                    argument: "--dry-run"
+                )
+            }
+            return .worktreeCleanupMerged(baseRef: baseRef, force: false, dryRun: dryRun)
 
         default:
             throw CLIError.invalidArgument(
@@ -5906,7 +5918,7 @@ public enum CLIArgumentParser {
     private static func parseGitHubPRMergeArgs(rest: [String]) throws -> ParsedCommand {
         var method: GitHubMergeMethodCLI?
         var prNumber: Int?
-        var deleteBranch: Bool = true
+        var deleteBranch = false
         var subject: String?
         var body: String?
         var index = 0

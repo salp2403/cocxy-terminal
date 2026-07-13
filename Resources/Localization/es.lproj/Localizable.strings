@@ -3068,6 +3068,12 @@
 "browser.initScriptApproval.profile.unknown" = "Perfil %@";
 "browser.initScriptApproval.remote.local" = "Local";
 
+"github.socketApproval.title" = "¿Autorizar acción de GitHub?";
+"github.socketApproval.message" = "Repositorio: %@\nPull request: #%d\nHuella: %@\n\nUna solicitud local del CLI quiere ejecutar la acción exacta de GitHub que se muestra abajo. Autorízala solo si tú iniciaste esta solicitud.";
+"github.socketApproval.approveOnce" = "Autorizar una vez";
+"github.socketApproval.cancel" = "Cancelar";
+"github.socketApproval.preview.accessibility" = "Acción exacta de GitHub para autorizar";
+
 "cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No hay cells";
 "cells.sidebar.empty.message" = "Crea una cell local o cloud propia.";

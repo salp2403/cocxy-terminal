@@ -120,6 +120,47 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         #expect(startupCopy.previewAccessibilityLabel == "Entrada exacta de terminal para aprobación")
     }
 
+    @Test("GitHub socket approval copy identifies the exact Spanish target")
+    func githubSocketApprovalCopyIdentifiesExactSpanishTarget() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        let controllerToken = NSObject()
+        let repository = try #require(GitHubRepositoryAuthority(
+            host: "github.com",
+            ownerLogin: "cocxy",
+            name: "terminal"
+        ))
+        let request = GitHubSocketMutationAuthorizationRequest(
+            intent: .review(
+                pullRequestNumber: 42,
+                action: .requestChanges,
+                body: "Corrige el check."
+            ),
+            context: GitHubSocketMutationContext(
+                windowControllerIdentifier: ObjectIdentifier(controllerToken),
+                tabID: TabID(),
+                workingDirectory: URL(fileURLWithPath: "/tmp/cocxy-github-copy"),
+                repository: repository
+            )
+        )
+
+        let copy = MainWindowController.localizedGitHubSocketMutationApprovalCopy(
+            request: request,
+            localizer: localizer
+        )
+
+        #expect(copy.title == "¿Autorizar acción de GitHub?")
+        #expect(copy.message.contains("Repositorio: cocxy/terminal"))
+        #expect(copy.message.contains("Pull request: #42"))
+        #expect(copy.message.contains("Huella: \(request.authorizationDigest.prefix(12))"))
+        #expect(copy.message.contains("acción exacta"))
+        #expect(copy.approveButton == "Autorizar una vez")
+        #expect(copy.cancelButton == "Cancelar")
+        #expect(copy.previewAccessibilityLabel == "Acción exacta de GitHub para autorizar")
+    }
+
     @Test("browser init-script approval copy explains exact Spanish security scope")
     func browserInitScriptApprovalCopyExplainsExactSpanishSecurityScope() throws {
         let localizer = AppLocalizer(

@@ -200,6 +200,70 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["removed-count"], "2")
     }
 
+    func test_worktreeRemoveForce_isRejectedBeforeProvider() {
+        let providerCallCount = LockedBox(0)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            worktreeCLIProvider: { _, _ in
+                providerCallCount.withValue { $0 += 1 }
+                return (success: true, data: ["status": "removed"])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "wt-remove-force",
+            command: "worktree-remove",
+            params: ["id": "abc123", "force": "true"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertTrue(response.error?.contains("retry without --force") == true)
+        XCTAssertEqual(providerCallCount.withValue { $0 }, 0)
+    }
+
+    func test_worktreeCleanupMerged_withoutDryRun_isRejectedBeforeProvider() {
+        let providerCallCount = LockedBox(0)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            worktreeCLIProvider: { _, _ in
+                providerCallCount.withValue { $0 += 1 }
+                return (success: true, data: ["status": "cleaned"])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "wt-cleanup-live",
+            command: "worktree-cleanup-merged",
+            params: ["base-ref": "main"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(providerCallCount.withValue { $0 }, 0)
+    }
+
+    func test_worktreeCleanupMerged_force_isRejectedBeforeProvider() {
+        let providerCallCount = LockedBox(0)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            worktreeCLIProvider: { _, _ in
+                providerCallCount.withValue { $0 += 1 }
+                return (success: true, data: ["status": "dry-run"])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "wt-cleanup-force",
+            command: "worktree-cleanup-merged",
+            params: ["base-ref": "main", "dry-run": "true", "force": "true"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(providerCallCount.withValue { $0 }, 0)
+    }
+
     @MainActor
     func test_pluginMarketplaceCommands_useInjectedLocalStores() throws {
         let root = try temporaryDirectory()

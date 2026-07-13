@@ -6079,7 +6079,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// defaults to `false` when absent so a dirty worktree is refused
     /// by default — matching the `on-close = keep` safety stance.
     private func handleWorktreeRemove(_ request: SocketRequest) -> SocketResponse {
-        runWorktreeProvider(kind: "remove", request: request)
+        if let rawForce = request.params?["force"] {
+            guard let force = parseSocketBoolean(rawForce) else {
+                return .failure(
+                    id: request.id,
+                    error: "worktree-remove received an invalid force value."
+                )
+            }
+            guard !force else {
+                return .failure(
+                    id: request.id,
+                    error: "Forced worktree removal is disabled for local-socket requests. Commit, stash, or discard the worktree changes, then retry without --force."
+                )
+            }
+        }
+        return runWorktreeProvider(kind: "remove", request: request)
     }
 
     /// Routes `cocxy worktree-prune`. No params; the provider returns
@@ -6088,12 +6102,40 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         runWorktreeProvider(kind: "prune", request: request)
     }
 
-    /// Routes merged-worktree cleanup through the same provider used by
-    /// the interactive Worktree UI. `dry-run=true` returns counts without
-    /// deleting anything; the default path performs the preflight then
-    /// removes only clean merged worktrees.
+    /// Routes merged-worktree cleanup previews through the provider. Live
+    /// batch deletion remains in the in-app flow where the user reviews a
+    /// context-bound plan and confirms the exact candidates.
     private func handleWorktreeCleanupMerged(_ request: SocketRequest) -> SocketResponse {
-        runWorktreeProvider(kind: "cleanup-merged", request: request)
+        let params = request.params ?? [:]
+        if let rawForce = params["force"] {
+            guard let force = parseSocketBoolean(rawForce) else {
+                return .failure(
+                    id: request.id,
+                    error: "worktree-cleanup-merged received an invalid force value."
+                )
+            }
+            guard !force else {
+                return .failure(
+                    id: request.id,
+                    error: "Forced merged-worktree cleanup is not available over the local socket."
+                )
+            }
+        }
+        guard params["dry-run"].flatMap(parseSocketBoolean) == true else {
+            return .failure(
+                id: request.id,
+                error: "worktree-cleanup-merged is preview-only over the local socket; pass --dry-run."
+            )
+        }
+        return runWorktreeProvider(kind: "cleanup-merged", request: request)
+    }
+
+    private func parseSocketBoolean(_ raw: String) -> Bool? {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "y": return true
+        case "0", "false", "no", "n": return false
+        default: return nil
+        }
     }
 
     /// Shared dispatch used by every worktree verb. Keeping the four

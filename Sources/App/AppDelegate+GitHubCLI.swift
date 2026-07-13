@@ -5,11 +5,29 @@
 // audit trail and the socket handler uses a single idiom.
 
 import AppKit
+import Darwin
 import Foundation
 import os.log
 
 extension AppDelegate {
     nonisolated private static let githubStatusRepoTimeoutSeconds: TimeInterval = 2.0
+
+    private struct GitHubCLITabSnapshot: Equatable, Sendable {
+        let windowControllerIdentifier: ObjectIdentifier
+        let tabID: TabID
+        let directory: URL
+
+        func authorizationContext(
+            repository: GitHubRepositoryAuthority
+        ) -> GitHubSocketMutationContext {
+            GitHubSocketMutationContext(
+                windowControllerIdentifier: windowControllerIdentifier,
+                tabID: tabID,
+                workingDirectory: directory,
+                repository: repository
+            )
+        }
+    }
 
     // MARK: - Service singleton
 
@@ -63,7 +81,8 @@ extension AppDelegate {
     /// [String: String])` tuple the socket expects.
     nonisolated func performGitHubCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        serviceOverride: GitHubService? = nil
     ) async -> (Bool, [String: String]) {
         // Gate: honour the master toggle so `cocxy github-*` never
         // invokes `gh` when the user disabled the pane.
@@ -79,6 +98,7 @@ extension AppDelegate {
             )
         }
 
+        let mutationService = serviceOverride ?? Self.sharedGitHubService
         switch kind {
         case "status":
             return await runGitHubStatus()
@@ -91,11 +111,23 @@ extension AppDelegate {
         case "refresh":
             return await runGitHubRefresh()
         case "pr-merge":
-            return await runGitHubPRMerge(params: params, config: githubConfig)
+            return await runGitHubPRMerge(
+                params: params,
+                config: githubConfig,
+                service: mutationService
+            )
         case "review-approve":
-            return await runGitHubPRReview(params: params, action: .approve)
+            return await runGitHubPRReview(
+                params: params,
+                action: .approve,
+                service: mutationService
+            )
         case "review-request-changes":
-            return await runGitHubPRReview(params: params, action: .requestChanges)
+            return await runGitHubPRReview(
+                params: params,
+                action: .requestChanges,
+                service: mutationService
+            )
         default:
             return (false, ["error": "Unknown github subcommand: \(kind)"])
         }
@@ -237,12 +269,32 @@ extension AppDelegate {
     /// cocxy-managed worktree.
     @MainActor
     func currentGitHubCLIWorkingDirectory() -> URL? {
+        currentGitHubCLITabSnapshot()?.directory
+    }
+
+    @MainActor
+    private func currentGitHubCLITabSnapshot() -> GitHubCLITabSnapshot? {
         guard let controller = focusedWindowController() else { return nil }
         guard let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID,
               let tab = controller.tabManager.tab(for: tabID) else {
             return nil
         }
-        return tab.worktreeRoot ?? tab.workingDirectory
+        return GitHubCLITabSnapshot(
+            windowControllerIdentifier: ObjectIdentifier(controller),
+            tabID: tabID,
+            directory: (tab.worktreeRoot ?? tab.workingDirectory).standardizedFileURL
+        )
+    }
+
+    @MainActor
+    private func authorizeGitHubSocketMutation(
+        _ request: GitHubSocketMutationAuthorizationRequest
+    ) -> GitHubSocketMutationAuthorizationGrant? {
+        guard let controller = focusedWindowController(),
+              ObjectIdentifier(controller) == request.context.windowControllerIdentifier else {
+            return nil
+        }
+        return controller.authorizeGitHubSocketMutation(request)
     }
 
     /// Resolves the effective GitHub config for the focused tab.
@@ -292,13 +344,13 @@ extension AppDelegate {
     /// Optional parameters:
     ///   - `pr` (Int)           — PR number; without it gh resolves the
     ///                            PR for the current branch.
-    ///   - `delete-branch`(Bool) — defaults to true; set false to keep
-    ///                            the branch alive after merge.
+    ///   - `delete-branch`(Bool) — defaults to false; opt in explicitly.
     ///   - `subject` (String)   — overrides the merge commit subject.
     ///   - `body` (String)      — overrides the merge commit body.
     nonisolated private func runGitHubPRMerge(
         params: [String: String],
-        config: GitHubConfig
+        config: GitHubConfig,
+        service: GitHubService
     ) async -> (Bool, [String: String]) {
         guard config.mergeEnabled else {
             return (false, [
@@ -311,68 +363,78 @@ extension AppDelegate {
                 "error": "Pass exactly one strategy: --squash, --merge, or --rebase.",
             ])
         }
-        guard let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) else {
+        guard let tabSnapshot = await MainActor.run(body: { self.currentGitHubCLITabSnapshot() }) else {
             return (false, [
                 "error": "Open a git repository before merging a pull request.",
             ])
         }
+        let directory = tabSnapshot.directory
 
-        // PR number resolution: explicit --pr wins; otherwise gh's
-        // own "current branch" default takes over via
-        // pullRequestNumber(forBranch:). When no PR matches the
-        // current branch, surface a friendly error rather than letting
-        // gh fail with a less-actionable stderr.
-        let resolvedNumber: Int
-        if let raw = params["pr"], let number = Int(raw), number > 0 {
-            resolvedNumber = number
+        let deleteBranch: Bool
+        if let raw = params["delete-branch"] {
+            guard let parsed = Self.parseGitHubSocketBoolean(raw) else {
+                return (false, ["error": "Invalid --delete-branch value."])
+            }
+            deleteBranch = parsed
         } else {
-            // Resolve the branch via git so we can query gh by branch.
-            // We piggy-back on `gh pr view` (no branch arg = current
-            // branch) by falling through to `gh pr merge` directly,
-            // but that path returns less actionable errors. Better to
-            // surface the resolution failure here.
-            do {
-                let branch = (try? await currentBranchForCLIMerge(directory: directory)) ?? ""
+            deleteBranch = false
+        }
+
+        do {
+            let repository = try await service.currentRepo(at: directory)
+            guard let repositoryAuthority = GitHubRepositoryAuthority(repository: repository) else {
+                return (false, ["error": "Could not bind the active GitHub repository."])
+            }
+
+            let resolvedNumber: Int
+            if let raw = params["pr"] {
+                guard let number = Int(raw), number > 0 else {
+                    return (false, ["error": "--pr expects a positive integer."])
+                }
+                resolvedNumber = number
+            } else {
+                let branch = (try? await Self.currentBranchForCLIMerge(directory: directory)) ?? ""
                 guard !branch.isEmpty else {
                     return (false, [
                         "error": "Could not determine the current branch. Pass --pr <number> explicitly.",
                     ])
                 }
-                guard let number = try await Self.sharedGitHubService.pullRequestNumber(
+                guard let number = try await service.pullRequestNumber(
                     forBranch: branch,
-                    at: directory
+                    at: directory,
+                    repository: repositoryAuthority
                 ) else {
                     return (false, [
                         "error": "No open pull request found for branch \(branch). Pass --pr <number> explicitly.",
                     ])
                 }
                 resolvedNumber = number
-            } catch let error as GitHubCLIError {
-                return (false, ["error": GitHubPaneViewModel.banner(for: error)])
-            } catch {
-                return (false, ["error": error.localizedDescription])
             }
-        }
 
-        let deleteBranch: Bool
-        if let raw = params["delete-branch"]?.lowercased(),
-           raw == "false" || raw == "0" || raw == "no" {
-            deleteBranch = false
-        } else {
-            deleteBranch = true
-        }
+            let mergeRequest = GitHubMergeRequest(
+                pullRequestNumber: resolvedNumber,
+                method: method,
+                deleteBranch: deleteBranch,
+                subject: GitHubSocketMutationSecurity.normalizedText(params["subject"]),
+                body: GitHubSocketMutationSecurity.normalizedText(params["body"])
+            )
+            let authorizationRequest = GitHubSocketMutationAuthorizationRequest(
+                intent: .merge(mergeRequest),
+                context: tabSnapshot.authorizationContext(
+                    repository: repositoryAuthority
+                )
+            )
+            guard let grant = await MainActor.run(body: {
+                self.authorizeGitHubSocketMutation(authorizationRequest)
+            }) else {
+                return (false, ["error": "GitHub merge was not approved."])
+            }
+            guard await MainActor.run(body: { self.currentGitHubCLITabSnapshot() }) == tabSnapshot else {
+                return (false, ["error": "The active tab changed after approval; no merge was performed."])
+            }
 
-        let request = GitHubMergeRequest(
-            pullRequestNumber: resolvedNumber,
-            method: method,
-            deleteBranch: deleteBranch,
-            subject: params["subject"],
-            body: params["body"]
-        )
-
-        do {
-            let merged = try await Self.sharedGitHubService.mergePullRequest(
-                request: request,
+            let merged = try await service.mergePullRequest(
+                authorizedBy: grant,
                 at: directory
             )
             return (true, [
@@ -383,6 +445,8 @@ extension AppDelegate {
             return (false, ["error": error.errorDescription ?? "Pull request could not be merged."])
         } catch let error as GitHubCLIError {
             return (false, ["error": GitHubPaneViewModel.banner(for: error)])
+        } catch let error as GitHubSocketMutationAuthorizationError {
+            return (false, ["error": error.localizedDescription])
         } catch {
             return (false, ["error": error.localizedDescription])
         }
@@ -391,21 +455,56 @@ extension AppDelegate {
     /// Returns the current branch of `directory` by shelling out to
     /// `git rev-parse --abbrev-ref HEAD`. Used by the CLI merge verb
     /// when the caller did not pass `--pr`.
-    nonisolated private func currentBranchForCLIMerge(
-        directory: URL
+    nonisolated static func currentBranchForCLIMerge(
+        directory: URL,
+        timeoutSeconds: TimeInterval = 5,
+        executableURL: URL = URL(fileURLWithPath: "/usr/bin/env"),
+        arguments: [String] = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
     ) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
+                guard timeoutSeconds.isFinite, timeoutSeconds > 0 else {
+                    continuation.resume(
+                        throwing: GitHubCLIError.timeout(seconds: timeoutSeconds)
+                    )
+                    return
+                }
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-                process.arguments = ["git", "rev-parse", "--abbrev-ref", "HEAD"]
+                process.executableURL = executableURL
+                process.arguments = arguments
                 process.currentDirectoryURL = directory
                 let stdout = Pipe()
                 process.standardOutput = stdout
-                process.standardError = Pipe()
+                // `git rev-parse` emits one bounded line on stdout. Discard
+                // stderr so an unexpected child cannot fill an unread pipe
+                // and prevent the deadline from terminating the process.
+                process.standardError = FileHandle.nullDevice
                 do {
                     try process.run()
-                    process.waitUntilExit()
+                    let completed = DispatchSemaphore(value: 0)
+                    DispatchQueue.global(qos: .userInitiated).async {
+                        process.waitUntilExit()
+                        completed.signal()
+                    }
+                    let timeout = DispatchTimeInterval.milliseconds(
+                        max(1, Int(timeoutSeconds * 1_000))
+                    )
+                    if completed.wait(timeout: .now() + timeout) == .timedOut {
+                        process.terminate()
+                        _ = completed.wait(timeout: .now() + .milliseconds(500))
+                        if process.isRunning {
+                            kill(process.processIdentifier, SIGKILL)
+                            _ = completed.wait(timeout: .now() + .milliseconds(200))
+                        }
+                        continuation.resume(
+                            throwing: GitHubCLIError.timeout(seconds: timeoutSeconds)
+                        )
+                        return
+                    }
+                    guard process.terminationStatus == 0 else {
+                        continuation.resume(returning: "")
+                        return
+                    }
                     let data = stdout.fileHandleForReading.readDataToEndOfFile()
                     let branch = String(decoding: data, as: UTF8.self)
                         .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -426,28 +525,77 @@ extension AppDelegate {
     /// under `review` for user ergonomics.
     nonisolated private func runGitHubPRReview(
         params: [String: String],
-        action: GitHubPullRequestReviewAction
+        action: GitHubPullRequestReviewAction,
+        service: GitHubService
     ) async -> (Bool, [String: String]) {
-        guard let directory = await MainActor.run(body: { self.currentGitHubCLIWorkingDirectory() }) else {
+        guard let tabSnapshot = await MainActor.run(body: { self.currentGitHubCLITabSnapshot() }) else {
             return (false, [
                 "error": "Open a git repository before submitting a pull request review.",
             ])
         }
+        let directory = tabSnapshot.directory
 
-        let prNumber = params["pr"].flatMap(Int.init)
         do {
-            try await Self.sharedGitHubService.reviewPullRequest(
-                number: prNumber,
-                action: action,
-                body: params["body"],
+            let repository = try await service.currentRepo(at: directory)
+            guard let repositoryAuthority = GitHubRepositoryAuthority(repository: repository) else {
+                return (false, ["error": "Could not bind the active GitHub repository."])
+            }
+
+            let prNumber: Int
+            if let raw = params["pr"] {
+                guard let number = Int(raw), number > 0 else {
+                    return (false, ["error": "--pr expects a positive integer."])
+                }
+                prNumber = number
+            } else {
+                let branch = (try? await Self.currentBranchForCLIMerge(directory: directory)) ?? ""
+                guard !branch.isEmpty else {
+                    return (false, [
+                        "error": "Could not determine the current branch. Pass --pr <number> explicitly.",
+                    ])
+                }
+                guard let number = try await service.pullRequestNumber(
+                    forBranch: branch,
+                    at: directory,
+                    repository: repositoryAuthority
+                ) else {
+                    return (false, [
+                        "error": "No open pull request found for branch \(branch). Pass --pr <number> explicitly.",
+                    ])
+                }
+                prNumber = number
+            }
+
+            let authorizationRequest = GitHubSocketMutationAuthorizationRequest(
+                intent: .review(
+                    pullRequestNumber: prNumber,
+                    action: action,
+                    body: GitHubSocketMutationSecurity.normalizedText(params["body"])
+                ),
+                context: tabSnapshot.authorizationContext(
+                    repository: repositoryAuthority
+                )
+            )
+            guard let grant = await MainActor.run(body: {
+                self.authorizeGitHubSocketMutation(authorizationRequest)
+            }) else {
+                return (false, ["error": "GitHub review was not approved."])
+            }
+            guard await MainActor.run(body: { self.currentGitHubCLITabSnapshot() }) == tabSnapshot else {
+                return (false, ["error": "The active tab changed after approval; no review was submitted."])
+            }
+
+            try await service.reviewPullRequest(
+                authorizedBy: grant,
                 at: directory
             )
-            let target = prNumber.map { "PR #\($0)" } ?? "the active pull request"
             return (true, [
-                "summary": "Review \(action.displayName) for \(target).",
+                "summary": "Review \(action.displayName) for PR #\(prNumber).",
             ])
         } catch let error as GitHubCLIError {
             return (false, ["error": GitHubPaneViewModel.banner(for: error)])
+        } catch let error as GitHubSocketMutationAuthorizationError {
+            return (false, ["error": error.localizedDescription])
         } catch {
             return (false, ["error": error.localizedDescription])
         }
@@ -488,6 +636,14 @@ extension AppDelegate {
                 "Failed to encode GitHub CLI payload: \(String(describing: error), privacy: .private)"
             )
             return "[]"
+        }
+    }
+
+    nonisolated private static func parseGitHubSocketBoolean(_ raw: String) -> Bool? {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "y": return true
+        case "0", "false", "no", "n": return false
+        default: return nil
         }
     }
 }

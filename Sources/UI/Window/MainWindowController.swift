@@ -655,6 +655,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var isTabConfigStartupAuthorizationPresented = false
     var consumedTabConfigStartupAuthorizationIDs: Set<UUID> = []
 
+    /// Optional test seam for one-time local-socket GitHub mutations.
+    var githubSocketMutationAuthorizationPresenter: ((GitHubSocketMutationAuthorizationRequest) -> Bool)?
+    var isGitHubSocketMutationAuthorizationPresented = false
+    var consumedGitHubSocketMutationAuthorizationIDs: [UUID: Date] = [:]
+
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
     var inlineImageRenderers: [ObjectIdentifier: InlineImageRenderer] = [:]

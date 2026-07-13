@@ -358,8 +358,8 @@ public enum CLICommand: String, CaseIterable {
         case .reviewRefresh: return "Refresh the agent code review diff"
         case .reviewSubmit: return "Submit all pending review comments to the active agent"
         case .reviewStats: return "Print the current agent code review statistics"
-        case .reviewApprove: return "Approve the active GitHub pull request, reading an optional body from stdin"
-        case .reviewRequestChanges: return "Request changes on the active GitHub pull request, reading an optional body from stdin"
+        case .reviewApprove: return "Approve a GitHub pull request after one-time in-app approval"
+        case .reviewRequestChanges: return "Request changes on a GitHub pull request after one-time in-app approval"
 
         // Tab extended
         case .tabRename: return "Rename a tab by UUID"
@@ -605,9 +605,9 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeAdd: return "Create a cocxy-managed git worktree and attach it to the active tab"
         case .worktreeList: return "List every cocxy-managed git worktree for the active tab's repo as JSON"
         case .worktreeFocus: return "Focus an existing cocxy-managed git worktree, reopening it in a tab when needed"
-        case .worktreeRemove: return "Remove a cocxy-managed git worktree (refuses when dirty unless --force)"
+        case .worktreeRemove: return "Remove a clean cocxy-managed git worktree"
         case .worktreePrune: return "Drop manifest entries whose worktree git no longer tracks"
-        case .worktreeCleanupMerged: return "Clean up merged cocxy-managed git worktrees after a dry-run preflight"
+        case .worktreeCleanupMerged: return "Preview merged cocxy-managed git worktree cleanup without deleting anything"
 
         // GitHub pane v0.1.84
         case .githubStatus: return "Return gh auth + repository summary for the active tab as JSON"
@@ -617,7 +617,7 @@ public enum CLICommand: String, CaseIterable {
         case .githubRefresh: return "Refresh the GitHub pane data on the focused window"
 
         // GitHub PR merge v0.1.86
-        case .githubPRMerge: return "Merge a pull request via gh (squash, merge, or rebase)"
+        case .githubPRMerge: return "Merge a pull request after one-time in-app approval; branch deletion is opt-in"
 
         // Git Assistant
         case .gitAssistantCommitMessage: return "Generate a commit message from the active tab's staged diff"
@@ -892,9 +892,9 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeAdd: return "cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]"
         case .worktreeList: return "cocxy worktree list"
         case .worktreeFocus: return "cocxy worktree focus <id>"
-        case .worktreeRemove: return "cocxy worktree remove <id> [--force]"
+        case .worktreeRemove: return "cocxy worktree remove <id>"
         case .worktreePrune: return "cocxy worktree prune"
-        case .worktreeCleanupMerged: return "cocxy worktree cleanup-merged [--base-ref <ref>] [--force] [--dry-run]"
+        case .worktreeCleanupMerged: return "cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]"
 
         // GitHub pane v0.1.84
         case .githubStatus: return "cocxy github status"
@@ -904,7 +904,7 @@ public enum CLICommand: String, CaseIterable {
         case .githubRefresh: return "cocxy github refresh"
 
         // GitHub PR merge v0.1.86
-        case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--no-delete-branch] [--subject <text>] [--body <text>]"
+        case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--delete-branch|--no-delete-branch] [--subject <text>] [--body <text>]"
 
         // Git Assistant
         case .gitAssistantCommitMessage: return "cocxy git-assistant commit-message"
