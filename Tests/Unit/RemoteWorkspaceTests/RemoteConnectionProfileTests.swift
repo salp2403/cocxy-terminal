@@ -250,7 +250,7 @@ struct RemoteConnectionProfileTests {
         #expect(command.contains("-R 9090:localhost:3000"))
     }
 
-    @Test func sshCommandWithDynamicForward() {
+    @Test func sshCommandOmitsLegacyDynamicForward() {
         let forward = RemoteConnectionProfile.PortForward.dynamic(localPort: 1080)
         let profile = RemoteConnectionProfile(
             name: "dev",
@@ -259,7 +259,8 @@ struct RemoteConnectionProfileTests {
         )
 
         let command = profile.sshCommand
-        #expect(command.contains("-D 1080"))
+        #expect(!command.contains("1080"))
+        #expect(command.hasSuffix("example.com"))
     }
 
     @Test func sshCommandWithKeepAlive() {
@@ -307,7 +308,7 @@ struct RemoteConnectionProfileTests {
         #expect(command.contains("-i ~/.ssh/prod_key"))
         #expect(command.contains("-J bastion.com"))
         #expect(command.contains("-L 3000:localhost:3000"))
-        #expect(command.contains("-D 1080"))
+        #expect(!command.contains("1080"))
         #expect(command.contains("-o ServerAliveInterval=45"))
         #expect(command.contains("-o SendEnv=ENV"))
         #expect(command.hasSuffix("deploy@prod.server.com"))
@@ -406,7 +407,7 @@ struct RemoteConnectionProfileTests {
 
     @Test func dynamicForwardSSHFlag() {
         let forward = RemoteConnectionProfile.PortForward.dynamic(localPort: 1080)
-        #expect(forward.sshFlag == "-D 1080")
+        #expect(forward.sshFlag == nil)
     }
 
     // MARK: - Equatable

@@ -89,6 +89,94 @@ final class MockManagedProcess: ManagedProcess, @unchecked Sendable {
     }
 }
 
+private final class MultiplexerTestProxyTransport: ProxyUpstreamTransport, @unchecked Sendable {
+    let processIdentifier: Int32 = 67_890
+    var isRunning = true
+    let diagnosticOutput = ""
+
+    func waitUntilReady() async throws {}
+
+    func send(
+        _ data: Data,
+        completion: @escaping @Sendable (Result<Void, any Error>) -> Void
+    ) {
+        _ = data
+        completion(.success(()))
+    }
+
+    func receive(
+        maximumLength: Int,
+        completion: @escaping @Sendable (Result<Data?, any Error>) -> Void
+    ) {
+        _ = maximumLength
+        _ = completion
+    }
+
+    func closeWrite() {}
+
+    func cancel() {
+        isRunning = false
+    }
+}
+
+private final class DirectTCPFactoryRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedCalls: [(
+        controlPath: String,
+        target: ProxyTarget,
+        attestation: SSHControlSocketAttestation
+    )] = []
+    private var recordedTransports: [MultiplexerTestProxyTransport] = []
+
+    var calls: [(
+        controlPath: String,
+        target: ProxyTarget,
+        attestation: SSHControlSocketAttestation
+    )] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedCalls
+    }
+
+    var transports: [MultiplexerTestProxyTransport] {
+        lock.lock()
+        defer { lock.unlock() }
+        return recordedTransports
+    }
+
+    func make(
+        controlPath: String,
+        target: ProxyTarget,
+        attestation: SSHControlSocketAttestation
+    ) -> any ProxyUpstreamTransport {
+        let transport = MultiplexerTestProxyTransport()
+        lock.lock()
+        recordedCalls.append((controlPath, target, attestation))
+        recordedTransports.append(transport)
+        lock.unlock()
+        return transport
+    }
+}
+
+private final class ControlSocketAttestationSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private let values: [SSHControlSocketAttestation]
+    private var index = 0
+
+    init(_ values: [SSHControlSocketAttestation]) {
+        self.values = values
+    }
+
+    func next() throws -> SSHControlSocketAttestation {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !values.isEmpty else { throw SSHMultiplexerError.notConnected }
+        let value = values[min(index, values.count - 1)]
+        index += 1
+        return value
+    }
+}
+
 private final class ConcurrentProfileExecutor: ProcessExecutor, @unchecked Sendable {
     let releaseFirst = DispatchSemaphore(value: 0)
 
@@ -895,15 +983,194 @@ struct SSHMultiplexerTests {
         #expect(call.arguments.contains("cancel"))
     }
 
-    @Test func forwardPortWithDynamicForward() throws {
+    @Test func forwardPortRejectsLegacyDynamicForwardWithoutExecutingSSH() {
         let executor = MockProcessExecutor()
         let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
         let forward = RemoteConnectionProfile.PortForward.dynamic(localPort: 1080)
 
-        try multiplexer.forwardPort(forward, on: profile, executor: executor)
+        #expect(throws: SSHMultiplexerError.self) {
+            try multiplexer.forwardPort(forward, on: profile, executor: executor)
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
 
-        let call = executor.executedCommands[0]
-        #expect(call.arguments.contains("-D"))
-        #expect(call.arguments.contains("1080"))
+    @Test func cancelForwardRejectsLegacyDynamicForwardWithoutExecutingSSH() {
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let forward = RemoteConnectionProfile.PortForward.dynamic(localPort: 1080)
+
+        #expect(throws: SSHMultiplexerError.self) {
+            try multiplexer.cancelForward(forward, on: profile, executor: executor)
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func directTCPTransportRequiresExactLiveSupervisedMaster() throws {
+        let recorder = DirectTCPFactoryRecorder()
+        let executor = MockProcessExecutor()
+        let attestation = SSHControlSocketAttestation(
+            device: 1,
+            inode: 2,
+            peerProcessID: executor.managedChildProcessID
+        )
+        let multiplexer = SSHMultiplexer(
+            directTCPTransportFactory: { controlPath, target, attestation in
+                recorder.make(
+                    controlPath: controlPath,
+                    target: target,
+                    attestation: attestation
+                )
+            },
+            controlSocketAttestationProvider: { _ in attestation }
+        )
+        let profile = RemoteConnectionProfile(
+            name: "dev",
+            host: "server.com",
+            user: "operator"
+        )
+        let identity = try multiplexer.connect(profile: profile, executor: executor)
+        defer { multiplexer.terminateControlMaster(identity) }
+        let target = try ProxyTarget(host: "internal.example", port: 443)
+        let wrongIdentity = SSHControlMasterIdentity(
+            processID: identity.processID,
+            controlPath: identity.controlPath,
+            supervisorID: UUID()
+        )
+
+        #expect(throws: SSHMultiplexerError.self) {
+            try multiplexer.openDirectTCPTransport(
+                to: target,
+                on: profile,
+                expectedControlMaster: wrongIdentity
+            )
+        }
+        #expect(recorder.calls.isEmpty)
+
+        _ = try multiplexer.openDirectTCPTransport(
+            to: target,
+            on: profile,
+            expectedControlMaster: identity
+        )
+        let call = try #require(recorder.calls.first)
+        #expect(call.controlPath == profile.controlPath)
+        #expect(call.target == target)
+        #expect(call.attestation == attestation)
+
+        executor.startedProcesses.first?.finish()
+        #expect(throws: SSHMultiplexerError.self) {
+            try multiplexer.openDirectTCPTransport(
+                to: target,
+                on: profile,
+                expectedControlMaster: identity
+            )
+        }
+        #expect(recorder.calls.count == 1)
+    }
+
+    @Test func directTCPTransportRejectsUnexpectedControlSocketPeer() throws {
+        let recorder = DirectTCPFactoryRecorder()
+        let executor = MockProcessExecutor()
+        let multiplexer = SSHMultiplexer(
+            directTCPTransportFactory: { controlPath, target, attestation in
+                recorder.make(
+                    controlPath: controlPath,
+                    target: target,
+                    attestation: attestation
+                )
+            },
+            controlSocketAttestationProvider: { _ in
+                SSHControlSocketAttestation(device: 1, inode: 2, peerProcessID: 99_999)
+            }
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let identity = try multiplexer.connect(profile: profile, executor: executor)
+        defer { multiplexer.terminateControlMaster(identity) }
+
+        #expect(throws: SSHMultiplexerError.notConnected) {
+            try multiplexer.openDirectTCPTransport(
+                to: ProxyTarget(host: "internal.example", port: 443),
+                on: profile,
+                expectedControlMaster: identity
+            )
+        }
+        #expect(recorder.calls.isEmpty)
+    }
+
+    @Test func directTCPTransportCancelsWhenControlSocketChangesDuringLaunch() throws {
+        let recorder = DirectTCPFactoryRecorder()
+        let executor = MockProcessExecutor()
+        let expected = SSHControlSocketAttestation(
+            device: 1,
+            inode: 2,
+            peerProcessID: executor.managedChildProcessID
+        )
+        let replacement = SSHControlSocketAttestation(
+            device: 1,
+            inode: 3,
+            peerProcessID: executor.managedChildProcessID
+        )
+        let attestations = ControlSocketAttestationSequence([expected, replacement])
+        let multiplexer = SSHMultiplexer(
+            directTCPTransportFactory: { controlPath, target, attestation in
+                recorder.make(
+                    controlPath: controlPath,
+                    target: target,
+                    attestation: attestation
+                )
+            },
+            controlSocketAttestationProvider: { _ in try attestations.next() }
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let identity = try multiplexer.connect(profile: profile, executor: executor)
+        defer { multiplexer.terminateControlMaster(identity) }
+
+        #expect(throws: SSHMultiplexerError.notConnected) {
+            try multiplexer.openDirectTCPTransport(
+                to: ProxyTarget(host: "internal.example", port: 443),
+                on: profile,
+                expectedControlMaster: identity
+            )
+        }
+        #expect(recorder.calls.count == 1)
+        #expect(recorder.transports.first?.isRunning == false)
+    }
+
+    @Test func directTCPTransportReattestsSocketAfterChannelConfirmation() async throws {
+        let recorder = DirectTCPFactoryRecorder()
+        let executor = MockProcessExecutor()
+        let expected = SSHControlSocketAttestation(
+            device: 1,
+            inode: 2,
+            peerProcessID: executor.managedChildProcessID
+        )
+        let replacement = SSHControlSocketAttestation(
+            device: 1,
+            inode: 3,
+            peerProcessID: executor.managedChildProcessID
+        )
+        let attestations = ControlSocketAttestationSequence([expected, expected, replacement])
+        let multiplexer = SSHMultiplexer(
+            directTCPTransportFactory: { controlPath, target, attestation in
+                recorder.make(
+                    controlPath: controlPath,
+                    target: target,
+                    attestation: attestation
+                )
+            },
+            controlSocketAttestationProvider: { _ in try attestations.next() }
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let identity = try multiplexer.connect(profile: profile, executor: executor)
+        defer { multiplexer.terminateControlMaster(identity) }
+        let transport = try multiplexer.openDirectTCPTransport(
+            to: ProxyTarget(host: "internal.example", port: 443),
+            on: profile,
+            expectedControlMaster: identity
+        )
+
+        await #expect(throws: SSHMultiplexerError.notConnected) {
+            try await transport.waitUntilReady()
+        }
+        #expect(recorder.transports.first?.isRunning == false)
     }
 }

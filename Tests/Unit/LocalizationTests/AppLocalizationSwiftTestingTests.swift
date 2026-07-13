@@ -393,6 +393,97 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func authenticatedProxyStringsLocalizeInEnglishAndSpanish() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let expectedEnglish = [
+            "remoteWorkspace.subPanel.proxy.detail": "Authenticated local proxy",
+            "remoteWorkspace.profileEditor.dynamicDisabled": "Legacy dynamic forward retained but disabled; remove it or use Proxy",
+            "remoteWorkspace.profileEditor.saveFailed": "Could not save profile: %@",
+            "remoteWorkspace.proxy.updating": "Updating proxy",
+            "remoteWorkspace.proxy.status.otherProfile": "Proxy session belongs to another profile",
+            "remoteWorkspace.proxy.socksToggle": "Authenticated SOCKS5 proxy",
+            "remoteWorkspace.proxy.socksPort": "SOCKS5 port",
+            "remoteWorkspace.proxy.otherProfileDetail": "Enabling here replaces the proxy session on the other profile.",
+            "remoteWorkspace.proxy.credentials": "Client Credentials",
+            "remoteWorkspace.proxy.username": "Username",
+            "remoteWorkspace.proxy.copyUsername": "Copy proxy username",
+            "remoteWorkspace.proxy.password": "Password",
+            "remoteWorkspace.proxy.socksPassword": "SOCKS Password",
+            "remoteWorkspace.proxy.httpPassword": "HTTP Password",
+            "remoteWorkspace.proxy.hidePassword": "Hide password",
+            "remoteWorkspace.proxy.revealPassword": "Reveal password",
+            "remoteWorkspace.proxy.copyPassword": "Copy proxy password",
+            "remoteWorkspace.proxy.copySOCKSPassword": "Copy SOCKS password",
+            "remoteWorkspace.proxy.copyHTTPPassword": "Copy HTTP password",
+            "remoteWorkspace.proxy.httpToggle": "Authenticated HTTP CONNECT proxy",
+            "remoteWorkspace.proxy.httpPort": "HTTP CONNECT port",
+            "remoteWorkspace.proxy.stats.connections": "Connections",
+            "remoteWorkspace.proxy.systemWide.secureUnavailable": "Unavailable for authenticated proxy sessions",
+        ]
+        let expectedSpanish = [
+            "remoteWorkspace.subPanel.proxy.detail": "Proxy local autenticado",
+            "remoteWorkspace.profileEditor.dynamicDisabled": "Redirección dinámica heredada conservada pero desactivada; elimínala o usa Proxy",
+            "remoteWorkspace.profileEditor.saveFailed": "No se pudo guardar el perfil: %@",
+            "remoteWorkspace.proxy.updating": "Actualizando proxy",
+            "remoteWorkspace.proxy.status.otherProfile": "La sesión de proxy pertenece a otro perfil",
+            "remoteWorkspace.proxy.socksToggle": "Proxy SOCKS5 autenticado",
+            "remoteWorkspace.proxy.socksPort": "Puerto SOCKS5",
+            "remoteWorkspace.proxy.otherProfileDetail": "Activarlo aquí reemplaza la sesión de proxy del otro perfil.",
+            "remoteWorkspace.proxy.credentials": "Credenciales del cliente",
+            "remoteWorkspace.proxy.username": "Usuario",
+            "remoteWorkspace.proxy.copyUsername": "Copiar usuario del proxy",
+            "remoteWorkspace.proxy.password": "Contraseña",
+            "remoteWorkspace.proxy.socksPassword": "Clave SOCKS",
+            "remoteWorkspace.proxy.httpPassword": "Clave HTTP",
+            "remoteWorkspace.proxy.hidePassword": "Ocultar contraseña",
+            "remoteWorkspace.proxy.revealPassword": "Mostrar contraseña",
+            "remoteWorkspace.proxy.copyPassword": "Copiar contraseña del proxy",
+            "remoteWorkspace.proxy.copySOCKSPassword": "Copiar clave SOCKS",
+            "remoteWorkspace.proxy.copyHTTPPassword": "Copiar clave HTTP",
+            "remoteWorkspace.proxy.httpToggle": "Proxy HTTP CONNECT autenticado",
+            "remoteWorkspace.proxy.httpPort": "Puerto HTTP CONNECT",
+            "remoteWorkspace.proxy.stats.connections": "Conexiones",
+            "remoteWorkspace.proxy.systemWide.secureUnavailable": "No disponible para sesiones de proxy autenticadas",
+        ]
+
+        #expect(expectedEnglish.allSatisfy { english[$0.key] == $0.value })
+        #expect(expectedSpanish.allSatisfy { spanish[$0.key] == $0.value })
+        #expect(Set(expectedEnglish.keys) == Set(expectedSpanish.keys))
+    }
+
+    @Test
+    func tunnelOperationFailureLocalizesAndPreservesItsFormatArgument() throws {
+        let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(
+            String(
+                format: english.string(
+                    "remoteWorkspace.portForward.operationFailed",
+                    fallback: "Tunnel operation failed: %@"
+                ),
+                "permission denied"
+            ) == "Tunnel operation failed: permission denied"
+        )
+        #expect(
+            String(
+                format: spanish.string(
+                    "remoteWorkspace.portForward.operationFailed",
+                    fallback: "Tunnel operation failed: %@"
+                ),
+                "permiso denegado"
+            ) == "Falló la operación del túnel: permiso denegado"
+        )
+    }
+
+    @Test
     func activityDashboardStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)

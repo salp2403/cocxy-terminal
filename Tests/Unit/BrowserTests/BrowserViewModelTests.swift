@@ -290,7 +290,10 @@ final class BrowserViewModelTests: XCTestCase {
         XCTAssertNotNil(vm.openRemoteForward(remote, remotePort: 3000))
         XCTAssertNil(vm.remoteBrowserNotice)
 
-        vm.updateRemoteBrowserProxyState(.failing(reason: "probe failed"))
+        vm.updateRemoteBrowserProxyState(.failing(
+            profileID: remote.connectionProfileID,
+            reason: "probe failed"
+        ))
 
         XCTAssertEqual(vm.activeRemoteBrowserProfile?.proxyHealth, .failed)
         XCTAssertEqual(vm.remoteBrowserNotice?.kind, .proxyFailed)
@@ -298,7 +301,11 @@ final class BrowserViewModelTests: XCTestCase {
         XCTAssertEqual(vm.getState()["remoteProxyHealth"], "failed")
         XCTAssertEqual(vm.getState()["remoteNotice"], "proxyFailed")
 
-        vm.updateRemoteBrowserProxyState(.active(socksPort: 1080, httpPort: 18080))
+        vm.updateRemoteBrowserProxyState(.active(
+            profileID: remote.connectionProfileID,
+            socksPort: 1080,
+            httpPort: 18080
+        ))
 
         XCTAssertEqual(vm.activeRemoteBrowserProfile?.proxyHealth, .active)
         XCTAssertEqual(vm.activeRemoteBrowserProfile?.socksPort, 1080)

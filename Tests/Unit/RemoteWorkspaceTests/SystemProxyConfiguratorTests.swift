@@ -15,6 +15,7 @@ final class MockNetworkConfigurator: SystemNetworkConfiguring {
     var interfaceToReturn: String? = "Wi-Fi"
     var currentProxyState: SystemProxyConfigurator.SavedState?
     var shouldThrow = false
+    private(set) var readStateCallCount = 0
 
     func detectActiveInterface() throws -> String {
         if shouldThrow { throw ProxyError.systemProxyFailed("Detection failed") }
@@ -30,6 +31,7 @@ final class MockNetworkConfigurator: SystemNetworkConfiguring {
     }
 
     func readCurrentProxyState(interface: String) throws -> SystemProxyConfigurator.SavedState {
+        readStateCallCount += 1
         if let state = currentProxyState { return state }
         return SystemProxyConfigurator.SavedState(
             interface: interface,
@@ -51,13 +53,17 @@ final class MockPACFileWriter: PACFileWriting {
 
     var writtenContent: String?
     var writtenPath: String?
+    private(set) var writeCallCount = 0
+    private(set) var removeCallCount = 0
 
     func writePACFile(content: String, to path: String) throws {
+        writeCallCount += 1
         writtenContent = content
         writtenPath = path
     }
 
     func removePACFile(at path: String) throws {
+        removeCallCount += 1
         writtenContent = nil
         writtenPath = nil
     }
@@ -88,40 +94,19 @@ struct SystemProxyConfiguratorTests {
 
     // MARK: - Activate Proxy
 
-    @Test("activateProxy generates correct networksetup commands")
-    @MainActor func activateProxy() throws {
-        let networkConfig = MockNetworkConfigurator()
-        let pacWriter = MockPACFileWriter()
-        let proxy = SystemProxyConfigurator(
-            networkConfigurator: networkConfig,
-            pacWriter: pacWriter
-        )
+    @Test("production configurator rejects mutations before launching networksetup")
+    @MainActor func productionConfiguratorRejectsMutations() {
+        let configurator = SystemNetworkConfigurator()
 
-        try proxy.activateProxy(
-            interface: "Wi-Fi",
-            socksPort: 1080,
-            httpPort: 8888,
-            exclusions: ProxyExclusionList()
-        )
-
-        // Should have saved state + set SOCKS + set web proxy = at least 2 setup commands.
-        #expect(networkConfig.executedCommands.count >= 2)
-
-        let socksCmd = networkConfig.executedCommands.first {
-            $0.arguments.contains("-setsocksfirewallproxy")
+        #expect(throws: ProxyError.self) {
+            try configurator.executeNetworkSetup(arguments: [
+                "-setsocksfirewallproxystate", "Wi-Fi", "on",
+            ])
         }
-        #expect(socksCmd != nil)
-        #expect(socksCmd?.arguments.contains("1080") == true)
-
-        let webCmd = networkConfig.executedCommands.first {
-            $0.arguments.contains("-setwebproxy")
-        }
-        #expect(webCmd != nil)
-        #expect(webCmd?.arguments.contains("8888") == true)
     }
 
-    @Test("activateProxy writes PAC file")
-    @MainActor func activateWritesPAC() throws {
+    @Test("activateProxy fails closed without commands or PAC side effects")
+    @MainActor func activateProxyFailsClosed() {
         let networkConfig = MockNetworkConfigurator()
         let pacWriter = MockPACFileWriter()
         let proxy = SystemProxyConfigurator(
@@ -129,21 +114,28 @@ struct SystemProxyConfiguratorTests {
             pacWriter: pacWriter
         )
 
-        try proxy.activateProxy(
-            interface: "Wi-Fi",
-            socksPort: 1080,
-            httpPort: nil,
-            exclusions: ProxyExclusionList()
-        )
+        for httpPort in [nil, 8_888] as [Int?] {
+            #expect(throws: ProxyError.self) {
+                try proxy.activateProxy(
+                    interface: "Wi-Fi",
+                    socksPort: 1_080,
+                    httpPort: httpPort,
+                    exclusions: ProxyExclusionList()
+                )
+            }
+        }
 
-        #expect(pacWriter.writtenContent != nil)
-        #expect(pacWriter.writtenContent?.contains("FindProxyForURL") == true)
+        #expect(networkConfig.readStateCallCount == 0)
+        #expect(networkConfig.executedCommands.isEmpty)
+        #expect(pacWriter.writeCallCount == 0)
+        #expect(pacWriter.removeCallCount == 0)
+        #expect(pacWriter.writtenContent == nil)
     }
 
     // MARK: - Deactivate Proxy
 
-    @Test("deactivateProxy restores saved state")
-    @MainActor func deactivateRestoresState() throws {
+    @Test("deactivateProxy removes legacy PAC without networksetup")
+    @MainActor func deactivateRemovesPACWithoutCommands() throws {
         let networkConfig = MockNetworkConfigurator()
         let pacWriter = MockPACFileWriter()
         let proxy = SystemProxyConfigurator(
@@ -151,44 +143,18 @@ struct SystemProxyConfiguratorTests {
             pacWriter: pacWriter
         )
 
-        // Activate first to save state.
-        try proxy.activateProxy(
-            interface: "Wi-Fi",
-            socksPort: 1080,
-            httpPort: nil,
-            exclusions: ProxyExclusionList()
-        )
-
-        let commandsBefore = networkConfig.executedCommands.count
-        try proxy.deactivateProxy(interface: "Wi-Fi")
-
-        // Should have executed restore commands.
-        #expect(networkConfig.executedCommands.count > commandsBefore)
-    }
-
-    @Test("deactivateProxy removes PAC file")
-    @MainActor func deactivateRemovesPAC() throws {
-        let networkConfig = MockNetworkConfigurator()
-        let pacWriter = MockPACFileWriter()
-        let proxy = SystemProxyConfigurator(
-            networkConfigurator: networkConfig,
-            pacWriter: pacWriter
-        )
-
-        try proxy.activateProxy(
-            interface: "Wi-Fi",
-            socksPort: 1080,
-            httpPort: nil,
-            exclusions: ProxyExclusionList()
-        )
+        try pacWriter.writePACFile(content: "legacy", to: SystemProxyConfigurator.defaultPACPath)
 
         try proxy.deactivateProxy(interface: "Wi-Fi")
         #expect(pacWriter.writtenContent == nil)
+        #expect(pacWriter.removeCallCount == 1)
+        #expect(networkConfig.readStateCallCount == 0)
+        #expect(networkConfig.executedCommands.isEmpty)
     }
 
     // MARK: - Safe Restore
 
-    @Test("deactivateProxy without prior activate is safe no-op")
+    @Test("deactivateProxy without prior activate is safe cleanup")
     @MainActor func deactivateWithoutActivate() throws {
         let networkConfig = MockNetworkConfigurator()
         let pacWriter = MockPACFileWriter()
@@ -197,9 +163,9 @@ struct SystemProxyConfiguratorTests {
             pacWriter: pacWriter
         )
 
-        // Should not throw even though there's no saved state.
         try proxy.deactivateProxy(interface: "Wi-Fi")
         #expect(networkConfig.executedCommands.isEmpty)
+        #expect(pacWriter.removeCallCount == 1)
     }
 
     // MARK: - Saved State

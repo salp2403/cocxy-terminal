@@ -200,6 +200,12 @@ struct SSHControlMasterIdentity: Equatable, Sendable {
     }
 }
 
+struct SSHControlSocketAttestation: Equatable, Sendable {
+    let device: UInt64
+    let inode: UInt64
+    let peerProcessID: Int32
+}
+
 // MARK: - Multiplexer Errors
 
 /// Errors that can occur during SSH multiplexing operations.
@@ -257,6 +263,11 @@ protocol SSHMultiplexing: Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws
+    func openDirectTCPTransport(
+        to target: ProxyTarget,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> any ProxyUpstreamTransport
 
     /// Executes a command on the remote host through the ControlMaster session.
     func executeRemoteCommand(
@@ -266,13 +277,76 @@ protocol SSHMultiplexing: Sendable {
     ) async throws -> ProcessResult
 }
 
+extension SSHMultiplexing {
+    func openDirectTCPTransport(
+        to target: ProxyTarget,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> any ProxyUpstreamTransport {
+        _ = target
+        _ = profile
+        _ = expectedControlMaster
+        throw ProxyUpstreamTransportError.unavailable
+    }
+}
+
+private final class AttestedProxyUpstreamTransport: ProxyUpstreamTransport, @unchecked Sendable {
+    private let upstream: any ProxyUpstreamTransport
+    private let verifyAttestation: @Sendable () throws -> Void
+
+    var processIdentifier: Int32 { upstream.processIdentifier }
+    var isRunning: Bool { upstream.isRunning }
+    var diagnosticOutput: String { upstream.diagnosticOutput }
+
+    init(
+        upstream: any ProxyUpstreamTransport,
+        verifyAttestation: @escaping @Sendable () throws -> Void
+    ) {
+        self.upstream = upstream
+        self.verifyAttestation = verifyAttestation
+    }
+
+    func waitUntilReady() async throws {
+        do {
+            try await upstream.waitUntilReady()
+            guard upstream.isRunning else { throw ProxyUpstreamTransportError.closed }
+            try verifyAttestation()
+        } catch {
+            upstream.cancel()
+            throw error
+        }
+    }
+
+    func send(
+        _ data: Data,
+        completion: @escaping @Sendable (Result<Void, any Error>) -> Void
+    ) {
+        upstream.send(data, completion: completion)
+    }
+
+    func receive(
+        maximumLength: Int,
+        completion: @escaping @Sendable (Result<Data?, any Error>) -> Void
+    ) {
+        upstream.receive(maximumLength: maximumLength, completion: completion)
+    }
+
+    func closeWrite() {
+        upstream.closeWrite()
+    }
+
+    func cancel() {
+        upstream.cancel()
+    }
+}
+
 // MARK: - SSH Multiplexer
 
 /// Manages OpenSSH ControlMaster sessions for connection reuse.
 ///
 /// ControlMaster allows multiple SSH sessions to share a single TCP
-/// connection, reducing latency for new sessions and enabling dynamic
-/// port forwarding via `ssh -O forward`.
+/// connection, reducing latency for new sessions and enabling approved
+/// local and remote forwarding through `ssh -O forward`.
 ///
 /// ## Socket Layout
 ///
@@ -282,6 +356,16 @@ protocol SSHMultiplexing: Sendable {
 ///     └── <profile-uuid>.sock
 /// ```
 final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
+
+    typealias DirectTCPTransportFactory = @Sendable (
+        _ controlPath: String,
+        _ target: ProxyTarget,
+        _ expectedAttestation: SSHControlSocketAttestation
+    ) throws -> any ProxyUpstreamTransport
+
+    typealias ControlSocketAttestationProvider = @Sendable (
+        _ controlPath: String
+    ) throws -> SSHControlSocketAttestation
 
     private final class LifecycleLockRegistry: @unchecked Sendable {
         private let registryLock = NSLock()
@@ -306,6 +390,7 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         let operationID: UUID
         let process: any ManagedProcess
         var childProcessID: Int32?
+        var controlSocketAttestation: SSHControlSocketAttestation?
         var terminationRequested = false
     }
 
@@ -355,6 +440,23 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     private static let lifecycleLocks = LifecycleLockRegistry()
     private let processLock = NSLock()
     private var supervisedProcesses: [String: SupervisedProcessEntry] = [:]
+    private let directTCPTransportFactory: DirectTCPTransportFactory
+    private let controlSocketAttestationProvider: ControlSocketAttestationProvider?
+
+    init(
+        directTCPTransportFactory: @escaping DirectTCPTransportFactory = {
+            controlPath, target, expectedAttestation in
+            try SSHDirectTCPTransport(
+                controlPath: controlPath,
+                target: target,
+                expectedAttestation: expectedAttestation
+            )
+        },
+        controlSocketAttestationProvider: ControlSocketAttestationProvider? = nil
+    ) {
+        self.directTCPTransportFactory = directTCPTransportFactory
+        self.controlSocketAttestationProvider = controlSocketAttestationProvider
+    }
 
     deinit {
         processLock.lock()
@@ -624,14 +726,14 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
 
     /// Dynamically adds a port forward to an active ControlMaster session.
     ///
-    /// Runs `ssh -O forward` with the appropriate `-L`, `-R`, or `-D` flag.
+    /// Runs `ssh -O forward` for an approved local or remote forward.
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
         let destination = try destination(for: profile)
-        let forwardArgs = forwardArguments(for: forward)
+        let forwardArgs = try forwardArguments(for: forward)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-O", "forward",
@@ -653,7 +755,7 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         executor: any ProcessExecutor
     ) throws {
         let destination = try destination(for: profile)
-        let forwardArgs = forwardArguments(for: forward)
+        let forwardArgs = try forwardArguments(for: forward)
         var arguments = buildBaseArguments(for: profile)
         arguments.append(contentsOf: [
             "-O", "cancel",
@@ -664,6 +766,62 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         guard result.exitCode == 0 else {
             throw SSHMultiplexerError.forwardFailed(result.stderr)
         }
+    }
+
+    // MARK: - Direct TCP Transport
+
+    /// Opens one direct-tcpip channel through the exact supervised ControlMaster.
+    ///
+    /// The transport verifies `LOCAL_PEERPID` on the same MUX descriptor that
+    /// receives the destination and stream descriptors, so path replacement
+    /// cannot redirect the channel to another local process.
+    func openDirectTCPTransport(
+        to target: ProxyTarget,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> any ProxyUpstreamTransport {
+        let currentPath = controlPath(for: profile)
+        guard expectedControlMaster.controlPath == currentPath,
+              expectedControlMaster.supervisorID != nil,
+              supervisedControlMasterIdentity(controlPath: currentPath) == expectedControlMaster,
+              isControlMasterProcessAlive(expectedControlMaster) else {
+            throw SSHMultiplexerError.notConnected
+        }
+
+        let attestation = try directTCPControlSocketAttestation(at: currentPath)
+        guard attestation.peerProcessID == expectedControlMaster.processID,
+              bindOrVerifyControlSocketAttestation(
+                attestation,
+                expectedControlMaster: expectedControlMaster
+              ) else {
+            throw SSHMultiplexerError.notConnected
+        }
+
+        let transport = try directTCPTransportFactory(
+            currentPath,
+            target,
+            attestation
+        )
+        do {
+            try verifyDirectTCPControlSocket(
+                expectedControlMaster: expectedControlMaster,
+                expectedAttestation: attestation
+            )
+        } catch {
+            transport.cancel()
+            throw error
+        }
+
+        return AttestedProxyUpstreamTransport(
+            upstream: transport,
+            verifyAttestation: { [weak self] in
+                guard let self else { throw SSHMultiplexerError.notConnected }
+                try self.verifyDirectTCPControlSocket(
+                    expectedControlMaster: expectedControlMaster,
+                    expectedAttestation: attestation
+                )
+            }
+        )
     }
 
     // MARK: - Remote Command Execution
@@ -851,7 +1009,8 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         let entry = SupervisedProcessEntry(
             operationID: operationID,
             process: process,
-            childProcessID: nil
+            childProcessID: nil,
+            controlSocketAttestation: nil
         )
         supervisedProcesses[controlPath] = entry
         processLock.unlock()
@@ -884,6 +1043,26 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
               entry.operationID == operationID else { return false }
         entry.childProcessID = childProcessID
         supervisedProcesses[controlPath] = entry
+        return true
+    }
+
+    private func bindOrVerifyControlSocketAttestation(
+        _ attestation: SSHControlSocketAttestation,
+        expectedControlMaster: SSHControlMasterIdentity
+    ) -> Bool {
+        guard let supervisorID = expectedControlMaster.supervisorID else { return false }
+        processLock.lock()
+        defer { processLock.unlock() }
+        guard var entry = supervisedProcesses[expectedControlMaster.controlPath],
+              entry.operationID == supervisorID,
+              entry.childProcessID == expectedControlMaster.processID else {
+            return false
+        }
+        if let existing = entry.controlSocketAttestation {
+            return existing == attestation
+        }
+        entry.controlSocketAttestation = attestation
+        supervisedProcesses[expectedControlMaster.controlPath] = entry
         return true
     }
 
@@ -1047,6 +1226,56 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         )
     }
 
+    private func directTCPControlSocketAttestation(
+        at path: String
+    ) throws -> SSHControlSocketAttestation {
+        if let controlSocketAttestationProvider {
+            return try controlSocketAttestationProvider(path)
+        }
+
+        guard let originalFileIdentity = try controlSocketFileIdentity(at: path) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        let peerProcessID: Int32
+        switch probeControlSocket(at: path) {
+        case .active(let processID):
+            peerProcessID = processID
+        case .stale, .indeterminate:
+            throw SSHMultiplexerError.notConnected
+        }
+        guard try controlSocketFileIdentity(at: path) == originalFileIdentity else {
+            throw SSHMultiplexerError.notConnected
+        }
+        return SSHControlSocketAttestation(
+            device: UInt64(truncatingIfNeeded: originalFileIdentity.device),
+            inode: UInt64(truncatingIfNeeded: originalFileIdentity.inode),
+            peerProcessID: peerProcessID
+        )
+    }
+
+    private func verifyDirectTCPControlSocket(
+        expectedControlMaster: SSHControlMasterIdentity,
+        expectedAttestation: SSHControlSocketAttestation
+    ) throws {
+        guard supervisedControlMasterIdentity(
+            controlPath: expectedControlMaster.controlPath
+        ) == expectedControlMaster,
+        isControlMasterProcessAlive(expectedControlMaster) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        let currentAttestation = try directTCPControlSocketAttestation(
+            at: expectedControlMaster.controlPath
+        )
+        guard currentAttestation == expectedAttestation,
+              currentAttestation.peerProcessID == expectedControlMaster.processID,
+              bindOrVerifyControlSocketAttestation(
+                currentAttestation,
+                expectedControlMaster: expectedControlMaster
+              ) else {
+            throw SSHMultiplexerError.notConnected
+        }
+    }
+
     private static func controlMasterProcessID(from output: String) -> Int32? {
         guard let marker = output.range(of: "pid=") else { return nil }
         let digits = output[marker.upperBound...].prefix { $0.isNumber }
@@ -1065,6 +1294,14 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         let descriptor = Darwin.socket(AF_UNIX, SOCK_STREAM, 0)
         guard descriptor >= 0 else { return .indeterminate }
         defer { Darwin.close(descriptor) }
+        guard Darwin.fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0 else {
+            return .indeterminate
+        }
+        let currentFlags = Darwin.fcntl(descriptor, F_GETFL)
+        guard currentFlags >= 0,
+              Darwin.fcntl(descriptor, F_SETFL, currentFlags | O_NONBLOCK) == 0 else {
+            return .indeterminate
+        }
 
         var address = sockaddr_un()
         address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
@@ -1091,7 +1328,15 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
             }
         }
         if connectResult != 0 {
-            return errno == ECONNREFUSED || errno == ENOENT ? .stale : .indeterminate
+            let connectError = errno
+            if connectError == ECONNREFUSED || connectError == ENOENT {
+                return .stale
+            }
+            // This probe runs from synchronous lifecycle and MainActor-owned
+            // forwarding paths. Never wait for a queued local connect here:
+            // an incomplete result is conservatively rejected and the caller
+            // can retry without blocking UI or teardown cancellation.
+            return .indeterminate
         }
 
         var processID: pid_t = 0
@@ -1164,14 +1409,16 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     /// Converts a port forward spec into SSH command-line arguments.
     private func forwardArguments(
         for forward: RemoteConnectionProfile.PortForward
-    ) -> [String] {
+    ) throws -> [String] {
         switch forward {
         case let .local(localPort, remotePort, remoteHost):
             return ["-L", "\(localPort):\(remoteHost):\(remotePort)"]
         case let .remote(remotePort, localPort, localHost):
             return ["-R", "\(remotePort):\(localHost):\(localPort)"]
-        case let .dynamic(localPort):
-            return ["-D", "\(localPort)"]
+        case .dynamic:
+            throw SSHMultiplexerError.forwardFailed(
+                "Dynamic forwarding requires the authenticated proxy"
+            )
         }
     }
 }

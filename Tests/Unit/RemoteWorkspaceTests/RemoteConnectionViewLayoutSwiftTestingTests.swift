@@ -2,8 +2,23 @@
 // RemoteConnectionViewLayoutSwiftTestingTests.swift - Remote workspace panel layout contracts.
 
 import Testing
+import Combine
 import Foundation
 @testable import CocxyTerminal
+
+private final class FailingRemoteProfileStore: RemoteProfileStoring, @unchecked Sendable {
+    func loadAll() throws -> [RemoteConnectionProfile] { [] }
+
+    func save(_ profile: RemoteConnectionProfile) throws {
+        throw RemoteProfileStoreError.saveFailed("disk full")
+    }
+
+    func delete(id: UUID) throws {}
+
+    func findByName(_ name: String) throws -> RemoteConnectionProfile? { nil }
+
+    func findByGroup(_ group: String) throws -> [RemoteConnectionProfile] { [] }
+}
 
 @Suite("Remote connection view layout")
 struct RemoteConnectionViewLayoutSwiftTestingTests {
@@ -88,5 +103,86 @@ struct RemoteConnectionViewLayoutSwiftTestingTests {
 
         #expect(viewModel.selectedProfileID == profile.id)
         #expect(viewModel.selectedSubPanel == .tunnels)
+    }
+
+    @Test("externally initiated connection changes refresh the remote workspace UI")
+    @MainActor
+    func externalConnectionChangesRefreshRemoteWorkspaceUI() async {
+        let connectionManager = RemoteConnectionManager(
+            multiplexer: MockSSHMultiplexerDelegate(),
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let viewModel = RemoteConnectionViewModel(
+            profileStore: MockRemoteProfileStore(),
+            connectionManager: connectionManager,
+            tunnelManager: SSHTunnelManager()
+        )
+        let profile = RemoteConnectionProfile(name: "CLI connection", host: "127.0.0.1")
+        var publishedUpdates = 0
+        let subscription = viewModel.objectWillChange.sink {
+            publishedUpdates += 1
+        }
+
+        await connectionManager.connect(profile: profile)
+
+        #expect(publishedUpdates >= 2)
+        #expect(viewModel.connectionState(for: profile.id) == .connected(latencyMs: nil))
+        withExtendedLifetime(subscription) {}
+    }
+
+    @Test("connection refreshes preserve unsaved profile editor state")
+    @MainActor
+    func connectionRefreshPreservesProfileEditorState() async throws {
+        let connectionManager = RemoteConnectionManager(
+            multiplexer: MockSSHMultiplexerDelegate(),
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let viewModel = RemoteConnectionViewModel(
+            profileStore: MockRemoteProfileStore(),
+            connectionManager: connectionManager,
+            tunnelManager: SSHTunnelManager()
+        )
+        let profile = RemoteConnectionProfile(name: "Original", host: "127.0.0.1")
+        viewModel.presentEditProfile(profile)
+        let editor = try #require(viewModel.profileEditorViewModel)
+        editor.name = "Unsaved name"
+        editor.host = "unsaved.internal"
+
+        await connectionManager.connect(profile: profile)
+
+        #expect(viewModel.profileEditorViewModel === editor)
+        #expect(editor.name == "Unsaved name")
+        #expect(editor.host == "unsaved.internal")
+        #expect(viewModel.isEditorPresented)
+    }
+
+    @Test("duplicate profile reports persistence failures")
+    @MainActor
+    func duplicateProfileReportsPersistenceFailures() throws {
+        let connectionManager = RemoteConnectionManager(
+            multiplexer: MockSSHMultiplexerDelegate(),
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let viewModel = RemoteConnectionViewModel(
+            profileStore: FailingRemoteProfileStore(),
+            connectionManager: connectionManager,
+            tunnelManager: SSHTunnelManager(),
+            localizer: AppLocalizer(languagePreference: .english)
+        )
+        let profile = RemoteConnectionProfile(name: "Production", host: "prod.internal")
+
+        #expect(!viewModel.duplicateProfile(profile))
+        let message = try #require(viewModel.profileActionErrorMessage)
+        #expect(message.contains("Production"))
+        #expect(message.contains("disk full"))
+
+        viewModel.dismissProfileActionError()
+        #expect(viewModel.profileActionErrorMessage == nil)
     }
 }

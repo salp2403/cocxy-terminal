@@ -355,6 +355,33 @@ final class RemoteConnectionManager: ObservableObject {
         connectionLeaseIDs[profileID]
     }
 
+    func openProxyTransport(
+        to target: ProxyTarget,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) throws -> any ProxyUpstreamTransport {
+        guard let profile = knownProfiles[profileID],
+              case .connected = connections[profileID],
+              connectionLeaseIDs[profileID] == expectedConnectionLeaseID,
+              let controlMasterIdentity = controlMasterIdentities[profileID]
+        else {
+            throw SSHMultiplexerError.notConnected
+        }
+
+        let transport = try multiplexer.openDirectTCPTransport(
+            to: target,
+            on: profile,
+            expectedControlMaster: controlMasterIdentity
+        )
+        guard case .connected = connections[profileID],
+              connectionLeaseIDs[profileID] == expectedConnectionLeaseID,
+              controlMasterIdentities[profileID] == controlMasterIdentity else {
+            transport.cancel()
+            throw SSHMultiplexerError.notConnected
+        }
+        return transport
+    }
+
     /// Revokes a profile's entire forwarding authority after a local broker fails closed.
     @discardableResult
     func revokeForwardingSession(
@@ -524,7 +551,18 @@ final class RemoteConnectionManager: ObservableObject {
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
     ) throws {
-        guard let profile = knownProfiles[profileID] else { return }
+        let canUseForwardingSession: Bool
+        if case .connected = connections[profileID] {
+            canUseForwardingSession = true
+        } else {
+            canUseForwardingSession = terminatingProfileIDs.contains(profileID)
+        }
+
+        guard let profile = knownProfiles[profileID],
+              connectionLeaseIDs[profileID] != nil,
+              canUseForwardingSession else {
+            throw SSHMultiplexerError.connectionFailed("No active connection for profile")
+        }
         try multiplexer.cancelForward(forward, on: profile, executor: executor)
     }
 

@@ -20,6 +20,9 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
     var disconnectedProfileIDs: [UUID] = []
     var terminatedControlPaths: [String] = []
     var lifecycleEvents: [String] = []
+    var proxyTransport: (any ProxyUpstreamTransport)?
+    private(set) var openedProxyTargets: [ProxyTarget] = []
+    private(set) var openedProxyIdentities: [SSHControlMasterIdentity] = []
 
     func connect(
         profile: RemoteConnectionProfile,
@@ -96,6 +99,20 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         }
     }
 
+    func openDirectTCPTransport(
+        to target: ProxyTarget,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> any ProxyUpstreamTransport {
+        _ = profile
+        guard let proxyTransport else {
+            throw ProxyUpstreamTransportError.unavailable
+        }
+        openedProxyTargets.append(target)
+        openedProxyIdentities.append(expectedControlMaster)
+        return proxyTransport
+    }
+
     var remoteCommandResults: [String: ProcessResult] = [:]
 
     func executeRemoteCommand(
@@ -104,6 +121,38 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         executor: any ProcessExecutor
     ) async throws -> ProcessResult {
         remoteCommandResults[command] ?? ProcessResult(exitCode: 0, stdout: "", stderr: "")
+    }
+}
+
+private final class RemoteManagerTestProxyTransport: ProxyUpstreamTransport, @unchecked Sendable {
+    let processIdentifier: Int32 = 73_001
+    var isRunning = true
+    let diagnosticOutput = ""
+    private(set) var wasCancelled = false
+
+    func waitUntilReady() async throws {}
+
+    func send(
+        _ data: Data,
+        completion: @escaping @Sendable (Result<Void, any Error>) -> Void
+    ) {
+        _ = data
+        completion(.success(()))
+    }
+
+    func receive(
+        maximumLength: Int,
+        completion: @escaping @Sendable (Result<Data?, any Error>) -> Void
+    ) {
+        _ = maximumLength
+        _ = completion
+    }
+
+    func closeWrite() {}
+
+    func cancel() {
+        wasCancelled = true
+        isRunning = false
     }
 }
 
@@ -381,6 +430,8 @@ struct RemoteConnectionManagerTests {
 
         try manager.forwardPort(forward, for: profile.id)
         #expect(multiplexer.forwardedPorts == [forward])
+        try manager.cancelForward(forward, for: profile.id)
+        #expect(multiplexer.lifecycleEvents.contains("cancel"))
 
         await manager.disconnect(profileID: profile.id)
         do {
@@ -391,6 +442,51 @@ struct RemoteConnectionManagerTests {
                 "No active connection for profile"
             ))
         }
+        do {
+            try manager.cancelForward(forward, for: profile.id)
+            Issue.record("Expected disconnected cancellation to fail")
+        } catch {
+            #expect(error as? SSHMultiplexerError == .connectionFailed(
+                "No active connection for profile"
+            ))
+        }
+    }
+
+    @Test @MainActor func proxyTransportUsesExactConnectedLeaseAndMasterIdentity() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let transport = RemoteManagerTestProxyTransport()
+        multiplexer.proxyTransport = transport
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let leaseID = try #require(manager.connectionLeaseID(for: profile.id))
+        let target = try ProxyTarget(host: "internal.example", port: 443)
+
+        let opened = try manager.openProxyTransport(
+            to: target,
+            for: profile.id,
+            expectedConnectionLeaseID: leaseID
+        )
+
+        #expect(opened === transport)
+        #expect(multiplexer.openedProxyTargets == [target])
+        #expect(multiplexer.openedProxyIdentities.count == 1)
+        #expect(multiplexer.openedProxyIdentities[0].controlPath == profile.controlPath)
+
+        #expect(throws: SSHMultiplexerError.self) {
+            try manager.openProxyTransport(
+                to: target,
+                for: profile.id,
+                expectedConnectionLeaseID: UUID()
+            )
+        }
+        #expect(multiplexer.openedProxyTargets == [target])
+        #expect(!transport.wasCancelled)
     }
 
     @Test @MainActor func brokerFailureRevocationDisconnectsTheProfile() async throws {

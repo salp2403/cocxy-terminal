@@ -176,7 +176,11 @@ struct BrowserProfileTests {
         let active = RemoteBrowserProfile(
             remoteConnectionProfile: remoteConnection,
             localForwardedPorts: [5173: 55173],
-            proxyState: .active(socksPort: 1081, httpPort: 18888)
+            proxyState: .active(
+                profileID: remoteConnection.id,
+                socksPort: 1081,
+                httpPort: 18888
+            )
         )
         let route = try #require(active.route(forRemotePort: 5173, path: "/app"))
 
@@ -188,7 +192,10 @@ struct BrowserProfileTests {
 
         let failing = RemoteBrowserProfile(
             remoteConnectionProfile: remoteConnection,
-            proxyState: .failing(reason: "probe failed")
+            proxyState: .failing(
+                profileID: remoteConnection.id,
+                reason: "probe failed"
+            )
         )
         #expect(failing.proxyHealth == .failed)
         #expect(failing.proxyHealth.needsAttention == true)
@@ -206,22 +213,54 @@ struct BrowserProfileTests {
         var profile = RemoteBrowserProfile(
             remoteConnectionProfile: remoteConnection,
             localForwardedPorts: [3000: 53000],
-            proxyState: .active(socksPort: 1080, httpPort: nil)
+            proxyState: .active(
+                profileID: remoteConnection.id,
+                socksPort: 1080,
+                httpPort: nil
+            )
         )
 
-        profile.apply(proxyState: .failing(reason: "probe failed"))
+        profile.apply(proxyState: .failing(
+            profileID: remoteConnection.id,
+            reason: "probe failed"
+        ))
 
         #expect(profile.localForwardedPorts == [3000: 53000])
         #expect(profile.proxyHealth == .failed)
         #expect(profile.socksPort == nil)
         #expect(profile.httpConnectPort == nil)
 
-        let restored = profile.applying(proxyState: .active(socksPort: 1081, httpPort: 18888))
+        let restored = profile.applying(proxyState: .active(
+            profileID: remoteConnection.id,
+            socksPort: 1081,
+            httpPort: 18888
+        ))
 
         #expect(restored.localForwardedPorts == [3000: 53000])
         #expect(restored.proxyHealth == .active)
         #expect(restored.socksPort == 1081)
         #expect(restored.httpConnectPort == 18888)
+    }
+
+    @Test("Remote browser profile ignores proxy state owned by another connection")
+    func remoteProfileIgnoresAnotherProxyOwner() {
+        let remoteConnection = RemoteConnectionProfile(
+            id: UUID(),
+            name: "Stage",
+            host: "stage.internal"
+        )
+        let profile = RemoteBrowserProfile(
+            remoteConnectionProfile: remoteConnection,
+            proxyState: .active(
+                profileID: UUID(),
+                socksPort: 1080,
+                httpPort: 18888
+            )
+        )
+
+        #expect(profile.proxyHealth == .disconnected)
+        #expect(profile.socksPort == nil)
+        #expect(profile.httpConnectPort == nil)
     }
 
     // MARK: - Equality

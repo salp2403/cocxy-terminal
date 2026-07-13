@@ -2762,7 +2762,7 @@
 "remoteWorkspace.subPanel.sftp" = "SFTP";
 "remoteWorkspace.subPanel.sessions.detail" = "Sesiones shell persistentes";
 "remoteWorkspace.subPanel.tunnels.detail" = "Redirigir puertos locales y remotos";
-"remoteWorkspace.subPanel.proxy.detail" = "Controles de proxy del sistema";
+"remoteWorkspace.subPanel.proxy.detail" = "Proxy local autenticado";
 "remoteWorkspace.subPanel.relay.detail" = "Canales relay";
 "remoteWorkspace.subPanel.daemon.detail" = "Daemon helper remoto";
 "remoteWorkspace.subPanel.keys.detail" = "Identidades SSH";
@@ -2779,6 +2779,9 @@
 "remoteWorkspace.profile.menu.edit" = "Editar";
 "remoteWorkspace.profile.menu.duplicate" = "Duplicar";
 "remoteWorkspace.profile.menu.delete" = "Eliminar";
+"remoteWorkspace.profile.actionFailed.title" = "La acción del perfil falló";
+"remoteWorkspace.profile.duplicateFailed" = "No se pudo duplicar \"%@\": %@";
+"remoteWorkspace.profile.error.notFound" = "El perfil ya no existe.";
 "remoteWorkspace.profile.action.connect" = "Conectar a %@";
 "remoteWorkspace.profile.action.disconnect" = "Desconectar de %@";
 "remoteWorkspace.profile.action.cancel" = "Cancelar conexión a %@";
@@ -2822,6 +2825,13 @@
 "remoteWorkspace.profileEditor.autoReconnect" = "Reconectar automáticamente";
 "remoteWorkspace.profileEditor.create" = "Crear";
 "remoteWorkspace.profileEditor.remove.accessibility" = "Eliminar";
+"remoteWorkspace.profileEditor.dynamicDisabled" = "Redirección dinámica heredada conservada pero desactivada; elimínala o usa Proxy";
+"remoteWorkspace.profileEditor.saveFailed" = "No se pudo guardar el perfil: %@";
+"remoteWorkspace.profileEditor.portForward.localHost" = "Host local";
+"remoteWorkspace.profileEditor.portForward.remoteHost" = "Host remoto";
+"remoteWorkspace.profileEditor.validation.portForward" = "Ingresa puertos válidos y un host de destino.";
+"remoteWorkspace.profileEditor.validation.duplicateEnvironment" = "Las claves de variables de entorno deben ser únicas.";
+"remoteWorkspace.profileEditor.validation.environmentKey" = "Ingresa una clave o elimina esta fila.";
 
 "remoteWorkspace.sessions.title" = "Sesiones persistentes";
 "remoteWorkspace.sessions.refresh.help" = "Refrescar sesiones";
@@ -2841,6 +2851,7 @@
 "remoteWorkspace.portForward.localPort" = "Puerto local";
 "remoteWorkspace.portForward.remotePort" = "Puerto remoto";
 "remoteWorkspace.portForward.remove.accessibility" = "Eliminar túnel";
+"remoteWorkspace.portForward.operationFailed" = "Falló la operación del túnel: %@";
 "remoteWorkspace.portForward.accessibility.local" = "Redirección local, puerto %d a %d";
 "remoteWorkspace.portForward.accessibility.remote" = "Redirección remota, puerto %d a %d";
 "remoteWorkspace.portForward.accessibility.dynamic" = "Proxy SOCKS dinámico en puerto %d";
@@ -2849,6 +2860,8 @@
 "remoteWorkspace.forwardType.dynamic" = "Dinámico";
 
 "remoteWorkspace.proxy.connectFirst" = "Conecta primero al perfil para activar proxy";
+"remoteWorkspace.proxy.updating" = "Actualizando proxy";
+"remoteWorkspace.proxy.status.otherProfile" = "La sesión de proxy pertenece a otro perfil";
 "remoteWorkspace.proxy.status.off" = "Proxy apagado";
 "remoteWorkspace.proxy.status.starting" = "Iniciando...";
 "remoteWorkspace.proxy.status.active.socksHttp" = "Activo - SOCKS5:%d HTTP:%d";
@@ -2856,17 +2869,36 @@
 "remoteWorkspace.proxy.status.failing" = "Fallando: %@";
 "remoteWorkspace.proxy.status.failover" = "Failover en progreso...";
 "remoteWorkspace.proxy.socksTitle" = "Proxy SOCKS5";
+"remoteWorkspace.proxy.socksToggle" = "Proxy SOCKS5 autenticado";
+"remoteWorkspace.proxy.socksPort" = "Puerto SOCKS5";
+"remoteWorkspace.proxy.otherProfileDetail" = "Activarlo aquí reemplaza la sesión de proxy del otro perfil.";
+"remoteWorkspace.proxy.credentials" = "Credenciales del cliente";
+"remoteWorkspace.proxy.username" = "Usuario";
+"remoteWorkspace.proxy.copyUsername" = "Copiar usuario del proxy";
+"remoteWorkspace.proxy.password" = "Contraseña";
+"remoteWorkspace.proxy.socksPassword" = "Clave SOCKS";
+"remoteWorkspace.proxy.httpPassword" = "Clave HTTP";
+"remoteWorkspace.proxy.hidePassword" = "Ocultar contraseña";
+"remoteWorkspace.proxy.revealPassword" = "Mostrar contraseña";
+"remoteWorkspace.proxy.copyPassword" = "Copiar contraseña del proxy";
+"remoteWorkspace.proxy.copySOCKSPassword" = "Copiar clave SOCKS";
+"remoteWorkspace.proxy.copyHTTPPassword" = "Copiar clave HTTP";
 "remoteWorkspace.proxy.httpTitle" = "HTTP CONNECT";
+"remoteWorkspace.proxy.httpToggle" = "Proxy HTTP CONNECT autenticado";
+"remoteWorkspace.proxy.httpPort" = "Puerto HTTP CONNECT";
 "remoteWorkspace.proxy.systemWideTitle" = "Proxy de todo el sistema";
+"remoteWorkspace.proxy.systemWide.secureUnavailable" = "No disponible para sesiones de proxy autenticadas";
 "remoteWorkspace.proxy.port" = "Puerto:";
 "remoteWorkspace.proxy.enableSocksFirst" = "Activa SOCKS5 primero";
 "remoteWorkspace.proxy.systemWide.detail" = "Enruta todo el tráfico de macOS por el túnel SSH. Requiere contraseña de administrador.";
 "remoteWorkspace.proxy.stats" = "Estadísticas";
 "remoteWorkspace.proxy.stats.uptime" = "Tiempo activo";
+"remoteWorkspace.proxy.stats.connections" = "Conexiones";
 "remoteWorkspace.proxy.stats.httpConnections" = "Conexiones HTTP";
 "remoteWorkspace.proxy.bypassList" = "Lista de exclusión";
 "remoteWorkspace.proxy.error.invalidPort" = "Número de puerto inválido";
 "remoteWorkspace.proxy.error.invalidHTTPPort" = "Número de puerto HTTP inválido";
+"remoteWorkspace.proxy.error.copyFailed" = "No se pudo copiar la credencial";
 "remoteWorkspace.proxy.error.systemProxy" = "Proxy del sistema: %@";
 "remoteWorkspace.proxy.error.systemProxyRestore" = "Restauración de proxy del sistema: %@";
 

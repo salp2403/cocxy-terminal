@@ -141,10 +141,10 @@ final class ProxyHealthMonitor {
 
 // MARK: - TCP Health Probe
 
-/// Production health probe that attempts a TCP connection through the SOCKS tunnel.
+/// Production health probe for an explicitly provided local TCP endpoint.
 ///
-/// Connects to a well-known host (1.1.1.1:443) to verify the tunnel is functional.
-/// The connection is established and immediately closed — no data is exchanged.
+/// Only literal loopback addresses are accepted. This prevents automatic health
+/// checks from contacting external hosts or resolving hostnames.
 @MainActor
 final class TCPHealthProbe: HealthProbing {
 
@@ -161,16 +161,24 @@ final class TCPHealthProbe: HealthProbing {
         }
     }
 
-    private let targetHost: String
-    private let targetPort: UInt16
+    private let targetHost: NWEndpoint.Host
+    private let targetPort: NWEndpoint.Port
     private let timeoutSeconds: TimeInterval
 
-    init(
-        targetHost: String = "1.1.1.1",
-        targetPort: UInt16 = 443,
+    init?(
+        loopbackHost: String,
+        port: UInt16,
         timeoutSeconds: TimeInterval = 5.0
     ) {
-        self.targetHost = targetHost
+        guard Self.isExplicitLoopbackAddress(loopbackHost),
+              port != 0,
+              let targetPort = NWEndpoint.Port(rawValue: port),
+              timeoutSeconds.isFinite,
+              timeoutSeconds > 0 else {
+            return nil
+        }
+
+        self.targetHost = NWEndpoint.Host(loopbackHost)
         self.targetPort = targetPort
         self.timeoutSeconds = timeoutSeconds
     }
@@ -178,8 +186,8 @@ final class TCPHealthProbe: HealthProbing {
     func probe() async -> Bool {
         await withCheckedContinuation { continuation in
             let connection = NWConnection(
-                host: NWEndpoint.Host(targetHost),
-                port: NWEndpoint.Port(rawValue: targetPort)!,
+                host: targetHost,
+                port: targetPort,
                 using: .tcp
             )
 
@@ -209,5 +217,20 @@ final class TCPHealthProbe: HealthProbing {
                 continuation.resume(returning: false)
             }
         }
+    }
+
+    private static func isExplicitLoopbackAddress(_ host: String) -> Bool {
+        if host == "::1" {
+            return true
+        }
+
+        let octets = host.split(separator: ".", omittingEmptySubsequences: false)
+        guard octets.count == 4 else { return false }
+
+        let values = octets.compactMap { octet -> UInt8? in
+            guard let value = UInt8(octet), String(value) == octet else { return nil }
+            return value
+        }
+        return values.count == 4 && values[0] == 127
     }
 }

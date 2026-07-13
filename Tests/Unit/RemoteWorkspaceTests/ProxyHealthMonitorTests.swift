@@ -62,6 +62,28 @@ final class MockProxyStateDelegate: ProxyHealthDelegate {
 @Suite("ProxyHealthMonitor")
 struct ProxyHealthMonitorTests {
 
+    @Test("TCP health probe accepts only explicit literal loopback endpoints")
+    @MainActor func tcpProbeRequiresLoopbackEndpoint() {
+        #expect(TCPHealthProbe(loopbackHost: "127.0.0.1", port: 1_080) != nil)
+        #expect(TCPHealthProbe(loopbackHost: "127.255.255.254", port: 65_535) != nil)
+        #expect(TCPHealthProbe(loopbackHost: "::1", port: 8_888) != nil)
+
+        let externalOrAmbiguousHosts = [
+            "1.1.1.1",
+            "8.8.8.8",
+            "0.0.0.0",
+            "::",
+            "::ffff:127.0.0.1",
+            "localhost",
+            "example.com",
+        ]
+        for host in externalOrAmbiguousHosts {
+            #expect(TCPHealthProbe(loopbackHost: host, port: 443) == nil)
+        }
+
+        #expect(TCPHealthProbe(loopbackHost: "127.0.0.1", port: 0) == nil)
+    }
+
     @Test("Initial state is unknown")
     @MainActor func initialState() {
         let monitor = ProxyHealthMonitor(

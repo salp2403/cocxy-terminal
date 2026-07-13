@@ -7,8 +7,8 @@ import Foundation
 
 /// Abstraction for macOS `networksetup` operations.
 ///
-/// Production implementation uses `Process` with `osascript` for admin privilege
-/// escalation. Test implementation records commands without execution.
+/// Production mutation is disabled until authenticated, transactional updates
+/// are available. Test implementations can record attempted commands.
 @MainActor
 protocol SystemNetworkConfiguring: AnyObject {
 
@@ -35,15 +35,12 @@ protocol PACFileWriting: AnyObject {
 
 /// Manages macOS system-wide proxy settings.
 ///
-/// Saves the previous proxy configuration before applying changes
-/// so it can be cleanly restored when the proxy is deactivated.
-///
 /// ## Security
 ///
-/// `networksetup` requires admin privileges on macOS 14+.
-/// The production `SystemNetworkConfigurator` uses `osascript` with
-/// `"do shell script ... with administrator privileges"` to trigger
-/// the native macOS admin password prompt.
+/// Activation is intentionally unavailable until authenticated sessions can
+/// provide credentials over standard input and restore all changes as one
+/// transaction. Failing before any state read or command prevents partial
+/// system proxy configuration and interactive privilege escalation.
 @MainActor
 final class SystemProxyConfigurator {
 
@@ -68,14 +65,13 @@ final class SystemProxyConfigurator {
         return "\(home)/.config/cocxy/proxy.pac"
     }()
 
+    static let activationUnavailableReason =
+        "System proxy activation is unavailable until authenticated, transactional configuration is supported"
+
     // MARK: - Dependencies
 
     private let networkConfigurator: any SystemNetworkConfiguring
     private let pacWriter: any PACFileWriting
-
-    // MARK: - State
-
-    private var savedState: SavedState?
 
     // MARK: - Initialization
 
@@ -89,12 +85,7 @@ final class SystemProxyConfigurator {
 
     // MARK: - Activate
 
-    /// Configures the system-wide proxy for the given interface.
-    ///
-    /// 1. Reads and saves the current proxy state for later restoration.
-    /// 2. Sets the SOCKS proxy via `networksetup -setsocksfirewallproxy`.
-    /// 3. Optionally sets the HTTP proxy via `networksetup -setwebproxy`.
-    /// 4. Writes a PAC file for applications that support auto-configuration.
+    /// Rejects system-wide proxy activation without performing side effects.
     ///
     /// - Parameters:
     ///   - interface: The network service name (e.g., "Wi-Fi").
@@ -102,80 +93,28 @@ final class SystemProxyConfigurator {
     ///   - httpPort: Local HTTP CONNECT proxy port (nil to skip).
     ///   - exclusions: Domains/IPs that should bypass the proxy.
     func activateProxy(
-        interface: String,
-        socksPort: Int,
-        httpPort: Int?,
-        exclusions: ProxyExclusionList
+        interface _: String,
+        socksPort _: Int,
+        httpPort _: Int?,
+        exclusions _: ProxyExclusionList
     ) throws {
-        // Save current state for clean restore.
-        savedState = try networkConfigurator.readCurrentProxyState(interface: interface)
-
-        // Enable SOCKS proxy.
-        try networkConfigurator.executeNetworkSetup(arguments: [
-            "-setsocksfirewallproxy", interface, "127.0.0.1", "\(socksPort)"
-        ])
-        try networkConfigurator.executeNetworkSetup(arguments: [
-            "-setsocksfirewallproxystate", interface, "on"
-        ])
-
-        // Enable HTTP proxy if port is specified.
-        if let httpPort {
-            try networkConfigurator.executeNetworkSetup(arguments: [
-                "-setwebproxy", interface, "127.0.0.1", "\(httpPort)"
-            ])
-            try networkConfigurator.executeNetworkSetup(arguments: [
-                "-setwebproxystate", interface, "on"
-            ])
-        }
-
-        // Write PAC file.
-        let pacContent = exclusions.generatePACContent(socksPort: socksPort)
-        try pacWriter.writePACFile(content: pacContent, to: Self.defaultPACPath)
+        throw ProxyError.systemProxyFailed(Self.activationUnavailableReason)
     }
 
     // MARK: - Deactivate
 
-    /// Restores the proxy configuration to the state saved before activation.
+    /// Removes a legacy Cocxy PAC file without changing system network settings.
     ///
-    /// If no state was saved (proxy was never activated), this is a safe no-op.
-    ///
-    /// - Parameter interface: The network service name to restore.
-    func deactivateProxy(interface: String) throws {
-        guard let saved = savedState else { return }
-
-        // Restore SOCKS proxy state.
-        if saved.socksEnabled, let host = saved.socksHost, let port = saved.socksPort {
-            try networkConfigurator.executeNetworkSetup(arguments: [
-                "-setsocksfirewallproxy", interface, host, "\(port)"
-            ])
-        } else {
-            try networkConfigurator.executeNetworkSetup(arguments: [
-                "-setsocksfirewallproxystate", interface, "off"
-            ])
-        }
-
-        // Restore web proxy state.
-        if saved.webProxyEnabled, let host = saved.webProxyHost, let port = saved.webProxyPort {
-            try networkConfigurator.executeNetworkSetup(arguments: [
-                "-setwebproxy", interface, host, "\(port)"
-            ])
-        } else {
-            try networkConfigurator.executeNetworkSetup(arguments: [
-                "-setwebproxystate", interface, "off"
-            ])
-        }
-
-        // Remove PAC file.
-        try? pacWriter.removePACFile(at: Self.defaultPACPath)
-
-        savedState = nil
+    /// - Parameter interface: Retained for API compatibility; no command is run.
+    func deactivateProxy(interface _: String) throws {
+        try pacWriter.removePACFile(at: Self.defaultPACPath)
     }
 }
 
 // MARK: - Production Network Configurator
 
-/// Production implementation that uses real `networksetup` commands
-/// with `osascript` for admin privilege escalation.
+/// Production implementation for read-only `networksetup` inspection.
+/// Mutating commands fail before any process is launched.
 @MainActor
 final class SystemNetworkConfigurator: SystemNetworkConfiguring {
 
@@ -201,18 +140,8 @@ final class SystemNetworkConfigurator: SystemNetworkConfiguring {
         throw ProxyError.systemProxyFailed("No active network interface found")
     }
 
-    func executeNetworkSetup(arguments: [String]) throws {
-        let escapedArgs = arguments.map { "\"\($0)\"" }.joined(separator: " ")
-        let script = "do shell script \"/usr/sbin/networksetup \(escapedArgs)\" with administrator privileges"
-
-        let result = try runProcess(
-            command: "/usr/bin/osascript",
-            arguments: ["-e", script]
-        )
-
-        if result.contains("error") {
-            throw ProxyError.systemProxyFailed(result)
-        }
+    func executeNetworkSetup(arguments _: [String]) throws {
+        throw ProxyError.systemProxyFailed(SystemProxyConfigurator.activationUnavailableReason)
     }
 
     func readCurrentProxyState(interface: String) throws -> SystemProxyConfigurator.SavedState {

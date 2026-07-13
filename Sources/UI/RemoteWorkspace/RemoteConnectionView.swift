@@ -57,7 +57,7 @@ final class RemoteConnectionViewModel: ObservableObject {
             switch self {
             case .sessions: return "Persistent shell sessions"
             case .tunnels: return "Forward local and remote ports"
-            case .proxy: return "System proxy controls"
+            case .proxy: return "Authenticated local proxy"
             case .relay: return "Relay channels"
             case .daemon: return "Remote helper daemon"
             case .keys: return "SSH identities"
@@ -82,20 +82,24 @@ final class RemoteConnectionViewModel: ObservableObject {
     @Published var quickConnectText: String = ""
     @Published var isEditorPresented = false
     @Published var editingProfile: RemoteConnectionProfile?
+    @Published private(set) var profileEditorViewModel: RemoteProfileEditorViewModel?
     @Published private(set) var collapsedGroups: Set<String> = []
+    @Published private(set) var profileActionErrorMessage: String?
+    @Published private(set) var connectionStates: [UUID: RemoteConnectionManager.ConnectionState] = [:]
 
     // MARK: - Dependencies
 
     let connectionManager: RemoteConnectionManager
     let tunnelManager: SSHTunnelManager
-    private let profileStore: RemoteProfileStore
+    private let profileStore: any RemoteProfileStoring
     private var localizer: AppLocalizer
     private var transientProfileIDs: Set<UUID> = []
+    private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Initialization
 
     init(
-        profileStore: RemoteProfileStore,
+        profileStore: any RemoteProfileStoring,
         connectionManager: RemoteConnectionManager,
         tunnelManager: SSHTunnelManager,
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
@@ -104,6 +108,13 @@ final class RemoteConnectionViewModel: ObservableObject {
         self.connectionManager = connectionManager
         self.tunnelManager = tunnelManager
         self.localizer = localizer
+        self.connectionStates = connectionManager.connections
+
+        connectionManager.$connections
+            .sink { [weak self] states in
+                self?.connectionStates = states
+            }
+            .store(in: &cancellables)
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
@@ -127,7 +138,7 @@ final class RemoteConnectionViewModel: ObservableObject {
 
     /// Returns the connection state for a given profile.
     func connectionState(for profileID: UUID) -> RemoteConnectionManager.ConnectionState {
-        connectionManager.connections[profileID] ?? .disconnected
+        connectionStates[profileID] ?? .disconnected
     }
 
     /// Whether a profile is currently connected.
@@ -221,22 +232,30 @@ final class RemoteConnectionViewModel: ObservableObject {
     }
 
     func presentNewProfile() {
-        editingProfile = nil
-        isEditorPresented = true
+        presentProfileEditor(profile: nil)
     }
 
     func presentEditProfile(_ profile: RemoteConnectionProfile) {
+        presentProfileEditor(profile: profile)
+    }
+
+    private func presentProfileEditor(profile: RemoteConnectionProfile?) {
         editingProfile = profile
+        let editorViewModel = RemoteProfileEditorViewModel(
+            profile: profile,
+            existingGroups: existingGroups
+        )
+        editorViewModel.onSave = { [weak self] profile in
+            guard let self else { return }
+            try self.saveProfile(profile)
+        }
+        profileEditorViewModel = editorViewModel
         isEditorPresented = true
     }
 
-    func saveProfile(_ profile: RemoteConnectionProfile) {
-        do {
-            try profileStore.save(profile)
-            loadProfiles()
-        } catch {
-            // Profile save failures are handled silently for now.
-        }
+    func saveProfile(_ profile: RemoteConnectionProfile) throws {
+        try profileStore.save(profile)
+        loadProfiles()
     }
 
     func deleteProfile(_ profile: RemoteConnectionProfile) {
@@ -248,7 +267,8 @@ final class RemoteConnectionViewModel: ObservableObject {
         }
     }
 
-    func duplicateProfile(_ profile: RemoteConnectionProfile) {
+    @discardableResult
+    func duplicateProfile(_ profile: RemoteConnectionProfile) -> Bool {
         let copy = RemoteConnectionProfile(
             name: "\(profile.name) (\(localizer.string("remoteWorkspace.profile.copySuffix", fallback: "copy")))",
             host: profile.host,
@@ -260,11 +280,49 @@ final class RemoteConnectionViewModel: ObservableObject {
             group: profile.group,
             envVars: profile.envVars,
             keepAliveInterval: profile.keepAliveInterval,
+            strictHostKeyChecking: profile.strictHostKeyChecking,
+            knownHostsFile: profile.knownHostsFile,
+            batchMode: profile.batchMode,
             autoReconnect: profile.autoReconnect,
             proxyExclusions: profile.proxyExclusions,
             relayChannels: profile.relayChannels
         )
-        saveProfile(copy)
+        do {
+            try saveProfile(copy)
+            profileActionErrorMessage = nil
+            return true
+        } catch {
+            let format = localizer.string(
+                "remoteWorkspace.profile.duplicateFailed",
+                fallback: "Could not duplicate \"%@\": %@"
+            )
+            profileActionErrorMessage = String(
+                format: format,
+                profile.name,
+                profileStoreErrorDescription(error)
+            )
+            return false
+        }
+    }
+
+    func dismissProfileActionError() {
+        profileActionErrorMessage = nil
+    }
+
+    private func profileStoreErrorDescription(_ error: Error) -> String {
+        guard let storeError = error as? RemoteProfileStoreError else {
+            return error.localizedDescription
+        }
+
+        switch storeError {
+        case let .saveFailed(message), let .deleteFailed(message), let .loadFailed(message):
+            return message
+        case .profileNotFound:
+            return localizer.string(
+                "remoteWorkspace.profile.error.notFound",
+                fallback: "The profile no longer exists."
+            )
+        }
     }
 
     // MARK: - Quick Connect Parsing
@@ -395,6 +453,23 @@ struct RemoteConnectionView: View {
         }
         .sheet(isPresented: $viewModel.isEditorPresented) {
             editorSheet
+        }
+        .alert(
+            localized("remoteWorkspace.profile.actionFailed.title", fallback: "Profile action failed"),
+            isPresented: Binding(
+                get: { viewModel.profileActionErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissProfileActionError()
+                    }
+                }
+            )
+        ) {
+            Button(localized("common.ok", fallback: "OK"), role: .cancel) {
+                viewModel.dismissProfileActionError()
+            }
+        } message: {
+            Text(viewModel.profileActionErrorMessage ?? "")
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("remoteWorkspace.accessibility", fallback: "Remote Workspaces"))
@@ -711,13 +786,14 @@ struct RemoteConnectionView: View {
                         tunnelManager: viewModel.tunnelManager,
                         profileID: profileID,
                         onForwardPort: { forward, profID in
-                            try? viewModel.connectionManager.forwardPort(forward, for: profID)
+                            try viewModel.connectionManager.forwardPort(forward, for: profID)
                         },
                         onCancelForward: { forward, profID in
-                            try? viewModel.connectionManager.cancelForward(forward, for: profID)
+                            try viewModel.connectionManager.cancelForward(forward, for: profID)
                         },
                         localizer: localizer
                     )
+                    .id(profileID)
                     remoteBrowserSuggestions(profile: profile)
                 }
             } else {
@@ -824,6 +900,7 @@ struct RemoteConnectionView: View {
                     proxyManager: proxyManager,
                     localizer: localizer
                 )
+                .id(profileID)
             } else {
                 selectProfilePlaceholder(
                     icon: "network.badge.shield.half.filled",
@@ -931,14 +1008,11 @@ struct RemoteConnectionView: View {
     // MARK: - Editor Sheet
 
     private var editorSheet: some View {
-        let editorVM = RemoteProfileEditorViewModel(
-            profile: viewModel.editingProfile,
-            existingGroups: viewModel.existingGroups
-        )
-        editorVM.onSave = { [weak viewModel] profile in
-            viewModel?.saveProfile(profile)
+        Group {
+            if let editorViewModel = viewModel.profileEditorViewModel {
+                RemoteProfileEditor(viewModel: editorViewModel, localizer: localizer)
+            }
         }
-        return RemoteProfileEditor(viewModel: editorVM, localizer: localizer)
     }
 
     private func localized(_ key: String, fallback: String) -> String {

@@ -283,12 +283,20 @@ struct RemotePortScannerBrowserRouteSwiftTestingTests {
 
         let browserProfile = scanner.browserProfile(
             for: profile,
-            proxyState: .active(socksPort: 1080, httpPort: 18888)
+            proxyState: .active(
+                profileID: profile.id,
+                socksPort: 1080,
+                httpPort: 18888
+            )
         )
         let route = try #require(scanner.browserRoute(
             forRemotePort: 5173,
             remoteConnectionProfile: profile,
-            proxyState: .active(socksPort: 1080, httpPort: 18888),
+            proxyState: .active(
+                profileID: profile.id,
+                socksPort: 1080,
+                httpPort: 18888
+            ),
             path: "dashboard"
         ))
 

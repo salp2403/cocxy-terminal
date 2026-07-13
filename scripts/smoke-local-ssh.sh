@@ -225,8 +225,9 @@ echo "reverse-forward-ok"
     COCXY_SSH_SMOKE_KNOWN_HOSTS="$ROOT/known_hosts" \
     COCXY_SSH_SMOKE_HTTP_PORT="$HTTP_PORT" \
     COCXY_SSH_SMOKE_REVERSE_PORT="$SUPERVISED_REVERSE_PORT" \
-        swift test --filter supervisedControlMasterLiveSmoke
+        swift test --filter 'supervisedControlMasterLiveSmoke|authenticatedBrokersRelayThroughRealSSH'
 )
 echo "supervised-control-master-ok"
+echo "authenticated-proxy-brokers-ok"
 
 echo "Local SSH smoke passed"

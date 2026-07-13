@@ -155,19 +155,19 @@ extension RemoteConnectionProfile {
         /// Equivalent to `ssh -R remotePort:localHost:localPort`.
         case remote(remotePort: Int, localPort: Int, localHost: String = "localhost")
 
-        /// Dynamic SOCKS proxy on the given local port.
-        /// Equivalent to `ssh -D localPort`.
+        /// Legacy dynamic proxy entry retained only for profile compatibility.
+        /// Runtime code rejects this case and uses the authenticated proxy broker.
         case dynamic(localPort: Int)
 
-        /// The SSH command-line flag for this port forward.
-        var sshFlag: String {
+        /// Display-only SSH flag for executable local and remote forwards.
+        var sshFlag: String? {
             switch self {
             case let .local(localPort, remotePort, remoteHost):
                 return "-L \(localPort):\(remoteHost):\(remotePort)"
             case let .remote(remotePort, localPort, localHost):
                 return "-R \(remotePort):\(localHost):\(localPort)"
-            case let .dynamic(localPort):
-                return "-D \(localPort)"
+            case .dynamic:
+                return nil
             }
         }
 
@@ -257,7 +257,9 @@ extension RemoteConnectionProfile {
 
         // Port forwards.
         for forward in portForwards {
-            parts.append(forward.sshFlag)
+            if let sshFlag = forward.sshFlag {
+                parts.append(sshFlag)
+            }
         }
 
         // Keep-alive.
