@@ -6,8 +6,46 @@ import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
+private final class WorkflowGitCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [[String]] = []
+
+    func append(_ arguments: [String]) {
+        lock.lock()
+        storage.append(arguments)
+        lock.unlock()
+    }
+
+    var values: [[String]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
 @Suite("CodeReview Git workflow")
 struct CodeReviewGitWorkflowSwiftTestingTests {
+
+    @Test("Git revision operands reject option, range and whitespace injection")
+    func gitRevisionOperandsRejectUnsafeValues() throws {
+        for value in [
+            "--output=/tmp/probe",
+            "main..attacker",
+            " main",
+            "main ",
+            "main\nHEAD",
+            "main\u{0}HEAD",
+        ] {
+            #expect(throws: GitRevisionArgumentError.self) {
+                _ = try GitRevisionArgument(value)
+            }
+        }
+
+        #expect(try GitRevisionArgument("HEAD").value == "HEAD")
+        #expect(try GitRevisionArgument("origin/main").value == "origin/main")
+        #expect(try GitRevisionArgument("HEAD~3").value == "HEAD~3")
+        #expect(try GitRevisionArgument("0123456789abcdef").value == "0123456789abcdef")
+    }
 
     @Test("parsePorcelainStatus counts staged, unstaged, untracked, ahead and behind")
     func parsePorcelainStatusCountsEverything() {
@@ -42,6 +80,7 @@ struct CodeReviewGitWorkflowSwiftTestingTests {
     @Test("workflow creates branches and commits all changes")
     func workflowCreatesBranchesAndCommits() throws {
         let repo = try makeGitWorkflowRepo()
+        defer { try? FileManager.default.removeItem(at: repo) }
         let workflow = CodeReviewGitWorkflowService()
 
         try workflow.createBranch(named: "feature/review-panel", workingDirectory: repo)
@@ -58,6 +97,97 @@ struct CodeReviewGitWorkflowSwiftTestingTests {
         _ = try workflow.commitAll(message: "Update file", workingDirectory: repo)
         let after = try workflow.status(workingDirectory: repo)
         #expect(after.changedCount == 0)
+    }
+
+    @Test("workflow binds a plus-prefixed branch to its exact remote ref")
+    func workflowBindsPlusPrefixedBranchToExactRemoteRef() throws {
+        let repo = try makeGitWorkflowRepo()
+        let remote = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CodeReviewPushRemote-\(UUID().uuidString).git", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: repo)
+            try? FileManager.default.removeItem(at: remote)
+        }
+
+        _ = try runWorkflowGit(["init", "--bare", "-q", remote.path], in: repo)
+        _ = try runWorkflowGit(["config", "core.hooksPath", "/dev/null"], in: repo)
+        _ = try runWorkflowGit(["remote", "add", "origin", remote.path], in: repo)
+        let workflow = CodeReviewGitWorkflowService()
+        try workflow.createBranch(named: "+main", workingDirectory: repo)
+
+        _ = try workflow.pushCurrentBranch(workingDirectory: repo)
+
+        let localHead = try runWorkflowGit(["rev-parse", "HEAD"], in: repo)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let remoteHead = try runWorkflowGit(
+            ["--git-dir", remote.path, "rev-parse", "refs/heads/+main"],
+            in: repo
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        let remoteRefs = try runWorkflowGit(
+            ["--git-dir", remote.path, "for-each-ref", "--format=%(refname)", "refs/heads"],
+            in: repo
+        ).split(separator: "\n").map(String.init)
+        #expect(remoteHead == localHead)
+        #expect(remoteRefs == ["refs/heads/+main"])
+    }
+
+    @Test("push rejects an option-shaped branch before invoking git push")
+    func pushRejectsOptionShapedBranch() {
+        let calls = WorkflowGitCalls()
+        let workflow = CodeReviewGitWorkflowService { _, arguments in
+            calls.append(arguments)
+            return "--receive-pack=./evil\n"
+        }
+
+        #expect(throws: HunkActionError.self) {
+            _ = try workflow.pushCurrentBranch(
+                workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+            )
+        }
+        #expect(calls.values == [["branch", "--show-current"]])
+    }
+
+    @Test("push places the validated branch after an option boundary")
+    func pushUsesOptionBoundary() throws {
+        let calls = WorkflowGitCalls()
+        let workflow = CodeReviewGitWorkflowService { _, arguments in
+            calls.append(arguments)
+            if arguments == ["branch", "--show-current"] {
+                return "feature/review-panel\n"
+            }
+            return "pushed\n"
+        }
+
+        let output = try workflow.pushCurrentBranch(
+            workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+        )
+
+        #expect(output == "pushed\n")
+        #expect(calls.values == [
+            ["branch", "--show-current"],
+            [
+                "push", "-u", "origin", "--",
+                "refs/heads/feature/review-panel:refs/heads/feature/review-panel",
+            ],
+        ])
+    }
+
+    @Test("direct diff revisions are validated and placed after end-of-options")
+    func directDiffArgumentsAreBounded() throws {
+        #expect(throws: GitRevisionArgumentError.self) {
+            _ = try CodeReviewPanelViewModel.directDiffArguments(
+                mode: .vsBranch,
+                reference: "--output=/tmp/probe"
+            )
+        }
+
+        let arguments = try CodeReviewPanelViewModel.directDiffArguments(
+            mode: .vsBranch,
+            reference: "origin/main"
+        )
+        #expect(arguments == [
+            "diff", "--no-color", "--end-of-options", "origin/main", "--", ".",
+        ])
     }
 }
 

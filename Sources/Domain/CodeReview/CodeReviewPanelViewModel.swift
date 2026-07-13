@@ -1315,17 +1315,10 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let arguments: [String]
-                    switch mode {
-                    case .uncommitted:
-                        arguments = ["diff", "--no-color", "--", "."]
-                    case .sinceSessionStart:
-                        let base = reference ?? "HEAD"
-                        arguments = ["diff", "--no-color", base, "--", "."]
-                    case .vsBranch:
-                        let base = reference ?? "HEAD"
-                        arguments = ["diff", "--no-color", base, "--", "."]
-                    }
+                    let arguments = try Self.directDiffArguments(
+                        mode: mode,
+                        reference: reference
+                    )
 
                     let raw = try SessionDiffTrackerImpl.runGit(workingDirectory, arguments)
                     continuation.resume(returning: DiffParser.parse(raw))
@@ -1333,6 +1326,21 @@ final class CodeReviewPanelViewModel: CodeReviewProviding, ObservableObject {
                     continuation.resume(throwing: error)
                 }
             }
+        }
+    }
+
+    nonisolated static func directDiffArguments(
+        mode: DiffMode,
+        reference: String?
+    ) throws -> [String] {
+        switch mode {
+        case .uncommitted:
+            return ["diff", "--no-color", "--", "."]
+        case .sinceSessionStart, .vsBranch:
+            let revision = try GitRevisionArgument(reference ?? "HEAD").value
+            return [
+                "diff", "--no-color", "--end-of-options", revision, "--", ".",
+            ]
         }
     }
 

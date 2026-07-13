@@ -257,14 +257,23 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 case .sinceSessionStart:
                     diffWorkingDirectory = snapshot.repoRoot ?? snapshot.workingDirectory
                     if let baseRef = snapshot.ref, !baseRef.isEmpty {
-                        rawDiff = try self.gitRunner(diffWorkingDirectory, ["diff", "--no-color", baseRef, "--"])
+                        let revision = try GitRevisionArgument(baseRef).value
+                        rawDiff = try self.gitRunner(
+                            diffWorkingDirectory,
+                            ["diff", "--no-color", "--end-of-options", revision, "--"]
+                        )
                     } else {
                         rawDiff = try self.gitRunner(diffWorkingDirectory, ["diff", "--no-color", "--"])
                     }
                 case .vsBranch:
                     diffWorkingDirectory = snapshot.workingDirectory
-                    let targetRef = reference ?? snapshot.ref ?? "HEAD"
-                    rawDiff = try self.gitRunner(diffWorkingDirectory, ["diff", "--no-color", targetRef, "--", "."])
+                    let targetRef = try GitRevisionArgument(
+                        reference ?? snapshot.ref ?? "HEAD"
+                    ).value
+                    rawDiff = try self.gitRunner(
+                        diffWorkingDirectory,
+                        ["diff", "--no-color", "--end-of-options", targetRef, "--", "."]
+                    )
                 }
 
                 let statusOutput = try self.gitRunner(diffWorkingDirectory, ["status", "--porcelain"])

@@ -21,6 +21,23 @@ private final class CounterBox: @unchecked Sendable {
     }
 }
 
+private final class GitArgumentCallsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [[String]] = []
+
+    func append(_ arguments: [String]) {
+        lock.lock()
+        storage.append(arguments)
+        lock.unlock()
+    }
+
+    var values: [[String]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
 private struct CapturedEditHistorySession: Sendable, Equatable {
     let sessionID: String
     let agentID: String
@@ -214,6 +231,60 @@ struct SessionDiffTrackerSwiftTestingTests {
         #expect(diffs[0].filePath == "tracked.txt")
         #expect(diffs[0].agentName == "Claude Code")
         #expect(diffs[0].additions == 1)
+    }
+
+    @Test("branch diff rejects an option-shaped revision before invoking git")
+    func branchDiffRejectsOptionShapedRevision() async {
+        let calls = CounterBox()
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, _ in
+            calls.increment()
+            return ""
+        })
+        tracker.recordSnapshot(
+            sessionId: "unsafe-ref",
+            ref: "abc123",
+            workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+        )
+
+        do {
+            _ = try await diffResult(
+                from: tracker,
+                sessionId: "unsafe-ref",
+                mode: .vsBranch,
+                reference: "--output=/tmp/probe"
+            )
+            Issue.record("Expected an invalid revision error")
+        } catch {
+            #expect(error is GitRevisionArgumentError)
+        }
+        #expect(calls.value == 0)
+    }
+
+    @Test("branch diff sends a validated revision after end-of-options")
+    func branchDiffUsesOptionBoundary() async throws {
+        let calls = GitArgumentCallsBox()
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, arguments in
+            calls.append(arguments)
+            return ""
+        })
+        tracker.recordSnapshot(
+            sessionId: "safe-ref",
+            ref: "abc123",
+            workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+        )
+
+        let diffs = try await diffResult(
+            from: tracker,
+            sessionId: "safe-ref",
+            mode: .vsBranch,
+            reference: "origin/main"
+        )
+
+        #expect(diffs.isEmpty)
+        #expect(calls.values == [
+            ["diff", "--no-color", "--end-of-options", "origin/main", "--", "."],
+            ["status", "--porcelain"],
+        ])
     }
 
     @Test("computeDiff synthesizes untracked files")

@@ -52,8 +52,6 @@ extension AppDelegate {
         }
 
         do {
-            let client = try makeGitAssistantLLMClient(settings: context.settings)
-            let service = DefaultGitAssistantService(client: client)
             switch kind {
             case "commit-message":
                 let diff = try Self.gitOutput(
@@ -63,6 +61,8 @@ extension AppDelegate {
                 guard !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     return (false, ["error": "No staged changes found. Stage files before generating a commit message."])
                 }
+                let client = try makeGitAssistantLLMClient(settings: context.settings)
+                let service = DefaultGitAssistantService(client: client)
                 let draft = try await service.generateCommitMessage(
                     diff: diff,
                     settings: context.settings
@@ -70,38 +70,50 @@ extension AppDelegate {
                 return (true, ["subject": draft.subject, "body": draft.body])
 
             case "pr-draft":
-                let base = try Self.nonEmptyParam(params["base"])
+                let rawBase = try Self.nonEmptyParam(params["base"])
                     ?? Self.defaultBaseBranch(at: context.workingDirectory)
-                let head = try Self.nonEmptyParam(params["head"])
+                let rawHead = try Self.nonEmptyParam(params["head"])
                     ?? Self.currentBranch(at: context.workingDirectory)
+                let revisions = try GitAssistantRevisionSelection(
+                    base: rawBase,
+                    head: rawHead
+                )
                 let diff = try Self.gitOutput(
                     at: context.workingDirectory,
-                    arguments: ["diff", "--no-color", "--no-ext-diff", "\(base)...\(head)"]
+                    arguments: revisions.diffArguments
                 )
                 guard !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                    return (false, ["error": "No branch diff found between \(base) and \(head)."])
+                    return (false, ["error": "No branch diff found between \(revisions.base) and \(revisions.head)."])
                 }
+                let client = try makeGitAssistantLLMClient(settings: context.settings)
+                let service = DefaultGitAssistantService(client: client)
                 let draft = try await service.generatePullRequestDraft(
-                    baseBranch: base,
-                    headBranch: head,
+                    baseBranch: revisions.base,
+                    headBranch: revisions.head,
                     diff: diff,
                     settings: context.settings
                 )
                 return (true, ["title": draft.title, "body": draft.body])
 
             case "release-notes":
-                let base = try Self.nonEmptyParam(params["base"])
+                let rawBase = try Self.nonEmptyParam(params["base"])
                     ?? Self.defaultBaseBranch(at: context.workingDirectory)
-                let head = try Self.nonEmptyParam(params["head"])
+                let rawHead = try Self.nonEmptyParam(params["head"])
                     ?? Self.currentBranch(at: context.workingDirectory)
+                let revisions = try GitAssistantRevisionSelection(
+                    base: rawBase,
+                    head: rawHead
+                )
                 let commits = try Self.gitLogCommits(
                     at: context.workingDirectory,
-                    base: base,
-                    head: head
+                    base: revisions.base,
+                    head: revisions.head
                 )
                 guard !commits.isEmpty else {
-                    return (false, ["error": "No commits found between \(base) and \(head)."])
+                    return (false, ["error": "No commits found between \(revisions.base) and \(revisions.head)."])
                 }
+                let client = try makeGitAssistantLLMClient(settings: context.settings)
+                let service = DefaultGitAssistantService(client: client)
                 let draft = try await service.generateReleaseNotes(
                     commits: commits,
                     settings: context.settings
@@ -161,8 +173,11 @@ extension AppDelegate {
     }
 
     nonisolated private static func nonEmptyParam(_ value: String?) -> String? {
-        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return trimmed.isEmpty ? nil : trimmed
+        guard let value,
+              !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return value
     }
 
     nonisolated static func defaultBaseBranch(at directory: URL) throws -> String {
@@ -181,9 +196,10 @@ extension AppDelegate {
         base: String,
         head: String
     ) throws -> [GitAssistantCommit] {
+        let revisions = try GitAssistantRevisionSelection(base: base, head: head)
         let output = try gitOutput(
             at: directory,
-            arguments: ["log", "--format=%H%x00%s", "\(base)..\(head)"]
+            arguments: revisions.logArguments
         )
         return output
             .split(separator: "\n", omittingEmptySubsequences: true)
@@ -198,36 +214,58 @@ extension AppDelegate {
     }
 
     nonisolated static func gitOutput(at directory: URL, arguments: [String]) throws -> String {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = arguments
-        process.currentDirectoryURL = directory
-
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        try process.run()
-        process.waitUntilExit()
-
-        let output = String(
-            decoding: stdout.fileHandleForReading.readDataToEndOfFile(),
-            as: UTF8.self
-        )
-        let error = String(
-            decoding: stderr.fileHandleForReading.readDataToEndOfFile(),
-            as: UTF8.self
+        let result = try CodeReviewGit.run(
+            workingDirectory: directory,
+            arguments: arguments,
+            gitExecutableURLOverride: URL(fileURLWithPath: "/usr/bin/git")
         )
 
-        guard process.terminationStatus == 0 else {
+        guard result.terminationStatus == 0 else {
             throw GitAssistantGitError.commandFailed(
                 command: "git " + arguments.joined(separator: " "),
-                stderr: error.trimmingCharacters(in: .whitespacesAndNewlines),
-                exitCode: process.terminationStatus
+                stderr: result.stderr.trimmingCharacters(in: .whitespacesAndNewlines),
+                exitCode: result.terminationStatus
             )
         }
-        return output
+        return result.stdout
+    }
+}
+
+struct GitAssistantRevisionSelection: Equatable, Sendable {
+    let base: String
+    let head: String
+    private let diffRange: String
+    private let logRange: String
+
+    init(base: String, head: String) throws {
+        let validatedBase = try GitRevisionArgument(base)
+        let validatedHead = try GitRevisionArgument(head)
+        self.base = validatedBase.value
+        self.head = validatedHead.value
+        self.diffRange = GitRevisionArgument.range(
+            base: validatedBase,
+            head: validatedHead,
+            kind: .threeDot
+        )
+        self.logRange = GitRevisionArgument.range(
+            base: validatedBase,
+            head: validatedHead,
+            kind: .twoDot
+        )
+    }
+
+    var diffArguments: [String] {
+        [
+            "diff", "--no-color", "--no-ext-diff", "--end-of-options",
+            diffRange, "--",
+        ]
+    }
+
+    var logArguments: [String] {
+        [
+            "log", "--format=%H%x00%s", "--end-of-options",
+            logRange, "--",
+        ]
     }
 }
 
