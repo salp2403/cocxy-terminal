@@ -1454,6 +1454,11 @@
 "window.tabConfig.open.message" = "The TOML file is reloaded from disk before the tab opens.";
 "window.tabConfig.save.error" = "Unable to save tab config.";
 "window.tabConfig.open.error" = "Unable to open tab config.";
+"tabConfig.startupApproval.title" = "Run Tab Config Startup Input?";
+"tabConfig.startupApproval.message" = "Config: %@\nWorking directory: %@\nFingerprint: %@\n\nThe exact input below will be sent once to the new terminal and can execute commands with your user account. Review it before continuing.";
+"tabConfig.startupApproval.runOnce" = "Run Once";
+"tabConfig.startupApproval.skip" = "Open Without Running";
+"tabConfig.startupApproval.preview.accessibility" = "Exact terminal input for approval";
 "window.sshUpload.complete.title" = "Upload Complete";
 "window.sshUpload.failed.title" = "Upload Failed";
 "window.sshUpload.unknownError" = "Unknown error";

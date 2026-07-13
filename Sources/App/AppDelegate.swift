@@ -2052,7 +2052,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 syncOnMainActor {
                     delegateRef.value?.exportTabConfigForCLI(
                         named: name,
-                        destination: output,
+                        fileName: output,
                         overwrite: overwrite
                     )
                 }

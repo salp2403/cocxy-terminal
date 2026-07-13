@@ -373,7 +373,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy tab move <id> <position>`
     case tabMove(id: String, position: String)
 
-    /// `cocxy tab config save <name> [--command <cmd>] [--theme <theme>] [--env KEY=VALUE]`
+    /// `cocxy tab config save <name> [--theme <theme>] [--env KEY=VALUE]`
     case tabConfigSave(
         name: String,
         command: String?,
@@ -390,7 +390,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy tab config path <name>`
     case tabConfigPath(name: String)
 
-    /// `cocxy tab config export <name> --output <path> [--force]`
+    /// `cocxy tab config export <name> --output <file.toml> [--force]`
     case tabConfigExport(name: String, output: String, force: Bool)
 
     // MARK: - Split extended (v2)
@@ -1966,7 +1966,6 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "tab config save", argument: "name")
         }
 
-        var command: String?
         var theme: String?
         var environment: [String: String] = [:]
         var index = 1
@@ -1974,11 +1973,11 @@ public enum CLIArgumentParser {
         while index < arguments.count {
             switch arguments[index] {
             case "--command":
-                guard index + 1 < arguments.count else {
-                    throw CLIError.missingArgument(command: "tab config save", argument: "command")
-                }
-                command = arguments[index + 1]
-                index += 2
+                throw CLIError.invalidArgument(
+                    command: "tab config save",
+                    argument: "--command",
+                    reason: "Startup commands must be reviewed and launched from Cocxy Terminal."
+                )
             case "--theme":
                 guard index + 1 < arguments.count else {
                     throw CLIError.missingArgument(command: "tab config save", argument: "theme")
@@ -2006,14 +2005,14 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "tab config save",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --command, --theme, or --env KEY=VALUE."
+                    reason: "Unknown flag. Use --theme or --env KEY=VALUE."
                 )
             }
         }
 
         return .tabConfigSave(
             name: name,
-            command: command,
+            command: nil,
             theme: theme,
             environment: environment
         )
@@ -2043,7 +2042,7 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "tab config export",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --output <path> and optional --force."
+                    reason: "Unknown flag. Use --output <file.toml> and optional --force."
                 )
             }
         }
@@ -2051,7 +2050,32 @@ public enum CLIArgumentParser {
         guard let output, !output.isEmpty else {
             throw CLIError.missingArgument(command: "tab config export", argument: "output")
         }
+        guard isValidTabConfigExportLeafName(output) else {
+            throw CLIError.invalidArgument(
+                command: "tab config export",
+                argument: output,
+                reason: "Output must be a single visible .toml file name."
+            )
+        }
         return .tabConfigExport(name: name, output: output, force: force)
+    }
+
+    private static func isValidTabConfigExportLeafName(_ name: String) -> Bool {
+        guard name == name.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty,
+              name.utf8.count <= 128,
+              name.hasSuffix(".toml"),
+              name.first != ".",
+              !name.contains(".."),
+              !name.contains("/"),
+              !name.contains("\\"),
+              !name.contains("\0") else {
+            return false
+        }
+        let allowed = CharacterSet(
+            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+        )
+        return name.unicodeScalars.allSatisfy { allowed.contains($0) }
     }
 
     /// Parses `cocxy tab rename <id> <name>`.

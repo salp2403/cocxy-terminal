@@ -1883,7 +1883,7 @@ final class OutputFormatterTests: XCTestCase {
             error: nil
         )
         let output = OutputFormatter.formatSuccess(
-            command: .tabConfigExport(name: "api", output: "/tmp/shared-api.toml", force: false),
+            command: .tabConfigExport(name: "api", output: "shared-api.toml", force: false),
             response: response
         )
         XCTAssertEqual(output, "Tab config exported: /tmp/shared-api.toml")
@@ -2752,14 +2752,14 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testTabConfigExportUsageMatchesPublicParserShape() throws {
         XCTAssertEqual(
             CLICommand.tabConfigExport.usageExample,
-            "cocxy tab config export <name> --output <path> [--force]"
+            "cocxy tab config export <name> --output <file.toml> [--force]"
         )
         XCTAssertEqual(
             try CLIArgumentParser.parse([
                 "tab", "config", "export", "api",
-                "--output", "/tmp/shared-api.toml",
+                "--output", "shared-api.toml",
             ]),
-            .tabConfigExport(name: "api", output: "/tmp/shared-api.toml", force: false)
+            .tabConfigExport(name: "api", output: "shared-api.toml", force: false)
         )
     }
 }

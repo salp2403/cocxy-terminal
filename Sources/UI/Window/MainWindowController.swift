@@ -650,6 +650,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserInitScriptAuthorizationPresenter: ((BrowserInitScriptAuthorizationRequest) -> Bool)?
     var isBrowserInitScriptAuthorizationPresented = false
 
+    /// Optional test seam for one-time tab-config startup approval.
+    var tabConfigStartupAuthorizationPresenter: ((TabConfigStartupAuthorizationRequest) -> Bool)?
+    var isTabConfigStartupAuthorizationPresented = false
+    var consumedTabConfigStartupAuthorizationIDs: Set<UUID> = []
+
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
     var inlineImageRenderers: [ObjectIdentifier: InlineImageRenderer] = [:]

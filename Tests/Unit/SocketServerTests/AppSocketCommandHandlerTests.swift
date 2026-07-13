@@ -436,7 +436,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["markdown"], "## Features\n- Improve source control")
     }
 
-    func test_tabConfigSave_routesNameCommandThemeAndEnvToProvider() {
+    func test_tabConfigSave_routesNameThemeAndEnvToProviderWithoutCommand() {
         let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
             (nil, nil, nil, [:])
         )
@@ -456,7 +456,6 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             command: "tab-config-save",
             params: [
                 "name": "api",
-                "command": "npm run dev",
                 "theme": "Nord",
                 "env.API_URL": "http://127.0.0.1:8080",
             ]
@@ -465,10 +464,32 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.success)
         let snapshot = captured.withValue { $0 }
         XCTAssertEqual(snapshot.name, "api")
-        XCTAssertEqual(snapshot.command, "npm run dev")
+        XCTAssertNil(snapshot.command)
         XCTAssertEqual(snapshot.theme, "Nord")
         XCTAssertEqual(snapshot.env, ["API_URL": "http://127.0.0.1:8080"])
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+    }
+
+    func test_tabConfigSave_rejectsStartupCommandBeforeProviderDispatch() {
+        let providerWasCalled = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabConfigSaveProvider: { name, _, _, _ in
+                providerWasCalled.withValue { $0 = true }
+                return (name: name, path: "/tmp/\(name).toml")
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "tab-config-save-command",
+            command: "tab-config-save",
+            params: ["name": "api", "command": "touch /tmp/should-not-run"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Startup commands are not allowed in socket tab configs")
+        XCTAssertFalse(providerWasCalled.withValue { $0 })
     }
 
     func test_tabConfigOpen_routesNameToProvider() {
@@ -494,7 +515,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
     }
 
-    func test_tabConfigExport_routesNameOutputAndForceToProvider() {
+    func test_tabConfigExport_routesNameLeafAndForceToProvider() {
         let captured = LockedBox<(name: String?, output: String?, force: Bool?)>(
             (nil, nil, nil)
         )
@@ -514,7 +535,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             command: "tab-config-export",
             params: [
                 "name": "api",
-                "output": "/tmp/shared-api.toml",
+                "output": "shared-api.toml",
                 "force": "true",
             ]
         ))
@@ -522,9 +543,41 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.success)
         let snapshot = captured.withValue { $0 }
         XCTAssertEqual(snapshot.name, "api")
-        XCTAssertEqual(snapshot.output, "/tmp/shared-api.toml")
+        XCTAssertEqual(snapshot.output, "shared-api.toml")
         XCTAssertEqual(snapshot.force, true)
-        XCTAssertEqual(response.data?["path"], "/tmp/shared-api.toml")
+        XCTAssertEqual(response.data?["path"], "shared-api.toml")
+    }
+
+    func test_tabConfigExport_rejectsUncontainedOutputsBeforeProviderDispatch() {
+        let providerCallCount = LockedBox(0)
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            tabConfigExportProvider: { name, output, _ in
+                providerCallCount.withValue { $0 += 1 }
+                return (name: name, path: output)
+            }
+        )
+
+        for output in [
+            "/tmp/shared-api.toml",
+            "../shared-api.toml",
+            "nested/shared-api.toml",
+            "nested\\shared-api.toml",
+            ".",
+            "..",
+            "",
+        ] {
+            let response = handler.handleCommand(SocketRequest(
+                id: "tab-config-export-invalid-\(output)",
+                command: "tab-config-export",
+                params: ["name": "api", "output": output]
+            ))
+
+            XCTAssertFalse(response.success, "Expected rejection for output: \(output)")
+        }
+
+        XCTAssertEqual(providerCallCount.withValue { $0 }, 0)
     }
 
     func test_reviewRequestChanges_routesToGitHubProvider() {
@@ -2748,15 +2801,15 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let export = handler.handleCommand(SocketRequest(
             id: "tab-config-export-2",
             command: "tab-config-export",
-            params: ["name": "api", "output": "/tmp/api-copy.toml", "force": "true"]
+            params: ["name": "api", "output": "api-copy.toml", "force": "true"]
         ))
         XCTAssertTrue(export.success)
-        XCTAssertEqual(export.data?["path"], "/tmp/api-copy.toml")
+        XCTAssertEqual(export.data?["path"], "api-copy.toml")
 
         let invalidExport = handler.handleCommand(SocketRequest(
             id: "tab-config-export-invalid",
             command: "tab-config-export",
-            params: ["name": "api", "output": "/tmp/api-copy.toml"]
+            params: ["name": "api", "output": "api-copy.toml"]
         ))
         XCTAssertFalse(invalidExport.success)
     }
@@ -3712,7 +3765,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         case .tabConfigOpen, .tabConfigList, .tabConfigPath:
             return ["name": "default"]
         case .tabConfigExport:
-            return ["name": "default", "output": "/tmp/default.toml"]
+            return ["name": "default", "output": "default.toml"]
         case .configGet:
             return ["key": "appearance.theme"]
         case .configSet:

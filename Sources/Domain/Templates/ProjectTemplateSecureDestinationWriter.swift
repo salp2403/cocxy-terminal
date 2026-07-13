@@ -5,18 +5,47 @@ import Darwin
 import Foundation
 
 struct ProjectTemplateSecureDestinationWriter {
+    struct Policy: Sendable {
+        let createdDirectoryMode: mode_t
+        let enforcedDestinationMode: mode_t?
+        let outputFileMode: mode_t?
+
+        static let projectTemplate = Policy(
+            createdDirectoryMode: 0o755,
+            enforcedDestinationMode: nil,
+            outputFileMode: nil
+        )
+
+        static let ownerOnlyPrivateFiles = Policy(
+            createdDirectoryMode: 0o700,
+            enforcedDestinationMode: 0o700,
+            outputFileMode: 0o600
+        )
+    }
+
     private static let directoryOpenFlags = O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC
 
     let destinationURL: URL
     private let destinationDescriptor: OwnedDescriptor
+    private let policy: Policy
 
-    init(destinationURL: URL) throws {
+    init(destinationURL: URL, policy: Policy = .projectTemplate) throws {
         let components = try Self.validatedDestinationComponents(destinationURL)
-        self.destinationURL = destinationURL.standardizedFileURL
-        self.destinationDescriptor = try Self.openDestination(
+        let destinationDescriptor = try Self.openDestination(
             components: components,
-            unsafePath: destinationURL.path
+            unsafePath: destinationURL.path,
+            createdDirectoryMode: policy.createdDirectoryMode
         )
+        if let destinationMode = policy.enforcedDestinationMode {
+            try Self.enforceOwnerOnlyDestination(
+                destinationDescriptor.value,
+                mode: destinationMode,
+                unsafePath: destinationURL.path
+            )
+        }
+        self.destinationURL = destinationURL.standardizedFileURL
+        self.destinationDescriptor = destinationDescriptor
+        self.policy = policy
     }
 
     func write(
@@ -28,6 +57,7 @@ struct ProjectTemplateSecureDestinationWriter {
         let parentDescriptor = try Self.openOutputParent(
             components: Array(components.dropLast()),
             destinationDescriptor: destinationDescriptor.value,
+            createdDirectoryMode: policy.createdDirectoryMode,
             unsafePath: relativePath
         )
         try Self.writeRenderedContent(
@@ -35,7 +65,8 @@ struct ProjectTemplateSecureDestinationWriter {
             finalName: components[components.count - 1],
             relativePath: relativePath,
             parentDescriptor: parentDescriptor.value,
-            overwrite: overwrite
+            overwrite: overwrite,
+            outputFileMode: policy.outputFileMode
         )
     }
 
@@ -78,7 +109,8 @@ struct ProjectTemplateSecureDestinationWriter {
 
     private static func openDestination(
         components: [String],
-        unsafePath: String
+        unsafePath: String,
+        createdDirectoryMode: mode_t
     ) throws -> OwnedDescriptor {
         let rootDescriptor = "/".withCString {
             Darwin.open($0, directoryOpenFlags)
@@ -93,6 +125,7 @@ struct ProjectTemplateSecureDestinationWriter {
                 named: component,
                 relativeTo: current.value,
                 allowTrustedSystemRootSymlink: index == 0 && index < components.count - 1,
+                createdDirectoryMode: createdDirectoryMode,
                 unsafePath: unsafePath
             )
             current = OwnedDescriptor(next)
@@ -103,6 +136,7 @@ struct ProjectTemplateSecureDestinationWriter {
     private static func openOutputParent(
         components: [String],
         destinationDescriptor: Int32,
+        createdDirectoryMode: mode_t,
         unsafePath: String
     ) throws -> OwnedDescriptor {
         let duplicate = ".".withCString {
@@ -118,6 +152,7 @@ struct ProjectTemplateSecureDestinationWriter {
                 named: component,
                 relativeTo: current.value,
                 allowTrustedSystemRootSymlink: false,
+                createdDirectoryMode: createdDirectoryMode,
                 unsafePath: unsafePath
             )
             current = OwnedDescriptor(next)
@@ -129,6 +164,7 @@ struct ProjectTemplateSecureDestinationWriter {
         named name: String,
         relativeTo parentDescriptor: Int32,
         allowTrustedSystemRootSymlink: Bool,
+        createdDirectoryMode: mode_t,
         unsafePath: String
     ) throws -> Int32 {
         let descriptor = name.withCString {
@@ -159,7 +195,7 @@ struct ProjectTemplateSecureDestinationWriter {
         }
 
         let creationResult = name.withCString {
-            Darwin.mkdirat(parentDescriptor, $0, mode_t(0o755))
+            Darwin.mkdirat(parentDescriptor, $0, createdDirectoryMode)
         }
         guard creationResult == 0 || errno == EEXIST else {
             throw ProjectTemplateError.unsafeOutputPath(unsafePath)
@@ -213,12 +249,33 @@ struct ProjectTemplateSecureDestinationWriter {
         return descriptor
     }
 
+    private static func enforceOwnerOnlyDestination(
+        _ descriptor: Int32,
+        mode: mode_t,
+        unsafePath: String
+    ) throws {
+        guard mode & ~mode_t(0o777) == 0 else {
+            throw ProjectTemplateError.unsafeOutputPath(unsafePath)
+        }
+        var metadata = stat()
+        guard Darwin.fstat(descriptor, &metadata) == 0,
+              isDirectory(metadata),
+              metadata.st_uid == geteuid(),
+              Darwin.fchmod(descriptor, mode) == 0,
+              Darwin.fstat(descriptor, &metadata) == 0,
+              metadata.st_uid == geteuid(),
+              metadata.st_mode & mode_t(0o777) == mode else {
+            throw ProjectTemplateError.unsafeOutputPath(unsafePath)
+        }
+    }
+
     private static func writeRenderedContent(
         _ data: Data,
         finalName: String,
         relativePath: String,
         parentDescriptor: Int32,
-        overwrite: Bool
+        overwrite: Bool,
+        outputFileMode: mode_t?
     ) throws {
         try validateExistingOutput(
             named: finalName,
@@ -229,7 +286,8 @@ struct ProjectTemplateSecureDestinationWriter {
         let temporaryFile = try createTemporaryFile(
             data,
             relativePath: relativePath,
-            parentDescriptor: parentDescriptor
+            parentDescriptor: parentDescriptor,
+            outputFileMode: outputFileMode
         )
         defer {
             if temporaryFile.shouldCleanup {
@@ -310,7 +368,8 @@ struct ProjectTemplateSecureDestinationWriter {
     private static func createTemporaryFile(
         _ data: Data,
         relativePath: String,
-        parentDescriptor: Int32
+        parentDescriptor: Int32,
+        outputFileMode: mode_t?
     ) throws -> TemporaryFile {
         for _ in 0..<16 {
             let name = ".cocxy-scaffold-\(UUID().uuidString).tmp"
@@ -330,9 +389,18 @@ struct ProjectTemplateSecureDestinationWriter {
             var descriptorIsOpen = true
             do {
                 try writeAll(data, to: descriptor, relativePath: relativePath)
+                if let outputFileMode {
+                    guard Darwin.fchmod(descriptor, outputFileMode) == 0 else {
+                        throw ProjectTemplateError.unsafeOutputPath(relativePath)
+                    }
+                }
                 var metadata = stat()
                 guard Darwin.fstat(descriptor, &metadata) == 0,
                       isRegularFile(metadata) else {
+                    throw ProjectTemplateError.unsafeOutputPath(relativePath)
+                }
+                if let outputFileMode,
+                   metadata.st_mode & mode_t(0o777) != outputFileMode {
                     throw ProjectTemplateError.unsafeOutputPath(relativePath)
                 }
                 let closeResult = Darwin.close(descriptor)

@@ -93,6 +93,31 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
             MainWindowController.localizedTabConfigOpenFailureMessage(localizer: localizer) ==
                 "No se pudo abrir la configuración de pestaña."
         )
+
+        let startupRequest = TabConfigStartupAuthorizationRequest(
+            id: UUID(),
+            configName: "api",
+            sourceDigest: String(repeating: "a", count: 64),
+            workingDirectory: "/tmp/proyecto",
+            destinationTabID: TabID(),
+            launchOrigin: .userInterface,
+            command: "npm run dev",
+            environment: [:],
+            startupInput: "npm run dev\r",
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        let startupCopy = MainWindowController.localizedTabConfigStartupApprovalCopy(
+            request: startupRequest,
+            localizer: localizer
+        )
+        #expect(startupCopy.title == "¿Ejecutar la entrada inicial de la configuración?")
+        #expect(startupCopy.message.contains("Configuración: api"))
+        #expect(startupCopy.message.contains("Directorio de trabajo: /tmp/proyecto"))
+        #expect(startupCopy.message.contains("Huella: aaaaaaaaaaaa"))
+        #expect(startupCopy.message.contains("se enviará una sola vez"))
+        #expect(startupCopy.approveButton == "Ejecutar una vez")
+        #expect(startupCopy.skipButton == "Abrir sin ejecutar")
+        #expect(startupCopy.previewAccessibilityLabel == "Entrada exacta de terminal para aprobación")
     }
 
     @Test("browser init-script approval copy explains exact Spanish security scope")

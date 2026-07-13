@@ -1601,13 +1601,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Saves the focused tab to `~/.cocxy/tabs/<name>.toml`.
     ///
     /// Required params: `name`.
-    /// Optional params: `command`, `theme`, and `env.<KEY>` entries.
+    /// Optional params: `theme` and `env.<KEY>` entries. Socket-origin startup
+    /// commands are rejected because opening a config must not borrow the
+    /// terminal process's broader authority.
     private func handleTabConfigSave(_ request: SocketRequest) -> SocketResponse {
         guard let provider = tabConfigSaveProvider else {
             return .failure(id: request.id, error: "Tab config save not available")
         }
         guard let name = request.params?["name"], !name.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard nonEmptyParam(request.params?["command"]) == nil else {
+            return .failure(
+                id: request.id,
+                error: "Startup commands are not allowed in socket tab configs"
+            )
         }
 
         let environment: [String: String]
@@ -1619,7 +1627,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
         guard let result = provider(
             name,
-            nonEmptyParam(request.params?["command"]),
+            nil,
             nonEmptyParam(request.params?["theme"]),
             environment
         ) else {
@@ -1688,8 +1696,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let output = request.params?["output"], !output.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: output")
         }
+        let outputLeaf: String
+        do {
+            outputLeaf = try TabConfigStore.validatedSocketExportLeafName(output)
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Output must be a single visible .toml file name"
+            )
+        }
         let overwrite = request.params?["force"] == "true"
-        guard let result = provider(name, output, overwrite) else {
+        guard let result = provider(name, outputLeaf, overwrite) else {
             return .failure(id: request.id, error: "Unable to export tab config")
         }
         return .ok(id: request.id, data: [

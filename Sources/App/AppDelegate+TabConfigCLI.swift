@@ -36,12 +36,30 @@ extension AppDelegate {
         }
     }
 
-    func openTabConfigForCLI(named name: String) -> (id: String, title: String, path: String)? {
+    func openTabConfigForCLI(
+        named name: String,
+        store: TabConfigStore = TabConfigStore()
+    ) -> (id: String, title: String, path: String)? {
+        openTabConfig(named: name, launchOrigin: .localSocket, store: store)
+    }
+
+    func openTabConfigFromUserInterface(
+        named name: String,
+        store: TabConfigStore = TabConfigStore()
+    ) -> (id: String, title: String, path: String)? {
+        openTabConfig(named: name, launchOrigin: .userInterface, store: store)
+    }
+
+    private func openTabConfig(
+        named name: String,
+        launchOrigin: TabConfigLaunchOrigin,
+        store: TabConfigStore
+    ) -> (id: String, title: String, path: String)? {
         guard let controller = focusedWindowController() else { return nil }
-        let store = TabConfigStore()
 
         do {
-            let config = try store.load(named: name)
+            let snapshot = try store.loadSnapshot(named: name)
+            let config = snapshot.config
             let path = try store.fileURL(forName: name).path
             let directory = resolveTabConfigDirectory(config.workingDirectory)
 
@@ -56,7 +74,15 @@ extension AppDelegate {
             controller.tabManager.setActive(id: tabID)
 
             applyTabConfigTheme(config.theme, to: tabID, in: controller)
-            sendTabConfigStartupInput(config, to: tabID, in: controller)
+            if let authorization = TabConfigStartupSecurity.makeAuthorizationRequest(
+                snapshot: snapshot,
+                workingDirectory: directory,
+                destinationTabID: tabID,
+                launchOrigin: launchOrigin
+            ),
+               controller.authorizeTabConfigStartup(authorization) {
+                sendTabConfigStartupInput(authorization, in: controller)
+            }
 
             let title = controller.tabManager.tab(for: tabID)?.displayTitle ?? config.name
             return (id: tabID.rawValue.uuidString, title: title, path: path)
@@ -85,14 +111,13 @@ extension AppDelegate {
 
     func exportTabConfigForCLI(
         named name: String,
-        destination: String,
+        fileName: String,
         overwrite: Bool
     ) -> (name: String, path: String)? {
         do {
-            let destinationURL = URL(fileURLWithPath: destination)
-            let exported = try TabConfigStore().export(
+            let exported = try TabConfigStore().exportForSocket(
                 named: name,
-                to: destinationURL,
+                fileName: fileName,
                 overwrite: overwrite
             )
             return (name: name, path: exported.path)
@@ -118,46 +143,24 @@ extension AppDelegate {
     }
 
     private func sendTabConfigStartupInput(
-        _ config: TabConfig,
-        to tabID: TabID,
+        _ authorization: TabConfigStartupAuthorizationRequest,
         in controller: MainWindowController
     ) {
-        guard let input = startupInput(for: config) else { return }
-
         Task { @MainActor [weak controller] in
             try? await Task.sleep(for: .milliseconds(500))
             guard let controller,
-                  controller.tabManager.activeTabID == tabID,
-                  let surfaceID = controller.tabSurfaceMap[tabID] else {
+                  Date() < authorization.expiresAt,
+                  controller.tabManager.activeTabID == authorization.destinationTabID,
+                  let tab = controller.tabManager.tab(for: authorization.destinationTabID),
+                  tab.workingDirectory.standardizedFileURL.path == authorization.workingDirectory,
+                  let surfaceID = controller.tabSurfaceMap[authorization.destinationTabID] else {
                 return
             }
-            controller.terminalEngine(for: surfaceID).sendText(input, to: surfaceID)
+            controller.terminalEngine(for: surfaceID).sendText(
+                authorization.startupInput,
+                to: surfaceID
+            )
         }
-    }
-
-    private func startupInput(for config: TabConfig) -> String? {
-        let assignments = config.environment
-            .keys
-            .sorted()
-            .compactMap { key -> String? in
-                guard let value = config.environment[key],
-                      TabConfigTOMLCodec.isValidEnvironmentKey(key) else {
-                    return nil
-                }
-                return "\(key)=\(shellSingleQuoted(value))"
-            }
-
-        if let command = config.command?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !command.isEmpty {
-            return (assignments + [command]).joined(separator: " ") + "\r"
-        }
-
-        guard !assignments.isEmpty else { return nil }
-        return "export \(assignments.joined(separator: " "))\r"
-    }
-
-    private func shellSingleQuoted(_ value: String) -> String {
-        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
     }
 
     private func resolveTabConfigDirectory(_ path: String) -> URL {

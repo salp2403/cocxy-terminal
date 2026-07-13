@@ -651,11 +651,11 @@ public enum CLICommand: String, CaseIterable {
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"
         case .tabMove: return "cocxy tab move <id> <position>"
-        case .tabConfigSave: return "cocxy tab config save <name> [--command <cmd>] [--theme <theme>] [--env KEY=VALUE]"
+        case .tabConfigSave: return "cocxy tab config save <name> [--theme <theme>] [--env KEY=VALUE]"
         case .tabConfigOpen: return "cocxy tab config open <name>"
         case .tabConfigList: return "cocxy tab config list"
         case .tabConfigPath: return "cocxy tab config path <name>"
-        case .tabConfigExport: return "cocxy tab config export <name> --output <path> [--force]"
+        case .tabConfigExport: return "cocxy tab config export <name> --output <file.toml> [--force]"
 
         // Split extended
         case .splitList: return "cocxy split list [--json]"
