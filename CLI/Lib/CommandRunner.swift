@@ -197,10 +197,14 @@ public struct CommandRunner {
             return CLIResult(exitCode: 0, stdout: output, stderr: "")
         } else {
             let errorMessage = response.error ?? "Unknown error"
+            var formattedError = CLIError.serverError(errorMessage).userMessage
+            if let diagnostics = response.data, !diagnostics.isEmpty {
+                formattedError += "\n" + OutputFormatter.formatDiagnosticData(diagnostics)
+            }
             return CLIResult(
                 exitCode: 1,
                 stdout: "",
-                stderr: CLIError.serverError(errorMessage).userMessage
+                stderr: formattedError
             )
         }
     }

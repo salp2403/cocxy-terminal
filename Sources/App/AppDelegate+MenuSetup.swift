@@ -146,6 +146,12 @@ extension AppDelegate {
 
         fileMenu.addItem(NSMenuItem.separator())
 
+        fileMenu.addItem(
+            withTitle: menuString("menu.file.importBrowserData", "Import Browser Data...", localizer),
+            action: #selector(MainWindowController.showBrowserImportAction(_:)),
+            keyEquivalent: ""
+        )
+
         let importFromDeviceTitle = menuString(
             "menu.file.importFromDevice",
             "Import from iPhone or iPad...",

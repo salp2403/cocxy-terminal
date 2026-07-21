@@ -1301,6 +1301,20 @@ final class RequestBuilderTests: XCTestCase {
 /// Tests for `OutputFormatter`: verify correct output for each command type.
 final class OutputFormatterTests: XCTestCase {
 
+    func testFailureDiagnosticsRemainStructuredJSON() throws {
+        let output = OutputFormatter.formatDiagnosticData([
+            "status": "failed",
+            "run_id": "run-123",
+            "errors": "1",
+        ])
+        let data = try XCTUnwrap(output.data(using: .utf8))
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+
+        XCTAssertEqual(decoded["status"], "failed")
+        XCTAssertEqual(decoded["run_id"], "run-123")
+        XCTAssertEqual(decoded["errors"], "1")
+    }
+
     func testFormatWebStartShowsUsableGeneratedCredentialOnce() {
         let response = CLISocketResponse(
             id: "web-start",
@@ -2664,6 +2678,7 @@ final class CLICommandDefinitionTests: XCTestCase {
         guard case .browserImportPreview(let previewOptions) = try CLIArgumentParser.parse([
             "browser", "import", "preview",
             "--source", "chrome",
+            "--source-profile", "Profile 7",
             "--history", "/tmp/History",
             "--cookies", "/tmp/Cookies",
             "--domain", "example.com",
@@ -2672,17 +2687,20 @@ final class CLICommandDefinitionTests: XCTestCase {
             return XCTFail("browser import preview should parse import options")
         }
         XCTAssertEqual(previewOptions.source, "chrome")
+        XCTAssertEqual(previewOptions.sourceProfile, "Profile 7")
         XCTAssertEqual(previewOptions.historyPath, "/tmp/History")
         XCTAssertEqual(previewOptions.cookiesPath, "/tmp/Cookies")
         XCTAssertEqual(previewOptions.domainWhitelist, ["example.com"])
         XCTAssertFalse(previewOptions.importBookmarks)
 
+        let previewToken = String(repeating: "A", count: 64)
         guard case .browserImportRun(let runOptions) = try CLIArgumentParser.parse([
             "browser", "import", "run",
             "--source", "firefox",
             "--profile", "00000000-0000-0000-0000-000000000001",
             "--max-history-days", "7",
             "--exclude-domain", "blocked.example",
+            "--preview-token", previewToken,
         ]) else {
             return XCTFail("browser import run should parse import options")
         }
@@ -2690,6 +2708,19 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(runOptions.profileID, "00000000-0000-0000-0000-000000000001")
         XCTAssertEqual(runOptions.maxHistoryDays, 7)
         XCTAssertEqual(runOptions.domainBlacklist, ["blocked.example"])
+        XCTAssertEqual(runOptions.previewToken, previewToken.lowercased())
+        XCTAssertEqual(runOptions.socketParams["preview-token"], previewToken.lowercased())
+
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "browser", "import", "preview",
+            "--source", "chrome",
+            "--preview-token", previewToken,
+        ]))
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "browser", "import", "run",
+            "--source", "chrome",
+            "--preview-token", "not-a-token",
+        ]))
     }
 
     func testRemoteUsageExamplesMatchPublicParserShape() throws {

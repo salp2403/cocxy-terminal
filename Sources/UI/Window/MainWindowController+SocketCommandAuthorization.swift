@@ -584,7 +584,8 @@ extension AppDelegate {
         } else {
             profileID = profileManager.activeProfileID
         }
-        guard let profile = profileManager.profiles.first(where: { $0.id == profileID }) else {
+        guard let profile = profileManager.profiles.first(where: { $0.id == profileID }),
+              !profile.isRemoteBacked else {
             return nil
         }
 
@@ -594,16 +595,33 @@ extension AppDelegate {
             guard let canonicalPath = canonicalCLIPath(rawPath)?.path else { return nil }
             canonicalExplicitPaths[key] = canonicalPath
         }
+        let isEnabled: (String) -> Bool = { key in
+            request.params[key]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased() != "false"
+        }
+        let importHistory = isEnabled("import-history")
+        let importCookies = isEnabled("import-cookies")
+        let importBookmarks = isEnabled("import-bookmarks")
+        guard importHistory || importCookies || importBookmarks else { return nil }
 
         let locations = BrowserImportLocationPathBinding.requestedLocations(
             source: source,
             profileName: request.params["source-profile"],
+            discoverProfiles: false,
+            importHistory: importHistory,
+            importCookies: importCookies,
+            importBookmarks: importBookmarks,
             historyPath: canonicalExplicitPaths["history"],
             cookiesPath: canonicalExplicitPaths["cookies"],
             bookmarksPath: canonicalExplicitPaths["bookmarks"]
         )
-        guard let resourcePaths = BrowserImportLocationPathBinding.canonicalResourcePaths(
+        guard !locations.isEmpty,
+              let resourcePaths = BrowserImportLocationPathBinding.canonicalResourcePaths(
             for: locations,
+            importHistory: importHistory,
+            importCookies: importCookies,
+            importBookmarks: importBookmarks,
             canonicalize: { [self] url in canonicalCLIPath(url.path) }
         ) else {
             return nil

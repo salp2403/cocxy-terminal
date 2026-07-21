@@ -3264,6 +3264,65 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertEqual(response.data?["cookies"], "1")
     }
 
+    func test_browserImportPreviewToken_isValidatedBeforeProviderDispatch() {
+        let providerCalled = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserImportProvider: { _, _ in
+                providerCalled.withValue { $0 = true }
+                return (true, [:])
+            }
+        )
+
+        let malformed = handler.handleCommand(SocketRequest(
+            id: "bir-token-malformed",
+            command: "browser-import-run",
+            params: ["source": "chrome", "preview-token": "not-a-token"]
+        ))
+        let previewOnly = handler.handleCommand(SocketRequest(
+            id: "bip-token-not-allowed",
+            command: "browser-import-preview",
+            params: ["source": "chrome", "preview-token": String(repeating: "a", count: 64)]
+        ))
+
+        XCTAssertFalse(malformed.success)
+        XCTAssertEqual(malformed.error, "Invalid browser import preview token")
+        XCTAssertFalse(previewOnly.success)
+        XCTAssertEqual(previewOnly.error, "preview-token is only valid for browser-import-run")
+        XCTAssertFalse(providerCalled.withValue { $0 })
+    }
+
+    func test_browserImportFailure_preservesStructuredDiagnostics() {
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserImportProvider: { _, _ in
+                (false, [
+                    "status": "failed",
+                    "run_id": "run-123",
+                    "history": "0",
+                    "errors": "1",
+                    "error_0": "Default: history write failed",
+                ])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "bir-failed",
+            command: "browser-import-run",
+            params: ["source": "chrome"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Default: history write failed")
+        XCTAssertEqual(response.data?["status"], "failed")
+        XCTAssertEqual(response.data?["run_id"], "run-123")
+        XCTAssertEqual(response.data?["errors"], "1")
+    }
+
     // MARK: - Browser Navigation Actions Emitted by Handler
 
     func test_browserBack_emitsGoBackAction() {

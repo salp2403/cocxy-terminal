@@ -42,6 +42,7 @@ enum BrowserAutomationNavigationOperation: Equatable, Sendable {
 
 enum BrowserCookieImportResult: Equatable, Sendable {
     case success
+    case partial(importedCount: Int, totalCount: Int, message: String)
     case failure(String)
 }
 

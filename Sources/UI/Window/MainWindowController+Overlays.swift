@@ -2231,6 +2231,9 @@ extension MainWindowController {
             profileManager: browserProfileManager,
             onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
             onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+            onImportData: { [weak self] profileID in
+                self?.showBrowserImportWizard(profileID: profileID)
+            },
             onDismiss: { [weak self] in self?.dismissBrowser() },
             localizer: appLocalizer()
         )
@@ -2698,6 +2701,9 @@ extension MainWindowController {
             profileManager: browserProfileManager,
             onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
             onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+            onImportData: { [weak self] profileID in
+                self?.showBrowserImportWizard(profileID: profileID)
+            },
             onDismiss: { [weak self] in self?.dismissBrowser() },
             localizer: appLocalizer()
         )

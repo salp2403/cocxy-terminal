@@ -448,6 +448,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserBookmarksHostingView: NSView?
     var isBrowserBookmarksVisible: Bool = false
 
+    /// Browser import sheet retained for the lifetime of its asynchronous work.
+    var browserImportSheetWindow: NSWindow?
+
     /// Preferences window, retained to prevent premature deallocation.
     var preferencesWindow: NSWindow?
 

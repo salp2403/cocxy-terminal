@@ -4473,6 +4473,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let params = request.params ?? [:]
         let allowedParameters: Set<String> = [
             "source",
+            "source-profile",
             "profile",
             "history",
             "cookies",
@@ -4483,6 +4484,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "max-history-days",
             "domain-whitelist",
             "domain-blacklist",
+            "preview-token",
         ]
         let unsupportedParameters = Set(params.keys).subtracting(allowedParameters)
         guard unsupportedParameters.isEmpty else {
@@ -4496,6 +4498,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 .lowercased(),
               BrowserImportSource(rawValue: rawSource) != nil else {
             return .failure(id: request.id, error: "Missing or invalid required param: source")
+        }
+        if let sourceProfile = params["source-profile"] {
+            let normalized = sourceProfile.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty,
+                  normalized.utf8.count <= 512,
+                  !normalized.contains("\0") else {
+                return .failure(id: request.id, error: "Invalid browser source profile")
+            }
         }
         if let rawProfileID = params["profile"], UUID(uuidString: rawProfileID) == nil {
             return .failure(id: request.id, error: "Invalid browser profile UUID: \(rawProfileID)")
@@ -4518,6 +4528,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
            (Int(rawDays).map { $0 >= 0 } != true) {
             return .failure(id: request.id, error: "Invalid max history days: \(rawDays)")
         }
+        if let previewToken = params["preview-token"] {
+            guard kind == "run" else {
+                return .failure(id: request.id, error: "preview-token is only valid for browser-import-run")
+            }
+            guard BrowserImportPreviewToken.isValid(previewToken) else {
+                return .failure(id: request.id, error: "Invalid browser import preview token")
+            }
+        }
         guard let provider = browserImportProvider else {
             return .failure(id: request.id, error: "Browser import is not available in this build.")
         }
@@ -4525,9 +4543,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         if result.success {
             return .ok(id: request.id, data: result.data)
         }
+        var diagnostics = result.data
+        let explicitError = diagnostics.removeValue(forKey: "error")
         return .failure(
             id: request.id,
-            error: result.data["error"] ?? "Browser import \(kind) failed"
+            error: explicitError
+                ?? diagnostics["error_0"]
+                ?? "Browser import \(kind) failed",
+            data: diagnostics.isEmpty ? nil : diagnostics
         )
     }
 

@@ -90,7 +90,7 @@ struct SocketResponse: Codable, Sendable, Equatable {
     /// Whether the command was executed successfully.
     let success: Bool
 
-    /// Command-specific response data. Nil on error.
+    /// Command-specific response data. Failures may include structured diagnostics.
     let data: [String: String]?
 
     /// Error message when `success` is `false`. Nil on success.
@@ -102,8 +102,12 @@ struct SocketResponse: Codable, Sendable, Equatable {
     }
 
     /// Convenience factory for a failed response.
-    static func failure(id: String, error: String) -> SocketResponse {
-        SocketResponse(id: id, success: false, data: nil, error: error)
+    static func failure(
+        id: String,
+        error: String,
+        data: [String: String]? = nil
+    ) -> SocketResponse {
+        SocketResponse(id: id, success: false, data: data, error: error)
     }
 }
 

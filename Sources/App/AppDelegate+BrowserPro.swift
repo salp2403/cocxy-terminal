@@ -26,6 +26,15 @@ extension AppDelegate {
     /// Must be called AFTER `createMainWindow()` since it injects services
     /// into the window controller.
     func setupBrowserPro() {
+        if let profileManager = browserProfileManager {
+            for controller in allWindowControllers {
+                controller.browserProfileManager = profileManager
+                controller.browserHistoryStore = browserHistoryStore
+                controller.browserBookmarkStore = browserBookmarkStore
+            }
+            return
+        }
+
         let profileStore = JSONBrowserProfileStore()
         let profileManager = BrowserProfileManager(store: profileStore)
 

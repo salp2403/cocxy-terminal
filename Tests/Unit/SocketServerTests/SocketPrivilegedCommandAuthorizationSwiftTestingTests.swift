@@ -292,7 +292,7 @@ struct SocketPrivilegedCommandAuthorizationSwiftTestingTests {
             SocketRequest(
                 id: "bad-browser-import-param",
                 command: "browser-import-run",
-                params: ["source": "chrome", "source-profile": "Default"]
+                params: ["source": "chrome", "unexpected": "value"]
             ),
             SocketRequest(
                 id: "bad-browser-import-path",

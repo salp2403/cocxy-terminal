@@ -61,6 +61,16 @@ protocol BrowserHistoryStoring: Sendable {
     ///   - profileID: The profile that owns this visit.
     func recordVisit(url: String, title: String?, profileID: UUID) throws
 
+    /// Records a visit while preserving an externally supplied timestamp.
+    ///
+    /// Importers use this overload so historical visits do not become new
+    /// visits at the time of import.
+    func recordVisit(url: String, title: String?, profileID: UUID, visitedAt: Date) throws
+
+    /// Records an imported visit only if its profile, URL, and timestamp are new.
+    @discardableResult
+    func recordVisitIfNew(url: String, title: String?, profileID: UUID, visitedAt: Date) throws -> Bool
+
     /// Searches history using full-text search on URL and title.
     ///
     /// - Parameters:
@@ -98,6 +108,18 @@ protocol BrowserHistoryStoring: Sendable {
     ///   - limit: Maximum total entries to fetch before grouping.
     /// - Returns: Entries grouped by calendar date with human-readable labels.
     func groupedByDate(profileID: UUID?, limit: Int) throws -> [DateGroup<HistoryEntry>]
+}
+
+extension BrowserHistoryStoring {
+    func recordVisit(url: String, title: String?, profileID: UUID, visitedAt: Date) throws {
+        try recordVisit(url: url, title: title, profileID: profileID)
+    }
+
+    @discardableResult
+    func recordVisitIfNew(url: String, title: String?, profileID: UUID, visitedAt: Date) throws -> Bool {
+        try recordVisit(url: url, title: title, profileID: profileID, visitedAt: visitedAt)
+        return true
+    }
 }
 
 // MARK: - History Store Errors
@@ -195,6 +217,11 @@ final class SQLiteBrowserHistoryStore: BrowserHistoryStoring, @unchecked Sendabl
             CREATE INDEX IF NOT EXISTS idx_visits_timestamp ON visits(timestamp DESC)
             """
 
+        let createImportIdentityIndex = """
+            CREATE INDEX IF NOT EXISTS idx_visits_import_identity
+            ON visits(profile_id, url, timestamp)
+            """
+
         let createInsertTrigger = """
             CREATE TRIGGER IF NOT EXISTS visits_ai AFTER INSERT ON visits BEGIN
                 INSERT INTO visits_fts(rowid, url, title) VALUES (new.id, new.url, new.title);
@@ -211,6 +238,7 @@ final class SQLiteBrowserHistoryStore: BrowserHistoryStoring, @unchecked Sendabl
         try execute(createFTS)
         try execute(createProfileIndex)
         try execute(createTimestampIndex)
+        try execute(createImportIdentityIndex)
         try execute(createInsertTrigger)
         try execute(createDeleteTrigger)
     }
@@ -218,8 +246,29 @@ final class SQLiteBrowserHistoryStore: BrowserHistoryStoring, @unchecked Sendabl
     // MARK: - BrowserHistoryStoring
 
     func recordVisit(url: String, title: String?, profileID: UUID) throws {
+        try recordVisit(url: url, title: title, profileID: profileID, visitedAt: Date())
+    }
+
+    func recordVisit(url: String, title: String?, profileID: UUID, visitedAt: Date) throws {
+        _ = try recordVisitIfNew(url: url, title: title, profileID: profileID, visitedAt: visitedAt)
+    }
+
+    @discardableResult
+    func recordVisitIfNew(
+        url: String,
+        title: String?,
+        profileID: UUID,
+        visitedAt: Date
+    ) throws -> Bool {
         try queue.sync {
-            let sql = "INSERT INTO visits (profile_id, url, title, timestamp) VALUES (?, ?, ?, ?)"
+            let sql = """
+                INSERT INTO visits (profile_id, url, title, timestamp)
+                SELECT ?, ?, ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM visits
+                    WHERE profile_id = ? AND url = ? AND timestamp = ?
+                )
+                """
             let stmt = try prepareStatement(sql)
             defer { sqlite3_finalize(stmt) }
 
@@ -232,11 +281,15 @@ final class SQLiteBrowserHistoryStore: BrowserHistoryStoring, @unchecked Sendabl
                 sqlite3_bind_null(stmt, 3)
             }
 
-            sqlite3_bind_double(stmt, 4, Date().timeIntervalSince1970)
+            sqlite3_bind_double(stmt, 4, visitedAt.timeIntervalSince1970)
+            sqlite3_bind_text(stmt, 5, profileID.uuidString, -1, Self.sqliteTransient)
+            sqlite3_bind_text(stmt, 6, url, -1, Self.sqliteTransient)
+            sqlite3_bind_double(stmt, 7, visitedAt.timeIntervalSince1970)
 
             guard sqlite3_step(stmt) == SQLITE_DONE else {
                 throw BrowserHistoryError.executionFailed(lastErrorMessage)
             }
+            return sqlite3_changes(database) > 0
         }
     }
 

@@ -18,7 +18,7 @@ public struct CLISocketResponse: Codable, Equatable, Sendable {
     /// Whether the command was executed successfully.
     public let success: Bool
 
-    /// Command-specific response data. Nil on error.
+    /// Command-specific response data. Failures may include structured diagnostics.
     public let data: [String: String]?
 
     /// Error message when `success` is `false`. Nil on success.

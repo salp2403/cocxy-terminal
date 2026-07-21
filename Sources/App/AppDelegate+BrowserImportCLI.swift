@@ -42,6 +42,9 @@ extension AppDelegate {
         authorizationContext: SocketPrivilegedCommandContext
     ) async -> (Bool, [String: String]) {
         do {
+            if kind == "preview", params["preview-token"] != nil {
+                throw BrowserImportCLIError.previewTokenNotAllowed
+            }
             let context = try await MainActor.run {
                 try self.browserImportContext(
                     from: params,
@@ -57,8 +60,16 @@ extension AppDelegate {
             case "preview":
                 let preview = try BrowserSourceImporterFactory.importer(for: plan.source)
                     .preview(plan: plan)
+                guard preview.itemCount > 0 else {
+                    throw BrowserImportError.noImportableData(
+                        "No importable data was found for the selected browser profile"
+                    )
+                }
                 return (true, browserImportPreviewData(preview, plan: plan))
             case "run":
+                let reservation = try await MainActor.run {
+                    try self.beginBrowserImportReservation(profileID: plan.profileID)
+                }
                 let cookieStore = plan.importCookies
                     ? BrowserWebKitCookieImportStore()
                     : nil
@@ -69,8 +80,18 @@ extension AppDelegate {
                     cookieStore: cookieStore,
                     auditLogger: FileBrowserImportAuditLogger()
                 )
-                let result = try importer.importData(plan)
-                return (true, browserImportResultData(result, plan: plan))
+                do {
+                    let result = try importer.importData(plan)
+                    await MainActor.run {
+                        self.browserProfileManager?.endImport(reservation)
+                    }
+                    return (result.status != .failed, browserImportResultData(result, plan: plan))
+                } catch {
+                    await MainActor.run {
+                        self.browserProfileManager?.endImport(reservation)
+                    }
+                    throw error
+                }
             default:
                 return (false, ["error": "Unknown browser import action: \(kind)"])
             }
@@ -109,8 +130,11 @@ extension AppDelegate {
         } else {
             profileID = profileManager.activeProfileID
         }
-        guard profileManager.profiles.contains(where: { $0.id == profileID }) else {
+        guard let profile = profileManager.profiles.first(where: { $0.id == profileID }) else {
             throw BrowserImportCLIError.profileUnavailable(profileID.uuidString)
+        }
+        guard !profile.isRemoteBacked else {
+            throw BrowserImportCLIError.remoteProfile(profileID.uuidString)
         }
 
         return BrowserImportCLIContext(
@@ -121,6 +145,23 @@ extension AppDelegate {
             historyStore: browserHistoryStore,
             bookmarkStore: browserBookmarkStore
         )
+    }
+
+    @MainActor
+    private func beginBrowserImportReservation(
+        profileID: UUID
+    ) throws -> BrowserProfileImportReservation {
+        guard let profileManager = browserProfileManager,
+              let profile = profileManager.profiles.first(where: { $0.id == profileID }) else {
+            throw BrowserImportCLIError.profileUnavailable(profileID.uuidString)
+        }
+        guard !profile.isRemoteBacked else {
+            throw BrowserImportCLIError.remoteProfile(profileID.uuidString)
+        }
+        guard let reservation = profileManager.beginImport(to: profileID) else {
+            throw BrowserImportCLIError.destinationBusy(profileID.uuidString)
+        }
+        return reservation
     }
 
     nonisolated private func buildBrowserImportPlan(
@@ -156,6 +197,35 @@ extension AppDelegate {
             maxHistoryDays = nil
         }
 
+        let importCookies = try boolParam(
+            params["import-cookies"],
+            name: "import-cookies",
+            defaultValue: true
+        )
+        let importHistory = try boolParam(
+            params["import-history"],
+            name: "import-history",
+            defaultValue: true
+        )
+        let importBookmarks = try boolParam(
+            params["import-bookmarks"],
+            name: "import-bookmarks",
+            defaultValue: true
+        )
+        guard importCookies || importHistory || importBookmarks else {
+            throw BrowserImportCLIError.noDataTypesSelected
+        }
+
+        let expectedPreviewToken: String?
+        if let token = params["preview-token"] {
+            guard BrowserImportPreviewToken.isValid(token) else {
+                throw BrowserImportCLIError.invalidPreviewToken
+            }
+            expectedPreviewToken = token.lowercased()
+        } else {
+            expectedPreviewToken = nil
+        }
+
         var canonicalExplicitPaths: [String: String] = [:]
         for key in ["history", "cookies", "bookmarks"] {
             guard let rawPath = params[key] else { continue }
@@ -168,15 +238,28 @@ extension AppDelegate {
         let requestedLocations = BrowserImportLocationPathBinding.requestedLocations(
             source: source,
             profileName: params["source-profile"],
+            discoverProfiles: context.approvedResourcePaths == nil,
+            importHistory: importHistory,
+            importCookies: importCookies,
+            importBookmarks: importBookmarks,
             historyPath: canonicalExplicitPaths["history"],
             cookiesPath: canonicalExplicitPaths["cookies"],
             bookmarksPath: canonicalExplicitPaths["bookmarks"]
         )
+        guard !requestedLocations.isEmpty else {
+            if let sourceProfile = params["source-profile"] {
+                throw BrowserImportError.sourceProfileUnavailable(sourceProfile)
+            }
+            throw BrowserImportCLIError.incompleteExplicitPaths
+        }
         let approvedLocations: [BrowserImportLocation]
         if let approvedResourcePaths = context.approvedResourcePaths {
             guard let locations = BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
                 approvedResourcePaths,
-                to: requestedLocations
+                to: requestedLocations,
+                importHistory: importHistory,
+                importCookies: importCookies,
+                importBookmarks: importBookmarks
             ) else {
                 throw BrowserImportCLIError.authorizationTargetUnavailable
             }
@@ -184,11 +267,17 @@ extension AppDelegate {
         } else {
             guard let canonicalPaths = BrowserImportLocationPathBinding.canonicalResourcePaths(
                 for: requestedLocations,
+                importHistory: importHistory,
+                importCookies: importCookies,
+                importBookmarks: importBookmarks,
                 canonicalize: canonicalBrowserImportURL
             ),
                   let locations = BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
                     canonicalPaths,
-                    to: requestedLocations
+                    to: requestedLocations,
+                    importHistory: importHistory,
+                    importCookies: importCookies,
+                    importBookmarks: importBookmarks
                   ) else {
                 throw BrowserImportCLIError.invalidPath
             }
@@ -198,25 +287,15 @@ extension AppDelegate {
         return BrowserImportPlan(
             source: source,
             profileID: profileID,
-            importCookies: try boolParam(
-                params["import-cookies"],
-                name: "import-cookies",
-                defaultValue: true
-            ),
-            importHistory: try boolParam(
-                params["import-history"],
-                name: "import-history",
-                defaultValue: true
-            ),
-            importBookmarks: try boolParam(
-                params["import-bookmarks"],
-                name: "import-bookmarks",
-                defaultValue: true
-            ),
+            importCookies: importCookies,
+            importHistory: importHistory,
+            importBookmarks: importBookmarks,
             maxHistoryDays: maxHistoryDays,
             domainWhitelist: splitListParam(params["domain-whitelist"]),
             domainBlacklist: splitListParam(params["domain-blacklist"]),
-            explicitLocations: approvedLocations
+            sourceProfile: params["source-profile"],
+            explicitLocations: approvedLocations,
+            expectedPreviewToken: expectedPreviewToken
         )
     }
 
@@ -262,13 +341,16 @@ extension AppDelegate {
         plan: BrowserImportPlan
     ) -> [String: String] {
         var data: [String: String] = [
-            "status": "previewed",
+            "status": preview.itemCount == 0 ? "empty" : (preview.errors.isEmpty ? "ready" : "partial"),
             "source": plan.source.rawValue,
+            "source_profile": plan.locations().first?.profileName ?? plan.sourceProfile ?? "",
             "profile": plan.profileID.uuidString,
             "history": "\(preview.history.count)",
             "cookies": "\(preview.cookies.count)",
             "bookmarks": "\(preview.bookmarks.count)",
+            "skipped": "\(preview.skippedCount)",
             "errors": "\(preview.errors.count)",
+            "preview_token": BrowserImportPreviewToken.make(preview: preview, plan: plan),
         ]
         for (index, issue) in preview.errors.prefix(5).enumerated() {
             data["error_\(index)"] = "\(issue.profileName): \(issue.message)"
@@ -281,8 +363,10 @@ extension AppDelegate {
         plan: BrowserImportPlan
     ) -> [String: String] {
         var data: [String: String] = [
-            "status": "imported",
+            "status": result.status.rawValue,
+            "run_id": result.runID.uuidString,
             "source": plan.source.rawValue,
+            "source_profile": result.sourceProfile,
             "profile": plan.profileID.uuidString,
             "history": "\(result.importedHistoryCount)",
             "cookies": "\(result.importedCookieCount)",
@@ -300,6 +384,10 @@ extension AppDelegate {
         if let error = error as? BrowserImportCLIError {
             return error.localizedDescription
         }
+        if let error = error as? LocalizedError,
+           let description = error.errorDescription {
+            return description
+        }
         return String(describing: error)
     }
 }
@@ -311,7 +399,13 @@ private enum BrowserImportCLIError: LocalizedError {
     case invalidBoolean(String, String)
     case invalidPath
     case profileUnavailable(String)
+    case remoteProfile(String)
+    case destinationBusy(String)
     case authorizationTargetUnavailable
+    case noDataTypesSelected
+    case incompleteExplicitPaths
+    case invalidPreviewToken
+    case previewTokenNotAllowed
 
     var errorDescription: String? {
         switch self {
@@ -327,8 +421,20 @@ private enum BrowserImportCLIError: LocalizedError {
             return "Invalid browser import path"
         case .profileUnavailable(let value):
             return "Browser profile is no longer available: \(value)"
+        case .remoteProfile(let value):
+            return "Browser data cannot be imported into remote-backed profile: \(value)"
+        case .destinationBusy(let value):
+            return "Another browser import is already using profile: \(value)"
         case .authorizationTargetUnavailable:
             return "Approved browser import target is no longer available"
+        case .noDataTypesSelected:
+            return "Select at least one browser data type to import"
+        case .incompleteExplicitPaths:
+            return "When overriding browser paths, provide every enabled data path"
+        case .invalidPreviewToken:
+            return "Invalid browser import preview token"
+        case .previewTokenNotAllowed:
+            return "preview-token is only valid for browser-import-run"
         }
     }
 }

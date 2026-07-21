@@ -46,6 +46,7 @@ struct BrowserPanelView: View {
     var profileManager: BrowserProfileManager?
     var onToggleHistory: (() -> Void)?
     var onToggleBookmarks: (() -> Void)?
+    var onImportData: ((UUID) -> Void)?
     var onDismiss: () -> Void
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
@@ -191,6 +192,7 @@ struct BrowserPanelView: View {
                         )
                     },
                     onManageProfiles: nil,
+                    onImportData: onImportData,
                     localizer: localizer
                 )
             }

@@ -14,6 +14,10 @@ import Foundation
 /// - `config-path`, `config-get`: Data-driven output.
 public enum OutputFormatter {
 
+    public static func formatDiagnosticData(_ data: [String: String]) -> String {
+        formatDataAsJSON(data)
+    }
+
     /// Formats a successful response for terminal output.
     ///
     /// - Parameters:

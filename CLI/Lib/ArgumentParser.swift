@@ -9,6 +9,7 @@ import CocxyVault
 
 public struct BrowserImportCLIOptions: Equatable {
     public let source: String
+    public let sourceProfile: String?
     public let profileID: String?
     public let historyPath: String?
     public let cookiesPath: String?
@@ -19,9 +20,11 @@ public struct BrowserImportCLIOptions: Equatable {
     public let maxHistoryDays: Int?
     public let domainWhitelist: [String]
     public let domainBlacklist: [String]
+    public let previewToken: String?
 
     public init(
         source: String,
+        sourceProfile: String? = nil,
         profileID: String? = nil,
         historyPath: String? = nil,
         cookiesPath: String? = nil,
@@ -31,9 +34,11 @@ public struct BrowserImportCLIOptions: Equatable {
         importBookmarks: Bool = true,
         maxHistoryDays: Int? = nil,
         domainWhitelist: [String] = [],
-        domainBlacklist: [String] = []
+        domainBlacklist: [String] = [],
+        previewToken: String? = nil
     ) {
         self.source = source
+        self.sourceProfile = sourceProfile
         self.profileID = profileID
         self.historyPath = historyPath
         self.cookiesPath = cookiesPath
@@ -44,6 +49,7 @@ public struct BrowserImportCLIOptions: Equatable {
         self.maxHistoryDays = maxHistoryDays
         self.domainWhitelist = domainWhitelist
         self.domainBlacklist = domainBlacklist
+        self.previewToken = previewToken?.lowercased()
     }
 
     var socketParams: [String: String] {
@@ -53,6 +59,7 @@ public struct BrowserImportCLIOptions: Equatable {
             "import-cookies": "\(importCookies)",
             "import-bookmarks": "\(importBookmarks)",
         ]
+        if let sourceProfile { params["source-profile"] = sourceProfile }
         if let profileID { params["profile"] = profileID }
         if let historyPath { params["history"] = historyPath }
         if let cookiesPath { params["cookies"] = cookiesPath }
@@ -64,6 +71,7 @@ public struct BrowserImportCLIOptions: Equatable {
         if !domainBlacklist.isEmpty {
             params["domain-blacklist"] = domainBlacklist.joined(separator: ",")
         }
+        if let previewToken { params["preview-token"] = previewToken }
         return params
     }
 }
@@ -4668,6 +4676,13 @@ public enum CLIArgumentParser {
         }
 
         let options = try parseBrowserImportOptions(arguments: Array(arguments.dropFirst()))
+        if action == "preview", options.previewToken != nil {
+            throw CLIError.invalidArgument(
+                command: "browser import preview",
+                argument: "--preview-token",
+                reason: "--preview-token is only accepted by browser import run."
+            )
+        }
         return action == "preview"
             ? .browserImportPreview(options)
             : .browserImportRun(options)
@@ -4675,6 +4690,7 @@ public enum CLIArgumentParser {
 
     private static func parseBrowserImportOptions(arguments: [String]) throws -> BrowserImportCLIOptions {
         var source: String?
+        var sourceProfile: String?
         var profileID: String?
         var historyPath: String?
         var cookiesPath: String?
@@ -4685,6 +4701,7 @@ public enum CLIArgumentParser {
         var maxHistoryDays: Int?
         var whitelist: [String] = []
         var blacklist: [String] = []
+        var previewToken: String?
 
         var index = 0
         while index < arguments.count {
@@ -4692,6 +4709,8 @@ public enum CLIArgumentParser {
             switch argument {
             case "--source":
                 source = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--source-profile":
+                sourceProfile = try value(after: argument, in: arguments, at: &index, command: "browser import")
             case "--profile":
                 profileID = try value(after: argument, in: arguments, at: &index, command: "browser import")
             case "--history":
@@ -4720,11 +4739,24 @@ public enum CLIArgumentParser {
                 whitelist.append(try value(after: argument, in: arguments, at: &index, command: "browser import"))
             case "--exclude-domain":
                 blacklist.append(try value(after: argument, in: arguments, at: &index, command: "browser import"))
+            case "--preview-token":
+                let token = try value(after: argument, in: arguments, at: &index, command: "browser import")
+                guard token.utf8.count == 64,
+                      token.utf8.allSatisfy({ byte in
+                          (48...57).contains(byte) || (65...70).contains(byte) || (97...102).contains(byte)
+                      }) else {
+                    throw CLIError.invalidArgument(
+                        command: "browser import",
+                        argument: token,
+                        reason: "--preview-token must be a 64-character hexadecimal token from browser import preview."
+                    )
+                }
+                previewToken = token.lowercased()
             default:
                 throw CLIError.invalidArgument(
                     command: "browser import",
                     argument: argument,
-                    reason: "Use --source, --profile, --history, --cookies, --bookmarks, --domain, --exclude-domain, --max-history-days, --no-history, --no-cookies, or --no-bookmarks."
+                    reason: "Use --source, --source-profile, --profile, --history, --cookies, --bookmarks, --domain, --exclude-domain, --max-history-days, --preview-token, --no-history, --no-cookies, or --no-bookmarks."
                 )
             }
             index += 1
@@ -4736,6 +4768,7 @@ public enum CLIArgumentParser {
 
         return BrowserImportCLIOptions(
             source: source,
+            sourceProfile: sourceProfile,
             profileID: profileID,
             historyPath: historyPath,
             cookiesPath: cookiesPath,
@@ -4745,7 +4778,8 @@ public enum CLIArgumentParser {
             importBookmarks: importBookmarks,
             maxHistoryDays: maxHistoryDays,
             domainWhitelist: whitelist,
-            domainBlacklist: blacklist
+            domainBlacklist: blacklist,
+            previewToken: previewToken
         )
     }
 
