@@ -1091,6 +1091,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         // MARK: - WKNavigationDelegate
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            viewModel.markAutomationNavigationBoundary()
             trackDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = true
@@ -1102,6 +1103,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             _ webView: WKWebView,
             didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
         ) {
+            viewModel.markAutomationNavigationBoundary()
             trackDOMGrabNavigation(navigation)
         }
 

@@ -788,6 +788,7 @@ extension BrowserContentView: WKNavigationDelegate {
     }
 
     func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        viewModel.markAutomationNavigationBoundary()
         trackDOMGrabNavigation(navigation)
         viewModel.isLoading = true
     }
@@ -796,6 +797,7 @@ extension BrowserContentView: WKNavigationDelegate {
         _ webView: WKWebView,
         didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
     ) {
+        viewModel.markAutomationNavigationBoundary()
         trackDOMGrabNavigation(navigation)
     }
 

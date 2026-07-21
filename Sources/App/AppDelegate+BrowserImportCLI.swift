@@ -6,13 +6,15 @@ import Foundation
 extension AppDelegate {
     private struct BrowserImportCLIContext: Sendable {
         let profileID: UUID
+        let approvedResourcePaths: [String: String]?
         let historyStore: (any BrowserHistoryStoring)?
         let bookmarkStore: (any BrowserBookmarkStoring)?
     }
 
     nonisolated func handleBrowserImportCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        authorizationContext: SocketPrivilegedCommandContext
     ) -> (success: Bool, data: [String: String]) {
         let semaphore = DispatchSemaphore(value: 0)
         let box = LockedBox<(Bool, [String: String])>((
@@ -21,7 +23,11 @@ extension AppDelegate {
         ))
 
         Task.detached { [self] in
-            let result = await performBrowserImportCLIRequest(kind: kind, params: params)
+            let result = await performBrowserImportCLIRequest(
+                kind: kind,
+                params: params,
+                authorizationContext: authorizationContext
+            )
             box.withValue { $0 = result }
             semaphore.signal()
         }
@@ -32,14 +38,20 @@ extension AppDelegate {
 
     nonisolated func performBrowserImportCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        authorizationContext: SocketPrivilegedCommandContext
     ) async -> (Bool, [String: String]) {
         do {
-            let delegateRef = WeakReference(self)
-            let context = await MainActor.run {
-                self.browserImportContext(from: params)
+            let context = try await MainActor.run {
+                try self.browserImportContext(
+                    from: params,
+                    authorizationContext: authorizationContext
+                )
             }
-            let plan = try buildBrowserImportPlan(params: params, defaultProfileID: context.profileID)
+            let plan = try buildBrowserImportPlan(
+                params: params,
+                context: context
+            )
 
             switch kind {
             case "preview":
@@ -48,11 +60,7 @@ extension AppDelegate {
                 return (true, browserImportPreviewData(preview, plan: plan))
             case "run":
                 let cookieStore = plan.importCookies
-                    ? BrowserWebKitCookieImportStore(viewModelProvider: {
-                        syncOnMainActor {
-                            delegateRef.value?.activeBrowserViewModelForCLI()
-                        }
-                    })
+                    ? BrowserWebKitCookieImportStore()
                     : nil
                 let importer = BrowserImporter(
                     source: plan.source,
@@ -72,29 +80,52 @@ extension AppDelegate {
     }
 
     @MainActor
-    private func browserImportContext(from params: [String: String]) -> BrowserImportCLIContext {
+    private func browserImportContext(
+        from params: [String: String],
+        authorizationContext: SocketPrivilegedCommandContext
+    ) throws -> BrowserImportCLIContext {
+        guard authorizationContext.scope == .browserGlobal
+            || authorizationContext.scope == .internalTrusted else {
+            throw BrowserImportCLIError.authorizationTargetUnavailable
+        }
         if browserProfileManager == nil {
             setupBrowserPro()
         }
+        guard let profileManager = browserProfileManager else {
+            throw BrowserImportCLIError.authorizationTargetUnavailable
+        }
+
+        let profileID: UUID
+        if authorizationContext.scope == .browserGlobal {
+            guard let approvedProfileID = authorizationContext.browserProfileID else {
+                throw BrowserImportCLIError.authorizationTargetUnavailable
+            }
+            profileID = approvedProfileID
+        } else if let rawProfile = params["profile"] {
+            guard let parsedProfileID = UUID(uuidString: rawProfile) else {
+                throw BrowserImportCLIError.invalidProfile(rawProfile)
+            }
+            profileID = parsedProfileID
+        } else {
+            profileID = profileManager.activeProfileID
+        }
+        guard profileManager.profiles.contains(where: { $0.id == profileID }) else {
+            throw BrowserImportCLIError.profileUnavailable(profileID.uuidString)
+        }
+
         return BrowserImportCLIContext(
-            profileID: browserImportProfileID(from: params),
+            profileID: profileID,
+            approvedResourcePaths: authorizationContext.scope == .browserGlobal
+                ? authorizationContext.localResourcePaths
+                : nil,
             historyStore: browserHistoryStore,
             bookmarkStore: browserBookmarkStore
         )
     }
 
-    @MainActor
-    private func browserImportProfileID(from params: [String: String]) -> UUID {
-        if let rawProfile = params["profile"],
-           let profileID = UUID(uuidString: rawProfile) {
-            return profileID
-        }
-        return browserProfileManager?.activeProfileID ?? UUID()
-    }
-
     nonisolated private func buildBrowserImportPlan(
         params: [String: String],
-        defaultProfileID: UUID
+        context: BrowserImportCLIContext
     ) throws -> BrowserImportPlan {
         guard let rawSource = params["source"]?.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased(),
@@ -109,7 +140,10 @@ extension AppDelegate {
             }
             profileID = parsed
         } else {
-            profileID = defaultProfileID
+            profileID = context.profileID
+        }
+        guard profileID == context.profileID else {
+            throw BrowserImportCLIError.authorizationTargetUnavailable
         }
 
         let maxHistoryDays: Int?
@@ -122,50 +156,97 @@ extension AppDelegate {
             maxHistoryDays = nil
         }
 
+        var canonicalExplicitPaths: [String: String] = [:]
+        for key in ["history", "cookies", "bookmarks"] {
+            guard let rawPath = params[key] else { continue }
+            guard let canonicalURL = canonicalBrowserImportURL(fromPath: rawPath) else {
+                throw BrowserImportCLIError.invalidPath
+            }
+            canonicalExplicitPaths[key] = canonicalURL.path
+        }
+
+        let requestedLocations = BrowserImportLocationPathBinding.requestedLocations(
+            source: source,
+            profileName: params["source-profile"],
+            historyPath: canonicalExplicitPaths["history"],
+            cookiesPath: canonicalExplicitPaths["cookies"],
+            bookmarksPath: canonicalExplicitPaths["bookmarks"]
+        )
+        let approvedLocations: [BrowserImportLocation]
+        if let approvedResourcePaths = context.approvedResourcePaths {
+            guard let locations = BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
+                approvedResourcePaths,
+                to: requestedLocations
+            ) else {
+                throw BrowserImportCLIError.authorizationTargetUnavailable
+            }
+            approvedLocations = locations
+        } else {
+            guard let canonicalPaths = BrowserImportLocationPathBinding.canonicalResourcePaths(
+                for: requestedLocations,
+                canonicalize: canonicalBrowserImportURL
+            ),
+                  let locations = BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
+                    canonicalPaths,
+                    to: requestedLocations
+                  ) else {
+                throw BrowserImportCLIError.invalidPath
+            }
+            approvedLocations = locations
+        }
+
         return BrowserImportPlan(
             source: source,
             profileID: profileID,
-            importCookies: boolParam(params["import-cookies"], defaultValue: true),
-            importHistory: boolParam(params["import-history"], defaultValue: true),
-            importBookmarks: boolParam(params["import-bookmarks"], defaultValue: true),
+            importCookies: try boolParam(
+                params["import-cookies"],
+                name: "import-cookies",
+                defaultValue: true
+            ),
+            importHistory: try boolParam(
+                params["import-history"],
+                name: "import-history",
+                defaultValue: true
+            ),
+            importBookmarks: try boolParam(
+                params["import-bookmarks"],
+                name: "import-bookmarks",
+                defaultValue: true
+            ),
             maxHistoryDays: maxHistoryDays,
             domainWhitelist: splitListParam(params["domain-whitelist"]),
             domainBlacklist: splitListParam(params["domain-blacklist"]),
-            explicitLocations: explicitLocations(source: source, params: params)
+            explicitLocations: approvedLocations
         )
     }
 
-    nonisolated private func explicitLocations(
-        source: BrowserImportSource,
-        params: [String: String]
-    ) -> [BrowserImportLocation]? {
-        let historyPath = params["history"]
-        let cookiesPath = params["cookies"]
-        let bookmarksPath = params["bookmarks"]
-        guard historyPath != nil || cookiesPath != nil || bookmarksPath != nil else {
-            return nil
-        }
-
-        let base = source.defaultLocations().first
-        let location = BrowserImportLocation(
-            source: source,
-            profileName: params["source-profile"] ?? base?.profileName ?? "Imported",
-            historyPath: historyPath.map(URL.init(fileURLWithPath:))
-                ?? base?.historyPath
-                ?? URL(fileURLWithPath: "/dev/null"),
-            cookiesPath: cookiesPath.map(URL.init(fileURLWithPath:)) ?? base?.cookiesPath,
-            bookmarksPath: bookmarksPath.map(URL.init(fileURLWithPath:)) ?? base?.bookmarksPath
-        )
-        return [location]
-    }
-
-    nonisolated private func boolParam(_ rawValue: String?, defaultValue: Bool) -> Bool {
+    nonisolated private func boolParam(
+        _ rawValue: String?,
+        name: String,
+        defaultValue: Bool
+    ) throws -> Bool {
         guard let rawValue else { return defaultValue }
-        switch rawValue.lowercased() {
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
         case "true", "1", "yes": return true
         case "false", "0", "no": return false
-        default: return defaultValue
+        default: throw BrowserImportCLIError.invalidBoolean(name, rawValue)
         }
+    }
+
+    nonisolated private func canonicalBrowserImportURL(_ url: URL) -> URL? {
+        canonicalBrowserImportURL(fromPath: url.path)
+    }
+
+    nonisolated private func canonicalBrowserImportURL(fromPath rawPath: String) -> URL? {
+        guard !rawPath.isEmpty,
+              rawPath.utf8.count <= 4_096,
+              !rawPath.contains("\0") else {
+            return nil
+        }
+        let expandedPath = (rawPath as NSString).expandingTildeInPath
+        return URL(fileURLWithPath: expandedPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
     }
 
     nonisolated private func splitListParam(_ rawValue: String?) -> [String] {
@@ -227,6 +308,10 @@ private enum BrowserImportCLIError: LocalizedError {
     case invalidSource(String)
     case invalidProfile(String)
     case invalidMaxHistoryDays(String)
+    case invalidBoolean(String, String)
+    case invalidPath
+    case profileUnavailable(String)
+    case authorizationTargetUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -236,6 +321,14 @@ private enum BrowserImportCLIError: LocalizedError {
             return "Invalid browser profile UUID: \(value)"
         case .invalidMaxHistoryDays(let value):
             return "Invalid max history days: \(value)"
+        case .invalidBoolean(let name, let value):
+            return "Invalid boolean for \(name): \(value)"
+        case .invalidPath:
+            return "Invalid browser import path"
+        case .profileUnavailable(let value):
+            return "Browser profile is no longer available: \(value)"
+        case .authorizationTargetUnavailable:
+            return "Approved browser import target is no longer available"
         }
     }
 }

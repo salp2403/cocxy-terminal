@@ -6,15 +6,26 @@ import Foundation
 extension AppDelegate {
     nonisolated func handleAgentTeamCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        approvedContext: SocketPrivilegedCommandContext? = nil
     ) -> (success: Bool, data: [String: String]) {
         syncOnMainActor {
             switch kind {
             case "launch":
-                return self.launchAgentTeam(params: params)
+                guard let approvedContext,
+                      approvedContext.scope == .localExecution else {
+                    return (false, ["error": "Approved agent team launch context is unavailable"])
+                }
+                return self.launchAgentTeam(
+                    params: params,
+                    approvedContext: approvedContext
+                )
             case "list":
                 return self.listAgentTeams()
             case "stop":
+                guard approvedContext?.scope == .localExecution else {
+                    return (false, ["error": "Approved agent team stop context is unavailable"])
+                }
                 return self.stopAgentTeam(params: params)
             default:
                 return (false, ["error": "Unknown agent team action: \(kind)"])
@@ -22,9 +33,17 @@ extension AppDelegate {
         }
     }
 
-    private func launchAgentTeam(params: [String: String]) -> (Bool, [String: String]) {
-        guard let controller = focusedWindowController() ?? windowController else {
-            return (false, ["error": "No focused window available"])
+    private func launchAgentTeam(
+        params: [String: String],
+        approvedContext: SocketPrivilegedCommandContext
+    ) -> (Bool, [String: String]) {
+        guard let rawTabID = approvedContext.tabID,
+              let controller = privilegedSocketController(for: approvedContext),
+              let tab = controller.tabManager.tab(for: TabID(rawValue: rawTabID)),
+              (tab.worktreeRoot ?? tab.workingDirectory)
+                .resolvingSymlinksInPath()
+                .standardizedFileURL.path == approvedContext.workingDirectory else {
+            return (false, ["error": "Approved agent team target is no longer available"])
         }
         let rawProvider = params["provider"]?.trimmingCharacters(in: .whitespacesAndNewlines)
         let providerName: String
@@ -56,7 +75,11 @@ extension AppDelegate {
             } else {
                 return (false, ["error": "Missing required param: teammates"])
             }
-            let launcher = AgentTeamLauncher(paneLauncher: controller)
+            let paneLauncher = SocketBoundAgentTeamPaneLauncher(
+                controller: controller,
+                targetTabID: rawTabID
+            )
+            let launcher = AgentTeamLauncher(paneLauncher: paneLauncher)
             let result = try launcher.launch(config: config)
             activeAgentTeamCoordinators[config.id] = AgentTeamCoordinator(config: config)
             activeAgentTeamRuns[config.id] = AgentTeamRunState(
@@ -66,7 +89,7 @@ extension AppDelegate {
             if let run = activeAgentTeamRuns[config.id] {
                 syncAgentTeamRunToDashboard(
                     run,
-                    tabID: (controller.visibleTabID ?? controller.tabManager.activeTabID)?.rawValue
+                    tabID: rawTabID
                 )
             }
             try? AgentTeamPersistence().save(config)
@@ -190,5 +213,23 @@ extension AppDelegate {
             guard controller.dashboardViewModel !== agentDashboardViewModel else { continue }
             controller.dashboardViewModel?.syncAgentTeamRun(run, tabId: resolvedTabID)
         }
+    }
+}
+
+@MainActor
+private final class SocketBoundAgentTeamPaneLauncher: AgentTeamPaneLaunching {
+    private weak var controller: MainWindowController?
+    private let targetTabID: UUID
+
+    init(controller: MainWindowController, targetTabID: UUID) {
+        self.controller = controller
+        self.targetTabID = targetTabID
+    }
+
+    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
+        controller?.spawnAgentTeamPane(
+            launchSpec: launchSpec,
+            targetTabID: targetTabID
+        ) ?? false
     }
 }

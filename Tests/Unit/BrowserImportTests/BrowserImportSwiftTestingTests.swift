@@ -76,6 +76,52 @@ struct BrowserImportSwiftTestingTests {
         #expect(!plan.allows(urlString: "https://other.test"))
     }
 
+    @Test("approved import location binding replaces every caller path and fails closed")
+    func approvedLocationBindingIsExactAndFailClosed() throws {
+        let requested = BrowserImportLocationPathBinding.requestedLocations(
+            source: .chrome,
+            profileName: "Profile 7",
+            historyPath: "/caller/History",
+            cookiesPath: "/caller/Cookies",
+            bookmarksPath: "/caller/Bookmarks"
+        )
+        let approvedPaths = try #require(
+            BrowserImportLocationPathBinding.canonicalResourcePaths(
+                for: requested,
+                canonicalize: { url in
+                    URL(fileURLWithPath: "/approved/\(url.lastPathComponent)")
+                }
+            )
+        )
+        let approved = try #require(
+            BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
+                approvedPaths,
+                to: requested
+            )
+        )
+
+        #expect(approved.count == 1)
+        #expect(approved[0].profileName == "Profile 7")
+        #expect(approved[0].historyPath.path == "/approved/History")
+        #expect(approved[0].cookiesPath?.path == "/approved/Cookies")
+        #expect(approved[0].bookmarksPath?.path == "/approved/Bookmarks")
+        #expect(!approved[0].historyPath.path.contains("/caller/"))
+
+        var missingPath = approvedPaths
+        missingPath.removeValue(forKey: try #require(missingPath.keys.sorted().first))
+        #expect(BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
+            missingPath,
+            to: requested
+        ) == nil)
+
+        var unexpectedPath = approvedPaths
+        unexpectedPath["browser-import.1.history"] = "/approved/unexpected"
+        #expect(BrowserImportLocationPathBinding.applyingApprovedResourcePaths(
+            unexpectedPath,
+            to: requested
+        ) == nil)
+    }
+
     @Test("chromium importer reads history and cookies from profile database files")
     func chromiumImporterReadsHistoryAndCookies() throws {
         let fixture = try BrowserImportFixture.chromium()

@@ -8,6 +8,7 @@ import WebKit
 enum BrowserWebKitAutomationBridge {
     @MainActor
     static func install(on viewModel: BrowserViewModel, webView: WKWebView) {
+        viewModel.installAutomationWebView(identifier: ObjectIdentifier(webView))
         BrowserInitScriptWebKitSupport.install(on: webView, viewModel: viewModel)
         viewModel.scriptEvaluator = { [weak webView] script, timeout in
             guard let webView else {
@@ -15,11 +16,47 @@ enum BrowserWebKitAutomationBridge {
             }
             return evaluate(script, in: webView, timeout: timeout)
         }
+        viewModel.automationBridge.authorizedScriptEvaluator = {
+            [weak viewModel, weak webView] authorizedPage, script, timeout in
+            guard let viewModel, let webView else {
+                return .failure("Browser web view is not available")
+            }
+            return evaluate(
+                script,
+                in: webView,
+                timeout: timeout,
+                authorizedPage: authorizedPage,
+                viewModel: viewModel
+            )
+        }
         viewModel.screenshotCapturer = { [weak webView] outputPath, timeout in
             guard let webView else {
                 return .failure("Browser web view is not available")
             }
             return captureScreenshot(outputPath: outputPath, in: webView, timeout: timeout)
+        }
+        viewModel.automationBridge.authorizedScreenshotCapturer = {
+            [weak viewModel, weak webView] authorizedPage, outputPath, timeout in
+            guard let viewModel, let webView else {
+                return .failure("Browser web view is not available")
+            }
+            return captureScreenshot(
+                outputPath: outputPath,
+                in: webView,
+                timeout: timeout,
+                authorizedPage: authorizedPage,
+                viewModel: viewModel
+            )
+        }
+        viewModel.automationBridge.authorizedNavigationPerformer = {
+            [weak viewModel, weak webView] authorizedPage, operation, _ in
+            guard let viewModel, let webView else { return false }
+            return performNavigation(
+                operation,
+                authorizedPage: authorizedPage,
+                viewModel: viewModel,
+                webView: webView
+            )
         }
         viewModel.cookieImporter = { cookie, profileID, timeout in
             BrowserWebKitCookieImportStore.importCookie(
@@ -34,7 +71,9 @@ enum BrowserWebKitAutomationBridge {
     private static func evaluate(
         _ script: String,
         in webView: WKWebView,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        authorizedPage: BrowserAutomationPageIdentity? = nil,
+        viewModel: BrowserViewModel? = nil
     ) -> BrowserScriptEvaluationResult {
         if Thread.isMainThread {
             return .failure("Synchronous browser evaluation cannot run on the main thread")
@@ -47,8 +86,32 @@ enum BrowserWebKitAutomationBridge {
         let box = Box()
 
         DispatchQueue.main.async {
+            if let authorizedPage {
+                guard let viewModel,
+                      viewModel.isCurrentAutomationPage(
+                        authorizedPage,
+                        webViewIdentifier: ObjectIdentifier(webView),
+                        webViewURL: webView.url?.absoluteString
+                      ) else {
+                    box.result = .failure("Approved browser page is no longer current")
+                    semaphore.signal()
+                    return
+                }
+            }
             if script.contains("waitForCocxyActionable") {
                 Task { @MainActor in
+                    if let authorizedPage {
+                        guard let viewModel,
+                              viewModel.isCurrentAutomationPage(
+                                authorizedPage,
+                                webViewIdentifier: ObjectIdentifier(webView),
+                                webViewURL: webView.url?.absoluteString
+                              ) else {
+                            box.result = .failure("Approved browser page is no longer current")
+                            semaphore.signal()
+                            return
+                        }
+                    }
                     do {
                         let value = try await webView.callAsyncJavaScript(
                             "return await \(script)",
@@ -56,6 +119,18 @@ enum BrowserWebKitAutomationBridge {
                             in: nil,
                             contentWorld: .page
                         )
+                        if let authorizedPage {
+                            guard let viewModel,
+                                  viewModel.isCurrentAutomationPage(
+                                    authorizedPage,
+                                    webViewIdentifier: ObjectIdentifier(webView),
+                                    webViewURL: webView.url?.absoluteString
+                                  ) else {
+                                box.result = .failure("Approved browser page is no longer current")
+                                semaphore.signal()
+                                return
+                            }
+                        }
                         box.result = .success(stringValue(for: value))
                     } catch {
                         box.result = .failure(error.localizedDescription)
@@ -64,6 +139,18 @@ enum BrowserWebKitAutomationBridge {
                 }
             } else {
                 webView.evaluateJavaScript(script) { value, error in
+                    if let authorizedPage {
+                        guard let viewModel,
+                              viewModel.isCurrentAutomationPage(
+                                authorizedPage,
+                                webViewIdentifier: ObjectIdentifier(webView),
+                                webViewURL: webView.url?.absoluteString
+                              ) else {
+                            box.result = .failure("Approved browser page is no longer current")
+                            semaphore.signal()
+                            return
+                        }
+                    }
                     if let error {
                         box.result = .failure(error.localizedDescription)
                     } else {
@@ -80,10 +167,47 @@ enum BrowserWebKitAutomationBridge {
         return box.result
     }
 
+    private static func performNavigation(
+        _ operation: BrowserAutomationNavigationOperation,
+        authorizedPage: BrowserAutomationPageIdentity,
+        viewModel: BrowserViewModel,
+        webView: WKWebView
+    ) -> Bool {
+        let work = {
+            MainActor.assumeIsolated { () -> Bool in
+                guard viewModel.isCurrentAutomationPage(
+                    authorizedPage,
+                    webViewIdentifier: ObjectIdentifier(webView),
+                    webViewURL: webView.url?.absoluteString
+                ) else {
+                    return false
+                }
+                switch operation {
+                case .load(let url):
+                    viewModel.applyAutomationNavigationURL(url)
+                    webView.load(URLRequest(url: url))
+                case .goBack:
+                    webView.goBack()
+                case .goForward:
+                    webView.goForward()
+                case .reload:
+                    webView.reload()
+                }
+                return true
+            }
+        }
+        if Thread.isMainThread {
+            return work()
+        }
+        return DispatchQueue.main.sync(execute: work)
+    }
+
     private static func captureScreenshot(
         outputPath: String?,
         in webView: WKWebView,
-        timeout: TimeInterval
+        timeout: TimeInterval,
+        authorizedPage: BrowserAutomationPageIdentity? = nil,
+        viewModel: BrowserViewModel? = nil
     ) -> BrowserScreenshotCaptureResult {
         if Thread.isMainThread {
             return .failure("Synchronous browser screenshot cannot run on the main thread")
@@ -96,7 +220,31 @@ enum BrowserWebKitAutomationBridge {
         let box = Box()
 
         DispatchQueue.main.async {
+            if let authorizedPage {
+                guard let viewModel,
+                      viewModel.isCurrentAutomationPage(
+                        authorizedPage,
+                        webViewIdentifier: ObjectIdentifier(webView),
+                        webViewURL: webView.url?.absoluteString
+                      ) else {
+                    box.result = .failure("Approved browser page is no longer current")
+                    semaphore.signal()
+                    return
+                }
+            }
             webView.takeSnapshot(with: nil) { image, error in
+                if let authorizedPage {
+                    guard let viewModel,
+                          viewModel.isCurrentAutomationPage(
+                            authorizedPage,
+                            webViewIdentifier: ObjectIdentifier(webView),
+                            webViewURL: webView.url?.absoluteString
+                          ) else {
+                        box.result = .failure("Approved browser page is no longer current")
+                        semaphore.signal()
+                        return
+                    }
+                }
                 if let error {
                     box.result = .failure(error.localizedDescription)
                     semaphore.signal()

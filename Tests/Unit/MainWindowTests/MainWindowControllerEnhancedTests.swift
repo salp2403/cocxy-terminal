@@ -526,6 +526,7 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
             blockType: 3
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             sshProvider: { destination, port, identityFile in

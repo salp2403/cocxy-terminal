@@ -158,6 +158,8 @@ extension MainWindowController {
     private func handleBrowserMCPCommand(_ command: BrowserMCPCommand) throws -> [String: String] {
         let controllerRef = WeakReference(self)
         let handler = AppSocketCommandHandler(
+            // Agent Mode reaches this router only after its own tool-permission decision.
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModelProviderOverride: {

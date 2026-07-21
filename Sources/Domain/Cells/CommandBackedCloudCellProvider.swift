@@ -598,7 +598,8 @@ final class AWSCellProvider: CellProvider, @unchecked Sendable {
         if let instanceProfile = request.metadata["instance-profile"]?.nilIfEmpty {
             arguments.append(contentsOf: ["--iam-instance-profile", "Name=\(instanceProfile)"])
         }
-        if let cloudInit = request.metadata["cloud-init"]?.nilIfEmpty {
+        if let cloudInit = request.metadata["cloud-init"],
+           !cloudInit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             arguments.append(contentsOf: ["--user-data", cloudInit])
         }
         arguments.append(contentsOf: [

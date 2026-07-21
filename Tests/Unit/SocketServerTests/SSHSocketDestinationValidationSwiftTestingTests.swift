@@ -43,6 +43,9 @@ struct SSHSocketDestinationValidationSwiftTestingTests {
     func canonicalizesIPv6BeforeProvider() throws {
         let recorder = SSHSocketProviderRecorder()
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                .internalTrusted(for: request)
+            },
             tabManager: nil,
             hookEventReceiver: nil,
             sshProvider: { destination, port, identity in

@@ -95,7 +95,6 @@ struct CellCLICommandServiceSwiftTestingTests {
             "security-group": "sg-1",
             "key-name": "cocxy-key",
             "instance-profile": "cocxy-ssm-profile",
-            "cloud-init": "cloud-init.yml",
         ])
 
         #expect(result.success)
@@ -111,7 +110,70 @@ struct CellCLICommandServiceSwiftTestingTests {
         #expect(provider.createdRequests[0].metadata["security-group"] == "sg-1")
         #expect(provider.createdRequests[0].metadata["key-name"] == "cocxy-key")
         #expect(provider.createdRequests[0].metadata["instance-profile"] == "cocxy-ssm-profile")
-        #expect(provider.createdRequests[0].metadata["cloud-init"] == "cloud-init.yml")
+    }
+
+    @Test("create preserves cloud-init file references for supported cloud providers")
+    func createPreservesCloudInitFileReferences() async {
+        let aws = FakeCellProvider(kind: .aws, cells: [
+            Cell(id: UUID(), name: "AWS", provider: .aws, status: .running),
+        ])
+        let gcp = FakeCellProvider(kind: .gcp, cells: [
+            Cell(id: UUID(), name: "GCP", provider: .gcp, status: .running),
+        ])
+        let azure = FakeCellProvider(kind: .azure, cells: [
+            Cell(id: UUID(), name: "Azure", provider: .azure, status: .running),
+        ])
+        let service = makeService(providers: [
+            .aws: aws,
+            .gcp: gcp,
+            .azure: azure,
+        ])
+
+        let requests: [(provider: FakeCellProvider, params: [String: String])] = [
+            (aws, ["provider": "aws", "cloud-init": "file://cloud-init.yml"]),
+            (aws, ["provider": "aws", "cloud-init": "FILEB://cloud-init.bin"]),
+            (gcp, ["provider": "gcp", "cloud-init": "/tmp/cloud-init.yml"]),
+            (azure, ["provider": "azure", "cloud-init": "cloud-init.yml"]),
+        ]
+        for request in requests {
+            let result = await service.perform(kind: "create", params: request.params)
+            #expect(result.success)
+            #expect(
+                request.provider.createdRequests.last?.metadata["cloud-init"]
+                    == request.params["cloud-init"]
+            )
+        }
+
+        #expect(aws.createdRequests.count == 2)
+        #expect(gcp.createdRequests.count == 1)
+        #expect(azure.createdRequests.count == 1)
+
+        let awsFile = CellCLICommandService.cloudInitLocalResourceReference(in: requests[0].params)
+        let awsFileB = CellCLICommandService.cloudInitLocalResourceReference(in: requests[1].params)
+        let gcpFile = CellCLICommandService.cloudInitLocalResourceReference(in: requests[2].params)
+        #expect(awsFile?.path == "cloud-init.yml")
+        #expect(awsFile?.binding(to: "/approved/cloud-init.yml") == "file:///approved/cloud-init.yml")
+        #expect(awsFileB?.path == "cloud-init.bin")
+        #expect(awsFileB?.binding(to: "/approved/cloud-init.bin") == "fileb:///approved/cloud-init.bin")
+        #expect(gcpFile?.binding(to: "/approved/cloud-init.yml") == "/approved/cloud-init.yml")
+    }
+
+    @Test("AWS create preserves bounded inline cloud-init content")
+    func awsCreatePreservesBoundedInlineCloudInit() async {
+        let provider = FakeCellProvider(kind: .aws, cells: [
+            Cell(id: UUID(), name: "AWS", provider: .aws, status: .running),
+        ])
+        let service = makeService(providers: [.aws: provider])
+        let cloudInit = "#cloud-config\npackages:\n  - ripgrep\n"
+
+        let result = await service.perform(kind: "create", params: [
+            "provider": "aws",
+            "cloud-init": cloudInit,
+        ])
+
+        #expect(result.success)
+        #expect(provider.createdRequests.count == 1)
+        #expect(provider.createdRequests[0].metadata["cloud-init"] == cloudInit)
     }
 
     @Test("exec decodes argv-json and returns stdout")

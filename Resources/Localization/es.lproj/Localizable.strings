@@ -3073,6 +3073,11 @@
 "github.socketApproval.approveOnce" = "Autorizar una vez";
 "github.socketApproval.cancel" = "Cancelar";
 "github.socketApproval.preview.accessibility" = "Acción exacta de GitHub para autorizar";
+"socket.privilegedApproval.title" = "¿Autorizar acción local del CLI?";
+"socket.privilegedApproval.message" = "Comando: %@\nDestino: %@\nDirectorio: %@\nHuella: %@\n\nUna solicitud local del CLI quiere usar la autoridad exacta de Cocxy que se muestra abajo. Autorízala solo si tú iniciaste esta solicitud. La autorización es válida una sola vez para esta acción.";
+"socket.privilegedApproval.approveOnce" = "Autorizar una vez";
+"socket.privilegedApproval.cancel" = "Cancelar";
+"socket.privilegedApproval.preview.accessibility" = "Acción local exacta del CLI para autorizar";
 
 "cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No hay cells";

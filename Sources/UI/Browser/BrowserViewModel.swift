@@ -25,6 +25,21 @@ enum BrowserScreenshotCaptureResult: Equatable, Sendable {
     case failure(String)
 }
 
+struct BrowserAutomationPageIdentity: Equatable, @unchecked Sendable {
+    let viewModelIdentifier: ObjectIdentifier
+    let webViewIdentifier: ObjectIdentifier
+    let tabID: UUID
+    let url: String
+    let navigationGeneration: UInt64
+}
+
+enum BrowserAutomationNavigationOperation: Equatable, Sendable {
+    case load(URL)
+    case goBack
+    case goForward
+    case reload
+}
+
 enum BrowserCookieImportResult: Equatable, Sendable {
     case success
     case failure(String)
@@ -89,6 +104,21 @@ struct RemoteBrowserNotice: Equatable, Sendable {
 final class BrowserAutomationBridgeStore: @unchecked Sendable {
     typealias ScriptEvaluator = (String, TimeInterval) -> BrowserScriptEvaluationResult
     typealias ScreenshotCapturer = (String?, TimeInterval) -> BrowserScreenshotCaptureResult
+    typealias AuthorizedScriptEvaluator = (
+        BrowserAutomationPageIdentity,
+        String,
+        TimeInterval
+    ) -> BrowserScriptEvaluationResult
+    typealias AuthorizedScreenshotCapturer = (
+        BrowserAutomationPageIdentity,
+        String?,
+        TimeInterval
+    ) -> BrowserScreenshotCaptureResult
+    typealias AuthorizedNavigator = (
+        BrowserAutomationPageIdentity,
+        BrowserAutomationNavigationOperation,
+        TimeInterval
+    ) -> Bool
     typealias CookieImporter = (BrowserImportedCookie, UUID, TimeInterval) -> BrowserCookieImportResult
     typealias InitScriptSynchronizer = ([BrowserInitScript]) -> BrowserScriptEvaluationResult
     typealias InitScriptNavigationCanceller = () -> Void
@@ -96,6 +126,9 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
     private let lock = NSLock()
     private var evaluator: ScriptEvaluator?
     private var capturer: ScreenshotCapturer?
+    private var authorizedEvaluator: AuthorizedScriptEvaluator?
+    private var authorizedCapturer: AuthorizedScreenshotCapturer?
+    private var authorizedNavigator: AuthorizedNavigator?
     private var cookieImporterValue: CookieImporter?
     private var initScriptSynchronizerValue: InitScriptSynchronizer?
     private var initScriptNavigationCancellerValue: InitScriptNavigationCanceller?
@@ -122,6 +155,45 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         set {
             lock.lock()
             capturer = newValue
+            lock.unlock()
+        }
+    }
+
+    var authorizedScriptEvaluator: AuthorizedScriptEvaluator? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return authorizedEvaluator
+        }
+        set {
+            lock.lock()
+            authorizedEvaluator = newValue
+            lock.unlock()
+        }
+    }
+
+    var authorizedScreenshotCapturer: AuthorizedScreenshotCapturer? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return authorizedCapturer
+        }
+        set {
+            lock.lock()
+            authorizedCapturer = newValue
+            lock.unlock()
+        }
+    }
+
+    var authorizedNavigationPerformer: AuthorizedNavigator? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return authorizedNavigator
+        }
+        set {
+            lock.lock()
+            authorizedNavigator = newValue
             lock.unlock()
         }
     }
@@ -173,12 +245,39 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         return scriptEvaluator(script, timeout)
     }
 
+    func evaluate(
+        authorizedPage: BrowserAutomationPageIdentity,
+        script: String,
+        timeout: TimeInterval
+    ) -> BrowserScriptEvaluationResult? {
+        guard let authorizedScriptEvaluator else { return nil }
+        return authorizedScriptEvaluator(authorizedPage, script, timeout)
+    }
+
     func captureScreenshot(
         outputPath: String?,
         timeout: TimeInterval
     ) -> BrowserScreenshotCaptureResult? {
         guard let screenshotCapturer else { return nil }
         return screenshotCapturer(outputPath, timeout)
+    }
+
+    func captureScreenshot(
+        authorizedPage: BrowserAutomationPageIdentity,
+        outputPath: String?,
+        timeout: TimeInterval
+    ) -> BrowserScreenshotCaptureResult? {
+        guard let authorizedScreenshotCapturer else { return nil }
+        return authorizedScreenshotCapturer(authorizedPage, outputPath, timeout)
+    }
+
+    func performNavigation(
+        authorizedPage: BrowserAutomationPageIdentity,
+        operation: BrowserAutomationNavigationOperation,
+        timeout: TimeInterval
+    ) -> Bool? {
+        guard let authorizedNavigationPerformer else { return nil }
+        return authorizedNavigationPerformer(authorizedPage, operation, timeout)
     }
 
     func importCookie(
@@ -231,6 +330,9 @@ final class BrowserViewModel: ObservableObject {
     /// The URL currently loaded in the web view. Nil when no page is loaded.
     @Published var currentURL: URL? {
         didSet {
+            if oldValue != currentURL {
+                markAutomationNavigationBoundary()
+            }
             guard !initScripts.isEmpty,
                   oldValue.flatMap(BrowserOrigin.init(url:))
                     != currentURL.flatMap(BrowserOrigin.init(url:)) else {
@@ -261,6 +363,7 @@ final class BrowserViewModel: ObservableObject {
     @Published var activeTabID: UUID? {
         didSet {
             if oldValue != activeTabID {
+                markAutomationNavigationBoundary()
                 revokeAllInitScripts()
                 revokeDOMGrabAuthorization()
             }
@@ -341,6 +444,8 @@ final class BrowserViewModel: ObservableObject {
     /// injected closure. Existing fire-and-forget JavaScript still goes through
     /// `navigationActionSubject` when this bridge is not installed.
     nonisolated let automationBridge = BrowserAutomationBridgeStore()
+    private(set) var automationWebViewIdentifier: ObjectIdentifier?
+    private(set) var automationNavigationGeneration: UInt64 = 0
 
     private var browserDialogCompletions: [UUID: (BrowserDialogResolution) -> Void] = [:]
     private var lastRemoteBrowserRouteRequest: RemoteBrowserRouteRequest?
@@ -377,6 +482,44 @@ final class BrowserViewModel: ObservableObject {
         set { automationBridge.cookieImporter = newValue }
     }
 
+    func installAutomationWebView(identifier: ObjectIdentifier) {
+        automationWebViewIdentifier = identifier
+        markAutomationNavigationBoundary()
+    }
+
+    func markAutomationNavigationBoundary() {
+        automationNavigationGeneration &+= 1
+    }
+
+    func currentAutomationPageIdentity() -> BrowserAutomationPageIdentity? {
+        guard let automationWebViewIdentifier,
+              let activeTabID,
+              let url = currentURL?.absoluteString ?? URL(string: urlString)?.absoluteString else {
+            return nil
+        }
+        return BrowserAutomationPageIdentity(
+            viewModelIdentifier: ObjectIdentifier(self),
+            webViewIdentifier: automationWebViewIdentifier,
+            tabID: activeTabID,
+            url: url,
+            navigationGeneration: automationNavigationGeneration
+        )
+    }
+
+    func isCurrentAutomationPage(
+        _ identity: BrowserAutomationPageIdentity,
+        webViewIdentifier: ObjectIdentifier,
+        webViewURL: String?
+    ) -> Bool {
+        ObjectIdentifier(self) == identity.viewModelIdentifier
+            && automationWebViewIdentifier == identity.webViewIdentifier
+            && webViewIdentifier == identity.webViewIdentifier
+            && activeTabID == identity.tabID
+            && automationNavigationGeneration == identity.navigationGeneration
+            && (currentURL?.absoluteString ?? URL(string: urlString)?.absoluteString) == identity.url
+            && webViewURL == identity.url
+    }
+
     private(set) var consoleSnapshotEntries: [BrowserConsoleSnapshotEntry] = []
 
     /// The active browser profile ID, used to associate visits and WebKit
@@ -385,6 +528,7 @@ final class BrowserViewModel: ObservableObject {
     @Published var activeProfileID: UUID? {
         didSet {
             if oldValue != activeProfileID {
+                markAutomationNavigationBoundary()
                 revokeAllInitScripts()
                 revokeDOMGrabAuthorization()
             }
@@ -649,22 +793,32 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter rawInput: The URL string to navigate to.
     func navigate(to rawInput: String) {
+        guard let url = preparedNavigationURL(from: rawInput) else { return }
+        applyAutomationNavigationURL(url)
+        navigationActionSubject.send(.load(url))
+    }
+
+    func preparedNavigationURL(from rawInput: String) -> URL? {
+        Self.preparedNavigationURLValue(from: rawInput)
+    }
+
+    nonisolated static func preparedNavigationURLValue(from rawInput: String) -> URL? {
         let trimmed = Self.repairedEditableURLInput(rawInput)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
 
         let normalized = normalizeURLString(trimmed)
-        guard let url = URL(string: normalized) else { return }
+        return URL(string: normalized)
+    }
 
+    func applyAutomationNavigationURL(_ url: URL) {
         revokeDOMGrabAuthorization()
-        urlString = normalized
+        urlString = url.absoluteString
         currentURL = url
 
         // Sync URL to the active tab.
         if let index = browserTabs.firstIndex(where: { $0.id == activeTabID }) {
             browserTabs[index].url = url
         }
-
-        navigationActionSubject.send(.load(url))
     }
 
     /// Navigates the web view backward in history.
@@ -1445,7 +1599,7 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter input: The raw URL string from the text field.
     /// - Returns: A normalized URL string with a scheme.
-    private func normalizeURLString(_ input: String) -> String {
+    private nonisolated static func normalizeURLString(_ input: String) -> String {
         let lowered = input.lowercased()
         if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") {
             return input
@@ -1463,7 +1617,7 @@ final class BrowserViewModel: ObservableObject {
     /// AppKit can leave a malformed value such as
     /// `http://localhost:3000/http://cocxy.dev/`. In that case, the most
     /// recently typed explicit URL is the user's intent.
-    static func repairedEditableURLInput(_ input: String) -> String {
+    nonisolated static func repairedEditableURLInput(_ input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 

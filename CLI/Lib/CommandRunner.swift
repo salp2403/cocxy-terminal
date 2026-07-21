@@ -25,7 +25,9 @@ public struct CommandRunner {
     public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
     static let extendedCellSocketTimeoutSeconds: TimeInterval = 300
     static let browserInitScriptApprovalSocketTimeoutSeconds: TimeInterval = 605
+    static let privilegedSocketApprovalGraceSeconds: TimeInterval = 65
     static let defaultBrowserActionTimeoutMilliseconds = 5_000
+    static let maximumBrowserWaitTimeoutMilliseconds = 30_000
     static let browserActionSocketGraceSeconds: TimeInterval = 3
 
     /// The socket client to use for communication.
@@ -2076,9 +2078,13 @@ public struct CommandRunner {
     }
 
     func socketClient(for command: ParsedCommand) -> SocketClient {
+        let requestCommand = buildRequest(from: command).command
+        let approvalGrace = Self.requiresPrivilegedSocketApproval(requestCommand)
+            ? Self.privilegedSocketApprovalGraceSeconds
+            : 0
         let timeoutSeconds = max(
             socketClient.timeoutSeconds,
-            Self.socketTimeoutSeconds(for: command)
+            Self.socketTimeoutSeconds(for: command) + approvalGrace
         )
         guard timeoutSeconds != socketClient.timeoutSeconds else {
             return socketClient
@@ -2129,6 +2135,8 @@ public struct CommandRunner {
              .browserScroll(_, _, let timeoutMilliseconds),
              .browserScrollIntoView(_, let timeoutMilliseconds):
             return browserActionSocketTimeoutSeconds(timeoutMilliseconds: timeoutMilliseconds)
+        case .browserWait(_, let timeoutMilliseconds):
+            return browserWaitSocketTimeoutSeconds(timeoutMilliseconds: timeoutMilliseconds)
         default:
             return SocketClient.defaultTimeoutSeconds
         }
@@ -2137,6 +2145,16 @@ public struct CommandRunner {
     static func browserActionSocketTimeoutSeconds(timeoutMilliseconds: Int?) -> TimeInterval {
         let milliseconds = timeoutMilliseconds ?? defaultBrowserActionTimeoutMilliseconds
         return Double(milliseconds) / 1_000.0 + browserActionSocketGraceSeconds
+    }
+
+    static func browserWaitSocketTimeoutSeconds(timeoutMilliseconds: Int?) -> TimeInterval {
+        let requested = timeoutMilliseconds ?? defaultBrowserActionTimeoutMilliseconds
+        let milliseconds = min(max(requested, 0), maximumBrowserWaitTimeoutMilliseconds)
+        return Double(milliseconds) / 1_000.0 + browserActionSocketGraceSeconds
+    }
+
+    static func requiresPrivilegedSocketApproval(_ commandName: String) -> Bool {
+        CocxyPrivilegedSocketCommandPolicy.requiresApproval(commandName)
     }
 }
 

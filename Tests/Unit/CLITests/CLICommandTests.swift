@@ -2015,15 +2015,15 @@ final class CommandRunnerTests: XCTestCase {
 
         XCTAssertEqual(
             runner.socketClient(for: .browserClick(ref: "button-1")).timeoutSeconds,
-            8
+            8 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
         XCTAssertEqual(
             runner.socketClient(for: .browserClick(ref: "button-1", timeoutMilliseconds: 250)).timeoutSeconds,
-            SocketClient.defaultTimeoutSeconds
+            3.25 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
         XCTAssertEqual(
             runner.socketClient(for: .browserClick(ref: "button-1", timeoutMilliseconds: 60_000)).timeoutSeconds,
-            63
+            63 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
 
         let alreadyExtended = CommandRunner(
@@ -2031,7 +2031,7 @@ final class CommandRunnerTests: XCTestCase {
         )
         XCTAssertEqual(
             alreadyExtended.socketClient(for: .browserClick(ref: "button-1", timeoutMilliseconds: 60_000)).timeoutSeconds,
-            90
+            63 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
     }
 
@@ -2042,11 +2042,13 @@ final class CommandRunnerTests: XCTestCase {
 
         XCTAssertEqual(
             runner.socketClient(for: .cellCreate(.init(provider: "gcp"))).timeoutSeconds,
-            300
+            CommandRunner.extendedCellSocketTimeoutSeconds
+                + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
         XCTAssertEqual(
             runner.socketClient(for: .cellDestroy(cellID: "cell-1", provider: nil, force: true)).timeoutSeconds,
-            300
+            CommandRunner.extendedCellSocketTimeoutSeconds
+                + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
 
         let alreadyExtended = CommandRunner(

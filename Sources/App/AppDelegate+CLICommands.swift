@@ -61,6 +61,10 @@ extension AppDelegate {
 
     @MainActor
     private func activeTerminalSurfaceForCLI() -> (controller: MainWindowController, surfaceID: SurfaceID)? {
+        if let context = activePrivilegedSocketCommandContext {
+            guard context.scope == .terminalSurface else { return nil }
+            return privilegedSocketTerminalTarget(for: context)
+        }
         guard let controller = focusedWindowController() ?? windowController else { return nil }
         guard let surfaceID = controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {

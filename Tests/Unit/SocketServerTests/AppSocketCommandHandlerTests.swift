@@ -29,7 +29,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: - Existing Handler Tests (moved from PreferencesViewTests)
 
     func test_unknownCommand_returnsFailure() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "test-1", command: "unknown-command", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertFalse(response.success)
@@ -39,7 +39,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_statusCommand_returnsRunning() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(id: "test-2", command: "status", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
@@ -51,6 +51,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_statusCommand_mergesCocxyCoreDiagnosticsWithoutOverwritingBaseStatus() {
         let tabManager = TabManager()
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: tabManager,
             hookEventReceiver: nil,
             statusDetailsProvider: {
@@ -80,6 +81,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_statusCommand_canReturnLaunchWarmupSnapshot() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabCountProviderOverride: { 0 },
@@ -99,7 +101,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_listTabsCommand_returnsTabInfo() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(id: "test-3", command: "list-tabs", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
@@ -107,7 +109,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_hookEventCommand_withoutReceiver_returnsFailure() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "test-4", command: "hook-event", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertFalse(response.success)
@@ -115,7 +117,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_hookEventCommand_withMissingPayload_returnsFailure() {
         let receiver = HookEventReceiverImpl()
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: receiver)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: receiver)
         let request = SocketRequest(id: "test-5", command: "hook-event", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertFalse(response.success)
@@ -123,7 +125,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_hookEventCommand_withInvalidPayload_returnsFailure() {
         let receiver = HookEventReceiverImpl()
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: receiver)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: receiver)
         let request = SocketRequest(
             id: "test-6",
             command: "hook-event",
@@ -136,6 +138,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_worktreeFocus_routesToWorktreeProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             worktreeCLIProvider: { kind, params in
@@ -168,6 +171,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_worktreeCleanupMerged_routesToWorktreeProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             worktreeCLIProvider: { kind, params in
@@ -203,6 +207,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_worktreeRemoveForce_isRejectedBeforeProvider() {
         let providerCallCount = LockedBox(0)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             worktreeCLIProvider: { _, _ in
@@ -225,6 +230,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_worktreeCleanupMerged_withoutDryRun_isRejectedBeforeProvider() {
         let providerCallCount = LockedBox(0)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             worktreeCLIProvider: { _, _ in
@@ -246,6 +252,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_worktreeCleanupMerged_force_isRejectedBeforeProvider() {
         let providerCallCount = LockedBox(0)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             worktreeCLIProvider: { _, _ in
@@ -286,6 +293,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
         let manager = PluginManager(pluginsDirectory: pluginsDirectory.path)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             pluginManagerProvider: { manager },
@@ -370,6 +378,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             grantedAt: Date(timeIntervalSince1970: 101)
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             pluginCapabilityGrantStoreProvider: { store }
@@ -397,7 +406,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_sandboxRevokeRejectsUnknownCapability() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
 
         let response = handler.handleCommand(SocketRequest(
             id: "sandbox-revoke-invalid",
@@ -412,6 +421,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_reviewApprove_routesToGitHubProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             githubCLIProvider: { kind, params in
@@ -442,6 +452,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_gitAssistantPRDraft_routesToProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             gitAssistantCLIProvider: { kind, params in
@@ -473,6 +484,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_gitAssistantReleaseNotes_routesToProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             gitAssistantCLIProvider: { kind, params in
@@ -505,6 +517,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             (nil, nil, nil, [:])
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabConfigSaveProvider: { name, command, theme, environment in
@@ -537,6 +550,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabConfigSave_rejectsStartupCommandBeforeProviderDispatch() {
         let providerWasCalled = LockedBox(false)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabConfigSaveProvider: { name, _, _, _ in
@@ -559,6 +573,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabConfigOpen_routesNameToProvider() {
         let captured = LockedBox<String?>(nil)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabConfigOpenProvider: { name in
@@ -584,6 +599,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             (nil, nil, nil)
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabConfigExportProvider: { name, output, force in
@@ -615,6 +631,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabConfigExport_rejectsUncontainedOutputsBeforeProviderDispatch() {
         let providerCallCount = LockedBox(0)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabConfigExportProvider: { name, output, _ in
@@ -647,6 +664,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_reviewRequestChanges_routesToGitHubProvider() {
         let captured = LockedBox<(kind: String?, params: [String: String]?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             githubCLIProvider: { kind, params in
@@ -677,6 +695,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_blockList_routesToBlockProviderWithClampedLimit() {
         let capturedLimit = LockedBox<UInt32?>(nil)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             blockListProvider: { limit in
@@ -701,6 +720,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_blockOutputs_routesToOutputProviderWithClampedLimit() {
         let capturedLimit = LockedBox<UInt32?>(nil)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             blockOutputsProvider: { limit in
@@ -725,6 +745,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_blockCopy_routesToBlockProvider() {
         let captured = LockedBox<(id: UInt64?, field: String?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             blockCopyProvider: { id, field in
@@ -750,6 +771,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_blockRerun_routesToBlockProvider() {
         let capturedID = LockedBox<UInt64?>(nil)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             blockRerunProvider: { id in
@@ -774,6 +796,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_blockCopyRejectsInvalidFieldBeforeProvider() {
         let called = LockedBox(false)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             blockCopyProvider: { _, _ in
@@ -804,7 +827,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let firstTabID = tabManager.tabs[0].id.rawValue.uuidString
         XCTAssertTrue(secondTab.isActive)
 
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ft-1",
             command: "focus-tab",
@@ -820,7 +843,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_focusTab_withMissingID_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(id: "ft-2", command: "focus-tab", params: nil)
         let response = handler.handleCommand(request)
 
@@ -831,7 +854,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_focusTab_withInvalidUUID_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ft-3",
             command: "focus-tab",
@@ -846,7 +869,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_focusTab_withNonexistentID_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let nonexistentUUID = UUID().uuidString
         let request = SocketRequest(
             id: "ft-4",
@@ -861,7 +884,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     @MainActor
     func test_focusTab_withNilTabManager_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ft-5",
             command: "focus-tab",
@@ -881,7 +904,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let secondTab = tabManager.addTab()
         XCTAssertEqual(tabManager.tabs.count, 2)
 
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ct-1",
             command: "close-tab",
@@ -897,7 +920,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_closeTab_withMissingID_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(id: "ct-2", command: "close-tab", params: nil)
         let response = handler.handleCommand(request)
 
@@ -911,7 +934,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(tabManager.tabs.count, 1)
         let onlyTabID = tabManager.tabs[0].id.rawValue.uuidString
 
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ct-3",
             command: "close-tab",
@@ -931,7 +954,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let tabManager = TabManager()
         XCTAssertEqual(tabManager.tabs.count, 1)
 
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(id: "nt-1", command: "new-tab", params: nil)
         let response = handler.handleCommand(request)
 
@@ -944,7 +967,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_newTab_withDir_createsTabAtDirectory() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "nt-2",
             command: "new-tab",
@@ -961,7 +984,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_newTab_withEnginePreference_persistsPreferenceOnTab() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "nt-engine",
             command: "new-tab",
@@ -978,7 +1001,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_newTab_withInvalidEngine_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "nt-engine-invalid",
             command: "new-tab",
@@ -994,7 +1017,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     @MainActor
     func test_newTab_withNilTabManager_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "nt-3", command: "new-tab", params: nil)
         let response = handler.handleCommand(request)
 
@@ -1006,6 +1029,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabDuplicate_withProvider_returnsDuplicatedTabMetadata() {
         let expectedID = UUID().uuidString
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabDuplicateProvider: { (id: expectedID, title: "Duplicated Tab") }
@@ -1023,6 +1047,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_sessionRestore_withProviderSuccess_returnsRestored() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             sessionRestoreProvider: { name in
@@ -1050,7 +1075,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let tabManager = TabManager()
         let tabID = tabManager.tabs[0].id.rawValue.uuidString
 
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "tr-1",
             command: "tab-rename",
@@ -1066,7 +1091,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_tabRename_withMissingID_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "tr-2",
             command: "tab-rename",
@@ -1082,7 +1107,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabRename_withMissingName_returnsError() {
         let tabManager = TabManager()
         let tabID = tabManager.tabs[0].id.rawValue.uuidString
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "tr-3",
             command: "tab-rename",
@@ -1104,7 +1129,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         tabManager.addTab()
         XCTAssertEqual(tabManager.tabs.count, 3)
 
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let firstTabID = firstTab.id.rawValue.uuidString
         let request = SocketRequest(
             id: "tm-1",
@@ -1122,7 +1147,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     @MainActor
     func test_tabMove_withMissingID_returnsError() {
         let tabManager = TabManager()
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "tm-2",
             command: "tab-move",
@@ -1137,7 +1162,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabMove_withMissingPosition_returnsError() {
         let tabManager = TabManager()
         let tabID = tabManager.tabs[0].id.rawValue.uuidString
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "tm-3",
             command: "tab-move",
@@ -1152,7 +1177,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_tabMove_withInvalidPosition_returnsError() {
         let tabManager = TabManager()
         let tabID = tabManager.tabs[0].id.rawValue.uuidString
-        let handler = AppSocketCommandHandler(tabManager: tabManager, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: tabManager, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "tm-4",
             command: "tab-move",
@@ -1168,7 +1193,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: config-path
 
     func test_configPath_returnsPath() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "cp-1", command: "config-path", params: nil)
         let response = handler.handleCommand(request)
 
@@ -1180,7 +1205,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: config-get
 
     func test_configGet_withValidKey_returnsValue() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-1",
             command: "config-get",
@@ -1194,7 +1219,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_clipboardWriteAccess_returnsSafeDefault() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "cg-clipboard-write",
             command: "config-get",
@@ -1207,7 +1232,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_withMissingKey_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "cg-2", command: "config-get", params: nil)
         let response = handler.handleCommand(request)
 
@@ -1216,7 +1241,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_withUnknownKey_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-3",
             command: "config-get",
@@ -1229,7 +1254,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_generalShell_returnsShellPath() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-4",
             command: "config-get",
@@ -1244,7 +1269,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_notesKeys_returnsDefaults() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-notes",
             command: "config-get",
@@ -1258,7 +1283,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_completionKeys_returnsDefaults() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "cg-completions",
             command: "config-get",
@@ -1271,7 +1296,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_rateLimitIndicatorKey_returnsDefault() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-rate-limit",
             command: "config-get",
@@ -1285,7 +1310,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_rateLimitProvidersKey_returnsDefaults() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-rate-limit-providers",
             command: "config-get",
@@ -1302,7 +1327,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_auroraEnabledKey_returnsDefault() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-aurora-enabled",
             command: "config-get",
@@ -1316,7 +1341,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_quickSwitchModeKey_returnsDefault() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-quickswitch-mode",
             command: "config-get",
@@ -1330,7 +1355,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_appLanguageKey_returnsDefault() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-app-language",
             command: "config-get",
@@ -1344,7 +1369,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configGet_commandCorrectionsKey_returnsDefault() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cg-command-corrections",
             command: "config-get",
@@ -1358,7 +1383,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configList_includesNewNotesAndRateLimitKeys() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
 
         XCTAssertTrue(response.success)
@@ -1422,7 +1447,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configList_withFilterOnlyReturnsMatchingKeys() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "cl-filter",
             command: "config-list",
@@ -1438,7 +1463,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configList_withExperimentalFilterReturnsRolloutKeys() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "cl-experimental",
             command: "config-list",
@@ -1457,7 +1482,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configList_withCompletionFilterOnlyReturnsCompletionKeys() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "cl-completions",
             command: "config-list",
@@ -1473,7 +1498,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configList_withCommandCorrectionsFilterOnlyReturnsCommandCorrectionKeys() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "cl-command-corrections",
             command: "config-list",
@@ -1493,7 +1518,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: config-set
 
     func test_configSet_withMissingKey_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cs-1",
             command: "config-set",
@@ -1506,7 +1531,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_configSet_withMissingValue_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "cs-2",
             command: "config-set",
@@ -1522,6 +1547,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         preservingUserConfig {
             let didReload = LockedBox(false)
             let handler = AppSocketCommandHandler(
+                privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
                 tabManager: nil,
                 hookEventReceiver: nil,
                 configReloadProvider: {
@@ -1545,6 +1571,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_configSet_reportsReloadFailure() {
         preservingUserConfig {
             let handler = AppSocketCommandHandler(
+                privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
                 tabManager: nil,
                 hookEventReceiver: nil,
                 configReloadProvider: { false }
@@ -1565,6 +1592,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         preservingUserConfig {
             let reloadCount = LockedBox(0)
             let handler = AppSocketCommandHandler(
+                privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
                 tabManager: nil,
                 hookEventReceiver: nil,
                 configReloadProvider: {
@@ -1609,7 +1637,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_configSet_rejectsUnknownClipboardAccessPolicy() {
         preservingUserConfig {
-            let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+            let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
             for key in ["terminal.clipboard-read-access", "terminal.clipboard-write-access"] {
                 let response = handler.handleCommand(SocketRequest(
                     id: "cs-invalid-clipboard-policy",
@@ -1700,7 +1728,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     @MainActor func test_themeList_returnsAvailableThemes() {
         let engine = ThemeEngineImpl()
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil, themeEngineProvider: { engine })
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil, themeEngineProvider: { engine })
         let request = SocketRequest(id: "tl-1", command: "theme-list", params: nil)
         let response = handler.handleCommand(request)
 
@@ -1714,7 +1742,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     @MainActor func test_themeList_includesBuiltInThemeNames() {
         let engine = ThemeEngineImpl()
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil, themeEngineProvider: { engine })
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil, themeEngineProvider: { engine })
         let request = SocketRequest(id: "tl-2", command: "theme-list", params: nil)
         let response = handler.handleCommand(request)
 
@@ -1728,7 +1756,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: theme-set
 
     func test_themeSet_withMissingName_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "ts-1", command: "theme-set", params: nil)
         let response = handler.handleCommand(request)
 
@@ -1738,7 +1766,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     @MainActor func test_themeSet_withValidName_returnsSuccess() {
         let engine = ThemeEngineImpl()
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil, themeEngineProvider: { engine })
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil, themeEngineProvider: { engine })
         let request = SocketRequest(
             id: "ts-2",
             command: "theme-set",
@@ -1751,7 +1779,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_themeSet_withInvalidName_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ts-3",
             command: "theme-set",
@@ -1769,6 +1797,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let dispatchedTitle = LockedBox<String?>(nil)
         let dispatchedBody = LockedBox<String?>(nil)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             notifyDispatcher: { title, body in
@@ -1792,6 +1821,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_notifyCommand_withCustomTitle() {
         let dispatchedTitle = LockedBox<String?>(nil)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             notifyDispatcher: { title, _ in
@@ -1810,7 +1840,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_notifyCommand_withoutMessage_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(
             id: "ack-1c",
             command: "notify",
@@ -1825,7 +1855,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     // MARK: - V4 Commands: Without Providers Return Error
 
     func test_splitCommand_withoutProvider_returnsError() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "v4-1", command: "split", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertFalse(response.success)
@@ -1833,6 +1863,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_splitCommand_withProvider_returnsCreated() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             splitCreateProvider: { _ in true }
         )
@@ -1844,6 +1875,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_splitListCommand_withProvider_returnsPanes() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             splitInfoProvider: { [
                 (leafID: "leaf-1", terminalID: "term-1", isFocused: true),
@@ -1858,6 +1890,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_dashboardToggleCommand_withProvider_returnsToggled() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             dashboardToggleProvider: { true }
         )
@@ -1870,6 +1903,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_dashboardStatusCommand_withProvider_returnsStatus() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             dashboardStatusProvider: { [
                 "visible": "true",
@@ -1890,6 +1924,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             summary: "Read: Sources/App.swift"
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             timelineQueryProvider: { tabID in
                 XCTAssertNil(tabID)
@@ -1923,6 +1958,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             contextAfter: " in haystack"
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             searchProvider: { query, regex, caseSensitive, tabID in
                 XCTAssertEqual(query, "needle")
@@ -1959,6 +1995,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_searchCommand_withoutQuery_withProvider_returnsToggled() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             searchToggleProvider: { }
         )
@@ -1970,6 +2007,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_sendCommand_withProvider_returnsSent() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             sendTextProvider: { _ in true }
         )
@@ -1981,6 +2019,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_sendKeyCommand_withProvider_returnsSent() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             sendKeyProvider: { _ in true }
         )
@@ -1991,7 +2030,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_hooksCommand_returnsData() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "v4-10", command: "hooks", params: nil)
         let response = handler.handleCommand(request)
         // hooks reads settings.json — succeeds even without provider
@@ -1999,7 +2038,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_hookHandlerCommand_returnsReady() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "v4-11", command: "hook-handler", params: nil)
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
@@ -2008,6 +2047,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_timelineExportCommand_withProvider_returnsExported() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             timelineExportProvider: { tabID, format in
                 XCTAssertNil(tabID)
@@ -2026,6 +2066,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_sshCommand_withProvider_returnsConnected() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             sshProvider: { destination, port, identity in
                 ("tab-id", destination)
@@ -2042,7 +2083,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_sshCommand_withoutProvider_returnsFailure() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "ssh-2", command: "ssh", params: ["destination": "host"])
         let response = handler.handleCommand(request)
         XCTAssertFalse(response.success)
@@ -2050,6 +2091,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_sshCommand_withoutDestination_returnsFailure() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil, hookEventReceiver: nil,
             sshProvider: { _, _, _ in ("id", "title") }
         )
@@ -2060,6 +2102,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_webStatusCommand_withProvider_returnsStructuredStatus() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             webStatusProvider: {
@@ -2086,7 +2129,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_webStartCommand_withoutProvider_returnsFailure() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "web-2", command: "web-start", params: nil))
         XCTAssertFalse(response.success)
     }
@@ -2094,6 +2137,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_webStartCommand_generatesCredentialAndKeepsProviderStatusTokenFree() {
         let calls = LockedBox<[(bind: String, token: String)]>([])
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             webStartProvider: { bind, _, token, _, _ in
@@ -2126,6 +2170,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_webStartCommand_rejectsCallerCredentialAndNonLoopbackBindBeforeProvider() {
         let callCount = LockedBox(0)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             webStartProvider: { _, _, _, _, _ in
@@ -2162,6 +2207,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_webStartCommand_acceptsIPv6LoopbackAndRejectsMalformedNumbers() {
         let calls = LockedBox<[(bind: String, port: UInt16, fps: UInt32)]>([])
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             webStartProvider: { bind, port, _, _, fps in
@@ -2198,6 +2244,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_streamListCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             streamListProvider: {
@@ -2213,6 +2260,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_protocolSendCommand_requiresTypeAndJson() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             protocolSendProvider: { _, _ in ["status": "sent"] }
@@ -2223,6 +2271,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_streamCurrentCommand_withProvider_returnsSelectedStream() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             streamCurrentProvider: { streamID in
@@ -2236,6 +2285,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_protocolCapabilitiesCommand_withProvider_returnsSent() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             protocolCapabilitiesProvider: {
@@ -2249,6 +2299,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreResetCommand_withProvider_returnsReset() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreResetProvider: {
@@ -2262,6 +2313,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreSignalCommand_requiresSignal() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreSignalProvider: { _ in ["status": "sent"] }
@@ -2272,6 +2324,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreSignalCommand_acceptsNamedSignal() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreSignalProvider: { signal in
@@ -2287,6 +2340,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreProcessCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreProcessProvider: { ["content": "{\"alive\":true}"] }
@@ -2298,6 +2352,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreModesCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreModesProvider: { ["content": "{\"cursorVisible\":true}"] }
@@ -2309,6 +2364,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreSearchCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreSearchProvider: { ["content": "{\"gpuActive\":true}"] }
@@ -2320,6 +2376,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreLigaturesCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreLigaturesProvider: { ["content": "{\"enabled\":true}"] }
@@ -2331,6 +2388,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreProtocolCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreProtocolProvider: { ["content": "{\"observed\":true}"] }
@@ -2342,6 +2400,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreSemanticCommand_clampsLimitAndReturnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreSemanticProvider: { limit in
@@ -2357,6 +2416,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_protocolViewportCommand_withProvider_returnsViewportMessage() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             protocolViewportProvider: { requestID in
@@ -2374,6 +2434,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_imageListCommand_withProvider_returnsData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             imageListProvider: {
@@ -2387,6 +2448,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_imageDeleteCommand_requiresID() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             imageDeleteProvider: { _ in ["status": "deleted"] }
@@ -2397,6 +2459,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_imageDeleteCommand_withProvider_returnsDeletedImage() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             imageDeleteProvider: { imageID in
@@ -2410,6 +2473,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_imageClearCommand_withProvider_returnsCleared() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             imageClearProvider: {
@@ -2423,7 +2487,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_allKnownSocketCommandsDispatchAndPreserveRequestID() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
 
         for command in CLICommandName.allCases {
             let request = SocketRequest(
@@ -2441,6 +2505,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_browserSplitDispatchesThroughProvider() {
         let didOpenSplit = LockedBox(false)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserSplitProvider: {
@@ -2459,7 +2524,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_browserSplitFailsWhenProviderIsUnavailableOrRejectsCreation() {
-        let unavailableHandler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let unavailableHandler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let unavailableResponse = unavailableHandler.handleCommand(
             SocketRequest(id: "browser-split-unavailable", command: "browser-split", params: nil)
         )
@@ -2468,6 +2533,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(unavailableResponse.error, "Browser split is not available")
 
         let rejectingHandler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserSplitProvider: { false }
@@ -2482,6 +2548,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_coreSnapshotCommands_withProvidersReturnData() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreSelectionProvider: { ["active": "true", "text": "selected"] },
@@ -2510,6 +2577,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_protocolSendCommand_withTypeAndJSONRoutesPayload() {
         let captured = LockedBox<(type: String?, payload: String?)>((nil, nil))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             protocolSendProvider: { type, payload in
@@ -2535,6 +2603,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_coreSignalCommand_acceptsNumericAndNamedSignals() {
         let capturedSignals = LockedBox<[Int32]>([])
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             coreSignalProvider: { signal in
@@ -2573,6 +2642,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     func test_v4PanelAndSplitCommands_coverStatusBranches() {
         let visibleToggle = LockedBox(false)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             dashboardToggleProvider: {
@@ -2653,6 +2723,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
 
     func test_timelineAndSearchValidationBranches() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             timelineQueryProvider: { tabID in
@@ -2717,6 +2788,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let validTabID = UUID().uuidString
         let capturedTabIDs = LockedBox<[String]>([])
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             richInputShowProvider: { tabID in
@@ -2774,6 +2846,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let tabID = UUID().uuidString
         let directory = try temporaryDirectory("provider-overrides")
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             tabCountProviderOverride: { 2 },
@@ -2882,6 +2955,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let session = makeSocketHandlerSession()
         let store = SocketHandlerSessionStore(session: session)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             sessionManagerProvider: { store },
@@ -2929,6 +3003,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         )
         let store = SocketHandlerRemoteProfileStore(profiles: [profile])
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             remoteProfileStoreProvider: { store }
@@ -2970,6 +3045,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let worktreeKinds = LockedBox<[String]>([])
         let githubKinds = LockedBox<[String]>([])
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             splitSwapProvider: { $0 == 0 && $1 == 1 },
@@ -3087,6 +3163,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ))
 
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             notificationManagerProvider: { manager }
@@ -3147,7 +3224,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         }
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-import-1",
             command: "notebook-import",
@@ -3193,7 +3270,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ```
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-export-1",
             command: "notebook-export",
@@ -3242,7 +3319,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ```
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-export-html-1",
             command: "notebook-export-html",
@@ -3266,7 +3343,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_notebookTemplateList_returnsBuiltInTemplates() throws {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-template-list-1",
             command: "notebook-template-list",
@@ -3284,7 +3361,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let outputURL = directory.appendingPathComponent("analysis.cocxynb")
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-template-create-1",
             command: "notebook-template-create",
@@ -3316,7 +3393,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         """.write(to: inputURL, atomically: true, encoding: .utf8)
         try "existing".write(to: outputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-import-2",
             command: "notebook-import",
@@ -3349,7 +3426,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ```
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-run-1",
             command: "notebook-run",
@@ -3394,7 +3471,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ```
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "notebook-run-sandbox",
             command: "notebook-run",
@@ -3447,7 +3524,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         ```
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let runResponse = handler.handleCommand(SocketRequest(
             id: "notebook-run-multi-language",
             command: "notebook-run",
@@ -3504,7 +3581,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         command = "echo workflow-ok"
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "workflow-run-1",
             command: "workflow-run",
@@ -3548,7 +3625,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         command = "printf 'report\\n' >> workflow-order.txt && printf 'report\\n'"
         """.write(to: inputURL, atomically: true, encoding: .utf8)
 
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(
             id: "workflow-run-five-step",
             command: "workflow-run",
@@ -3578,6 +3655,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             directories: [SkillDirectory(url: directory, source: .builtIn)]
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             skillRegistryProvider: { registry }
@@ -3607,6 +3685,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         try writeSkill(id: "local-review", name: "Local Review", summary: "Local skill.", in: sourceRoot)
 
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             skillRegistryProvider: {
@@ -3677,7 +3756,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_v4Commands_withoutProviders_returnFailure() {
-        let handler = AppSocketCommandHandler(tabManager: nil, hookEventReceiver: nil)
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let commands = [
             "split", "split-list", "split-focus", "split-close", "split-resize",
             "dashboard-show", "dashboard-hide", "dashboard-toggle", "dashboard-status",

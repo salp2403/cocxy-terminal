@@ -8,8 +8,26 @@ extension AppDelegate {
 
     nonisolated func handleCellCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        approvedContext: SocketPrivilegedCommandContext
     ) -> (success: Bool, data: [String: String]) {
+        guard var boundParams = approvedContext.bindingLocalResourcePaths(
+            in: params,
+            keys: kind == "create" ? CellCLICommandService.createLocalResourcePathKeys : [],
+            requiredScope: .computeCell
+        ) else {
+            return (false, ["error": "Approved cell command context is unavailable"])
+        }
+        if kind == "create",
+           approvedContext.scope != .internalTrusted,
+           let reference = CellCLICommandService.cloudInitLocalResourceReference(in: params) {
+            guard let approvedPath = approvedContext.localResourcePaths["cloud-init"] else {
+                return (false, ["error": "Approved cloud-init path is unavailable"])
+            }
+            boundParams["cloud-init"] = reference.binding(to: approvedPath)
+        }
+        let approvedParams = boundParams
+
         let semaphore = DispatchSemaphore(value: 0)
         let box = LockedBox<(Bool, [String: String])>((
             false,
@@ -17,7 +35,7 @@ extension AppDelegate {
         ))
 
         Task.detached {
-            let result = await Self.sharedCellCLIService.perform(kind: kind, params: params)
+            let result = await Self.sharedCellCLIService.perform(kind: kind, params: approvedParams)
             box.withValue { $0 = result }
             semaphore.signal()
         }
@@ -26,7 +44,7 @@ extension AppDelegate {
         let result = box.withValue { $0 }
         guard kind == "attach",
               result.0,
-              params["open-tab"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "false",
+              approvedParams["open-tab"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "false",
               let command = result.1["pty-command"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !command.isEmpty else {
             return result
@@ -38,7 +56,8 @@ extension AppDelegate {
                 attachData: result.1,
                 command: command,
                 title: result.1["pty-title"],
-                cellID: result.1["cell-id"]
+                cellID: result.1["cell-id"],
+                approvedContext: approvedContext
             )
         }
         if let appAttachData {
@@ -55,9 +74,10 @@ extension AppDelegate {
         attachData: [String: String],
         command: String,
         title: String?,
-        cellID: String?
+        cellID: String?,
+        approvedContext: SocketPrivilegedCommandContext?
     ) -> [String: String]? {
-        guard let controller = focusedWindowController() ?? windowController else {
+        guard let controller = privilegedSocketController(for: approvedContext) else {
             return nil
         }
 

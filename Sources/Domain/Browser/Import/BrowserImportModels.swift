@@ -191,6 +191,104 @@ struct BrowserImportLocation: Codable, Sendable, Equatable {
     let bookmarksPath: URL?
 }
 
+enum BrowserImportLocationPathBinding {
+    private static let keyPrefix = "browser-import."
+
+    static func requestedLocations(
+        source: BrowserImportSource,
+        profileName: String? = nil,
+        historyPath: String?,
+        cookiesPath: String?,
+        bookmarksPath: String?
+    ) -> [BrowserImportLocation] {
+        let defaults = source.defaultLocations()
+        guard historyPath != nil || cookiesPath != nil || bookmarksPath != nil,
+              let base = defaults.first else {
+            return defaults
+        }
+
+        return [BrowserImportLocation(
+            source: source,
+            profileName: profileName ?? base.profileName,
+            historyPath: historyPath.map(URL.init(fileURLWithPath:)) ?? base.historyPath,
+            cookiesPath: cookiesPath.map(URL.init(fileURLWithPath:)) ?? base.cookiesPath,
+            bookmarksPath: bookmarksPath.map(URL.init(fileURLWithPath:)) ?? base.bookmarksPath
+        )]
+    }
+
+    static func canonicalResourcePaths(
+        for locations: [BrowserImportLocation],
+        canonicalize: (URL) -> URL?
+    ) -> [String: String]? {
+        var paths: [String: String] = [:]
+        for (index, location) in locations.enumerated() {
+            guard let historyURL = canonicalize(location.historyPath) else { return nil }
+            paths[key(component: "history", index: index)] = historyURL.path
+
+            if let cookiesPath = location.cookiesPath {
+                guard let cookiesURL = canonicalize(cookiesPath) else { return nil }
+                paths[key(component: "cookies", index: index)] = cookiesURL.path
+            }
+            if let bookmarksPath = location.bookmarksPath {
+                guard let bookmarksURL = canonicalize(bookmarksPath) else { return nil }
+                paths[key(component: "bookmarks", index: index)] = bookmarksURL.path
+            }
+        }
+        return paths
+    }
+
+    static func applyingApprovedResourcePaths(
+        _ resourcePaths: [String: String],
+        to locations: [BrowserImportLocation]
+    ) -> [BrowserImportLocation]? {
+        var expectedKeys = Set<String>()
+        var approvedLocations: [BrowserImportLocation] = []
+        approvedLocations.reserveCapacity(locations.count)
+
+        for (index, location) in locations.enumerated() {
+            let historyKey = key(component: "history", index: index)
+            expectedKeys.insert(historyKey)
+            guard let historyPath = resourcePaths[historyKey] else { return nil }
+
+            let cookiesPath: URL?
+            if location.cookiesPath != nil {
+                let cookiesKey = key(component: "cookies", index: index)
+                expectedKeys.insert(cookiesKey)
+                guard let approvedPath = resourcePaths[cookiesKey] else { return nil }
+                cookiesPath = URL(fileURLWithPath: approvedPath).standardizedFileURL
+            } else {
+                cookiesPath = nil
+            }
+
+            let bookmarksPath: URL?
+            if location.bookmarksPath != nil {
+                let bookmarksKey = key(component: "bookmarks", index: index)
+                expectedKeys.insert(bookmarksKey)
+                guard let approvedPath = resourcePaths[bookmarksKey] else { return nil }
+                bookmarksPath = URL(fileURLWithPath: approvedPath).standardizedFileURL
+            } else {
+                bookmarksPath = nil
+            }
+
+            approvedLocations.append(BrowserImportLocation(
+                source: location.source,
+                profileName: location.profileName,
+                historyPath: URL(fileURLWithPath: historyPath).standardizedFileURL,
+                cookiesPath: cookiesPath,
+                bookmarksPath: bookmarksPath
+            ))
+        }
+
+        let suppliedKeys = Set(resourcePaths.keys.filter { $0.hasPrefix(keyPrefix) })
+        guard suppliedKeys == expectedKeys else { return nil }
+        return approvedLocations
+    }
+
+    private static func key(component: String, index: Int) -> String {
+        "\(keyPrefix)\(index).\(component)"
+    }
+}
+
 struct BrowserImportPlan: Codable, Sendable, Equatable {
     let source: BrowserImportSource
     let profileID: UUID

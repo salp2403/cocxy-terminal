@@ -9,7 +9,8 @@ extension AppDelegate {
 
     nonisolated func handleGitAssistantCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        approvedWorkingDirectory: URL
     ) -> (success: Bool, data: [String: String]) {
         let semaphore = DispatchSemaphore(value: 0)
         let box = LockedBox<(Bool, [String: String])>((
@@ -18,7 +19,11 @@ extension AppDelegate {
         ))
 
         Task.detached { [self] in
-            let result = await performGitAssistantCLIRequest(kind: kind, params: params)
+            let result = await performGitAssistantCLIRequest(
+                kind: kind,
+                params: params,
+                approvedWorkingDirectory: approvedWorkingDirectory
+            )
             box.withValue { $0 = result }
             semaphore.signal()
         }
@@ -31,10 +36,12 @@ extension AppDelegate {
 
     nonisolated func performGitAssistantCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        approvedWorkingDirectory: URL? = nil
     ) async -> (Bool, [String: String]) {
         let context = await MainActor.run { () -> GitAssistantCLIContext? in
-            guard let directory = self.currentGitHubCLIWorkingDirectory() else { return nil }
+            guard let directory = approvedWorkingDirectory
+                ?? self.currentGitHubCLIWorkingDirectory() else { return nil }
             return GitAssistantCLIContext(
                 workingDirectory: directory,
                 settings: self.configService?.current.gitAssistant ?? .defaults
