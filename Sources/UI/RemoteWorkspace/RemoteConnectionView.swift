@@ -399,7 +399,7 @@ struct RemoteConnectionView: View {
     var remotePortScanner: RemotePortScanner?
 
     /// Opens a detected remote dev server in the browser.
-    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Void)?
+    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Bool)?
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -794,7 +794,15 @@ struct RemoteConnectionView: View {
                         localizer: localizer
                     )
                     .id(profileID)
-                    remoteBrowserSuggestions(profile: profile)
+                    if let remotePortScanner {
+                        RemoteBrowserSuggestionsSection(
+                            scanner: remotePortScanner,
+                            profile: profile,
+                            isConnected: viewModel.isConnected(profileID),
+                            onOpenRemoteBrowser: onOpenRemoteBrowser,
+                            localizer: localizer
+                        )
+                    }
                 }
             } else {
                 selectProfilePlaceholder(
@@ -803,91 +811,6 @@ struct RemoteConnectionView: View {
                 )
             }
         }
-    }
-
-    @ViewBuilder
-    private func remoteBrowserSuggestions(profile: RemoteConnectionProfile) -> some View {
-        let suggestions = remotePortScanner?.browserOpenSuggestions
-            .filter { $0.profileID == profile.id }
-            .sorted { $0.remotePort < $1.remotePort } ?? []
-
-        if !suggestions.isEmpty {
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "globe.badge.chevron.backward")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color(nsColor: CocxyColors.blue))
-                    Text(localized("remoteWorkspace.browserSuggestions.title", fallback: "Remote Browser"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color(nsColor: CocxyColors.text))
-                    Spacer()
-                }
-
-                ForEach(suggestions) { suggestion in
-                    remoteBrowserSuggestionRow(profile: profile, suggestion: suggestion)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
-        }
-    }
-
-    private func remoteBrowserSuggestionRow(
-        profile: RemoteConnectionProfile,
-        suggestion: RemoteBrowserOpenSuggestion
-    ) -> some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(
-                    String(
-                        format: localized("remoteWorkspace.browserSuggestions.port", fallback: "localhost:%d"),
-                        suggestion.remotePort
-                    )
-                )
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(nsColor: CocxyColors.text))
-
-                Text(suggestion.process ?? localized("remoteWorkspace.browserSuggestions.unknownProcess", fallback: "remote service"))
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Text("127.0.0.1:\(suggestion.localPort)")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                .lineLimit(1)
-
-            Button(action: { onOpenRemoteBrowser?(profile, suggestion) }) {
-                Image(systemName: "arrow.up.forward.square")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(nsColor: CocxyColors.blue))
-            }
-            .buttonStyle(.plain)
-            .frame(width: 24, height: 24)
-            .disabled(onOpenRemoteBrowser == nil)
-            .accessibilityLabel(
-                String(
-                    format: localized("remoteWorkspace.browserSuggestions.open.accessibility", fallback: "Open remote port %d in browser"),
-                    suggestion.remotePort
-                )
-            )
-            .help(localized("remoteWorkspace.browserSuggestions.open", fallback: "Open in Browser"))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Color(nsColor: CocxyColors.surface1).opacity(0.55), lineWidth: 1)
-        )
     }
 
     private var proxySubPanel: some View {
@@ -1013,6 +936,385 @@ struct RemoteConnectionView: View {
                 RemoteProfileEditor(viewModel: editorViewModel, localizer: localizer)
             }
         }
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+}
+
+// MARK: - Remote Browser Suggestions
+
+private struct RemoteBrowserSuggestionsSection: View {
+    @ObservedObject var scanner: RemotePortScanner
+    let profile: RemoteConnectionProfile
+    let isConnected: Bool
+    let onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Bool)?
+    var localizer: AppLocalizer
+
+    @State private var errorMessage: String?
+    @State private var isSwitchConfirmationPresented = false
+
+    private var isActiveProfile: Bool {
+        scanner.isScanning && scanner.scanningProfileID == profile.id
+    }
+
+    private var visibleRemotePorts: [Int] {
+        Set(scanner.detectedPorts.map(\.port))
+            .union(scanner.forwardedPortMappings.keys)
+            .sorted()
+    }
+
+    var body: some View {
+        Divider()
+        VStack(alignment: .leading, spacing: 8) {
+            header
+            content
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
+        .confirmationDialog(
+            localized(
+                "remoteWorkspace.browserSuggestions.switch.title",
+                fallback: "Switch Remote Browser connection?"
+            ),
+            isPresented: $isSwitchConfirmationPresented
+        ) {
+            Button(
+                localized(
+                    "remoteWorkspace.browserSuggestions.switch.action",
+                    fallback: "Stop current forwards and switch"
+                ),
+                role: .destructive,
+                action: activateScan
+            )
+            Button(localized("common.cancel", fallback: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(
+                localized(
+                    "remoteWorkspace.browserSuggestions.switch.message",
+                    fallback: "Remote Browser forwards on the other connection will be stopped."
+                )
+            )
+        }
+        .alert(
+            localized("remoteWorkspace.browserSuggestions.error.title", fallback: "Remote Browser failed"),
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button(localized("common.ok", fallback: "OK"), role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "globe.badge.chevron.backward")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(nsColor: CocxyColors.blue))
+            Text(localized("remoteWorkspace.browserSuggestions.title", fallback: "Remote Browser"))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+            Spacer()
+
+            if isActiveProfile {
+                if scanner.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 24, height: 24)
+                        .accessibilityLabel(
+                            localized("remoteWorkspace.browserSuggestions.scanning", fallback: "Scanning remote ports")
+                        )
+                } else {
+                    Button(action: refresh) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(Color(nsColor: CocxyColors.blue))
+                    .accessibilityLabel(
+                        localized("remoteWorkspace.browserSuggestions.refresh.accessibility", fallback: "Refresh remote ports")
+                    )
+                    .help(localized("remoteWorkspace.browserSuggestions.refresh", fallback: "Refresh Ports"))
+                }
+            } else {
+                Button(action: requestScan) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .foregroundColor(
+                    isConnected
+                        ? Color(nsColor: CocxyColors.blue)
+                        : Color(nsColor: CocxyColors.overlay0)
+                )
+                .disabled(!isConnected)
+                .accessibilityLabel(
+                    localized("remoteWorkspace.browserSuggestions.scan.accessibility", fallback: "Scan this remote connection")
+                )
+                .help(localized("remoteWorkspace.browserSuggestions.scan", fallback: "Scan Connection"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !isConnected {
+            statusRow(
+                icon: "bolt.slash",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.disconnected",
+                    fallback: "Connect this profile to discover services."
+                )
+            )
+        } else if !isActiveProfile {
+            statusRow(
+                icon: "dot.radiowaves.left.and.right",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.inactive",
+                    fallback: "Port discovery is inactive for this connection."
+                )
+            )
+        } else if scanner.scanError != nil {
+            statusRow(
+                icon: "exclamationmark.triangle",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.scanFailed",
+                    fallback: "Could not scan this connection."
+                )
+            )
+        } else if scanner.isRefreshing && visibleRemotePorts.isEmpty {
+            statusRow(
+                icon: "magnifyingglass",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.scanning",
+                    fallback: "Scanning remote ports"
+                )
+            )
+        } else if visibleRemotePorts.isEmpty {
+            statusRow(
+                icon: "network.slash",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.empty",
+                    fallback: "No listening ports detected."
+                )
+            )
+        } else {
+            ForEach(visibleRemotePorts, id: \.self) { remotePort in
+                serviceRow(remotePort: remotePort)
+            }
+        }
+    }
+
+    private func statusRow(icon: String, text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+                .frame(width: 16)
+            Text(text)
+                .font(.system(size: 10))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+        .padding(.horizontal, 8)
+        .frame(minHeight: 34)
+    }
+
+    private func serviceRow(remotePort: Int) -> some View {
+        let info = scanner.detectedPorts.first { $0.port == remotePort }
+        let localPort = scanner.forwardedPortMappings[remotePort]
+        let isBusy = scanner.busyPorts.contains(remotePort)
+
+        return HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(
+                    String(
+                        format: localized("remoteWorkspace.browserSuggestions.port", fallback: "Remote :%d"),
+                        remotePort
+                    )
+                )
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+
+                Text(
+                    info?.process
+                        ?? localized("remoteWorkspace.browserSuggestions.unknownProcess", fallback: "remote service")
+                )
+                .font(.system(size: 10))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                .lineLimit(1)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            Text(localPort.map { "127.0.0.1:\($0)" } ?? (info?.address ?? "--"))
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 24, height: 24)
+            } else {
+                Button(action: { open(remotePort: remotePort) }) {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(nsColor: CocxyColors.blue))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .disabled(onOpenRemoteBrowser == nil)
+                .accessibilityLabel(
+                    String(
+                        format: localized(
+                            "remoteWorkspace.browserSuggestions.open.accessibility",
+                            fallback: "Open remote port %d in browser"
+                        ),
+                        remotePort
+                    )
+                )
+                .help(
+                    localPort == nil
+                        ? localized(
+                            "remoteWorkspace.browserSuggestions.forwardAndOpen",
+                            fallback: "Forward and Open in Browser"
+                        )
+                        : localized("remoteWorkspace.browserSuggestions.open", fallback: "Open in Browser")
+                )
+
+                if localPort != nil {
+                    Button(action: { stopForward(remotePort: remotePort) }) {
+                        Image(systemName: "xmark.circle")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(Color(nsColor: CocxyColors.red))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 24, height: 24)
+                    .accessibilityLabel(
+                        String(
+                            format: localized(
+                                "remoteWorkspace.browserSuggestions.stop.accessibility",
+                                fallback: "Stop forwarding remote port %d"
+                            ),
+                            remotePort
+                        )
+                    )
+                    .help(localized("remoteWorkspace.browserSuggestions.stop", fallback: "Stop Forward"))
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(minHeight: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: CocxyColors.surface1).opacity(0.55), lineWidth: 1)
+        )
+    }
+
+    private func requestScan() {
+        guard isConnected else { return }
+        if scanner.scanningProfileID != nil,
+           scanner.scanningProfileID != profile.id,
+           !scanner.forwardedPortMappings.isEmpty {
+            isSwitchConfirmationPresented = true
+        } else {
+            activateScan()
+        }
+    }
+
+    private func activateScan() {
+        errorMessage = nil
+        scanner.startScanning(profileID: profile.id)
+    }
+
+    private func refresh() {
+        Task { @MainActor in
+            await scanner.refreshNow()
+        }
+    }
+
+    private func open(remotePort: Int) {
+        guard let onOpenRemoteBrowser else {
+            errorMessage = localized(
+                "remoteWorkspace.browserSuggestions.browserUnavailable",
+                fallback: "No browser surface is available."
+            )
+            return
+        }
+        Task { @MainActor in
+            do {
+                _ = try await RemoteBrowserOpeningOperation.open(
+                    remotePort: remotePort,
+                    profile: profile,
+                    scanner: scanner,
+                    opener: onOpenRemoteBrowser
+                )
+            } catch {
+                errorMessage = localizedError(error)
+            }
+        }
+    }
+
+    private func stopForward(remotePort: Int) {
+        do {
+            try scanner.cancelForwardedPort(remotePort)
+        } catch {
+            errorMessage = localizedError(error)
+        }
+    }
+
+    private func localizedError(_ error: Error) -> String {
+        guard let scannerError = error as? RemotePortScannerError else {
+            return localized(
+                "remoteWorkspace.browserSuggestions.error.generic",
+                fallback: "The remote browser operation could not be completed."
+            )
+        }
+        let key: String
+        let fallback: String
+        switch scannerError {
+        case .inactive:
+            key = "remoteWorkspace.browserSuggestions.error.inactive"
+            fallback = "Port discovery is not active for this connection."
+        case .portNotDetected:
+            key = "remoteWorkspace.browserSuggestions.error.notDetected"
+            fallback = "The remote service is no longer available."
+        case .operationInProgress:
+            key = "remoteWorkspace.browserSuggestions.error.inProgress"
+            fallback = "Another operation is already in progress for this port."
+        case .noAvailableLocalPort:
+            key = "remoteWorkspace.browserSuggestions.error.noLocalPort"
+            fallback = "No safe local port is available for this service."
+        case .forwardingFailed:
+            key = "remoteWorkspace.browserSuggestions.error.forwardFailed"
+            fallback = "The remote service could not be opened."
+        case .cancellationFailed:
+            key = "remoteWorkspace.browserSuggestions.error.stopFailed"
+            fallback = "The SSH forward could not be stopped."
+        case .browserUnavailable:
+            key = "remoteWorkspace.browserSuggestions.browserUnavailable"
+            fallback = "No browser surface is available."
+        case .scanFailed:
+            key = "remoteWorkspace.browserSuggestions.scanFailed"
+            fallback = "Could not scan this connection."
+        }
+        return localized(key, fallback: fallback)
     }
 
     private func localized(_ key: String, fallback: String) -> String {

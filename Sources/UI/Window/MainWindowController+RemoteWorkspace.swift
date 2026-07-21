@@ -60,7 +60,7 @@ extension MainWindowController {
             sftpExecutor: SystemSFTPExecutor(),
             remotePortScanner: remotePortScanner,
             onOpenRemoteBrowser: { [weak self] profile, suggestion in
-                self?.openRemoteBrowser(profile: profile, suggestion: suggestion)
+                self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
             }
         )
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
@@ -110,40 +110,45 @@ extension MainWindowController {
         focusActiveTerminalSurface()
     }
 
+    @discardableResult
     func openRemoteBrowser(
         profile: RemoteConnectionProfile,
         suggestion: RemoteBrowserOpenSuggestion
-    ) {
+    ) -> Bool {
         guard let remoteConnectionManager,
               case .connected = remoteConnectionManager.connections[profile.id],
               let remotePortScanner,
               remotePortScanner.scanningProfileID == profile.id,
+              suggestion.profileID == profile.id,
               remotePortScanner.forwardedPortMappings[suggestion.remotePort]
                 == suggestion.localPort else {
-            return
+            return false
         }
-        guard let viewModel = browserViewModelForExternalNavigation() else { return }
+        guard let viewModel = browserViewModelForExternalNavigation() else { return false }
         let proxyState = remoteConnectionManager.proxyManager?.state ?? .off
         let remoteProfile = remotePortScanner.browserProfile(
             for: profile,
             proxyState: proxyState
         )
 
-        if viewModel.openRemoteForward(
+        guard viewModel.openRemoteForward(
             remoteProfile,
-            remotePort: suggestion.remotePort
-        ) == nil {
-            viewModel.attachRemoteBrowserProfile(remoteProfile)
-            viewModel.navigate(to: suggestion.localURL.absoluteString)
-        }
+            remotePort: suggestion.remotePort,
+            scheme: suggestion.localURL.scheme ?? "http"
+        ) != nil else { return false }
+        let activeProfileIDs = Set(remoteConnectionManager.connections.compactMap { profileID, state in
+            if case .connected = state { return profileID }
+            return nil
+        })
         viewModel.updateInitScriptRemoteConnectionAvailability(
-            activeConnectionProfileIDs: Set([profile.id])
+            activeConnectionProfileIDs: activeProfileIDs
         )
         viewModel.updateInitScriptRemoteForwardLeaseAvailability(
             scanningProfileID: remotePortScanner.scanningProfileID,
             forwardedPortMappings: remotePortScanner.forwardedPortMappings
         )
         bindRemoteBrowserProxyState(to: viewModel, profileID: profile.id)
+        return true
     }
 
     func bindRemoteBrowserProxyState(to viewModel: BrowserViewModel, profileID: UUID) {

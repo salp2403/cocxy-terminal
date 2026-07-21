@@ -28,6 +28,68 @@ struct RemoteBrowserOpenSuggestion: Identifiable, Equatable, Sendable {
     }
 }
 
+/// User-action failures surfaced by remote browser port discovery and forwarding.
+enum RemotePortScannerError: Error, Equatable, LocalizedError {
+    case inactive
+    case portNotDetected(Int)
+    case operationInProgress(Int)
+    case noAvailableLocalPort(Int)
+    case forwardingFailed(Int)
+    case cancellationFailed(Int)
+    case browserUnavailable
+    case scanFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .inactive:
+            return "Remote port scanning is not active for this connection"
+        case .portNotDetected(let port):
+            return "Remote port \(port) is no longer available"
+        case .operationInProgress(let port):
+            return "An operation is already in progress for remote port \(port)"
+        case .noAvailableLocalPort(let port):
+            return "No local port is available for remote port \(port)"
+        case .forwardingFailed(let port):
+            return "Could not forward remote port \(port)"
+        case .cancellationFailed(let port):
+            return "Could not stop forwarding remote port \(port)"
+        case .browserUnavailable:
+            return "No browser surface is available"
+        case .scanFailed:
+            return "Could not scan the remote connection for listening ports"
+        }
+    }
+}
+
+/// Opens a remote browser route and removes a newly-created forward if the UI
+/// cannot accept the navigation.
+@MainActor
+enum RemoteBrowserOpeningOperation {
+    static func open(
+        remotePort: Int,
+        profile: RemoteConnectionProfile,
+        scanner: RemotePortScanner,
+        opener: (RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Bool
+    ) async throws -> RemoteBrowserOpenSuggestion {
+        guard scanner.scanningProfileID == profile.id else {
+            throw RemotePortScannerError.inactive
+        }
+        let hadExistingForward = scanner.forwardedPortMappings[remotePort] != nil
+        let suggestion = try await scanner.forwardDetectedPort(remotePort)
+        guard opener(profile, suggestion) else {
+            if !hadExistingForward {
+                do {
+                    try scanner.cancelForwardedPort(remotePort)
+                } catch {
+                    throw RemotePortScannerError.cancellationFailed(remotePort)
+                }
+            }
+            throw RemotePortScannerError.browserUnavailable
+        }
+        return suggestion
+    }
+}
+
 // MARK: - Remote Port Scanner
 
 /// Scans a remote host for listening TCP ports via an SSH ControlMaster connection.
@@ -56,7 +118,16 @@ final class RemotePortScanner: ObservableObject {
     @Published private(set) var browserOpenSuggestions: [RemoteBrowserOpenSuggestion] = []
 
     /// Whether the scanner is actively polling.
-    private(set) var isScanning = false
+    @Published private(set) var isScanning = false
+
+    /// Whether an immediate or scheduled scan is currently in flight.
+    @Published private(set) var isRefreshing = false
+
+    /// Ports currently being forwarded or cancelled.
+    @Published private(set) var busyPorts: Set<Int> = []
+
+    /// Most recent scan failure. A successful scan clears it.
+    @Published private(set) var scanError: RemotePortScannerError?
 
     /// Profile currently being scanned.
     var scanningProfileID: UUID? { activeProfileID }
@@ -76,6 +147,7 @@ final class RemotePortScanner: ObservableObject {
     private let localPortAvailability: LocalPortAvailabilityChecker
     private var scanTimer: Timer?
     private var activeProfileID: UUID?
+    private var refreshToken: UUID?
 
     // MARK: - Initialization
 
@@ -99,9 +171,17 @@ final class RemotePortScanner: ObservableObject {
     ///
     /// - Parameter profileID: The remote connection profile to scan through.
     func startScanning(profileID: UUID, performInitialScan: Bool = true) {
+        guard activeProfileID != profileID || !isScanning else {
+            if performInitialScan {
+                Task { await performScan() }
+            }
+            return
+        }
         stopScanning()
         activeProfileID = profileID
         isScanning = true
+        scanError = nil
+        busyPorts = []
 
         // Initial scan immediately.
         if performInitialScan {
@@ -125,22 +205,42 @@ final class RemotePortScanner: ObservableObject {
         scanTimer?.invalidate()
         scanTimer = nil
         isScanning = false
+        refreshToken = nil
+        isRefreshing = false
+        scanError = nil
+        busyPorts = []
 
         let profileID = activeProfileID
         let ownedForwardMappings = forwardedPortMappings
+        let connectionLeaseID = profileID.flatMap { connectionManager.connectionLeaseID(for: $0) }
         activeProfileID = nil
         detectedPorts = []
         forwardedPorts = []
         forwardedPortMappings = [:]
         browserOpenSuggestions = []
 
+        var cancellationFailed = false
         if let profileID {
             for (remotePort, localPort) in ownedForwardMappings.sorted(by: { $0.key < $1.key }) {
                 let forward = RemoteConnectionProfile.PortForward.local(
                     localPort: localPort,
                     remotePort: remotePort
                 )
-                try? connectionManager.cancelForward(forward, for: profileID)
+                do {
+                    try connectionManager.cancelForward(forward, for: profileID)
+                } catch {
+                    cancellationFailed = true
+                }
+            }
+        }
+
+        if cancellationFailed, let profileID, let connectionLeaseID {
+            let manager = connectionManager
+            Task { @MainActor [weak manager] in
+                _ = await manager?.revokeForwardingSession(
+                    profileID: profileID,
+                    expectedLeaseID: connectionLeaseID
+                )
             }
         }
     }
@@ -151,16 +251,28 @@ final class RemotePortScanner: ObservableObject {
     ///
     /// Creates an SSH `-L localPort:localhost:remotePort` tunnel via the
     /// existing ControlMaster connection.
-    func forwardDetectedPort(_ port: Int) async {
-        guard let profileID = activeProfileID else { return }
-        guard detectedPorts.contains(where: { $0.port == port }) else { return }
-        guard forwardedPortMappings[port] == nil else { return }
+    func forwardDetectedPort(_ port: Int) async throws -> RemoteBrowserOpenSuggestion {
+        guard let profileID = activeProfileID else {
+            throw RemotePortScannerError.inactive
+        }
+        if let existing = makeBrowserOpenSuggestion(remotePort: port) {
+            return existing
+        }
+        guard detectedPorts.contains(where: { $0.port == port }) else {
+            throw RemotePortScannerError.portNotDetected(port)
+        }
+        guard busyPorts.insert(port).inserted else {
+            throw RemotePortScannerError.operationInProgress(port)
+        }
+        defer { busyPorts.remove(port) }
 
         let usedLocalPorts = Set(forwardedPortMappings.values)
         let candidates = localPortCandidates(port, usedLocalPorts)
+        var didAttemptForward = false
 
-        for localPort in candidates where (1...65535).contains(localPort) {
+        for localPort in candidates where (1...65535).contains(localPort) && !usedLocalPorts.contains(localPort) {
             guard localPortAvailability(localPort) else { continue }
+            didAttemptForward = true
 
             let forward = RemoteConnectionProfile.PortForward.local(
                 localPort: localPort, remotePort: port
@@ -168,15 +280,58 @@ final class RemotePortScanner: ObservableObject {
 
             do {
                 try connectionManager.forwardPort(forward, for: profileID)
-                forwardedPorts.insert(port)
-                forwardedPortMappings[port] = localPort
-                refreshBrowserOpenSuggestions()
-                return
             } catch {
                 // Try the next candidate. The same-numbered port can be busy locally.
                 continue
             }
+
+            forwardedPorts.insert(port)
+            forwardedPortMappings[port] = localPort
+            refreshBrowserOpenSuggestions()
+            guard let suggestion = makeBrowserOpenSuggestion(remotePort: port) else {
+                do {
+                    try connectionManager.cancelForward(forward, for: profileID)
+                } catch {
+                    throw RemotePortScannerError.cancellationFailed(port)
+                }
+                forwardedPorts.remove(port)
+                forwardedPortMappings.removeValue(forKey: port)
+                refreshBrowserOpenSuggestions()
+                throw RemotePortScannerError.forwardingFailed(port)
+            }
+            return suggestion
         }
+
+        if didAttemptForward {
+            throw RemotePortScannerError.forwardingFailed(port)
+        }
+        throw RemotePortScannerError.noAvailableLocalPort(port)
+    }
+
+    /// Stops a scanner-owned local forward while retaining it in published
+    /// state if OpenSSH cannot confirm cancellation.
+    func cancelForwardedPort(_ remotePort: Int) throws {
+        guard let profileID = activeProfileID else {
+            throw RemotePortScannerError.inactive
+        }
+        guard let localPort = forwardedPortMappings[remotePort] else { return }
+        guard busyPorts.insert(remotePort).inserted else {
+            throw RemotePortScannerError.operationInProgress(remotePort)
+        }
+        defer { busyPorts.remove(remotePort) }
+
+        let forward = RemoteConnectionProfile.PortForward.local(
+            localPort: localPort,
+            remotePort: remotePort
+        )
+        do {
+            try connectionManager.cancelForward(forward, for: profileID)
+        } catch {
+            throw RemotePortScannerError.cancellationFailed(remotePort)
+        }
+        forwardedPorts.remove(remotePort)
+        forwardedPortMappings.removeValue(forKey: remotePort)
+        refreshBrowserOpenSuggestions()
     }
 
     /// Runs an immediate scan for the active profile.
@@ -187,16 +342,29 @@ final class RemotePortScanner: ObservableObject {
     // MARK: - Private: Scanning
 
     private func performScan() async {
-        guard let profileID = activeProfileID else { return }
+        guard let profileID = activeProfileID, refreshToken == nil else { return }
+        let token = UUID()
+        refreshToken = token
+        isRefreshing = true
+        defer {
+            if refreshToken == token {
+                refreshToken = nil
+                isRefreshing = false
+            }
+        }
 
         // Try `ss` first (modern Linux), fall back to `netstat` (older systems).
         let command = "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
         guard let output = await executeRemoteCommand(command, profileID: profileID) else {
+            guard refreshToken == token, activeProfileID == profileID else { return }
+            scanError = .scanFailed
             return
         }
+        guard refreshToken == token, activeProfileID == profileID else { return }
 
         let ports = parseListeningPorts(output)
         detectedPorts = ports
+        scanError = nil
         refreshBrowserOpenSuggestions()
     }
 
@@ -206,25 +374,52 @@ final class RemotePortScanner: ObservableObject {
             return
         }
 
-        browserOpenSuggestions = detectedPorts.compactMap { portInfo in
-            guard let localPort = forwardedPortMappings[portInfo.port] else {
-                return nil
-            }
-            var components = URLComponents()
-            components.scheme = "http"
-            components.host = "127.0.0.1"
-            components.port = localPort
-            components.path = "/"
-            guard let localURL = components.url else { return nil }
-            return RemoteBrowserOpenSuggestion(
-                profileID: profileID,
-                remotePort: portInfo.port,
-                localPort: localPort,
-                process: portInfo.process,
-                remoteAddress: portInfo.address,
-                localURL: localURL
-            )
+        browserOpenSuggestions = forwardedPortMappings.keys.sorted().compactMap {
+            makeBrowserOpenSuggestion(remotePort: $0, profileID: profileID)
         }
+    }
+
+    private func makeBrowserOpenSuggestion(
+        remotePort: Int,
+        profileID: UUID? = nil
+    ) -> RemoteBrowserOpenSuggestion? {
+        guard let profileID = profileID ?? activeProfileID,
+              let localPort = forwardedPortMappings[remotePort] else { return nil }
+        let portInfo = detectedPorts.first { $0.port == remotePort }
+        var components = URLComponents()
+        components.scheme = Self.suggestedScheme(for: remotePort)
+        components.host = "127.0.0.1"
+        components.port = localPort
+        components.path = "/"
+        guard let localURL = components.url else { return nil }
+        return RemoteBrowserOpenSuggestion(
+            profileID: profileID,
+            remotePort: remotePort,
+            localPort: localPort,
+            process: portInfo?.process,
+            remoteAddress: portInfo?.address ?? "unknown",
+            localURL: localURL
+        )
+    }
+
+    nonisolated static func suggestedScheme(for remotePort: Int) -> String {
+        [443, 8443].contains(remotePort) ? "https" : "http"
+    }
+
+    nonisolated static func preferredScanningProfileID(
+        currentProfileID: UUID?,
+        connections: [UUID: RemoteConnectionManager.ConnectionState]
+    ) -> UUID? {
+        if let currentProfileID,
+           case .connected = connections[currentProfileID] {
+            return currentProfileID
+        }
+        return connections.compactMap { profileID, state in
+            if case .connected = state { return profileID }
+            return nil
+        }
+        .sorted { $0.uuidString < $1.uuidString }
+        .first
     }
 
     func browserProfile(

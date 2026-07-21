@@ -146,19 +146,17 @@ extension AppDelegate {
             .receive(on: DispatchQueue.main)
             .sink { [weak portScanner] connections in
                 guard let scanner = portScanner else { return }
+                let connectedProfileID = RemotePortScanner.preferredScanningProfileID(
+                    currentProfileID: scanner.scanningProfileID,
+                    connections: connections
+                )
 
-                // Find the first connected profile to scan.
-                let connectedProfile = connections.first { _, state in
-                    if case .connected = state { return true }
-                    return false
-                }
-
-                if let (profileID, _) = connectedProfile {
-                    if scanner.scanningProfileID != profileID {
-                        scanner.startScanning(profileID: profileID)
+                if let connectedProfileID {
+                    if scanner.scanningProfileID != connectedProfileID || !scanner.isScanning {
+                        scanner.startScanning(profileID: connectedProfileID)
                     }
                 } else {
-                    if scanner.isScanning {
+                    if scanner.isScanning || scanner.scanningProfileID != nil {
                         scanner.stopScanning()
                     }
                 }
