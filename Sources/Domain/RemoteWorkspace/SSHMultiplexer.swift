@@ -32,6 +32,13 @@ struct SSHConnectionDestination: Equatable, Sendable {
         user.map { "\($0)@\(host)" } ?? host
     }
 
+    /// SFTP uses colons to separate a destination path, so IPv6 literals
+    /// must remain bracketed at that process boundary.
+    var sftpValue: String {
+        let formattedHost = host.contains(":") ? "[\(host)]" : host
+        return user.map { "\($0)@\(formattedHost)" } ?? formattedHost
+    }
+
     init(_ rawValue: String) throws {
         guard !rawValue.isEmpty,
               rawValue.utf8.count <= Self.maximumByteCount,

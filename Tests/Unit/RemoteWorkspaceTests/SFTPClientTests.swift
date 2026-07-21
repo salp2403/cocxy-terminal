@@ -8,16 +8,22 @@ import Testing
 // MARK: - Mock SFTP Executor
 
 final class MockSFTPExecutor: SFTPExecutor, @unchecked Sendable {
-    var executedCommands: [(sftpCommand: String, host: String, controlPath: String)] = []
+    var executedCommands: [(
+        sftpCommand: String,
+        destination: SSHConnectionDestination,
+        port: Int?,
+        controlPath: String
+    )] = []
     var stubbedOutput = ""
     var shouldThrow = false
 
     func execute(
         sftpCommand: String,
-        host: String,
+        destination: SSHConnectionDestination,
+        port: Int?,
         controlPath: String
     ) throws -> String {
-        executedCommands.append((sftpCommand, host, controlPath))
+        executedCommands.append((sftpCommand, destination, port, controlPath))
         if shouldThrow {
             throw SFTPClientError.commandFailed("mock sftp error")
         }
@@ -126,7 +132,8 @@ struct SFTPClientTests {
         #expect(executor.executedCommands.count == 1)
         let call = executor.executedCommands[0]
         #expect(call.sftpCommand == "ls -la '/var/log'")
-        #expect(call.host == "deploy@server.com")
+        #expect(call.destination.value == "deploy@server.com")
+        #expect(call.port == 22)
     }
 
     @Test func listDirectoryUsesControlPath() throws {
@@ -224,24 +231,97 @@ struct SFTPClientTests {
 
     // MARK: - Path Sanitization
 
-    @Test func sanitizePathWrapsInSingleQuotes() {
-        let result = SFTPClient.sanitizePath("/var/log/app.log")
+    @Test func sanitizePathWrapsInSingleQuotes() throws {
+        let result = try SFTPClient.sanitizePath("/var/log/app.log")
         #expect(result == "'/var/log/app.log'")
     }
 
-    @Test func sanitizePathEscapesSingleQuotesInPath() {
-        let result = SFTPClient.sanitizePath("/tmp/it's a file")
+    @Test func sanitizePathEscapesSingleQuotesInPath() throws {
+        let result = try SFTPClient.sanitizePath("/tmp/it's a file")
         #expect(result == "'/tmp/it'\\''s a file'")
     }
 
-    @Test func sanitizePathHandlesSpacesInPath() {
-        let result = SFTPClient.sanitizePath("/home/user/my documents/file.txt")
+    @Test func sanitizePathHandlesSpacesInPath() throws {
+        let result = try SFTPClient.sanitizePath("/home/user/my documents/file.txt")
         #expect(result == "'/home/user/my documents/file.txt'")
     }
 
-    @Test func sanitizePathHandlesSpecialCharacters() {
-        let result = SFTPClient.sanitizePath("/tmp/file;rm -rf /")
+    @Test func sanitizePathHandlesSpecialCharacters() throws {
+        let result = try SFTPClient.sanitizePath("/tmp/file;rm -rf /")
         #expect(result == "'/tmp/file;rm -rf /'")
+    }
+
+    @Test func rejectsControlCharactersBeforeExecuting() {
+        let executor = MockSFTPExecutor()
+        let client = makeClient(executor: executor)
+
+        #expect(throws: SFTPClientError.invalidPath) {
+            try client.remove(path: "/tmp/safe\n!touch /tmp/unsafe", on: makeProfile())
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func rejectsOptionLikePathsBeforeExecuting() {
+        let executor = MockSFTPExecutor()
+        let client = makeClient(executor: executor)
+
+        #expect(throws: SFTPClientError.invalidPath) {
+            try client.remove(path: "-R", on: makeProfile())
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func rejectsOptionLikeDestinationsBeforeExecuting() {
+        let executor = MockSFTPExecutor()
+        let client = makeClient(executor: executor)
+        let profile = RemoteConnectionProfile(
+            name: "unsafe",
+            host: "-oProxyCommand=/bin/true"
+        )
+
+        #expect(throws: SFTPClientError.invalidDestination) {
+            try client.mkdir(path: "/tmp/example", on: profile)
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func rejectsOversizedEscapedCommandsBeforeExecuting() {
+        let executor = MockSFTPExecutor()
+        let client = makeClient(executor: executor)
+        let quoteHeavyPath = "/tmp/" + String(repeating: "'", count: 600)
+
+        #expect(throws: SFTPClientError.invalidCommand) {
+            try client.download(
+                remotePath: quoteHeavyPath,
+                localPath: "/tmp/output",
+                on: makeProfile()
+            )
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func rejectsInvalidPortsBeforeExecuting() {
+        let executor = MockSFTPExecutor()
+        let client = makeClient(executor: executor)
+        let profile = RemoteConnectionProfile(name: "unsafe", host: "example.com", port: 70_000)
+
+        #expect(throws: SFTPClientError.invalidPort) {
+            try client.mkdir(path: "/tmp/example", on: profile)
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func systemArgumentsTerminateOptionsAndBracketIPv6() throws {
+        let destination = try SSHConnectionDestination(user: "deploy", host: "2001:db8::10")
+        let arguments = SystemSFTPExecutor.arguments(
+            destination: destination,
+            port: 2_222,
+            controlPath: "/tmp/control.sock"
+        )
+
+        #expect(arguments.suffix(2) == ["--", "deploy@[2001:db8::10]"])
+        #expect(arguments.contains("-P"))
+        #expect(arguments.contains("2222"))
     }
 
     @Test func listDirectoryWithSpacesInPath() throws {

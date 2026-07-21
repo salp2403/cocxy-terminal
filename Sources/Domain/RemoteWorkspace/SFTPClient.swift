@@ -3,6 +3,16 @@
 
 import Foundation
 
+private enum SFTPBatchCommandBoundary {
+    static let maximumByteCount = 2_000
+
+    static func contains(_ command: String) -> Bool {
+        !command.isEmpty
+            && command.utf8.count <= maximumByteCount
+            && !command.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+    }
+}
+
 // MARK: - SFTP Executor Protocol
 
 /// Abstraction over sftp command execution for testability.
@@ -15,12 +25,14 @@ protocol SFTPExecutor: Sendable {
     ///
     /// - Parameters:
     ///   - sftpCommand: The SFTP sub-command (e.g., "ls -la /tmp").
-    ///   - host: The remote host in "user@host" format.
+    ///   - destination: A validated remote SSH destination.
+    ///   - port: The explicit SSH port, if configured.
     ///   - controlPath: The SSH ControlMaster socket path.
     /// - Returns: The raw stdout output from sftp.
     func execute(
         sftpCommand: String,
-        host: String,
+        destination: SSHConnectionDestination,
+        port: Int?,
         controlPath: String
     ) throws -> String
 }
@@ -35,16 +47,20 @@ final class SystemSFTPExecutor: SFTPExecutor {
 
     func execute(
         sftpCommand: String,
-        host: String,
+        destination: SSHConnectionDestination,
+        port: Int?,
         controlPath: String
     ) throws -> String {
+        guard SFTPBatchCommandBoundary.contains(sftpCommand) else {
+            throw SFTPClientError.invalidCommand
+        }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/sftp")
-        process.arguments = [
-            "-b", "-",
-            "-o", "ControlPath=\(controlPath)",
-            host,
-        ]
+        process.arguments = Self.arguments(
+            destination: destination,
+            port: port,
+            controlPath: controlPath
+        )
 
         let stdinPipe = Pipe()
         let stdoutPipe = Pipe()
@@ -77,15 +93,51 @@ final class SystemSFTPExecutor: SFTPExecutor {
 
         return stdout
     }
+
+    static func arguments(
+        destination: SSHConnectionDestination,
+        port: Int?,
+        controlPath: String
+    ) -> [String] {
+        var arguments = [
+            "-b", "-",
+            "-o", "ControlPath=\(controlPath)",
+        ]
+        if let port {
+            arguments.append(contentsOf: ["-P", String(port)])
+        }
+        arguments.append(contentsOf: ["--", destination.sftpValue])
+        return arguments
+    }
+
 }
 
 // MARK: - SFTP Errors
 
 /// Errors that can occur during SFTP operations.
-enum SFTPClientError: Error, Equatable {
+enum SFTPClientError: Error, Equatable, LocalizedError {
     case commandFailed(String)
     case parseFailed(String)
     case transferFailed(String)
+    case invalidDestination
+    case invalidPort
+    case invalidPath
+    case invalidCommand
+
+    var errorDescription: String? {
+        switch self {
+        case .commandFailed(let detail), .parseFailed(let detail), .transferFailed(let detail):
+            return detail
+        case .invalidDestination:
+            return "Invalid SFTP destination"
+        case .invalidPort:
+            return "Invalid SFTP port"
+        case .invalidPath:
+            return "Invalid SFTP path"
+        case .invalidCommand:
+            return "SFTP command exceeds the safe batch boundary"
+        }
+    }
 }
 
 // MARK: - Remote File Entry
@@ -249,10 +301,9 @@ final class SFTPClient: Sendable {
         path: String,
         on profile: RemoteConnectionProfile
     ) throws -> [RemoteFileEntry] {
-        let output = try executor.execute(
-            sftpCommand: "ls -la \(Self.sanitizePath(path))",
-            host: sftpHost(for: profile),
-            controlPath: profile.controlPath
+        let output = try execute(
+            command: "ls -la \(try Self.sanitizePath(path))",
+            on: profile
         )
 
         return output
@@ -273,10 +324,9 @@ final class SFTPClient: Sendable {
         localPath: String,
         on profile: RemoteConnectionProfile
     ) throws {
-        _ = try executor.execute(
-            sftpCommand: "get \(Self.sanitizePath(remotePath)) \(Self.sanitizePath(localPath))",
-            host: sftpHost(for: profile),
-            controlPath: profile.controlPath
+        _ = try execute(
+            command: "get \(try Self.sanitizePath(remotePath)) \(try Self.sanitizePath(localPath))",
+            on: profile
         )
     }
 
@@ -293,10 +343,9 @@ final class SFTPClient: Sendable {
         remotePath: String,
         on profile: RemoteConnectionProfile
     ) throws {
-        _ = try executor.execute(
-            sftpCommand: "put \(Self.sanitizePath(localPath)) \(Self.sanitizePath(remotePath))",
-            host: sftpHost(for: profile),
-            controlPath: profile.controlPath
+        _ = try execute(
+            command: "put \(try Self.sanitizePath(localPath)) \(try Self.sanitizePath(remotePath))",
+            on: profile
         )
     }
 
@@ -311,10 +360,9 @@ final class SFTPClient: Sendable {
         path: String,
         on profile: RemoteConnectionProfile
     ) throws {
-        _ = try executor.execute(
-            sftpCommand: "mkdir \(Self.sanitizePath(path))",
-            host: sftpHost(for: profile),
-            controlPath: profile.controlPath
+        _ = try execute(
+            command: "mkdir \(try Self.sanitizePath(path))",
+            on: profile
         )
     }
 
@@ -329,21 +377,36 @@ final class SFTPClient: Sendable {
         path: String,
         on profile: RemoteConnectionProfile
     ) throws {
-        _ = try executor.execute(
-            sftpCommand: "rm \(Self.sanitizePath(path))",
-            host: sftpHost(for: profile),
-            controlPath: profile.controlPath
+        _ = try execute(
+            command: "rm \(try Self.sanitizePath(path))",
+            on: profile
         )
     }
 
     // MARK: - Helpers
 
-    /// Builds the sftp host string from a profile: "user@host" or just "host".
-    private func sftpHost(for profile: RemoteConnectionProfile) -> String {
-        if let user = profile.user {
-            return "\(user)@\(profile.host)"
+    private func execute(
+        command: String,
+        on profile: RemoteConnectionProfile
+    ) throws -> String {
+        guard SFTPBatchCommandBoundary.contains(command) else {
+            throw SFTPClientError.invalidCommand
         }
-        return profile.host
+        guard profile.port.map({ (1...65_535).contains($0) }) ?? true else {
+            throw SFTPClientError.invalidPort
+        }
+        let destination: SSHConnectionDestination
+        do {
+            destination = try SSHConnectionDestination(user: profile.user, host: profile.host)
+        } catch {
+            throw SFTPClientError.invalidDestination
+        }
+        return try executor.execute(
+            sftpCommand: command,
+            destination: destination,
+            port: profile.port,
+            controlPath: profile.controlPath
+        )
     }
 
     /// Wraps a path in single quotes with proper escaping to prevent command injection.
@@ -351,7 +414,13 @@ final class SFTPClient: Sendable {
     /// Any embedded single quotes are replaced with the sequence `'\''` which
     /// terminates the current quoted string, inserts a literal single quote
     /// via backslash escaping, then reopens the quoted string.
-    static func sanitizePath(_ path: String) -> String {
+    static func sanitizePath(_ path: String) throws -> String {
+        guard !path.isEmpty,
+              path.utf8.count <= 1_024,
+              path.first != "-",
+              !path.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains) else {
+            throw SFTPClientError.invalidPath
+        }
         let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
         return "'\(escaped)'"
     }
