@@ -39,7 +39,7 @@ struct MacroSignaturePolicy: Sendable {
     let requireSignedMacros: Bool
 
     init(
-        trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry(),
+        trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry.loadDefault(),
         requireSignedMacros: Bool = false
     ) {
         self.trustedAuthors = trustedAuthors

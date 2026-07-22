@@ -45,8 +45,7 @@ public struct CommandRunner {
     public init(
         socketClient: SocketClient = SocketClient(),
         signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
-        trustedAuthorRegistryURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cocxy/security/trusted-authors.json"),
+        trustedAuthorRegistryURL: URL = TrustedAuthorRegistry.defaultFileURL,
         vaultStore: any VaultSessionStoring = VaultSessionStore.defaultStore(),
         vaultUserStateStore: VaultUserStateStore = VaultUserStateStore(),
         vaultSearchIndexFactory: @escaping () throws -> VaultSearchIndex = { try VaultSearchIndex() }
