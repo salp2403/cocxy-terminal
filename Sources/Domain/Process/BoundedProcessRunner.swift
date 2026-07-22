@@ -1,10 +1,10 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// NotebookProcessRunner.swift - Bounded process-tree execution for notebook cells.
+// BoundedProcessRunner.swift - Shared bounded process-tree execution.
 
 import Darwin
 import Foundation
 
-enum NotebookProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
+enum BoundedProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
     case invalidInvocation
     case systemCallFailed(operation: String, code: Int32)
     case processTreeDidNotTerminate
@@ -13,13 +13,13 @@ enum NotebookProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
     var errorDescription: String? {
         switch self {
         case .invalidInvocation:
-            return "The notebook process invocation is invalid."
+            return "The process invocation is invalid."
         case .systemCallFailed(let operation, let code):
-            return "Notebook process operation \(operation) failed: \(Self.message(for: code))."
+            return "Process operation \(operation) failed: \(Self.message(for: code))."
         case .processTreeDidNotTerminate:
-            return "The notebook process tree did not terminate cleanly."
+            return "The process tree did not terminate cleanly."
         case .outputDrainDidNotFinish:
-            return "The notebook process output did not close after teardown."
+            return "The process output did not close after teardown."
         }
     }
 
@@ -29,31 +29,50 @@ enum NotebookProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
     }
 }
 
-struct NotebookProcessRunner: AgentProcessRunning {
-    static let maximumRetainedBytesPerStream = 1 * 1_024 * 1_024
+struct BoundedProcessResult: Equatable, Sendable {
+    let exitCode: Int32
+    let stdout: String
+    let stderr: String
+    let stdoutWasTruncated: Bool
+    let stderrWasTruncated: Bool
+    let timedOut: Bool
+}
 
+/// Runs a process in an isolated session while bounding time, output, and descendants.
+struct BoundedProcessRunner: Sendable {
     private static let pollIntervalMilliseconds: Int32 = 20
     private static let terminationGracePeriodSeconds: TimeInterval = 0.2
     private static let killWaitSeconds: TimeInterval = 1
     private static let outputDrainWaitSeconds: TimeInterval = 0.5
 
+    let maximumRetainedBytesPerStream: Int
+
+    init(maximumRetainedBytesPerStream: Int) {
+        self.maximumRetainedBytesPerStream = maximumRetainedBytesPerStream
+    }
+
     func run(
         executableURL: URL,
         arguments: [String],
         workingDirectory: URL,
-        timeoutSeconds: TimeInterval?
-    ) throws -> AgentProcessResult {
+        environment: [String: String]? = nil,
+        timeoutSeconds: TimeInterval?,
+        timeoutDiagnostic: String? = nil
+    ) throws -> BoundedProcessResult {
         try Task.checkCancellation()
-        if let timeoutSeconds,
-           (!timeoutSeconds.isFinite || timeoutSeconds < 0) {
-            throw NotebookProcessRunnerError.invalidInvocation
+        guard maximumRetainedBytesPerStream > 0 else {
+            throw BoundedProcessRunnerError.invalidInvocation
+        }
+        if let timeoutSeconds, (!timeoutSeconds.isFinite || timeoutSeconds < 0) {
+            throw BoundedProcessRunnerError.invalidInvocation
         }
 
-        let execution = try NotebookProcessExecution.spawn(
+        let execution = try BoundedProcessExecution.spawn(
             executableURL: executableURL,
             arguments: arguments,
             workingDirectory: workingDirectory,
-            retainedBytesPerStream: Self.maximumRetainedBytesPerStream
+            environment: environment,
+            retainedBytesPerStream: maximumRetainedBytesPerStream
         )
         var completedCleanup = false
         defer {
@@ -63,7 +82,7 @@ struct NotebookProcessRunner: AgentProcessRunning {
         }
 
         let deadline = Self.deadline(for: timeoutSeconds)
-        var stopReason: NotebookProcessStopReason?
+        var stopReason: BoundedProcessStopReason?
         var terminationStatus: Int32?
 
         while terminationStatus == nil, stopReason == nil {
@@ -74,7 +93,7 @@ struct NotebookProcessRunner: AgentProcessRunning {
 
             if Task.isCancelled {
                 stopReason = .cancelled
-            } else if let deadline, NotebookMonotonicClock.now() >= deadline {
+            } else if let deadline, BoundedMonotonicClock.now() >= deadline {
                 stopReason = .timedOut
             } else {
                 try execution.pollOutput(milliseconds: Self.pollIntervalMilliseconds)
@@ -101,98 +120,135 @@ struct NotebookProcessRunner: AgentProcessRunning {
         case .cancelled:
             throw CancellationError()
         case .timedOut:
-            let seconds = String(
-                format: "%.0f",
-                (timeoutSeconds ?? 0).rounded(.towardZero)
-            )
-            return AgentProcessResult(
+            return BoundedProcessResult(
                 exitCode: 124,
                 stdout: execution.stdoutString(),
-                stderr: execution.stderrString(
-                    diagnostic: "Command timed out after \(seconds) seconds."
-                )
+                stderr: execution.stderrString(diagnostic: timeoutDiagnostic),
+                stdoutWasTruncated: execution.stdoutWasTruncated,
+                stderrWasTruncated: execution.stderrWasTruncated,
+                timedOut: true
             )
         case nil:
-            return AgentProcessResult(
+            return BoundedProcessResult(
                 exitCode: terminationStatus ?? 1,
                 stdout: execution.stdoutString(),
-                stderr: execution.stderrString()
+                stderr: execution.stderrString(),
+                stdoutWasTruncated: execution.stdoutWasTruncated,
+                stderrWasTruncated: execution.stderrWasTruncated,
+                timedOut: false
             )
         }
     }
 
     private static func deadline(for timeoutSeconds: TimeInterval?) -> UInt64? {
         guard let timeoutSeconds else { return nil }
-        return NotebookMonotonicClock.adding(
+        return BoundedMonotonicClock.adding(
             seconds: timeoutSeconds,
-            to: NotebookMonotonicClock.now()
+            to: BoundedMonotonicClock.now()
         )
     }
 }
 
-private enum NotebookProcessStopReason {
+struct NotebookProcessRunner: AgentProcessRunning {
+    static let maximumRetainedBytesPerStream = 1 * 1_024 * 1_024
+
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval?
+    ) throws -> AgentProcessResult {
+        let seconds = String(
+            format: "%.0f",
+            (timeoutSeconds ?? 0).rounded(.towardZero)
+        )
+        let result = try BoundedProcessRunner(
+            maximumRetainedBytesPerStream: Self.maximumRetainedBytesPerStream
+        ).run(
+            executableURL: executableURL,
+            arguments: arguments,
+            workingDirectory: workingDirectory,
+            timeoutSeconds: timeoutSeconds,
+            timeoutDiagnostic: "Command timed out after \(seconds) seconds."
+        )
+        return AgentProcessResult(
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr
+        )
+    }
+}
+
+private enum BoundedProcessStopReason {
     case cancelled
     case timedOut
 }
 
-private final class NotebookProcessExecution {
+private final class BoundedProcessExecution {
     private static let maximumIOBytesPerCycle = 256 * 1_024
     private static let processTreeRefreshIntervalNanoseconds: UInt64 = 50_000_000
 
     let leaderPID: pid_t
     let sessionID: pid_t
 
-    private let stdoutDescriptor: NotebookOwnedFileDescriptor
-    private let stderrDescriptor: NotebookOwnedFileDescriptor
-    private var stdoutCapture: NotebookCapturedStream
-    private var stderrCapture: NotebookCapturedStream
+    private let stdoutDescriptor: BoundedOwnedFileDescriptor
+    private let stderrDescriptor: BoundedOwnedFileDescriptor
+    private var stdoutCapture: BoundedCapturedStream
+    private var stderrCapture: BoundedCapturedStream
     private var stdoutReachedEOF = false
     private var stderrReachedEOF = false
-    private var trackedProcesses: [pid_t: NotebookProcessIdentity] = [:]
+    private var trackedProcesses: [pid_t: BoundedProcessIdentity] = [:]
     private var cachedTerminationStatus: Int32?
     private var leaderWasReaped = false
     private var lastProcessTreeRefresh = UInt64.zero
 
     private init(
         leaderPID: pid_t,
-        stdoutDescriptor: NotebookOwnedFileDescriptor,
-        stderrDescriptor: NotebookOwnedFileDescriptor,
+        stdoutDescriptor: BoundedOwnedFileDescriptor,
+        stderrDescriptor: BoundedOwnedFileDescriptor,
         retainedBytesPerStream: Int
     ) {
         self.leaderPID = leaderPID
         sessionID = leaderPID
         self.stdoutDescriptor = stdoutDescriptor
         self.stderrDescriptor = stderrDescriptor
-        stdoutCapture = NotebookCapturedStream(limit: retainedBytesPerStream)
-        stderrCapture = NotebookCapturedStream(limit: retainedBytesPerStream)
+        stdoutCapture = BoundedCapturedStream(limit: retainedBytesPerStream)
+        stderrCapture = BoundedCapturedStream(limit: retainedBytesPerStream)
     }
 
     static func spawn(
         executableURL: URL,
         arguments: [String],
         workingDirectory: URL,
+        environment: [String: String]?,
         retainedBytesPerStream: Int
-    ) throws -> NotebookProcessExecution {
+    ) throws -> BoundedProcessExecution {
         guard executableURL.path.hasPrefix("/"),
               !executableURL.path.utf8.contains(0),
               !workingDirectory.path.utf8.contains(0),
-              arguments.allSatisfy({ !$0.utf8.contains(0) }) else {
-            throw NotebookProcessRunnerError.invalidInvocation
+              arguments.allSatisfy({ !$0.utf8.contains(0) }),
+              environment?.allSatisfy({ key, value in
+                  !key.isEmpty
+                      && !key.contains("=")
+                      && !key.utf8.contains(0)
+                      && !value.utf8.contains(0)
+              }) ?? true else {
+            throw BoundedProcessRunnerError.invalidInvocation
         }
 
-        let stdoutPipe = try NotebookPipe.make()
-        let stderrPipe = try NotebookPipe.make()
+        let stdoutPipe = try BoundedPipe.make()
+        let stderrPipe = try BoundedPipe.make()
         try stdoutPipe.read.setNonBlocking()
         try stderrPipe.read.setNonBlocking()
 
         var fileActions: posix_spawn_file_actions_t?
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawn_file_actions_init(&fileActions),
             operation: "posix_spawn_file_actions_init"
         )
         defer { posix_spawn_file_actions_destroy(&fileActions) }
 
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawn_file_actions_addopen(
                 &fileActions,
                 STDIN_FILENO,
@@ -202,7 +258,7 @@ private final class NotebookProcessExecution {
             ),
             operation: "posix_spawn_file_actions_addopen"
         )
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawn_file_actions_adddup2(
                 &fileActions,
                 stdoutPipe.write.rawValue,
@@ -210,7 +266,7 @@ private final class NotebookProcessExecution {
             ),
             operation: "posix_spawn_file_actions_adddup2"
         )
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawn_file_actions_adddup2(
                 &fileActions,
                 stderrPipe.write.rawValue,
@@ -224,20 +280,20 @@ private final class NotebookProcessExecution {
             stderrPipe.read.rawValue,
             stderrPipe.write.rawValue,
         ] {
-            try NotebookPOSIX.check(
+            try BoundedPOSIX.check(
                 posix_spawn_file_actions_addclose(&fileActions, descriptor),
                 operation: "posix_spawn_file_actions_addclose"
             )
         }
         try workingDirectory.path.withCString { path in
-            try NotebookPOSIX.check(
+            try BoundedPOSIX.check(
                 posix_spawn_file_actions_addchdir_np(&fileActions, path),
                 operation: "posix_spawn_file_actions_addchdir_np"
             )
         }
 
         var attributes: posix_spawnattr_t?
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawnattr_init(&attributes),
             operation: "posix_spawnattr_init"
         )
@@ -245,14 +301,14 @@ private final class NotebookProcessExecution {
 
         var emptySignalMask = sigset_t()
         sigemptyset(&emptySignalMask)
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawnattr_setsigmask(&attributes, &emptySignalMask),
             operation: "posix_spawnattr_setsigmask"
         )
 
         var defaultSignals = sigset_t()
         sigfillset(&defaultSignals)
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawnattr_setsigdefault(&attributes, &defaultSignals),
             operation: "posix_spawnattr_setsigdefault"
         )
@@ -262,16 +318,31 @@ private final class NotebookProcessExecution {
             | POSIX_SPAWN_START_SUSPENDED
             | POSIX_SPAWN_SETSIGDEF
             | POSIX_SPAWN_SETSIGMASK
-        try NotebookPOSIX.check(
+        try BoundedPOSIX.check(
             posix_spawnattr_setflags(&attributes, Int16(rawFlags)),
             operation: "posix_spawnattr_setflags"
         )
 
         var pid: pid_t = 0
         let invocation = [executableURL.path] + arguments
-        let spawnCode = try NotebookCStringArray.withMutablePointers(invocation) { argv in
-            executableURL.path.withCString { executablePath in
-                posix_spawn(
+        let spawnCode = try BoundedCStringArray.withMutablePointers(invocation) { argv in
+            try executableURL.path.withCString { executablePath in
+                if let environment {
+                    let entries = environment
+                        .map { "\($0.key)=\($0.value)" }
+                        .sorted()
+                    return try BoundedCStringArray.withMutablePointers(entries) { envp in
+                        posix_spawn(
+                            &pid,
+                            executablePath,
+                            &fileActions,
+                            &attributes,
+                            argv,
+                            envp
+                        )
+                    }
+                }
+                return posix_spawn(
                     &pid,
                     executablePath,
                     &fileActions,
@@ -281,23 +352,23 @@ private final class NotebookProcessExecution {
                 )
             }
         }
-        try NotebookPOSIX.check(spawnCode, operation: "posix_spawn")
+        try BoundedPOSIX.check(spawnCode, operation: "posix_spawn")
 
         stdoutPipe.write.close()
         stderrPipe.write.close()
 
-        let execution = NotebookProcessExecution(
+        let execution = BoundedProcessExecution(
             leaderPID: pid,
             stdoutDescriptor: stdoutPipe.read,
             stderrDescriptor: stderrPipe.read,
             retainedBytesPerStream: retainedBytesPerStream
         )
-        // The suspended child cannot execute notebook code until isolation is verified.
+        // The suspended child cannot execute caller code until isolation is verified.
         guard getpgid(pid) == pid, getsid(pid) == pid else {
             execution.forceCleanup()
-            throw NotebookProcessRunnerError.processTreeDidNotTerminate
+            throw BoundedProcessRunnerError.processTreeDidNotTerminate
         }
-        if let identity = NotebookProcessIdentity.current(for: pid) {
+        if let identity = BoundedProcessIdentity.current(for: pid) {
             execution.trackedProcesses[pid] = identity
         }
 
@@ -308,7 +379,7 @@ private final class NotebookProcessExecution {
         guard kill(pid, SIGCONT) == 0 else {
             let code = errno
             execution.forceCleanup()
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "resume",
                 code: code
             )
@@ -335,7 +406,7 @@ private final class NotebookProcessExecution {
                 return status
             }
             if errno == EINTR { continue }
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "waitid",
                 code: errno
             )
@@ -343,28 +414,28 @@ private final class NotebookProcessExecution {
     }
 
     func waitForObservedTermination(timeoutSeconds: TimeInterval) throws -> Int32 {
-        let deadline = NotebookMonotonicClock.adding(
+        let deadline = BoundedMonotonicClock.adding(
             seconds: timeoutSeconds,
-            to: NotebookMonotonicClock.now()
+            to: BoundedMonotonicClock.now()
         )
-        while NotebookMonotonicClock.now() < deadline {
+        while BoundedMonotonicClock.now() < deadline {
             if let status = try observedTerminationStatus() {
                 return status
             }
             try pollOutput(milliseconds: 10)
             try drainAvailableOutput()
         }
-        throw NotebookProcessRunnerError.processTreeDidNotTerminate
+        throw BoundedProcessRunnerError.processTreeDidNotTerminate
     }
 
     func refreshProcessTree(force: Bool = false) throws {
-        let now = NotebookMonotonicClock.now()
+        let now = BoundedMonotonicClock.now()
         if !force,
            lastProcessTreeRefresh != 0,
            now - lastProcessTreeRefresh < Self.processTreeRefreshIntervalNanoseconds {
             return
         }
-        let snapshots = try NotebookProcessSnapshot.all()
+        let snapshots = try BoundedProcessSnapshot.all()
         let snapshotsByPID = Dictionary(
             snapshots.map { ($0.identity.pid, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -401,12 +472,12 @@ private final class NotebookProcessExecution {
         guard try hasLiveTrackedProcesses() else { return }
         try signalTrackedProcessTree(SIGTERM)
 
-        let termDeadline = NotebookMonotonicClock.adding(
+        let termDeadline = BoundedMonotonicClock.adding(
             seconds: gracePeriodSeconds,
-            to: NotebookMonotonicClock.now()
+            to: BoundedMonotonicClock.now()
         )
         while try hasLiveTrackedProcesses() {
-            if NotebookMonotonicClock.now() >= termDeadline { break }
+            if BoundedMonotonicClock.now() >= termDeadline { break }
             try drainAvailableOutput()
             try pollOutput(milliseconds: 10)
             try refreshProcessTree(force: true)
@@ -414,18 +485,18 @@ private final class NotebookProcessExecution {
 
         guard try hasLiveTrackedProcesses() else { return }
 
-        let killDeadline = NotebookMonotonicClock.adding(
+        let killDeadline = BoundedMonotonicClock.adding(
             seconds: killWaitSeconds,
-            to: NotebookMonotonicClock.now()
+            to: BoundedMonotonicClock.now()
         )
         while try hasLiveTrackedProcesses() {
             try signalTrackedProcessTree(SIGKILL)
             try drainAvailableOutput()
             try pollOutput(milliseconds: 10)
             try refreshProcessTree(force: true)
-            if NotebookMonotonicClock.now() >= killDeadline,
+            if BoundedMonotonicClock.now() >= killDeadline,
                try hasLiveTrackedProcesses() {
-                throw NotebookProcessRunnerError.processTreeDidNotTerminate
+                throw BoundedProcessRunnerError.processTreeDidNotTerminate
             }
         }
     }
@@ -462,7 +533,7 @@ private final class NotebookProcessExecution {
             Darwin.poll(buffer.baseAddress, nfds_t(buffer.count), milliseconds)
         }
         if result < 0, errno != EINTR {
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "poll",
                 code: errno
             )
@@ -470,15 +541,15 @@ private final class NotebookProcessExecution {
     }
 
     func drainOutputToEnd(timeoutSeconds: TimeInterval) throws {
-        let deadline = NotebookMonotonicClock.adding(
+        let deadline = BoundedMonotonicClock.adding(
             seconds: timeoutSeconds,
-            to: NotebookMonotonicClock.now()
+            to: BoundedMonotonicClock.now()
         )
         while !stdoutReachedEOF || !stderrReachedEOF {
             try drainAvailableOutput()
             if stdoutReachedEOF, stderrReachedEOF { return }
-            if NotebookMonotonicClock.now() >= deadline {
-                throw NotebookProcessRunnerError.outputDrainDidNotFinish
+            if BoundedMonotonicClock.now() >= deadline {
+                throw BoundedProcessRunnerError.outputDrainDidNotFinish
             }
             try pollOutput(milliseconds: 10)
         }
@@ -494,7 +565,7 @@ private final class NotebookProcessExecution {
                 return
             }
             if result == -1, errno == EINTR { continue }
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "waitpid",
                 code: errno
             )
@@ -505,8 +576,16 @@ private final class NotebookProcessExecution {
         stdoutCapture.rendered()
     }
 
+    var stdoutWasTruncated: Bool {
+        stdoutCapture.wasTruncated
+    }
+
     func stderrString(diagnostic: String? = nil) -> String {
         stderrCapture.rendered(diagnostic: diagnostic)
+    }
+
+    var stderrWasTruncated: Bool {
+        stderrCapture.wasTruncated
     }
 
     func forceCleanup() {
@@ -525,14 +604,14 @@ private final class NotebookProcessExecution {
 
     private func signalTrackedProcessTree(_ signal: Int32) throws {
         if kill(-sessionID, signal) == -1, errno != ESRCH, errno != EPERM {
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "killpg",
                 code: errno
             )
         }
 
         let snapshots = Dictionary(
-            try NotebookProcessSnapshot.all().map { ($0.identity.pid, $0) },
+            try BoundedProcessSnapshot.all().map { ($0.identity.pid, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         for identity in trackedProcesses.values {
@@ -542,7 +621,7 @@ private final class NotebookProcessExecution {
                 continue
             }
             if kill(identity.pid, signal) == -1, errno != ESRCH {
-                throw NotebookProcessRunnerError.systemCallFailed(
+                throw BoundedProcessRunnerError.systemCallFailed(
                     operation: "kill",
                     code: errno
                 )
@@ -553,7 +632,7 @@ private final class NotebookProcessExecution {
     private func hasLiveTrackedProcesses() throws -> Bool {
         try refreshProcessTree(force: true)
         let snapshots = Dictionary(
-            try NotebookProcessSnapshot.all().map { ($0.identity.pid, $0) },
+            try BoundedProcessSnapshot.all().map { ($0.identity.pid, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         return trackedProcesses.values.contains { identity in
@@ -563,8 +642,8 @@ private final class NotebookProcessExecution {
     }
 
     private func drain(
-        descriptor: NotebookOwnedFileDescriptor,
-        capture: inout NotebookCapturedStream
+        descriptor: BoundedOwnedFileDescriptor,
+        capture: inout BoundedCapturedStream
     ) throws -> Bool {
         var buffer = [UInt8](repeating: 0, count: 32 * 1_024)
         var bytesReadThisCycle = 0
@@ -581,7 +660,7 @@ private final class NotebookProcessExecution {
             }
             if errno == EINTR { continue }
             if errno == EAGAIN || errno == EWOULDBLOCK { return false }
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "read",
                 code: errno
             )
@@ -590,31 +669,31 @@ private final class NotebookProcessExecution {
     }
 }
 
-private struct NotebookProcessIdentity: Hashable {
+private struct BoundedProcessIdentity: Hashable {
     let pid: pid_t
     let startSeconds: UInt64
     let startMicroseconds: UInt64
 
-    static func current(for pid: pid_t) -> NotebookProcessIdentity? {
-        guard let snapshot = NotebookProcessSnapshot.current(for: pid) else { return nil }
+    static func current(for pid: pid_t) -> BoundedProcessIdentity? {
+        guard let snapshot = BoundedProcessSnapshot.current(for: pid) else { return nil }
         return snapshot.identity
     }
 }
 
-private struct NotebookProcessSnapshot {
-    let identity: NotebookProcessIdentity
+private struct BoundedProcessSnapshot {
+    let identity: BoundedProcessIdentity
     let parentPID: pid_t
     let userID: uid_t
     let status: UInt32
 
-    static func current(for pid: pid_t) -> NotebookProcessSnapshot? {
+    static func current(for pid: pid_t) -> BoundedProcessSnapshot? {
         guard pid > 0 else { return nil }
         var info = proc_bsdinfo()
         let expectedSize = Int32(MemoryLayout.size(ofValue: info))
         let result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, expectedSize)
         guard result == expectedSize else { return nil }
-        return NotebookProcessSnapshot(
-            identity: NotebookProcessIdentity(
+        return BoundedProcessSnapshot(
+            identity: BoundedProcessIdentity(
                 pid: pid,
                 startSeconds: UInt64(info.pbi_start_tvsec),
                 startMicroseconds: UInt64(info.pbi_start_tvusec)
@@ -625,7 +704,7 @@ private struct NotebookProcessSnapshot {
         )
     }
 
-    static func all() throws -> [NotebookProcessSnapshot] {
+    static func all() throws -> [BoundedProcessSnapshot] {
         var capacity = max(
             Int(proc_listpids(UInt32(PROC_ALL_PIDS), 0, nil, 0)) / MemoryLayout<pid_t>.stride + 64,
             256
@@ -642,7 +721,7 @@ private struct NotebookProcessSnapshot {
                 )
             }
             guard bytes >= 0 else {
-                throw NotebookProcessRunnerError.systemCallFailed(
+                throw BoundedProcessRunnerError.systemCallFailed(
                     operation: "proc_listpids",
                     code: errno
                 )
@@ -655,27 +734,27 @@ private struct NotebookProcessSnapshot {
             capacity *= 2
         }
 
-        throw NotebookProcessRunnerError.systemCallFailed(
+        throw BoundedProcessRunnerError.systemCallFailed(
             operation: "proc_listpids",
             code: EOVERFLOW
         )
     }
 }
 
-private struct NotebookPipe {
-    let read: NotebookOwnedFileDescriptor
-    let write: NotebookOwnedFileDescriptor
+private struct BoundedPipe {
+    let read: BoundedOwnedFileDescriptor
+    let write: BoundedOwnedFileDescriptor
 
-    static func make() throws -> NotebookPipe {
+    static func make() throws -> BoundedPipe {
         var descriptors: [Int32] = [-1, -1]
         guard pipe(&descriptors) == 0 else {
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "pipe",
                 code: errno
             )
         }
-        let read = NotebookOwnedFileDescriptor(descriptors[0])
-        let write = NotebookOwnedFileDescriptor(descriptors[1])
+        let read = BoundedOwnedFileDescriptor(descriptors[0])
+        let write = BoundedOwnedFileDescriptor(descriptors[1])
         do {
             try read.setCloseOnExec()
             try write.setCloseOnExec()
@@ -684,11 +763,11 @@ private struct NotebookPipe {
             write.close()
             throw error
         }
-        return NotebookPipe(read: read, write: write)
+        return BoundedPipe(read: read, write: write)
     }
 }
 
-private final class NotebookOwnedFileDescriptor {
+private final class BoundedOwnedFileDescriptor {
     private(set) var rawValue: Int32
 
     init(_ rawValue: Int32) {
@@ -707,7 +786,7 @@ private final class NotebookOwnedFileDescriptor {
 
     func setCloseOnExec() throws {
         guard fcntl(rawValue, F_SETFD, FD_CLOEXEC) == 0 else {
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "fcntl(FD_CLOEXEC)",
                 code: errno
             )
@@ -717,7 +796,7 @@ private final class NotebookOwnedFileDescriptor {
     func setNonBlocking() throws {
         let flags = fcntl(rawValue, F_GETFL)
         guard flags >= 0, fcntl(rawValue, F_SETFL, flags | O_NONBLOCK) == 0 else {
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "fcntl(O_NONBLOCK)",
                 code: errno
             )
@@ -725,10 +804,10 @@ private final class NotebookOwnedFileDescriptor {
     }
 }
 
-private struct NotebookCapturedStream {
+private struct BoundedCapturedStream {
     let limit: Int
     private var data = Data()
-    private var wasTruncated = false
+    private(set) var wasTruncated = false
 
     init(limit: Int) {
         self.limit = max(limit, 1)
@@ -795,7 +874,7 @@ private struct NotebookCapturedStream {
     }
 }
 
-private enum NotebookCStringArray {
+private enum BoundedCStringArray {
     static func withMutablePointers<T>(
         _ strings: [String],
         _ body: (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) throws -> T
@@ -806,7 +885,7 @@ private enum NotebookCStringArray {
 
         for string in strings {
             guard let allocation = strdup(string) else {
-                throw NotebookProcessRunnerError.systemCallFailed(
+                throw BoundedProcessRunnerError.systemCallFailed(
                     operation: "strdup",
                     code: ENOMEM
                 )
@@ -822,10 +901,10 @@ private enum NotebookCStringArray {
     }
 }
 
-private enum NotebookPOSIX {
+private enum BoundedPOSIX {
     static func check(_ code: Int32, operation: String) throws {
         guard code == 0 else {
-            throw NotebookProcessRunnerError.systemCallFailed(
+            throw BoundedProcessRunnerError.systemCallFailed(
                 operation: operation,
                 code: code
             )
@@ -833,7 +912,7 @@ private enum NotebookPOSIX {
     }
 }
 
-private enum NotebookMonotonicClock {
+private enum BoundedMonotonicClock {
     static func now() -> UInt64 {
         DispatchTime.now().uptimeNanoseconds
     }

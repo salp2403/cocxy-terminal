@@ -2318,6 +2318,7 @@
 "plugins.empty.installed" = "No hay plugins instalados.";
 "plugins.updates.section" = "Actualizaciones";
 "plugins.install" = "Instalar";
+"plugins.installing" = "Instalando...";
 "plugins.uninstall" = "Desinstalar";
 "plugins.uninstall.title" = "Desinstalar plugin";
 "plugins.enable" = "Activar";
@@ -2333,6 +2334,10 @@
 "plugins.status.enabled" = "%@ activado.";
 "plugins.status.disabled" = "%@ desactivado.";
 "plugins.status.noUpdates" = "No se encontraron actualizaciones.";
+"plugins.status.updateCheckPartial.noUpdates" = "No se encontraron actualizaciones. Fuentes sin revisar: %d.";
+"plugins.status.updateCheckFailed.one" = "No se pudieron buscar actualizaciones. Falló 1 fuente.";
+"plugins.status.updateCheckFailed.many" = "No se pudieron buscar actualizaciones. Fallaron %d fuentes.";
+"plugins.status.updateCheckPartial.updates" = "Actualizaciones encontradas: %d. Fuentes sin revisar: %d.";
 "plugins.status.updatesFound.one" = "%d actualización encontrada.";
 "plugins.status.updatesFound.many" = "%d actualizaciones encontradas.";
 "plugins.signature.verified" = "Verificado";

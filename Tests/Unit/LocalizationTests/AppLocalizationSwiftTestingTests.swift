@@ -218,8 +218,21 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(spanish.string("plugins.sources", fallback: "Sources") == "Fuentes")
         #expect(spanish.string("plugins.replaceExisting", fallback: "Replace existing") == "Reemplazar existente")
+        #expect(spanish.string("plugins.installing", fallback: "Installing...") == "Instalando...")
         #expect(spanish.string("plugins.empty.installed", fallback: "No plugins installed.") == "No hay plugins instalados.")
         #expect(spanish.string("plugins.status.noUpdates", fallback: "No updates found.") == "No se encontraron actualizaciones.")
+        #expect(
+            spanish.string(
+                "plugins.status.updateCheckFailed.one",
+                fallback: "Could not check plugin updates. 1 source failed."
+            ) == "No se pudieron buscar actualizaciones. Falló 1 fuente."
+        )
+        #expect(
+            spanish.string(
+                "plugins.status.updateCheckPartial.updates",
+                fallback: "Updates found: %d. Sources not checked: %d."
+            ) == "Actualizaciones encontradas: %d. Fuentes sin revisar: %d."
+        )
         let bundledPlugin = PluginManifest(
             id: "cocxy-github-pane",
             name: "GitHub Pane",

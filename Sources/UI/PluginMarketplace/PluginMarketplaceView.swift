@@ -24,7 +24,10 @@ final class PluginMarketplaceViewModel: ObservableObject {
         case enabled(String)
         case disabled(String)
         case noUpdates
+        case noUpdatesWithFailures(Int)
+        case updateCheckFailed(Int)
         case updatesFound(Int)
+        case updatesFoundWithFailures(updates: Int, failures: Int)
     }
 
     @Published var sourceURLText: String = ""
@@ -36,6 +39,7 @@ final class PluginMarketplaceViewModel: ObservableObject {
     @Published private(set) var plugins: [PluginState] = []
     @Published private(set) var availableUpdates: [PluginUpdateCandidate] = []
     @Published private(set) var isCheckingForUpdates = false
+    @Published private(set) var isInstallingPlugin = false
     @Published private(set) var pendingCapabilityRequest: PluginCapabilityApprovalRequest?
 
     private var signatureStatusesByPluginID: [String: PluginSignatureStatus] = [:]
@@ -109,6 +113,28 @@ final class PluginMarketplaceViewModel: ObservableObject {
     func installPlugin(replaceExisting: Bool) throws {
         let url = try makeURL(from: installURLText)
         let receipt = try installer.install(from: url, replaceExisting: replaceExisting)
+        completeInstallation(receipt)
+    }
+
+    func installPluginInBackground(replaceExisting: Bool) async throws {
+        guard !isInstallingPlugin else { return }
+        let url = try makeURL(from: installURLText)
+        let installer = self.installer
+        isInstallingPlugin = true
+        defer { isInstallingPlugin = false }
+
+        let task = Task.detached(priority: .userInitiated) {
+            try installer.install(from: url, replaceExisting: replaceExisting)
+        }
+        let receipt = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        completeInstallation(receipt)
+    }
+
+    private func completeInstallation(_ receipt: PluginInstallReceipt) {
         installURLText = ""
         refresh()
         signatureStatusesByPluginID[receipt.pluginID] = receipt.signatureStatus
@@ -181,8 +207,24 @@ final class PluginMarketplaceViewModel: ObservableObject {
         guard !isCheckingForUpdates else { return }
         isCheckingForUpdates = true
         defer { isCheckingForUpdates = false }
-        availableUpdates = await updater.availableUpdates(for: pluginManager.plugins.map(\.manifest))
-        setStatus(availableUpdates.isEmpty ? .noUpdates : .updatesFound(availableUpdates.count))
+        let result = await updater.checkAvailableUpdates(
+            for: pluginManager.plugins.map(\.manifest)
+        )
+        guard !result.wasCancelled else { return }
+
+        availableUpdates = result.updates
+        if result.failedSourceCount == 0 {
+            setStatus(result.updates.isEmpty ? .noUpdates : .updatesFound(result.updates.count))
+        } else if result.checkedSourceCount == 0 {
+            setStatus(.updateCheckFailed(result.failedSourceCount))
+        } else if result.updates.isEmpty {
+            setStatus(.noUpdatesWithFailures(result.failedSourceCount))
+        } else {
+            setStatus(.updatesFoundWithFailures(
+                updates: result.updates.count,
+                failures: result.failedSourceCount
+            ))
+        }
     }
 
     func signatureStatus(for pluginID: String) -> PluginSignatureStatus? {
@@ -236,6 +278,26 @@ final class PluginMarketplaceViewModel: ObservableObject {
             return String(format: localizer.string("plugins.status.disabled", fallback: "Disabled %@."), pluginID)
         case .noUpdates:
             return localizer.string("plugins.status.noUpdates", fallback: "No updates found.")
+        case .noUpdatesWithFailures(let count):
+            return String(
+                format: localizer.string(
+                    "plugins.status.updateCheckPartial.noUpdates",
+                    fallback: "No updates found. Sources not checked: %d."
+                ),
+                count
+            )
+        case .updateCheckFailed(let count):
+            return String(
+                format: localizer.string(
+                    count == 1
+                        ? "plugins.status.updateCheckFailed.one"
+                        : "plugins.status.updateCheckFailed.many",
+                    fallback: count == 1
+                        ? "Could not check plugin updates. 1 source failed."
+                        : "Could not check plugin updates. %d sources failed."
+                ),
+                count
+            )
         case .updatesFound(let count):
             return String(
                 format: localizer.string(
@@ -243,6 +305,15 @@ final class PluginMarketplaceViewModel: ObservableObject {
                     fallback: count == 1 ? "%d update found." : "%d updates found."
                 ),
                 count
+            )
+        case .updatesFoundWithFailures(let updates, let failures):
+            return String(
+                format: localizer.string(
+                    "plugins.status.updateCheckPartial.updates",
+                    fallback: "Updates found: %d. Sources not checked: %d."
+                ),
+                updates,
+                failures
             )
         }
     }
@@ -339,14 +410,22 @@ struct PluginMarketplaceView: View {
                         }
                     }
                     .id(Self.initialScrollAnchorID)
+                    .disabled(viewModel.isInstallingPlugin)
 
                     pluginSection(localized("plugins.install.section", fallback: "Install")) {
                         PluginInstallSheet(
                             urlText: $viewModel.installURLText,
                             replaceExisting: $replaceExisting,
-                            localizer: localizer
+                            localizer: localizer,
+                            isInstalling: viewModel.isInstallingPlugin
                         ) {
-                            perform { try viewModel.installPlugin(replaceExisting: replaceExisting) }
+                            Task {
+                                await perform {
+                                    try await viewModel.installPluginInBackground(
+                                        replaceExisting: replaceExisting
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -377,6 +456,7 @@ struct PluginMarketplaceView: View {
                             }
                         }
                     }
+                    .disabled(viewModel.isInstallingPlugin)
 
                     pluginSection(localized("plugins.installed.section", fallback: "Installed")) {
                         if viewModel.plugins.isEmpty {
@@ -413,6 +493,7 @@ struct PluginMarketplaceView: View {
                             }
                         }
                     }
+                    .disabled(viewModel.isInstallingPlugin)
 
                     pluginSection(localized("plugins.updates.section", fallback: "Updates")) {
                         PluginUpdatePicker(
@@ -426,6 +507,7 @@ struct PluginMarketplaceView: View {
                             }
                         )
                     }
+                    .disabled(viewModel.isInstallingPlugin)
 
                     if let status = viewModel.statusMessage {
                         Text(status)
@@ -516,6 +598,14 @@ struct PluginMarketplaceView: View {
     private func perform(_ action: () throws -> Void) {
         do {
             try action()
+        } catch {
+            viewModel.statusMessage = viewModel.localizedErrorDescription(error)
+        }
+    }
+
+    private func perform(_ action: () async throws -> Void) async {
+        do {
+            try await action()
         } catch {
             viewModel.statusMessage = viewModel.localizedErrorDescription(error)
         }

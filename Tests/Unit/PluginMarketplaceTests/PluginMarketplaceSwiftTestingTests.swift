@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // PluginMarketplaceSwiftTestingTests.swift - Decentralized plugin marketplace coverage.
 
+import Darwin
 import Foundation
 import Testing
 import CocxyCommandSignatures
@@ -16,6 +17,18 @@ struct PluginMarketplaceSwiftTestingTests {
         try? FileManager.default.removeItem(at: url)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
+    }
+
+    private func installExecutableScript(at url: URL, contents: String) throws {
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: url.path
+        )
+    }
+
+    private func shellSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\"'\"'") + "'"
     }
 
     @Test("source store persists decentralized plugin sources")
@@ -824,6 +837,199 @@ struct PluginMarketplaceSwiftTestingTests {
         }
 
         #expect(await updater.availableUpdates(for: [manifest]).isEmpty)
+    }
+
+    @Test("plugin updater reports successful and failed source checks separately")
+    func pluginUpdaterReportsPartialSourceFailures() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        let manifests = ["current-plugin", "offline-plugin"].map { pluginID in
+            PluginManifest(
+                id: pluginID,
+                name: pluginID,
+                description: "Plugin update fixture",
+                version: "1.0.0",
+                author: "Dev",
+                minCocxyVersion: nil,
+                events: [],
+                directoryPath: pluginsDirectory.appendingPathComponent(pluginID).path
+            )
+        }
+        for manifest in manifests {
+            let sourceURL = try #require(URL(
+                string: "https://example.test/\(manifest.id).git"
+            ))
+            try sourceStore.save(
+                try #require(PluginUpdateSource.remoteRepository(sourceURL)),
+                for: manifest.id
+            )
+        }
+        let updater = PluginUpdater(sourceStore: sourceStore) { sourceURL in
+            if sourceURL.lastPathComponent == "offline-plugin.git" {
+                throw PluginUpdaterError.gitFailed(128)
+            }
+            return "abc\trefs/tags/v1.2.0\n"
+        }
+
+        let result = await updater.checkAvailableUpdates(for: manifests)
+
+        #expect(result.updates.map(\.pluginID) == ["current-plugin"])
+        #expect(result.checkedSourceCount == 1)
+        #expect(result.failedSourceCount == 1)
+        #expect(!result.wasCancelled)
+    }
+
+    @Test("plugin updater preserves cancellation instead of reporting a source failure")
+    func pluginUpdaterPreservesCancellation() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        let manifest = PluginManifest(
+            id: "cancelled-plugin",
+            name: "Cancelled Plugin",
+            description: "Plugin update fixture",
+            version: "1.0.0",
+            author: "Dev",
+            minCocxyVersion: nil,
+            events: [],
+            directoryPath: pluginsDirectory.appendingPathComponent("cancelled-plugin").path
+        )
+        let sourceURL = try #require(URL(string: "https://example.test/cancelled-plugin.git"))
+        try sourceStore.save(
+            try #require(PluginUpdateSource.remoteRepository(sourceURL)),
+            for: manifest.id
+        )
+        let updater = PluginUpdater(sourceStore: sourceStore) { _ in
+            throw CancellationError()
+        }
+
+        let result = await updater.checkAvailableUpdates(for: [manifest])
+
+        #expect(result.updates.isEmpty)
+        #expect(result.checkedSourceCount == 0)
+        #expect(result.failedSourceCount == 0)
+        #expect(result.wasCancelled)
+    }
+
+    @Test("remote tag query strips inherited Git execution configuration")
+    func remoteTagQueryUsesHardenedEnvironment() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fakeGit = root.appendingPathComponent("git")
+        try installExecutableScript(
+            at: fakeGit,
+            contents: #"""
+            #!/bin/sh
+            printf 'env:%s|%s|%s|%s|%s\n' "$GIT_CONFIG_GLOBAL" "$GIT_CONFIG_NOSYSTEM" "$GIT_TERMINAL_PROMPT" "${GIT_CONFIG_COUNT:-}" "${UNRELATED_SECRET:-}"
+            printf 'cwd:%s|%s\n' "$GIT_CEILING_DIRECTORIES" "$PWD"
+            printf 'args:%s\n' "$*"
+            printf 'abc\trefs/tags/v1.2.3\n'
+            """#
+        )
+        let runner = MarketplaceGitProcessRunner(
+            gitExecutableURL: fakeGit,
+            workingDirectory: root,
+            inheritedEnvironment: [
+                "GIT_CONFIG_GLOBAL": "/tmp/attacker-config",
+                "GIT_CONFIG_COUNT": "1",
+                "GIT_CEILING_DIRECTORIES": "/",
+                "UNRELATED_SECRET": "must-not-cross",
+            ]
+        )
+
+        let output = try PluginUpdater.runGitTagQuery(
+            sourceURL: URL(string: "https://example.test/plugin.git")!,
+            processRunner: runner
+        )
+
+        let lines = output.split(whereSeparator: \.isNewline).map(String.init)
+        #expect(lines.first == "env:/dev/null|1|0||")
+        #expect(!output.contains("attacker-config"))
+        #expect(!output.contains("must-not-cross"))
+        let workingDirectories = try #require(
+            lines.first(where: { $0.hasPrefix("cwd:") })?.dropFirst("cwd:".count)
+        ).split(separator: "|", omittingEmptySubsequences: false)
+        #expect(workingDirectories.count == 2)
+        let ceilingDirectory = URL(fileURLWithPath: String(workingDirectories[0]))
+            .resolvingSymlinksInPath()
+        let processDirectory = URL(fileURLWithPath: String(workingDirectories[1]))
+            .resolvingSymlinksInPath()
+        #expect(ceilingDirectory == processDirectory)
+        #expect(ceilingDirectory.lastPathComponent.hasPrefix(".cocxy-marketplace-git-"))
+        #expect(!FileManager.default.fileExists(atPath: String(workingDirectories[0])))
+        let invocation = try #require(lines.first(where: { $0.hasPrefix("args:") }))
+        #expect(invocation.contains("core.askPass=/usr/bin/false"))
+        #expect(invocation.contains("core.gitProxy=none"))
+        #expect(invocation.contains("credential.helper="))
+        #expect(invocation.contains("protocol.ext.allow=never"))
+        #expect(invocation.contains("protocol.file.allow=never"))
+    }
+
+    @Test("remote tag query times out and reaps a signal-resistant process")
+    func remoteTagQueryTimesOutAndReapsProcess() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fakeGit = root.appendingPathComponent("git")
+        let pidFile = root.appendingPathComponent("git.pid")
+        try installExecutableScript(
+            at: fakeGit,
+            contents: """
+            #!/bin/sh
+            printf '%s' "$$" > \(shellSingleQuoted(pidFile.path))
+            trap '' TERM
+            while :; do sleep 1; done
+            """
+        )
+        let timeout: TimeInterval = 3
+        let runner = MarketplaceGitProcessRunner(
+            gitExecutableURL: fakeGit,
+            workingDirectory: root,
+            timeoutSeconds: timeout
+        )
+        let startedAt = Date()
+
+        #expect(throws: PluginUpdaterError.timedOut(timeout)) {
+            _ = try PluginUpdater.runGitTagQuery(
+                sourceURL: URL(string: "https://example.test/plugin.git")!,
+                processRunner: runner
+            )
+        }
+
+        #expect(Date().timeIntervalSince(startedAt) < 6)
+        let pid = try #require(Int32(String(contentsOf: pidFile, encoding: .utf8)))
+        errno = 0
+        #expect(kill(pid, 0) == -1)
+        #expect(errno == ESRCH)
+    }
+
+    @Test("remote tag query rejects output beyond its retained byte budget")
+    func remoteTagQueryRejectsOversizedOutput() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fakeGit = root.appendingPathComponent("git")
+        try installExecutableScript(
+            at: fakeGit,
+            contents: """
+            #!/bin/sh
+            /usr/bin/yes x | /usr/bin/head -c 4096
+            """
+        )
+        let limit = 256
+        let runner = MarketplaceGitProcessRunner(
+            gitExecutableURL: fakeGit,
+            workingDirectory: root,
+            maximumRetainedBytesPerStream: limit
+        )
+
+        #expect(throws: PluginUpdaterError.outputTooLarge(limit)) {
+            _ = try PluginUpdater.runGitTagQuery(
+                sourceURL: URL(string: "https://example.test/plugin.git")!,
+                processRunner: runner
+            )
+        }
     }
 
     @Test("sandbox rejects scripts outside plugin directory")

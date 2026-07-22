@@ -11,10 +11,18 @@ struct PluginUpdateCandidate: Identifiable, Equatable, Sendable {
     let pluginDirectory: URL
 }
 
+struct PluginUpdateCheckResult: Equatable, Sendable {
+    let updates: [PluginUpdateCandidate]
+    let checkedSourceCount: Int
+    let failedSourceCount: Int
+    let wasCancelled: Bool
+}
+
 enum PluginUpdaterError: Error, Equatable {
     case gitFailed(Int32)
     case invalidUpdateSource
     case outputTooLarge(Int)
+    case timedOut(TimeInterval)
 }
 
 struct PluginUpdateSource: Codable, Equatable, Sendable {
@@ -110,9 +118,14 @@ struct PluginUpdater: Sendable {
     private static let maxTagOutputBytes = 4 * 1_024 * 1_024
 
     private static let defaultRemoteTagQuery: RemoteTagQuery = { sourceURL in
-        try await Task.detached(priority: .utility) {
+        let task = Task.detached(priority: .utility) {
             try runGitTagQuery(sourceURL: sourceURL)
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private let sourceStore: PluginUpdateSourceStore
@@ -127,23 +140,78 @@ struct PluginUpdater: Sendable {
     }
 
     func availableUpdates(for manifests: [PluginManifest]) async -> [PluginUpdateCandidate] {
+        await checkAvailableUpdates(for: manifests).updates
+    }
+
+    func checkAvailableUpdates(for manifests: [PluginManifest]) async -> PluginUpdateCheckResult {
         var updates: [PluginUpdateCandidate] = []
+        var checkedSourceCount = 0
+        var failedSourceCount = 0
+
+        guard !Task.isCancelled else {
+            return PluginUpdateCheckResult(
+                updates: [],
+                checkedSourceCount: 0,
+                failedSourceCount: 0,
+                wasCancelled: true
+            )
+        }
+
         for manifest in manifests {
-            guard let source = try? sourceStore.source(for: manifest.id),
-                  let latestVersion = try? await latestVersion(from: source.repositoryURL),
-                  Self.compareVersions(latestVersion, manifest.version) == .orderedDescending
-            else {
+            if Task.isCancelled {
+                return PluginUpdateCheckResult(
+                    updates: updates,
+                    checkedSourceCount: checkedSourceCount,
+                    failedSourceCount: failedSourceCount,
+                    wasCancelled: true
+                )
+            }
+
+            let source: PluginUpdateSource?
+            do {
+                source = try sourceStore.source(for: manifest.id)
+            } catch {
+                failedSourceCount += 1
                 continue
             }
+            guard let source else { continue }
+
+            let latestAvailableVersion: String?
+            do {
+                latestAvailableVersion = try await latestVersion(from: source.repositoryURL)
+            } catch is CancellationError {
+                return PluginUpdateCheckResult(
+                    updates: updates,
+                    checkedSourceCount: checkedSourceCount,
+                    failedSourceCount: failedSourceCount,
+                    wasCancelled: true
+                )
+            } catch {
+                failedSourceCount += 1
+                continue
+            }
+            checkedSourceCount += 1
+
+            guard let latestAvailableVersion,
+                  Self.compareVersions(
+                      latestAvailableVersion,
+                      manifest.version
+                  ) == .orderedDescending
+            else { continue }
 
             updates.append(PluginUpdateCandidate(
                 pluginID: manifest.id,
                 currentVersion: manifest.version,
-                latestVersion: latestVersion,
+                latestVersion: latestAvailableVersion,
                 pluginDirectory: URL(fileURLWithPath: manifest.directoryPath, isDirectory: true)
             ))
         }
-        return updates
+        return PluginUpdateCheckResult(
+            updates: updates,
+            checkedSourceCount: checkedSourceCount,
+            failedSourceCount: failedSourceCount,
+            wasCancelled: Task.isCancelled
+        )
     }
 
     private func latestVersion(from sourceURL: URL) async throws -> String? {
@@ -165,54 +233,31 @@ struct PluginUpdater: Sendable {
         return normalizedVersion(version)
     }
 
-    private static func runGitTagQuery(sourceURL: URL) throws -> String {
+    static func runGitTagQuery(
+        sourceURL: URL,
+        processRunner: MarketplaceGitProcessRunner = MarketplaceGitProcessRunner(
+            maximumRetainedBytesPerStream: maxTagOutputBytes
+        )
+    ) throws -> String {
         guard PluginUpdateSource.remoteRepository(sourceURL) != nil else {
             throw PluginValidationError.invalidSourceScheme(sourceURL.scheme)
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = [
-            "-c", "protocol.ext.allow=never",
-            "-c", "protocol.file.allow=never",
+        let result = try processRunner.run(arguments: [
             "ls-remote", "--tags", "--refs", "--", sourceURL.absoluteString,
-        ]
-        let inheritedEnvironment = ProcessInfo.processInfo.environment
-        var environment: [String: String] = [
-            "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
-            "PATH": "/usr/bin:/bin",
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": "/dev/null",
-            "GIT_TERMINAL_PROMPT": "0",
-            "GIT_SSH_COMMAND": "/usr/bin/ssh -F /dev/null -oBatchMode=yes -oPermitLocalCommand=no -oProxyCommand=none",
-        ]
-        for key in ["LANG", "LC_ALL", "SSH_AUTH_SOCK", "TMPDIR"] {
-            if let value = inheritedEnvironment[key] {
-                environment[key] = value
-            }
+        ])
+        if result.timedOut {
+            throw PluginUpdaterError.timedOut(processRunner.timeoutSeconds)
         }
-        process.environment = environment
-
-        let stdout = Pipe()
-        process.standardOutput = stdout
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-
-        var data = Data()
-        while let chunk = try stdout.fileHandleForReading.read(upToCount: 64 * 1_024),
-              !chunk.isEmpty {
-            guard chunk.count <= maxTagOutputBytes - data.count else {
-                process.terminate()
-                process.waitUntilExit()
-                throw PluginUpdaterError.outputTooLarge(maxTagOutputBytes)
-            }
-            data.append(chunk)
+        if result.stdoutWasTruncated {
+            throw PluginUpdaterError.outputTooLarge(
+                processRunner.maximumRetainedBytesPerStream
+            )
         }
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw PluginUpdaterError.gitFailed(process.terminationStatus)
+        guard result.exitCode == 0 else {
+            throw PluginUpdaterError.gitFailed(result.exitCode)
         }
-        return String(data: data, encoding: .utf8) ?? ""
+        return result.stdout
     }
 
     static func compareVersions(_ lhs: String, _ rhs: String) -> ComparisonResult {

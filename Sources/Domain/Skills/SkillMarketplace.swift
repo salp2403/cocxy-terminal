@@ -73,6 +73,7 @@ enum SkillMarketplaceError: Error, Equatable, Sendable {
     case skillNotInstalled(String)
     case missingSkillFile(String)
     case gitCloneFailed(Int32)
+    case gitCloneTimedOut(TimeInterval)
 }
 
 extension SkillMarketplaceError: LocalizedError {
@@ -96,7 +97,15 @@ extension SkillMarketplaceError: LocalizedError {
             return "Missing SKILL.md in skill source: \(path)"
         case .gitCloneFailed(let status):
             return "Skill source clone failed with status \(status)."
+        case .gitCloneTimedOut(let seconds):
+            return "Skill source clone timed out after \(Self.formatted(seconds)) seconds."
         }
+    }
+
+    private static func formatted(_ seconds: TimeInterval) -> String {
+        seconds.rounded() == seconds
+            ? String(format: "%.0f", seconds)
+            : String(format: "%.1f", seconds)
     }
 }
 
@@ -128,17 +137,20 @@ struct SkillMarketplaceInstaller {
     private let fileManager: FileManager
     private let loader: SkillLoader
     private let protectedSkillDirectories: [SkillDirectory]
+    private let gitProcessRunner: MarketplaceGitProcessRunner
 
     init(
         skillsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/skills", isDirectory: true),
         fileManager: FileManager = .default,
         loader: SkillLoader = SkillLoader(),
-        protectedSkillDirectories: [SkillDirectory]? = nil
+        protectedSkillDirectories: [SkillDirectory]? = nil,
+        gitProcessRunner: MarketplaceGitProcessRunner = MarketplaceGitProcessRunner()
     ) {
         self.skillsDirectory = skillsDirectory.standardizedFileURL
         self.fileManager = fileManager
         self.loader = loader
+        self.gitProcessRunner = gitProcessRunner
         if let protectedSkillDirectories {
             self.protectedSkillDirectories = protectedSkillDirectories
         } else if let bundledDirectory = BuiltInSkills.bundledDirectory() {
@@ -259,15 +271,15 @@ struct SkillMarketplaceInstaller {
             return
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["clone", "--depth", "1", sourceURL.absoluteString, destination.path]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw SkillMarketplaceError.gitCloneFailed(process.terminationStatus)
+        let result = try gitProcessRunner.clone(
+            sourceURL: sourceURL,
+            destinationURL: destination
+        )
+        if result.timedOut {
+            throw SkillMarketplaceError.gitCloneTimedOut(gitProcessRunner.timeoutSeconds)
+        }
+        guard result.exitCode == 0 else {
+            throw SkillMarketplaceError.gitCloneFailed(result.exitCode)
         }
     }
 }

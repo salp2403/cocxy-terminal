@@ -2318,6 +2318,7 @@
 "plugins.empty.installed" = "No plugins installed.";
 "plugins.updates.section" = "Updates";
 "plugins.install" = "Install";
+"plugins.installing" = "Installing...";
 "plugins.uninstall" = "Uninstall";
 "plugins.uninstall.title" = "Uninstall Plugin";
 "plugins.enable" = "Enable";
@@ -2333,6 +2334,10 @@
 "plugins.status.enabled" = "Enabled %@.";
 "plugins.status.disabled" = "Disabled %@.";
 "plugins.status.noUpdates" = "No updates found.";
+"plugins.status.updateCheckPartial.noUpdates" = "No updates found. Sources not checked: %d.";
+"plugins.status.updateCheckFailed.one" = "Could not check plugin updates. 1 source failed.";
+"plugins.status.updateCheckFailed.many" = "Could not check plugin updates. %d sources failed.";
+"plugins.status.updateCheckPartial.updates" = "Updates found: %d. Sources not checked: %d.";
 "plugins.status.updatesFound.one" = "%d update found.";
 "plugins.status.updatesFound.many" = "%d updates found.";
 "plugins.signature.verified" = "Verified";

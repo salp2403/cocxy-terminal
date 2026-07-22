@@ -191,7 +191,7 @@ struct PluginValidationReport: Equatable, Sendable {
 struct PluginValidator: Sendable {
     let trustedAuthors: TrustedAuthorRegistry
 
-    init(trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry()) {
+    init(trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry.loadDefault()) {
         self.trustedAuthors = trustedAuthors
     }
 
@@ -279,6 +279,7 @@ enum PluginInstallerError: Error, Equatable {
     case unsafeSourceName(String)
     case unsupportedLocalSource(String)
     case gitCloneFailed(Int32)
+    case gitCloneTimedOut(TimeInterval)
 }
 
 extension PluginInstallerError: LocalizedError {
@@ -300,7 +301,15 @@ extension PluginInstallerError: LocalizedError {
             return "Plugin source is not a readable local directory: \(path)."
         case .gitCloneFailed(let status):
             return "Plugin source clone failed with exit code \(status)."
+        case .gitCloneTimedOut(let seconds):
+            return "Plugin source clone timed out after \(Self.formatted(seconds)) seconds."
         }
+    }
+
+    private static func formatted(_ seconds: TimeInterval) -> String {
+        seconds.rounded() == seconds
+            ? String(format: "%.0f", seconds)
+            : String(format: "%.1f", seconds)
     }
 }
 
@@ -312,12 +321,13 @@ struct PluginInstallReceipt: Equatable, Sendable {
 }
 
 /// Installs decentralized plugin repos into the local plugin registry.
-struct PluginInstaller {
+struct PluginInstaller: @unchecked Sendable {
     let pluginsDirectory: URL
     private let fileManager: FileManager
     private let validator: PluginValidator
     private let capabilityGrantStore: PluginCapabilityGrantStore
     private let updateSourceStore: PluginUpdateSourceStore
+    private let gitProcessRunner: MarketplaceGitProcessRunner
 
     init(
         pluginsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
@@ -325,7 +335,8 @@ struct PluginInstaller {
         fileManager: FileManager = .default,
         validator: PluginValidator = PluginValidator(),
         capabilityGrantStore: PluginCapabilityGrantStore = PluginCapabilityGrantStore(),
-        updateSourceStore: PluginUpdateSourceStore? = nil
+        updateSourceStore: PluginUpdateSourceStore? = nil,
+        gitProcessRunner: MarketplaceGitProcessRunner = MarketplaceGitProcessRunner()
     ) {
         self.pluginsDirectory = pluginsDirectory
         self.fileManager = fileManager
@@ -333,6 +344,7 @@ struct PluginInstaller {
         self.capabilityGrantStore = capabilityGrantStore
         self.updateSourceStore = updateSourceStore
             ?? PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        self.gitProcessRunner = gitProcessRunner
     }
 
     func install(from sourceURL: URL, replaceExisting: Bool = false) throws -> PluginInstallReceipt {
@@ -429,15 +441,15 @@ struct PluginInstaller {
             return
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["clone", "--depth", "1", sourceURL.absoluteString, destination.path]
-        process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw PluginInstallerError.gitCloneFailed(process.terminationStatus)
+        let result = try gitProcessRunner.clone(
+            sourceURL: sourceURL,
+            destinationURL: destination
+        )
+        if result.timedOut {
+            throw PluginInstallerError.gitCloneTimedOut(gitProcessRunner.timeoutSeconds)
+        }
+        guard result.exitCode == 0 else {
+            throw PluginInstallerError.gitCloneFailed(result.exitCode)
         }
     }
 
