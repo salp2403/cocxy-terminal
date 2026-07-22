@@ -2230,6 +2230,8 @@
 "browser.import.historyRange.365" = "1 year";
 "browser.import.filters.allow" = "Only these domains";
 "browser.import.filters.block" = "Exclude these domains";
+"browser.import.filters.allowPlaceholder" = "example.com, docs.example.com";
+"browser.import.filters.blockPlaceholder" = "internal.example.com";
 "browser.import.filters.invalid" = "Invalid domain";
 "browser.import.filters.conflict" = "Domain appears in both lists";
 "browser.import.preview.loading" = "Reading the selected profile...";

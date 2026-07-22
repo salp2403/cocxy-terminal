@@ -289,12 +289,24 @@ struct BrowserImportWizardView: View {
 
             VStack(alignment: .leading, spacing: 8) {
                 fieldLabel(localized("browser.import.filters.allow", fallback: "Only these domains"))
-                TextField("example.com, docs.example.com", text: $viewModel.domainAllowList)
+                TextField(
+                    localized(
+                        "browser.import.filters.allowPlaceholder",
+                        fallback: "example.com, docs.example.com"
+                    ),
+                    text: $viewModel.domainAllowList
+                )
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel(localized("browser.import.filters.allow", fallback: "Only these domains"))
 
                 fieldLabel(localized("browser.import.filters.block", fallback: "Exclude these domains"))
-                TextField("internal.example.com", text: $viewModel.domainBlockList)
+                TextField(
+                    localized(
+                        "browser.import.filters.blockPlaceholder",
+                        fallback: "internal.example.com"
+                    ),
+                    text: $viewModel.domainBlockList
+                )
                     .textFieldStyle(.roundedBorder)
                     .accessibilityLabel(localized("browser.import.filters.block", fallback: "Exclude these domains"))
             }
