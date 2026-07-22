@@ -8,8 +8,11 @@ import Darwin
 #endif
 
 public final class PTYDaemonServer {
+    private static let maximumRequestLineBytes = 16 * 1_024 * 1_024
+    private static let inputReadBufferBytes = 64 * 1_024
     private let writer: PTYDaemonLineWriter
     private let registry: SurfaceRegistry
+    private var inputBuffer = Data()
 
     public init(output: FileHandle = .standardOutput) {
         self.writer = PTYDaemonLineWriter(handle: output)
@@ -21,7 +24,9 @@ public final class PTYDaemonServer {
     }
 
     public func runStdioLoop() {
-        while let line = Self.readLineData(), line.isEmpty == false {
+        defer { _ = registry.closeAll() }
+
+        while let line = readLineData(), line.isEmpty == false {
             let request: PTYDaemonRequest
             do {
                 request = try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: line)
@@ -31,9 +36,8 @@ public final class PTYDaemonServer {
             }
 
             let response = handle(request)
-            writer.write(response)
-            if request.command == .shutdown, response.ok {
-                registry.closeAll()
+            guard writer.write(response) else { return }
+            if request.command == .shutdown {
                 return
             }
         }
@@ -47,7 +51,12 @@ public final class PTYDaemonServer {
             case .hello:
                 return PTYDaemonResponse(id: request.id, ok: true, hello: makeHello())
             case .shutdown:
-                return PTYDaemonResponse(id: request.id, ok: true)
+                let didCloseAll = registry.closeAll()
+                return PTYDaemonResponse(
+                    id: request.id,
+                    ok: didCloseAll,
+                    error: didCloseAll ? nil : "one or more terminal surfaces did not terminate cleanly"
+                )
             case .surfaceCreate:
                 let surface = try registry.create(payload: payload)
                 return PTYDaemonResponse(id: request.id, ok: true, surfaceID: surface.surfaceID)
@@ -63,11 +72,10 @@ public final class PTYDaemonServer {
                 return PTYDaemonResponse(id: request.id, ok: surface.write(bytes: data))
             case .surfaceResize:
                 let surface = try requireSurface(payload)
-                let rows = payload.uint16("rows") ?? 24
-                let columns = payload.uint16("columns") ?? 80
+                let dimensions = try PTYDaemonSurface.validatedDimensions(payload: payload)
                 return PTYDaemonResponse(
                     id: request.id,
-                    ok: surface.resize(rows: rows, columns: columns)
+                    ok: surface.resize(rows: dimensions.rows, columns: dimensions.columns)
                 )
             case .surfaceClose:
                 return PTYDaemonResponse(id: request.id, ok: registry.close(id: payload["surfaceID"]))
@@ -152,19 +160,57 @@ public final class PTYDaemonServer {
         return surface
     }
 
-    static func readLineData() -> Data? {
-        var buffer = Data()
-        var byte: UInt8 = 0
+    private func readLineData() -> Data? {
+        while true {
+            if let newline = inputBuffer.firstIndex(of: 0x0A) {
+                let lineLength = inputBuffer.distance(
+                    from: inputBuffer.startIndex,
+                    to: newline
+                ) + 1
+                if lineLength > Self.maximumRequestLineBytes {
+                    inputBuffer.removeSubrange(inputBuffer.startIndex...newline)
+                    return Data("oversized request\n".utf8)
+                }
+                let line = Data(inputBuffer[inputBuffer.startIndex...newline])
+                inputBuffer.removeSubrange(inputBuffer.startIndex...newline)
+                return line
+            }
+
+            if inputBuffer.count > Self.maximumRequestLineBytes {
+                return discardOversizedLine()
+            }
+
+            var chunk = [UInt8](repeating: 0, count: Self.inputReadBufferBytes)
+            let count = Darwin.read(STDIN_FILENO, &chunk, chunk.count)
+            if count > 0 {
+                inputBuffer.append(contentsOf: chunk.prefix(count))
+                continue
+            }
+            if count == -1, errno == EINTR { continue }
+            guard inputBuffer.isEmpty == false else { return nil }
+            let remainder = inputBuffer
+            inputBuffer.removeAll(keepingCapacity: false)
+            return remainder
+        }
+    }
+
+    private func discardOversizedLine() -> Data? {
+        inputBuffer.removeAll(keepingCapacity: false)
+        var chunk = [UInt8](repeating: 0, count: Self.inputReadBufferBytes)
 
         while true {
-            let count = read(STDIN_FILENO, &byte, 1)
-            if count <= 0 {
-                return buffer.isEmpty ? nil : buffer
+            let count = Darwin.read(STDIN_FILENO, &chunk, chunk.count)
+            if count > 0 {
+                let bytes = chunk.prefix(count)
+                if let newlineOffset = bytes.firstIndex(of: 0x0A) {
+                    let remainderStart = bytes.index(after: newlineOffset)
+                    inputBuffer.append(contentsOf: bytes[remainderStart...])
+                    return Data("oversized request\n".utf8)
+                }
+                continue
             }
-            buffer.append(byte)
-            if byte == 0x0A {
-                return buffer
-            }
+            if count == -1, errno == EINTR { continue }
+            return nil
         }
     }
 }

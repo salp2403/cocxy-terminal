@@ -515,6 +515,8 @@ final class CocxyCoreBridge: TerminalEngine {
     // MARK: - State
 
     private var surfaces: [SurfaceID: SurfaceState] = [:]
+    private var reapedPTYChildren = Set<SurfaceID>()
+    private var lastPTYExitPollAt: TimeInterval = 0
     private var config: TerminalEngineConfig?
     private var nativeSemanticPatterns: [TerminalSemanticNativePattern] = []
     var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
@@ -698,11 +700,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // 7. Create PTY read loop
         let masterFd = cocxycore_pty_master_fd(pty)
-        guard masterFd >= 0 else {
+        guard masterFd >= 0,
+              TerminalProcessBoundary.setCloseOnExec(masterFd) else {
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             contextBox.release()
-            throw TerminalEngineError.surfaceCreationFailed(reason: "Invalid PTY master fd")
+            throw TerminalEngineError.surfaceCreationFailed(reason: "Invalid PTY master fd configuration")
         }
 
         // Per-surface lock that serializes PTY feed (background) and frame
@@ -715,6 +718,7 @@ final class CocxyCoreBridge: TerminalEngine {
             masterFd: masterFd,
             terminal: terminal,
             pty: pty,
+            childPID: childPid,
             contextBox: contextBox,
             surfaceID: surfaceID,
             terminalLock: terminalLock
@@ -739,6 +743,7 @@ final class CocxyCoreBridge: TerminalEngine {
             configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
             configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes
         )
+        reapedPTYChildren.remove(surfaceID)
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
@@ -747,6 +752,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func destroySurface(_ id: SurfaceID) {
         guard let state = surfaces.removeValue(forKey: id) else { return }
+        reapedPTYChildren.remove(id)
 
         state.pendingFallbackWorkingDirectoryProbe?.cancel()
 
@@ -1064,9 +1070,22 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func tick() {
-        // CocxyCore does not have a global tick. Each surface's DispatchSource
-        // handles I/O independently. This method exists for protocol conformance.
-        // Process polling happens in the read source event handler.
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastPTYExitPollAt >= 0.05 else { return }
+        lastPTYExitPollAt = now
+
+        for surfaceID in Array(surfaces.keys) where !reapedPTYChildren.contains(surfaceID) {
+            let didReap = withTerminalLock(surfaceID) { state -> Bool in
+                cocxycore_terminal_poll_processes(state.terminal)
+                var waitResult = cocxycore_pty_wait_result()
+                _ = cocxycore_pty_wait_check(state.pty, &waitResult)
+                guard cocxycore_pty_is_alive(state.pty) == false else { return false }
+                return TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID)
+            }
+            if didReap == true {
+                reapedPTYChildren.insert(surfaceID)
+            }
+        }
     }
 
     func setOutputHandler(
@@ -3278,6 +3297,7 @@ final class CocxyCoreBridge: TerminalEngine {
         masterFd: Int32,
         terminal: OpaquePointer,
         pty: OpaquePointer,
+        childPID: Int32,
         contextBox: Unmanaged<CallbackContext>,
         surfaceID: SurfaceID,
         terminalLock: NSLock
@@ -3344,6 +3364,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         source.setCancelHandler {
             cocxycore_terminal_detach_pty(terminal)
+            _ = TerminalProcessBoundary.terminateAndReapPTYChild(childPID)
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             contextBox.release()

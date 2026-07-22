@@ -27,6 +27,26 @@ struct PTYDaemonClientSwiftTestingTests {
         }
     }
 
+    @Test("initialize rejects an incompatible daemon protocol")
+    func initializeRejectsIncompatibleProtocol() {
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(
+                id: "hello",
+                ok: true,
+                hello: PTYDaemonHello(
+                    version: "dev",
+                    protocolVersion: PTYDaemonProtocol.protocolVersion + 1,
+                    capabilities: terminalSurfaceHello().capabilities
+                )
+            )
+        ])
+        let client = PTYDaemonClient(connection: connection)
+
+        #expect(throws: TerminalEngineError.self) {
+            try client.initialize(config: testConfig())
+        }
+    }
+
     @Test("initialize rejects terminal-surface without terminal-engine capability")
     func initializeRejectsTerminalSurfaceWithoutEngineCapability() {
         let connection = MockPTYDaemonClientConnection(responses: [
@@ -200,7 +220,6 @@ struct PTYDaemonClientSwiftTestingTests {
                 ok: true,
                 process: PTYDaemonProcessRegistration(
                     shellPID: 123,
-                    ptyMasterFD: 7,
                     startSeconds: 456,
                     startMicroseconds: 789
                 )
@@ -219,7 +238,7 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(results?.first?.id == resultID)
         #expect(results?.first?.contextBefore == "hay ")
         #expect(process?.shellPID == 123)
-        #expect(process?.ptyMasterFD == 7)
+        #expect(process?.ptyMasterFD == -1)
         #expect(process?.shellIdentity?.startMicroseconds == 789)
     }
 
@@ -481,6 +500,59 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(event?.event == .surfaceOutput)
         #expect(event?.surfaceID == surfaceID.uuidString)
         #expect(event?.bytesBase64 == "b2sK")
+    }
+
+    @Test("process connection turns a closed helper stdin into an error without SIGPIPE")
+    func processConnectionSurvivesClosedHelperInput() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-ptydaemon-epipe-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+        let scriptURL = tempDirectory.appendingPathComponent("fake-cocxyd-epipe.sh")
+        let script = """
+        #!/bin/sh
+        IFS= read -r line
+        printf '{"id":"hello","ok":true,"hello":{"version":"dev","protocolVersion":1,"capabilities":["ipc-jsonl-v1"]}}\\n'
+        exec 0<&-
+        sleep 3
+        """
+        try script.write(to: scriptURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
+        defer { try? FileManager.default.removeItem(at: tempDirectory) }
+
+        let connection = PTYDaemonProcessConnection(executableURL: scriptURL, timeoutSeconds: 1)
+        _ = try connection.send(PTYDaemonRequest(id: "hello", command: .hello))
+        Thread.sleep(forTimeInterval: 0.1)
+
+        #expect(throws: TerminalEngineError.self) {
+            try connection.send(PTYDaemonRequest(id: "second", command: .hello))
+        }
+    }
+
+    @Test("message buffer disconnects on malformed and oversized helper output")
+    func messageBufferBoundsMalformedAndOversizedOutput() {
+        let malformed = PTYDaemonProcessMessageBuffer()
+        let malformedGeneration = malformed.reset()
+        malformed.ingest(Data("not-json\n".utf8), generation: malformedGeneration)
+        #expect(malformed.isDisconnected == true)
+
+        let oversized = PTYDaemonProcessMessageBuffer()
+        let oversizedGeneration = oversized.reset()
+        oversized.ingest(
+            Data(repeating: 0x41, count: 33 * 1_024 * 1_024),
+            generation: oversizedGeneration
+        )
+        #expect(oversized.isDisconnected == true)
+    }
+
+    @Test("stale helper callbacks cannot disconnect a replacement generation")
+    func messageBufferIgnoresStaleGenerationCallbacks() {
+        let buffer = PTYDaemonProcessMessageBuffer()
+        let oldGeneration = buffer.reset()
+        _ = buffer.reset()
+
+        buffer.markDisconnected(generation: oldGeneration)
+
+        #expect(buffer.isDisconnected == false)
     }
 
     @Test("real helper process connection initializes, writes, streams output and frames")

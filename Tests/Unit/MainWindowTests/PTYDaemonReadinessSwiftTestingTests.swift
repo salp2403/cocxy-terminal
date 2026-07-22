@@ -58,6 +58,35 @@ struct PTYDaemonReadinessSwiftTestingTests {
         #expect(readiness.shouldUseInProcessEngine == true)
     }
 
+    @Test("enabled config rejects an incompatible daemon protocol")
+    func incompatibleProtocolFallsBack() {
+        let hello = PTYDaemonHello(
+            version: "dev",
+            protocolVersion: PTYDaemonProtocol.protocolVersion + 1,
+            capabilities: [
+                PTYDaemonProtocol.jsonLinesCapability,
+                PTYDaemonProtocol.terminalSurfaceCapability,
+                PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability,
+            ]
+        )
+        let resolver = PTYDaemonReadinessResolver(expectedHelperVersion: nil) { _ in
+            .success(hello)
+        }
+
+        let readiness = resolver.resolve(
+            config: ExperimentalConfig(ptyDaemonEnabled: true),
+            helperURL: URL(fileURLWithPath: "/tmp/cocxyd")
+        )
+
+        #expect(readiness == .protocolVersionMismatch(
+            actual: PTYDaemonProtocol.protocolVersion + 1,
+            expected: PTYDaemonProtocol.protocolVersion
+        ))
+        #expect(readiness.shouldUseInProcessEngine == true)
+        #expect(readiness.diagnostic.contains("protocol version"))
+    }
+
     @Test("healthy IPC-only helper is explicit fallback")
     func healthyIPCOnlyHelperFallsBack() {
         let hello = PTYDaemonHello(version: "dev", capabilities: [PTYDaemonProtocol.jsonLinesCapability])

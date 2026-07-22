@@ -104,12 +104,24 @@ struct PTYDaemonProtocolSwiftTestingTests {
             scrollbackTop: 3,
             images: [
                 PTYDaemonImageReference(id: "img-1", row: 0, column: 1, width: 4, height: 2)
-            ]
+            ],
+            mouseTrackingMode: 6
         )
         let response = PTYDaemonResponse(id: "frame-1", ok: true, frame: frame)
         let data = try PTYDaemonLineCodec.encode(response)
 
         #expect(try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: data) == response)
+    }
+
+    @Test("process registration omits daemon-local file descriptors")
+    func processRegistrationOmitsDaemonLocalDescriptor() throws {
+        let registration = PTYDaemonProcessRegistration(shellPID: 123)
+        let data = try JSONEncoder().encode(registration)
+        let json = try #require(String(data: data, encoding: .utf8))
+        let decoded = try JSONDecoder().decode(PTYDaemonProcessRegistration.self, from: data)
+
+        #expect(json.contains("ptyMasterFD") == false)
+        #expect(decoded.ptyMasterFD == nil)
     }
 
     @Test("surface output and OSC events round-trip through newline codec")

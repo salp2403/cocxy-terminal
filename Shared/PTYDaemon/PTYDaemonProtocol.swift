@@ -184,6 +184,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let cursor: PTYDaemonCursor
     public let scrollbackTop: Int
     public let images: [PTYDaemonImageReference]
+    public let mouseTrackingMode: UInt8?
 
     public init(
         surfaceID: String,
@@ -194,7 +195,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         cells: [PTYDaemonGridCell],
         cursor: PTYDaemonCursor,
         scrollbackTop: Int = 0,
-        images: [PTYDaemonImageReference] = []
+        images: [PTYDaemonImageReference] = [],
+        mouseTrackingMode: UInt8? = nil
     ) {
         self.surfaceID = surfaceID
         self.revision = revision
@@ -205,6 +207,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.cursor = cursor
         self.scrollbackTop = scrollbackTop
         self.images = images
+        self.mouseTrackingMode = mouseTrackingMode
     }
 }
 
@@ -290,13 +293,13 @@ public struct PTYDaemonSearchResult: Codable, Equatable, Sendable {
 
 public struct PTYDaemonProcessRegistration: Codable, Equatable, Sendable {
     public let shellPID: Int32
-    public let ptyMasterFD: Int32
+    public let ptyMasterFD: Int32?
     public let startSeconds: UInt64?
     public let startMicroseconds: UInt64?
 
     public init(
         shellPID: Int32,
-        ptyMasterFD: Int32,
+        ptyMasterFD: Int32? = nil,
         startSeconds: UInt64? = nil,
         startMicroseconds: UInt64? = nil
     ) {

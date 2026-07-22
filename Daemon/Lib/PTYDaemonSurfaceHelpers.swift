@@ -42,6 +42,14 @@ extension Dictionary where Key == String, Value == String {
         nonEmpty(key).flatMap(UInt16.init)
     }
 
+    func uint16(_ key: String, default defaultValue: UInt16) throws -> UInt16 {
+        guard let raw = self[key], raw.isEmpty == false else { return defaultValue }
+        guard let value = UInt16(raw) else {
+            throw PTYDaemonSurfaceError.invalidPayload("\(key) must be an unsigned 16-bit integer")
+        }
+        return value
+    }
+
     func uint32(_ key: String) -> UInt32? {
         nonEmpty(key).flatMap(UInt32.init)
     }

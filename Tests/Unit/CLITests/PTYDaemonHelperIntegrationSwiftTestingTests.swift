@@ -80,6 +80,196 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         )
     }
 
+    @Test("new PTY children do not inherit another surface's master descriptor")
+    func helperPTYMastersAreCloseOnExec() throws {
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+
+        var surfaces: [String] = []
+        for index in 0..<2 {
+            let create = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: "create-\(index)",
+                    command: .surfaceCreate,
+                    payload: [
+                        "command": "/bin/cat",
+                        "workingDirectory": "/tmp",
+                        "rows": "8",
+                        "columns": "40",
+                    ]
+                )
+            )
+            surfaces.append(try #require(create.surfaceID))
+        }
+
+        let process = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "process-second",
+                command: .surfaceProcess,
+                payload: ["surfaceID": surfaces[1]]
+            )
+        )
+        let secondPID = try #require(process.process?.shellPID)
+        let descriptors = try numericOpenFileDescriptors(for: secondPID)
+
+        #expect(descriptors.filter { $0 > STDERR_FILENO }.isEmpty)
+
+        for (index, surfaceID) in surfaces.enumerated() {
+            let close = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: "close-\(index)",
+                    command: .surfaceClose,
+                    payload: ["surfaceID": surfaceID]
+                )
+            )
+            #expect(close.ok == true)
+        }
+    }
+
+    @Test("a naturally exiting shell is reaped and removed from the registry")
+    func helperReapsNaturallyExitingShell() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-natural-exit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let trigger = root.appendingPathComponent("exit-now")
+        let script = root.appendingPathComponent("wait-then-exit.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            while [ ! -e "\(trigger.path)" ]; do
+              sleep 0.02
+            done
+            exit 0
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-natural-exit",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        let process = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "process-natural-exit",
+                command: .surfaceProcess,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let shellPID = try #require(process.process?.shellPID)
+
+        try Data().write(to: trigger)
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+
+        #expect(waitForProcessToDisappear(shellPID, timeout: 2))
+        let attach = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "attach-after-exit",
+                command: .surfaceAttach,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        #expect(attach.ok == false)
+    }
+
+    @Test("shutdown waits for HUP and TERM resistant shells to be killed and reaped")
+    func helperShutdownReapsSignalResistantShell() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-resistant-exit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let script = root.appendingPathComponent("resist-signals.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            trap '' HUP TERM
+            printf ready > "\(ready.path)"
+            while :; do
+              sleep 1
+            done
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-resistant",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        let process = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "process-resistant",
+                command: .surfaceProcess,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let shellPID = try #require(process.process?.shellPID)
+        #expect(waitForFile(ready, timeout: 2))
+
+        let shutdown = try helper.shutdownGracefully(timeout: 6)
+
+        #expect(shutdown.ok == true)
+        #expect(helper.isRunning == false)
+        #expect(processExists(shellPID) == false)
+    }
+
+    @Test("stdin EOF closes and reaps every daemon surface")
+    func helperEOFReapsLiveShell() throws {
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-before-eof",
+                command: .surfaceCreate,
+                payload: [
+                    "command": "/bin/cat",
+                    "workingDirectory": "/tmp",
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        let process = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "process-before-eof",
+                command: .surfaceProcess,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let shellPID = try #require(process.process?.shellPID)
+
+        try helper.closeInputAndWaitForExit(timeout: 5)
+
+        #expect(helper.isRunning == false)
+        #expect(processExists(shellPID) == false)
+    }
+
     @Test("daemon isolates output across N concurrent surfaces under one helper process")
     func helperIsolatesOutputAcrossConcurrentSurfaces() throws {
         let helper = try RunningHelperProcess()
@@ -247,6 +437,21 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         )
         #expect(invalidCreate.ok == false)
         #expect(invalidCreate.error?.contains("workingDirectory") == true)
+
+        let oversizedCreate = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "oversized-create",
+                command: .surfaceCreate,
+                payload: [
+                    "command": "/bin/sh",
+                    "workingDirectory": "/tmp",
+                    "rows": "513",
+                    "columns": "40",
+                ]
+            )
+        )
+        #expect(oversizedCreate.ok == false)
+        #expect(oversizedCreate.error?.contains("safety limit") == true)
 
         let create = try helper.sendAndWait(
             PTYDaemonRequest(
@@ -427,7 +632,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         )
         #expect(process.ok == true)
         #expect((process.process?.shellPID ?? -1) > 0)
-        #expect((process.process?.ptyMasterFD ?? -1) >= 0)
+        #expect(process.process?.ptyMasterFD == nil)
 
         let close = try helper.sendAndWait(
             PTYDaemonRequest(
@@ -500,6 +705,9 @@ private final class RunningHelperProcess {
         process.standardInput = input
         process.standardOutput = output
         process.standardError = Pipe()
+        guard TerminalProcessBoundary.setNoSigPipe(input.fileHandleForWriting.fileDescriptor) else {
+            throw HelperTestError.transport("failed to disable SIGPIPE")
+        }
         if extraEnvironment.isEmpty == false {
             var env = ProcessInfo.processInfo.environment
             for (key, value) in extraEnvironment {
@@ -526,6 +734,7 @@ private final class RunningHelperProcess {
         output.fileHandleForReading.readabilityHandler = nil
         if process.isRunning {
             kill(process.processIdentifier, SIGKILL)
+            process.waitUntilExit()
         }
         try? input.fileHandleForWriting.close()
     }
@@ -535,8 +744,57 @@ private final class RunningHelperProcess {
     }
 
     func sendAndWait(_ request: PTYDaemonRequest, timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
-        input.fileHandleForWriting.write(try PTYDaemonLineCodec.encode(request))
+        guard TerminalProcessBoundary.writeAll(
+            try PTYDaemonLineCodec.encode(request),
+            to: input.fileHandleForWriting.fileDescriptor
+        ) else {
+            throw HelperTestError.transport("request write failed")
+        }
         return try waitForResponse(id: request.id, timeout: timeout)
+    }
+
+    func shutdownGracefully(timeout: TimeInterval = 5) throws -> PTYDaemonResponse {
+        guard isShutdown == false else {
+            throw HelperTestError.transport("helper already shut down")
+        }
+        let response = try sendAndWait(
+            PTYDaemonRequest(id: "shutdown", command: .shutdown),
+            timeout: timeout
+        )
+        isShutdown = true
+        try? input.fileHandleForWriting.close()
+        output.fileHandleForReading.readabilityHandler = nil
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            process.waitUntilExit()
+            throw HelperTestError.timeout("helper process exit after shutdown")
+        }
+        process.waitUntilExit()
+        return response
+    }
+
+    func closeInputAndWaitForExit(timeout: TimeInterval = 5) throws {
+        guard isShutdown == false else {
+            throw HelperTestError.transport("helper already shut down")
+        }
+        isShutdown = true
+        try input.fileHandleForWriting.close()
+
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        if process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            process.waitUntilExit()
+            throw HelperTestError.timeout("helper process exit after stdin EOF")
+        }
+        process.waitUntilExit()
     }
 
     func waitForEvent(
@@ -596,14 +854,16 @@ private final class RunningHelperProcess {
 
     func shutdownIfNeeded() {
         guard isShutdown == false else { return }
-        isShutdown = true
-        output.fileHandleForReading.readabilityHandler = nil
-        if process.isRunning {
-            try? input.fileHandleForWriting.write(
-                PTYDaemonLineCodec.encode(PTYDaemonRequest(id: "shutdown", command: .shutdown))
-            )
-            input.fileHandleForWriting.closeFile()
-            process.terminate()
+        if process.isRunning, (try? shutdownGracefully()) == nil {
+            isShutdown = true
+            output.fileHandleForReading.readabilityHandler = nil
+            try? input.fileHandleForWriting.close()
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                process.waitUntilExit()
+            }
+        } else {
+            isShutdown = true
         }
     }
 
@@ -681,6 +941,7 @@ private func helperExecutableURL() throws -> URL {
 private enum HelperTestError: Error, CustomStringConvertible {
     case missing([String])
     case timeout(String)
+    case transport(String)
 
     var description: String {
         switch self {
@@ -688,8 +949,58 @@ private enum HelperTestError: Error, CustomStringConvertible {
             "Missing built cocxyd helper at: \(paths.joined(separator: ", "))"
         case .timeout(let label):
             "Timed out waiting for \(label)"
+        case .transport(let reason):
+            "Helper transport failed: \(reason)"
         }
     }
+}
+
+private func numericOpenFileDescriptors(for pid: Int32) throws -> [Int] {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+    process.arguments = ["-a", "-p", "\(pid)", "-d", "0-255", "-Fn"]
+    let output = Pipe()
+    process.standardOutput = output
+    process.standardError = Pipe()
+    try process.run()
+    process.waitUntilExit()
+    guard process.terminationStatus == 0 else {
+        throw HelperTestError.transport("lsof exited with \(process.terminationStatus)")
+    }
+    let text = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+    return text.split(separator: "\n").compactMap { line in
+        guard line.first == "f" else { return nil }
+        return Int(line.dropFirst())
+    }
+}
+
+private func processExists(_ pid: Int32) -> Bool {
+    guard pid > 0 else { return false }
+    errno = 0
+    return kill(pid, 0) == 0 || errno == EPERM
+}
+
+private func waitForProcessToDisappear(_ pid: Int32, timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if processExists(pid) == false { return true }
+        Thread.sleep(forTimeInterval: 0.01)
+    }
+    return processExists(pid) == false
+}
+
+private func waitForFile(_ url: URL, timeout: TimeInterval) -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while Date() < deadline {
+        if FileManager.default.fileExists(atPath: url.path) { return true }
+        Thread.sleep(forTimeInterval: 0.01)
+    }
+    return FileManager.default.fileExists(atPath: url.path)
+}
+
+private func writeExecutableTestScript(_ contents: String, to url: URL) throws {
+    try contents.write(to: url, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
 }
 
 private extension NSLock {

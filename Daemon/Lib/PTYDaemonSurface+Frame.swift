@@ -59,7 +59,8 @@ extension PTYDaemonSurface {
                 style: Self.cursorStyle(renderCursor.shape)
             ),
             scrollbackTop: Int(cocxycore_terminal_history_visible_start(terminal)),
-            images: []
+            images: [],
+            mouseTrackingMode: cocxycore_terminal_mode_mouse(terminal)
         )
     }
 

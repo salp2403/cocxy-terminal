@@ -5,17 +5,26 @@ import Foundation
 import CocxyShared
 
 final class PTYDaemonLineWriter: @unchecked Sendable {
-    private let handle: FileHandle
+    private let descriptor: Int32
+    private let descriptorIsSafe: Bool
     private let lock = NSLock()
 
     init(handle: FileHandle = .standardOutput) {
-        self.handle = handle
+        self.descriptor = handle.fileDescriptor
+        self.descriptorIsSafe = TerminalProcessBoundary.setNoSigPipe(handle.fileDescriptor)
+            && TerminalProcessBoundary.setNonBlocking(handle.fileDescriptor)
     }
 
-    func write<T: Encodable>(_ value: T) {
-        guard let data = try? PTYDaemonLineCodec.encode(value) else { return }
+    @discardableResult
+    func write<T: Encodable>(_ value: T) -> Bool {
+        guard descriptorIsSafe,
+              let data = try? PTYDaemonLineCodec.encode(value) else { return false }
         lock.lock()
         defer { lock.unlock() }
-        handle.write(data)
+        return TerminalProcessBoundary.writeAll(
+            data,
+            to: descriptor,
+            maximumWaitMilliseconds: 1_000
+        )
     }
 }
