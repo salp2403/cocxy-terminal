@@ -3086,8 +3086,8 @@
 "remoteWorkspace.sftp.download.inProgress" = "Descargando...";
 "remoteWorkspace.browserSuggestions.title" = "Navegador remoto";
 "remoteWorkspace.browserSuggestions.switch.title" = "¿Cambiar la conexión del navegador remoto?";
-"remoteWorkspace.browserSuggestions.switch.action" = "Detener reenvíos actuales y cambiar";
-"remoteWorkspace.browserSuggestions.switch.message" = "Se detendrán los reenvíos del navegador remoto en la otra conexión.";
+"remoteWorkspace.browserSuggestions.switch.action" = "Cerrar rutas remotas y cambiar";
+"remoteWorkspace.browserSuggestions.switch.message" = "Se cerrarán las rutas protegidas del navegador en la otra conexión.";
 "remoteWorkspace.browserSuggestions.error.title" = "Falló el navegador remoto";
 "remoteWorkspace.browserSuggestions.scanning" = "Buscando puertos remotos";
 "remoteWorkspace.browserSuggestions.refresh.accessibility" = "Actualizar puertos remotos";
@@ -3102,6 +3102,7 @@
 "remoteWorkspace.browserSuggestions.unknownProcess" = "servicio remoto";
 "remoteWorkspace.browserSuggestions.open.accessibility" = "Abrir el puerto remoto %d en el navegador";
 "remoteWorkspace.browserSuggestions.forwardAndOpen" = "Reenviar y abrir en el navegador";
+"remoteWorkspace.browserSuggestions.secureOpen" = "Abrir de forma segura en el navegador";
 "remoteWorkspace.browserSuggestions.open" = "Abrir en el navegador";
 "remoteWorkspace.browserSuggestions.stop.accessibility" = "Detener el reenvío del puerto remoto %d";
 "remoteWorkspace.browserSuggestions.stop" = "Detener reenvío";

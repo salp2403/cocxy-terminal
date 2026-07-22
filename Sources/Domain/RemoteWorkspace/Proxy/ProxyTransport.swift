@@ -76,7 +76,7 @@ enum ProxyTargetError: Error, Equatable, LocalizedError {
 }
 
 /// A validated host and port for one OpenSSH MUX `direct-tcpip` request.
-struct ProxyTarget: Equatable, Sendable {
+struct ProxyTarget: Hashable, Sendable {
     let host: String
     let port: Int
 

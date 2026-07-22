@@ -36,6 +36,7 @@ extension MainWindowController {
     func revokeBrowserAuthorizations(in panelViews: [NSView]) {
         for panelView in panelViews {
             guard let viewModel = browserViewModel(containedIn: panelView) else { continue }
+            revokeRemoteBrowserRouteOwnership(of: viewModel)
             viewModel.revokeDOMGrabAuthorization()
             viewModel.revokeAllInitScripts()
         }

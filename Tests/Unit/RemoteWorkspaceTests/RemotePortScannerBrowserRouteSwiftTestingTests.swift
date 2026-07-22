@@ -1,19 +1,13 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// RemotePortScannerBrowserRouteSwiftTestingTests.swift - Browser routing tests for remote port discovery.
+// RemotePortScannerBrowserRouteSwiftTestingTests.swift - Protected browser route discovery tests.
 
-import Combine
 import Foundation
 import Testing
 @testable import CocxyTerminal
 
 private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Sendable {
     var attemptedForwards: [RemoteConnectionProfile.PortForward] = []
-    var forwarded: [RemoteConnectionProfile.PortForward] = []
-    var cancelled: [RemoteConnectionProfile.PortForward] = []
-    var lifecycleEvents: [String] = []
-    var failingLocalPorts: Set<Int> = []
-    var failingCancellations: Set<Int> = []
-    var disconnectedProfileIDs: [UUID] = []
+    var cancelledForwards: [RemoteConnectionProfile.PortForward] = []
     var remoteCommandResults: [String: ProcessResult] = [:]
 
     func connect(
@@ -23,27 +17,16 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
         SSHControlMasterIdentity(processID: 56_789, controlPath: profile.controlPath)
     }
 
-    func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {
-        disconnectedProfileIDs.append(profile.id)
-    }
+    func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
 
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool {
         true
     }
 
-    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool {
-        false
-    }
-
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool { false }
     func terminateControlMaster(_ identity: SSHControlMasterIdentity) {}
-
-    func controlPath(for profile: RemoteConnectionProfile) -> String {
-        profile.controlPath
-    }
-
-    func newSession(profile: RemoteConnectionProfile) -> String {
-        "ssh mock"
-    }
+    func controlPath(for profile: RemoteConnectionProfile) -> String { profile.controlPath }
+    func newSession(profile: RemoteConnectionProfile) -> String { "ssh mock" }
 
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
@@ -51,10 +34,6 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
         executor: any ProcessExecutor
     ) throws {
         attemptedForwards.append(forward)
-        if let localPort = forward.boundLocalPort, failingLocalPorts.contains(localPort) {
-            throw SSHMultiplexerError.connectionFailed("local port busy")
-        }
-        forwarded.append(forward)
     }
 
     func cancelForward(
@@ -62,12 +41,7 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
-        lifecycleEvents.append("cancel")
-        if let localPort = forward.boundLocalPort,
-           failingCancellations.contains(localPort) {
-            throw SSHMultiplexerError.connectionFailed("cancel failed")
-        }
-        cancelled.append(forward)
+        cancelledForwards.append(forward)
     }
 
     func executeRemoteCommand(
@@ -82,29 +56,21 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
 private final class RemotePortScannerProfileStore: RemoteProfileStoring, @unchecked Sendable {
     var profiles: [RemoteConnectionProfile] = []
 
-    func loadAll() throws -> [RemoteConnectionProfile] {
-        profiles
-    }
-
-    func save(_ profile: RemoteConnectionProfile) throws {
-        profiles.append(profile)
-    }
-
-    func delete(id: UUID) throws {
-        profiles.removeAll { $0.id == id }
-    }
-
+    func loadAll() throws -> [RemoteConnectionProfile] { profiles }
+    func save(_ profile: RemoteConnectionProfile) throws { profiles.append(profile) }
+    func delete(id: UUID) throws { profiles.removeAll { $0.id == id } }
     func findByName(_ name: String) throws -> RemoteConnectionProfile? {
         profiles.first { $0.name == name }
     }
-
     func findByGroup(_ group: String) throws -> [RemoteConnectionProfile] {
         profiles.filter { $0.group == group }
     }
 }
 
-@Suite("RemotePortScanner browser routes")
+@Suite("RemotePortScanner protected browser routes")
 struct RemotePortScannerBrowserRouteSwiftTestingTests {
+    private static let scanCommand = "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
+
     @MainActor private static func makeConnectionManager(
         multiplexer: RemotePortScannerMultiplexer
     ) -> RemoteConnectionManager {
@@ -116,85 +82,74 @@ struct RemotePortScannerBrowserRouteSwiftTestingTests {
         )
     }
 
+    @MainActor private static func connectedScanner(
+        output: String,
+        profile: RemoteConnectionProfile = RemoteConnectionProfile(
+            id: UUID(),
+            name: "Remote Dev",
+            host: "dev.internal",
+            user: "said"
+        )
+    ) async -> (RemotePortScanner, RemotePortScannerMultiplexer, RemoteConnectionProfile) {
+        let multiplexer = RemotePortScannerMultiplexer()
+        let manager = makeConnectionManager(multiplexer: multiplexer)
+        await manager.connect(profile: profile)
+        multiplexer.remoteCommandResults[scanCommand] = ProcessResult(
+            exitCode: 0,
+            stdout: output,
+            stderr: ""
+        )
+        let scanner = RemotePortScanner(connectionManager: manager)
+        scanner.startScanning(profileID: profile.id, performInitialScan: false)
+        await scanner.refreshNow()
+        return (scanner, multiplexer, profile)
+    }
+
     @Test("Automatic selection keeps an explicitly active connected profile")
     func automaticSelectionKeepsCurrentConnectedProfile() {
         let first = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
         let selected = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
 
-        let result = RemotePortScanner.preferredScanningProfileID(
+        #expect(RemotePortScanner.preferredScanningProfileID(
             currentProfileID: selected,
             connections: [
                 first: .connected(latencyMs: nil),
                 selected: .connected(latencyMs: 12),
             ]
-        )
-
-        #expect(result == selected)
+        ) == selected)
     }
 
     @Test("Automatic selection chooses a deterministic connected replacement")
     func automaticSelectionChoosesDeterministicReplacement() {
         let first = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
         let second = UUID(uuidString: "00000000-0000-0000-0000-000000000002")!
-        let disconnected = UUID(uuidString: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF")!
 
-        let result = RemotePortScanner.preferredScanningProfileID(
-            currentProfileID: disconnected,
+        #expect(RemotePortScanner.preferredScanningProfileID(
+            currentProfileID: nil,
             connections: [
                 second: .connected(latencyMs: nil),
                 first: .connected(latencyMs: nil),
-                disconnected: .disconnected,
             ]
-        )
-
-        #expect(result == first)
+        ) == first)
     }
 
-    @Test("Scan discovers a dev service without publishing a local forward")
-    @MainActor func scanDoesNotPublishDetectedService() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        multiplexer.failingLocalPorts = [3000]
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(
-            id: UUID(),
-            name: "Remote Dev",
-            host: "dev.internal",
-            user: "said"
+    @Test("Scan discovers services without creating any SSH listener")
+    @MainActor func scanIsDiscoveryOnly() async {
+        let (scanner, multiplexer, _) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1234,fd=15))"#
         )
-        await manager.connect(profile: profile)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { remotePort, _ in [remotePort, 53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1234,fd=15))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-
-        await scanner.refreshNow()
 
         #expect(scanner.detectedPorts == [
             RemotePortInfo(port: 3000, process: "node", address: "127.0.0.1"),
         ])
         #expect(multiplexer.attemptedForwards.isEmpty)
-        #expect(multiplexer.forwarded.isEmpty)
-        #expect(scanner.forwardedPorts.isEmpty)
-        #expect(scanner.forwardedPortMappings.isEmpty)
-        #expect(scanner.browserOpenSuggestions.isEmpty)
+        #expect(multiplexer.cancelledForwards.isEmpty)
     }
 
     @Test("Listening endpoint parser distinguishes loopback and wildcard addresses")
     @MainActor func parserPreservesListeningAddressScope() {
         let multiplexer = RemotePortScannerMultiplexer()
         let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
             connectionManager: Self.makeConnectionManager(multiplexer: multiplexer)
         )
 
@@ -213,410 +168,141 @@ struct RemotePortScannerBrowserRouteSwiftTestingTests {
         ])
     }
 
-    @Test("Explicit forward falls back to a browser-safe port and publishes a suggestion")
-    @MainActor func explicitForwardPublishesBrowserSuggestionWithFallbackPort() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        multiplexer.failingLocalPorts = [3000]
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(
-            id: UUID(),
-            name: "Remote Dev",
-            host: "dev.internal",
-            user: "said"
+    @Test("Explicit browser approval returns remote metadata without forwarding")
+    @MainActor func approvalProducesBrokerTargetOnly() async throws {
+        let (scanner, multiplexer, profile) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1234,fd=15))"#
         )
-        await manager.connect(profile: profile)
 
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { remotePort, _ in [remotePort, 53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1234,fd=15))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
+        let suggestion = try scanner.beginBrowserOpen(3000)
 
-        _ = try await scanner.forwardDetectedPort(3000)
-
-        #expect(multiplexer.attemptedForwards.count == 2)
-        #expect(multiplexer.forwarded.count == 1)
-        #expect(scanner.forwardedPorts == Set([3000]))
-        #expect(scanner.forwardedPortMappings[3000] == 53_000)
-        #expect(scanner.browserOpenSuggestions.count == 1)
-        let suggestion = try #require(scanner.browserOpenSuggestions.first)
+        #expect(suggestion.profileID == profile.id)
         #expect(suggestion.remotePort == 3000)
-        #expect(suggestion.localPort == 53_000)
-        #expect(suggestion.localURL.absoluteString == "http://127.0.0.1:53000/")
         #expect(suggestion.process == "node")
+        #expect(suggestion.remoteAddress == "127.0.0.1")
+        #expect(suggestion.browserURL.absoluteString == "http://localhost:3000/")
+        #expect(scanner.busyPorts == [3000])
+        #expect(multiplexer.attemptedForwards.isEmpty)
+
+        scanner.finishBrowserOpen(3000)
+        #expect(scanner.busyPorts.isEmpty)
     }
 
-    @Test("Explicit forward skips a locally bound candidate before publishing")
-    @MainActor func explicitForwardSkipsLocallyBoundCandidate() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(
-            id: UUID(),
-            name: "Remote Dev",
-            host: "dev.internal",
-            user: "said"
+    @Test("Opening operation retains busy ownership until the async opener finishes")
+    @MainActor func openingOperationOwnsBusyState() async throws {
+        let (scanner, multiplexer, profile) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#
         )
-        await manager.connect(profile: profile)
 
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { remotePort, _ in [remotePort, 53_000] },
-            localPortAvailability: { $0 != 3000 }
+        let suggestion = try await RemoteBrowserOpeningOperation.open(
+            remotePort: 3000,
+            profile: profile,
+            scanner: scanner,
+            opener: { openedProfile, openedSuggestion in
+                #expect(openedProfile.id == profile.id)
+                #expect(openedSuggestion.browserURL.absoluteString == "http://localhost:3000/")
+                #expect(scanner.busyPorts == [3000])
+                return true
+            }
         )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1234,fd=15))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
 
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(3000)
-
-        #expect(multiplexer.attemptedForwards.count == 1)
-        #expect(multiplexer.forwarded.count == 1)
-        #expect(scanner.forwardedPortMappings[3000] == 53_000)
-        let suggestion = try #require(scanner.browserOpenSuggestions.first)
-        #expect(suggestion.localURL.absoluteString == "http://127.0.0.1:53000/")
+        #expect(suggestion.remotePort == 3000)
+        #expect(scanner.busyPorts.isEmpty)
+        #expect(multiplexer.attemptedForwards.isEmpty)
     }
 
-    @Test("Scanner builds remote browser profile and route from forwarded mapping")
-    @MainActor func scannerBuildsRemoteBrowserProfileAndRoute() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(
-            id: UUID(),
-            name: "Lab",
-            host: "lab.internal",
-            user: "dev",
-            port: 2200
+    @Test("Rejected browser surface leaves no SSH capability behind")
+    @MainActor func rejectedBrowserOpenLeavesNoForward() async {
+        let (scanner, multiplexer, profile) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#
         )
-        await manager.connect(profile: profile)
 
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [55_173] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 0.0.0.0:5173 *:* users:(("vite",pid=42,fd=9))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(5173)
-
-        let browserProfile = scanner.browserProfile(
-            for: profile,
-            proxyState: .active(
-                profileID: profile.id,
-                socksPort: 1080,
-                httpPort: 18888
+        await #expect(throws: RemotePortScannerError.browserUnavailable) {
+            _ = try await RemoteBrowserOpeningOperation.open(
+                remotePort: 3000,
+                profile: profile,
+                scanner: scanner,
+                opener: { _, _ in false }
             )
-        )
-        let route = try #require(scanner.browserRoute(
-            forRemotePort: 5173,
-            remoteConnectionProfile: profile,
-            proxyState: .active(
-                profileID: profile.id,
-                socksPort: 1080,
-                httpPort: 18888
-            ),
-            path: "dashboard"
-        ))
+        }
 
-        #expect(browserProfile.displayTitle == "Lab (dev@lab.internal:2200)")
-        #expect(browserProfile.localForwardedPorts == [5173: 55_173])
-        #expect(browserProfile.proxyHealth == .active)
-        #expect(browserProfile.socksPort == 1080)
-        #expect(browserProfile.httpConnectPort == 18888)
-        #expect(route.remoteAddress == "lab.internal:5173")
-        #expect(route.localURL.absoluteString == "http://127.0.0.1:55173/dashboard")
+        #expect(scanner.busyPorts.isEmpty)
+        #expect(multiplexer.attemptedForwards.isEmpty)
+        #expect(multiplexer.cancelledForwards.isEmpty)
     }
 
-    @Test("Switching scanned profile clears stale browser routes")
-    @MainActor func switchingScannedProfileClearsStaleBrowserRoutes() async throws {
+    @Test("A second open for the same port fails closed while approval is active")
+    @MainActor func duplicateOpenIsRejected() async throws {
+        let (scanner, _, _) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#
+        )
+
+        _ = try scanner.beginBrowserOpen(3000)
+        #expect(throws: RemotePortScannerError.operationInProgress(3000)) {
+            _ = try scanner.beginBrowserOpen(3000)
+        }
+        scanner.finishBrowserOpen(3000)
+    }
+
+    @Test("Stopping revokes route ownership before scanner state is cleared")
+    @MainActor func stopRevokesBeforeClearingState() async {
+        let (scanner, _, profile) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#
+        )
+        var observedProfileID: UUID?
+        var observedDetectedPorts: [RemotePortInfo] = []
+        scanner.routeRevocationHandler = { revokedProfileID in
+            observedProfileID = scanner.scanningProfileID
+            observedDetectedPorts = scanner.detectedPorts
+            #expect(revokedProfileID == profile.id)
+        }
+
+        scanner.stopScanning()
+
+        #expect(observedProfileID == profile.id)
+        #expect(observedDetectedPorts.map(\.port) == [3000])
+        #expect(scanner.scanningProfileID == nil)
+        #expect(scanner.detectedPorts.isEmpty)
+        #expect(!scanner.isScanning)
+    }
+
+    @Test("Switching profiles revokes the previous route exactly once")
+    @MainActor func profileSwitchRevokesPreviousRoute() async {
         let multiplexer = RemotePortScannerMultiplexer()
         let manager = Self.makeConnectionManager(multiplexer: multiplexer)
         let first = RemoteConnectionProfile(id: UUID(), name: "One", host: "one.internal")
         let second = RemoteConnectionProfile(id: UUID(), name: "Two", host: "two.internal")
         await manager.connect(profile: first)
         await manager.connect(profile: second)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1234,fd=15))"#,
-            stderr: ""
-        )
+        let scanner = RemotePortScanner(connectionManager: manager)
+        var revoked: [UUID] = []
+        scanner.routeRevocationHandler = { revoked.append($0) }
 
         scanner.startScanning(profileID: first.id, performInitialScan: false)
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(3000)
-        #expect(scanner.scanningProfileID == first.id)
-        #expect(scanner.forwardedPortMappings[3000] == 53_000)
-        #expect(scanner.browserOpenSuggestions.count == 1)
-
         scanner.startScanning(profileID: second.id, performInitialScan: false)
 
-        #expect(multiplexer.cancelled == [
-            .local(localPort: 53_000, remotePort: 3000),
-        ])
+        #expect(revoked == [first.id])
         #expect(scanner.scanningProfileID == second.id)
-        #expect(scanner.forwardedPortMappings.isEmpty)
-        #expect(scanner.browserOpenSuggestions.isEmpty)
     }
 
-    @Test("Stopping clears browser leases before cancelling scanner-owned forwards")
-    @MainActor func stopClearsBrowserLeasesBeforeCancellingOwnedForwards() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(
-            id: UUID(),
-            name: "Remote Dev",
-            host: "dev.internal"
-        )
-        await manager.connect(profile: profile)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { remotePort, _ in
-                remotePort == 3000 ? [53_000] : [55_173]
-            },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: """
-            LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))
-            LISTEN 0 128 127.0.0.1:5173 *:* users:(("vite",pid=2,fd=4))
-            """,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(3000)
-        _ = try await scanner.forwardDetectedPort(5173)
-        let leaseObserver = scanner.$forwardedPortMappings
-            .dropFirst()
-            .sink { mappings in
-                if mappings.isEmpty {
-                    multiplexer.lifecycleEvents.append("leases-cleared")
-                }
-            }
-
-        scanner.stopScanning()
-
-        #expect(multiplexer.lifecycleEvents == [
-            "leases-cleared",
-            "cancel",
-            "cancel",
-        ])
-        #expect(multiplexer.cancelled == [
-            .local(localPort: 53_000, remotePort: 3000),
-            .local(localPort: 55_173, remotePort: 5173),
-        ])
-        #expect(scanner.scanningProfileID == nil)
-        #expect(scanner.detectedPorts.isEmpty)
-        #expect(scanner.forwardedPorts.isEmpty)
-        #expect(scanner.forwardedPortMappings.isEmpty)
-        #expect(scanner.browserOpenSuggestions.isEmpty)
-        _ = leaseObserver
-    }
-
-    @Test("Rejected browser navigation rolls back a newly-created forward")
-    @MainActor func rejectedBrowserNavigationRollsBackNewForward() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(id: UUID(), name: "Remote Dev", host: "dev.internal")
-        await manager.connect(profile: profile)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
-
-        await #expect(throws: RemotePortScannerError.browserUnavailable) {
-            _ = try await RemoteBrowserOpeningOperation.open(
-                remotePort: 3000,
-                profile: profile,
-                scanner: scanner,
-                opener: { _, _ in false }
-            )
-        }
-
-        #expect(multiplexer.forwarded == [.local(localPort: 53_000, remotePort: 3000)])
-        #expect(multiplexer.cancelled == [.local(localPort: 53_000, remotePort: 3000)])
-        #expect(scanner.forwardedPortMappings.isEmpty)
-        #expect(scanner.browserOpenSuggestions.isEmpty)
-    }
-
-    @Test("Rejected browser navigation preserves a pre-existing forward")
-    @MainActor func rejectedBrowserNavigationPreservesExistingForward() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(id: UUID(), name: "Remote Dev", host: "dev.internal")
-        await manager.connect(profile: profile)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(3000)
-
-        await #expect(throws: RemotePortScannerError.browserUnavailable) {
-            _ = try await RemoteBrowserOpeningOperation.open(
-                remotePort: 3000,
-                profile: profile,
-                scanner: scanner,
-                opener: { _, _ in false }
-            )
-        }
-
-        #expect(multiplexer.cancelled.isEmpty)
-        #expect(scanner.forwardedPortMappings == [3000: 53_000])
-    }
-
-    @Test("Failed cancellation retains the forward lease for an explicit retry")
-    @MainActor func failedCancellationRetainsPublishedForward() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(id: UUID(), name: "Remote Dev", host: "dev.internal")
-        await manager.connect(profile: profile)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(3000)
-        multiplexer.failingCancellations = [53_000]
-
-        #expect(throws: RemotePortScannerError.cancellationFailed(3000)) {
-            try scanner.cancelForwardedPort(3000)
-        }
-
-        #expect(scanner.forwardedPortMappings == [3000: 53_000])
-        #expect(scanner.browserOpenSuggestions.map(\.remotePort) == [3000])
-    }
-
-    @Test("TLS development ports produce HTTPS browser routes")
+    @Test("TLS development ports produce HTTPS broker targets")
     @MainActor func tlsPortProducesHTTPSRoute() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(id: UUID(), name: "Remote TLS", host: "dev.internal")
-        await manager.connect(profile: profile)
-
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [58_443] },
-            localPortAvailability: { _ in true }
+        let (scanner, _, _) = await Self.connectedScanner(
+            output: #"LISTEN 0 128 0.0.0.0:8443 *:* users:(("server",pid=2,fd=4))"#
         )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 0.0.0.0:8443 *:* users:(("server",pid=2,fd=4))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
 
-        let suggestion = try await scanner.forwardDetectedPort(8443)
+        let suggestion = try scanner.beginBrowserOpen(8443)
+        defer { scanner.finishBrowserOpen(8443) }
 
-        #expect(suggestion.localURL.absoluteString == "https://127.0.0.1:58443/")
+        #expect(suggestion.browserURL.absoluteString == "https://localhost:8443/")
     }
 
-    @Test("Scanner teardown revokes the SSH lease when forward cancellation fails")
-    @MainActor func teardownFailureRevokesForwardingSession() async throws {
-        let multiplexer = RemotePortScannerMultiplexer()
-        let manager = Self.makeConnectionManager(multiplexer: multiplexer)
-        let profile = RemoteConnectionProfile(id: UUID(), name: "Remote Dev", host: "dev.internal")
-        await manager.connect(profile: profile)
+    @Test("Approval rejects a service that disappeared after discovery")
+    @MainActor func staleServiceIsRejected() async {
+        let (scanner, _, _) = await Self.connectedScanner(output: "")
 
-        let scanner = RemotePortScanner(
-            multiplexer: multiplexer,
-            connectionManager: manager,
-            localPortCandidates: { _, _ in [53_000] },
-            localPortAvailability: { _ in true }
-        )
-        multiplexer.remoteCommandResults[
-            "ss -tlnp 2>/dev/null || netstat -tlnp 2>/dev/null"
-        ] = ProcessResult(
-            exitCode: 0,
-            stdout: #"LISTEN 0 128 127.0.0.1:3000 *:* users:(("node",pid=1,fd=3))"#,
-            stderr: ""
-        )
-        scanner.startScanning(profileID: profile.id, performInitialScan: false)
-        await scanner.refreshNow()
-        _ = try await scanner.forwardDetectedPort(3000)
-        multiplexer.failingCancellations = [53_000]
-
-        scanner.stopScanning()
-        await Task.yield()
-
-        #expect(multiplexer.disconnectedProfileIDs == [profile.id])
-        #expect(manager.connections[profile.id] == .disconnected)
-        #expect(scanner.forwardedPortMappings.isEmpty)
+        #expect(throws: RemotePortScannerError.portNotDetected(3000)) {
+            _ = try scanner.beginBrowserOpen(3000)
+        }
     }
 }

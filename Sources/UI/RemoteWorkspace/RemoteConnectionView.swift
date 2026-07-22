@@ -399,7 +399,7 @@ struct RemoteConnectionView: View {
     var remotePortScanner: RemotePortScanner?
 
     /// Opens a detected remote dev server in the browser.
-    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Bool)?
+    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) async -> Bool)?
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -949,7 +949,7 @@ private struct RemoteBrowserSuggestionsSection: View {
     @ObservedObject var scanner: RemotePortScanner
     let profile: RemoteConnectionProfile
     let isConnected: Bool
-    let onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Bool)?
+    let onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) async -> Bool)?
     var localizer: AppLocalizer
 
     @State private var errorMessage: String?
@@ -960,9 +960,7 @@ private struct RemoteBrowserSuggestionsSection: View {
     }
 
     private var visibleRemotePorts: [Int] {
-        Set(scanner.detectedPorts.map(\.port))
-            .union(scanner.forwardedPortMappings.keys)
-            .sorted()
+        scanner.detectedPorts.map(\.port).sorted()
     }
 
     var body: some View {
@@ -984,7 +982,7 @@ private struct RemoteBrowserSuggestionsSection: View {
             Button(
                 localized(
                     "remoteWorkspace.browserSuggestions.switch.action",
-                    fallback: "Stop current forwards and switch"
+                    fallback: "Close remote routes and switch"
                 ),
                 role: .destructive,
                 action: activateScan
@@ -994,7 +992,7 @@ private struct RemoteBrowserSuggestionsSection: View {
             Text(
                 localized(
                     "remoteWorkspace.browserSuggestions.switch.message",
-                    fallback: "Remote Browser forwards on the other connection will be stopped."
+                    fallback: "Protected browser routes on the other connection will be closed."
                 )
             )
         }
@@ -1131,7 +1129,6 @@ private struct RemoteBrowserSuggestionsSection: View {
 
     private func serviceRow(remotePort: Int) -> some View {
         let info = scanner.detectedPorts.first { $0.port == remotePort }
-        let localPort = scanner.forwardedPortMappings[remotePort]
         let isBusy = scanner.busyPorts.contains(remotePort)
 
         return HStack(spacing: 8) {
@@ -1157,7 +1154,7 @@ private struct RemoteBrowserSuggestionsSection: View {
 
             Spacer(minLength: 4)
 
-            Text(localPort.map { "127.0.0.1:\($0)" } ?? (info?.address ?? "--"))
+            Text(info?.address ?? "--")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 .lineLimit(1)
@@ -1186,33 +1183,11 @@ private struct RemoteBrowserSuggestionsSection: View {
                     )
                 )
                 .help(
-                    localPort == nil
-                        ? localized(
-                            "remoteWorkspace.browserSuggestions.forwardAndOpen",
-                            fallback: "Forward and Open in Browser"
-                        )
-                        : localized("remoteWorkspace.browserSuggestions.open", fallback: "Open in Browser")
-                )
-
-                if localPort != nil {
-                    Button(action: { stopForward(remotePort: remotePort) }) {
-                        Image(systemName: "xmark.circle")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(Color(nsColor: CocxyColors.red))
-                    }
-                    .buttonStyle(.plain)
-                    .frame(width: 24, height: 24)
-                    .accessibilityLabel(
-                        String(
-                            format: localized(
-                                "remoteWorkspace.browserSuggestions.stop.accessibility",
-                                fallback: "Stop forwarding remote port %d"
-                            ),
-                            remotePort
-                        )
+                    localized(
+                        "remoteWorkspace.browserSuggestions.secureOpen",
+                        fallback: "Open Securely in Browser"
                     )
-                    .help(localized("remoteWorkspace.browserSuggestions.stop", fallback: "Stop Forward"))
-                }
+                )
             }
         }
         .padding(.horizontal, 8)
@@ -1230,8 +1205,7 @@ private struct RemoteBrowserSuggestionsSection: View {
     private func requestScan() {
         guard isConnected else { return }
         if scanner.scanningProfileID != nil,
-           scanner.scanningProfileID != profile.id,
-           !scanner.forwardedPortMappings.isEmpty {
+           scanner.scanningProfileID != profile.id {
             isSwitchConfirmationPresented = true
         } else {
             activateScan()
@@ -1271,14 +1245,6 @@ private struct RemoteBrowserSuggestionsSection: View {
         }
     }
 
-    private func stopForward(remotePort: Int) {
-        do {
-            try scanner.cancelForwardedPort(remotePort)
-        } catch {
-            errorMessage = localizedError(error)
-        }
-    }
-
     private func localizedError(_ error: Error) -> String {
         guard let scannerError = error as? RemotePortScannerError else {
             return localized(
@@ -1298,15 +1264,9 @@ private struct RemoteBrowserSuggestionsSection: View {
         case .operationInProgress:
             key = "remoteWorkspace.browserSuggestions.error.inProgress"
             fallback = "Another operation is already in progress for this port."
-        case .noAvailableLocalPort:
-            key = "remoteWorkspace.browserSuggestions.error.noLocalPort"
-            fallback = "No safe local port is available for this service."
-        case .forwardingFailed:
+        case .invalidBrowserURL:
             key = "remoteWorkspace.browserSuggestions.error.forwardFailed"
             fallback = "The remote service could not be opened."
-        case .cancellationFailed:
-            key = "remoteWorkspace.browserSuggestions.error.stopFailed"
-            fallback = "The SSH forward could not be stopped."
         case .browserUnavailable:
             key = "remoteWorkspace.browserSuggestions.browserUnavailable"
             fallback = "No browser surface is available."

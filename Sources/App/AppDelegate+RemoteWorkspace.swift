@@ -85,7 +85,6 @@ extension AppDelegate {
 
         // Remote port scanner — detects dev servers on SSH-connected hosts.
         let portScanner = RemotePortScanner(
-            multiplexer: multiplexer,
             connectionManager: connectionManager
         )
 
@@ -105,10 +104,18 @@ extension AppDelegate {
             controller.remotePortScanner = portScanner
         }
 
-        // Browser init-script grants are bound to live remote connection and
-        // scanner-owned forward leases. These sinks intentionally stay on the
-        // publishing main actor so revocation happens before teardown frees a
-        // local port for reuse.
+        portScanner.routeRevocationHandler = { [weak self] profileID in
+            for controller in self?.allWindowControllers ?? [] {
+                controller.revokeRemoteBrowserRoute(
+                    profileID: profileID,
+                    reason: "The remote browser connection is no longer active"
+                )
+            }
+        }
+
+        // Browser init-script grants remain bound to a live remote connection.
+        // The route revocation callback above synchronously closes the
+        // window-scoped proxy before scanner ownership moves to another profile.
         connectionManager.$connections
             .sink { [weak self] connections in
                 let activeProfileIDs = Set(connections.compactMap { profileID, state in
@@ -122,20 +129,6 @@ extension AppDelegate {
                 }) ?? [] {
                     viewModel.updateInitScriptRemoteConnectionAvailability(
                         activeConnectionProfileIDs: activeProfileIDs
-                    )
-                }
-            }
-            .store(in: &hookCancellables)
-
-        portScanner.$forwardedPortMappings
-            .sink { [weak self, weak portScanner] forwardedPortMappings in
-                let scanningProfileID = portScanner?.scanningProfileID
-                for viewModel in self?.allWindowControllers.flatMap({
-                    $0.allBrowserViewModels()
-                }) ?? [] {
-                    viewModel.updateInitScriptRemoteForwardLeaseAvailability(
-                        scanningProfileID: scanningProfileID,
-                        forwardedPortMappings: forwardedPortMappings
                     )
                 }
             }

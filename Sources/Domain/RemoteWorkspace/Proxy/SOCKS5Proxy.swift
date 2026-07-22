@@ -55,6 +55,10 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
 
     let port: Int
     private(set) var activeConnectionCount = 0
+    private(set) var acceptedConnectionCount = 0
+    private(set) var authenticationAttemptCount = 0
+    private(set) var authenticationFailureCount = 0
+    private(set) var targetRejectionCount = 0
     var isReady: Bool { listeners.isReady }
     var failureHandler: (@MainActor @Sendable (String) -> Void)?
 
@@ -62,6 +66,8 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
     private weak var forwarder: (any PortForwarding)?
     private let profileID: UUID
     private let connectionLeaseID: UUID
+    private let allowedTargets: Set<ProxyTarget>?
+    private let targetMappings: [ProxyTarget: ProxyTarget]?
     private let listeners: LoopbackTCPListenerGroup
     private let authenticationTimeoutNanoseconds: UInt64
     private let upstreamSetupTimeoutNanoseconds: UInt64
@@ -76,6 +82,8 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
         forwarder: any PortForwarding,
         profileID: UUID,
         connectionLeaseID: UUID,
+        allowedTargets: Set<ProxyTarget>? = nil,
+        targetMappings: [ProxyTarget: ProxyTarget]? = nil,
         authenticationTimeoutNanoseconds: UInt64 = 3_000_000_000,
         upstreamSetupTimeoutNanoseconds: UInt64 = 10_000_000_000
     ) {
@@ -84,6 +92,8 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
         self.forwarder = forwarder
         self.profileID = profileID
         self.connectionLeaseID = connectionLeaseID
+        self.allowedTargets = allowedTargets
+        self.targetMappings = targetMappings
         self.authenticationTimeoutNanoseconds = authenticationTimeoutNanoseconds
         self.upstreamSetupTimeoutNanoseconds = upstreamSetupTimeoutNanoseconds
         listeners = LoopbackTCPListenerGroup(port: listenPort)
@@ -155,6 +165,7 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
             connection: connection,
             acceptanceSequence: nextAcceptanceSequence
         )
+        acceptedConnectionCount += 1
         sessions[session.id] = session
         updateConnectionCount()
         connection.stateUpdateHandler = { [weak self] state in
@@ -274,7 +285,9 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
         let passwordStart = passwordLengthIndex + 1
         let password = Data(session.buffer[passwordStart..<frameLength])
         session.buffer = Data(session.buffer.dropFirst(frameLength))
+        authenticationAttemptCount += 1
         guard credentials.matches(username: username, password: password) else {
+            authenticationFailureCount += 1
             send(Data([0x01, 0x01]), to: session, closeAfterSending: true)
             return
         }
@@ -329,6 +342,22 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
             sendRequestReply(0x04, to: session, closeAfterSending: true)
             return
         }
+        guard allowedTargets?.contains(target) != false else {
+            targetRejectionCount += 1
+            sendRequestReply(0x02, to: session, closeAfterSending: true)
+            return
+        }
+        let upstreamTarget: ProxyTarget
+        if let targetMappings {
+            guard let mappedTarget = targetMappings[target] else {
+                targetRejectionCount += 1
+                sendRequestReply(0x02, to: session, closeAfterSending: true)
+                return
+            }
+            upstreamTarget = mappedTarget
+        } else {
+            upstreamTarget = target
+        }
         session.buffer = Data(session.buffer.dropFirst(parsed.frameLength))
         let initialData = session.buffer
         session.buffer.removeAll(keepingCapacity: false)
@@ -340,7 +369,7 @@ final class SOCKS5Proxy: SOCKS5ProxyLifecycle {
                 throw SSHMultiplexerError.notConnected
             }
             let transport = try forwarder.openProxyTransport(
-                to: target,
+                to: upstreamTarget,
                 for: profileID,
                 expectedConnectionLeaseID: connectionLeaseID
             )

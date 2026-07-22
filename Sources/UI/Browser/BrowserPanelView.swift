@@ -226,39 +226,55 @@ struct BrowserPanelView: View {
             ?? localized("browser.route.local.detail", fallback: "Browser traffic uses local networking")
 
         return HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .semibold))
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundColor(tint)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(
+                Capsule()
+                    .fill(
+                        isRemote
+                            ? tint.opacity(0.12)
+                            : Color(nsColor: CocxyColors.surface0).opacity(0.72)
+                    )
+            )
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isRemote
+                            ? tint.opacity(0.35)
+                            : Color(nsColor: CocxyColors.surface1).opacity(0.7),
+                        lineWidth: 1
+                    )
+            )
+            .help(detail)
+            .accessibilityLabel(
+                isRemote
+                    ? localized("browser.route.remote.accessibility", fallback: "Remote browser route")
+                    : localized("browser.route.local.accessibility", fallback: "Local browser route")
+            )
+            .accessibilityValue(remoteProfile?.displayTitle ?? detail)
+
+            if isRemote {
+                Button(action: { viewModel.clearRemoteBrowserProfile() }) {
+                    Image(systemName: "house")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 20, height: 20)
+                .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                .help(localized("browser.route.notice.switchLocal", fallback: "Switch to local"))
+                .accessibilityLabel(
+                    localized("browser.route.notice.switchLocal", fallback: "Switch to local")
+                )
+            }
         }
-        .foregroundColor(tint)
-        .padding(.horizontal, 7)
-        .frame(height: 20)
-        .background(
-            Capsule()
-                .fill(
-                    isRemote
-                        ? tint.opacity(0.12)
-                        : Color(nsColor: CocxyColors.surface0).opacity(0.72)
-                )
-        )
-        .overlay(
-            Capsule()
-                .stroke(
-                    isRemote
-                        ? tint.opacity(0.35)
-                        : Color(nsColor: CocxyColors.surface1).opacity(0.7),
-                    lineWidth: 1
-                )
-        )
-        .help(detail)
-        .accessibilityLabel(
-            isRemote
-                ? localized("browser.route.remote.accessibility", fallback: "Remote browser route")
-                : localized("browser.route.local.accessibility", fallback: "Local browser route")
-        )
-        .accessibilityValue(remoteProfile?.displayTitle ?? detail)
     }
 
     private func routeBadgeTint(for remoteProfile: RemoteBrowserProfile?) -> Color {
@@ -723,7 +739,10 @@ struct BrowserPanelView: View {
                         }
                     }
                 )
-                .id(viewModel.activeProfileID)
+                .id(
+                    "\(viewModel.activeProfileID?.uuidString ?? "default")"
+                        + ":\(viewModel.activeRemoteBrowserProxyCapability?.id.uuidString ?? "local")"
+                )
             } else {
                 emptyStateView
             }
@@ -922,9 +941,15 @@ struct WebViewRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        if let profileID = viewModel.activeProfileID {
-            configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
-        }
+        configuration.websiteDataStore = BrowserWebsiteDataStoreFactory.make(
+            profileID: viewModel.activeProfileID,
+            remoteCapability: viewModel.activeRemoteBrowserProxyCapability
+        )
+        let remoteNetworkIsolationReady = BrowserWebsiteDataStoreFactory
+            .installRemoteNetworkIsolation(
+                on: configuration,
+                capability: viewModel.activeRemoteBrowserProxyCapability
+            )
         BrowserDOMGrabWebKitSupport.install(
             on: configuration,
             handler: context.coordinator.domGrabHandler
@@ -954,8 +979,10 @@ struct WebViewRepresentable: NSViewRepresentable {
         // This is load-bearing for profile switches: SwiftUI recreates the
         // WKWebView with a new data store, then this initial load lands in
         // the correct profile even if the publish happened before subscribe.
-        if let url = viewModel.currentURL {
+        if remoteNetworkIsolationReady, let url = viewModel.currentURL {
             webView.load(URLRequest(url: url))
+        } else if !remoteNetworkIsolationReady {
+            viewModel.markRemoteBrowserProxyFailed("Remote browser isolation is unavailable")
         }
 
         return webView
@@ -1163,7 +1190,8 @@ struct WebViewRepresentable: NSViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
-            guard BrowserNavigationPolicy.allows(navigationAction.request.url) else {
+            guard viewModel.allowsNavigationForActiveRemoteRoute(navigationAction.request.url),
+                  BrowserNavigationPolicy.allows(navigationAction.request.url) else {
                 decisionHandler(.cancel)
                 return
             }
@@ -1299,13 +1327,13 @@ struct WebViewRepresentable: NSViewRepresentable {
             )
         }
 
-        /// Allows HTTPS certificate errors for localhost dev servers.
+        /// Allows development certificates only for the current route authority.
         func webView(
             _ webView: WKWebView,
             didReceive challenge: URLAuthenticationChallenge,
             completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
         ) {
-            if challenge.protectionSpace.host == "localhost" || challenge.protectionSpace.host == "127.0.0.1",
+            if viewModel.allowsDevelopmentServerTrust(host: challenge.protectionSpace.host),
                let trust = challenge.protectionSpace.serverTrust {
                 completionHandler(.useCredential, URLCredential(trust: trust))
             } else {

@@ -171,6 +171,20 @@ final class MainWindowDelegateTests: XCTestCase {
             "Closing the window must stop the terminal viewModel"
         )
     }
+
+    func testWindowWillCloseInvalidatesPendingRemoteBrowserOpen() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let browserViewModel = BrowserViewModel()
+        controller.remoteBrowserOpeningID = UUID()
+        controller.remoteBrowserOpeningViewModel = browserViewModel
+        let generation = controller.remoteBrowserOpenGeneration
+
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+
+        XCTAssertGreaterThan(controller.remoteBrowserOpenGeneration, generation)
+        XCTAssertNil(controller.remoteBrowserOpeningID)
+        XCTAssertNil(controller.remoteBrowserOpeningViewModel)
+    }
 }
 
 // MARK: - Window Background Color Tests

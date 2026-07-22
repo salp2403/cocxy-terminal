@@ -3086,8 +3086,8 @@
 "remoteWorkspace.sftp.download.inProgress" = "Downloading...";
 "remoteWorkspace.browserSuggestions.title" = "Remote Browser";
 "remoteWorkspace.browserSuggestions.switch.title" = "Switch Remote Browser connection?";
-"remoteWorkspace.browserSuggestions.switch.action" = "Stop current forwards and switch";
-"remoteWorkspace.browserSuggestions.switch.message" = "Remote Browser forwards on the other connection will be stopped.";
+"remoteWorkspace.browserSuggestions.switch.action" = "Close remote routes and switch";
+"remoteWorkspace.browserSuggestions.switch.message" = "Protected browser routes on the other connection will be closed.";
 "remoteWorkspace.browserSuggestions.error.title" = "Remote Browser failed";
 "remoteWorkspace.browserSuggestions.scanning" = "Scanning remote ports";
 "remoteWorkspace.browserSuggestions.refresh.accessibility" = "Refresh remote ports";
@@ -3102,6 +3102,7 @@
 "remoteWorkspace.browserSuggestions.unknownProcess" = "remote service";
 "remoteWorkspace.browserSuggestions.open.accessibility" = "Open remote port %d in browser";
 "remoteWorkspace.browserSuggestions.forwardAndOpen" = "Forward and Open in Browser";
+"remoteWorkspace.browserSuggestions.secureOpen" = "Open Securely in Browser";
 "remoteWorkspace.browserSuggestions.open" = "Open in Browser";
 "remoteWorkspace.browserSuggestions.stop.accessibility" = "Stop forwarding remote port %d";
 "remoteWorkspace.browserSuggestions.stop" = "Stop Forward";

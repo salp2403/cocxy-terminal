@@ -558,6 +558,46 @@ struct SOCKS5ProxyTests {
         #expect(try await socksTestConnectionObservedClosure(#require(pendingClients.first)))
     }
 
+    @Test("A scoped proxy rejects authenticated requests for another target")
+    @MainActor func rejectsTargetOutsideCapabilityScope() async throws {
+        let forwarder = SOCKSTestForwarder()
+        let credentials = ProxyCredentials(password: "route-secret")
+        let proxy = SOCKS5Proxy(
+            listenPort: try Self.availableLoopbackPort(),
+            credentials: credentials,
+            forwarder: forwarder,
+            profileID: UUID(),
+            connectionLeaseID: forwarder.leaseID,
+            allowedTargets: [try ProxyTarget(host: "localhost", port: 3_000)]
+        )
+        try await proxy.start()
+        proxy.activate()
+        defer { proxy.stop() }
+        let client = try await connectSOCKSTestClient(to: proxy.port)
+        defer { client.cancel() }
+
+        try await sendSOCKSTestData(Data([0x05, 0x01, 0x02]), on: client)
+        #expect(try await receiveSOCKSTestData(count: 2, on: client) == Data([0x05, 0x02]))
+        let username = Data(ProxyCredentials.username.utf8)
+        let password = Data(credentials.password.utf8)
+        var authentication = Data([0x01, UInt8(username.count)])
+        authentication.append(username)
+        authentication.append(UInt8(password.count))
+        authentication.append(password)
+        try await sendSOCKSTestData(authentication, on: client)
+        #expect(try await receiveSOCKSTestData(count: 2, on: client) == Data([0x01, 0x00]))
+
+        let domain = Data("localhost".utf8)
+        var request = Data([0x05, 0x01, 0x00, 0x03, UInt8(domain.count)])
+        request.append(domain)
+        request.append(contentsOf: [0x0b, 0xb9]) // 3001, outside the approved route.
+        try await sendSOCKSTestData(request, on: client)
+
+        let reply = try await receiveSOCKSTestData(count: 10, on: client)
+        #expect(reply[1] == 0x02)
+        #expect(forwarder.openedTargets.isEmpty)
+    }
+
     @Test("Unauthenticated SOCKS clients expire at the bounded authentication deadline")
     @MainActor func pendingAuthenticationExpires() async throws {
         let forwarder = SOCKSTestForwarder()

@@ -63,6 +63,7 @@ final class BrowserContentView: NSView {
 
     /// Compact Local/Remote route indicator in the browser toolbar.
     private var routeIndicatorLabel: NSTextField?
+    private var routeLocalButton: NSButton?
 
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -241,6 +242,21 @@ final class BrowserContentView: NSView {
         routeIndicator.widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         routeIndicator.heightAnchor.constraint(equalToConstant: 20).isActive = true
         self.routeIndicatorLabel = routeIndicator
+
+        let routeLocalButton = createToolbarButton(
+            symbol: "house",
+            action: #selector(switchRemoteBrowserToLocalAction)
+        )
+        routeLocalButton.toolTip = localized(
+            "browser.route.notice.switchLocal",
+            fallback: "Switch to local"
+        )
+        routeLocalButton.setAccessibilityLabel(routeLocalButton.toolTip ?? "Switch to local")
+        routeLocalButton.translatesAutoresizingMaskIntoConstraints = false
+        rightStack.addArrangedSubview(routeLocalButton)
+        routeLocalButton.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        routeLocalButton.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        self.routeLocalButton = routeLocalButton
         updateRouteIndicator(remoteProfile: viewModel.activeRemoteBrowserProfile)
 
         if let profileManager {
@@ -378,9 +394,15 @@ final class BrowserContentView: NSView {
 
         let config = WKWebViewConfiguration()
         config.preferences.isElementFullscreenEnabled = true
-        if let profileID = viewModel.activeProfileID {
-            config.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
-        }
+        config.websiteDataStore = BrowserWebsiteDataStoreFactory.make(
+            profileID: viewModel.activeProfileID,
+            remoteCapability: viewModel.activeRemoteBrowserProxyCapability
+        )
+        let remoteNetworkIsolationReady = BrowserWebsiteDataStoreFactory
+            .installRemoteNetworkIsolation(
+                on: config,
+                capability: viewModel.activeRemoteBrowserProxyCapability
+            )
         let domGrabHandler = BrowserDOMGrabHandler()
         domGrabHandler.onPayload = { [weak viewModel] authorizationID, payload in
             viewModel?.handleDOMGrabPayload(payload, authorizationID: authorizationID)
@@ -433,8 +455,10 @@ final class BrowserContentView: NSView {
         installBrowserInstrumentation()
         BrowserWebKitAutomationBridge.install(on: viewModel, webView: wv)
 
-        if loadCurrentURL, let url = viewModel.currentURL {
+        if loadCurrentURL, remoteNetworkIsolationReady, let url = viewModel.currentURL {
             wv.load(URLRequest(url: url))
+        } else if !remoteNetworkIsolationReady {
+            viewModel.markRemoteBrowserProxyFailed("Remote browser isolation is unavailable")
         }
     }
 
@@ -476,6 +500,16 @@ final class BrowserContentView: NSView {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] remoteProfile in
                 self?.updateRouteIndicator(remoteProfile: remoteProfile)
+            }
+            .store(in: &cancellables)
+
+        viewModel.$activeRemoteBrowserProxyCapability
+            .map { $0?.id }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.installWebViewForActiveProfile(loadCurrentURL: true)
             }
             .store(in: &cancellables)
     }
@@ -533,6 +567,10 @@ final class BrowserContentView: NSView {
 
     @objc private func reloadAction(_ sender: Any?) {
         viewModel.reload()
+    }
+
+    @objc private func switchRemoteBrowserToLocalAction(_ sender: Any?) {
+        viewModel.clearRemoteBrowserProfile()
     }
 
     @objc private func toggleDOMGrabAction(_ sender: Any?) {
@@ -600,6 +638,7 @@ final class BrowserContentView: NSView {
                 : localized("browser.route.local.accessibility", fallback: "Local browser route")
         )
         routeIndicatorLabel.setAccessibilityValue(remoteProfile?.displayTitle ?? routeIndicatorLabel.toolTip)
+        routeLocalButton?.isHidden = !isRemote
     }
 
     private func routeIndicatorTint(for remoteProfile: RemoteBrowserProfile?) -> NSColor {
@@ -746,7 +785,8 @@ extension BrowserContentView: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        guard BrowserNavigationPolicy.allows(navigationAction.request.url) else {
+        guard viewModel.allowsNavigationForActiveRemoteRoute(navigationAction.request.url),
+              BrowserNavigationPolicy.allows(navigationAction.request.url) else {
             decisionHandler(.cancel)
             return
         }
@@ -777,8 +817,8 @@ extension BrowserContentView: WKNavigationDelegate {
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        // Allow self-signed certificates for localhost dev servers.
-        if challenge.protectionSpace.host == "localhost" || challenge.protectionSpace.host == "127.0.0.1" {
+        // Development trust is local-only or bound to the active remote alias.
+        if viewModel.allowsDevelopmentServerTrust(host: challenge.protectionSpace.host) {
             if let trust = challenge.protectionSpace.serverTrust {
                 completionHandler(.useCredential, URLCredential(trust: trust))
                 return

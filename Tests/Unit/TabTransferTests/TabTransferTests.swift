@@ -405,12 +405,37 @@ struct MainWindowControllerTransferTests {
         source.savedTabPanelContentViews[tabID] = [UUID(): browserPanel]
         browserViewModel.setDOMGrabMode(true)
         #expect(browserViewModel.domGrabAuthorizationID != nil)
+        let remoteProfileID = UUID()
+        let capability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: source.windowID,
+            profileID: remoteProfileID,
+            remotePort: 3_000,
+            localProxyPort: 53_000,
+            credentials: ProxyCredentials(password: "transfer-route-secret"),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        let remoteProfile = RemoteBrowserProfile(
+            connectionProfileID: remoteProfileID,
+            name: "Transferred Remote",
+            host: "remote.internal"
+        )
+        #expect(browserViewModel.openRemoteBrokeredRoute(
+            remoteProfile,
+            capability: capability
+        ) != nil)
+        source.remoteBrowserRouteViewModel = browserViewModel
+        let routeGeneration = source.remoteBrowserOpenGeneration
 
         _ = makeRegisteredSession(for: source, tabID: tabID, in: registry)
         #expect(source.transferTab(tabID, to: destination))
 
         #expect(browserViewModel.isDOMGrabActive == false)
         #expect(browserViewModel.domGrabAuthorizationID == nil)
+        #expect(browserViewModel.activeRemoteBrowserProxyCapability == nil)
+        #expect(browserViewModel.activeRemoteBrowserProfile == nil)
+        #expect(source.remoteBrowserRouteViewModel == nil)
+        #expect(source.remoteBrowserOpenGeneration > routeGeneration)
 
         let payload = BrowserDOMGrabPayload(
             selector: "button#transfer",

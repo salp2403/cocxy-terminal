@@ -277,6 +277,155 @@ final class BrowserViewModelTests: XCTestCase {
         cancellable.cancel()
     }
 
+    func testOpenRemoteBrokeredRouteInstallsCapabilityBeforeHostReload() {
+        let vm = BrowserViewModel()
+        let connectionProfileID = UUID()
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: connectionProfileID,
+            name: "Remote Dev",
+            host: "dev.internal"
+        )
+        let capability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: WindowID(),
+            profileID: connectionProfileID,
+            remotePort: 3000,
+            localProxyPort: 53_000,
+            credentials: ProxyCredentials(password: "route-secret"),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        var navigationActionCount = 0
+        let cancellable = vm.navigationActionSubject.sink { _ in navigationActionCount += 1 }
+
+        XCTAssertNil(vm.openRemoteBrokeredRoute(
+            remote,
+            capability: capability,
+            scheme: "file"
+        ))
+
+        let route = vm.openRemoteBrokeredRoute(
+            remote,
+            capability: capability,
+            path: "dashboard"
+        )
+
+        let expectedURL = "http://\(capability.browserHost):3000/dashboard"
+        XCTAssertEqual(route?.localURL.absoluteString, expectedURL)
+        XCTAssertEqual(vm.currentURL?.absoluteString, expectedURL)
+        XCTAssertEqual(vm.activeRemoteBrowserProxyCapability, capability)
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.socksPort, 53_000)
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.localForwardedPorts, [:])
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.proxyHealth, .active)
+        XCTAssertEqual(navigationActionCount, 0)
+        XCTAssertFalse(vm.getState().values.contains("route-secret"))
+        XCTAssertTrue(vm.allowsNavigationForActiveRemoteRoute(route?.localURL))
+        XCTAssertFalse(vm.allowsNavigationForActiveRemoteRoute(
+            URL(string: "http://localhost:3000/")
+        ))
+        XCTAssertFalse(vm.allowsNavigationForActiveRemoteRoute(
+            URL(string: "https://example.com/")
+        ))
+        XCTAssertTrue(vm.allowsDevelopmentServerTrust(host: capability.browserHost))
+        XCTAssertFalse(vm.allowsDevelopmentServerTrust(host: "localhost"))
+        vm.navigate(to: "http://localhost:3000/bypass")
+        XCTAssertEqual(vm.currentURL?.absoluteString, expectedURL)
+        XCTAssertEqual(navigationActionCount, 0)
+
+        let renewedCapability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: capability.ownerWindowID,
+            profileID: connectionProfileID,
+            remotePort: 3000,
+            localProxyPort: 53_001,
+            credentials: ProxyCredentials(password: "renewed-route-secret"),
+            expiresAt: Date().addingTimeInterval(120)
+        )
+        XCTAssertTrue(vm.refreshRemoteBrowserProxyCapability(renewedCapability))
+        XCTAssertEqual(vm.currentURL?.absoluteString, expectedURL)
+        XCTAssertEqual(vm.activeRemoteBrowserProxyCapability, renewedCapability)
+
+        vm.clearRemoteBrowserProfile()
+
+        XCTAssertEqual(vm.currentURL?.absoluteString, "about:blank")
+        XCTAssertNil(vm.activeRemoteBrowserProxyCapability)
+        XCTAssertNil(vm.activeRemoteBrowserProfile)
+        XCTAssertTrue(vm.allowsDevelopmentServerTrust(host: "localhost"))
+        XCTAssertEqual(navigationActionCount, 0)
+        cancellable.cancel()
+    }
+
+    func testFailedBrokeredRouteKeepsDeadProxyConfigurationAndUsesRetryCallback() {
+        let vm = BrowserViewModel()
+        let connectionProfileID = UUID()
+        let capability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: WindowID(),
+            profileID: connectionProfileID,
+            remotePort: 5173,
+            localProxyPort: 55_173,
+            credentials: ProxyCredentials(password: "route-secret"),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: connectionProfileID,
+            name: "Remote Dev",
+            host: "dev.internal"
+        )
+        XCTAssertNotNil(vm.openRemoteBrokeredRoute(remote, capability: capability))
+        var retriedRequest: RemoteBrowserRouteRequest?
+        vm.onRetryRemoteBrowserRoute = { retriedRequest = $0 }
+
+        vm.markRemoteBrowserProxyFailed("listener stopped")
+
+        XCTAssertEqual(vm.activeRemoteBrowserProxyCapability, capability)
+        XCTAssertEqual(vm.activeRemoteBrowserProfile?.proxyHealth, .failed)
+        XCTAssertEqual(vm.remoteBrowserNotice?.kind, .proxyFailed)
+        XCTAssertEqual(vm.remoteBrowserNotice?.detail, "listener stopped")
+        XCTAssertNil(vm.retryRemoteBrowserNotice())
+        XCTAssertEqual(retriedRequest?.remotePort, 5173)
+    }
+
+    func testSelectingLocalTabRevokesBrokeredRouteBeforeLoadingIt() throws {
+        let vm = BrowserViewModel()
+        let localTabID = try XCTUnwrap(vm.browserTabs.first?.id)
+        vm.addBrowserTab(url: URL(string: "http://localhost:4000")!)
+        let connectionProfileID = UUID()
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: connectionProfileID,
+            name: "Remote Dev",
+            host: "dev.internal"
+        )
+        let capability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: WindowID(),
+            profileID: connectionProfileID,
+            remotePort: 3000,
+            localProxyPort: 53_000,
+            credentials: ProxyCredentials(password: "route-secret"),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        XCTAssertNotNil(vm.openRemoteBrokeredRoute(remote, capability: capability))
+        var loadedURL: URL?
+        let cancellable = vm.navigationActionSubject.sink { action in
+            if case .load(let url) = action { loadedURL = url }
+        }
+
+        vm.selectBrowserTab(localTabID)
+
+        XCTAssertNil(vm.activeRemoteBrowserProxyCapability)
+        XCTAssertNil(vm.activeRemoteBrowserProfile)
+        XCTAssertEqual(vm.currentURL, BrowserTab.defaultURL)
+        XCTAssertEqual(loadedURL, BrowserTab.defaultURL)
+
+        XCTAssertNotNil(vm.openRemoteBrokeredRoute(remote, capability: capability))
+        vm.activateProfile(UUID())
+        XCTAssertNil(vm.activeRemoteBrowserProxyCapability)
+        XCTAssertNil(vm.activeRemoteBrowserProfile)
+        XCTAssertEqual(vm.currentURL?.absoluteString, "about:blank")
+        XCTAssertEqual(loadedURL?.absoluteString, "about:blank")
+        cancellable.cancel()
+    }
+
     func testRemoteProxyFailureUpdatesNoticeAndState() {
         let vm = BrowserViewModel()
         let remote = RemoteBrowserProfile(

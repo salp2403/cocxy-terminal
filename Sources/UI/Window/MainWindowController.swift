@@ -314,6 +314,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserHostingView: NSHostingView<BrowserPanelView>?
     var isBrowserVisible: Bool = false
     var remoteBrowserProxyStateCancellable: AnyCancellable?
+    var remoteBrowserProxySession: RemoteBrowserProxySession?
+    var remoteBrowserProxyRenewalTask: Task<Void, Never>?
+    weak var remoteBrowserRouteViewModel: BrowserViewModel?
+    weak var remoteBrowserOpeningViewModel: BrowserViewModel?
+    var remoteBrowserOpeningID: UUID?
+    var remoteBrowserRouteProfile: RemoteConnectionProfile?
+    var remoteBrowserRouteSuggestion: RemoteBrowserOpenSuggestion?
+    var remoteBrowserOpenGeneration: UInt64 = 0
 
     var codeReviewViewModel: CodeReviewPanelViewModel?
     var codeReviewHostingView: NSHostingView<CodeReviewPanelView>?
@@ -1714,8 +1722,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         smartRoutingViewModel = nil
         notificationPanelViewModel?.onNavigateToTab = nil
         notificationPanelViewModel = nil
+        remoteBrowserOpenGeneration &+= 1
+        remoteBrowserOpeningID = nil
+        remoteBrowserOpeningViewModel = nil
         remoteBrowserProxyStateCancellable?.cancel()
         remoteBrowserProxyStateCancellable = nil
+        remoteBrowserProxyRenewalTask?.cancel()
+        remoteBrowserProxyRenewalTask = nil
+        if let capability = remoteBrowserProxySession?.capability
+            ?? remoteBrowserRouteViewModel?.activeRemoteBrowserProxyCapability {
+            BrowserWebsiteDataStoreFactory.releaseRemoteDataStore(for: capability)
+        }
+        remoteBrowserProxySession?.stop()
+        remoteBrowserProxySession = nil
+        remoteBrowserRouteViewModel?.onRetryRemoteBrowserRoute = nil
+        remoteBrowserRouteViewModel = nil
+        remoteBrowserRouteProfile = nil
+        remoteBrowserRouteSuggestion = nil
         browserViewModel?.revokeDOMGrabAuthorization()
         browserViewModel?.revokeAllInitScripts()
         revokeBrowserAuthorizations(in: Array(panelContentViews.values))

@@ -2768,7 +2768,7 @@ extension MainWindowController {
             sftpExecutor: SystemSFTPExecutor(),
             remotePortScanner: remotePortScanner,
             onOpenRemoteBrowser: { [weak self] profile, suggestion in
-                self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
+                await self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
             }
         )
         viewModel.updateLocalizer(appLocalizer())

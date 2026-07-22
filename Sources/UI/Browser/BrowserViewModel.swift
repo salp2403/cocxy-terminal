@@ -411,6 +411,10 @@ final class BrowserViewModel: ObservableObject {
     /// lifecycle stays owned by RemoteWorkspace services.
     @Published private(set) var activeRemoteBrowserProfile: RemoteBrowserProfile?
 
+    /// In-memory capability used only by the active remote browser WebView.
+    /// Its password is intentionally excluded from scriptable/browser state.
+    @Published private(set) var activeRemoteBrowserProxyCapability: RemoteBrowserProxyCapability?
+
     /// Actionable notice for remote route failures or degraded proxy state.
     @Published private(set) var remoteBrowserNotice: RemoteBrowserNotice?
 
@@ -450,6 +454,7 @@ final class BrowserViewModel: ObservableObject {
 
     private var browserDialogCompletions: [UUID: (BrowserDialogResolution) -> Void] = [:]
     private var lastRemoteBrowserRouteRequest: RemoteBrowserRouteRequest?
+    var onRetryRemoteBrowserRoute: ((RemoteBrowserRouteRequest) -> Void)?
     private var initScriptExpirationTask: Task<Void, Never>?
     private var initScriptWebViewIdentifier: ObjectIdentifier?
     private var consumedInitScriptAuthorizationExpirations: [UUID: Date] = [:]
@@ -570,6 +575,9 @@ final class BrowserViewModel: ObservableObject {
     /// races ahead of the new subscriber.
     func activateProfile(_ profileID: UUID?) {
         guard activeProfileID != profileID else { return }
+        if activeRemoteBrowserProxyCapability != nil {
+            clearRemoteBrowserProfile()
+        }
         activeProfileID = profileID
         navigationActionSubject.send(.load(currentURL ?? BrowserTab.defaultURL))
     }
@@ -615,12 +623,125 @@ final class BrowserViewModel: ObservableObject {
         return route
     }
 
+    @discardableResult
+    func openRemoteBrokeredRoute(
+        _ remoteProfile: RemoteBrowserProfile,
+        capability: RemoteBrowserProxyCapability,
+        scheme: String = "http",
+        path: String = "/"
+    ) -> RemoteBrowserRoute? {
+        let normalizedScheme = scheme.lowercased()
+        guard ["http", "https"].contains(normalizedScheme),
+              capability.profileID == remoteProfile.connectionProfileID,
+              capability.remotePort > 0,
+              capability.expiresAt > Date() else {
+            return nil
+        }
+
+        var components = URLComponents()
+        components.scheme = normalizedScheme
+        components.host = capability.browserHost
+        components.port = capability.remotePort
+        components.path = path.hasPrefix("/") ? path : "/\(path)"
+        guard let browserURL = components.url else { return nil }
+
+        let request = RemoteBrowserRouteRequest(
+            remotePort: capability.remotePort,
+            scheme: normalizedScheme,
+            path: components.path
+        )
+        lastRemoteBrowserRouteRequest = request
+
+        var routedProfile = remoteProfile
+        routedProfile.localForwardedPorts = [:]
+        routedProfile.socksPort = capability.localProxyPort
+        routedProfile.httpConnectPort = nil
+        routedProfile.proxyHealth = .active
+
+        applyAutomationNavigationURL(browserURL)
+        setActiveRemoteBrowserProfile(routedProfile)
+        initScriptRemoteConnectionIsAvailable = false
+        initScriptRemoteForwardLeaseIsAvailable = true
+        remoteBrowserNotice = nil
+        activeRemoteBrowserProxyCapability = capability
+
+        return RemoteBrowserRoute(
+            profile: routedProfile,
+            remotePort: capability.remotePort,
+            localURL: browserURL
+        )
+    }
+
+    @discardableResult
+    func refreshRemoteBrowserProxyCapability(
+        _ capability: RemoteBrowserProxyCapability
+    ) -> Bool {
+        guard var remoteProfile = activeRemoteBrowserProfile,
+              remoteProfile.connectionProfileID == capability.profileID,
+              lastRemoteBrowserRouteRequest?.remotePort == capability.remotePort,
+              capability.expiresAt > Date() else {
+            return false
+        }
+
+        remoteProfile.socksPort = capability.localProxyPort
+        remoteProfile.httpConnectPort = nil
+        remoteProfile.proxyHealth = .active
+        setActiveRemoteBrowserProfile(remoteProfile)
+        remoteBrowserNotice = nil
+        activeRemoteBrowserProxyCapability = capability
+        return true
+    }
+
+    func markRemoteBrowserProxyFailed(_ detail: String?) {
+        guard var remoteProfile = activeRemoteBrowserProfile,
+              activeRemoteBrowserProxyCapability != nil else { return }
+        remoteProfile.proxyHealth = .failed
+        setActiveRemoteBrowserProfile(remoteProfile)
+        remoteBrowserNotice = RemoteBrowserNotice(
+            kind: .proxyFailed,
+            remoteProfile: remoteProfile,
+            routeRequest: lastRemoteBrowserRouteRequest,
+            failedURLString: currentURL?.absoluteString,
+            detail: detail
+        )
+    }
+
+    func allowsNavigationForActiveRemoteRoute(_ url: URL?) -> Bool {
+        guard let capability = activeRemoteBrowserProxyCapability else { return true }
+        guard capability.expiresAt > Date(), let url else { return false }
+        switch url.scheme?.lowercased() {
+        case "http", "ws":
+            return url.host?.caseInsensitiveCompare(capability.browserHost) == .orderedSame
+                && (url.port ?? 80) == capability.remotePort
+        case "https", "wss":
+            return url.host?.caseInsensitiveCompare(capability.browserHost) == .orderedSame
+                && (url.port ?? 443) == capability.remotePort
+        default:
+            return true
+        }
+    }
+
+    func allowsDevelopmentServerTrust(host: String) -> Bool {
+        guard let capability = activeRemoteBrowserProxyCapability else {
+            return host == "localhost" || host == "127.0.0.1"
+        }
+        return capability.expiresAt > Date()
+            && activeRemoteBrowserProfile?.proxyHealth == .active
+            && host.caseInsensitiveCompare(capability.browserHost) == .orderedSame
+    }
+
     func clearRemoteBrowserProfile() {
+        if activeRemoteBrowserProxyCapability != nil,
+           let blankURL = URL(string: "about:blank") {
+            // Never reload a brokered route after removing its proxy.
+            applyAutomationNavigationURL(blankURL)
+        }
         setActiveRemoteBrowserProfile(nil)
         initScriptRemoteConnectionIsAvailable = true
         initScriptRemoteForwardLeaseIsAvailable = true
         remoteBrowserNotice = nil
         lastRemoteBrowserRouteRequest = nil
+        activeRemoteBrowserProxyCapability = nil
     }
 
     func updateInitScriptRemoteConnectionAvailability(
@@ -667,6 +788,7 @@ final class BrowserViewModel: ObservableObject {
     }
 
     func updateRemoteBrowserProxyState(_ proxyState: ProxyState) {
+        guard activeRemoteBrowserProxyCapability == nil else { return }
         guard var remoteProfile = activeRemoteBrowserProfile else { return }
         remoteProfile.apply(proxyState: proxyState)
         setActiveRemoteBrowserProfile(remoteProfile)
@@ -715,6 +837,13 @@ final class BrowserViewModel: ObservableObject {
         guard let notice = remoteBrowserNotice else { return nil }
         guard let request = notice.routeRequest else {
             reload()
+            return nil
+        }
+
+        if notice.kind == .proxyFailed,
+           activeRemoteBrowserProxyCapability != nil,
+           let onRetryRemoteBrowserRoute {
+            onRetryRemoteBrowserRoute(request)
             return nil
         }
 
@@ -794,7 +923,8 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter rawInput: The URL string to navigate to.
     func navigate(to rawInput: String) {
-        guard let url = preparedNavigationURL(from: rawInput) else { return }
+        guard let url = preparedNavigationURL(from: rawInput),
+              allowsNavigationForActiveRemoteRoute(url) else { return }
         applyAutomationNavigationURL(url)
         navigationActionSubject.send(.load(url))
     }
@@ -853,6 +983,7 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter url: The initial URL for the new tab. Defaults to `http://localhost:3000`.
     func addBrowserTab(url: URL = BrowserTab.defaultURL) {
+        clearRemoteRouteIfNeeded(for: url)
         let newTab = BrowserTab(url: url)
         browserTabs.append(newTab)
         activeTabID = newTab.id
@@ -880,6 +1011,7 @@ final class BrowserViewModel: ObservableObject {
             // Activate the nearest neighbor (prefer the tab to the left).
             let newIndex = min(closingIndex, browserTabs.count - 1)
             let newActiveTab = browserTabs[newIndex]
+            clearRemoteRouteIfNeeded(for: newActiveTab.url)
             activeTabID = newActiveTab.id
             urlString = newActiveTab.url.absoluteString
             currentURL = newActiveTab.url
@@ -894,11 +1026,18 @@ final class BrowserViewModel: ObservableObject {
     func selectBrowserTab(_ tabID: UUID) {
         guard let tab = browserTabs.first(where: { $0.id == tabID }) else { return }
         revokeDOMGrabAuthorization()
+        clearRemoteRouteIfNeeded(for: tab.url)
         activeTabID = tab.id
         urlString = tab.url.absoluteString
         currentURL = tab.url
         pageTitle = tab.title
         navigationActionSubject.send(.load(tab.url))
+    }
+
+    private func clearRemoteRouteIfNeeded(for url: URL) {
+        guard activeRemoteBrowserProxyCapability != nil,
+              !allowsNavigationForActiveRemoteRoute(url) else { return }
+        clearRemoteBrowserProfile()
     }
 
     /// Updates the title of the active tab.
