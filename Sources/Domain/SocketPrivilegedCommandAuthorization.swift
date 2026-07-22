@@ -92,6 +92,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
     let tabID: UUID?
     let workingDirectory: String
     let localResourcePaths: [String: String]
+    let localResourceDigests: [String: String]
     let surfaceID: UUID?
     let browserViewModelIdentifier: ObjectIdentifier?
     let browserTabID: UUID?
@@ -107,6 +108,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
         tabID: UUID?,
         workingDirectory: String,
         localResourcePaths: [String: String] = [:],
+        localResourceDigests: [String: String] = [:],
         surfaceID: UUID?,
         browserViewModelIdentifier: ObjectIdentifier?,
         browserTabID: UUID?,
@@ -121,6 +123,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
         self.tabID = tabID
         self.workingDirectory = workingDirectory
         self.localResourcePaths = localResourcePaths
+        self.localResourceDigests = localResourceDigests
         self.surfaceID = surfaceID
         self.browserViewModelIdentifier = browserViewModelIdentifier
         self.browserTabID = browserTabID
@@ -356,6 +359,7 @@ enum SocketPrivilegedCommandSecurity {
     static let maxParameterKeyBytes = 256
     static let maxParameterValueBytes = 32_768
     static let maxApprovalPreviewBytes = 49_152
+    static let maxBoundLocalResourceBytes = 1 * 1_024 * 1_024
 
     static func policy(for command: CLICommandName) -> SocketCommandAuthorizationPolicy {
         switch command {
@@ -645,6 +649,46 @@ enum SocketPrivilegedCommandSecurity {
         return SHA256.hash(data: Data(canonical.utf8))
             .map { String(format: "%02x", $0) }
             .joined()
+    }
+
+    static func digest(data: Data) -> String {
+        SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static func boundedFileDigest(
+        at url: URL,
+        maximumBytes: Int = maxBoundLocalResourceBytes,
+        fileManager: FileManager = .default
+    ) -> String? {
+        boundedFileData(
+            at: url,
+            maximumBytes: maximumBytes,
+            fileManager: fileManager
+        ).map { digest(data: $0) }
+    }
+
+    static func boundedFileData(
+        at url: URL,
+        maximumBytes: Int = maxBoundLocalResourceBytes,
+        fileManager: FileManager = .default
+    ) -> Data? {
+        guard maximumBytes > 0,
+              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
+              attributes[.type] as? FileAttributeType == .typeRegular,
+              let size = (attributes[.size] as? NSNumber)?.intValue,
+              size <= maximumBytes,
+              let handle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { try? handle.close() }
+
+        guard let data = try? handle.read(upToCount: maximumBytes + 1),
+              data.count <= maximumBytes else {
+            return nil
+        }
+        return data
     }
 
     static func escapedPreview(_ value: String) -> String {

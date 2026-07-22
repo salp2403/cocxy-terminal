@@ -9,6 +9,7 @@ enum WorkflowTOMLCodecError: Error, Sendable, Equatable {
     case noWorkflowSteps
     case missingStep(String)
     case missingCommand(String)
+    case unsupportedShell(stepID: String, shell: String)
 }
 
 extension WorkflowTOMLCodecError: LocalizedError {
@@ -24,6 +25,8 @@ extension WorkflowTOMLCodecError: LocalizedError {
             return "Workflow TOML references missing step: \(id)"
         case .missingCommand(let id):
             return "Workflow step must include a command: \(id)"
+        case .unsupportedShell(let stepID, let shell):
+            return "Workflow step \(stepID) uses an unsupported shell: \(shell)"
         }
     }
 }
@@ -55,11 +58,27 @@ enum WorkflowTOMLCodec {
             else {
                 throw WorkflowTOMLCodecError.missingCommand(stepID)
             }
+            let shell: WorkflowShell
+            if let rawShell = stringValue(stepTable["shell"]),
+               !rawShell.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                let normalizedShell = rawShell
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                    .lowercased()
+                guard let parsedShell = WorkflowShell(rawValue: normalizedShell) else {
+                    throw WorkflowTOMLCodecError.unsupportedShell(
+                        stepID: stepID,
+                        shell: rawShell
+                    )
+                }
+                shell = parsedShell
+            } else {
+                shell = .bash
+            }
             return WorkflowStep(
                 id: stepID,
                 title: stringValue(stepTable["title"]),
                 command: command,
-                shell: WorkflowShell(normalizing: stringValue(stepTable["shell"])),
+                shell: shell,
                 workingDirectory: stringValue(stepTable["working-directory"]),
                 timeoutSeconds: doubleValue(stepTable["timeout-seconds"]),
                 continueOnFailure: boolValue(stepTable["continue-on-failure"]) ?? false

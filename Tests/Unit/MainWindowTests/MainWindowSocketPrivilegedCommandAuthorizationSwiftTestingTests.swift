@@ -173,6 +173,9 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
             localResourcePaths: [
                 "browser-import.0.history": "/Users/test/Library/Application Support/Browser/History",
             ],
+            localResourceDigests: [
+                "browser-import.0.history": String(repeating: "a", count: 64),
+            ],
             surfaceID: nil,
             browserViewModelIdentifier: nil,
             browserTabID: nil,
@@ -190,6 +193,8 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(preview.contains("browser-profile: \(profileID.uuidString)"))
         #expect(preview.contains("browser-import.0.history"))
         #expect(preview.contains("/Users/test/Library/Application Support/Browser/History"))
+        #expect(preview.contains("browser-import.0.history-sha256"))
+        #expect(preview.contains(String(repeating: "a", count: 64)))
     }
 
     private func makeFixture() -> (

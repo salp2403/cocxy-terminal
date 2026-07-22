@@ -457,6 +457,16 @@ extension AppDelegate {
                     paths[key] = canonicalPath
                 }
             }
+            var localResourceDigests: [String: String] = [:]
+            if request.command == .workflowRun {
+                guard let inputPath = localResourcePaths["input"],
+                      let digest = SocketPrivilegedCommandSecurity.boundedFileDigest(
+                        at: URL(fileURLWithPath: inputPath)
+                      ) else {
+                    return nil
+                }
+                localResourceDigests["input"] = digest
+            }
             let workingDirectory = localResourcePaths["cwd"]
                 ?? localResourcePaths["input"].map {
                     URL(fileURLWithPath: $0).deletingLastPathComponent().path
@@ -473,6 +483,7 @@ extension AppDelegate {
                 scope: .localExecution,
                 workingDirectory: workingDirectory,
                 localResourcePaths: localResourcePaths,
+                localResourceDigests: localResourceDigests,
                 displayName: inputPath ?? request.command.rawValue
             )
 
@@ -543,6 +554,7 @@ extension AppDelegate {
         scope: SocketPrivilegedCommandContext.Scope,
         workingDirectory: String? = nil,
         localResourcePaths: [String: String] = [:],
+        localResourceDigests: [String: String] = [:],
         browserProfileID: UUID? = nil,
         displayName: String
     ) -> SocketPrivilegedCommandPresentationTarget {
@@ -553,6 +565,7 @@ extension AppDelegate {
                 tabID: nil,
                 workingDirectory: workingDirectory ?? "Cocxy application",
                 localResourcePaths: localResourcePaths,
+                localResourceDigests: localResourceDigests,
                 surfaceID: nil,
                 browserViewModelIdentifier: nil,
                 browserTabID: nil,
@@ -720,6 +733,13 @@ extension MainWindowController {
             let value = context.localResourcePaths[key] ?? ""
             lines.append(
                 "\(SocketPrivilegedCommandSecurity.escapedPreview(key)): "
+                    + SocketPrivilegedCommandSecurity.escapedPreview(value)
+            )
+        }
+        for key in context.localResourceDigests.keys.sorted() {
+            let value = context.localResourceDigests[key] ?? ""
+            lines.append(
+                "\(SocketPrivilegedCommandSecurity.escapedPreview(key))-sha256: "
                     + SocketPrivilegedCommandSecurity.escapedPreview(value)
             )
         }

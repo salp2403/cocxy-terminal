@@ -52,6 +52,26 @@ struct SandboxFoundationSwiftTestingTests {
         #expect(!profile.contains("file-write*"))
     }
 
+    @Test("isolated profile keeps system services while denying ambient IO authority")
+    func isolatedProfileDeniesAmbientIOAuthority() {
+        let profile = SandboxProfileBuilder().profile(
+            capabilities: [.filesystemRead, .filesystemWrite, .processExec],
+            readablePaths: [URL(fileURLWithPath: "/tmp/workspace")],
+            writablePaths: [URL(fileURLWithPath: "/tmp/workspace")],
+            executablePaths: [URL(fileURLWithPath: "/bin/bash")],
+            basePolicy: .isolateFilesystemAndNetwork
+        )
+
+        #expect(profile.contains("(allow default)"))
+        #expect(profile.contains("(deny network*)"))
+        #expect(profile.contains("(deny file-read*)"))
+        #expect(profile.contains("(deny file-write*)"))
+        #expect(profile.contains("(deny process-exec)"))
+        #expect(profile.contains(#"(allow file-read* (subpath "/tmp/workspace"))"#))
+        #expect(profile.contains(#"(allow file-write* (subpath "/tmp/workspace"))"#))
+        #expect(profile.contains(#"(allow process-exec (literal "/bin/bash"))"#))
+    }
+
     @Test("profile escapes paths before embedding them in sandbox scheme")
     func profileEscapesPaths() {
         let profile = SandboxProfileBuilder().profile(

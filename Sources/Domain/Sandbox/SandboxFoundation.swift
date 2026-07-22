@@ -34,6 +34,11 @@ extension PluginCapability {
 
 // MARK: - Profile Builder
 
+enum SandboxProfileBasePolicy: Sendable, Equatable {
+    case denyByDefault
+    case isolateFilesystemAndNetwork
+}
+
 struct SandboxProfileBuilder: Sendable {
     func profile(
         capabilities: Set<SandboxCapability>,
@@ -44,13 +49,27 @@ struct SandboxProfileBuilder: Sendable {
         writableLiteralPaths: [URL] = [],
         executableSubpaths: [URL] = [],
         includeSystemReadBaseline: Bool = false,
-        additionalDeniedLiteralPaths: [URL] = []
+        additionalDeniedLiteralPaths: [URL] = [],
+        basePolicy: SandboxProfileBasePolicy = .denyByDefault
     ) -> String {
-        var lines = [
-            "(version 1)",
-            "(deny default)",
-            "(allow process-fork)",
-        ]
+        var lines: [String]
+        switch basePolicy {
+        case .denyByDefault:
+            lines = [
+                "(version 1)",
+                "(deny default)",
+                "(allow process-fork)",
+            ]
+        case .isolateFilesystemAndNetwork:
+            lines = [
+                "(version 1)",
+                "(allow default)",
+                "(deny network*)",
+                "(deny file-read*)",
+                "(deny file-write*)",
+                "(deny process-exec)",
+            ]
+        }
 
         if includeSystemReadBaseline {
             lines.append("(allow sysctl-read)")

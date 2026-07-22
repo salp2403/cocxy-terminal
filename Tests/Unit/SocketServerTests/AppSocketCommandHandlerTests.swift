@@ -3646,6 +3646,73 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         )
     }
 
+    func test_workflowRun_rejectsInputChangedAfterApproval() throws {
+        let directory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let inputURL = directory.appendingPathComponent("workflow.toml")
+        let markerURL = directory.appendingPathComponent("unexpected.txt")
+        let approvedSource = """
+        [workflow]
+        id = "approved"
+        steps = ["verify"]
+
+        [step.verify]
+        command = "printf approved"
+        """
+        let replacedSource = """
+        [workflow]
+        id = "replaced"
+        steps = ["write"]
+
+        [step.write]
+        command = "printf unexpected > unexpected.txt"
+        """
+        try approvedSource.write(to: inputURL, atomically: true, encoding: .utf8)
+        let approvedDigest = SocketPrivilegedCommandSecurity.digest(
+            data: Data(approvedSource.utf8)
+        )
+
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                try? replacedSource.write(to: inputURL, atomically: true, encoding: .utf8)
+                let context = SocketPrivilegedCommandContext(
+                    scope: .localExecution,
+                    windowControllerIdentifier: nil,
+                    tabID: nil,
+                    workingDirectory: directory.path,
+                    localResourcePaths: [
+                        "input": inputURL.path,
+                        "cwd": directory.path,
+                    ],
+                    localResourceDigests: ["input": approvedDigest],
+                    surfaceID: nil,
+                    browserViewModelIdentifier: nil,
+                    browserTabID: nil,
+                    browserURL: nil,
+                    targetDisplayName: inputURL.path
+                )
+                return SocketPrivilegedCommandAuthorizationGrant(
+                    request: request,
+                    context: context
+                )
+            },
+            tabManager: nil,
+            hookEventReceiver: nil
+        )
+        let response = handler.handleCommand(SocketRequest(
+            id: "workflow-run-content-swap",
+            command: "workflow-run",
+            params: [
+                "input": inputURL.path,
+                "cwd": directory.path,
+            ]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Workflow input changed after approval.")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: markerURL.path))
+    }
+
     func test_skillList_returnsLocalSkillsAsJSONContent() throws {
         let directory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }

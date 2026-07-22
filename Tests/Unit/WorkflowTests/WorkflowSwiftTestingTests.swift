@@ -59,6 +59,24 @@ struct WorkflowSwiftTestingTests {
         #expect(reparsed == original)
     }
 
+    @Test("rejects unsupported workflow shells instead of falling back")
+    func rejectsUnsupportedWorkflowShells() {
+        #expect(throws: WorkflowTOMLCodecError.unsupportedShell(
+            stepID: "build",
+            shell: "fish"
+        )) {
+            _ = try WorkflowTOMLCodec.parse("""
+            [workflow]
+            id = "ci"
+            steps = ["build"]
+
+            [step.build]
+            command = "swift build"
+            shell = "fish"
+            """)
+        }
+    }
+
     @Test("executes workflow steps sequentially and stops on first failure")
     func executesWorkflowStepsAndStopsOnFailure() throws {
         let workspace = try temporaryWorkflowDirectory()
@@ -68,7 +86,7 @@ struct WorkflowSwiftTestingTests {
             AgentProcessResult(exitCode: 1, stdout: "", stderr: "tests failed\n"),
             AgentProcessResult(exitCode: 0, stdout: "deploy\n", stderr: ""),
         ])
-        let executor = WorkflowExecutor(processRunner: runner)
+        let executor = WorkflowExecutor(processRunner: runner, sandboxPolicy: .none)
         let workflow = WorkflowDocument(
             id: "ci",
             name: "CI",
@@ -97,7 +115,7 @@ struct WorkflowSwiftTestingTests {
             AgentProcessResult(exitCode: 1, stdout: "", stderr: "lint failed\n"),
             AgentProcessResult(exitCode: 0, stdout: "tests ok\n", stderr: ""),
         ])
-        let executor = WorkflowExecutor(processRunner: runner)
+        let executor = WorkflowExecutor(processRunner: runner, sandboxPolicy: .none)
         let workflow = WorkflowDocument(
             id: "ci",
             steps: [
@@ -118,7 +136,7 @@ struct WorkflowSwiftTestingTests {
         let workspace = try temporaryWorkflowDirectory()
         defer { try? FileManager.default.removeItem(at: workspace) }
         let runner = RecordingWorkflowProcessRunner()
-        let executor = WorkflowExecutor(processRunner: runner)
+        let executor = WorkflowExecutor(processRunner: runner, sandboxPolicy: .none)
         let workflow = WorkflowDocument(
             id: "escape",
             steps: [
@@ -130,6 +148,93 @@ struct WorkflowSwiftTestingTests {
             _ = try executor.execute(workflow, workspaceRoot: workspace)
         }
         #expect(runner.calls.isEmpty)
+    }
+
+    @Test("workspace sandbox wraps commands with bounded filesystem and network authority")
+    func workspaceSandboxWrapsCommandsWithBoundedAuthority() throws {
+        let workspace = try temporaryWorkflowDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let runner = RecordingWorkflowProcessRunner()
+        let executor = WorkflowExecutor(processRunner: runner)
+        let workflow = WorkflowDocument(
+            id: "sandboxed",
+            steps: [WorkflowStep(id: "verify", command: "printf ok")]
+        )
+
+        _ = try executor.execute(workflow, workspaceRoot: workspace)
+
+        let call = try #require(runner.calls.first)
+        #expect(call.executablePath == "/usr/bin/sandbox-exec")
+        #expect(call.arguments.first == "-p")
+        let profile = try #require(call.arguments.dropFirst().first)
+        #expect(profile.contains("(deny network*)"))
+        #expect(profile.contains("(deny file-read*)"))
+        #expect(profile.contains("(deny file-write*)"))
+        #expect(profile.contains("(deny process-exec)"))
+        #expect(profile.contains(workspace.resolvingSymlinksInPath().path))
+        #expect(call.arguments.contains("/bin/bash"))
+        let remainingNames = try FileManager.default.contentsOfDirectory(atPath: workspace.path)
+        #expect(!remainingNames.contains { $0.hasPrefix(".cocxy-workflow-") })
+    }
+
+    @Test("workspace sandbox fails closed when sandbox-exec is unavailable")
+    func workspaceSandboxFailsClosedWhenUnavailable() throws {
+        let workspace = try temporaryWorkflowDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let runner = RecordingWorkflowProcessRunner()
+        let executor = WorkflowExecutor(
+            processRunner: runner,
+            sandboxExecutor: SandboxExecutor(
+                fileManager: WorkflowSandboxFileManager(executable: false)
+            )
+        )
+        let workflow = WorkflowDocument(
+            id: "sandboxed",
+            steps: [WorkflowStep(id: "verify", command: "printf ok")]
+        )
+
+        #expect(throws: WorkflowExecutionError.sandboxUnavailable) {
+            _ = try executor.execute(workflow, workspaceRoot: workspace)
+        }
+        #expect(runner.calls.isEmpty)
+    }
+
+    @Test("workspace sandbox permits workspace writes and blocks sibling reads")
+    func workspaceSandboxEnforcesFilesystemBoundary() throws {
+        let root = try temporaryWorkflowDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: false)
+        let secretURL = root.appendingPathComponent("outside-secret.txt")
+        try "outside-secret".write(to: secretURL, atomically: true, encoding: .utf8)
+        let artifactURL = workspace.appendingPathComponent("artifact.txt")
+        let workflow = WorkflowDocument(
+            id: "filesystem-boundary",
+            steps: [
+                WorkflowStep(
+                    id: "inside-write",
+                    command: "printf inside > artifact.txt"
+                ),
+                WorkflowStep(
+                    id: "outside-read",
+                    command: "cat \(shellQuoted(secretURL.path))"
+                ),
+            ]
+        )
+
+        let summary = try WorkflowExecutor().execute(workflow, workspaceRoot: workspace)
+
+        guard case .failed(let stepID, let exitCode) = summary.status else {
+            Issue.record("Expected the out-of-workspace read to fail")
+            return
+        }
+        #expect(stepID == "outside-read")
+        #expect(exitCode != 0)
+        #expect(summary.results.count == 2)
+        #expect(summary.results[0].exitCode == 0)
+        #expect(summary.results[1].exitCode != 0)
+        #expect(!summary.results[1].stdout.contains("outside-secret"))
+        #expect(try String(contentsOf: artifactURL, encoding: .utf8) == "inside")
     }
 
     @Test("registry lists and loads workflow TOML files by id")
@@ -184,9 +289,21 @@ private struct WorkflowProcessCall: Equatable {
     let timeoutSeconds: TimeInterval?
 }
 
+private struct WorkflowSandboxFileManager: SandboxFileManaging {
+    let executable: Bool
+
+    func isExecutableFile(atPath path: String) -> Bool {
+        executable
+    }
+}
+
 private func temporaryWorkflowDirectory() throws -> URL {
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("cocxy-workflow-tests-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
+}
+
+private func shellQuoted(_ value: String) -> String {
+    "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
 }

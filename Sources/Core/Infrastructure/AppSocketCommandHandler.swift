@@ -6383,7 +6383,27 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         do {
-            let source = try String(contentsOf: inputURL, encoding: .utf8)
+            guard let sourceData = SocketPrivilegedCommandSecurity.boundedFileData(
+                at: inputURL
+            ) else {
+                return .failure(
+                    id: request.id,
+                    error: "Workflow input is unavailable or exceeds the safe size limit."
+                )
+            }
+            if let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context,
+               context.scope != .internalTrusted {
+                guard let approvedDigest = context.localResourceDigests["input"],
+                      approvedDigest == SocketPrivilegedCommandSecurity.digest(data: sourceData) else {
+                    return .failure(
+                        id: request.id,
+                        error: "Workflow input changed after approval."
+                    )
+                }
+            }
+            guard let source = String(data: sourceData, encoding: .utf8) else {
+                return .failure(id: request.id, error: "Workflow input must be valid UTF-8.")
+            }
             let workflow = try WorkflowTOMLCodec.parse(source)
             let summary = try WorkflowExecutor().execute(workflow, workspaceRoot: workspaceRoot)
             var data = [
