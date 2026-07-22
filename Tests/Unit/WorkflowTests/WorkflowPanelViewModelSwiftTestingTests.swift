@@ -48,7 +48,7 @@ struct WorkflowPanelViewModelSwiftTestingTests {
         let viewModel = WorkflowPanelViewModel(
             fileURL: fileURL,
             workspaceRoot: workspace,
-            executor: WorkflowExecutor(processRunner: runner)
+            executor: WorkflowExecutor(processRunner: runner, sandboxPolicy: .none)
         )
 
         #expect(viewModel.workflowID == "ci")
