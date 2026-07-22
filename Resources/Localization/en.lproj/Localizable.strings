@@ -3083,6 +3083,7 @@
 "remoteWorkspace.sftp.download.unsafeName" = "The remote file name cannot be downloaded safely.";
 "remoteWorkspace.sftp.download.unsafeDestination" = "The download destination is outside Downloads.";
 "remoteWorkspace.sftp.download.destinationExists" = "A file with this name already exists in Downloads.";
+"remoteWorkspace.sftp.download.inProgress" = "Downloading...";
 "remoteWorkspace.browserSuggestions.title" = "Remote Browser";
 "remoteWorkspace.browserSuggestions.switch.title" = "Switch Remote Browser connection?";
 "remoteWorkspace.browserSuggestions.switch.action" = "Stop current forwards and switch";

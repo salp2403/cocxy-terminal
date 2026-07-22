@@ -3,6 +3,11 @@
 
 import SwiftUI
 
+private enum SFTPDirectoryLoadResult: Sendable {
+    case success([RemoteFileEntry])
+    case failure(String)
+}
+
 // MARK: - SFTP Browser View Model
 
 /// Drives the SFTP file browser sub-panel.
@@ -18,6 +23,7 @@ final class SFTPBrowserViewModel: ObservableObject {
     @Published private(set) var currentPath: String = "/home"
     @Published private(set) var entries: [RemoteFileEntry] = []
     @Published private(set) var isLoading = false
+    @Published private(set) var downloadingEntryIDs: Set<String> = []
     @Published private(set) var errorMessage: String?
 
     // MARK: - Dependencies
@@ -27,6 +33,8 @@ final class SFTPBrowserViewModel: ObservableObject {
     private let downloadsDirectory: URL
     private let fileManager: FileManager
     private let localizer: AppLocalizer
+    private var directoryRequestID = UUID()
+    private var directoryTask: Task<SFTPDirectoryLoadResult, Never>?
 
     // MARK: - Initialization
 
@@ -49,19 +57,39 @@ final class SFTPBrowserViewModel: ObservableObject {
 
     func loadDirectory(at path: String? = nil) {
         let targetPath = path ?? currentPath
+        let requestID = UUID()
+        directoryRequestID = requestID
         isLoading = true
         errorMessage = nil
-
-        do {
-            let result = try sftpClient.listDirectory(path: targetPath, on: profile)
-            entries = sortEntries(result)
-            currentPath = targetPath
-        } catch {
-            errorMessage = error.localizedDescription
-            entries = []
+        let client = sftpClient
+        let profile = profile
+        directoryTask?.cancel()
+        let operation = Task.detached(priority: .userInitiated) {
+            do {
+                return SFTPDirectoryLoadResult.success(
+                    try client.listDirectory(path: targetPath, on: profile)
+                )
+            } catch {
+                return SFTPDirectoryLoadResult.failure(error.localizedDescription)
+            }
         }
+        directoryTask = operation
 
-        isLoading = false
+        Task { [weak self] in
+            let result = await operation.value
+            guard let self, self.directoryRequestID == requestID else { return }
+            self.directoryTask = nil
+
+            switch result {
+            case .success(let entries):
+                self.entries = self.sortEntries(entries)
+                self.currentPath = targetPath
+            case .failure(let message):
+                self.errorMessage = message
+                self.entries = []
+            }
+            self.isLoading = false
+        }
     }
 
     func navigateToDirectory(_ entry: RemoteFileEntry) {
@@ -81,6 +109,7 @@ final class SFTPBrowserViewModel: ObservableObject {
 
     func downloadFile(_ entry: RemoteFileEntry) {
         guard !entry.isDirectory else { return }
+        guard !downloadingEntryIDs.contains(entry.id) else { return }
         errorMessage = nil
 
         guard RemoteFileEntry.isSafePathComponent(entry.name) else {
@@ -91,18 +120,43 @@ final class SFTPBrowserViewModel: ObservableObject {
             return
         }
 
+        let destination: URL
         do {
-            let destination = try downloadDestination(for: entry.name)
-            try sftpClient.download(
-                remotePath: entry.id,
-                localPath: destination.path,
-                on: profile
-            )
+            destination = try downloadDestination(for: entry.name)
         } catch let error as DownloadValidationError {
             errorMessage = downloadValidationMessage(for: error)
+            return
         } catch {
             errorMessage = error.localizedDescription
+            return
         }
+
+        downloadingEntryIDs.insert(entry.id)
+        let client = sftpClient
+        let profile = profile
+        Task { [weak self] in
+            let errorMessage: String? = await Task.detached(priority: .userInitiated) {
+                do {
+                    try client.download(
+                        remotePath: entry.id,
+                        localPath: destination.path,
+                        on: profile
+                    )
+                    return nil
+                } catch {
+                    return error.localizedDescription
+                }
+            }.value
+            guard let self else { return }
+            self.downloadingEntryIDs.remove(entry.id)
+            if let errorMessage {
+                self.errorMessage = errorMessage
+            }
+        }
+    }
+
+    func isDownloading(_ entry: RemoteFileEntry) -> Bool {
+        downloadingEntryIDs.contains(entry.id)
     }
 
     func dismissError() {
@@ -266,6 +320,7 @@ struct SFTPBrowserView: View {
             }
             .buttonStyle(.plain)
             .frame(width: 24, height: 24)
+            .disabled(viewModel.isLoading)
             .accessibilityLabel(
                 viewModel.isLoading
                     ? localized("remoteWorkspace.sftp.loading", fallback: "Loading...")
@@ -294,11 +349,12 @@ struct SFTPBrowserView: View {
         ScrollView(.vertical, showsIndicators: true) {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(viewModel.entries) { entry in
-                            FileEntryRow(
-                                entry: entry,
-                                dateFormatter: Self.dateFormatter,
-                                localizer: localizer
-                            )
+                    FileEntryRow(
+                        entry: entry,
+                        dateFormatter: Self.dateFormatter,
+                        isDownloading: viewModel.isDownloading(entry),
+                        localizer: localizer
+                    )
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) {
                         if entry.isDirectory {
@@ -381,6 +437,7 @@ struct FileEntryRow: View {
 
     let entry: RemoteFileEntry
     let dateFormatter: DateFormatter
+    var isDownloading = false
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     var body: some View {
@@ -405,6 +462,23 @@ struct FileEntryRow: View {
                 .font(.system(size: 10))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                 .frame(width: 48, alignment: .trailing)
+
+            Group {
+                if isDownloading {
+                    ProgressView()
+                        .controlSize(.small)
+                        .scaleEffect(0.65)
+                        .accessibilityLabel(
+                            localized(
+                                "remoteWorkspace.sftp.download.inProgress",
+                                fallback: "Downloading..."
+                            )
+                        )
+                } else {
+                    Color.clear
+                }
+            }
+            .frame(width: 16, height: 16)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)

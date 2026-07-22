@@ -8,7 +8,8 @@ import Testing
 // MARK: - Mock SFTP Executor
 
 final class MockSFTPExecutor: SFTPExecutor, @unchecked Sendable {
-    var executedCommands: [(
+    private let lock = NSLock()
+    private var commandStorage: [(
         sftpCommand: String,
         destination: SSHConnectionDestination,
         port: Int?,
@@ -16,6 +17,18 @@ final class MockSFTPExecutor: SFTPExecutor, @unchecked Sendable {
     )] = []
     var stubbedOutput = ""
     var shouldThrow = false
+    var executionDelay: TimeInterval = 0
+
+    var executedCommands: [(
+        sftpCommand: String,
+        destination: SSHConnectionDestination,
+        port: Int?,
+        controlPath: String
+    )] {
+        lock.lock()
+        defer { lock.unlock() }
+        return commandStorage
+    }
 
     func execute(
         sftpCommand: String,
@@ -23,11 +36,43 @@ final class MockSFTPExecutor: SFTPExecutor, @unchecked Sendable {
         port: Int?,
         controlPath: String
     ) throws -> String {
-        executedCommands.append((sftpCommand, destination, port, controlPath))
-        if shouldThrow {
+        lock.lock()
+        commandStorage.append((sftpCommand, destination, port, controlPath))
+        let output = stubbedOutput
+        let throwsError = shouldThrow
+        let delay = executionDelay
+        lock.unlock()
+        if delay > 0 {
+            Thread.sleep(forTimeInterval: delay)
+        }
+        if throwsError {
             throw SFTPClientError.commandFailed("mock sftp error")
         }
-        return stubbedOutput
+        return output
+    }
+}
+
+final class RecordingSFTPProcessRunner: SFTPProcessRunning, @unchecked Sendable {
+    var invocation: SFTPProcessInvocation?
+    var batchContents: String?
+    var batchPermissions: Int?
+    var result = BoundedProcessResult(
+        exitCode: 0,
+        stdout: "fixture output",
+        stderr: "",
+        stdoutWasTruncated: false,
+        stderrWasTruncated: false,
+        timedOut: false
+    )
+
+    func run(_ invocation: SFTPProcessInvocation) throws -> BoundedProcessResult {
+        self.invocation = invocation
+        if let batchPath = invocation.arguments.dropFirst().first {
+            batchContents = try String(contentsOfFile: batchPath, encoding: .utf8)
+            let attributes = try FileManager.default.attributesOfItem(atPath: batchPath)
+            batchPermissions = (attributes[.posixPermissions] as? NSNumber)?.intValue
+        }
+        return result
     }
 }
 
@@ -324,6 +369,62 @@ struct SFTPClientTests {
         #expect(arguments.contains("2222"))
     }
 
+    @Test func systemExecutorUsesPrivateBatchFileAndCleansItUp() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-sftp-executor-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let processRunner = RecordingSFTPProcessRunner()
+        let executor = SystemSFTPExecutor(
+            temporaryDirectory: root,
+            timeoutSeconds: 2,
+            retainedBytesPerStream: 4 * 1_024,
+            processRunner: processRunner
+        )
+        let destination = try SSHConnectionDestination(user: "deploy", host: "example.com")
+
+        let output = try executor.execute(
+            sftpCommand: "ls -la '/tmp'",
+            destination: destination,
+            port: 22,
+            controlPath: "/tmp/control.sock"
+        )
+
+        #expect(output == "fixture output")
+        #expect(processRunner.batchContents == "ls -la '/tmp'\nbye\n")
+        #expect(processRunner.batchPermissions == 0o600)
+        #expect(processRunner.invocation?.timeoutSeconds == 2)
+        #expect(processRunner.invocation?.retainedBytesPerStream == 4 * 1_024)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test func systemExecutorRejectsTruncatedProcessOutput() throws {
+        let processRunner = RecordingSFTPProcessRunner()
+        processRunner.result = BoundedProcessResult(
+            exitCode: 0,
+            stdout: "partial",
+            stderr: "",
+            stdoutWasTruncated: true,
+            stderrWasTruncated: false,
+            timedOut: false
+        )
+        let executor = SystemSFTPExecutor(
+            processRunner: processRunner
+        )
+        let destination = try SSHConnectionDestination(user: "deploy", host: "example.com")
+
+        #expect(throws: SFTPClientError.commandFailed("SFTP output exceeded the safe limit.")) {
+            _ = try executor.execute(
+                sftpCommand: "ls -la '/tmp'",
+                destination: destination,
+                port: 22,
+                controlPath: "/tmp/control.sock"
+            )
+        }
+    }
+
     @Test func listDirectoryWithSpacesInPath() throws {
         let executor = MockSFTPExecutor()
         executor.stubbedOutput = ""
@@ -413,6 +514,17 @@ struct SFTPClientTests {
 
 @Suite("SFTP browser download containment")
 struct SFTPBrowserDownloadContainmentTests {
+    @MainActor
+    private func waitUntil(
+        _ condition: @escaping @MainActor () -> Bool
+    ) async {
+        for _ in 0..<200 {
+            if condition() { return }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        Issue.record("Timed out waiting for the SFTP operation")
+    }
+
     private func profile() -> RemoteConnectionProfile {
         RemoteConnectionProfile(name: "dev", host: "server.com", user: "deploy")
     }
@@ -455,7 +567,7 @@ struct SFTPBrowserDownloadContainmentTests {
     }
 
     @Test("normal filename with spaces targets one strict child of Downloads")
-    @MainActor func normalFilenameTargetsDownloadsChild() throws {
+    @MainActor func normalFilenameTargetsDownloadsChild() async throws {
         let downloads = try temporaryDownloadsDirectory()
         defer { try? FileManager.default.removeItem(at: downloads) }
         let executor = MockSFTPExecutor()
@@ -465,15 +577,39 @@ struct SFTPBrowserDownloadContainmentTests {
             downloadsDirectory: downloads
         )
 
-        viewModel.downloadFile(entry(
+        let file = entry(
             name: "report final.txt",
             remotePath: "/remote/report final.txt"
-        ))
+        )
+        viewModel.downloadFile(file)
+        await waitUntil { !viewModel.isDownloading(file) }
 
         #expect(executor.executedCommands.count == 1)
         #expect(executor.executedCommands.first?.sftpCommand ==
             "get '/remote/report final.txt' '\(downloads.path)/report final.txt'")
         #expect(viewModel.errorMessage == nil)
+    }
+
+    @Test("directory loading returns immediately while SFTP runs off the main actor")
+    @MainActor func directoryLoadingDoesNotBlockMainActor() async throws {
+        let downloads = try temporaryDownloadsDirectory()
+        defer { try? FileManager.default.removeItem(at: downloads) }
+        let executor = MockSFTPExecutor()
+        executor.executionDelay = 0.15
+        executor.stubbedOutput =
+            "-rw-r--r-- 1 deploy deploy 12 Jan 15 10:30 report.txt\n"
+        let viewModel = SFTPBrowserViewModel(
+            sftpClient: SFTPClient(executor: executor),
+            profile: profile(),
+            downloadsDirectory: downloads
+        )
+
+        viewModel.loadDirectory(at: "/remote")
+
+        #expect(viewModel.isLoading)
+        await waitUntil { !viewModel.isLoading }
+        #expect(viewModel.currentPath == "/remote")
+        #expect(viewModel.entries.map(\.name) == ["report.txt"])
     }
 
     @Test("existing symlink destination is rejected without touching its target")

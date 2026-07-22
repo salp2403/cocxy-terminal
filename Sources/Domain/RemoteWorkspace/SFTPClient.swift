@@ -39,11 +39,62 @@ protocol SFTPExecutor: Sendable {
 
 // MARK: - System SFTP Executor
 
+struct SFTPProcessInvocation: Sendable {
+    let executableURL: URL
+    let arguments: [String]
+    let workingDirectory: URL
+    let timeoutSeconds: TimeInterval
+    let retainedBytesPerStream: Int
+}
+
+protocol SFTPProcessRunning: Sendable {
+    func run(_ invocation: SFTPProcessInvocation) throws -> BoundedProcessResult
+}
+
+struct BoundedSFTPProcessRunner: SFTPProcessRunning {
+    func run(_ invocation: SFTPProcessInvocation) throws -> BoundedProcessResult {
+        try BoundedProcessRunner(
+            maximumRetainedBytesPerStream: invocation.retainedBytesPerStream
+        ).run(
+            executableURL: invocation.executableURL,
+            arguments: invocation.arguments,
+            workingDirectory: invocation.workingDirectory,
+            timeoutSeconds: invocation.timeoutSeconds,
+            timeoutDiagnostic: "SFTP command timed out."
+        )
+    }
+}
+
 /// Production implementation that pipes commands to `/usr/bin/sftp` in batch mode.
 ///
 /// Uses the SSH ControlMaster socket for connection reuse, so the existing
 /// SSH session is shared without re-authentication.
-final class SystemSFTPExecutor: SFTPExecutor {
+final class SystemSFTPExecutor: SFTPExecutor, @unchecked Sendable {
+    static let defaultTimeoutSeconds: TimeInterval = 30 * 60
+    static let maximumRetainedBytesPerStream = 4 * 1_024 * 1_024
+
+    private let executableURL: URL
+    private let temporaryDirectory: URL
+    private let fileManager: FileManager
+    private let timeoutSeconds: TimeInterval
+    private let retainedBytesPerStream: Int
+    private let processRunner: any SFTPProcessRunning
+
+    init(
+        executableURL: URL = URL(fileURLWithPath: "/usr/bin/sftp"),
+        temporaryDirectory: URL = FileManager.default.temporaryDirectory,
+        fileManager: FileManager = .default,
+        timeoutSeconds: TimeInterval = SystemSFTPExecutor.defaultTimeoutSeconds,
+        retainedBytesPerStream: Int = SystemSFTPExecutor.maximumRetainedBytesPerStream,
+        processRunner: any SFTPProcessRunning = BoundedSFTPProcessRunner()
+    ) {
+        self.executableURL = executableURL
+        self.temporaryDirectory = temporaryDirectory
+        self.fileManager = fileManager
+        self.timeoutSeconds = timeoutSeconds
+        self.retainedBytesPerStream = retainedBytesPerStream
+        self.processRunner = processRunner
+    }
 
     func execute(
         sftpCommand: String,
@@ -54,53 +105,59 @@ final class SystemSFTPExecutor: SFTPExecutor {
         guard SFTPBatchCommandBoundary.contains(sftpCommand) else {
             throw SFTPClientError.invalidCommand
         }
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/sftp")
-        process.arguments = Self.arguments(
-            destination: destination,
-            port: port,
-            controlPath: controlPath
+        let batchDirectory = temporaryDirectory.appendingPathComponent(
+            "cocxy-sftp-batch-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try fileManager.createDirectory(
+            at: batchDirectory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? fileManager.removeItem(at: batchDirectory) }
+
+        let batchFile = batchDirectory.appendingPathComponent("commands.sftp")
+        try Data("\(sftpCommand)\nbye\n".utf8).write(to: batchFile, options: .atomic)
+        try fileManager.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: batchFile.path
         )
 
-        let stdinPipe = Pipe()
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardInput = stdinPipe
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
+        let result = try processRunner.run(SFTPProcessInvocation(
+            executableURL: executableURL,
+            arguments: Self.arguments(
+                destination: destination,
+                port: port,
+                controlPath: controlPath,
+                batchFilePath: batchFile.path
+            ),
+            workingDirectory: batchDirectory,
+            timeoutSeconds: timeoutSeconds,
+            retainedBytesPerStream: retainedBytesPerStream
+        ))
 
-        try process.run()
-
-        if let commandData = "\(sftpCommand)\nbye\n".data(using: .utf8) {
-            stdinPipe.fileHandleForWriting.write(commandData)
+        guard !result.stdoutWasTruncated, !result.stderrWasTruncated else {
+            throw SFTPClientError.commandFailed("SFTP output exceeded the safe limit.")
         }
-        stdinPipe.fileHandleForWriting.closeFile()
-
-        process.waitUntilExit()
-
-        let stdout = String(
-            data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
-        let stderr = String(
-            data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
-
-        guard process.terminationStatus == 0 else {
-            throw SFTPClientError.commandFailed(stderr.isEmpty ? "sftp exited with code \(process.terminationStatus)" : stderr)
+        guard result.exitCode == 0 else {
+            throw SFTPClientError.commandFailed(
+                result.stderr.isEmpty
+                    ? "sftp exited with code \(result.exitCode)"
+                    : result.stderr
+            )
         }
 
-        return stdout
+        return result.stdout
     }
 
     static func arguments(
         destination: SSHConnectionDestination,
         port: Int?,
-        controlPath: String
+        controlPath: String,
+        batchFilePath: String = "-"
     ) -> [String] {
         var arguments = [
-            "-b", "-",
+            "-b", batchFilePath,
             "-o", "ControlPath=\(controlPath)",
         ]
         if let port {
