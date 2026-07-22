@@ -1871,6 +1871,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Starts the CLI companion socket server and schedules a health check timer.
     private func initializeSocketServer() {
+        try? CellCloudInitFileStager.removeAbandonedDefaultStaging()
         let configService = self.configService
         let delegateRef = WeakReference(self)
         let configServiceRef = WeakReference(configService)

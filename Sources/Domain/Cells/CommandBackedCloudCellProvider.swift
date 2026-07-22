@@ -476,7 +476,11 @@ final class AWSCellProvider: CellProvider, @unchecked Sendable {
             updatedAt: now,
             metadata: metadata
         )
-        setRecord(Record(cell: cell, externalID: externalID, metadata: request.metadata), for: cellID)
+        setRecord(Record(
+            cell: cell,
+            externalID: externalID,
+            metadata: CloudCellProviderUtilities.operationalMetadata(from: request.metadata)
+        ), for: cellID)
         return cell
     }
 
@@ -709,7 +713,11 @@ final class GCPCellProvider: CellProvider, @unchecked Sendable {
             updatedAt: now,
             metadata: metadata
         )
-        setRecord(Record(cell: cell, externalID: instanceName, metadata: request.metadata), for: cellID)
+        setRecord(Record(
+            cell: cell,
+            externalID: instanceName,
+            metadata: CloudCellProviderUtilities.operationalMetadata(from: request.metadata)
+        ), for: cellID)
         return cell
     }
 
@@ -928,6 +936,7 @@ final class AzureCellProvider: CellProvider, @unchecked Sendable {
         metadata["resource-group"] = resourceGroup
         metadata["user"] = adminUsername
         var recordMetadata = request.metadata
+        recordMetadata.removeValue(forKey: "cloud-init")
         recordMetadata["user"] = adminUsername
         let cell = Cell(
             id: cellID,
@@ -1192,6 +1201,12 @@ private enum CloudCellProviderUtilities {
             safe.removeValue(forKey: key)
         }
         return safe
+    }
+
+    static func operationalMetadata(from metadata: [String: String]) -> [String: String] {
+        var operational = metadata
+        operational.removeValue(forKey: "cloud-init")
+        return operational
     }
 
     static func cloudName(from name: String) -> String {

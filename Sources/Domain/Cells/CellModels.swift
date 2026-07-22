@@ -114,6 +114,7 @@ enum CellMetadataRedactor {
         "api_key",
         "apikey",
         "authorization",
+        "cloud_init",
         "credential",
         "identity",
         "identity_file",

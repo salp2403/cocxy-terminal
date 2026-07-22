@@ -3,6 +3,7 @@
 
 import CocxyShared
 import CryptoKit
+import Darwin
 import Foundation
 
 typealias SocketPrivilegedCommandCategory = CocxyPrivilegedSocketCommandCategory
@@ -148,6 +149,26 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
             browserTabID: nil,
             browserURL: nil,
             targetDisplayName: request.command.rawValue
+        )
+    }
+
+    func replacingLocalResourceDigests(_ digests: [String: String]) -> Self {
+        Self(
+            scope: scope,
+            windowControllerIdentifier: windowControllerIdentifier,
+            tabID: tabID,
+            workingDirectory: workingDirectory,
+            localResourcePaths: localResourcePaths,
+            localResourceDigests: digests,
+            authorityDetails: authorityDetails,
+            surfaceID: surfaceID,
+            browserViewModelIdentifier: browserViewModelIdentifier,
+            browserTabID: browserTabID,
+            browserURL: browserURL,
+            browserWebViewIdentifier: browserWebViewIdentifier,
+            browserNavigationGeneration: browserNavigationGeneration,
+            browserProfileID: browserProfileID,
+            targetDisplayName: targetDisplayName
         )
     }
 
@@ -672,24 +693,55 @@ enum SocketPrivilegedCommandSecurity {
         ).map { digest(data: $0) }
     }
 
+    static func boundedRegularFileSize(
+        at url: URL,
+        maximumBytes: Int = maxBoundLocalResourceBytes
+    ) -> Int? {
+        guard maximumBytes >= 0 else { return nil }
+        var metadata = stat()
+        let status = url.path.withCString { Darwin.lstat($0, &metadata) }
+        guard status == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              metadata.st_size >= 0,
+              metadata.st_size <= off_t(maximumBytes) else {
+            return nil
+        }
+        return Int(metadata.st_size)
+    }
+
     static func boundedFileData(
         at url: URL,
         maximumBytes: Int = maxBoundLocalResourceBytes,
-        fileManager: FileManager = .default
+        fileManager _: FileManager = .default
     ) -> Data? {
-        guard maximumBytes > 0,
-              let attributes = try? fileManager.attributesOfItem(atPath: url.path),
-              attributes[.type] as? FileAttributeType == .typeRegular,
-              let size = (attributes[.size] as? NSNumber)?.intValue,
-              size <= maximumBytes,
-              let handle = try? FileHandle(forReadingFrom: url) else {
+        guard maximumBytes > 0 else { return nil }
+        let descriptor = url.path.withCString {
+            Darwin.open($0, O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC)
+        }
+        guard descriptor >= 0 else {
             return nil
         }
-        defer { try? handle.close() }
+        defer { Darwin.close(descriptor) }
 
-        guard let data = try? handle.read(upToCount: maximumBytes + 1),
-              data.count <= maximumBytes else {
+        var metadata = stat()
+        guard Darwin.fstat(descriptor, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFREG),
+              metadata.st_size >= 0,
+              metadata.st_size <= off_t(maximumBytes) else {
             return nil
+        }
+
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: min(64 * 1_024, maximumBytes))
+        while data.count <= maximumBytes {
+            let readCount = buffer.withUnsafeMutableBytes { bytes in
+                Darwin.read(descriptor, bytes.baseAddress, bytes.count)
+            }
+            if readCount < 0, errno == EINTR { continue }
+            guard readCount >= 0 else { return nil }
+            if readCount == 0 { break }
+            guard data.count + readCount <= maximumBytes else { return nil }
+            data.append(buffer, count: readCount)
         }
         return data
     }

@@ -16,7 +16,11 @@ struct CellCLICommandServiceSwiftTestingTests {
                 name: "local-dev",
                 provider: .docker,
                 status: .running,
-                metadata: ["token": "secret-token", "image": "swift:6.0"]
+                metadata: [
+                    "token": "secret-token",
+                    "image": "swift:6.0",
+                    "cloud-init": "/private/staging/user-data",
+                ]
             ),
         ])
         let service = makeService(providers: [.docker: provider])
@@ -32,6 +36,7 @@ struct CellCLICommandServiceSwiftTestingTests {
         #expect(result.data["id"] == cellID.uuidString)
         #expect(result.data["metadata_image"] == "swift:6.0")
         #expect(result.data["metadata_token"] == "[redacted]")
+        #expect(result.data["metadata_cloud-init"] == "[redacted]")
         #expect(provider.createdRequests.first?.name == "local-dev")
         #expect(provider.createdRequests.first?.metadata["image"] == "swift:6.0")
     }
@@ -303,7 +308,11 @@ struct CellCLICommandServiceSwiftTestingTests {
                 name: "local",
                 provider: .docker,
                 status: .running,
-                metadata: ["token": "secret-token", "image": "swift:6.0"]
+                metadata: [
+                    "token": "secret-token",
+                    "image": "swift:6.0",
+                    "cloud-init": "/private/staging/user-data",
+                ]
             ),
         ])
         provider.execOutput = "ok\n"
@@ -327,6 +336,7 @@ struct CellCLICommandServiceSwiftTestingTests {
         #expect(auditLog.events.allSatisfy { $0.cellID == cellID })
         #expect(auditLog.events.allSatisfy { $0.actor == "cells-test" })
         #expect(auditLog.events[0].metadata["token"] == "[redacted]")
+        #expect(auditLog.events[0].metadata["cloud-init"] == "[redacted]")
         #expect(auditLog.events[1].metadata["argv"] == "echo ok")
         #expect(provider.destroyCalls.count == 1)
         #expect(provider.destroyCalls[0].0 == cellID)

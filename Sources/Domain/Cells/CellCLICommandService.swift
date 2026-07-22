@@ -5,7 +5,7 @@ import Foundation
 
 final class CellCLICommandService: @unchecked Sendable {
     private static let maxSocketStdoutBytes = 48_000
-    private static let maxInlineCloudInitBytes = 64 * 1_024
+    static let maxCloudInitBytes = 64 * 1_024
 
     static let createLocalResourcePathKeys = [
         "identity",
@@ -206,7 +206,7 @@ final class CellCLICommandService: @unchecked Sendable {
                         key: "cloud-init"
                     )
                 }
-                guard rawValue.utf8.count <= maxInlineCloudInitBytes else {
+                guard rawValue.utf8.count <= maxCloudInitBytes else {
                     return "AWS inline cloud-init exceeds the 65536-byte limit"
                 }
                 return nil

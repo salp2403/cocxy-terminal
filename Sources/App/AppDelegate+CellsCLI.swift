@@ -9,39 +9,50 @@ extension AppDelegate {
     nonisolated func handleCellCLIRequest(
         kind: String,
         params: [String: String],
-        approvedContext: SocketPrivilegedCommandContext
+        approvedContext: SocketPrivilegedCommandContext,
+        serviceOverride: CellCLICommandService? = nil,
+        cloudInitBroker: CellCloudInitFileBroker = CellCloudInitFileBroker()
     ) -> (success: Bool, data: [String: String]) {
-        guard var boundParams = approvedContext.bindingLocalResourcePaths(
+        guard let boundParams = approvedContext.bindingLocalResourcePaths(
             in: params,
             keys: kind == "create" ? CellCLICommandService.createLocalResourcePathKeys : [],
             requiredScope: .computeCell
         ) else {
             return (false, ["error": "Approved cell command context is unavailable"])
         }
-        if kind == "create",
-           approvedContext.scope != .internalTrusted,
-           let reference = CellCLICommandService.cloudInitLocalResourceReference(in: params) {
-            guard let approvedPath = approvedContext.localResourcePaths["cloud-init"] else {
-                return (false, ["error": "Approved cloud-init path is unavailable"])
+        let dispatch: (result: (Bool, [String: String]), params: [String: String])
+        let service = serviceOverride ?? Self.sharedCellCLIService
+        do {
+            dispatch = try cloudInitBroker.withStagedApprovedCloudInit(
+                kind: kind,
+                params: boundParams,
+                approvedContext: approvedContext
+            ) { approvedParams in
+                let semaphore = DispatchSemaphore(value: 0)
+                let box = LockedBox<(Bool, [String: String])>((
+                    false,
+                    ["error": "Cell dispatch did not complete"]
+                ))
+
+                Task.detached {
+                    let result = await service.perform(
+                        kind: kind,
+                        params: approvedParams
+                    )
+                    box.withValue { $0 = result }
+                    semaphore.signal()
+                }
+
+                semaphore.wait()
+                return (box.withValue { $0 }, approvedParams)
             }
-            boundParams["cloud-init"] = reference.binding(to: approvedPath)
-        }
-        let approvedParams = boundParams
-
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = LockedBox<(Bool, [String: String])>((
-            false,
-            ["error": "Cell dispatch did not complete"]
-        ))
-
-        Task.detached {
-            let result = await Self.sharedCellCLIService.perform(kind: kind, params: approvedParams)
-            box.withValue { $0 = result }
-            semaphore.signal()
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return (false, ["error": message])
         }
 
-        semaphore.wait()
-        let result = box.withValue { $0 }
+        let result = dispatch.result
+        let approvedParams = dispatch.params
         guard kind == "attach",
               result.0,
               approvedParams["open-tab"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "false",

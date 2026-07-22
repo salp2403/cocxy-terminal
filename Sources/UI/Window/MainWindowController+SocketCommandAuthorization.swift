@@ -44,17 +44,23 @@ final class SocketPrivilegedCommandAuthorizationCoordinator {
 
         if let presenter {
             let approved = presenter(request, target.context)
-            let currentTarget = targetProvider()
             activeRequestID = nil
             guard approved,
                   request.isValid(at: Date()),
-                  currentTarget?.context == target.context else {
+                  let currentTarget = targetProvider(),
+                  currentTarget.context == target.context,
+                  let approvedContext = currentTarget.contextAfterApproval(),
+                  approvedContext.replacingLocalResourceDigests(
+                    target.context.localResourceDigests
+                  ) == target.context,
+                  targetProvider()?.context == target.context,
+                  request.isValid(at: Date()) else {
                 completion(nil)
                 return
             }
             completion(SocketPrivilegedCommandAuthorizationGrant(
                 request: request,
-                context: target.context
+                context: approvedContext
             ))
             return
         }
@@ -95,16 +101,22 @@ final class SocketPrivilegedCommandAuthorizationCoordinator {
             MainActor.assumeIsolated {
                 guard let self, self.activeRequestID == request.id else { return }
                 self.activeRequestID = nil
-                let currentTarget = targetProvider()
                 guard response == .alertFirstButtonReturn,
                       request.isValid(at: Date()),
-                      currentTarget?.context == target.context else {
+                      let currentTarget = targetProvider(),
+                      currentTarget.context == target.context,
+                      let approvedContext = currentTarget.contextAfterApproval(),
+                      approvedContext.replacingLocalResourceDigests(
+                        target.context.localResourceDigests
+                      ) == target.context,
+                      targetProvider()?.context == target.context,
+                      request.isValid(at: Date()) else {
                     completion(nil)
                     return
                 }
                 completion(SocketPrivilegedCommandAuthorizationGrant(
                     request: request,
-                    context: target.context
+                    context: approvedContext
                 ))
             }
         }
@@ -126,8 +138,26 @@ final class SocketPrivilegedCommandAuthorizationCoordinator {
 
 @MainActor
 struct SocketPrivilegedCommandPresentationTarget {
+    typealias ApprovedContextProvider = @MainActor () -> SocketPrivilegedCommandContext?
+
     let context: SocketPrivilegedCommandContext
     let controller: MainWindowController
+    let approvedContextProvider: ApprovedContextProvider?
+
+    init(
+        context: SocketPrivilegedCommandContext,
+        controller: MainWindowController,
+        approvedContextProvider: ApprovedContextProvider? = nil
+    ) {
+        self.context = context
+        self.controller = controller
+        self.approvedContextProvider = approvedContextProvider
+    }
+
+    func contextAfterApproval() -> SocketPrivilegedCommandContext? {
+        guard let approvedContextProvider else { return context }
+        return approvedContextProvider()
+    }
 }
 
 extension AppDelegate {
@@ -503,11 +533,45 @@ extension AppDelegate {
                 ?? request.params["profile"]
                 ?? request.params["provider"]
                 ?? "Compute cells"
-            return globalPresentationTarget(
+            let localResourcePaths = canonicalSocketResourcePaths(for: request)
+            let hasCloudInitFile = request.command == .cellCreate
+                && CellCLICommandService.cloudInitLocalResourceReference(in: request.params) != nil
+            var authorityDetails: [String: String] = [:]
+            if hasCloudInitFile {
+                guard let path = localResourcePaths["cloud-init"],
+                      let size = SocketPrivilegedCommandSecurity.boundedRegularFileSize(
+                        at: URL(fileURLWithPath: path),
+                        maximumBytes: CellCLICommandService.maxCloudInitBytes
+                      ) else {
+                    return nil
+                }
+                authorityDetails["cloud-init-bytes"] = "\(size)"
+            }
+            let target = globalPresentationTarget(
                 controller: focusedController,
                 scope: .computeCell,
-                localResourcePaths: canonicalSocketResourcePaths(for: request),
+                localResourcePaths: localResourcePaths,
+                authorityDetails: authorityDetails,
                 displayName: identifier
+            )
+            guard hasCloudInitFile,
+                  let path = localResourcePaths["cloud-init"] else {
+                return target
+            }
+            return SocketPrivilegedCommandPresentationTarget(
+                context: target.context,
+                controller: target.controller,
+                approvedContextProvider: { [context = target.context] in
+                    guard let data = SocketPrivilegedCommandSecurity.boundedFileData(
+                        at: URL(fileURLWithPath: path),
+                        maximumBytes: CellCLICommandService.maxCloudInitBytes
+                    ) else {
+                        return nil
+                    }
+                    var digests = context.localResourceDigests
+                    digests["cloud-init"] = SocketPrivilegedCommandSecurity.digest(data: data)
+                    return context.replacingLocalResourceDigests(digests)
+                }
             )
 
         case .remoteConnection:
@@ -565,6 +629,7 @@ extension AppDelegate {
         workingDirectory: String? = nil,
         localResourcePaths: [String: String] = [:],
         localResourceDigests: [String: String] = [:],
+        authorityDetails: [String: String] = [:],
         browserProfileID: UUID? = nil,
         displayName: String
     ) -> SocketPrivilegedCommandPresentationTarget {
@@ -576,6 +641,7 @@ extension AppDelegate {
                 workingDirectory: workingDirectory ?? "Cocxy application",
                 localResourcePaths: localResourcePaths,
                 localResourceDigests: localResourceDigests,
+                authorityDetails: authorityDetails,
                 surfaceID: nil,
                 browserViewModelIdentifier: nil,
                 browserTabID: nil,

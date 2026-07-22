@@ -205,6 +205,110 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(preview.contains("authority.repository: /tmp/project"))
     }
 
+    @Test("cell cloud-init reads and binds bytes only after approval")
+    func cellCloudInitApprovalBindsPathAndDigest() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-cell-approval-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        let source = root.appendingPathComponent("cloud-init.yml")
+        let data = Data("#cloud-config\nruncmd:\n  - echo ready\n".utf8)
+        try data.write(to: source)
+
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            deferContentSetup: true
+        )
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "cell-cloud-init",
+                command: "cell-create",
+                params: [
+                    "provider": "gcp",
+                    "project": "project-a",
+                    "zone": "us-central1-a",
+                    "cloud-init": source.path,
+                ]
+            )
+        ))
+
+        let presentedTarget = try #require(
+            delegate.privilegedSocketCommandPresentationTarget(for: request)
+        )
+        let canonicalPath = source.resolvingSymlinksInPath().standardizedFileURL.path
+        let expectedDigest = SocketPrivilegedCommandSecurity.digest(data: data)
+        let coordinator = SocketPrivilegedCommandAuthorizationCoordinator()
+        var grant: SocketPrivilegedCommandAuthorizationGrant?
+        coordinator.presenter = { _, context in
+            #expect(context.localResourceDigests["cloud-init"] == nil)
+            return true
+        }
+        coordinator.requestAuthorization(
+            request,
+            targetProvider: {
+                delegate.privilegedSocketCommandPresentationTarget(for: request)
+            },
+            completion: { grant = $0 }
+        )
+
+        #expect(presentedTarget.context.scope == .computeCell)
+        #expect(presentedTarget.context.localResourcePaths["cloud-init"] == canonicalPath)
+        #expect(presentedTarget.context.localResourceDigests["cloud-init"] == nil)
+        #expect(presentedTarget.context.authorityDetails["cloud-init-bytes"] == "\(data.count)")
+        #expect(grant?.context.localResourceDigests["cloud-init"] == expectedDigest)
+    }
+
+    @Test("denied approval never resolves post-approval resources")
+    func deniedApprovalSkipsApprovedContextProvider() throws {
+        let fixture = makeFixture()
+        let request = try makeGitAssistantRequest()
+        let coordinator = SocketPrivilegedCommandAuthorizationCoordinator()
+        var approvedContextCalls = 0
+        var grant: SocketPrivilegedCommandAuthorizationGrant?
+        let target = SocketPrivilegedCommandPresentationTarget(
+            context: fixture.context,
+            controller: fixture.controller,
+            approvedContextProvider: {
+                approvedContextCalls += 1
+                return fixture.context
+            }
+        )
+        coordinator.presenter = { _, _ in false }
+
+        coordinator.requestAuthorization(
+            request,
+            targetProvider: { target },
+            completion: { grant = $0 }
+        )
+
+        #expect(grant == nil)
+        #expect(approvedContextCalls == 0)
+    }
+
+    @Test("missing post-approval resources fail closed")
+    func missingApprovedContextFailsClosed() throws {
+        let fixture = makeFixture()
+        let request = try makeGitAssistantRequest()
+        let coordinator = SocketPrivilegedCommandAuthorizationCoordinator()
+        var grant: SocketPrivilegedCommandAuthorizationGrant?
+        let target = SocketPrivilegedCommandPresentationTarget(
+            context: fixture.context,
+            controller: fixture.controller,
+            approvedContextProvider: { nil }
+        )
+        coordinator.presenter = { _, _ in true }
+
+        coordinator.requestAuthorization(
+            request,
+            targetProvider: { target },
+            completion: { grant = $0 }
+        )
+
+        #expect(grant == nil)
+    }
+
     private func makeFixture() -> (
         controller: MainWindowController,
         tabID: TabID,
