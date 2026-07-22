@@ -99,21 +99,26 @@ jobs:
           CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
         run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          set -euo pipefail
+          umask 077
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          CERTIFICATE_PATH="$(mktemp "$RUNNER_TEMP/cocxy-release-certificate.XXXXXX")"
+          cleanup_certificate() {
+            rm -f "$CERTIFICATE_PATH"
+          }
+          trap cleanup_certificate EXIT
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          printf '%s' "$CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s \
-            -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-          rm $RUNNER_TEMP/certificate.p12
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
 
       - name: Build app bundle
         env:
@@ -249,6 +254,9 @@ jobs:
           codesign --force --timestamp \
             --sign "$SIGNING_IDENTITY" \
             "build/CocxyTerminal-${VERSION}.dmg"
+
+      - name: Delete signing keychain
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db"
 
       - name: Notarize DMG
         env:
@@ -550,9 +558,17 @@ jobs:
           SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          echo "$SERVER_KEY" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
+          set -euo pipefail
+          umask 077
+          DEPLOY_KEY="$(mktemp "$RUNNER_TEMP/cocxy-release-deploy-key.XXXXXX")"
+          RELEASES_JSON="$(mktemp "$RUNNER_TEMP/cocxy-release-list.XXXXXX")"
+          cleanup_deploy_credentials() {
+            rm -f "$DEPLOY_KEY" "$RELEASES_JSON"
+          }
+          trap cleanup_deploy_credentials EXIT
+          printf '%s' "$SERVER_KEY" > "$DEPLOY_KEY"
           VERSION="${{ steps.version.outputs.VERSION }}"
+          export RELEASES_JSON VERSION
           DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
           case "$DEPLOY_PATH" in
@@ -562,83 +578,83 @@ jobs:
 
           node web/scripts/build-site.mjs
 
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es ${DEPLOY_PATH}videos ${DEPLOY_PATH}og ${DEPLOY_PATH}features ${DEPLOY_PATH}docs ${DEPLOY_PATH}es/features ${DEPLOY_PATH}es/docs"
 
           # Deploy appcast.xml
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             build/appcast.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
           # Deploy static pages from repo (ensures nav links, content are current)
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
           # Deploy CSS, JS, image, video, OG, and nested static pages
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
           if [ -d web/public/js ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
           fi
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/images/* ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
           if [ -d web/public/og ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/og/* ${DEPLOY_TARGET}:${DEPLOY_PATH}og/
           fi
           if [ -d web/public/features ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features/
           fi
           if [ -d web/public/docs ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/
             if [ -f web/public/docs/search-index.json ]; then
-              scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
                 web/public/docs/search-index.json ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/search-index.json
             fi
           fi
           if [ -d web/public/videos ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/
           fi
 
           # Deploy SEO files
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/robots.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}robots.txt
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/sitemap.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}sitemap.xml
 
           # Deploy PWA manifest
           if [ -f web/public/manifest.webmanifest ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/manifest.webmanifest ${DEPLOY_TARGET}:${DEPLOY_PATH}manifest.webmanifest
           fi
           if [ -f web/public/llms.txt ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/llms.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}llms.txt
           fi
           if [ -f web/public/feed.xml ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/feed.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}feed.xml
           fi
           if [ -f web/public/releases.xml ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/releases.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.xml
           fi
           if [ -f web/public/service-worker.js ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/service-worker.js ${DEPLOY_TARGET}:${DEPLOY_PATH}service-worker.js
           fi
           if [ -d web/public/es ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/
             if [ -d web/public/es/features ]; then
-              scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
                 web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/
             fi
             if [ -d web/public/es/docs ]; then
-              scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+              scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
                 web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/
             fi
           fi
@@ -646,15 +662,14 @@ jobs:
           # Fetch releases with body content for release notes (gh release list lacks body field, use API)
           gh api repos/salp2403/cocxy-terminal/releases?per_page=50 \
             --jq '[.[] | {tagName: .tag_name, publishedAt: .published_at, body: .body}]' \
-            > /tmp/releases.json
-          echo "${VERSION}" > /tmp/version.txt
+            > "$RELEASES_JSON"
 
           # Generate releases page with notes and pagination
           python3 << 'PYEOF'
-          import json, pathlib, re, html
+          import html, json, os, pathlib, re
 
-          releases = json.loads(pathlib.Path("/tmp/releases.json").read_text())
-          version = pathlib.Path("/tmp/version.txt").read_text().strip()
+          releases = json.loads(pathlib.Path(os.environ["RELEASES_JSON"]).read_text())
+          version = os.environ["VERSION"]
           PER_PAGE = 5
 
           def md_to_html(text):
@@ -870,14 +885,14 @@ jobs:
             --output build/es/releases.html
 
           # Deploy releases page and getting-started docs
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html
 
           # Deploy getting-started page from repo
           if [ -f web/public/getting-started.html ]; then
-            scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+            scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
               web/public/getting-started.html ${DEPLOY_TARGET}:${DEPLOY_PATH}getting-started.html
           fi
 
@@ -886,7 +901,7 @@ jobs:
           # become the real version when these sed commands rewrite them on the server.
           # Match the regex [0-9]*\.[0-9]*\.[0-9]* so any prior version also gets replaced.
           ASSET_VERSION="${VERSION}-${GITHUB_SHA::12}"
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|releases/download/v[0-9]*\.[0-9]*\.[0-9]*/CocxyTerminal-|releases/download/v${VERSION}/CocxyTerminal-|g'; \
@@ -904,11 +919,11 @@ jobs:
           # Deploy the Express runtime too. The redesigned site relies on
           # server.js for redirects, CSP, and security headers; static assets
           # alone are not enough for a correct production deploy.
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
             web/scripts/restart-production-runtime.sh \
             ${DEPLOY_TARGET}:${DEPLOY_PATH}
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\"; \
              if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\" >/dev/null 2>&1; fi; \
@@ -917,20 +932,39 @@ jobs:
              chmod +x restart-production-runtime.sh; \
              ./restart-production-runtime.sh"
 
-          rm /tmp/deploy_key
           echo "Website deployed to cocxy.dev"
 
       - name: Update Homebrew Cask
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
+          set -euo pipefail
+          umask 077
+          TAP_DIR="$(mktemp -d "$RUNNER_TEMP/cocxy-release-homebrew-tap.XXXXXX")"
+          HOMEBREW_ASKPASS="$(mktemp "$RUNNER_TEMP/cocxy-release-homebrew-askpass.XXXXXX")"
+          cleanup_homebrew_credentials() {
+            rm -f "$HOMEBREW_ASKPASS"
+            rm -rf "$TAP_DIR"
+          }
+          trap cleanup_homebrew_credentials EXIT
+          cat > "$HOMEBREW_ASKPASS" <<'ASKPASS_EOF'
+          #!/bin/bash
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS_EOF
+          chmod 700 "$HOMEBREW_ASKPASS"
+
           VERSION="${{ steps.version.outputs.VERSION }}"
           DMG="build/CocxyTerminal-${VERSION}.dmg"
           SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
 
           # Clone tap, update formula, push
-          git clone https://x-access-token:${GH_TOKEN}@github.com/salp2403/homebrew-tap.git /tmp/tap
-          cd /tmp/tap
+          GIT_ASKPASS="$HOMEBREW_ASKPASS" GIT_TERMINAL_PROMPT=0 git clone \
+            https://github.com/salp2403/homebrew-tap.git "$TAP_DIR"
+          cd "$TAP_DIR"
 
           cat > Casks/cocxy.rb << CASK
           cask "cocxy" do
@@ -969,5 +1003,15 @@ jobs:
             exit 1
           fi
           git commit -m "Update cocxy to ${VERSION}"
-          git push
-          rm -rf /tmp/tap
+          GIT_ASKPASS="$HOMEBREW_ASKPASS" GIT_TERMINAL_PROMPT=0 git push
+
+      - name: Cleanup signing credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP"/cocxy-release-certificate.* \
+            "$RUNNER_TEMP"/cocxy-release-deploy-key.* \
+            "$RUNNER_TEMP"/cocxy-release-list.* \
+            "$RUNNER_TEMP"/cocxy-release-homebrew-askpass.* \
+            "$RUNNER_TEMP/cocxy-release-git-askpass"
+          rm -rf "$RUNNER_TEMP"/cocxy-release-homebrew-tap.*
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" >/dev/null 2>&1 || true

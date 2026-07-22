@@ -85,9 +85,14 @@ jobs:
           VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
           set -euo pipefail
+          umask 077
           ASSET_VERSION="${VERSION}-${GITHUB_SHA::12}"
-          echo "$SERVER_KEY" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
+          DEPLOY_KEY="$(mktemp "$RUNNER_TEMP/cocxy-website-deploy-key.XXXXXX")"
+          cleanup_deploy_credentials() {
+            rm -f "$DEPLOY_KEY"
+          }
+          trap cleanup_deploy_credentials EXIT
+          printf '%s' "$SERVER_KEY" > "$DEPLOY_KEY"
           DEPLOY_TARGET="${DEPLOY_USER}@${DEPLOY_HOST}"
           case "$DEPLOY_PATH" in
             */) ;;
@@ -95,55 +100,55 @@ jobs:
           esac
           BACKUP_NAME="cocxy-web-backup-${GITHUB_RUN_ID}-$(date -u +%Y%m%d%H%M%S).tar.gz"
 
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              mkdir -p ${DEPLOY_PATH} ${DEPLOY_PATH}css ${DEPLOY_PATH}js ${DEPLOY_PATH}images ${DEPLOY_PATH}es ${DEPLOY_PATH}videos ${DEPLOY_PATH}og ${DEPLOY_PATH}features ${DEPLOY_PATH}docs ${DEPLOY_PATH}es/features ${DEPLOY_PATH}es/docs; \
              tar -czf /tmp/${BACKUP_NAME} -C ${DEPLOY_PATH} ."
 
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/css/* ${DEPLOY_TARGET}:${DEPLOY_PATH}css/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/js/* ${DEPLOY_TARGET}:${DEPLOY_PATH}js/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/images/* ${DEPLOY_TARGET}:${DEPLOY_PATH}images/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/og/* ${DEPLOY_TARGET}:${DEPLOY_PATH}og/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}features/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/docs/search-index.json ${DEPLOY_TARGET}:${DEPLOY_PATH}docs/search-index.json
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/videos/* ${DEPLOY_TARGET}:${DEPLOY_PATH}videos/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/robots.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}robots.txt
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/sitemap.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}sitemap.xml
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/manifest.webmanifest ${DEPLOY_TARGET}:${DEPLOY_PATH}manifest.webmanifest
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/llms.txt ${DEPLOY_TARGET}:${DEPLOY_PATH}llms.txt
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/feed.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}feed.xml
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/releases.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.xml
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/service-worker.js ${DEPLOY_TARGET}:${DEPLOY_PATH}service-worker.js
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/es/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/es/features/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/features/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/public/es/docs/*.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/docs/
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             build/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}releases.html
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             build/es/releases.html ${DEPLOY_TARGET}:${DEPLOY_PATH}es/releases.html
 
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|releases/download/v[0-9]*\.[0-9]*\.[0-9]*/CocxyTerminal-|releases/download/v${VERSION}/CocxyTerminal-|g'; \
@@ -158,11 +163,11 @@ jobs:
              sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt; \
              if find ${DEPLOY_PATH} \( -name '*.html' -o -name 'llms.txt' -o -name 'service-worker.js' \) -print0 | xargs -0 grep -F 'v0.0.0'; then echo 'unresolved version placeholder in deployed website'; exit 1; fi"
 
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             web/server.js web/package.json web/package-lock.json web/ecosystem.config.js \
             web/scripts/restart-production-runtime.sh \
             ${DEPLOY_TARGET}:${DEPLOY_PATH}
-          ssh -o StrictHostKeyChecking=no -i /tmp/deploy_key ${DEPLOY_TARGET} \
+          ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
              export PATH=\"\$HOME/.npm-global/bin:\$HOME/.npm/bin:\$HOME/.local/bin:\$HOME/.nvm/current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:\$PATH\"; \
              if [ -s \"\$HOME/.nvm/nvm.sh\" ]; then . \"\$HOME/.nvm/nvm.sh\" >/dev/null 2>&1; fi; \
@@ -171,7 +176,6 @@ jobs:
              chmod +x restart-production-runtime.sh; \
              ./restart-production-runtime.sh"
 
-          rm /tmp/deploy_key
           echo "backup=/tmp/${BACKUP_NAME}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Production smoke
@@ -221,3 +225,7 @@ jobs:
           grep -q "No telemetry pipeline" "$SMOKE_DIR/privacy.html"
           grep -q "https://cocxy.dev/privacy.html" "$SMOKE_DIR/sitemap.xml"
           grep -q "Sitemap: https://cocxy.dev/sitemap.xml" "$SMOKE_DIR/robots.txt"
+
+      - name: Cleanup deployment credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP"/cocxy-website-deploy-key.*

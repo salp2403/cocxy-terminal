@@ -56,21 +56,26 @@ jobs:
           CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_P12 }}
           CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_PASSWORD }}
         run: |
-          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
-          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+          set -euo pipefail
+          umask 077
+          KEYCHAIN_PATH="$RUNNER_TEMP/app-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 32)"
+          CERTIFICATE_PATH="$(mktemp "$RUNNER_TEMP/cocxy-nightly-certificate.XXXXXX")"
+          cleanup_certificate() {
+            rm -f "$CERTIFICATE_PATH"
+          }
+          trap cleanup_certificate EXIT
 
-          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "$CERTIFICATE_P12" | base64 --decode > $RUNNER_TEMP/certificate.p12
-          security import $RUNNER_TEMP/certificate.p12 -P "$CERTIFICATE_PASSWORD" \
-            -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          printf '%s' "$CERTIFICATE_P12" | base64 --decode > "$CERTIFICATE_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" \
+            -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple: -s \
-            -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
-          security list-keychain -d user -s $KEYCHAIN_PATH
-
-          rm $RUNNER_TEMP/certificate.p12
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
 
       - name: Create app bundle (nightly)
         env:
@@ -189,6 +194,9 @@ jobs:
             --sign "$SIGNING_IDENTITY" \
             "build/CocxyTerminal-Nightly-${VERSION}.dmg"
 
+      - name: Delete signing keychain
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db"
+
       - name: Notarize DMG
         env:
           APPLE_ID: ${{ secrets.APPLE_ID }}
@@ -299,27 +307,52 @@ jobs:
         env:
           SERVER_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
         run: |
-          echo "$SERVER_KEY" > /tmp/deploy_key
-          chmod 600 /tmp/deploy_key
+          set -euo pipefail
+          umask 077
+          DEPLOY_KEY="$(mktemp "$RUNNER_TEMP/cocxy-nightly-deploy-key.XXXXXX")"
+          cleanup_deploy_credentials() {
+            rm -f "$DEPLOY_KEY"
+          }
+          trap cleanup_deploy_credentials EXIT
+          printf '%s' "$SERVER_KEY" > "$DEPLOY_KEY"
           DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
 
-          scp -o StrictHostKeyChecking=no -i /tmp/deploy_key \
+          scp -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" \
             build/appcast-nightly.xml ${DEPLOY_TARGET}:${DEPLOY_PATH}
 
-          rm /tmp/deploy_key
           echo "Nightly appcast deployed."
 
       - name: Update Homebrew nightly Cask
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
+          set -euo pipefail
+          umask 077
+          TAP_DIR="$(mktemp -d "$RUNNER_TEMP/cocxy-nightly-homebrew-tap.XXXXXX")"
+          HOMEBREW_ASKPASS="$(mktemp "$RUNNER_TEMP/cocxy-nightly-homebrew-askpass.XXXXXX")"
+          cleanup_homebrew_credentials() {
+            rm -f "$HOMEBREW_ASKPASS"
+            rm -rf "$TAP_DIR"
+          }
+          trap cleanup_homebrew_credentials EXIT
+          cat > "$HOMEBREW_ASKPASS" <<'ASKPASS_EOF'
+          #!/bin/bash
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS_EOF
+          chmod 700 "$HOMEBREW_ASKPASS"
+
           VERSION="${{ steps.version.outputs.VERSION }}"
           DMG="build/CocxyTerminal-Nightly-${VERSION}.dmg"
           SHA=$(shasum -a 256 "$DMG" | awk '{print $1}')
 
-          git clone https://x-access-token:${GH_TOKEN}@github.com/salp2403/homebrew-tap.git /tmp/tap
-          cd /tmp/tap
+          GIT_ASKPASS="$HOMEBREW_ASKPASS" GIT_TERMINAL_PROMPT=0 git clone \
+            https://github.com/salp2403/homebrew-tap.git "$TAP_DIR"
+          cd "$TAP_DIR"
 
           cat > Casks/cocxy-nightly.rb << CASK
           cask "cocxy-nightly" do
@@ -353,5 +386,13 @@ jobs:
             exit 1
           fi
           git commit -m "Update cocxy-nightly to ${VERSION}"
-          git push
-          rm -rf /tmp/tap
+          GIT_ASKPASS="$HOMEBREW_ASKPASS" GIT_TERMINAL_PROMPT=0 git push
+
+      - name: Cleanup signing credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP"/cocxy-nightly-certificate.* \
+            "$RUNNER_TEMP"/cocxy-nightly-deploy-key.* \
+            "$RUNNER_TEMP"/cocxy-nightly-homebrew-askpass.*
+          rm -rf "$RUNNER_TEMP"/cocxy-nightly-homebrew-tap.*
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" >/dev/null 2>&1 || true

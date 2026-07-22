@@ -230,6 +230,58 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(deployWebsite.contains("ref: main"))
     }
 
+    @Test("release workflows clean ephemeral credentials on every exit path")
+    func releaseWorkflowsCleanEphemeralCredentials() throws {
+        let root = repositoryRoot()
+        let channelWorkflowNames = ["release.yml", "nightly.yml", "preview.yml"]
+
+        for workflowName in channelWorkflowNames {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+
+            #expect(
+                !workflow.contains("/tmp/deploy_key"),
+                "\(workflowName) uses a shared deploy-key path"
+            )
+            #expect(
+                !workflow.contains("https://x-access-token:${GH_TOKEN}@"),
+                "\(workflowName) exposes a token in Git argv"
+            )
+            #expect(workflow.contains("mktemp \"$RUNNER_TEMP/cocxy-"))
+            #expect(workflow.contains("trap cleanup_certificate EXIT"))
+            #expect(workflow.contains("trap cleanup_deploy_credentials EXIT"))
+            #expect(workflow.contains("trap cleanup_homebrew_credentials EXIT"))
+            #expect(workflow.contains(
+                "GIT_ASKPASS=\"$HOMEBREW_ASKPASS\" GIT_TERMINAL_PROMPT=0 git clone"
+            ))
+            #expect(workflow.contains(
+                "GIT_ASKPASS=\"$HOMEBREW_ASKPASS\" GIT_TERMINAL_PROMPT=0 git push"
+            ))
+            #expect(workflow.contains("if: always()"))
+            #expect(workflow.contains("security delete-keychain \"$RUNNER_TEMP/app-signing.keychain-db\""))
+
+            let signDMG = try #require(workflow.range(of: "- name: Sign DMG"))
+            let deleteKeychain = try #require(
+                workflow.range(of: "- name: Delete signing keychain")
+            )
+            let notarizeDMG = try #require(workflow.range(of: "- name: Notarize DMG"))
+            #expect(signDMG.lowerBound < deleteKeychain.lowerBound)
+            #expect(deleteKeychain.lowerBound < notarizeDMG.lowerBound)
+        }
+
+        let websiteWorkflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+        #expect(!websiteWorkflow.contains("/tmp/deploy_key"))
+        #expect(websiteWorkflow.contains(
+            "DEPLOY_KEY=\"$(mktemp \"$RUNNER_TEMP/cocxy-website-deploy-key.XXXXXX\")\""
+        ))
+        #expect(websiteWorkflow.contains("trap cleanup_deploy_credentials EXIT"))
+    }
+
     @Test("CI tool installers are immutable and remote-daemon fixtures are inert")
     func ciToolInstallersAreImmutableAndFixturesAreInert() throws {
         let root = repositoryRoot()
@@ -5105,7 +5157,7 @@ struct CITestGateScriptSwiftTestingTests {
 
         let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
         let cleanupStart = try #require(
-            workflow.range(of: "rm /tmp/deploy_key", range: rewriteStart.upperBound..<workflow.endIndex)
+            workflow.range(of: "echo \"Website deployed to cocxy.dev\"", range: rewriteStart.upperBound..<workflow.endIndex)
         )
         let versionRewriteBlock = String(workflow[rewriteStart.lowerBound..<cleanupStart.lowerBound])
         #expect(versionRewriteBlock.contains("set -e;"))
@@ -5162,7 +5214,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(preview.contains(#"app "Cocxy Terminal Preview.app""#))
         #expect(preview.contains("git commit -m \"Update cocxy-preview to ${VERSION}\""))
         #expect(preview.contains("git push"))
-        #expect(preview.contains("rm /tmp/deploy_key"))
+        #expect(preview.contains("trap cleanup_deploy_credentials EXIT"))
 
         #expect(nightly.contains("ERROR: sign_update not found. Cannot generate Sparkle signature."))
         #expect(nightly.contains("ERROR: Failed to generate Sparkle EdDSA signature."))
