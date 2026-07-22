@@ -190,6 +190,16 @@ struct WorktreeServiceTests {
         try await verifyAddDisablesPostCheckoutHook(customHooksPath: true)
     }
 
+    @Test("add neutralizes repository-configured smudge filters")
+    func addDisablesSmudgeFilters() async throws {
+        try await verifyAddDisablesCheckoutFilter(.smudge)
+    }
+
+    @Test("add neutralizes repository-configured long-running filters")
+    func addDisablesProcessFilters() async throws {
+        try await verifyAddDisablesCheckoutFilter(.process)
+    }
+
     @Test("add refuses when the feature is disabled")
     func addRefusesWhenFeatureDisabled() async throws {
         guard gitAvailable() else { return }
@@ -782,6 +792,92 @@ struct WorktreeServiceTests {
 
         #expect(FileManager.default.fileExists(atPath: entry.path.path))
         #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
+    private enum CheckoutFilterKind: String {
+        case smudge
+        case process
+    }
+
+    private func verifyAddDisablesCheckoutFilter(
+        _ kind: CheckoutFilterKind
+    ) async throws {
+        guard gitAvailable() else { return }
+
+        let tempRoot = try makeTempRoot()
+        defer { removeTempRoot(tempRoot) }
+        let origin = try initOriginRepo(under: tempRoot)
+        try "*.txt filter=host-command\n".write(
+            to: origin.appendingPathComponent(".gitattributes"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "original payload\n".write(
+            to: origin.appendingPathComponent("filtered.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGitCommand(at: origin, arguments: ["add", ".gitattributes", "filtered.txt"])
+        try runGitCommand(at: origin, arguments: ["commit", "-q", "-m", "filtered fixture"])
+
+        let marker = tempRoot.appendingPathComponent("\(kind.rawValue)-filter-ran")
+        let filter = tempRoot.appendingPathComponent("\(kind.rawValue)-filter.sh")
+        let body = kind == .smudge
+            ? "cat\nprintf invoked > \(shellSingleQuoted(marker.path))"
+            : "printf invoked > \(shellSingleQuoted(marker.path))\nexit 1"
+        try installExecutableScript(
+            at: filter,
+            contents: "#!/bin/sh\n\(body)\n"
+        )
+        try runGitCommand(
+            at: origin,
+            arguments: ["config", "filter.host-command.\(kind.rawValue)", filter.path]
+        )
+        try runGitCommand(
+            at: origin,
+            arguments: ["config", "filter.host-command.required", "true"]
+        )
+
+        // Positive control: raw checkout reaches the executable filter selected by attributes.
+        let rawPath = tempRoot.appendingPathComponent("raw-\(kind.rawValue)", isDirectory: true)
+        let rawBranch = "raw-\(kind.rawValue)-control"
+        let rawResult = try runGitCommand(
+            at: origin,
+            arguments: ["worktree", "add", "-b", rawBranch, rawPath.path, "HEAD"]
+        )
+        if kind == .smudge {
+            #expect(rawResult.terminationStatus == 0)
+        } else {
+            #expect(rawResult.terminationStatus != 0)
+        }
+        #expect(FileManager.default.fileExists(atPath: marker.path))
+        _ = try? runGitCommand(
+            at: origin,
+            arguments: ["worktree", "remove", "--force", rawPath.path]
+        )
+        _ = try? runGitCommand(at: origin, arguments: ["worktree", "prune"])
+        if FileManager.default.fileExists(atPath: rawPath.path) {
+            try FileManager.default.removeItem(at: rawPath)
+        }
+        _ = try? runGitCommand(at: origin, arguments: ["branch", "-D", rawBranch])
+        try FileManager.default.removeItem(at: marker)
+
+        let storagePath = tempRoot.appendingPathComponent("worktrees").path
+        let service = WorktreeService()
+        let store = makeStore(originRepoPath: origin, basePath: storagePath)
+        let entry = try await service.add(
+            originRepoPath: origin,
+            agent: kind.rawValue,
+            tabID: nil,
+            config: makeConfig(basePath: storagePath),
+            store: store
+        )
+
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+        #expect(try String(
+            contentsOf: entry.path.appendingPathComponent("filtered.txt"),
+            encoding: .utf8
+        ) == "original payload\n")
     }
 }
 
