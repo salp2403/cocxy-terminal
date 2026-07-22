@@ -176,6 +176,11 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
             localResourceDigests: [
                 "browser-import.0.history": String(repeating: "a", count: 64),
             ],
+            authorityDetails: [
+                "operation": "pr-draft",
+                "provider": "openai",
+                "repository": "/tmp/project",
+            ],
             surfaceID: nil,
             browserViewModelIdentifier: nil,
             browserTabID: nil,
@@ -195,6 +200,9 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(preview.contains("/Users/test/Library/Application Support/Browser/History"))
         #expect(preview.contains("browser-import.0.history-sha256"))
         #expect(preview.contains(String(repeating: "a", count: 64)))
+        #expect(preview.contains("authority.operation: pr-draft"))
+        #expect(preview.contains("authority.provider: openai"))
+        #expect(preview.contains("authority.repository: /tmp/project"))
     }
 
     private func makeFixture() -> (

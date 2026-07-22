@@ -2905,7 +2905,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 return delegate.handleGitAssistantCLIRequest(
                     kind: kind,
                     params: params,
-                    approvedWorkingDirectory: URL(fileURLWithPath: context.workingDirectory)
+                    approvedContext: context
                 )
             },
             agentTeamCLIProvider: { kind, params in

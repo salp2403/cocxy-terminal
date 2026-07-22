@@ -31,6 +31,29 @@ struct SocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(!sink.value)
     }
 
+    @Test("Git Assistant denial occurs before repository or provider work")
+    func gitAssistantDenialPrecedesProvider() {
+        let providerCalls = LockedCounter()
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            gitAssistantCLIProvider: { _, _ in
+                providerCalls.increment()
+                return (true, ["subject": "must not run"])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "git-assistant-denied",
+            command: "git-assistant-commit-message",
+            params: nil
+        ))
+
+        #expect(!response.success)
+        #expect(response.error == "This local CLI command requires approval in Cocxy Terminal.")
+        #expect(providerCalls.value == 0)
+    }
+
     @Test("approved command carries the exact intent and reaches its provider once")
     func approvedCommandCarriesExactIntent() {
         let sink = LockedFlag()

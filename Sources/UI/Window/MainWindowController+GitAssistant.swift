@@ -28,7 +28,10 @@ extension MainWindowController {
         do {
             let diff = try AppDelegate.gitOutput(
                 at: workingDirectory,
-                arguments: ["diff", "--cached", "--no-color", "--no-ext-diff"]
+                arguments: [
+                    "diff", "--cached", "--no-color", "--no-ext-diff",
+                    "--no-textconv", "--end-of-options", "--",
+                ]
             )
             guard !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 notifyGitAssistantPaletteResult(

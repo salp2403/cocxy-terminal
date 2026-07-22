@@ -93,6 +93,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
     let workingDirectory: String
     let localResourcePaths: [String: String]
     let localResourceDigests: [String: String]
+    let authorityDetails: [String: String]
     let surfaceID: UUID?
     let browserViewModelIdentifier: ObjectIdentifier?
     let browserTabID: UUID?
@@ -109,6 +110,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
         workingDirectory: String,
         localResourcePaths: [String: String] = [:],
         localResourceDigests: [String: String] = [:],
+        authorityDetails: [String: String] = [:],
         surfaceID: UUID?,
         browserViewModelIdentifier: ObjectIdentifier?,
         browserTabID: UUID?,
@@ -124,6 +126,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
         self.workingDirectory = workingDirectory
         self.localResourcePaths = localResourcePaths
         self.localResourceDigests = localResourceDigests
+        self.authorityDetails = authorityDetails
         self.surfaceID = surfaceID
         self.browserViewModelIdentifier = browserViewModelIdentifier
         self.browserTabID = browserTabID

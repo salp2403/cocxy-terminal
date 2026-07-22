@@ -200,6 +200,21 @@ extension MainWindowController {
             self?.configService?.current.gitAssistant ?? .defaults
         }
         viewModel.generatePullRequestDraftProvider = { workingDirectory, baseBranch, headBranch, settings in
+            let revisions = try GitAssistantResolvedRevisionSelection(
+                requested: GitAssistantRevisionSelection(base: baseBranch, head: headBranch),
+                workingDirectory: workingDirectory
+            )
+            let diff = try AppDelegate.gitOutput(
+                at: workingDirectory,
+                arguments: revisions.diffArguments
+            )
+            guard !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw GitAssistantGitError.commandFailed(
+                    command: "git diff \(baseBranch)...\(headBranch)",
+                    stderr: "No branch diff found.",
+                    exitCode: 0
+                )
+            }
             let client = try AgentProviderClientFactory().makeClient(
                 configuration: AgentModeConfig(
                     enabled: true,
@@ -210,17 +225,6 @@ extension MainWindowController {
                     maxIterations: 1
                 )
             )
-            let diff = try AppDelegate.gitOutput(
-                at: workingDirectory,
-                arguments: ["diff", "--no-color", "--no-ext-diff", "\(baseBranch)...\(headBranch)"]
-            )
-            guard !diff.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw GitAssistantGitError.commandFailed(
-                    command: "git diff \(baseBranch)...\(headBranch)",
-                    stderr: "No branch diff found.",
-                    exitCode: 0
-                )
-            }
             return try await DefaultGitAssistantService(client: client)
                 .generatePullRequestDraft(
                     baseBranch: baseBranch,
@@ -230,9 +234,13 @@ extension MainWindowController {
                 )
         }
         viewModel.suggestReviewersProvider = { workingDirectory, baseBranch, headBranch, settings in
+            let revisions = try GitAssistantResolvedRevisionSelection(
+                requested: GitAssistantRevisionSelection(base: baseBranch, head: headBranch),
+                workingDirectory: workingDirectory
+            )
             let changedFilesOutput = try AppDelegate.gitOutput(
                 at: workingDirectory,
-                arguments: ["diff", "--name-only", "\(baseBranch)...\(headBranch)"]
+                arguments: revisions.changedFilesArguments
             )
             let changedFilePaths = changedFilesOutput
                 .split(separator: "\n")
@@ -261,7 +269,7 @@ extension MainWindowController {
                     )
                     let diff = try AppDelegate.gitOutput(
                         at: workingDirectory,
-                        arguments: ["diff", "--no-color", "--no-ext-diff", "\(baseBranch)...\(headBranch)"]
+                        arguments: revisions.diffArguments
                     )
                     let aiRanked = try await suggester.aiSuggestions(
                         root: workingDirectory,

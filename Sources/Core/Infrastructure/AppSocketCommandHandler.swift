@@ -6737,12 +6737,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// AppDelegate-side bridge owns provider construction and Git diff
     /// collection so the socket handler remains a pure router.
     func handleGitAssistantCLI(kind: String, request: SocketRequest) -> SocketResponse {
+        let params = request.params ?? [:]
         switch kind {
         case "commit-message":
-            break
+            guard params.isEmpty else {
+                return .failure(id: request.id, error: "Commit-message does not accept parameters.")
+            }
         case "pr-draft", "release-notes":
+            guard Set(params.keys).isSubset(of: Set(["base", "head"])) else {
+                return .failure(id: request.id, error: "Unexpected Git Assistant parameter.")
+            }
             for key in ["base", "head"] {
-                guard let value = request.params?[key] else { continue }
+                guard let value = params[key] else { continue }
+                guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
                 do {
                     _ = try GitRevisionArgument(value)
                 } catch {
@@ -6764,7 +6773,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 error: "Git Assistant CLI is not yet wired in this build."
             )
         }
-        let result = provider(kind, request.params ?? [:])
+        let result = provider(kind, params)
         if result.success {
             return .ok(id: request.id, data: result.data)
         }

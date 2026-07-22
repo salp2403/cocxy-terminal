@@ -512,6 +512,36 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["markdown"], "## Features\n- Improve source control")
     }
 
+    func test_gitAssistantRejectsUnexpectedAndUnsafeParamsBeforeProvider() {
+        let providerCalls = LockedBox(0)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            gitAssistantCLIProvider: { _, _ in
+                providerCalls.withValue { $0 += 1 }
+                return (success: true, data: [:])
+            }
+        )
+
+        let unexpected = handler.handleCommand(SocketRequest(
+            id: "git-assistant-unexpected",
+            command: "git-assistant-commit-message",
+            params: ["base": "main"]
+        ))
+        let unsafe = handler.handleCommand(SocketRequest(
+            id: "git-assistant-unsafe",
+            command: "git-assistant-pr-draft",
+            params: ["base": "--upload-pack=payload"]
+        ))
+
+        XCTAssertFalse(unexpected.success)
+        XCTAssertEqual(unexpected.error, "Commit-message does not accept parameters.")
+        XCTAssertFalse(unsafe.success)
+        XCTAssertEqual(unsafe.error, "Invalid Git reference for base.")
+        XCTAssertEqual(providerCalls.withValue { $0 }, 0)
+    }
+
     func test_tabConfigSave_routesNameThemeAndEnvToProviderWithoutCommand() {
         let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
             (nil, nil, nil, [:])

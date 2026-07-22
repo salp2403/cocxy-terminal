@@ -415,17 +415,27 @@ extension AppDelegate {
         case .providerCredentialUse:
             guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
             let workingDirectory = canonicalWorkingDirectory(for: tab)
+            let settings = configService?.current.gitAssistant ?? .defaults
+            guard settings.enabled,
+                  let authorityDetails = GitAssistantSocketAuthority.details(
+                    request: request,
+                    provider: settings.defaultProvider,
+                    workingDirectory: URL(fileURLWithPath: workingDirectory)
+                  ) else {
+                return nil
+            }
             return SocketPrivilegedCommandPresentationTarget(
                 context: SocketPrivilegedCommandContext(
                     scope: .repository,
                     windowControllerIdentifier: ObjectIdentifier(focusedController),
                     tabID: tabID.rawValue,
                     workingDirectory: workingDirectory,
+                    authorityDetails: authorityDetails,
                     surfaceID: nil,
                     browserViewModelIdentifier: nil,
                     browserTabID: nil,
                     browserURL: nil,
-                    targetDisplayName: workingDirectory
+                    targetDisplayName: "\(workingDirectory) via \(settings.defaultProvider.rawValue)"
                 ),
                 controller: focusedController
             )
@@ -740,6 +750,13 @@ extension MainWindowController {
             let value = context.localResourceDigests[key] ?? ""
             lines.append(
                 "\(SocketPrivilegedCommandSecurity.escapedPreview(key))-sha256: "
+                    + SocketPrivilegedCommandSecurity.escapedPreview(value)
+            )
+        }
+        for key in context.authorityDetails.keys.sorted() {
+            let value = context.authorityDetails[key] ?? ""
+            lines.append(
+                "authority.\(SocketPrivilegedCommandSecurity.escapedPreview(key)): "
                     + SocketPrivilegedCommandSecurity.escapedPreview(value)
             )
         }

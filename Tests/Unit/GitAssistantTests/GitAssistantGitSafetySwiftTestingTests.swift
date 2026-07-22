@@ -48,7 +48,7 @@ struct GitAssistantGitSafetySwiftTestingTests {
         )
 
         #expect(revisions.diffArguments == [
-            "diff", "--no-color", "--no-ext-diff", "--end-of-options",
+            "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--end-of-options",
             "origin/main...feature/review-panel", "--",
         ])
         #expect(revisions.logArguments == [
@@ -91,11 +91,96 @@ struct GitAssistantGitSafetySwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: target.path) == false)
 
         let revisions = try GitAssistantRevisionSelection(base: "HEAD~1", head: "HEAD")
-        let diff = try AppDelegate.gitOutput(at: root, arguments: revisions.diffArguments)
+        let resolved = try GitAssistantResolvedRevisionSelection(
+            requested: revisions,
+            workingDirectory: root
+        )
+        let diff = try AppDelegate.gitOutput(at: root, arguments: resolved.diffArguments)
         let commits = try AppDelegate.gitLogCommits(at: root, base: "HEAD~1", head: "HEAD")
 
         #expect(diff.contains("+after"))
+        #expect(resolved.diffArguments.contains("\(resolved.baseCommit)...\(resolved.headCommit)"))
+        #expect(!resolved.diffArguments.contains("HEAD~1...HEAD"))
+        #expect(resolved.changedFilesArguments == [
+            "diff", "--name-only", "--no-ext-diff", "--no-textconv", "--end-of-options",
+            "\(resolved.baseCommit)...\(resolved.headCommit)", "--",
+        ])
         #expect(commits.count == 1)
         #expect(commits.first?.subject == "Update")
+
+        try "later\n".write(to: tracked, atomically: true, encoding: .utf8)
+        _ = try AppDelegate.gitOutput(at: root, arguments: ["commit", "-qam", "Later"])
+        let pinnedDiff = try AppDelegate.gitOutput(at: root, arguments: resolved.diffArguments)
+        #expect(pinnedDiff == diff)
+        #expect(!pinnedDiff.contains("+later"))
+    }
+
+    @Test("socket authority binds provider repository operation and requested range")
+    func socketAuthorityBindsExactScope() throws {
+        let directory = URL(fileURLWithPath: "/tmp/cocxy-git-assistant-authority")
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "authority",
+                command: "git-assistant-pr-draft",
+                params: ["base": "main", "head": "feature/review"]
+            )
+        ))
+        let details = try #require(GitAssistantSocketAuthority.details(
+            request: request,
+            provider: .openai,
+            workingDirectory: directory
+        ))
+        let context = SocketPrivilegedCommandContext(
+            scope: .repository,
+            windowControllerIdentifier: nil,
+            tabID: nil,
+            workingDirectory: directory.path,
+            authorityDetails: details,
+            surfaceID: nil,
+            browserViewModelIdentifier: nil,
+            browserTabID: nil,
+            browserURL: nil,
+            targetDisplayName: directory.path
+        )
+
+        #expect(GitAssistantSocketAuthority.matches(
+            kind: "pr-draft",
+            params: request.params,
+            provider: .openai,
+            workingDirectory: directory,
+            context: context
+        ))
+        #expect(!GitAssistantSocketAuthority.matches(
+            kind: "pr-draft",
+            params: request.params,
+            provider: .google,
+            workingDirectory: directory,
+            context: context
+        ))
+        #expect(!GitAssistantSocketAuthority.matches(
+            kind: "pr-draft",
+            params: ["base": "release", "head": "feature/review"],
+            provider: .openai,
+            workingDirectory: directory,
+            context: context
+        ))
+        #expect(!GitAssistantSocketAuthority.matches(
+            kind: "pr-draft",
+            params: request.params,
+            provider: .openai,
+            workingDirectory: directory.appendingPathComponent("other"),
+            context: context
+        ))
+        #expect(GitAssistantSocketAuthority.details(
+            request: try #require(SocketPrivilegedCommandAuthorizationRequest(
+                socketRequest: SocketRequest(
+                    id: "invalid-authority",
+                    command: "git-assistant-pr-draft",
+                    params: ["base": "--upload-pack=payload"]
+                )
+            )),
+            provider: .openai,
+            workingDirectory: directory
+        ) == nil)
     }
 }
