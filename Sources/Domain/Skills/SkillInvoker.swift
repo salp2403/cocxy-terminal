@@ -13,27 +13,18 @@ struct SkillInvoker: Sendable {
     let registry: SkillRegistry
 
     func makeInvocation(skillIDs: [String]) throws -> SkillInvocation {
-        let requestedIDs = Array(Set(skillIDs.map { $0.lowercased() })).sorted()
-        let skillsByID = try registry.skillMap()
-        let skills = try requestedIDs.map { id -> Skill in
-            guard let skill = skillsByID[id] else {
-                throw SkillError.missingSkill(id)
-            }
-            return skill
-        }
+        let requestedIDs = Array(Set(skillIDs.map(Self.normalizedID))).sorted()
+        let skills = try registry.resolveSkills(ids: requestedIDs)
 
         return makeInvocation(skills: skills)
     }
 
     func makeInvocation(skillIdentities: [SkillIdentity]) throws -> SkillInvocation {
-        let requestedIdentities = Array(Set(skillIdentities)).sorted(by: Self.identitySort)
-        let skillsByIdentity = try registry.skillMapByIdentity()
-        let skills = try requestedIdentities.map { identity -> Skill in
-            guard let skill = skillsByIdentity[identity] else {
-                throw SkillError.missingSkill("\(identity.id) [\(identity.source.rawValue)]")
-            }
-            return skill
+        let normalizedIdentities = skillIdentities.map {
+            SkillIdentity(id: Self.normalizedID($0.id), source: $0.source)
         }
+        let requestedIdentities = Array(Set(normalizedIdentities)).sorted(by: Self.identitySort)
+        let skills = try registry.resolveSkills(identities: requestedIdentities)
 
         return makeInvocation(skills: skills)
     }
@@ -63,5 +54,9 @@ struct SkillInvoker: Sendable {
             return lhs.id < rhs.id
         }
         return lhs.source.rawValue < rhs.source.rawValue
+    }
+
+    private static func normalizedID(_ id: String) -> String {
+        id.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 }

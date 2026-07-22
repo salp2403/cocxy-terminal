@@ -15,16 +15,8 @@ struct SkillRegistry: Sendable {
     func loadSkills() throws -> [Skill] {
         var merged: [String: Skill] = [:]
 
-        for directory in directories {
-            for skillDirectory in skillDirectories(in: directory.url) {
-                do {
-                    if let skill = try loader.loadSkill(from: skillDirectory, source: directory.source) {
-                        merged[skill.id] = skill
-                    }
-                } catch SkillError.invalidIdentifier {
-                    continue
-                }
-            }
+        for skill in try discoverSkills() {
+            merged[skill.id] = skill
         }
 
         return merged.values.sorted { lhs, rhs in
@@ -33,22 +25,28 @@ struct SkillRegistry: Sendable {
     }
 
     func skillMap() throws -> [String: Skill] {
-        Dictionary(uniqueKeysWithValues: try loadSkills().map { ($0.id, $0) })
+        let grouped = Dictionary(grouping: try loadAllSkills(), by: \.id)
+        if let collision = grouped
+            .filter({ $0.value.count > 1 })
+            .sorted(by: { $0.key < $1.key })
+            .first {
+            throw SkillError.ambiguousSkill(
+                id: collision.key,
+                sources: Self.sortedSources(collision.value.map(\.source))
+            )
+        }
+
+        return grouped.mapValues { $0[0] }
     }
 
     func loadAllSkills() throws -> [Skill] {
         var discovered: [SkillIdentity: Skill] = [:]
 
-        for directory in directories {
-            for skillDirectory in skillDirectories(in: directory.url) {
-                do {
-                    if let skill = try loader.loadSkill(from: skillDirectory, source: directory.source) {
-                        discovered[skill.identity] = skill
-                    }
-                } catch SkillError.invalidIdentifier {
-                    continue
-                }
+        for skill in try discoverSkills() {
+            guard discovered[skill.identity] == nil else {
+                throw SkillError.duplicateSkillIdentity(skill.identity)
             }
+            discovered[skill.identity] = skill
         }
 
         return discovered.values.sorted { lhs, rhs in
@@ -61,6 +59,63 @@ struct SkillRegistry: Sendable {
 
     func skillMapByIdentity() throws -> [SkillIdentity: Skill] {
         Dictionary(uniqueKeysWithValues: try loadAllSkills().map { ($0.identity, $0) })
+    }
+
+    func resolveSkills(ids: [String]) throws -> [Skill] {
+        let discovered = try discoverSkills()
+        return try ids.map { id in
+            let matches = discovered.filter { $0.id == id }
+            guard let first = matches.first else {
+                throw SkillError.missingSkill(id)
+            }
+            guard matches.count == 1 else {
+                let identities = Set(matches.map(\.identity))
+                if identities.count == 1 {
+                    throw SkillError.duplicateSkillIdentity(first.identity)
+                }
+                throw SkillError.ambiguousSkill(
+                    id: id,
+                    sources: Self.sortedSources(matches.map(\.source))
+                )
+            }
+            return first
+        }
+    }
+
+    func resolveSkills(identities: [SkillIdentity]) throws -> [Skill] {
+        let discovered = try discoverSkills()
+        return try identities.map { identity in
+            let matches = discovered.filter { $0.identity == identity }
+            guard let first = matches.first else {
+                throw SkillError.missingSkill("\(identity.id) [\(identity.source.rawValue)]")
+            }
+            guard matches.count == 1 else {
+                throw SkillError.duplicateSkillIdentity(identity)
+            }
+            return first
+        }
+    }
+
+    private func discoverSkills() throws -> [Skill] {
+        var discovered: [Skill] = []
+
+        for directory in directories {
+            for skillDirectory in skillDirectories(in: directory.url) {
+                do {
+                    if let skill = try loader.loadSkill(from: skillDirectory, source: directory.source) {
+                        discovered.append(skill)
+                    }
+                } catch SkillError.invalidIdentifier {
+                    continue
+                }
+            }
+        }
+
+        return discovered
+    }
+
+    private static func sortedSources(_ sources: [SkillSource]) -> [SkillSource] {
+        Array(Set(sources)).sorted { $0.rawValue < $1.rawValue }
     }
 
     private func skillDirectories(in root: URL) -> [URL] {

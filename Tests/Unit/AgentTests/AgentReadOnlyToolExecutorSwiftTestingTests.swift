@@ -479,7 +479,118 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
 
         #expect(useResult.status == .success)
         #expect(useContent["skillIDs"] == .array([.string("custom-agent-skill")]))
+        #expect(useContent["skillIdentities"] == .array([
+            .object([
+                "id": .string("custom-agent-skill"),
+                "source": .string("project"),
+            ]),
+        ]))
         #expect(useContent["instructions"]?.stringValue?.contains("Prefer project conventions") == true)
+    }
+
+    @Test("use_skill binds the listed source and rejects naked collisions or source drift")
+    func useSkillBindsListedSourceAndRejectsAmbiguity() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let builtIns = root.appendingPathComponent("built-in-skills", isDirectory: true)
+        let user = root.appendingPathComponent("user-skills", isDirectory: true)
+        let project = root.appendingPathComponent("project-skills", isDirectory: true)
+        try writeSkill(
+            id: "review-pr",
+            name: "Bundled Review",
+            summary: "Trusted bundled guidance",
+            body: "Use the exact bundled body.",
+            in: builtIns
+        )
+        let registry = SkillRegistry(directories: [
+            SkillDirectory(url: builtIns, source: .builtIn),
+            SkillDirectory(url: user, source: .user),
+            SkillDirectory(url: project, source: .project),
+        ])
+        let executor = AgentReadOnlyToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            skillRegistry: registry
+        )
+
+        let initialList = try await executor.execute(AgentToolCall(
+            id: "call-list-initial-skill",
+            toolID: "list_skills"
+        ))
+        let initialSkills = try arrayValue(contentObject(initialList)["skills"])
+        #expect(skillSources(id: "review-pr", in: initialSkills) == ["built-in"])
+
+        try writeSkill(
+            id: "review-pr",
+            name: "User Review",
+            summary: "User guidance",
+            body: "Do not redirect to the user body.",
+            in: user
+        )
+        try writeSkill(
+            id: "review-pr",
+            name: "Project Review",
+            summary: "Project guidance",
+            body: "Do not redirect to the project body.",
+            in: project
+        )
+
+        let collidingList = try await executor.execute(AgentToolCall(
+            id: "call-list-colliding-skills",
+            toolID: "list_skills"
+        ))
+        let collidingSkills = try arrayValue(contentObject(collidingList)["skills"])
+        #expect(skillSources(id: "review-pr", in: collidingSkills) == ["built-in", "project", "user"])
+
+        let naked = try await executor.execute(AgentToolCall(
+            id: "call-use-ambiguous-skill",
+            toolID: "use_skill",
+            arguments: ["id": .string("review-pr")]
+        ))
+        #expect(naked.status == .failure)
+        #expect(naked.error?.code == "skill_error")
+        #expect(naked.error?.message.contains("ambiguous across sources") == true)
+
+        let exact = try await executor.execute(AgentToolCall(
+            id: "call-use-exact-skill",
+            toolID: "use_skill",
+            arguments: [
+                "id": .string("review-pr"),
+                "source": .string("built-in"),
+            ]
+        ))
+        let exactContent = try contentObject(exact)
+        #expect(exact.status == .success)
+        #expect(exactContent["skillIdentities"] == .array([
+            .object([
+                "id": .string("review-pr"),
+                "source": .string("built-in"),
+            ]),
+        ]))
+        #expect(exactContent["instructions"]?.stringValue?.contains("Use the exact bundled body.") == true)
+        #expect(exactContent["instructions"]?.stringValue?.contains("Do not redirect") == false)
+
+        try FileManager.default.removeItem(at: builtIns)
+        let drifted = try await executor.execute(AgentToolCall(
+            id: "call-use-missing-source",
+            toolID: "use_skill",
+            arguments: [
+                "id": .string("review-pr"),
+                "source": .string("built-in"),
+            ]
+        ))
+        #expect(drifted.status == .failure)
+        #expect(drifted.error?.message == "Skill not found: review-pr [built-in]")
+
+        let invalidSource = try await executor.execute(AgentToolCall(
+            id: "call-use-invalid-source",
+            toolID: "use_skill",
+            arguments: [
+                "id": .string("review-pr"),
+                "source": .string("remote"),
+            ]
+        ))
+        #expect(invalidSource.status == .failure)
+        #expect(invalidSource.error?.message == "Invalid skill source: remote")
     }
 
     @Test("git_status executes read-only git status in workspace")
@@ -668,9 +779,23 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         body: String,
         in root: URL
     ) throws {
-        let directory = root
-            .appendingPathComponent(".cocxy/skills", isDirectory: true)
-            .appendingPathComponent(id, isDirectory: true)
+        try writeSkill(
+            id: id,
+            name: name,
+            summary: summary,
+            body: body,
+            in: root.appendingPathComponent(".cocxy/skills", isDirectory: true)
+        )
+    }
+
+    private func writeSkill(
+        id: String,
+        name: String,
+        summary: String,
+        body: String,
+        in root: URL
+    ) throws {
+        let directory = root.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try """
         ---
@@ -682,6 +807,16 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
 
         \(body)
         """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    private func skillSources(id: String, in entries: [AgentJSONValue]) -> [String] {
+        entries.compactMap { entry in
+            guard case .object(let object) = entry,
+                  object["id"]?.stringValue == id else {
+                return nil
+            }
+            return object["source"]?.stringValue
+        }
     }
 
     private func contentObject(_ result: AgentToolResult) throws -> [String: AgentJSONValue] {

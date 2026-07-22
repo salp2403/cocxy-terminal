@@ -501,7 +501,7 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
     }
 
     private func listSkills(_ call: AgentToolCall) throws -> AgentToolResult {
-        let entries = try skillRegistry.loadSkills().map { skill -> AgentJSONValue in
+        let entries = try skillRegistry.loadAllSkills().map { skill -> AgentJSONValue in
             .object([
                 "id": .string(skill.id),
                 "name": .string(skill.name),
@@ -521,14 +521,36 @@ struct AgentReadOnlyToolExecutor: AgentToolExecuting {
     }
 
     private func useSkill(_ call: AgentToolCall) throws -> AgentToolResult {
-        let id = try requiredStringArgument("id", in: call).lowercased()
-        let invocation = try SkillInvoker(registry: skillRegistry).makeInvocation(skillIDs: [id])
+        let id = try requiredStringArgument("id", in: call)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        let invoker = SkillInvoker(registry: skillRegistry)
+        let invocation: SkillInvocation
+        if call.arguments["source"] != nil {
+            let rawSource = try requiredStringArgument("source", in: call)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard let source = SkillSource(rawValue: rawSource) else {
+                throw SkillError.invalidSource(rawSource)
+            }
+            invocation = try invoker.makeInvocation(skillIdentities: [
+                SkillIdentity(id: id, source: source),
+            ])
+        } else {
+            invocation = try invoker.makeInvocation(skillIDs: [id])
+        }
 
         return .success(
             callID: call.id,
             toolID: call.toolID,
             content: .object([
                 "skillIDs": .array(invocation.skillIDs.map { .string($0) }),
+                "skillIdentities": .array(invocation.skillIdentities.map { identity in
+                    .object([
+                        "id": .string(identity.id),
+                        "source": .string(identity.source.rawValue),
+                    ])
+                }),
                 "instructions": .string(invocation.instructions),
             ])
         )

@@ -60,6 +60,7 @@ struct AgentToolRegistrySwiftTestingTests {
         let useSkillSchema = try #require(registry.descriptor(for: "use_skill")?.inputSchema)
         #expect(useSkillSchema.required == ["id"])
         #expect(useSkillSchema.properties["id"]?.type == .string)
+        #expect(useSkillSchema.properties["source"]?.type == .string)
 
         let typeTextSchema = try #require(registry.descriptor(for: "computer_type_text")?.inputSchema)
         #expect(typeTextSchema.required == ["text"])
