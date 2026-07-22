@@ -129,13 +129,16 @@ struct PluginUpdater: Sendable {
     }
 
     private let sourceStore: PluginUpdateSourceStore
+    private let validator: PluginValidator
     private let queryRemoteTags: RemoteTagQuery
 
     init(
         sourceStore: PluginUpdateSourceStore = PluginUpdateSourceStore(),
+        validator: PluginValidator = PluginValidator(),
         queryRemoteTags: @escaping RemoteTagQuery = Self.defaultRemoteTagQuery
     ) {
         self.sourceStore = sourceStore
+        self.validator = validator
         self.queryRemoteTags = queryRemoteTags
     }
 
@@ -175,6 +178,30 @@ struct PluginUpdater: Sendable {
                 continue
             }
             guard let source else { continue }
+
+            do {
+                let pluginDirectory = URL(
+                    fileURLWithPath: manifest.directoryPath,
+                    isDirectory: true
+                )
+                let installedManifest = try PluginRegistry.loadManifest(from: pluginDirectory)
+                guard installedManifest == manifest else {
+                    failedSourceCount += 1
+                    continue
+                }
+                let report = try validator.validate(
+                    manifest: installedManifest,
+                    sourceURL: source.repositoryURL,
+                    pluginDirectory: pluginDirectory
+                )
+                guard report.signatureStatus == .verified else {
+                    failedSourceCount += 1
+                    continue
+                }
+            } catch {
+                failedSourceCount += 1
+                continue
+            }
 
             let latestAvailableVersion: String?
             do {

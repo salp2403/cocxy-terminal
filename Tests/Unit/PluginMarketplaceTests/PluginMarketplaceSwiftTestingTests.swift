@@ -344,6 +344,50 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(manager.plugins[0].manifest.capabilities == [.environmentRead])
     }
 
+    @Test("installation receipt binds the exact installed tree")
+    func installationReceiptBindsExactInstalledTree() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let repo = root.appendingPathComponent("tree-bound-plugin", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        try "name = \"Tree Bound\"\nversion = \"1.0.0\"\n".write(
+            to: repo.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo trusted\n".write(
+            to: repo.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let sidecarURL = repo.appendingPathComponent(".cocxy-signature.json")
+        try "{\"metadata\":\"original\"}\n".write(
+            to: sidecarURL,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let receipt = try PluginInstaller(
+            pluginsDirectory: root.appendingPathComponent("plugins", isDirectory: true)
+        ).install(from: repo)
+        let installedDigest = try PluginInstalledTreeDigest.sha256(
+            at: receipt.installedURL,
+            manifestFileName: receipt.manifest.manifestFileName
+        )
+
+        #expect(receipt.packageTreeSHA256 == installedDigest)
+
+        try "{\"metadata\":\"changed\"}\n".write(
+            to: receipt.installedURL.appendingPathComponent(".cocxy-signature.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+        #expect(try PluginInstalledTreeDigest.sha256(
+            at: receipt.installedURL,
+            manifestFileName: receipt.manifest.manifestFileName
+        ) != receipt.packageTreeSHA256)
+    }
+
     @Test("installer rejects legacy manifests from marketplace sources")
     func installerRejectsLegacyMarketplaceManifest() throws {
         let root = try temporaryDirectory()
@@ -395,6 +439,19 @@ struct PluginMarketplaceSwiftTestingTests {
         let stateURL = root.appendingPathComponent("plugins.json")
         try JSONEncoder().encode(["shared-plugin"]).write(to: stateURL, options: [.atomic])
         try grantStore.grant(.networkClient, for: "shared-plugin", reason: "Approved original")
+        let resetRecorder = PluginAuthorizationResetSnapshotRecorder(
+            pluginID: "shared-plugin",
+            pluginsDirectory: pluginsDirectory,
+            stateURL: stateURL,
+            grantStore: grantStore
+        )
+        let resetObserver = NotificationCenter.default.addObserver(
+            forName: .cocxyPluginAuthorizationDidReset,
+            object: nil,
+            queue: nil,
+            using: resetRecorder.record
+        )
+        defer { NotificationCenter.default.removeObserver(resetObserver) }
 
         let replacement = root.appendingPathComponent("replacement-source", isDirectory: true)
         try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
@@ -414,6 +471,9 @@ struct PluginMarketplaceSwiftTestingTests {
         let enabled = try JSONDecoder().decode([String].self, from: Data(contentsOf: stateURL))
         #expect(enabled.isEmpty)
         #expect(try grantStore.grants(for: "shared-plugin").isEmpty)
+        #expect(resetRecorder.notificationCount == 1)
+        #expect(resetRecorder.wasEnabledAtNotification == false)
+        #expect(resetRecorder.hadGrantsAtNotification == false)
         let installedScript = try String(
             contentsOf: pluginsDirectory
                 .appendingPathComponent("shared-plugin")
@@ -421,6 +481,297 @@ struct PluginMarketplaceSwiftTestingTests {
             encoding: .utf8
         )
         #expect(installedScript == "echo replacement\n")
+    }
+
+    @Test("unreadable update metadata aborts replacement before authority changes")
+    func unreadableUpdateMetadataFailsWithoutMutation() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let grantStore = PluginCapabilityGrantStore(
+            backend: MemoryPluginCapabilityGrantBackingStore()
+        )
+        let installer = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            capabilityGrantStore: grantStore
+        )
+
+        let original = root.appendingPathComponent("metadata-original", isDirectory: true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        try "id = \"metadata-plugin\"\nname = \"Original\"\n".write(
+            to: original.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo original\n".write(
+            to: original.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        _ = try installer.install(from: original)
+
+        let stateURL = root.appendingPathComponent("plugins.json")
+        try JSONEncoder().encode(["metadata-plugin"]).write(to: stateURL, options: [.atomic])
+        try grantStore.grant(.networkClient, for: "metadata-plugin", reason: "Original grant")
+        let sourceDirectory = pluginsDirectory.appendingPathComponent(
+            ".update-sources",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: sourceDirectory,
+            withIntermediateDirectories: true
+        )
+        try "not-json\n".write(
+            to: sourceDirectory.appendingPathComponent("metadata-plugin.json"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let replacement = root.appendingPathComponent("metadata-replacement", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: replacement,
+            withIntermediateDirectories: true
+        )
+        try "id = \"metadata-plugin\"\nname = \"Replacement\"\n".write(
+            to: replacement.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo replacement\n".write(
+            to: replacement.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        #expect(throws: DecodingError.self) {
+            _ = try installer.install(from: replacement, replaceExisting: true)
+        }
+
+        let installedScript = try String(
+            contentsOf: pluginsDirectory
+                .appendingPathComponent("metadata-plugin", isDirectory: true)
+                .appendingPathComponent("on-session-start.sh"),
+            encoding: .utf8
+        )
+        #expect(installedScript == "echo original\n")
+        #expect(
+            try JSONDecoder().decode([String].self, from: Data(contentsOf: stateURL))
+                == ["metadata-plugin"]
+        )
+        #expect(try grantStore.isGranted(.networkClient, for: "metadata-plugin"))
+    }
+
+    @Test("replacement mutation is rejected and atomically restores the prior plugin")
+    func replacementMutationRollsBackPriorPlugin() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+
+        let original = root.appendingPathComponent("original-race-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        try "id = \"race-plugin\"\nname = \"Original\"\n".write(
+            to: original.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo original\n".write(
+            to: original.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        _ = try PluginInstaller(pluginsDirectory: pluginsDirectory).install(from: original)
+
+        let replacement = root.appendingPathComponent("replacement-race-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        try "id = \"race-plugin\"\nname = \"Replacement\"\n".write(
+            to: replacement.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo validated\n".write(
+            to: replacement.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let racingInstaller = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            prePromotionAction: { stagedPlugin in
+                try "echo changed-after-validation\n".write(
+                    to: stagedPlugin.appendingPathComponent("on-session-start.sh"),
+                    atomically: true,
+                    encoding: .utf8
+                )
+            }
+        )
+
+        #expect(throws: PluginInstallerError.packageChangedDuringInstall("race-plugin")) {
+            _ = try racingInstaller.install(from: replacement, replaceExisting: true)
+        }
+        let installedScript = try String(
+            contentsOf: pluginsDirectory
+                .appendingPathComponent("race-plugin", isDirectory: true)
+                .appendingPathComponent("on-session-start.sh"),
+            encoding: .utf8
+        )
+        #expect(installedScript == "echo original\n")
+    }
+
+    @Test("new installation mutation is rejected without publishing a plugin")
+    func newInstallationMutationRemovesPublishedPlugin() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let source = root.appendingPathComponent("new-race-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try "id = \"new-race-plugin\"\nname = \"New Race\"\n".write(
+            to: source.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo validated\n".write(
+            to: source.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let racingInstaller = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            prePromotionAction: { stagedPlugin in
+                try "echo changed-after-validation\n".write(
+                    to: stagedPlugin.appendingPathComponent("on-session-start.sh"),
+                    atomically: true,
+                    encoding: .utf8
+                )
+            }
+        )
+
+        #expect(throws: PluginInstallerError.packageChangedDuringInstall("new-race-plugin")) {
+            _ = try racingInstaller.install(from: source)
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: pluginsDirectory.appendingPathComponent("new-race-plugin").path
+        ))
+    }
+
+    @Test("live plugin manager observes replacement reset through a symlink alias")
+    @MainActor
+    func livePluginManagerDropsReplacementEnablement() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+
+        let original = root.appendingPathComponent("live-original", isDirectory: true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        try "id = \"live-plugin\"\nname = \"Original\"\nevents = [\"session-start\"]\n".write(
+            to: original.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo original\n".write(
+            to: original.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        _ = try installer.install(from: original)
+
+        let pluginsAlias = root.appendingPathComponent("plugins-alias", isDirectory: true)
+        try FileManager.default.createSymbolicLink(
+            at: pluginsAlias,
+            withDestinationURL: pluginsDirectory
+        )
+        #expect(
+            PluginRegistrySynchronization.canonicalDirectoryURL(pluginsAlias)
+                == PluginRegistrySynchronization.canonicalDirectoryURL(pluginsDirectory)
+        )
+
+        let sandbox = RecordingPluginSandbox()
+        let manager = PluginManager(
+            pluginsDirectory: pluginsAlias.path,
+            sandbox: sandbox
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: "live-plugin")
+        #expect(manager.plugins.first?.isEnabled == true)
+
+        let replacement = root.appendingPathComponent("live-replacement", isDirectory: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        try "id = \"live-plugin\"\nname = \"Replacement\"\nevents = [\"session-start\"]\n".write(
+            to: replacement.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo replacement\n".write(
+            to: replacement.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        _ = try installer.install(from: replacement, replaceExisting: true)
+        #expect(manager.plugins.first?.isEnabled == false)
+
+        manager.dispatchEvent(.sessionStart)
+
+        #expect(manager.enabledPlugins.isEmpty)
+        #expect(sandbox.executions.isEmpty)
+    }
+
+    @Test("queued event cannot execute code from a re-enabled replacement generation")
+    @MainActor
+    func queuedEventRejectsReenabledReplacementGeneration() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(pluginsDirectory: pluginsDirectory)
+
+        let original = root.appendingPathComponent("queued-original", isDirectory: true)
+        try FileManager.default.createDirectory(at: original, withIntermediateDirectories: true)
+        try "id = \"queued-plugin\"\nname = \"Original\"\nevents = [\"session-start\"]\n".write(
+            to: original.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo original\n".write(
+            to: original.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        _ = try installer.install(from: original)
+
+        let sandbox = DeferredPluginSandbox()
+        let manager = PluginManager(
+            pluginsDirectory: pluginsDirectory.path,
+            sandbox: sandbox
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: "queued-plugin")
+        manager.dispatchEvent(.sessionStart)
+        #expect(sandbox.pendingCount == 1)
+
+        let replacement = root.appendingPathComponent("queued-replacement", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: replacement,
+            withIntermediateDirectories: true
+        )
+        try "id = \"queued-plugin\"\nname = \"Replacement\"\nevents = [\"session-start\"]\n".write(
+            to: replacement.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "echo replacement\n".write(
+            to: replacement.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+        _ = try installer.install(from: replacement, replaceExisting: true)
+        manager.scanPlugins()
+        try manager.enablePlugin(id: "queued-plugin")
+
+        sandbox.runPendingExecutions()
+        #expect(sandbox.executedScriptContents.isEmpty)
+
+        manager.dispatchEvent(.sessionStart)
+        sandbox.runPendingExecutions()
+        #expect(sandbox.executedScriptContents == ["echo replacement\n"])
     }
 
     @Test("installed plugin can be enabled dispatched and uninstalled")
@@ -750,22 +1101,100 @@ struct PluginMarketplaceSwiftTestingTests {
         ) == nil)
     }
 
+    @Test("installer records remote update provenance only for verified packages")
+    func installerRecordsOnlyVerifiedRemoteUpdateProvenance() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+
+        let unsignedSource = root.appendingPathComponent("unsigned-source", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: unsignedSource,
+            withIntermediateDirectories: true
+        )
+        try "name = \"Unsigned Remote\"\nversion = \"1.0.0\"\n".write(
+            to: unsignedSource.appendingPathComponent(
+                PluginManifest.marketplaceManifestFileName
+            ),
+            atomically: true,
+            encoding: .utf8
+        )
+        let unsignedGit = root.appendingPathComponent("git-unsigned")
+        try installExecutableScript(
+            at: unsignedGit,
+            contents: """
+            #!/bin/sh
+            destination=
+            for argument in "$@"; do destination="$argument"; done
+            /bin/cp -R \(shellSingleQuoted(unsignedSource.path)) "$destination"
+            """
+        )
+        let unsignedURL = try #require(URL(
+            string: "https://example.test/unsigned-remote.git"
+        ))
+        let unsignedReceipt = try PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            updateSourceStore: sourceStore,
+            gitProcessRunner: MarketplaceGitProcessRunner(
+                gitExecutableURL: unsignedGit,
+                workingDirectory: root
+            )
+        ).install(from: unsignedURL)
+
+        #expect(unsignedReceipt.signatureStatus == .unsignedAllowed)
+        #expect(try sourceStore.source(for: unsignedReceipt.pluginID) == nil)
+
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let signedSource = root.appendingPathComponent("signed-source", isDirectory: true)
+        _ = try writeSignedUpdateManifest(
+            to: signedSource,
+            name: "Signed Remote",
+            version: "1.0.0",
+            keyPair: keyPair
+        )
+        let signedGit = root.appendingPathComponent("git-signed")
+        try installExecutableScript(
+            at: signedGit,
+            contents: """
+            #!/bin/sh
+            destination=
+            for argument in "$@"; do destination="$argument"; done
+            /bin/cp -R \(shellSingleQuoted(signedSource.path)) "$destination"
+            """
+        )
+        let signedURL = try #require(URL(
+            string: "https://example.test/signed-remote.git"
+        ))
+        let signedReceipt = try PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            validator: try trustedValidator(for: keyPair),
+            updateSourceStore: sourceStore,
+            gitProcessRunner: MarketplaceGitProcessRunner(
+                gitExecutableURL: signedGit,
+                workingDirectory: root
+            )
+        ).install(from: signedURL)
+
+        #expect(signedReceipt.signatureStatus == .verified)
+        #expect(
+            try sourceStore.source(for: signedReceipt.pluginID)
+                == PluginUpdateSource.remoteRepository(signedURL)
+        )
+    }
+
     @Test("plugin updater reports newer semver tags from recorded remote source")
     func pluginUpdaterReportsNewerSemverTags() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
         let pluginDirectory = pluginsDirectory.appendingPathComponent("tagged-plugin", isDirectory: true)
-        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
-        let manifest = PluginManifest(
-            id: "tagged-plugin",
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let manifest = try writeSignedUpdateManifest(
+            to: pluginDirectory,
             name: "Tagged Plugin",
-            description: "Tagged plugin",
             version: "1.1.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: pluginDirectory.path
+            keyPair: keyPair
         )
         let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
         let repositoryURL = URL(string: "https://example.test/tagged-plugin.git")!
@@ -773,7 +1202,10 @@ struct PluginMarketplaceSwiftTestingTests {
             try #require(PluginUpdateSource.remoteRepository(repositoryURL)),
             for: manifest.id
         )
-        let updater = PluginUpdater(sourceStore: sourceStore) { sourceURL in
+        let updater = PluginUpdater(
+            sourceStore: sourceStore,
+            validator: try trustedValidator(for: keyPair)
+        ) { sourceURL in
             #expect(sourceURL == repositoryURL)
             return "abc\trefs/tags/v1.1.0\ndef\trefs/tags/v1.2.0\n"
         }
@@ -791,16 +1223,12 @@ struct PluginMarketplaceSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
         let pluginDirectory = pluginsDirectory.appendingPathComponent("current-plugin", isDirectory: true)
-        try FileManager.default.createDirectory(at: pluginDirectory, withIntermediateDirectories: true)
-        let manifest = PluginManifest(
-            id: "current-plugin",
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let manifest = try writeSignedUpdateManifest(
+            to: pluginDirectory,
             name: "Current Plugin",
-            description: "Current plugin",
             version: "2.0.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: pluginDirectory.path
+            keyPair: keyPair
         )
         let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
         try sourceStore.save(
@@ -809,7 +1237,10 @@ struct PluginMarketplaceSwiftTestingTests {
             )),
             for: manifest.id
         )
-        let updater = PluginUpdater(sourceStore: sourceStore) { _ in
+        let updater = PluginUpdater(
+            sourceStore: sourceStore,
+            validator: try trustedValidator(for: keyPair)
+        ) { _ in
             "abc\trefs/tags/v2.0.0\ndef\trefs/tags/v1.9.0\nghi\trefs/tags/not-semver\n"
         }
 
@@ -839,22 +1270,133 @@ struct PluginMarketplaceSwiftTestingTests {
         #expect(await updater.availableUpdates(for: [manifest]).isEmpty)
     }
 
+    @Test("plugin updater rejects unsigned untrusted and tampered packages before querying")
+    func pluginUpdaterRequiresVerifiedInstalledPackage() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+
+        let unsignedDirectory = pluginsDirectory.appendingPathComponent(
+            "unsigned-update",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: unsignedDirectory,
+            withIntermediateDirectories: true
+        )
+        try "name = \"Unsigned Update\"\nversion = \"1.0.0\"\n".write(
+            to: unsignedDirectory.appendingPathComponent(
+                PluginManifest.marketplaceManifestFileName
+            ),
+            atomically: true,
+            encoding: .utf8
+        )
+        let unsignedManifest = try PluginRegistry.loadManifest(from: unsignedDirectory)
+
+        let unknownKeyPair = try SignatureKeyPair.generate(author: "Unknown")
+        let untrustedManifest = try writeSignedUpdateManifest(
+            to: pluginsDirectory.appendingPathComponent("untrusted-update", isDirectory: true),
+            name: "Untrusted Update",
+            version: "1.0.0",
+            keyPair: unknownKeyPair
+        )
+
+        let trustedKeyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let tamperedDirectory = pluginsDirectory.appendingPathComponent(
+            "tampered-update",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: tamperedDirectory,
+            withIntermediateDirectories: true
+        )
+        let tamperedScript = tamperedDirectory.appendingPathComponent("on-session-start.sh")
+        try "echo trusted\n".write(
+            to: tamperedScript,
+            atomically: true,
+            encoding: .utf8
+        )
+        let tamperedManifest = try writeSignedUpdateManifest(
+            to: tamperedDirectory,
+            name: "Tampered Update",
+            version: "1.0.0",
+            keyPair: trustedKeyPair
+        )
+        try "echo substituted\n".write(
+            to: tamperedScript,
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let currentManifest = try writeSignedUpdateManifest(
+            to: pluginsDirectory.appendingPathComponent("stale-update", isDirectory: true),
+            name: "Stale Update",
+            version: "2.0.0",
+            keyPair: trustedKeyPair
+        )
+        let staleManifest = PluginManifest(
+            id: currentManifest.id,
+            name: currentManifest.name,
+            description: currentManifest.description,
+            version: "1.0.0",
+            author: currentManifest.author,
+            minCocxyVersion: currentManifest.minCocxyVersion,
+            events: currentManifest.events,
+            directoryPath: currentManifest.directoryPath,
+            manifestFileName: currentManifest.manifestFileName,
+            repositoryURL: currentManifest.repositoryURL,
+            homepageURL: currentManifest.homepageURL,
+            license: currentManifest.license,
+            capabilities: currentManifest.capabilities,
+            signature: currentManifest.signature
+        )
+
+        let manifests = [
+            unsignedManifest,
+            untrustedManifest,
+            tamperedManifest,
+            staleManifest,
+        ]
+        for manifest in manifests {
+            let sourceURL = try #require(URL(
+                string: "https://example.test/\(manifest.id).git"
+            ))
+            try sourceStore.save(
+                try #require(PluginUpdateSource.remoteRepository(sourceURL)),
+                for: manifest.id
+            )
+        }
+        let queryRecorder = PluginRemoteTagQueryRecorder()
+        let updater = PluginUpdater(
+            sourceStore: sourceStore,
+            validator: try trustedValidator(for: trustedKeyPair)
+        ) { sourceURL in
+            queryRecorder.record(sourceURL)
+            return "abc\trefs/tags/v9.0.0\n"
+        }
+
+        let result = await updater.checkAvailableUpdates(for: manifests)
+
+        #expect(result.updates.isEmpty)
+        #expect(result.checkedSourceCount == 0)
+        #expect(result.failedSourceCount == 4)
+        #expect(queryRecorder.urls.isEmpty)
+    }
+
     @Test("plugin updater reports successful and failed source checks separately")
     func pluginUpdaterReportsPartialSourceFailures() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
         let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
-        let manifests = ["current-plugin", "offline-plugin"].map { pluginID in
-            PluginManifest(
-                id: pluginID,
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let manifests = try ["current-plugin", "offline-plugin"].map { pluginID in
+            try writeSignedUpdateManifest(
+                to: pluginsDirectory.appendingPathComponent(pluginID, isDirectory: true),
                 name: pluginID,
-                description: "Plugin update fixture",
                 version: "1.0.0",
-                author: "Dev",
-                minCocxyVersion: nil,
-                events: [],
-                directoryPath: pluginsDirectory.appendingPathComponent(pluginID).path
+                keyPair: keyPair
             )
         }
         for manifest in manifests {
@@ -866,7 +1408,10 @@ struct PluginMarketplaceSwiftTestingTests {
                 for: manifest.id
             )
         }
-        let updater = PluginUpdater(sourceStore: sourceStore) { sourceURL in
+        let updater = PluginUpdater(
+            sourceStore: sourceStore,
+            validator: try trustedValidator(for: keyPair)
+        ) { sourceURL in
             if sourceURL.lastPathComponent == "offline-plugin.git" {
                 throw PluginUpdaterError.gitFailed(128)
             }
@@ -887,22 +1432,22 @@ struct PluginMarketplaceSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
         let sourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
-        let manifest = PluginManifest(
-            id: "cancelled-plugin",
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let manifest = try writeSignedUpdateManifest(
+            to: pluginsDirectory.appendingPathComponent("cancelled-plugin", isDirectory: true),
             name: "Cancelled Plugin",
-            description: "Plugin update fixture",
             version: "1.0.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: pluginsDirectory.appendingPathComponent("cancelled-plugin").path
+            keyPair: keyPair
         )
         let sourceURL = try #require(URL(string: "https://example.test/cancelled-plugin.git"))
         try sourceStore.save(
             try #require(PluginUpdateSource.remoteRepository(sourceURL)),
             for: manifest.id
         )
-        let updater = PluginUpdater(sourceStore: sourceStore) { _ in
+        let updater = PluginUpdater(
+            sourceStore: sourceStore,
+            validator: try trustedValidator(for: keyPair)
+        ) { _ in
             throw CancellationError()
         }
 
@@ -1320,6 +1865,227 @@ struct PluginMarketplaceSwiftTestingTests {
         ].contains(marker))
     }
 
+    @Test("production sandbox rejects stale authorization before process launch")
+    func productionSandboxRejectsStaleAuthorization() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let pluginDirectory = pluginsDirectory.appendingPathComponent(
+            "stale-plugin",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: pluginDirectory,
+            withIntermediateDirectories: true
+        )
+        let markerURL = root.appendingPathComponent("stale-marker.txt")
+        let scriptURL = pluginDirectory.appendingPathComponent("on-session-start.sh")
+        try "#!/bin/sh\nprintf launched > \"$MARKER_PATH\"\n".write(
+            to: scriptURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        let authorizationChecked = DispatchSemaphore(value: 0)
+        let authorization = PluginExecutionAuthorization(
+            pluginsDirectory: pluginsDirectory
+        ) {
+            authorizationChecked.signal()
+            return false
+        }
+
+        PluginSandbox(timeoutSeconds: 2, kernelSandboxEnabled: false).execute(
+            scriptPath: scriptURL.path,
+            environment: ["MARKER_PATH": markerURL.path],
+            pluginID: "stale-plugin",
+            pluginDirectory: pluginDirectory.path,
+            capabilities: [.environmentRead],
+            authorization: authorization
+        )
+
+        #expect(authorizationChecked.wait(timeout: .now() + 2) == .success)
+        #expect(!FileManager.default.fileExists(atPath: markerURL.path))
+    }
+
+    @Test("closing one shared registry lease preserves concurrent leases")
+    func sharedRegistryLeasesReleaseIndependently() throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let firstAcquired = DispatchSemaphore(value: 0)
+        let secondAcquired = DispatchSemaphore(value: 0)
+        let releaseFirst = DispatchSemaphore(value: 0)
+        let releaseSecond = DispatchSemaphore(value: 0)
+        let firstFinished = DispatchSemaphore(value: 0)
+        let secondFinished = DispatchSemaphore(value: 0)
+        let errors = PluginRegistryLeaseErrorRecorder()
+        var firstDidFinish = false
+        var secondDidFinish = false
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            defer { firstFinished.signal() }
+            do {
+                try PluginRegistrySynchronization.shared.withSharedFileLock(
+                    pluginsDirectory: pluginsDirectory
+                ) {
+                    firstAcquired.signal()
+                    _ = releaseFirst.wait(timeout: .now() + 2)
+                }
+            } catch {
+                errors.record(error)
+            }
+        }
+        #expect(firstAcquired.wait(timeout: .now() + 2) == .success)
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            defer { secondFinished.signal() }
+            do {
+                try PluginRegistrySynchronization.shared.withSharedFileLock(
+                    pluginsDirectory: pluginsDirectory
+                ) {
+                    secondAcquired.signal()
+                    _ = releaseSecond.wait(timeout: .now() + 2)
+                }
+            } catch {
+                errors.record(error)
+            }
+        }
+        defer {
+            releaseFirst.signal()
+            releaseSecond.signal()
+            if !firstDidFinish {
+                _ = firstFinished.wait(timeout: .now() + 2)
+            }
+            if !secondDidFinish {
+                _ = secondFinished.wait(timeout: .now() + 2)
+            }
+        }
+        #expect(secondAcquired.wait(timeout: .now() + 2) == .success)
+
+        releaseFirst.signal()
+        let firstCompletion = firstFinished.wait(timeout: .now() + 2)
+        firstDidFinish = firstCompletion == .success
+        #expect(firstDidFinish)
+        #expect(try PluginRegistrySynchronization.shared.withFileLockIfAvailable(
+            pluginsDirectory: pluginsDirectory
+        ) { true } == nil)
+
+        releaseSecond.signal()
+        let secondCompletion = secondFinished.wait(timeout: .now() + 2)
+        secondDidFinish = secondCompletion == .success
+        #expect(secondDidFinish)
+        #expect(errors.messages.isEmpty)
+        #expect(try PluginRegistrySynchronization.shared.withFileLockIfAvailable(
+            pluginsDirectory: pluginsDirectory
+        ) { true } == true)
+    }
+
+    @Test("running plugin keeps reads responsive and mutations fail fast")
+    @MainActor
+    func runningPluginUsesSharedRegistryLease() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("lease-source", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        try """
+        id = "lease-plugin"
+        name = "Lease Plugin"
+        events = ["session-start"]
+        capabilities = ["environment-read"]
+        """.write(
+            to: source.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+        try """
+        #!/bin/sh
+        printf started > "$MARKER_PATH"
+        sleep 0.5
+        printf finished > "$FINISHED_PATH"
+        """.write(
+            to: source.appendingPathComponent("on-session-start.sh"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        _ = try PluginInstaller(pluginsDirectory: pluginsDirectory).install(from: source)
+        let manager = PluginManager(
+            pluginsDirectory: pluginsDirectory.path,
+            sandbox: PluginSandbox(timeoutSeconds: 2, kernelSandboxEnabled: false),
+            grantedCapabilitiesProvider: { pluginID in
+                pluginID == "lease-plugin" ? [.environmentRead] : []
+            }
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: "lease-plugin")
+
+        let markerURL = root.appendingPathComponent("lease-started.txt")
+        let finishedURL = root.appendingPathComponent("lease-finished.txt")
+        manager.dispatchEvent(
+            .sessionStart,
+            environment: [
+                "MARKER_PATH": markerURL.path,
+                "FINISHED_PATH": finishedURL.path,
+            ]
+        )
+
+        let startDeadline = Date().addingTimeInterval(2)
+        while !FileManager.default.fileExists(atPath: markerURL.path),
+              Date() < startDeadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(FileManager.default.fileExists(atPath: markerURL.path))
+
+        let readStartedAt = Date()
+        #expect(manager.enabledPlugins.map(\.id) == ["lease-plugin"])
+        #expect(Date().timeIntervalSince(readStartedAt) < 0.2)
+
+        let mutationStartedAt = Date()
+        #expect(throws: PluginManagerError.registryBusy) {
+            try manager.disablePlugin(id: "lease-plugin")
+        }
+        #expect(Date().timeIntervalSince(mutationStartedAt) < 0.2)
+
+        let finishDeadline = Date().addingTimeInterval(2)
+        while !FileManager.default.fileExists(atPath: finishedURL.path),
+              Date() < finishDeadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(FileManager.default.fileExists(atPath: finishedURL.path))
+
+        try manager.disablePlugin(id: "lease-plugin")
+        #expect(manager.enabledPlugins.isEmpty)
+    }
+
+    private func writeSignedUpdateManifest(
+        to pluginDirectory: URL,
+        name: String,
+        version: String,
+        keyPair: SignatureKeyPair
+    ) throws -> PluginManifest {
+        try FileManager.default.createDirectory(
+            at: pluginDirectory,
+            withIntermediateDirectories: true
+        )
+        _ = try writeSignedPluginManifest(
+            """
+            name = "\(name)"
+            version = "\(version)"
+            author = "\(keyPair.author)"
+            """,
+            to: pluginDirectory,
+            keyPair: keyPair,
+            timestamp: Date(timeIntervalSince1970: 1_800_000_000)
+        )
+        return try PluginRegistry.loadManifest(from: pluginDirectory)
+    }
+
+    private func trustedValidator(for keyPair: SignatureKeyPair) throws -> PluginValidator {
+        var registry = TrustedAuthorRegistry()
+        try registry.trust(displayName: keyPair.author, publicKey: keyPair.publicKey)
+        return PluginValidator(trustedAuthors: registry)
+    }
+
     private func writeSignedPluginManifest(
         _ unsignedManifest: String,
         to pluginDirectory: URL,
@@ -1370,6 +2136,125 @@ struct PluginMarketplaceSwiftTestingTests {
     }
 }
 
+private final class PluginRemoteTagQueryRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedURLs: [URL] = []
+
+    var urls: [URL] {
+        lock.withLock { recordedURLs }
+    }
+
+    func record(_ url: URL) {
+        lock.withLock {
+            recordedURLs.append(url)
+        }
+    }
+}
+
+private final class PluginRegistryLeaseErrorRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedMessages: [String] = []
+
+    var messages: [String] {
+        lock.withLock { recordedMessages }
+    }
+
+    func record(_ error: Error) {
+        lock.withLock {
+            recordedMessages.append(String(describing: error))
+        }
+    }
+}
+
+private final class PluginAuthorizationResetSnapshotRecorder: @unchecked Sendable {
+    private let pluginID: String
+    private let pluginsDirectoryPath: String
+    private let stateURL: URL
+    private let grantStore: PluginCapabilityGrantStore
+    private let lock = NSLock()
+    private var count = 0
+    private var enabledAtNotification: Bool?
+    private var grantsAtNotification: Bool?
+
+    init(
+        pluginID: String,
+        pluginsDirectory: URL,
+        stateURL: URL,
+        grantStore: PluginCapabilityGrantStore
+    ) {
+        self.pluginID = pluginID
+        self.pluginsDirectoryPath = PluginRegistrySynchronization
+            .canonicalDirectoryURL(pluginsDirectory).path
+        self.stateURL = stateURL
+        self.grantStore = grantStore
+    }
+
+    var notificationCount: Int { lock.withLock { count } }
+    var wasEnabledAtNotification: Bool? { lock.withLock { enabledAtNotification } }
+    var hadGrantsAtNotification: Bool? { lock.withLock { grantsAtNotification } }
+
+    func record(_ notification: Notification) {
+        guard notification.userInfo?["pluginID"] as? String == pluginID,
+              notification.userInfo?["pluginsDirectory"] as? String
+                == pluginsDirectoryPath else {
+            return
+        }
+        let enabledIDs = (
+            try? JSONDecoder().decode([String].self, from: Data(contentsOf: stateURL))
+        ) ?? []
+        let hasGrants = !((try? grantStore.grants(for: pluginID)) ?? []).isEmpty
+        lock.withLock {
+            count += 1
+            enabledAtNotification = enabledIDs.contains(pluginID)
+            grantsAtNotification = hasGrants
+        }
+    }
+}
+
+private final class DeferredPluginSandbox: PluginSandboxing, @unchecked Sendable {
+    private struct PendingExecution {
+        let scriptPath: String
+        let authorization: PluginExecutionAuthorization
+    }
+
+    private var pending: [PendingExecution] = []
+    private(set) var executedScriptContents: [String] = []
+
+    var pendingCount: Int { pending.count }
+
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization
+    ) {
+        _ = environment
+        _ = pluginID
+        _ = pluginDirectory
+        _ = capabilities
+        pending.append(PendingExecution(
+            scriptPath: scriptPath,
+            authorization: authorization
+        ))
+    }
+
+    func runPendingExecutions() {
+        let executions = pending
+        pending.removeAll()
+        for execution in executions where execution.authorization.isValid() {
+            guard let contents = try? String(
+                contentsOfFile: execution.scriptPath,
+                encoding: .utf8
+            ) else {
+                continue
+            }
+            executedScriptContents.append(contents)
+        }
+    }
+}
+
 private final class RecordingPluginSandbox: PluginSandboxing, @unchecked Sendable {
     struct Execution: Equatable {
         let scriptPath: String
@@ -1386,8 +2271,10 @@ private final class RecordingPluginSandbox: PluginSandboxing, @unchecked Sendabl
         environment: [String: String],
         pluginID: String,
         pluginDirectory: String,
-        capabilities: Set<PluginCapability>
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization
     ) {
+        guard authorization.isValid() else { return }
         executions.append(Execution(
             scriptPath: scriptPath,
             environment: environment,

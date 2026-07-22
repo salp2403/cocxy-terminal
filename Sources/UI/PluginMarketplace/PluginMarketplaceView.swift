@@ -154,8 +154,59 @@ final class PluginMarketplaceViewModel: ObservableObject {
         setStatus(.installed(receipt.pluginID))
     }
 
+    func installBundledPluginInBackground(
+        id: String,
+        replaceExisting: Bool
+    ) async throws {
+        guard !isInstallingPlugin else { return }
+        guard let manifest = bundledPlugins.first(where: { $0.id == id }) else {
+            throw PluginInstallerError.pluginNotInstalled(id)
+        }
+        let sourceURL = URL(
+            fileURLWithPath: manifest.directoryPath,
+            isDirectory: true
+        )
+        let installer = self.installer
+        isInstallingPlugin = true
+        defer { isInstallingPlugin = false }
+
+        let task = Task.detached(priority: .userInitiated) {
+            try installer.install(
+                from: sourceURL,
+                replaceExisting: replaceExisting
+            )
+        }
+        let receipt = try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
+        refresh()
+        signatureStatusesByPluginID[receipt.pluginID] = receipt.signatureStatus
+        setStatus(.installed(receipt.pluginID))
+    }
+
     func uninstallPlugin(id: String) throws {
         try installer.uninstall(id: id)
+        signatureStatusesByPluginID[id] = nil
+        refresh()
+        setStatus(.uninstalled(id))
+    }
+
+    func uninstallPluginInBackground(id: String) async throws {
+        guard !isInstallingPlugin else { return }
+        let installer = self.installer
+        isInstallingPlugin = true
+        defer { isInstallingPlugin = false }
+
+        let task = Task.detached(priority: .userInitiated) {
+            try installer.uninstall(id: id)
+        }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
         signatureStatusesByPluginID[id] = nil
         refresh()
         setStatus(.uninstalled(id))
@@ -244,6 +295,13 @@ final class PluginMarketplaceViewModel: ObservableObject {
                     fallback: "Enter a plugin URL or local path."
                 )
             }
+        }
+        if let managerError = error as? PluginManagerError,
+           managerError == .registryBusy {
+            return localizer.string(
+                "plugins.error.registryBusy",
+                fallback: "A plugin is still running. Try again when it finishes."
+            )
         }
         return error.localizedDescription
     }
@@ -444,11 +502,14 @@ struct PluginMarketplaceView: View {
                                         title: localized("plugins.install", fallback: "Install"),
                                         systemImage: "square.and.arrow.down",
                                         perform: {
-                                            perform {
-                                                try viewModel.installBundledPlugin(
-                                                    id: plugin.id,
-                                                    replaceExisting: replaceExisting
-                                                )
+                                            Task {
+                                                await perform {
+                                                    try await viewModel
+                                                        .installBundledPluginInBackground(
+                                                            id: plugin.id,
+                                                            replaceExisting: replaceExisting
+                                                        )
+                                                }
                                             }
                                         }
                                     )
@@ -536,7 +597,11 @@ struct PluginMarketplaceView: View {
         ) {
             Button(localized("plugins.uninstall", fallback: "Uninstall"), role: .destructive) {
                 if let id = pendingUninstallID {
-                    perform { try viewModel.uninstallPlugin(id: id) }
+                    Task {
+                        await perform {
+                            try await viewModel.uninstallPluginInBackground(id: id)
+                        }
+                    }
                 }
                 pendingUninstallID = nil
             }

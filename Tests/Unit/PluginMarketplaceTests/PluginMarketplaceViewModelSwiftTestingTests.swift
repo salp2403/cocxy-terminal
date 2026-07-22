@@ -182,6 +182,50 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         #expect(viewModel.statusMessage == "Installed cocxy-bundled.")
     }
 
+    @Test("background bundled install and uninstall refresh installed state")
+    @MainActor
+    func backgroundBundledInstallAndUninstallRefreshState() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let bundled = root.appendingPathComponent("bundled", isDirectory: true)
+        let plugin = bundled.appendingPathComponent("cocxy-bundled", isDirectory: true)
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        try """
+        name = "Bundled Plugin"
+        version = "1.0.0"
+        author = "Cocxy"
+        events = ["session-start"]
+        """.write(
+            to: plugin.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let viewModel = PluginMarketplaceViewModel(
+            sourceStore: PluginSourceStore(fileURL: root.appendingPathComponent("sources.json")),
+            installer: PluginInstaller(pluginsDirectory: pluginsDirectory),
+            pluginManager: PluginManager(pluginsDirectory: pluginsDirectory.path),
+            bundledCatalog: BundledPluginCatalog(pluginsDirectory: bundled)
+        )
+
+        try await viewModel.installBundledPluginInBackground(
+            id: "cocxy-bundled",
+            replaceExisting: false
+        )
+
+        #expect(!viewModel.isInstallingPlugin)
+        #expect(viewModel.plugins.map(\.id) == ["cocxy-bundled"])
+        #expect(viewModel.statusMessage == "Installed cocxy-bundled.")
+
+        try await viewModel.uninstallPluginInBackground(id: "cocxy-bundled")
+
+        #expect(!viewModel.isInstallingPlugin)
+        #expect(viewModel.plugins.isEmpty)
+        #expect(viewModel.statusMessage == "Uninstalled cocxy-bundled.")
+    }
+
     @Test("enabling plugin with unapproved capabilities opens approval request")
     @MainActor
     func enablingPluginWithUnapprovedCapabilitiesOpensApprovalRequest() throws {
@@ -253,10 +297,18 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
             viewModel.localizedErrorDescription(PluginMarketplaceViewModelError.missingURL)
                 == "Ingresa una URL de plugin o una ruta local."
         )
+        #expect(
+            viewModel.localizedErrorDescription(PluginManagerError.registryBusy)
+                == "Aún se está ejecutando un plugin. Inténtalo de nuevo cuando termine."
+        )
 
         viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
 
         #expect(viewModel.statusMessage == "No updates found.")
+        #expect(
+            viewModel.localizedErrorDescription(PluginManagerError.registryBusy)
+                == "A plugin is still running. Try again when it finishes."
+        )
     }
 
     @Test("failed plugin update checks are not reported as no updates")

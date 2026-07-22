@@ -10,6 +10,7 @@ import Testing
 private final class InMemoryPluginFileSystem: PluginFileSystem, @unchecked Sendable {
     var files: [String: String] = [:]
     var directories: Set<String> = []
+    var writeError: (any Error)?
 
     func directoryExists(at path: String) -> Bool {
         directories.contains(path)
@@ -33,6 +34,7 @@ private final class InMemoryPluginFileSystem: PluginFileSystem, @unchecked Senda
     }
 
     func writeFile(at path: String, contents: String) throws {
+        if let writeError { throw writeError }
         files[path] = contents
     }
 }
@@ -151,6 +153,7 @@ struct PluginManagerTests {
         try manager.enablePlugin(id: "test-plugin")
 
         #expect(manager.plugins[0].isEnabled == true)
+        #expect(manager.enabledPlugins.map(\.id) == ["test-plugin"])
     }
 
     @Test @MainActor func disablePlugin() throws {
@@ -203,6 +206,32 @@ struct PluginManagerTests {
         #expect(throws: PluginManagerError.self) {
             try manager.disablePlugin(id: "test-plugin")
         }
+    }
+
+    @Test @MainActor func statePersistenceFailureRollsBackEnableAndDisable() throws {
+        let (fs, basePath) = makeFS(plugins: [
+            (id: "test-plugin", manifest: sampleManifest),
+        ])
+        let manager = PluginManager(fileSystem: fs, pluginsDirectory: basePath)
+        manager.scanPlugins()
+        fs.writeError = NSError(domain: "PluginManagerTests", code: 77)
+
+        #expect(throws: (any Error).self) {
+            try manager.enablePlugin(id: "test-plugin")
+        }
+
+        #expect(manager.plugins[0].isEnabled == false)
+        #expect(manager.enabledPlugins.isEmpty)
+
+        fs.writeError = nil
+        try manager.enablePlugin(id: "test-plugin")
+        fs.writeError = NSError(domain: "PluginManagerTests", code: 78)
+
+        #expect(throws: (any Error).self) {
+            try manager.disablePlugin(id: "test-plugin")
+        }
+
+        #expect(manager.plugins[0].isEnabled == true)
     }
 
     // MARK: - Queries
@@ -315,8 +344,10 @@ private final class RecordingPluginManagerSandbox: PluginSandboxing, @unchecked 
         environment: [String: String],
         pluginID: String,
         pluginDirectory: String,
-        capabilities: Set<PluginCapability>
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization
     ) {
+        guard authorization.isValid() else { return }
         executions.append(Execution(
             environment: environment,
             capabilities: capabilities

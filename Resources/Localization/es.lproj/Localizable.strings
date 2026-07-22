@@ -2326,6 +2326,7 @@
 "plugins.replaceExisting" = "Reemplazar existente";
 "plugins.checkUpdates" = "Buscar actualizaciones";
 "plugins.error.missingURL" = "Ingresa una URL de plugin o una ruta local.";
+"plugins.error.registryBusy" = "Aún se está ejecutando un plugin. Inténtalo de nuevo cuando termine.";
 "plugins.status.failedLoadSources" = "No se pudieron cargar las fuentes.";
 "plugins.status.failedLoadBundledPlugins" = "No se pudieron cargar los plugins incluidos.";
 "plugins.status.sourceAdded" = "Fuente de plugin agregada.";

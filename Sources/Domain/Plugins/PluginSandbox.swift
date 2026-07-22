@@ -20,13 +20,35 @@ struct PluginExecutionPlan: Equatable, Sendable {
     let kernelSandboxProfile: String?
 }
 
+/// Revalidates a queued plugin event while the registry lock is held. The
+/// validator must inspect current disk authorization and installation identity;
+/// a stale request is rejected before any process is created.
+struct PluginExecutionAuthorization: Sendable {
+    let pluginsDirectory: URL
+    private let validator: @Sendable () -> Bool
+
+    init(
+        pluginsDirectory: URL,
+        validator: @escaping @Sendable () -> Bool
+    ) {
+        self.pluginsDirectory = PluginRegistrySynchronization
+            .canonicalDirectoryURL(pluginsDirectory)
+        self.validator = validator
+    }
+
+    func isValid() -> Bool {
+        validator()
+    }
+}
+
 protocol PluginSandboxing: Sendable {
     func execute(
         scriptPath: String,
         environment: [String: String],
         pluginID: String,
         pluginDirectory: String,
-        capabilities: Set<PluginCapability>
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization
     )
 }
 
@@ -108,7 +130,8 @@ final class PluginSandbox: PluginSandboxing, @unchecked Sendable {
         )
     }
 
-    /// Executes a plugin script with an explicit plugin root and capability set.
+    /// Executes a directly requested plugin script without a registry lease.
+    /// Runtime event dispatch must use the authorization-bearing overload.
     func execute(
         scriptPath: String,
         environment: [String: String],
@@ -116,60 +139,150 @@ final class PluginSandbox: PluginSandboxing, @unchecked Sendable {
         pluginDirectory: String,
         capabilities: Set<PluginCapability>
     ) {
+        enqueueExecution(
+            scriptPath: scriptPath,
+            environment: environment,
+            pluginID: pluginID,
+            pluginDirectory: pluginDirectory,
+            capabilities: capabilities,
+            authorization: nil
+        )
+    }
+
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization
+    ) {
+        enqueueExecution(
+            scriptPath: scriptPath,
+            environment: environment,
+            pluginID: pluginID,
+            pluginDirectory: pluginDirectory,
+            capabilities: capabilities,
+            authorization: authorization
+        )
+    }
+
+    private func enqueueExecution(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization?
+    ) {
         executionQueue.async { [timeoutSeconds] in
-            let plan: PluginExecutionPlan
-            do {
-                plan = try self.makeExecutionPlan(
-                    scriptPath: scriptPath,
-                    environment: environment,
-                    pluginID: pluginID,
-                    pluginDirectory: pluginDirectory,
-                    capabilities: capabilities
-                )
-            } catch {
-                NSLog("[PluginSandbox] Rejected script %@: %@", scriptPath, "\(error)")
-                return
-            }
-
-            let process = Process()
-            process.executableURL = plan.executableURL
-            process.arguments = plan.arguments
-            process.environment = plan.environment
-            process.currentDirectoryURL = plan.currentDirectoryURL
-
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
-
-            do {
-                try process.run()
-            } catch {
-                NSLog("[PluginSandbox] Failed to start script %@: %@",
-                      scriptPath, error.localizedDescription)
-                return
-            }
-
-            // Enforce timeout.
-            let deadline = DispatchTime.now() + timeoutSeconds
-            DispatchQueue.global().asyncAfter(deadline: deadline) {
-                if process.isRunning {
-                    process.terminate()
-                    NSLog("[PluginSandbox] Killed script %@ (timeout after %.0fs)",
-                          scriptPath, timeoutSeconds)
+            if let authorization {
+                do {
+                    try PluginRegistrySynchronization.shared.withProcessReadLock(
+                        pluginsDirectory: authorization.pluginsDirectory
+                    ) {
+                        try PluginRegistrySynchronization.shared.withSharedFileLock(
+                            pluginsDirectory: authorization.pluginsDirectory
+                        ) {
+                            guard authorization.isValid() else {
+                                NSLog(
+                                    "[PluginSandbox] Rejected stale authorization for plugin %@",
+                                    pluginID
+                                )
+                                return
+                            }
+                            self.executeImmediately(
+                                scriptPath: scriptPath,
+                                environment: environment,
+                                pluginID: pluginID,
+                                pluginDirectory: pluginDirectory,
+                                capabilities: capabilities,
+                                timeoutSeconds: timeoutSeconds
+                            )
+                        }
+                    }
+                } catch {
+                    NSLog(
+                        "[PluginSandbox] Could not acquire execution lease for plugin %@: %@",
+                        pluginID,
+                        error.localizedDescription
+                    )
                 }
+                return
             }
 
-            process.waitUntilExit()
+            self.executeImmediately(
+                scriptPath: scriptPath,
+                environment: environment,
+                pluginID: pluginID,
+                pluginDirectory: pluginDirectory,
+                capabilities: capabilities,
+                timeoutSeconds: timeoutSeconds
+            )
+        }
+    }
 
-            // Log non-zero exit for debugging.
-            if process.terminationStatus != 0 {
-                let stderr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-                let errorOutput = String(data: stderr, encoding: .utf8) ?? ""
-                let truncated = String(errorOutput.prefix(500))
-                NSLog("[PluginSandbox] Script %@ exited with code %d: %@",
-                      scriptPath, process.terminationStatus, truncated)
+    /// Runs while the registry lock is held for managed event dispatches.
+    private func executeImmediately(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>,
+        timeoutSeconds: TimeInterval
+    ) {
+        let plan: PluginExecutionPlan
+        do {
+            plan = try makeExecutionPlan(
+                scriptPath: scriptPath,
+                environment: environment,
+                pluginID: pluginID,
+                pluginDirectory: pluginDirectory,
+                capabilities: capabilities
+            )
+        } catch {
+            NSLog("[PluginSandbox] Rejected script %@: %@", scriptPath, "\(error)")
+            return
+        }
+
+        let process = Process()
+        process.executableURL = plan.executableURL
+        process.arguments = plan.arguments
+        process.environment = plan.environment
+        process.currentDirectoryURL = plan.currentDirectoryURL
+
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
+
+        do {
+            try process.run()
+        } catch {
+            NSLog("[PluginSandbox] Failed to start script %@: %@",
+                  scriptPath, error.localizedDescription)
+            return
+        }
+
+        // Enforce timeout.
+        let deadline = DispatchTime.now() + timeoutSeconds
+        DispatchQueue.global().asyncAfter(deadline: deadline) {
+            if process.isRunning {
+                process.terminate()
+                NSLog("[PluginSandbox] Killed script %@ (timeout after %.0fs)",
+                      scriptPath, timeoutSeconds)
             }
+        }
+
+        process.waitUntilExit()
+
+        // Log non-zero exit for debugging.
+        if process.terminationStatus != 0 {
+            let stderr = stderrPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorOutput = String(data: stderr, encoding: .utf8) ?? ""
+            let truncated = String(errorOutput.prefix(500))
+            NSLog("[PluginSandbox] Script %@ exited with code %d: %@",
+                  scriptPath, process.terminationStatus, truncated)
         }
     }
 
