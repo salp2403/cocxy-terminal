@@ -68,11 +68,22 @@ struct DaemonRequest: Codable, Sendable {
 
     /// Serializes the request to a JSON line (single line + newline).
     func jsonLine() throws -> String {
-        let data = try JSONEncoder().encode(self)
-        guard let line = String(data: data, encoding: .utf8) else {
+        let encoder = JSONEncoder()
+        guard let encodedID = String(data: try encoder.encode(id), encoding: .utf8),
+              let encodedCommand = String(data: try encoder.encode(cmd), encoding: .utf8) else {
             throw DaemonProtocolError.encodingFailed
         }
-        return line + "\n"
+        var line = "{\"proto\":\(proto),\"id\":\(encodedID),\"cmd\":\(encodedCommand)"
+        if let args {
+            guard let encodedArguments = String(
+                data: try encoder.encode(args),
+                encoding: .utf8
+            ) else {
+                throw DaemonProtocolError.encodingFailed
+            }
+            line += ",\"args\":\(encodedArguments)"
+        }
+        return line + "}\n"
     }
 }
 
@@ -124,12 +135,30 @@ struct DaemonResponse: @unchecked Sendable {
 // MARK: - Protocol Errors
 
 /// Errors in daemon protocol communication.
-enum DaemonProtocolError: Error, Equatable {
+enum DaemonProtocolError: Error, Equatable, LocalizedError, Sendable {
     case invalidResponse
     case encodingFailed
     case connectionLost
     case timeout
     case daemonNotRunning
+    case authenticationFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "The remote daemon returned an invalid response."
+        case .encodingFailed:
+            return "The remote daemon request could not be encoded."
+        case .connectionLost:
+            return "The authenticated remote daemon connection was lost."
+        case .timeout:
+            return "The remote daemon did not respond before the timeout."
+        case .daemonNotRunning:
+            return "The remote daemon is not running on this connection."
+        case .authenticationFailed:
+            return "The remote daemon rejected its private connection capability."
+        }
+    }
 }
 
 // MARK: - Daemon State

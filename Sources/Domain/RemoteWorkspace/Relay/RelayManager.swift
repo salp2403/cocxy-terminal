@@ -10,8 +10,8 @@ import Combine
 @MainActor
 protocol RelayManaging: AnyObject {
     func openChannel(config: RelayChannelConfig, profileID: UUID) async throws -> RelayChannel
-    func closeChannel(channelID: UUID)
-    func closeAllChannels(profileID: UUID)
+    func closeChannel(channelID: UUID) async
+    func closeAllChannels(profileID: UUID) async
     func listChannels(profileID: UUID) -> [RelayChannel]
     func rotateToken(channelID: UUID) throws
     func updateACL(channelID: UUID, acl: RelayACL)
@@ -89,6 +89,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     private var openingGenerations: [UUID: UInt64] = [:]
     private var openingChannelIDs: Set<UUID> = []
     private var openingFailures: [UUID: String] = [:]
+    private var closingChannelIDs: Set<UUID> = []
     private var profileRevocationTasks: [ProfileLeaseKey: ProfileRevocationTask] = [:]
 
     // MARK: - Auto-Cleanup
@@ -176,7 +177,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
             self?.updateConnectionCount(channelID: channel.id, count: count)
         }
         broker.setFailureHandler { [weak self] error in
-            self?.handleBrokerFailure(channelID: channel.id, error: error)
+            self?.handleBrokerFailureSignal(channelID: channel.id, error: error)
         }
 
         do {
@@ -217,9 +218,44 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
 
         forwards[channel.id] = forward
 
+        var forwardWasConfirmed = false
         do {
-            try forwarder.forwardPort(forward, for: profileID)
+            try await forwarder.forwardPort(
+                forward,
+                for: profileID,
+                expectedConnectionLeaseID: connectionLeaseID
+            )
+            forwardWasConfirmed = true
+            guard !Task.isCancelled,
+                  openingGenerations[profileID, default: 0] == openingGeneration,
+                  forwarder.connectionLeaseID(for: profileID) == connectionLeaseID else {
+                throw CancellationError()
+            }
         } catch {
+            var cleanupConfirmed = !forwardWasConfirmed && !forwardOutcomeMayBeUncertain(error)
+            if forwardWasConfirmed || forwardOutcomeMayBeUncertain(error) {
+                cleanupConfirmed = await compensateForwardOpening(
+                    forward,
+                    profileID: profileID,
+                    connectionLeaseID: connectionLeaseID,
+                    forwarder: forwarder
+                )
+            }
+            guard cleanupConfirmed else {
+                retainUncertainForwardOpening(
+                    channel: channel,
+                    token: token,
+                    forward: forward,
+                    connectionLeaseID: connectionLeaseID,
+                    broker: broker,
+                    reason: error.localizedDescription
+                )
+                scheduleProfileRevocation(
+                    profileID: profileID,
+                    connectionLeaseID: connectionLeaseID
+                )
+                throw error
+            }
             brokers.removeValue(forKey: channel.id)
             forwards.removeValue(forKey: channel.id)
             broker.stop()
@@ -240,8 +276,10 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     // MARK: - Close Channel
 
     /// Closes a single relay channel and cancels its reverse tunnel.
-    func closeChannel(channelID: UUID) {
+    func closeChannel(channelID: UUID) async {
         guard var channel = channels[channelID] else { return }
+        guard closingChannelIDs.insert(channelID).inserted else { return }
+        defer { closingChannelIDs.remove(channelID) }
 
         if let forward = forwards[channelID] {
             guard let forwarder else {
@@ -262,9 +300,17 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
                 channels[channelID] = channel
                 return
             }
+            brokers[channelID]?.deactivate()
+            channel.connectionCount = 0
+            channels[channelID] = channel
             do {
-                try forwarder.cancelForward(forward, for: channel.profileID)
+                try await forwarder.cancelForward(
+                    forward,
+                    for: channel.profileID,
+                    expectedConnectionLeaseID: connectionLeaseID
+                )
             } catch {
+                guard channels[channelID] != nil else { return }
                 brokers[channelID]?.deactivate()
                 channel.status = .closeFailed(reason: error.localizedDescription)
                 channel.connectionCount = 0
@@ -277,6 +323,8 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
                 }
                 return
             }
+            guard channels[channelID] != nil,
+                  channelLeaseIDs[channelID] == connectionLeaseID else { return }
         }
 
         finalizeClosedChannel(channelID: channelID)
@@ -285,11 +333,11 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     /// Closes all channels for a given profile.
     ///
     /// Called when a profile disconnects to clean up all associated tunnels.
-    func closeAllChannels(profileID: UUID) {
-        closeAllChannels(profileID: profileID, connectionLeaseID: nil)
+    func closeAllChannels(profileID: UUID) async {
+        await closeAllChannels(profileID: profileID, connectionLeaseID: nil)
     }
 
-    func closeAllChannels(profileID: UUID, connectionLeaseID: UUID?) {
+    func closeAllChannels(profileID: UUID, connectionLeaseID: UUID?) async {
         invalidatePendingOpenings(profileID: profileID)
         deactivateChannelsForSessionTermination(
             profileID: profileID,
@@ -300,7 +348,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
             return connectionLeaseID.map { channelLeaseIDs[channel.id] == $0 } ?? true
         }
         for channel in profileChannels {
-            closeChannel(channelID: channel.id)
+            await closeChannel(channelID: channel.id)
         }
     }
 
@@ -446,7 +494,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 60_000_000_000) // 60s
                 guard let self else { return }
-                self.closeExpiredChannels()
+                await self.closeExpiredChannels()
             }
         }
     }
@@ -462,10 +510,10 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     }
 
     /// Closes all channels that have passed their `expiresAt` time.
-    private func closeExpiredChannels() {
+    private func closeExpiredChannels() async {
         let expired = channels.values.filter { $0.isExpired }
         for channel in expired {
-            closeChannel(channelID: channel.id)
+            await closeChannel(channelID: channel.id)
         }
     }
 
@@ -479,7 +527,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         openingGenerations[profileID, default: 0] &+= 1
     }
 
-    private func handleBrokerFailure(channelID: UUID, error: any Error) {
+    private func handleBrokerFailureSignal(channelID: UUID, error: any Error) {
         if openingChannelIDs.contains(channelID) {
             brokers[channelID]?.deactivate()
             openingFailures[channelID] = error.localizedDescription
@@ -489,30 +537,53 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         guard let channel = channels[channelID],
               let connectionLeaseID = channelLeaseIDs[channelID]
         else { return }
-        guard let forward = forwards[channelID], let forwarder else {
-            retainBrokerFailure(channelID: channelID, error: error)
-            scheduleProfileRevocation(
+        guard !closingChannelIDs.contains(channelID) else { return }
+        retainBrokerFailure(channelID: channelID, error: error)
+
+        Task { @MainActor [weak self] in
+            await self?.resolveBrokerFailure(
+                channelID: channelID,
                 profileID: channel.profileID,
+                connectionLeaseID: connectionLeaseID
+            )
+        }
+    }
+
+    private func resolveBrokerFailure(
+        channelID: UUID,
+        profileID: UUID,
+        connectionLeaseID: UUID
+    ) async {
+        guard channels[channelID] != nil,
+              channelLeaseIDs[channelID] == connectionLeaseID else { return }
+        guard let forward = forwards[channelID], let forwarder else {
+            scheduleProfileRevocation(
+                profileID: profileID,
                 connectionLeaseID: connectionLeaseID
             )
             return
         }
-        guard forwarder.connectionLeaseID(for: channel.profileID) == connectionLeaseID else {
-            retainBrokerFailure(channelID: channelID, error: error)
+        guard forwarder.connectionLeaseID(for: profileID) == connectionLeaseID else {
             scheduleProfileRevocation(
-                profileID: channel.profileID,
+                profileID: profileID,
                 connectionLeaseID: connectionLeaseID
             )
             return
         }
 
         do {
-            try forwarder.cancelForward(forward, for: channel.profileID)
-            finalizeClosedChannel(channelID: channelID)
+            try await forwarder.cancelForward(
+                forward,
+                for: profileID,
+                expectedConnectionLeaseID: connectionLeaseID
+            )
+            if channels[channelID] != nil,
+               channelLeaseIDs[channelID] == connectionLeaseID {
+                finalizeClosedChannel(channelID: channelID)
+            }
         } catch {
-            retainBrokerFailure(channelID: channelID, error: error)
             scheduleProfileRevocation(
-                profileID: channel.profileID,
+                profileID: profileID,
                 connectionLeaseID: connectionLeaseID
             )
         }
@@ -529,6 +600,66 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
                 id: tunnelID,
                 status: .failed(error.localizedDescription)
             )
+        }
+    }
+
+    private func compensateForwardOpening(
+        _ forward: RemoteConnectionProfile.PortForward,
+        profileID: UUID,
+        connectionLeaseID: UUID,
+        forwarder: any PortForwarding
+    ) async -> Bool {
+        let cleanup = Task { @MainActor in
+            try await forwarder.cancelForward(
+                forward,
+                for: profileID,
+                expectedConnectionLeaseID: connectionLeaseID
+            )
+        }
+        do {
+            try await cleanup.value
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func retainUncertainForwardOpening(
+        channel: RelayChannel,
+        token: RelayToken,
+        forward: RemoteConnectionProfile.PortForward,
+        connectionLeaseID: UUID,
+        broker: any RelayAuthBrokering,
+        reason: String
+    ) {
+        broker.deactivate()
+        var retainedChannel = channel
+        retainedChannel.connectionCount = 0
+        retainedChannel.status = .closeFailed(
+            reason: "Reverse forward cleanup is unconfirmed: \(reason)"
+        )
+        let tunnel = tunnelManager.addTunnel(
+            forward: forward,
+            for: channel.profileID,
+            status: .failed(reason)
+        )
+        channels[channel.id] = retainedChannel
+        tokens[channel.id] = token
+        forwards[channel.id] = forward
+        brokers[channel.id] = broker
+        tunnelIDs[channel.id] = tunnel.id
+        channelLeaseIDs[channel.id] = connectionLeaseID
+    }
+
+    private func forwardOutcomeMayBeUncertain(_ error: any Error) -> Bool {
+        if error is CancellationError { return true }
+        if error as? ProcessExecutorError == .outputLimitExceeded { return true }
+        guard let error = error as? SSHMultiplexerError else { return false }
+        switch error {
+        case .forwardTimedOut, .forwardCleanupUnconfirmed, .notConnected:
+            return true
+        default:
+            return false
         }
     }
 

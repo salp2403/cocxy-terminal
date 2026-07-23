@@ -414,6 +414,10 @@ struct BrowserImportWizardView: View {
                 bookmarks: result.importedBookmarkCount
             )
 
+            if result.uncertainCookieCount > 0 {
+                uncertainCookieBanner(result.uncertainCookieCount)
+            }
+
             if result.skippedCount > 0 || !result.errors.isEmpty {
                 issueList(
                     skippedCount: result.skippedCount,
@@ -427,9 +431,22 @@ struct BrowserImportWizardView: View {
     private var footer: some View {
         HStack(spacing: 10) {
             if viewModel.result == nil {
-                Button(localized("common.cancel", fallback: "Cancel"), action: onCancel)
+                Button(
+                    viewModel.isImporting
+                        ? (viewModel.isCancellingImport
+                            ? localized("browser.import.cancelling", fallback: "Cancelling...")
+                            : localized("browser.import.cancel", fallback: "Cancel Import"))
+                        : localized("common.cancel", fallback: "Cancel"),
+                    action: {
+                        if viewModel.isImporting {
+                            viewModel.requestImportCancellation()
+                        } else {
+                            onCancel()
+                        }
+                    }
+                )
                     .keyboardShortcut(.cancelAction)
-                    .disabled(viewModel.isImporting)
+                    .disabled(viewModel.isCancellingImport)
             }
 
             Spacer()
@@ -534,6 +551,72 @@ struct BrowserImportWizardView: View {
         .clipShape(RoundedRectangle(cornerRadius: 7))
     }
 
+    private func uncertainCookieBanner(_ count: Int) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: "questionmark.circle.fill")
+                .foregroundStyle(Color(nsColor: CocxyColors.yellow))
+            Text(Self.uncertainCookieMessage(count: count, localizer: localizer))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(nsColor: CocxyColors.surface0).opacity(0.4))
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+    }
+
+    static func uncertainCookieMessage(count: Int, localizer: AppLocalizer) -> String {
+        let key = count == 1
+            ? "browser.import.result.cookieUnconfirmed.one"
+            : "browser.import.result.cookieUnconfirmed.many"
+        let fallback = count == 1
+            ? "%d cookie write could not be confirmed."
+            : "%d cookie writes could not be confirmed."
+        return String(format: localizer.string(key, fallback: fallback), count)
+    }
+
+    static func localizedIssueMessage(
+        _ issue: BrowserImportIssue,
+        localizer: AppLocalizer
+    ) -> String {
+        guard let kind = issue.kind else {
+            return issue.message
+        }
+        switch kind {
+        case .bookmarkRootConflict:
+            return localizer.string(
+                "browser.import.issue.bookmarkRootConflict",
+                fallback: "The imported bookmark folder conflicts with an existing item."
+            )
+        case .cancelled:
+            return localizer.string(
+                "browser.import.issue.cancelled",
+                fallback: "The browser import was cancelled."
+            )
+        case .cookieBatchWrite(let imported, let total, let uncertain) where uncertain > 0:
+            return String(
+                format: localizer.string(
+                    "browser.import.issue.cookiesPartialUnconfirmed",
+                    fallback: "Imported %d of %d cookies; %d could not be confirmed by WebKit."
+                ),
+                imported,
+                total,
+                uncertain
+            )
+        case .cookieBatchWrite(let imported, let total, _):
+            return String(
+                format: localizer.string(
+                    "browser.import.issue.cookiesPartial",
+                    fallback: "Imported %d of %d cookies before the write stopped."
+                ),
+                imported,
+                total
+            )
+        }
+    }
+
     private func issueList(
         skippedCount: Int,
         issues: [BrowserImportIssue],
@@ -561,7 +644,7 @@ struct BrowserImportWizardView: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Color(nsColor: CocxyColors.yellow))
                         .padding(.top, 2)
-                    Text(issue.message)
+                    Text(Self.localizedIssueMessage(issue, localizer: localizer))
                         .font(.system(size: 10))
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -807,6 +890,26 @@ struct BrowserImportWizardView: View {
                 "browser.import.error.sourceChanged",
                 fallback: "The source data changed after review. Refresh the preview before importing."
             )
+        case .sourceUnavailable:
+            return localized(
+                "browser.import.error.sourceUnavailable",
+                fallback: "The selected browser profile or data file is no longer available."
+            )
+        case .sourceReadFailed:
+            return localized(
+                "browser.import.error.sourceReadFailed",
+                fallback: "The selected browser data could not be read safely."
+            )
+        case .noImportableData:
+            return localized(
+                "browser.import.error.noData",
+                fallback: "No importable data was found for the selected profile and filters."
+            )
+        case .cookieAccessFailed:
+            return localized(
+                "browser.import.error.cookieAccess",
+                fallback: "Cookie values could not be read from the selected browser profile."
+            )
         case .operation(let detail):
             return detail
         }
@@ -833,6 +936,12 @@ struct BrowserImportWizardView: View {
                 "xmark.octagon.fill",
                 Color(nsColor: CocxyColors.red),
                 localized("browser.import.result.failed", fallback: "Import failed")
+            )
+        case .cancelled:
+            return (
+                "xmark.circle.fill",
+                Color(nsColor: CocxyColors.yellow),
+                localized("browser.import.result.cancelled", fallback: "Import cancelled")
             )
         }
     }

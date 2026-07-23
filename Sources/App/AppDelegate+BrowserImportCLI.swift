@@ -3,12 +3,48 @@
 
 import Foundation
 
+enum BrowserImportSynchronousBridgeOutcome<Result: Sendable>: Sendable {
+    case completed(Result)
+    case timedOut(settledResult: Result)
+    case unavailable
+}
+
+enum BrowserImportSynchronousBridge {
+    static let requestTimeout: TimeInterval = 5 * 60
+
+    static func run<Result: Sendable>(
+        timeout: TimeInterval,
+        operation: @escaping @Sendable () async -> Result
+    ) -> BrowserImportSynchronousBridgeOutcome<Result> {
+        guard !Thread.isMainThread else { return .unavailable }
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = LockedBox<Result?>(nil)
+        let task = Task.detached {
+            let result = await operation()
+            box.withValue { $0 = result }
+            semaphore.signal()
+        }
+        let boundedTimeout = timeout.isFinite ? max(timeout, 0) : 0
+        guard semaphore.wait(timeout: .now() + boundedTimeout) == .success else {
+            task.cancel()
+            // Imports mutate app-owned stores, so cancellation must settle before replying.
+            semaphore.wait()
+            guard let result = box.withValue({ $0 }) else { return .unavailable }
+            return .timedOut(settledResult: result)
+        }
+        guard let result = box.withValue({ $0 }) else { return .unavailable }
+        return .completed(result)
+    }
+}
+
 extension AppDelegate {
     private struct BrowserImportCLIContext: Sendable {
         let profileID: UUID
         let approvedResourcePaths: [String: String]?
         let historyStore: (any BrowserHistoryStoring)?
         let bookmarkStore: (any BrowserBookmarkStoring)?
+        let bookmarkRootTitleFormat: String
+        let bookmarkRootTitleAliases: [String]
     }
 
     nonisolated func handleBrowserImportCLIRequest(
@@ -16,24 +52,35 @@ extension AppDelegate {
         params: [String: String],
         authorizationContext: SocketPrivilegedCommandContext
     ) -> (success: Bool, data: [String: String]) {
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = LockedBox<(Bool, [String: String])>((
-            false,
-            ["error": "Browser import dispatch did not complete"]
-        ))
-
-        Task.detached { [self] in
-            let result = await performBrowserImportCLIRequest(
-                kind: kind,
-                params: params,
-                authorizationContext: authorizationContext
-            )
-            box.withValue { $0 = result }
-            semaphore.signal()
+        let outcome = BrowserImportSynchronousBridge.run(
+            timeout: BrowserImportSynchronousBridge.requestTimeout,
+            operation: { [self] in
+                await performBrowserImportCLIRequest(
+                    kind: kind,
+                    params: params,
+                    authorizationContext: authorizationContext
+                )
+            }
+        )
+        switch outcome {
+        case .completed(let result):
+            return result
+        case .timedOut(let settledResult):
+            return Self.browserImportTimedOutResponse(settledResult)
+        case .unavailable:
+            return (false, ["error": "Browser import bridge is unavailable"])
         }
+    }
 
-        semaphore.wait()
-        return box.withValue { $0 }
+    nonisolated static func browserImportTimedOutResponse(
+        _ settledResult: (success: Bool, data: [String: String])
+    ) -> (success: Bool, data: [String: String]) {
+        var data = settledResult.data
+        data["error"] = "Browser import exceeded the five-minute request limit; cancellation was requested"
+        data["timed_out"] = "true"
+        data["cancelled"] = "true"
+        data["settled_after_cancellation"] = "true"
+        return (false, data)
     }
 
     nonisolated func performBrowserImportCLIRequest(
@@ -42,6 +89,7 @@ extension AppDelegate {
         authorizationContext: SocketPrivilegedCommandContext
     ) async -> (Bool, [String: String]) {
         do {
+            try Task.checkCancellation()
             if kind == "preview", params["preview-token"] != nil {
                 throw BrowserImportCLIError.previewTokenNotAllowed
             }
@@ -51,6 +99,7 @@ extension AppDelegate {
                     authorizationContext: authorizationContext
                 )
             }
+            try Task.checkCancellation()
             let plan = try buildBrowserImportPlan(
                 params: params,
                 context: context
@@ -58,8 +107,10 @@ extension AppDelegate {
 
             switch kind {
             case "preview":
+                try Task.checkCancellation()
                 let preview = try BrowserSourceImporterFactory.importer(for: plan.source)
                     .preview(plan: plan)
+                try Task.checkCancellation()
                 guard preview.itemCount > 0 else {
                     throw BrowserImportError.noImportableData(
                         "No importable data was found for the selected browser profile"
@@ -78,14 +129,19 @@ extension AppDelegate {
                     historyStore: context.historyStore,
                     bookmarkStore: context.bookmarkStore,
                     cookieStore: cookieStore,
-                    auditLogger: FileBrowserImportAuditLogger()
+                    auditLogger: FileBrowserImportAuditLogger(),
+                    bookmarkRootTitleFormat: context.bookmarkRootTitleFormat,
+                    bookmarkRootTitleAliases: context.bookmarkRootTitleAliases
                 )
                 do {
                     let result = try importer.importData(plan)
                     await MainActor.run {
                         self.browserProfileManager?.endImport(reservation)
                     }
-                    return (result.status != .failed, browserImportResultData(result, plan: plan))
+                    return (
+                        Self.browserImportCommandSucceeded(status: result.status),
+                        browserImportResultData(result, plan: plan)
+                    )
                 } catch {
                     await MainActor.run {
                         self.browserProfileManager?.endImport(reservation)
@@ -98,6 +154,12 @@ extension AppDelegate {
         } catch {
             return (false, ["error": browserImportErrorMessage(error)])
         }
+    }
+
+    nonisolated static func browserImportCommandSucceeded(
+        status: BrowserImportStatus
+    ) -> Bool {
+        status == .completed || status == .partial
     }
 
     @MainActor
@@ -137,13 +199,21 @@ extension AppDelegate {
             throw BrowserImportCLIError.remoteProfile(profileID.uuidString)
         }
 
+        let bookmarkRootTitleFormat = appLocalizer().string(
+            BrowserImportBookmarkRootLocalization.key,
+            fallback: BrowserImportBookmarkRootLocalization.fallback
+        )
         return BrowserImportCLIContext(
             profileID: profileID,
             approvedResourcePaths: authorizationContext.scope == .browserGlobal
                 ? authorizationContext.localResourcePaths
                 : nil,
             historyStore: browserHistoryStore,
-            bookmarkStore: browserBookmarkStore
+            bookmarkStore: browserBookmarkStore,
+            bookmarkRootTitleFormat: bookmarkRootTitleFormat,
+            bookmarkRootTitleAliases: BrowserImportBookmarkRootLocalization.formats(
+                current: bookmarkRootTitleFormat
+            )
         )
     }
 
@@ -370,6 +440,7 @@ extension AppDelegate {
             "profile": plan.profileID.uuidString,
             "history": "\(result.importedHistoryCount)",
             "cookies": "\(result.importedCookieCount)",
+            "cookies_uncertain": "\(result.uncertainCookieCount)",
             "bookmarks": "\(result.importedBookmarkCount)",
             "skipped": "\(result.skippedCount)",
             "errors": "\(result.errors.count)",

@@ -348,8 +348,31 @@ struct BrowserImportSwiftTestingTests {
             bookmarksPath: "/explicit/Bookmarks"
         )
         #expect(explicit.count == 1)
-        #expect(explicit[0].profileIdentifier == "Profile 999999")
+        #expect(explicit[0].profileIdentifier == "explicit:chrome:/explicit")
         #expect(explicit[0].historyPath.path == "/explicit/History")
+
+        let aliased = BrowserImportLocationPathBinding.requestedLocations(
+            source: .chrome,
+            profileName: "A different visible alias",
+            discoverProfiles: false,
+            historyPath: "/explicit/History",
+            cookiesPath: "/explicit/Network/Cookies",
+            bookmarksPath: "/explicit/Bookmarks"
+        )
+        #expect(aliased.first?.profileIdentifier == explicit.first?.profileIdentifier)
+
+        let knownAliasAtExplicitPath = BrowserImportLocationPathBinding.requestedLocations(
+            source: .chrome,
+            profileName: "Default",
+            discoverProfiles: false,
+            historyPath: "/external-profile/History",
+            cookiesPath: "/external-profile/Network/Cookies",
+            bookmarksPath: "/external-profile/Bookmarks"
+        )
+        #expect(
+            knownAliasAtExplicitPath.first?.profileIdentifier
+                == "explicit:chrome:/external-profile"
+        )
     }
 
     @Test("Chromium discovery uses Local State and the modern cookie path")
@@ -890,6 +913,152 @@ struct BrowserImportSwiftTestingTests {
         #expect(auditLogger.entries.count == 1)
     }
 
+    @Test("orchestrator uses the localized imported-bookmark folder title")
+    func orchestratorLocalizesImportedBookmarkFolder() throws {
+        let bookmarkStore = InMemoryBrowserImportBookmarkStore()
+        let importer = BrowserImporter(
+            sourceImporter: StubBrowserSourceImporter(previewResult: BrowserImportPreview(
+                history: [],
+                cookies: [],
+                bookmarks: [BrowserImportedBookmark(
+                    title: "Ejemplo",
+                    url: "https://example.com"
+                )],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: bookmarkStore,
+            cookieStore: nil,
+            auditLogger: nil,
+            bookmarkRootTitleFormat: "Importado de %@ - %@"
+        )
+
+        _ = try importer.importData(BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importCookies: false,
+            importHistory: false,
+            sourceProfile: "Trabajo",
+            explicitLocations: [BrowserImportLocation(
+                source: .chrome,
+                profileName: "Trabajo",
+                historyPath: URL(fileURLWithPath: "/fixture/Trabajo/History"),
+                cookiesPath: nil,
+                bookmarksPath: nil
+            )]
+        ))
+
+        #expect(try bookmarkStore.loadAll().contains {
+            $0.isFolder && $0.title == "Importado de Chrome - Trabajo"
+        })
+    }
+
+    @Test("bookmark import keeps one stable root when the app language changes")
+    func bookmarkRootIdentityDoesNotDependOnLocalizedTitle() throws {
+        let destinationProfileID = UUID()
+        let bookmarkStore = InMemoryBrowserImportBookmarkStore()
+        let location = BrowserImportLocation(
+            source: .chrome,
+            profileName: "Trabajo",
+            profileIdentifier: "Profile 7",
+            historyPath: URL(fileURLWithPath: "/fixture/Profile 7/History"),
+            cookiesPath: nil,
+            bookmarksPath: nil
+        )
+        let preview = BrowserImportPreview(
+            history: [],
+            cookies: [],
+            bookmarks: [BrowserImportedBookmark(
+                title: "Ejemplo",
+                url: "https://example.com"
+            )],
+            errors: []
+        )
+        let plan = BrowserImportPlan(
+            source: .chrome,
+            profileID: destinationProfileID,
+            importCookies: false,
+            importHistory: false,
+            sourceProfile: "Trabajo",
+            explicitLocations: [location]
+        )
+
+        let spanishResult = try BrowserImporter(
+            sourceImporter: StubBrowserSourceImporter(previewResult: preview),
+            historyStore: nil,
+            bookmarkStore: bookmarkStore,
+            cookieStore: nil,
+            auditLogger: nil,
+            bookmarkRootTitleFormat: "Importado de %@ - %@"
+        ).importData(plan)
+        let englishResult = try BrowserImporter(
+            sourceImporter: StubBrowserSourceImporter(previewResult: preview),
+            historyStore: nil,
+            bookmarkStore: bookmarkStore,
+            cookieStore: nil,
+            auditLogger: nil,
+            bookmarkRootTitleFormat: "Imported from %@ - %@"
+        ).importData(plan)
+
+        let bookmarks = try bookmarkStore.loadAll()
+        let roots = bookmarks.filter { $0.isFolder && $0.parentID == nil }
+        #expect(spanishResult.importedBookmarkCount == 1)
+        #expect(englishResult.importedBookmarkCount == 0)
+        #expect(englishResult.skippedCount == 1)
+        #expect(roots.count == 1)
+        #expect(roots.first?.title == "Importado de Chrome - Trabajo")
+    }
+
+    @Test("bookmark import does not adopt an ambiguous title-only root")
+    func bookmarkImportDoesNotAdoptAmbiguousLegacyRoot() throws {
+        let bookmarkStore = InMemoryBrowserImportBookmarkStore()
+        let legacyRoot = BrowserBookmark.folder(name: "Importado de Chrome - Trabajo")
+        try bookmarkStore.save(legacyRoot)
+        let importer = BrowserImporter(
+            sourceImporter: StubBrowserSourceImporter(previewResult: BrowserImportPreview(
+                history: [],
+                cookies: [],
+                bookmarks: [BrowserImportedBookmark(
+                    title: "Example",
+                    url: "https://example.com"
+                )],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: bookmarkStore,
+            cookieStore: nil,
+            auditLogger: nil,
+            bookmarkRootTitleFormat: "Imported from %@ - %@",
+            bookmarkRootTitleAliases: ["Importado de %@ - %@"]
+        )
+
+        let result = try importer.importData(BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importCookies: false,
+            importHistory: false,
+            sourceProfile: "Trabajo",
+            explicitLocations: [BrowserImportLocation(
+                source: .chrome,
+                profileName: "Trabajo",
+                profileIdentifier: "Profile 7",
+                historyPath: URL(fileURLWithPath: "/fixture/Profile 7/History"),
+                cookiesPath: nil,
+                bookmarksPath: nil
+            )]
+        ))
+
+        let bookmarks = try bookmarkStore.loadAll()
+        #expect(result.importedBookmarkCount == 1)
+        let roots = bookmarks.filter { $0.isFolder && $0.parentID == nil }
+        #expect(roots.count == 2)
+        #expect(bookmarks.first { !$0.isFolder }?.parentID != legacyRoot.id)
+        #expect(roots.contains { root in
+            root.id == bookmarks.first { !$0.isFolder }?.parentID
+                && root.title == "Imported from Chrome - Trabajo"
+        })
+    }
+
     @Test("orchestrator refuses changed data before writing any destination")
     func orchestratorRejectsChangedPreviewBeforeWrites() throws {
         let profileID = UUID()
@@ -1058,6 +1227,75 @@ struct BrowserImportSwiftTestingTests {
         #expect(auditLogger.entries.first?.status == .partial)
     }
 
+    @Test("orchestrator preserves bookmark cancellation semantics")
+    func orchestratorTreatsBookmarkStoreCancellationAsCancellation() throws {
+        let auditLogger = InMemoryBrowserImportAuditLogger()
+        let importer = BrowserImporter(
+            sourceImporter: StubBrowserSourceImporter(previewResult: BrowserImportPreview(
+                history: [],
+                cookies: [],
+                bookmarks: [BrowserImportedBookmark(
+                    title: "Cancelled",
+                    url: "https://example.com/cancelled"
+                )],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: CancellingBrowserImportBookmarkStore(),
+            cookieStore: nil,
+            auditLogger: auditLogger
+        )
+
+        let result = try importer.importData(BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importCookies: false,
+            importHistory: false
+        ))
+
+        #expect(result.status == .cancelled)
+        #expect(result.importedBookmarkCount == 0)
+        #expect(result.skippedCount == 1)
+        #expect(result.errors.contains {
+            $0.message == BrowserImportError.cancelled.localizedDescription
+        })
+        #expect(!result.errors.contains { $0.message.contains("write failures") })
+        #expect(auditLogger.entries.first?.status == .cancelled)
+    }
+
+    @Test("cancelled and bookmark-conflict issues localize without leaking English")
+    @MainActor
+    func browserImportRecoveryIssuesAreLocalized() throws {
+        let localizationURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)
+        let bundle = try #require(Bundle(url: localizationURL))
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: bundle
+        )
+        let cancelled = BrowserImportIssue(
+            source: .chrome,
+            profileName: "Trabajo",
+            message: BrowserImportError.cancelled.localizedDescription,
+            kind: .cancelled
+        )
+        let conflict = BrowserImportIssue(
+            source: .chrome,
+            profileName: "Trabajo",
+            message: BrowserImportError.bookmarkRootConflict.localizedDescription,
+            kind: .bookmarkRootConflict
+        )
+
+        #expect(
+            BrowserImportWizardView.localizedIssueMessage(cancelled, localizer: localizer)
+                == "La importación del navegador fue cancelada."
+        )
+        #expect(
+            BrowserImportWizardView.localizedIssueMessage(conflict, localizer: localizer)
+                == "La carpeta de marcadores importados entra en conflicto con un elemento existente."
+        )
+    }
+
     @Test("orchestrator preserves exact cookie counts after a partial batch")
     func orchestratorCountsPartialCookieWrites() throws {
         let cookies = (0..<3).map { index in
@@ -1099,6 +1337,56 @@ struct BrowserImportSwiftTestingTests {
         #expect(result.errors[0].message.contains("Imported 1 of 3 cookies"))
         #expect(auditLogger.entries.first?.importedCookieCount == 1)
         #expect(auditLogger.entries.first?.skippedCount == 2)
+    }
+
+    @Test("orchestrator reports cookies without WebKit confirmation as indeterminate")
+    func orchestratorCountsIndeterminateCookieWrites() throws {
+        let cookies = (0..<3).map { index in
+            BrowserImportedCookie(
+                domain: ".example.com",
+                name: "session-\(index)",
+                path: "/",
+                value: "value-\(index)",
+                expiresAt: nil,
+                isSecure: true,
+                isHTTPOnly: true
+            )
+        }
+        let auditLogger = InMemoryBrowserImportAuditLogger()
+        let importer = BrowserImporter(
+            sourceImporter: StubBrowserSourceImporter(previewResult: BrowserImportPreview(
+                history: [],
+                cookies: cookies,
+                bookmarks: [],
+                errors: []
+            )),
+            historyStore: nil,
+            bookmarkStore: nil,
+            cookieStore: PartiallyFailingBrowserImportCookieStore(
+                importedCount: 0,
+                uncertainCount: 2
+            ),
+            auditLogger: auditLogger
+        )
+
+        let result = try importer.importData(BrowserImportPlan(
+            source: .chrome,
+            profileID: UUID(),
+            importHistory: false,
+            importBookmarks: false
+        ))
+
+        #expect(result.status == .partial)
+        #expect(result.importedCookieCount == 0)
+        #expect(result.uncertainCookieCount == 2)
+        #expect(result.skippedCount == 1)
+        #expect(result.errors[0].message.contains("2 that could not be confirmed by WebKit"))
+        #expect(
+            result.errors[0].kind
+                == .cookieBatchWrite(imported: 0, total: 3, uncertain: 2)
+        )
+        #expect(auditLogger.entries.first?.uncertainCookieCount == 2)
+        #expect(auditLogger.entries.first?.status == .partial)
     }
 
     @Test("file audit logger creates private append-only metadata")
@@ -1346,6 +1634,160 @@ struct BrowserImportSwiftTestingTests {
         #expect(viewModel.failure == nil)
     }
 
+    @Test("browser import cancellation reaches the active destination writer")
+    @MainActor
+    func browserImportRunCancellationPropagates() async throws {
+        let destination = BrowserProfile(name: "Personal", isDefault: true)
+        let location = BrowserImportLocation(
+            source: .chrome,
+            profileName: "Work",
+            profileIdentifier: "Profile 7",
+            historyPath: URL(fileURLWithPath: "/fixture/Profile 7/History"),
+            cookiesPath: nil,
+            bookmarksPath: nil
+        )
+        let preview = BrowserImportPreview(
+            history: [BrowserImportedHistoryVisit(
+                url: "https://example.com",
+                title: "Example",
+                visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )],
+            cookies: [],
+            bookmarks: [],
+            errors: []
+        )
+        let service = CancellationAwareBrowserImportRunService(
+            discoveries: [BrowserImportSourceDiscovery(
+                source: .chrome,
+                profiles: [BrowserImportSourceProfile(
+                    location: location,
+                    availableData: [.history]
+                )]
+            )],
+            previewResult: preview
+        )
+        let viewModel = BrowserImportViewModel(
+            destinationProfiles: [destination],
+            initialDestinationProfileID: destination.id,
+            historyDestinationAvailable: true,
+            cookieDestinationAvailable: true,
+            bookmarkDestinationAvailable: true,
+            service: service,
+            destinationProfileProvider: { [destination] in [destination] }
+        )
+        var completedResult: BrowserImportResult?
+        viewModel.onImportCompleted = { completedResult = $0 }
+        defer { viewModel.cancelPendingWork() }
+
+        viewModel.start()
+        #expect(await BrowserImportFixture.waitUntil { !viewModel.isDiscovering })
+        viewModel.advance()
+        viewModel.advance()
+        viewModel.advance()
+        #expect(await BrowserImportFixture.waitUntil { viewModel.preview != nil })
+        viewModel.advance()
+        #expect(await BrowserImportFixture.waitUntil { service.didStartImport })
+
+        viewModel.requestImportCancellation()
+
+        #expect(await BrowserImportFixture.waitUntil { service.didCancelImport })
+        #expect(await BrowserImportFixture.waitUntil { completedResult != nil })
+        #expect(!viewModel.isImporting)
+        #expect(!viewModel.isCancellingImport)
+        #expect(viewModel.result == completedResult)
+        #expect(viewModel.failure == nil)
+        #expect(completedResult?.status == .cancelled)
+        #expect(completedResult?.importedHistoryCount == 1)
+    }
+
+    @Test("closing browser import suppresses a stale completion callback")
+    @MainActor
+    func closingBrowserImportSuppressesStaleCompletion() async throws {
+        let destination = BrowserProfile(name: "Personal", isDefault: true)
+        let location = BrowserImportLocation(
+            source: .chrome,
+            profileName: "Work",
+            profileIdentifier: "Profile 7",
+            historyPath: URL(fileURLWithPath: "/fixture/Profile 7/History"),
+            cookiesPath: nil,
+            bookmarksPath: nil
+        )
+        let service = CancellationAwareBrowserImportRunService(
+            discoveries: [BrowserImportSourceDiscovery(
+                source: .chrome,
+                profiles: [BrowserImportSourceProfile(
+                    location: location,
+                    availableData: [.history]
+                )]
+            )],
+            previewResult: BrowserImportPreview(
+                history: [BrowserImportedHistoryVisit(
+                    url: "https://example.com",
+                    title: "Example",
+                    visitedAt: Date(timeIntervalSince1970: 1_700_000_000)
+                )],
+                cookies: [],
+                bookmarks: [],
+                errors: []
+            )
+        )
+        let viewModel = BrowserImportViewModel(
+            destinationProfiles: [destination],
+            initialDestinationProfileID: destination.id,
+            historyDestinationAvailable: true,
+            cookieDestinationAvailable: true,
+            bookmarkDestinationAvailable: true,
+            service: service,
+            destinationProfileProvider: { [destination] in [destination] }
+        )
+        var completedResult: BrowserImportResult?
+        viewModel.onImportCompleted = { completedResult = $0 }
+
+        viewModel.start()
+        #expect(await BrowserImportFixture.waitUntil { !viewModel.isDiscovering })
+        viewModel.advance()
+        viewModel.advance()
+        viewModel.advance()
+        #expect(await BrowserImportFixture.waitUntil { viewModel.preview != nil })
+        viewModel.advance()
+        #expect(await BrowserImportFixture.waitUntil { service.didStartImport })
+
+        viewModel.cancelPendingWork()
+
+        #expect(await BrowserImportFixture.waitUntil { service.didCancelImport })
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(completedResult == nil)
+        #expect(viewModel.result == nil)
+        #expect(!viewModel.isImporting)
+    }
+
+    @Test("browser import uncertainty stays visible and localized")
+    @MainActor
+    func browserImportUncertaintyPresentationIsLocalized() throws {
+        let localizationURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)
+        let bundle = try #require(Bundle(url: localizationURL))
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let issue = BrowserImportIssue(
+            source: .chrome,
+            profileName: "Work",
+            message: "Imported 0 of 2 cookies, with 2 that could not be confirmed by WebKit",
+            kind: .cookieBatchWrite(imported: 0, total: 2, uncertain: 2)
+        )
+
+        #expect(
+            BrowserImportWizardView.uncertainCookieMessage(count: 2, localizer: localizer)
+                == "No se pudo confirmar la escritura de 2 cookies."
+        )
+        let message = BrowserImportWizardView.localizedIssueMessage(
+            issue,
+            localizer: localizer
+        )
+        #expect(message == "Se importaron 0 de 2 cookies; WebKit no pudo confirmar 2.")
+        #expect(!message.contains("awaiting"))
+        #expect(!message.contains("Imported"))
+    }
+
     @Test("WebKit cookie store forwards imported cookies to active profile storage")
     @MainActor
     func webKitCookieStoreForwardsCookiesToActiveProfileStorage() throws {
@@ -1454,6 +1896,194 @@ struct BrowserImportSwiftTestingTests {
             .filter { $0.domain == "budget.example" }
         #expect(cookies.map(\.name) == ["first"])
         await BrowserImportFixture.removeAllData(from: dataStore)
+    }
+
+    @Test("WebKit cookie callback waits have a hard completion boundary")
+    func webKitCookieCallbackWaitIsBounded() async {
+        let start = DispatchTime.now().uptimeNanoseconds
+        let result = await Task.detached {
+            BrowserWebKitCookieImportStore.waitForCookieBatch(
+                cookieCount: 2,
+                hardTimeout: 0.05,
+                submit: { _ in }
+            )
+        }.value
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+
+        #expect(result == .timedOut(0))
+        #expect(elapsed < 0.5)
+    }
+
+    @Test("WebKit import settlement drains callbacks submitted before timeout")
+    func webKitCookieTimeoutSettlesSubmittedCallbacks() async {
+        let completedCallbacks = LockedBox(0)
+        let start = DispatchTime.now().uptimeNanoseconds
+        let result = await Task.detached {
+            BrowserWebKitCookieImportStore.waitForCookieBatch(
+                cookieCount: 2,
+                hardTimeout: 0.02,
+                settleAfterTimeout: true
+            ) { completion in
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.08) {
+                    completion()
+                    completedCallbacks.withValue { $0 += 1 }
+                    completion()
+                    completedCallbacks.withValue { $0 += 1 }
+                }
+            }
+        }.value
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+
+        #expect(result == .timedOut(2))
+        #expect(completedCallbacks.withValue { $0 } == 2)
+        #expect(elapsed >= 0.07)
+        #expect(elapsed < 0.5)
+    }
+
+    @Test("WebKit import settlement stops when callbacks never arrive")
+    func webKitCookieTimeoutSettlementIsBounded() async {
+        let start = DispatchTime.now().uptimeNanoseconds
+        let result = await Task.detached {
+            BrowserWebKitCookieImportStore.waitForCookieBatch(
+                cookieCount: 2,
+                hardTimeout: 0.02,
+                settleAfterTimeout: true,
+                settlementTimeout: 0.05,
+                submit: { _ in }
+            )
+        }.value
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+
+        #expect(result == .timedOut(0))
+        #expect(elapsed >= 0.06)
+        #expect(elapsed < 0.5)
+    }
+
+    @Test("WebKit data store lookup has a hard completion boundary")
+    func webKitDataStoreLookupIsBounded() async {
+        let start = DispatchTime.now().uptimeNanoseconds
+        let result = await Task.detached {
+            BrowserWebKitCookieImportStore.waitForDataStore(
+                hardTimeout: 0.05,
+                submit: { _ in }
+            )
+        }.value
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+
+        if case .timedOut = result {
+            #expect(elapsed < 0.5)
+        } else {
+            Issue.record("Expected the WebKit data store lookup to time out")
+        }
+    }
+
+    @Test("WebKit cancellation settles every submitted cookie callback")
+    func webKitCookieCancellationSettlesSubmittedCallbacks() async {
+        let submitted = LockedBox(false)
+        let releaseCallbacks = DispatchSemaphore(value: 0)
+        let task = Task.detached {
+            BrowserWebKitCookieImportStore.waitForCookieBatch(
+                cookieCount: 2,
+                hardTimeout: 0.5
+            ) { completion in
+                submitted.withValue { $0 = true }
+                DispatchQueue.global().async {
+                    releaseCallbacks.wait()
+                    completion()
+                    completion()
+                }
+            }
+        }
+        #expect(await BrowserImportFixture.waitUntil {
+            submitted.withValue { $0 }
+        })
+        task.cancel()
+        releaseCallbacks.signal()
+
+        let result = await task.value
+        #expect(result == .cancelled(2), "Observed callback wait result: \(result)")
+    }
+
+    @Test("browser import CLI bridge cancels stalled async work at its boundary")
+    @MainActor
+    func browserImportCLIBridgeIsBounded() async {
+        let observedCancellation = LockedBox(false)
+        let start = DispatchTime.now().uptimeNanoseconds
+        let result = await Task.detached {
+            BrowserImportSynchronousBridge.run(timeout: 0.05) {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 2_000_000)
+                }
+                observedCancellation.withValue { $0 = true }
+                return 42
+            }
+        }.value
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+
+        switch result {
+        case .timedOut(let settledResult):
+            #expect(settledResult == 42)
+        default:
+            Issue.record("Expected the bridge to retain a settled result and mark the timeout")
+        }
+        #expect(elapsed < 0.5)
+        #expect(await BrowserImportFixture.waitUntil {
+            observedCancellation.withValue { $0 }
+        })
+
+        let response = AppDelegate.browserImportTimedOutResponse((
+            success: true,
+            data: ["status": "partial", "history": "1", "cookies_uncertain": "2"]
+        ))
+        #expect(!response.success)
+        #expect(response.data["status"] == "partial")
+        #expect(response.data["history"] == "1")
+        #expect(response.data["cookies_uncertain"] == "2")
+        #expect(response.data["timed_out"] == "true")
+        #expect(response.data["cancelled"] == "true")
+        #expect(response.data["settled_after_cancellation"] == "true")
+    }
+
+    @Test("browser import CLI bridge never returns before cancelled work settles")
+    @MainActor
+    func browserImportCLIBridgeWaitsForCancellationSettlement() async {
+        let continuation = LockedBox<CheckedContinuation<Int, Never>?>(nil)
+        let returned = LockedBox(false)
+        let bridge = Task.detached {
+            let outcome = BrowserImportSynchronousBridge.run(timeout: 0.01) {
+                await withCheckedContinuation { pending in
+                    continuation.withValue { $0 = pending }
+                }
+            }
+            returned.withValue { $0 = true }
+            return outcome
+        }
+        #expect(await BrowserImportFixture.waitUntil {
+            continuation.withValue { $0 != nil }
+        })
+        try? await Task.sleep(for: .milliseconds(75))
+        #expect(!returned.withValue { $0 })
+        let pending = continuation.withValue { value in
+            defer { value = nil }
+            return value
+        }
+        pending?.resume(returning: 7)
+
+        switch await bridge.value {
+        case .timedOut(let settledResult):
+            #expect(settledResult == 7)
+        default:
+            Issue.record("Expected timeout only after cancellation settlement")
+        }
+        #expect(returned.withValue { $0 })
+    }
+
+    @Test("browser import CLI reports cancellation as failure")
+    func browserImportCLICancellationIsFailure() {
+        #expect(AppDelegate.browserImportCommandSucceeded(status: .completed))
+        #expect(AppDelegate.browserImportCommandSucceeded(status: .partial))
+        #expect(!AppDelegate.browserImportCommandSucceeded(status: .failed))
+        #expect(!AppDelegate.browserImportCommandSucceeded(status: .cancelled))
     }
 }
 
@@ -1792,6 +2422,7 @@ private final class InMemoryBrowserImportCookieStore: BrowserImportedCookieStori
 
 private struct PartiallyFailingBrowserImportCookieStore: BrowserImportedCookieStoring {
     let importedCount: Int
+    var uncertainCount = 0
 
     func saveImportedCookie(_ cookie: BrowserImportedCookie, profileID: UUID) throws {}
 
@@ -1799,6 +2430,7 @@ private struct PartiallyFailingBrowserImportCookieStore: BrowserImportedCookieSt
         throw BrowserImportedCookieBatchWriteError(
             importedCount: importedCount,
             totalCount: cookies.count,
+            uncertainCount: uncertainCount,
             detail: "Synthetic batch boundary"
         )
     }
@@ -1882,6 +2514,17 @@ private final class FailAfterBrowserImportBookmarkStore: BrowserBookmarkStoring,
     func children(of parentID: UUID?) -> [BrowserBookmark] {
         bookmarks.filter { $0.parentID == parentID }
     }
+}
+
+private struct CancellingBrowserImportBookmarkStore: BrowserBookmarkStoring {
+    func loadAll() throws -> [BrowserBookmark] { [] }
+    func save(_ bookmark: BrowserBookmark) throws { throw CancellationError() }
+    func saveBatch(_ bookmarks: [BrowserBookmark]) throws { throw CancellationError() }
+    func update(_ bookmark: BrowserBookmark) throws {}
+    func delete(id: UUID) throws {}
+    func move(id: UUID, toParent: UUID?, sortOrder: Int) throws {}
+    func search(query: String) -> [BrowserBookmark] { [] }
+    func children(of parentID: UUID?) -> [BrowserBookmark] { [] }
 }
 
 private final class InMemoryBrowserImportAuditLogger: BrowserImportAuditLogging, @unchecked Sendable {
@@ -2026,5 +2669,54 @@ private final class CancellationAwareBrowserImportService: BrowserImportServicin
     private struct CancellationState {
         var previewStarted: Bool
         var previewCancelled: Bool
+    }
+}
+
+private final class CancellationAwareBrowserImportRunService: BrowserImportServicing, @unchecked Sendable {
+    private let discoveries: [BrowserImportSourceDiscovery]
+    private let previewResult: BrowserImportPreview
+    private let importStarted = LockedBox(false)
+    private let importCancelled = LockedBox(false)
+
+    var didStartImport: Bool { importStarted.withValue { $0 } }
+    var didCancelImport: Bool { importCancelled.withValue { $0 } }
+
+    init(
+        discoveries: [BrowserImportSourceDiscovery],
+        previewResult: BrowserImportPreview
+    ) {
+        self.discoveries = discoveries
+        self.previewResult = previewResult
+    }
+
+    func discoverSources() -> [BrowserImportSourceDiscovery] {
+        discoveries
+    }
+
+    func preview(_ plan: BrowserImportPlan) throws -> BrowserImportPreview {
+        previewResult
+    }
+
+    func run(_ plan: BrowserImportPlan) throws -> BrowserImportResult {
+        importStarted.withValue { $0 = true }
+        while !Task.isCancelled {
+            Thread.sleep(forTimeInterval: 0.002)
+        }
+        importCancelled.withValue { $0 = true }
+        return BrowserImportResult(
+            runID: UUID(),
+            status: .cancelled,
+            sourceProfile: plan.sourceProfile ?? plan.source.displayName,
+            importedHistoryCount: 1,
+            importedCookieCount: 0,
+            importedBookmarkCount: 0,
+            skippedCount: 0,
+            errors: [BrowserImportIssue(
+                source: plan.source,
+                profileName: plan.sourceProfile ?? plan.source.displayName,
+                message: BrowserImportError.cancelled.localizedDescription,
+                kind: .cancelled
+            )]
+        )
     }
 }

@@ -2074,6 +2074,24 @@ final class CommandRunnerTests: XCTestCase {
         )
     }
 
+    func testBrowserImportCommandsCoverServerWorkAndCancellationSettlement() {
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: "/tmp/nonexistent.sock")
+        )
+        let options = BrowserImportCLIOptions(source: "chrome")
+        let expected = CommandRunner.browserImportSocketTimeoutSeconds
+            + CommandRunner.privilegedSocketApprovalGraceSeconds
+
+        XCTAssertEqual(
+            runner.socketClient(for: .browserImportPreview(options)).timeoutSeconds,
+            expected
+        )
+        XCTAssertEqual(
+            runner.socketClient(for: .browserImportRun(options)).timeoutSeconds,
+            expected
+        )
+    }
+
     private static func jsonObject(from text: String) throws -> [String: Any] {
         let data = Data(text.utf8)
         return try XCTUnwrap(

@@ -9,6 +9,10 @@ enum BrowserImportWizardFailure: Sendable, Equatable {
     case remoteDestination
     case destinationBusy
     case sourceChanged
+    case sourceUnavailable
+    case sourceReadFailed
+    case noImportableData
+    case cookieAccessFailed
     case operation(String)
 }
 
@@ -79,6 +83,7 @@ final class BrowserImportViewModel: ObservableObject {
     @Published private(set) var isDiscovering = false
     @Published private(set) var isPreviewing = false
     @Published private(set) var isImporting = false
+    @Published private(set) var isCancellingImport = false
 
     var onImportCompleted: ((BrowserImportResult) -> Void)?
 
@@ -87,8 +92,10 @@ final class BrowserImportViewModel: ObservableObject {
     private weak var destinationProfileManager: BrowserProfileManager?
     private var discoveryTask: Task<Void, Never>?
     private var previewTask: Task<Void, Never>?
+    private var importTask: Task<Void, Never>?
     private var discoveryGeneration: UInt = 0
     private var previewGeneration: UInt = 0
+    private var importGeneration: UInt = 0
     private var reviewedPreviewToken: String?
     private var hasStarted = false
 
@@ -202,10 +209,23 @@ final class BrowserImportViewModel: ObservableObject {
     func cancelPendingWork() {
         discoveryTask?.cancel()
         previewTask?.cancel()
+        importTask?.cancel()
+        discoveryTask = nil
+        previewTask = nil
+        importTask = nil
         discoveryGeneration &+= 1
         previewGeneration &+= 1
+        importGeneration &+= 1
         isDiscovering = false
         isPreviewing = false
+        isImporting = false
+        isCancellingImport = false
+    }
+
+    func requestImportCancellation() {
+        guard isImporting, !isCancellingImport else { return }
+        isCancellingImport = true
+        importTask?.cancel()
     }
 
     func advance() {
@@ -359,7 +379,7 @@ final class BrowserImportViewModel: ObservableObject {
                     || (error as? BrowserImportError) == .cancelled
                     || Task.isCancelled
                 await self?.applyPreviewFailure(
-                    wasCancelled ? nil : .operation(error.localizedDescription),
+                    wasCancelled ? nil : Self.presentationFailure(for: error),
                     generation: generation
                 )
             }
@@ -427,34 +447,73 @@ final class BrowserImportViewModel: ObservableObject {
         }
 
         isImporting = true
+        isCancellingImport = false
         failure = nil
+        importGeneration &+= 1
+        let generation = importGeneration
         let service = self.service
         let profileManager = destinationProfileManager
-        Task { [weak self, weak profileManager] in
+        let completion = onImportCompleted
+        let worker = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            return try service.run(plan)
+        }
+        importTask = Task { [weak self, weak profileManager] in
             defer {
                 if let reservation {
                     profileManager?.endImport(reservation)
                 }
             }
             do {
-                let importResult = try await Task.detached(priority: .userInitiated) {
-                    try service.run(plan)
-                }.value
-                guard let self else { return }
+                let importResult = try await withTaskCancellationHandler {
+                    try await worker.value
+                } onCancel: {
+                    worker.cancel()
+                }
+                guard let self, generation == self.importGeneration else { return }
                 self.result = importResult
                 self.isImporting = false
-                self.onImportCompleted?(importResult)
+                self.isCancellingImport = false
+                self.importTask = nil
+                completion?(importResult)
             } catch {
-                guard let self else { return }
+                guard let self, generation == self.importGeneration else { return }
                 if (error as? BrowserImportError) == .sourceChangedAfterPreview {
                     self.preview = nil
                     self.reviewedPreviewToken = nil
                     self.failure = .sourceChanged
                 } else {
-                    self.failure = .operation(error.localizedDescription)
+                    self.failure = Self.presentationFailure(for: error)
                 }
                 self.isImporting = false
+                self.isCancellingImport = false
+                self.importTask = nil
             }
+        }
+    }
+
+    nonisolated private static func presentationFailure(
+        for error: Error
+    ) -> BrowserImportWizardFailure? {
+        if error is CancellationError { return nil }
+        guard let importError = error as? BrowserImportError else {
+            return .operation(error.localizedDescription)
+        }
+        switch importError {
+        case .sourceChangedAfterPreview:
+            return .sourceChanged
+        case .invalidSourceFile, .sourceProfileUnavailable:
+            return .sourceUnavailable
+        case .databaseOpenFailed, .statementFailed, .sourceChangedDuringRead:
+            return .sourceReadFailed
+        case .noImportableData:
+            return .noImportableData
+        case .cookieDecryptionFailed:
+            return .cookieAccessFailed
+        case .bookmarkRootConflict:
+            return .operation(importError.localizedDescription)
+        case .cancelled:
+            return nil
         }
     }
 }

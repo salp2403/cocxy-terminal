@@ -8,6 +8,24 @@ import Testing
 
 // MARK: - Shared Test Double
 
+@MainActor
+final class MockPortForwardCompletionGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+
+    var isWaiting: Bool { continuation != nil }
+
+    func wait() async {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func resume() {
+        continuation?.resume()
+        continuation = nil
+    }
+}
+
 /// Mock port forwarder shared with the relay manager tests.
 @MainActor
 final class MockPortForwarder: PortForwarding {
@@ -18,6 +36,7 @@ final class MockPortForwarder: PortForwarding {
     var shouldThrow = false
     var shouldThrowOnCancel = false
     var currentConnectionLeaseID: UUID? = UUID()
+    var forwardCompletionGate: MockPortForwardCompletionGate?
 
     func connectionLeaseID(for profileID: UUID) -> UUID? {
         _ = profileID
@@ -27,18 +46,19 @@ final class MockPortForwarder: PortForwarding {
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
-    ) throws {
+    ) async throws {
         if shouldThrow {
             throw SSHMultiplexerError.connectionFailed("Mock forward error")
         }
         forwardedPorts.append(forward)
         forwardedProfileIDs.append(profileID)
+        await forwardCompletionGate?.wait()
     }
 
     func cancelForward(
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
-    ) throws {
+    ) async throws {
         if shouldThrowOnCancel {
             throw SSHMultiplexerError.forwardFailed("Mock cancellation error")
         }

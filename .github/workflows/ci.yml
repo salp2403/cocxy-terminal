@@ -60,6 +60,26 @@ jobs:
       - name: Privacy Audit
         run: ./scripts/run-privacy-audit.sh --app build/CocxyTerminal.app
 
+  bounded-process-containment:
+    name: Bounded Process Containment (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keep containment mandatory on both the oldest and newest current hosted macOS images.
+        os: [macos-15, macos-26]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          lfs: true
+          persist-credentials: false
+
+      - name: Test launchd process containment
+        run: ./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests
+
   trusted-bundle-audit:
     name: Full Bundle Audit (Trusted Main)
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'

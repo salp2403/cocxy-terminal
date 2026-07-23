@@ -280,4 +280,22 @@ private struct RecordingSSHCellProcessExecutor: ProcessExecutor {
     func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult {
         ProcessResult(exitCode: 0, stdout: "", stderr: "")
     }
+
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try execute(command: command, arguments: arguments)
+    }
+
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try await executeAsync(command: command, arguments: arguments)
+    }
 }

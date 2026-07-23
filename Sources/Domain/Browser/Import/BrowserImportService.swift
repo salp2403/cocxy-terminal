@@ -37,17 +37,23 @@ struct BrowserImportService: BrowserImportServicing, Sendable {
     let bookmarkStore: (any BrowserBookmarkStoring)?
     let cookieStore: (any BrowserImportedCookieStoring)?
     let auditLogger: (any BrowserImportAuditLogging)?
+    let bookmarkRootTitleFormat: String
+    let bookmarkRootTitleAliases: [String]
 
     init(
         historyStore: (any BrowserHistoryStoring)?,
         bookmarkStore: (any BrowserBookmarkStoring)?,
         cookieStore: (any BrowserImportedCookieStoring)?,
-        auditLogger: (any BrowserImportAuditLogging)? = FileBrowserImportAuditLogger()
+        auditLogger: (any BrowserImportAuditLogging)? = FileBrowserImportAuditLogger(),
+        bookmarkRootTitleFormat: String = "Imported from %@ - %@",
+        bookmarkRootTitleAliases: [String] = []
     ) {
         self.historyStore = historyStore
         self.bookmarkStore = bookmarkStore
         self.cookieStore = cookieStore
         self.auditLogger = auditLogger
+        self.bookmarkRootTitleFormat = bookmarkRootTitleFormat
+        self.bookmarkRootTitleAliases = bookmarkRootTitleAliases
     }
 
     func discoverSources() -> [BrowserImportSourceDiscovery] {
@@ -67,16 +73,22 @@ struct BrowserImportService: BrowserImportServicing, Sendable {
     }
 
     func preview(_ plan: BrowserImportPlan) throws -> BrowserImportPreview {
-        try BrowserSourceImporterFactory.importer(for: plan.source).preview(plan: plan)
+        try Task.checkCancellation()
+        let preview = try BrowserSourceImporterFactory.importer(for: plan.source).preview(plan: plan)
+        try Task.checkCancellation()
+        return preview
     }
 
     func run(_ plan: BrowserImportPlan) throws -> BrowserImportResult {
-        try BrowserImporter(
+        try Task.checkCancellation()
+        return try BrowserImporter(
             source: plan.source,
             historyStore: historyStore,
             bookmarkStore: bookmarkStore,
             cookieStore: cookieStore,
-            auditLogger: auditLogger
+            auditLogger: auditLogger,
+            bookmarkRootTitleFormat: bookmarkRootTitleFormat,
+            bookmarkRootTitleAliases: bookmarkRootTitleAliases
         ).importData(plan)
     }
 
@@ -94,5 +106,31 @@ struct BrowserImportService: BrowserImportServicing, Sendable {
             result.insert(.bookmarks)
         }
         return result
+    }
+}
+
+enum BrowserImportBookmarkRootLocalization {
+    static let key = "browser.import.bookmarks.folder"
+    static let fallback = "Imported from %@ - %@"
+
+    static func formats(
+        current: String,
+        bundle: Bundle = .main
+    ) -> [String] {
+        var formats: [String] = []
+        func append(_ format: String) {
+            guard !format.isEmpty, !formats.contains(format) else { return }
+            formats.append(format)
+        }
+
+        append(current)
+        for language in AppLocalizationResolver.supportedLanguages {
+            append(AppLocalizer(
+                languagePreference: language,
+                bundle: bundle
+            ).string(key, fallback: fallback))
+        }
+        append(fallback)
+        return formats
     }
 }

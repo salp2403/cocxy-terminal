@@ -412,6 +412,7 @@ struct RemoteConnectionView: View {
     /// Sub-panel view models created lazily and retained for the panel lifetime.
     @State private var keyManagerVM: SSHKeyManagerViewModel?
     @State private var sftpBrowserVM: SFTPBrowserViewModel?
+    @State private var isSFTPSetupUnavailable = false
 
     static let panelWidth: CGFloat = 380
     static let subPanelPickerMinimumItemWidth: CGFloat = 78
@@ -449,7 +450,18 @@ struct RemoteConnectionView: View {
             viewModel.updateLocalizer(localizer)
         }
         .onChange(of: viewModel.selectedProfileID) { _, _ in
+            sftpBrowserVM?.cancelPendingWork()
             sftpBrowserVM = nil
+            isSFTPSetupUnavailable = false
+        }
+        .onChange(of: viewModel.connectionStates) { _, _ in
+            guard let profileID = viewModel.selectedProfileID,
+                  viewModel.isConnected(profileID) else {
+                sftpBrowserVM?.cancelPendingWork()
+                sftpBrowserVM = nil
+                isSFTPSetupUnavailable = false
+                return
+            }
         }
         .sheet(isPresented: $viewModel.isEditorPresented) {
             editorSheet
@@ -786,10 +798,16 @@ struct RemoteConnectionView: View {
                         tunnelManager: viewModel.tunnelManager,
                         profileID: profileID,
                         onForwardPort: { forward, profID in
-                            try viewModel.connectionManager.forwardPort(forward, for: profID)
+                            try await viewModel.connectionManager.forwardPort(
+                                forward,
+                                for: profID
+                            )
                         },
                         onCancelForward: { forward, profID in
-                            try viewModel.connectionManager.cancelForward(forward, for: profID)
+                            try await viewModel.connectionManager.cancelForward(
+                                forward,
+                                for: profID
+                            )
                         },
                         localizer: localizer
                     )
@@ -843,6 +861,7 @@ struct RemoteConnectionView: View {
                     relayManager: relayManager,
                     localizer: localizer
                 )
+                .id(profileID)
             } else {
                 selectProfilePlaceholder(
                     icon: "point.3.connected.trianglepath.dotted",
@@ -862,6 +881,7 @@ struct RemoteConnectionView: View {
                     daemonManager: daemonManager,
                     localizer: localizer
                 )
+                .id(profileID)
             } else {
                 selectProfilePlaceholder(
                     icon: "server.rack",
@@ -888,20 +908,39 @@ struct RemoteConnectionView: View {
 
     private var sftpSubPanel: some View {
         Group {
-            if let vm = sftpBrowserVM {
+            if isSFTPSetupUnavailable {
+                VStack(spacing: 10) {
+                    Spacer()
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                    Text(localized(
+                        "remoteWorkspace.sftp.connectionUnavailable",
+                        fallback: "Reconnect this profile before using SFTP."
+                    ))
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                    .multilineTextAlignment(.center)
+                    Button {
+                        setupSFTPBrowser()
+                    } label: {
+                        Label(
+                            localized("common.retry", fallback: "Retry"),
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                    .controlSize(.small)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else if let vm = sftpBrowserVM {
                 SFTPBrowserView(viewModel: vm, localizer: localizer)
             } else if let profileID = viewModel.selectedProfileID,
-                      let profile = viewModel.profiles.first(where: { $0.id == profileID }),
-                      let executor = sftpExecutor {
+                      viewModel.isConnected(profileID),
+                      sftpExecutor != nil {
                 Color.clear.onAppear {
-                    let client = SFTPClient(executor: executor)
-                    let vm = SFTPBrowserViewModel(
-                        sftpClient: client,
-                        profile: profile,
-                        localizer: localizer
-                    )
-                    sftpBrowserVM = vm
-                    vm.loadDirectory()
+                    setupSFTPBrowser()
                 }
             } else {
                 selectProfilePlaceholder(
@@ -909,6 +948,30 @@ struct RemoteConnectionView: View {
                     text: localized("remoteWorkspace.placeholder.sftp", fallback: "Select a connected profile to browse files")
                 )
             }
+        }
+    }
+
+    private func setupSFTPBrowser() {
+        guard let profileID = viewModel.selectedProfileID,
+              viewModel.isConnected(profileID),
+              let executor = sftpExecutor else {
+            sftpBrowserVM = nil
+            isSFTPSetupUnavailable = false
+            return
+        }
+        do {
+            let client = try viewModel.connectionManager.makeSFTPClient(
+                profileID: profileID,
+                executor: executor
+            )
+            sftpBrowserVM = SFTPBrowserViewModel(
+                sftpClient: client,
+                localizer: localizer
+            )
+            isSFTPSetupUnavailable = false
+        } catch {
+            sftpBrowserVM = nil
+            isSFTPSetupUnavailable = true
         }
     }
 

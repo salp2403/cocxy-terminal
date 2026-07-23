@@ -55,12 +55,24 @@ protocol PortForwarding: AnyObject {
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
-    ) throws
+    ) async throws
 
     func cancelForward(
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
-    ) throws
+    ) async throws
+
+    func forwardPort(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws
+
+    func cancelForward(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws
 
     func openProxyTransport(
         to target: ProxyTarget,
@@ -70,6 +82,34 @@ protocol PortForwarding: AnyObject {
 }
 
 extension PortForwarding {
+    func forwardPort(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws {
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+        try await forwardPort(forward, for: profileID)
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+    }
+
+    func cancelForward(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws {
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+        try await cancelForward(forward, for: profileID)
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+    }
+
     func openProxyTransport(
         to target: ProxyTarget,
         for profileID: UUID,

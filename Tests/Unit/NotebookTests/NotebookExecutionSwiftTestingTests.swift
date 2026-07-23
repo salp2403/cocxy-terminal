@@ -33,7 +33,10 @@ struct NotebookExecutionSwiftTestingTests {
         )
 
         #expect(summary.executedCellIndices == [1, 2])
-        #expect(summary.failedCellIndex == nil)
+        #expect(
+            summary.failedCellIndex == nil,
+            "stderr: \(summary.results.first?.stderr ?? "<missing result>")"
+        )
         #expect(summary.document.cells[0] == .markdown("# Setup"))
         #expect(summary.document.cells[1].outputs == [
             NotebookCellOutput(kind: .stdout, text: "bash ok\n"),
@@ -175,7 +178,10 @@ struct NotebookExecutionSwiftTestingTests {
             sandbox: .workspace
         )
 
-        #expect(summary.failedCellIndex == nil)
+        #expect(
+            summary.failedCellIndex == nil,
+            "stderr: \(summary.results.first?.stderr ?? "<missing result>")"
+        )
         #expect(summary.results.count == 1)
         #expect(summary.results[0].exitCode == 0)
         #expect(summary.results[0].stdout == "swift-cache-ok\n")

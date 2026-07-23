@@ -162,11 +162,23 @@ struct SSHConnectionDestination: Equatable, Sendable {
 protocol ProcessExecutor: Sendable {
     func execute(command: String, arguments: [String]) throws -> ProcessResult
     func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult
     func start(command: String, arguments: [String]) throws -> any ManagedProcess
 }
 
 enum ProcessExecutorError: Error, Equatable {
     case managedProcessUnsupported
+    case outputLimitExceeded
+    case invalidTimeout
 }
 
 extension ProcessExecutor {
@@ -188,11 +200,32 @@ protocol ManagedProcess: AnyObject, Sendable {
 
 // MARK: - Process Result
 
+enum SSHPostExecutionConnectionState: Sendable, Equatable {
+    case verified
+    case unavailable
+}
+
 /// The result of executing a system process.
 struct ProcessResult: Sendable {
     let exitCode: Int32
     let stdout: String
     let stderr: String
+    let timedOut: Bool
+    let postExecutionConnectionState: SSHPostExecutionConnectionState
+
+    init(
+        exitCode: Int32,
+        stdout: String,
+        stderr: String,
+        timedOut: Bool = false,
+        postExecutionConnectionState: SSHPostExecutionConnectionState = .verified
+    ) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.timedOut = timedOut
+        self.postExecutionConnectionState = postExecutionConnectionState
+    }
 }
 
 struct SSHControlMasterIdentity: Equatable, Sendable {
@@ -221,6 +254,9 @@ enum SSHMultiplexerError: Error, Equatable, LocalizedError {
     case connectionFailed(String)
     case disconnectFailed(String)
     case forwardFailed(String)
+    case forwardTimedOut(String)
+    case forwardCleanupUnconfirmed(String)
+    case remoteCommandTimedOut(String)
     case notConnected
 
     var errorDescription: String? {
@@ -233,9 +269,15 @@ enum SSHMultiplexerError: Error, Equatable, LocalizedError {
         case .disconnectFailed(let message):
             return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? "SSH disconnect failed"
-        case .forwardFailed(let message):
+        case .forwardFailed(let message), .forwardTimedOut(let message):
             return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
                 ?? "SSH port forward failed"
+        case .forwardCleanupUnconfirmed(let message):
+            return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "SSH port forward cleanup could not be confirmed"
+        case .remoteCommandTimedOut(let message):
+            return message.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+                ?? "Remote command timed out"
         case .notConnected:
             return "SSH ControlMaster is not connected"
         }
@@ -255,26 +297,69 @@ protocol SSHMultiplexing: Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws -> SSHControlMasterIdentity
+    @discardableResult
+    func connectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> SSHControlMasterIdentity
     func newSession(profile: RemoteConnectionProfile) throws -> String
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool
     func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool
     func terminateControlMaster(_ identity: SSHControlMasterIdentity)
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws
+    func disconnectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws
+    func disconnectAsync(
+        profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws
+    func forwardPortAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws
+    func forwardPortAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws
     func cancelForward(
         _ forward: RemoteConnectionProfile.PortForward,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws
+    func cancelForwardAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws
+    func cancelForwardAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws
     func openDirectTCPTransport(
         to target: ProxyTarget,
         on profile: RemoteConnectionProfile,
         expectedControlMaster: SSHControlMasterIdentity
     ) throws -> any ProxyUpstreamTransport
+    func attestControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> SSHControlSocketAttestation
+    func verifyControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity,
+        attestation: SSHControlSocketAttestation
+    ) throws
 
     /// Executes a command on the remote host through the ControlMaster session.
     func executeRemoteCommand(
@@ -282,9 +367,46 @@ protocol SSHMultiplexing: Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> ProcessResult
+    func executeRemoteCommand(
+        _ command: String,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws -> ProcessResult
 }
 
 extension SSHMultiplexing {
+    @discardableResult
+    func connectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> SSHControlMasterIdentity {
+        try connect(profile: profile, executor: executor)
+    }
+
+    func disconnectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws {
+        try disconnect(profile: profile, executor: executor)
+    }
+
+    func forwardPortAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws {
+        try forwardPort(forward, on: profile, executor: executor)
+    }
+
+    func cancelForwardAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws {
+        try cancelForward(forward, on: profile, executor: executor)
+    }
+
     func openDirectTCPTransport(
         to target: ProxyTarget,
         on profile: RemoteConnectionProfile,
@@ -294,6 +416,22 @@ extension SSHMultiplexing {
         _ = profile
         _ = expectedControlMaster
         throw ProxyUpstreamTransportError.unavailable
+    }
+
+    func attestControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> SSHControlSocketAttestation {
+        _ = expectedControlMaster
+        throw SSHMultiplexerError.notConnected
+    }
+
+    func verifyControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity,
+        attestation: SSHControlSocketAttestation
+    ) throws {
+        _ = expectedControlMaster
+        _ = attestation
+        throw SSHMultiplexerError.notConnected
     }
 }
 
@@ -363,6 +501,8 @@ private final class AttestedProxyUpstreamTransport: ProxyUpstreamTransport, @unc
 ///     └── <profile-uuid>.sock
 /// ```
 final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
+
+    static let defaultControlCommandTimeoutSeconds: TimeInterval = 5
 
     typealias DirectTCPTransportFactory = @Sendable (
         _ controlPath: String,
@@ -449,6 +589,7 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     private var supervisedProcesses: [String: SupervisedProcessEntry] = [:]
     private let directTCPTransportFactory: DirectTCPTransportFactory
     private let controlSocketAttestationProvider: ControlSocketAttestationProvider?
+    private let controlCommandTimeoutSeconds: TimeInterval
 
     init(
         directTCPTransportFactory: @escaping DirectTCPTransportFactory = {
@@ -459,10 +600,12 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
                 expectedAttestation: expectedAttestation
             )
         },
-        controlSocketAttestationProvider: ControlSocketAttestationProvider? = nil
+        controlSocketAttestationProvider: ControlSocketAttestationProvider? = nil,
+        controlCommandTimeoutSeconds: TimeInterval = SSHMultiplexer.defaultControlCommandTimeoutSeconds
     ) {
         self.directTCPTransportFactory = directTCPTransportFactory
         self.controlSocketAttestationProvider = controlSocketAttestationProvider
+        self.controlCommandTimeoutSeconds = controlCommandTimeoutSeconds
     }
 
     deinit {
@@ -503,6 +646,7 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws -> SSHControlMasterIdentity {
+        try Task.checkCancellation()
         let destination = try destination(for: profile)
         try ensureControlPathDirectory(for: profile)
 
@@ -526,6 +670,22 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
                 currentPath: currentPath,
                 executor: executor
             )
+        }
+    }
+
+    @discardableResult
+    func connectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> SSHControlMasterIdentity {
+        let operation = Task.detached(priority: .userInitiated) { [self] in
+            try Task.checkCancellation()
+            return try connect(profile: profile, executor: executor)
+        }
+        return try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
         }
     }
 
@@ -588,6 +748,7 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         }
 
         for _ in 0..<50 {
+            try Task.checkCancellation()
             let childProcessID = Self.supervisedChildProcessID(
                 from: process.diagnosticOutput
             )
@@ -666,9 +827,16 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
             "--", destination.value,
         ])
 
-        let result = try await executor.executeAsync(
-            command: "/usr/bin/ssh", arguments: arguments
+        let result = try await executor.executeControlAsync(
+            command: "/usr/bin/ssh",
+            arguments: arguments,
+            timeoutSeconds: controlCommandTimeoutSeconds
         )
+        guard !result.timedOut else {
+            throw SSHMultiplexerError.connectionFailed(
+                "SSH ControlMaster health check timed out"
+            )
+        }
         return result.exitCode == 0
     }
 
@@ -729,6 +897,63 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         }
     }
 
+    func disconnectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws {
+        let operation = Task.detached(priority: .userInitiated) { [self] in
+            try disconnect(profile: profile, executor: executor)
+        }
+        try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
+    func disconnectAsync(
+        profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        guard expectedControlMaster.controlPath == controlPath(for: profile) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        let operation = Task.detached(priority: .userInitiated) { [self] in
+            try Task.checkCancellation()
+            try disconnect(
+                expectedControlMaster: expectedControlMaster,
+                executor: executor
+            )
+        }
+        try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
+    }
+
+    private func disconnect(
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) throws {
+        try withLifecycleLock(
+            controlPath: expectedControlMaster.controlPath,
+            executor: executor
+        ) {
+            guard supervisedControlMasterIdentity(
+                controlPath: expectedControlMaster.controlPath
+            ) == expectedControlMaster,
+            isControlMasterProcessAlive(expectedControlMaster) else {
+                throw SSHMultiplexerError.notConnected
+            }
+            try terminateAndWaitForControlMaster(
+                expectedControlMaster,
+                failureMessage: "SSH ControlMaster did not terminate"
+            )
+        }
+    }
+
     // MARK: - Port Forwarding
 
     /// Dynamically adds a port forward to an active ControlMaster session.
@@ -739,18 +964,51 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
-        let destination = try destination(for: profile)
-        let forwardArgs = try forwardArguments(for: forward)
-        var arguments = buildBaseArguments(for: profile)
-        arguments.append(contentsOf: [
-            "-O", "forward",
-            "-o", "ControlPath=\(controlPath(for: profile))",
-        ] + forwardArgs + ["--", destination.value])
+        let arguments = try forwardControlArguments(
+            operation: "forward",
+            forward: forward,
+            profile: profile
+        )
+        let result = try executor.executeControl(
+            command: "/usr/bin/ssh",
+            arguments: arguments,
+            timeoutSeconds: controlCommandTimeoutSeconds
+        )
+        try validateForwardControlResult(result, operation: "request")
+    }
 
-        let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
-        guard result.exitCode == 0 else {
-            throw SSHMultiplexerError.forwardFailed(result.stderr)
-        }
+    func forwardPortAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws {
+        let arguments = try forwardControlArguments(
+            operation: "forward",
+            forward: forward,
+            profile: profile
+        )
+        let result = try await executor.executeControlAsync(
+            command: "/usr/bin/ssh",
+            arguments: arguments,
+            timeoutSeconds: controlCommandTimeoutSeconds
+        )
+        try validateForwardControlResult(result, operation: "request")
+    }
+
+    func forwardPortAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        try await performExactForwardControlAsync(
+            operation: "forward",
+            resultOperation: "request",
+            forward: forward,
+            profile: profile,
+            expectedControlMaster: expectedControlMaster,
+            executor: executor
+        )
     }
 
     /// Cancels a port forward on an active ControlMaster session.
@@ -761,17 +1019,94 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
-        let destination = try destination(for: profile)
-        let forwardArgs = try forwardArguments(for: forward)
-        var arguments = buildBaseArguments(for: profile)
-        arguments.append(contentsOf: [
-            "-O", "cancel",
-            "-o", "ControlPath=\(controlPath(for: profile))",
-        ] + forwardArgs + ["--", destination.value])
+        let arguments = try forwardControlArguments(
+            operation: "cancel",
+            forward: forward,
+            profile: profile
+        )
+        let result = try executor.executeControl(
+            command: "/usr/bin/ssh",
+            arguments: arguments,
+            timeoutSeconds: controlCommandTimeoutSeconds
+        )
+        try validateForwardControlResult(result, operation: "cancellation")
+    }
 
-        let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
-        guard result.exitCode == 0 else {
-            throw SSHMultiplexerError.forwardFailed(result.stderr)
+    func cancelForwardAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws {
+        let arguments = try forwardControlArguments(
+            operation: "cancel",
+            forward: forward,
+            profile: profile
+        )
+        let result = try await executor.executeControlAsync(
+            command: "/usr/bin/ssh",
+            arguments: arguments,
+            timeoutSeconds: controlCommandTimeoutSeconds
+        )
+        try validateForwardControlResult(result, operation: "cancellation")
+    }
+
+    func cancelForwardAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        try await performExactForwardControlAsync(
+            operation: "cancel",
+            resultOperation: "cancellation",
+            forward: forward,
+            profile: profile,
+            expectedControlMaster: expectedControlMaster,
+            executor: executor
+        )
+    }
+
+    private func performExactForwardControlAsync(
+        operation: String,
+        resultOperation: String,
+        forward: RemoteConnectionProfile.PortForward,
+        profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        guard expectedControlMaster.controlPath == controlPath(for: profile) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        let task = Task.detached(priority: .userInitiated) { [self] in
+            try Task.checkCancellation()
+            try withLifecycleLock(
+                controlPath: expectedControlMaster.controlPath,
+                executor: executor
+            ) {
+                try Task.checkCancellation()
+                let attestation = try attestControlMaster(expectedControlMaster)
+                let arguments = try forwardControlArguments(
+                    operation: operation,
+                    forward: forward,
+                    profile: profile
+                )
+                let result = try executor.executeControl(
+                    command: "/usr/bin/ssh",
+                    arguments: arguments,
+                    timeoutSeconds: controlCommandTimeoutSeconds
+                )
+                try validateForwardControlResult(result, operation: resultOperation)
+                try Task.checkCancellation()
+                try verifyControlMaster(
+                    expectedControlMaster,
+                    attestation: attestation
+                )
+            }
+        }
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
         }
     }
 
@@ -831,18 +1166,50 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         )
     }
 
+    func attestControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> SSHControlSocketAttestation {
+        guard supervisedControlMasterIdentity(
+            controlPath: expectedControlMaster.controlPath
+        ) == expectedControlMaster,
+        isControlMasterProcessAlive(expectedControlMaster) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        let attestation = try directTCPControlSocketAttestation(
+            at: expectedControlMaster.controlPath
+        )
+        guard attestation.peerProcessID == expectedControlMaster.processID,
+              bindOrVerifyControlSocketAttestation(
+                  attestation,
+                  expectedControlMaster: expectedControlMaster
+              ) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        return attestation
+    }
+
+    func verifyControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity,
+        attestation: SSHControlSocketAttestation
+    ) throws {
+        try verifyDirectTCPControlSocket(
+            expectedControlMaster: expectedControlMaster,
+            expectedAttestation: attestation
+        )
+    }
+
     // MARK: - Remote Command Execution
 
     /// Executes a command on the remote host through the ControlMaster session.
     ///
-    /// Reuses the existing multiplexed connection to avoid opening a new TCP
-    /// session. An option boundary precedes the destination so OpenSSH cannot
-    /// reinterpret it as local configuration.
+    /// Reuses the existing multiplexed connection through Cocxy's helper. The
+    /// helper validates `LOCAL_PEERPID` on the connected Unix descriptor before
+    /// it sends the command or standard-stream descriptors to the master.
     ///
     /// - Parameters:
     ///   - command: The shell command to run on the remote host.
     ///   - profile: The connection profile whose ControlMaster to use.
-    ///   - executor: The process executor for running SSH.
+    ///   - executor: The bounded process executor for running the MUX helper.
     /// - Returns: The result of the remote command execution.
     /// - Throws: `SSHMultiplexerError.invalidDestination` for malformed destinations,
     ///   or `SSHMultiplexerError.connectionFailed` if the command fails to execute.
@@ -851,19 +1218,67 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> ProcessResult {
-        let destination = try destination(for: profile)
-        var arguments = buildBaseArguments(for: profile)
-        arguments.append(contentsOf: [
-            "-o", "ControlMaster=no",
-            "-o", "ControlPath=\(controlPath(for: profile))",
-            "--",
-            destination.value,
+        _ = try destination(for: profile)
+        let path = controlPath(for: profile)
+        guard let identity = supervisedControlMasterIdentity(controlPath: path) else {
+            throw SSHMultiplexerError.notConnected
+        }
+        return try await executeRemoteCommand(
             command,
-        ])
+            on: profile,
+            expectedControlMaster: identity,
+            executor: executor
+        )
+    }
 
-        return try await executor.executeAsync(
-            command: "/usr/bin/ssh",
+    func executeRemoteCommand(
+        _ command: String,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws -> ProcessResult {
+        _ = try destination(for: profile)
+        let path = controlPath(for: profile)
+        guard expectedControlMaster.controlPath == path else {
+            throw SSHMultiplexerError.notConnected
+        }
+        let attestation = try attestControlMaster(expectedControlMaster)
+        let helperURL = Bundle.main.executableURL
+            ?? URL(fileURLWithPath: CommandLine.arguments.first ?? "")
+        guard helperURL.path.first == "/" else {
+            throw SSHMultiplexerError.connectionFailed(
+                "The verified SSH command helper is unavailable"
+            )
+        }
+        let arguments: [String]
+        do {
+            arguments = try SFTPMuxSessionArgumentContract.arguments(
+                controlPath: path,
+                attestation: attestation,
+                command: command
+            )
+        } catch {
+            throw SSHMultiplexerError.connectionFailed(
+                "The remote command exceeds the safe execution boundary"
+            )
+        }
+        let result = try await executor.executeAsync(
+            command: helperURL.path,
             arguments: arguments
+        )
+        let connectionState: SSHPostExecutionConnectionState
+        do {
+            try verifyControlMaster(expectedControlMaster, attestation: attestation)
+            connectionState = result.postExecutionConnectionState
+        } catch {
+            connectionState = .unavailable
+        }
+        return ProcessResult(
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            timedOut: result.timedOut,
+            postExecutionConnectionState: connectionState
         )
     }
 
@@ -881,13 +1296,51 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
             "-o", "ControlPath=\(controlPath)",
             "--", destination.value,
         ])
-        let result = try executor.execute(command: "/usr/bin/ssh", arguments: arguments)
+        let result = try executor.executeControl(
+            command: "/usr/bin/ssh",
+            arguments: arguments,
+            timeoutSeconds: controlCommandTimeoutSeconds
+        )
+        guard !result.timedOut else {
+            throw SSHMultiplexerError.connectionFailed(
+                "SSH ControlMaster check timed out"
+            )
+        }
         guard result.exitCode == 0 else { return nil }
         let output = result.stdout + "\n" + result.stderr
         guard let processID = Self.controlMasterProcessID(from: output) else {
             return nil
         }
         return SSHControlMasterIdentity(processID: processID, controlPath: controlPath)
+    }
+
+    private func forwardControlArguments(
+        operation: String,
+        forward: RemoteConnectionProfile.PortForward,
+        profile: RemoteConnectionProfile
+    ) throws -> [String] {
+        let destination = try destination(for: profile)
+        let forwardArgs = try forwardArguments(for: forward)
+        var arguments = buildBaseArguments(for: profile)
+        arguments.append(contentsOf: [
+            "-O", operation,
+            "-o", "ControlPath=\(controlPath(for: profile))",
+        ] + forwardArgs + ["--", destination.value])
+        return arguments
+    }
+
+    private func validateForwardControlResult(
+        _ result: ProcessResult,
+        operation: String
+    ) throws {
+        guard !result.timedOut else {
+            throw SSHMultiplexerError.forwardTimedOut(
+                "SSH port forward \(operation) timed out"
+            )
+        }
+        guard result.exitCode == 0 else {
+            throw SSHMultiplexerError.forwardFailed(result.stderr)
+        }
     }
 
     private func retireExistingControlMaster(
@@ -1535,35 +1988,68 @@ private final class SystemManagedProcess: ManagedProcess, @unchecked Sendable {
     }
 }
 
+private final class ProcessExecutionCancellationState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var cancellationRequested = false
+
+    func cancel() {
+        lock.lock()
+        cancellationRequested = true
+        lock.unlock()
+    }
+
+    var isCancellationRequested: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancellationRequested
+    }
+}
+
 /// Production implementation that runs real system processes.
 struct SystemProcessExecutor: ProcessExecutor {
+    static let defaultAsyncTimeoutSeconds: TimeInterval = 30 * 60
+    static let maximumRetainedBytesPerStream = 4 * 1_024 * 1_024
 
     /// Background queue for async process execution.
     private static let processQueue = DispatchQueue(
         label: "com.cocxy.process-executor",
-        qos: .userInitiated
+        qos: .userInitiated,
+        attributes: .concurrent
     )
 
+    private let asyncTimeoutSeconds: TimeInterval
+    private let maximumRetainedBytesPerStream: Int
+
+    init(
+        asyncTimeoutSeconds: TimeInterval = Self.defaultAsyncTimeoutSeconds,
+        maximumRetainedBytesPerStream: Int = Self.maximumRetainedBytesPerStream
+    ) {
+        self.asyncTimeoutSeconds = asyncTimeoutSeconds
+        self.maximumRetainedBytesPerStream = maximumRetainedBytesPerStream
+    }
+
     func execute(command: String, arguments: [String]) throws -> ProcessResult {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: command)
-        process.arguments = arguments
+        try executeBounded(
+            command: command,
+            arguments: arguments,
+            timeoutSeconds: nil,
+            cancellationRequested: { false }
+        )
+    }
 
-        let stdoutPipe = Pipe()
-        let stderrPipe = Pipe()
-        process.standardOutput = stdoutPipe
-        process.standardError = stderrPipe
-
-        try process.run()
-        process.waitUntilExit()
-
-        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-
-        return ProcessResult(
-            exitCode: process.terminationStatus,
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? ""
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult {
+        guard timeoutSeconds.isFinite, timeoutSeconds > 0 else {
+            throw ProcessExecutorError.invalidTimeout
+        }
+        return try executeBounded(
+            command: command,
+            arguments: arguments,
+            timeoutSeconds: timeoutSeconds,
+            cancellationRequested: { false }
         )
     }
 
@@ -1572,34 +2058,83 @@ struct SystemProcessExecutor: ProcessExecutor {
     }
 
     func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult {
-        try await withCheckedThrowingContinuation { continuation in
-            Self.processQueue.async {
-                do {
-                    let process = Process()
-                    process.executableURL = URL(fileURLWithPath: command)
-                    process.arguments = arguments
+        try await executeAsyncBounded(
+            command: command,
+            arguments: arguments,
+            timeoutSeconds: asyncTimeoutSeconds
+        )
+    }
 
-                    let stdoutPipe = Pipe()
-                    let stderrPipe = Pipe()
-                    process.standardOutput = stdoutPipe
-                    process.standardError = stderrPipe
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        guard timeoutSeconds.isFinite, timeoutSeconds > 0 else {
+            throw ProcessExecutorError.invalidTimeout
+        }
+        return try await executeAsyncBounded(
+            command: command,
+            arguments: arguments,
+            timeoutSeconds: timeoutSeconds
+        )
+    }
 
-                    try process.run()
-                    process.waitUntilExit()
-
-                    let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-                    let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-
-                    let result = ProcessResult(
-                        exitCode: process.terminationStatus,
-                        stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-                        stderr: String(data: stderrData, encoding: .utf8) ?? ""
-                    )
-                    continuation.resume(returning: result)
-                } catch {
-                    continuation.resume(throwing: error)
+    private func executeAsyncBounded(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        try Task.checkCancellation()
+        let cancellation = ProcessExecutionCancellationState()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                Self.processQueue.async {
+                    do {
+                        continuation.resume(returning: try executeBounded(
+                            command: command,
+                            arguments: arguments,
+                            timeoutSeconds: timeoutSeconds,
+                            cancellationRequested: { cancellation.isCancellationRequested }
+                        ))
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
+        } onCancel: {
+            cancellation.cancel()
         }
+    }
+
+    private func executeBounded(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval?,
+        cancellationRequested: @escaping @Sendable () -> Bool
+    ) throws -> ProcessResult {
+        let result = try BoundedProcessRunner(
+            maximumRetainedBytesPerStream: maximumRetainedBytesPerStream,
+            observesTaskCancellation: false,
+            externalCancellationRequested: cancellationRequested
+        ).run(
+            executableURL: URL(fileURLWithPath: command),
+            arguments: arguments,
+            workingDirectory: URL(
+                fileURLWithPath: FileManager.default.currentDirectoryPath,
+                isDirectory: true
+            ),
+            timeoutSeconds: timeoutSeconds,
+            timeoutDiagnostic: timeoutSeconds == nil ? nil : "SSH command timed out."
+        )
+        guard !result.stdoutWasTruncated, !result.stderrWasTruncated else {
+            throw ProcessExecutorError.outputLimitExceeded
+        }
+        return ProcessResult(
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            timedOut: result.timedOut
+        )
     }
 }

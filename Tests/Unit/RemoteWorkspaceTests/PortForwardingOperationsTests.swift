@@ -11,7 +11,7 @@ struct PortForwardingOperationsTests {
     }
 
     @Test("Failed SSH activation is never published as an active tunnel")
-    @MainActor func failedAddRollsBackUIState() {
+    @MainActor func failedAddRollsBackUIState() async {
         let manager = SSHTunnelManager()
         let profileID = UUID()
         let forward = RemoteConnectionProfile.PortForward.local(
@@ -19,8 +19,8 @@ struct PortForwardingOperationsTests {
             remotePort: 80
         )
 
-        #expect(throws: TestFailure.self) {
-            try PortForwardingOperations.add(
+        await #expect(throws: TestFailure.self) {
+            try await PortForwardingOperations.add(
                 forward,
                 profileID: profileID,
                 to: manager
@@ -32,7 +32,7 @@ struct PortForwardingOperationsTests {
     }
 
     @Test("Failed SSH cancellation keeps the tunnel visible for retry")
-    @MainActor func failedRemoveRetainsUIState() throws {
+    @MainActor func failedRemoveRetainsUIState() async throws {
         let manager = SSHTunnelManager()
         let profileID = UUID()
         let tunnel = manager.addTunnel(
@@ -40,14 +40,14 @@ struct PortForwardingOperationsTests {
             for: profileID
         )
 
-        #expect(throws: TestFailure.self) {
-            try PortForwardingOperations.remove(tunnel, from: manager) {
+        await #expect(throws: TestFailure.self) {
+            try await PortForwardingOperations.remove(tunnel, from: manager) {
                 throw TestFailure.rejected
             }
         }
         #expect(manager.listTunnels(for: profileID).map(\.id) == [tunnel.id])
 
-        try PortForwardingOperations.remove(tunnel, from: manager) {}
+        try await PortForwardingOperations.remove(tunnel, from: manager) {}
         #expect(manager.listTunnels(for: profileID).isEmpty)
     }
 }

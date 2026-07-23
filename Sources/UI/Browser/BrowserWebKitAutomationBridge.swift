@@ -324,6 +324,60 @@ enum BrowserWebKitCookieImportError: LocalizedError {
     }
 }
 
+enum BrowserCookieBatchWaitResult: Equatable {
+    case completed(Int)
+    case timedOut(Int)
+    case cancelled(Int)
+}
+
+private final class BrowserCookieBatchCompletionState: @unchecked Sendable {
+    let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var completedCount = 0
+
+    func completeOne() {
+        lock.lock()
+        completedCount += 1
+        lock.unlock()
+        semaphore.signal()
+    }
+
+    func snapshot() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return completedCount
+    }
+}
+
+enum BrowserWebsiteDataStoreWaitResult {
+    case completed(WKWebsiteDataStore)
+    case timedOut
+    case cancelled
+}
+
+private final class BrowserWebsiteDataStoreCompletionState: @unchecked Sendable {
+    let semaphore = DispatchSemaphore(value: 0)
+    private let lock = NSLock()
+    private var value: WKWebsiteDataStore?
+
+    func complete(_ value: WKWebsiteDataStore) {
+        lock.lock()
+        guard self.value == nil else {
+            lock.unlock()
+            return
+        }
+        self.value = value
+        lock.unlock()
+        semaphore.signal()
+    }
+
+    func snapshot() -> WKWebsiteDataStore? {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 final class BrowserWebKitCookieImportStore: BrowserImportedCookieStoring, @unchecked Sendable {
     @MainActor
     private enum DataStoreRegistry {
@@ -357,6 +411,7 @@ final class BrowserWebKitCookieImportStore: BrowserImportedCookieStoring, @unche
 
     func saveImportedCookies(_ cookies: [BrowserImportedCookie], profileID: UUID) throws {
         guard !cookies.isEmpty else { return }
+        guard !Task.isCancelled else { throw BrowserImportError.cancelled }
         if cookies.count == 1,
            let result = viewModelProvider()?.automationBridge.importCookie(
                cookies[0],
@@ -371,22 +426,47 @@ final class BrowserWebKitCookieImportStore: BrowserImportedCookieStoring, @unche
                     totalCount: totalCount,
                     detail: message
                 )
+            case .indeterminate(
+                let importedCount,
+                let totalCount,
+                let uncertainCount,
+                let message
+            ):
+                throw BrowserImportedCookieBatchWriteError(
+                    importedCount: importedCount,
+                    totalCount: totalCount,
+                    uncertainCount: uncertainCount,
+                    detail: message
+                )
             case .failure(let message): throw BrowserWebKitCookieImportError.failed(message)
             }
         }
 
-        switch Self.importCookies(
+        let result = Self.importCookies(
             cookies,
             profileID: profileID,
             timeout: timeout,
             batchSize: batchSize
-        ) {
+        )
+        switch result {
         case .success:
             return
         case .partial(let importedCount, let totalCount, let message):
             throw BrowserImportedCookieBatchWriteError(
                 importedCount: importedCount,
                 totalCount: totalCount,
+                detail: message
+            )
+        case .indeterminate(
+            let importedCount,
+            let totalCount,
+            let uncertainCount,
+            let message
+        ):
+            throw BrowserImportedCookieBatchWriteError(
+                importedCount: importedCount,
+                totalCount: totalCount,
+                uncertainCount: uncertainCount,
                 detail: message
             )
         case .failure(let message):
@@ -416,43 +496,80 @@ final class BrowserWebKitCookieImportStore: BrowserImportedCookieStoring, @unche
             return .failure(BrowserWebKitCookieImportError.invalidCookie.localizedDescription)
         }
         guard !cookies.isEmpty else { return .success }
-
-        final class Box: @unchecked Sendable {
-            var dataStore: WKWebsiteDataStore?
-        }
-        let box = Box()
-        DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                box.dataStore = DataStoreRegistry.store(for: profileID)
-            }
+        guard !Task.isCancelled else {
+            return .failure(BrowserImportError.cancelled.localizedDescription)
         }
 
-        let deadline = Date().addingTimeInterval(max(timeout, 0))
-        let boundedBatchSize = min(max(batchSize, 1), 512)
-        var completedCount = 0
-        while completedCount < cookies.count {
-            let upperBound = min(completedCount + boundedBatchSize, cookies.count)
-            let batch = Array(cookies[completedCount..<upperBound])
-            let semaphore = DispatchSemaphore(value: 0)
-            DispatchQueue.main.async {
-                guard let store = box.dataStore?.httpCookieStore else {
-                    semaphore.signal()
-                    return
-                }
-                var remaining = batch.count
-                for cookie in batch {
-                    store.setCookie(cookie) {
-                        remaining -= 1
-                        if remaining == 0 { semaphore.signal() }
+        let operationTimeout = timeout.isFinite ? max(timeout, 0) : 0
+        let operationDeadline = monotonicDeadline(after: operationTimeout)
+        let batchCompletionTimeout = timeout.isFinite
+            ? min(max(timeout, 1), 30)
+            : 3
+        let dataStore: WKWebsiteDataStore
+        switch waitForDataStore(
+            hardTimeout: batchCompletionTimeout,
+            submit: { completion in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        completion(DataStoreRegistry.store(for: profileID))
                     }
                 }
             }
-            semaphore.wait()
-            guard box.dataStore != nil else {
-                return .failure("WebKit cookie storage became unavailable")
+        ) {
+        case .completed(let value):
+            dataStore = value
+        case .timedOut:
+            return .failure("Timed out while opening WebKit cookie storage")
+        case .cancelled:
+            return .failure(BrowserImportError.cancelled.localizedDescription)
+        }
+        let boundedBatchSize = min(max(batchSize, 1), 512)
+        var completedCount = 0
+        while completedCount < cookies.count {
+            guard !Task.isCancelled else {
+                return .partial(
+                    importedCount: completedCount,
+                    totalCount: cookies.count,
+                    message: BrowserImportError.cancelled.localizedDescription
+                )
             }
-            completedCount = upperBound
-            if completedCount < cookies.count, Date() >= deadline {
+            let upperBound = min(completedCount + boundedBatchSize, cookies.count)
+            let batch = Array(cookies[completedCount..<upperBound])
+            let waitResult = waitForCookieBatch(
+                cookieCount: batch.count,
+                hardTimeout: batchCompletionTimeout,
+                settleAfterTimeout: true
+            ) { completion in
+                DispatchQueue.main.async {
+                    for cookie in batch {
+                        dataStore.httpCookieStore.setCookie(
+                            cookie,
+                            completionHandler: completion
+                        )
+                    }
+                }
+            }
+            let completedInBatch: Int
+            switch waitResult {
+            case .completed(let count):
+                completedInBatch = count
+            case .timedOut(let count):
+                return .indeterminate(
+                    importedCount: completedCount + count,
+                    totalCount: cookies.count,
+                    uncertainCount: batch.count - count,
+                    message: BrowserWebKitCookieImportError.timedOut.localizedDescription
+                )
+            case .cancelled(let count):
+                return .partial(
+                    importedCount: completedCount + count,
+                    totalCount: cookies.count,
+                    message: BrowserImportError.cancelled.localizedDescription
+                )
+            }
+            completedCount += completedInBatch
+            if completedCount < cookies.count,
+               DispatchTime.now().uptimeNanoseconds >= operationDeadline {
                 return .partial(
                     importedCount: completedCount,
                     totalCount: cookies.count,
@@ -461,6 +578,80 @@ final class BrowserWebKitCookieImportStore: BrowserImportedCookieStoring, @unche
             }
         }
         return .success
+    }
+
+    static func waitForDataStore(
+        hardTimeout: TimeInterval,
+        submit: (@escaping @Sendable (WKWebsiteDataStore) -> Void) -> Void
+    ) -> BrowserWebsiteDataStoreWaitResult {
+        let state = BrowserWebsiteDataStoreCompletionState()
+        submit { state.complete($0) }
+        let safeTimeout = hardTimeout.isFinite ? max(hardTimeout, 0) : 0
+        let deadline = monotonicDeadline(after: safeTimeout)
+
+        while true {
+            if let value = state.snapshot() { return .completed(value) }
+            if Task.isCancelled { return .cancelled }
+            let now = DispatchTime.now().uptimeNanoseconds
+            if now >= deadline { return .timedOut }
+            let waitNanoseconds = min(deadline - now, 25_000_000)
+            _ = state.semaphore.wait(
+                timeout: DispatchTime(uptimeNanoseconds: now + waitNanoseconds)
+            )
+        }
+    }
+
+    static func waitForCookieBatch(
+        cookieCount: Int,
+        hardTimeout: TimeInterval,
+        settleAfterTimeout: Bool = false,
+        settlementTimeout: TimeInterval = 5,
+        submit: (@escaping @Sendable () -> Void) -> Void
+    ) -> BrowserCookieBatchWaitResult {
+        guard cookieCount > 0 else { return .completed(0) }
+        let state = BrowserCookieBatchCompletionState()
+        submit { state.completeOne() }
+        let safeTimeout = hardTimeout.isFinite ? max(hardTimeout, 0) : 0
+        let deadline = monotonicDeadline(after: safeTimeout)
+        let safeSettlementTimeout = settlementTimeout.isFinite
+            ? max(settlementTimeout, 0)
+            : 0
+        var cancellationObserved = Task.isCancelled
+        var boundaryResult: BrowserCookieBatchWaitResult?
+        var settlementDeadline: UInt64?
+
+        while true {
+            let completed = min(state.snapshot(), cookieCount)
+            cancellationObserved = cancellationObserved || Task.isCancelled
+            if completed == cookieCount {
+                if cancellationObserved { return .cancelled(completed) }
+                if boundaryResult != nil { return .timedOut(completed) }
+                return .completed(completed)
+            }
+            let now = DispatchTime.now().uptimeNanoseconds
+            if boundaryResult == nil, now >= deadline {
+                let timedOut = BrowserCookieBatchWaitResult.timedOut(completed)
+                guard settleAfterTimeout else { return timedOut }
+                boundaryResult = timedOut
+                settlementDeadline = monotonicDeadline(after: safeSettlementTimeout)
+            }
+            if let settlementDeadline, now >= settlementDeadline {
+                return .timedOut(completed)
+            }
+            let nextDeadline = settlementDeadline ?? deadline
+            let waitNanoseconds = min(nextDeadline - now, 25_000_000)
+            _ = state.semaphore.wait(
+                timeout: DispatchTime(uptimeNanoseconds: now + waitNanoseconds)
+            )
+        }
+    }
+
+    private static func monotonicDeadline(after seconds: TimeInterval) -> UInt64 {
+        let now = DispatchTime.now().uptimeNanoseconds
+        guard seconds > 0 else { return now }
+        let maximumSeconds = Double(UInt64.max - now) / 1_000_000_000
+        let boundedSeconds = min(seconds, maximumSeconds)
+        return now + UInt64(boundedSeconds * 1_000_000_000)
     }
 
     fileprivate static func httpCookie(from imported: BrowserImportedCookie) -> HTTPCookie? {

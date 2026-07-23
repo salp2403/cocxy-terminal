@@ -70,7 +70,7 @@ struct ProjectTemplateHookRunner {
         phase: ProjectTemplateHookPhase,
         workingDirectory: URL
     ) throws -> ProjectTemplateHookExecution {
-        let result = try BoundedProcessRunner(
+        let result = try LaunchdProcessBrokerClient(
             maximumRetainedBytesPerStream: retainedBytesPerStream
         ).run(
             executableURL: URL(fileURLWithPath: "/usr/bin/env"),

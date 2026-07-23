@@ -111,7 +111,11 @@ struct RelayControlView: View {
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
-                Button(action: { relayManager.closeChannel(channelID: channel.id) }) {
+                Button {
+                    Task {
+                        await relayManager.closeChannel(channelID: channel.id)
+                    }
+                } label: {
                     Image(systemName: "xmark.circle")
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay0))

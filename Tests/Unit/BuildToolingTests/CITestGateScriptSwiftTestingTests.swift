@@ -2,6 +2,7 @@
 // CITestGateScriptSwiftTestingTests.swift - Local/CI test gate drift checks.
 
 import Foundation
+import Dispatch
 import CryptoKit
 import Testing
 
@@ -18,6 +19,13 @@ struct CITestGateScriptSwiftTestingTests {
         )
         let serialScript = try String(
             contentsOf: root.appendingPathComponent("scripts/run-swift-testing-serial.sh"),
+            encoding: .utf8
+        )
+        let filteredScriptURL = root.appendingPathComponent(
+            "scripts/run-filtered-swift-testing.sh"
+        )
+        let filteredScript = try String(
+            contentsOf: filteredScriptURL,
             encoding: .utf8
         )
         let ci = try String(
@@ -42,8 +50,135 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
         #expect(serialScript.contains("CocxyTerminal-SwiftTesting.json"))
         #expect(!serialScript.contains("mapfile"))
+        #expect(FileManager.default.isExecutableFile(atPath: filteredScriptURL.path))
+        #expect(filteredScript.contains("matching_test_count == 0"))
+        #expect(filteredScript.contains("filter discovered zero tests"))
         #expect(ci.contains("./scripts/run-tests.sh"))
         #expect(pullRequestTemplate.contains("`./scripts/run-tests.sh` passes locally"))
+    }
+
+    @Test("bounded process containment uses current mandatory runners and rejects empty filters")
+    func boundedProcessContainmentUsesCurrentRunnerAndNonemptyFilter() throws {
+        let ci = try String(
+            contentsOf: repositoryRoot().appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let jobStart = try #require(ci.range(of: "  bounded-process-containment:"))
+        let nextJob = try #require(
+            ci.range(of: "  trusted-bundle-audit:", range: jobStart.upperBound..<ci.endIndex)
+        )
+        let job = String(ci[jobStart.lowerBound..<nextJob.lowerBound])
+
+        #expect(job.contains("runs-on: ${{ matrix.os }}"))
+        #expect(job.contains("os: [macos-15, macos-26]"))
+        #expect(job.contains("fail-fast: false"))
+        #expect(job.contains("timeout-minutes: 20"))
+        #expect(job.contains("persist-credentials: false"))
+        #expect(!job.contains("macos-14"))
+        #expect(!job.contains("continue-on-error"))
+        #expect(job.contains(
+            "./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests"
+        ))
+        #expect(!job.contains("swift test --filter"))
+        #expect(!job.contains("COCXYCORE_DEPLOY_KEY"))
+        #expect(!job.contains("repository: salp2403/cocxycore"))
+    }
+
+    @Test("filtered Swift Testing gate exits nonzero when discovery finds no match")
+    func filteredGateRejectsEmptyDiscovery() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' 'CocxyTerminalTests.OtherSuite/unrelated()'
+              exit 0
+            fi
+            exit 0
+            """,
+            filter: "MissingSuite"
+        )
+
+        #expect(result.terminationStatus != 0)
+        #expect(result.stderr.contains("filter discovered zero tests"))
+    }
+
+    @Test("filtered Swift Testing gate discovers and executes matching tests")
+    func filteredGateDiscoversAndExecutesMatchingTests() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            printf '%s\n' "$*" >> "$FAKE_SWIFT_CALL_LOG"
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' \
+                'CocxyTerminalTests.OtherSuite/unrelated()' \
+                'CocxyTerminalTests.FilteredSuite/matching()'
+              exit 0
+            fi
+            if [ "$1" = "test" ]; then
+              printf '%s\n' 'synthetic filtered execution passed'
+              exit 0
+            fi
+            exit 97
+            """,
+            filter: "FilteredSuite",
+            additionalArguments: ["--verbose"]
+        )
+
+        let invocations = result.invocationLog.split(separator: "\n").map(String.init)
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("Discovered 1 Swift Testing test(s)"))
+        #expect(result.stdout.contains("synthetic filtered execution passed"))
+        #expect(invocations.count == 2)
+        let discoveryInvocation = try #require(invocations.first)
+        let executionInvocation = try #require(invocations.dropFirst().first)
+        #expect(discoveryInvocation.hasPrefix("test list "))
+        #expect(discoveryInvocation.contains("--disable-xctest"))
+        #expect(discoveryInvocation.contains("--verbose"))
+        #expect(executionInvocation.hasPrefix("test "))
+        #expect(!executionInvocation.hasPrefix("test list "))
+        #expect(executionInvocation.contains("--disable-xctest"))
+        #expect(executionInvocation.contains("--verbose --filter FilteredSuite"))
+    }
+
+    @Test("filtered Swift Testing gate propagates discovery failure")
+    func filteredGatePropagatesDiscoveryFailure() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' 'synthetic discovery failure' >&2
+              exit 23
+            fi
+            exit 0
+            """,
+            filter: "AnySuite"
+        )
+
+        #expect(result.terminationStatus == 23)
+        #expect(result.stderr.contains("synthetic discovery failure"))
+    }
+
+    @Test("filtered Swift Testing gate propagates filtered execution failure")
+    func filteredGatePropagatesExecutionFailure() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' 'CocxyTerminalTests.FilteredSuite/matching()'
+              exit 0
+            fi
+            if [ "$1" = "test" ]; then
+              printf '%s\n' 'synthetic filtered execution failure' >&2
+              exit 29
+            fi
+            exit 97
+            """,
+            filter: "FilteredSuite"
+        )
+
+        #expect(result.terminationStatus == 29)
+        #expect(result.stdout.contains("Discovered 1 Swift Testing test(s)"))
+        #expect(result.stderr.contains("synthetic filtered execution failure"))
     }
 
     @Test("workflow actions use reviewed immutable commits and checkouts drop credentials")
@@ -287,8 +422,12 @@ struct CITestGateScriptSwiftTestingTests {
         let root = repositoryRoot()
         let installerURL = root.appendingPathComponent("scripts/install-pinned-xcodegen.sh")
         let fixtureScriptURL = root.appendingPathComponent("scripts/prepare-ci-cocxycore-fixture.sh")
+        let bundleVerifierURL = root.appendingPathComponent("scripts/verify-app-bundle.sh")
+        let appBuilderURL = root.appendingPathComponent("scripts/build-app.sh")
         let installer = try String(contentsOf: installerURL, encoding: .utf8)
         let fixtureScript = try String(contentsOf: fixtureScriptURL, encoding: .utf8)
+        let bundleVerifier = try String(contentsOf: bundleVerifierURL, encoding: .utf8)
+        let appBuilder = try String(contentsOf: appBuilderURL, encoding: .utf8)
 
         #expect(FileManager.default.isExecutableFile(atPath: installerURL.path))
         #expect(FileManager.default.isExecutableFile(atPath: fixtureScriptURL.path))
@@ -301,6 +440,8 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(fixtureScript.contains("x86_64-linux-musl"))
         #expect(fixtureScript.contains("aarch64-linux-musl"))
         #expect(fixtureScript.contains("xcrun clang -arch arm64"))
+        #expect(bundleVerifier.contains("--check-remote-daemon-binary"))
+        #expect(appBuilder.contains("--check-remote-daemon-binary"))
 
         guard FileManager.default.isExecutableFile(atPath: "/usr/bin/xcrun"),
               let path = ProcessInfo.processInfo.environment["PATH"],
@@ -337,14 +478,54 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(build.terminationStatus == 0, "CI fixture compilation failed")
 
         let binaries = fixtureRoot.appendingPathComponent("zig-out/bin", isDirectory: true)
-        let macOSMagic = try Data(
-            contentsOf: binaries.appendingPathComponent("cocxyd-remote-macos-arm64")
-        ).prefix(4)
-        let linuxMagic = try Data(
-            contentsOf: binaries.appendingPathComponent("cocxyd-remote-linux-x86_64")
-        ).prefix(4)
+        let macOSBinary = binaries.appendingPathComponent("cocxyd-remote-macos-arm64")
+        let linuxX86Binary = binaries.appendingPathComponent("cocxyd-remote-linux-x86_64")
+        let linuxArmBinary = binaries.appendingPathComponent("cocxyd-remote-linux-arm64")
+        let macOSMagic = try Data(contentsOf: macOSBinary).prefix(4)
+        let linuxMagic = try Data(contentsOf: linuxX86Binary).prefix(4)
         #expect(macOSMagic == Data([0xCF, 0xFA, 0xED, 0xFE]))
         #expect(linuxMagic == Data([0x7F, 0x45, 0x4C, 0x46]))
+
+        for (binary, target) in [
+            (macOSBinary, "macos-arm64"),
+            (linuxX86Binary, "linux-x86_64"),
+            (linuxArmBinary, "linux-arm64"),
+        ] {
+            let validation = try runProcess(
+                URL(fileURLWithPath: "/bin/bash"),
+                arguments: [
+                    bundleVerifierURL.path,
+                    "--check-remote-daemon-binary",
+                    binary.path,
+                    target,
+                ]
+            )
+            #expect(
+                validation.terminationStatus == 0,
+                "Expected \(binary.lastPathComponent) to match \(target): \(validation.stderr)"
+            )
+        }
+
+        let swappedX86 = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [
+                bundleVerifierURL.path,
+                "--check-remote-daemon-binary",
+                linuxX86Binary.path,
+                "linux-arm64",
+            ]
+        )
+        let swappedArm = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [
+                bundleVerifierURL.path,
+                "--check-remote-daemon-binary",
+                linuxArmBinary.path,
+                "linux-x86_64",
+            ]
+        )
+        #expect(swappedX86.terminationStatus != 0)
+        #expect(swappedArm.terminationStatus != 0)
     }
 
     @Test("SwiftPM release inputs are tracked exact and fail closed")
@@ -380,6 +561,7 @@ struct CITestGateScriptSwiftTestingTests {
         let automatedScripts = [
             "scripts/run-tests.sh",
             "scripts/run-swift-testing-serial.sh",
+            "scripts/run-filtered-swift-testing.sh",
             "scripts/run-performance-benchmarks.sh",
             "scripts/run-cocxycore-benchmarks.sh",
             "scripts/run-security-audit.sh",
@@ -407,8 +589,20 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(buildScript.contains("verify-swiftpm-resolution.sh\" --verify-artifacts"))
         #expect(buildScript.contains(".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"))
         #expect(!buildScript.contains("find \"${PROJECT_ROOT}/.build\" -name \"Sparkle.framework\""))
+        #expect(buildScript.contains(
+            "codesign --force --sign - --entitlements \"${APP_ENTITLEMENTS}\" \"${APP_BUNDLE}\" >/dev/null"
+        ))
+        #expect(!buildScript.contains("\"${APP_BUNDLE}\" 2>/dev/null || true"))
+        #expect(buildScript.contains("install_name_tool -add_rpath \"${SPARKLE_RPATH}\""))
+        #expect(!buildScript.contains(
+            "install_name_tool -add_rpath @executable_path/../Frameworks \"${MACOS}/${APP_NAME}\" 2>/dev/null || true"
+        ))
         #expect(bundleVerifier.contains("CFBundleShortVersionString\" \"2.9.4\" \"Reviewed Sparkle version"))
         #expect(bundleVerifier.contains("check_codesign_valid \"$SPARKLE_FRAMEWORK\" \"Sparkle.framework signature\""))
+        #expect(bundleVerifier.contains(
+            "check_macho_rpath \"$CONTENTS/MacOS/CocxyTerminal\" \"@executable_path/../Frameworks\""
+        ))
+        #expect(bundleVerifier.contains("codesign --verify --deep --strict \"$APP_BUNDLE\""))
         #expect(ci.contains("swift build --disable-automatic-resolution -c debug"))
         #expect(ci.contains("swift build --disable-automatic-resolution -c release"))
 
@@ -6247,6 +6441,28 @@ struct CITestGateScriptSwiftTestingTests {
         let terminationStatus: Int32
     }
 
+    private struct FilteredGateResult {
+        let process: ProcessResult
+        let invocationLog: String
+
+        var stdout: String { process.stdout }
+        var stderr: String { process.stderr }
+        var terminationStatus: Int32 { process.terminationStatus }
+    }
+
+    private final class PipeDrainer: @unchecked Sendable {
+        private let handle: FileHandle
+        private(set) var data = Data()
+
+        init(handle: FileHandle) {
+            self.handle = handle
+        }
+
+        func drain() {
+            data = handle.readDataToEndOfFile()
+        }
+    }
+
     private struct LocalWebsiteReference {
         let target: URL
         let fragment: String?
@@ -6876,6 +7092,50 @@ struct CITestGateScriptSwiftTestingTests {
         return root
     }
 
+    private func runFilteredGateWithFakeSwift(
+        _ fakeSwiftSource: String,
+        filter: String,
+        additionalArguments: [String] = []
+    ) throws -> FilteredGateResult {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-filtered-gate-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fakeSwiftURL = directory.appendingPathComponent("swift")
+        try fakeSwiftSource.write(
+            to: fakeSwiftURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: fakeSwiftURL.path
+        )
+        let callLogURL = directory.appendingPathComponent("swift-invocations.log")
+        try Data().write(to: callLogURL, options: .atomic)
+
+        let process = try runProcess(
+            repositoryRoot().appendingPathComponent(
+                "scripts/run-filtered-swift-testing.sh"
+            ),
+            arguments: [filter] + additionalArguments,
+            environment: [
+                "FAKE_SWIFT_CALL_LOG": callLogURL.path,
+                "SWIFT": fakeSwiftURL.path,
+            ]
+        )
+        return FilteredGateResult(
+            process: process,
+            invocationLog: try String(contentsOf: callLogURL, encoding: .utf8)
+        )
+    }
+
     private func iamPolicyActions(from policy: String) throws -> Set<String> {
         let payload = try JSONSerialization.jsonObject(
             with: Data(policy.utf8),
@@ -6944,13 +7204,22 @@ struct CITestGateScriptSwiftTestingTests {
         process.standardError = stderr
 
         try process.run()
+        let stdoutDrainer = PipeDrainer(handle: stdout.fileHandleForReading)
+        let stderrDrainer = PipeDrainer(handle: stderr.fileHandleForReading)
+        let drainGroup = DispatchGroup()
+        for drainer in [stdoutDrainer, stderrDrainer] {
+            drainGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                drainer.drain()
+                drainGroup.leave()
+            }
+        }
         process.waitUntilExit()
+        drainGroup.wait()
 
-        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
         return ProcessResult(
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? "",
+            stdout: String(data: stdoutDrainer.data, encoding: .utf8) ?? "",
+            stderr: String(data: stderrDrainer.data, encoding: .utf8) ?? "",
             terminationStatus: process.terminationStatus
         )
     }

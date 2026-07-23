@@ -64,9 +64,12 @@ extension AppDelegate {
         connectionManager.relayManager = relayManager
 
         // Daemon manager — optional, zero overhead when unused.
-        let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager, profileStore: profileStore)
+        let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager)
         let daemonDeployer = DaemonDeployer(executor: deployAdapter)
-        let daemonManager = DaemonManagerImpl(deployer: daemonDeployer)
+        let daemonManager = DaemonManagerImpl(
+            deployer: daemonDeployer,
+            transportProvider: connectionManager
+        )
         connectionManager.daemonManager = daemonManager
         let remoteUploader = CocxyDRemoteUploader(executor: deployAdapter)
         let remoteBootstrapper = CocxyDRemoteSSHBootstrapper(
@@ -278,11 +281,14 @@ final class SystemSSHKeyExecutor: SSHKeyExecuting {
 final class DaemonDeployAdapter: DaemonDeployExecuting {
 
     private weak var connectionManager: RemoteConnectionManager?
-    private let profileStore: RemoteProfileStore?
+    private let sftpExecutor: any SFTPExecutor
 
-    init(connectionManager: RemoteConnectionManager, profileStore: RemoteProfileStore?) {
+    init(
+        connectionManager: RemoteConnectionManager,
+        sftpExecutor: any SFTPExecutor = SystemSFTPExecutor()
+    ) {
         self.connectionManager = connectionManager
-        self.profileStore = profileStore
+        self.sftpExecutor = sftpExecutor
     }
 
     func executeRemote(_ command: String, profileID: UUID) async throws -> String {
@@ -293,26 +299,34 @@ final class DaemonDeployAdapter: DaemonDeployExecuting {
     }
 
     func uploadFile(localPath: String, remotePath: String, profileID: UUID) async throws {
-        guard connectionManager != nil else {
+        guard let connectionManager else {
             throw DaemonProtocolError.connectionLost
         }
-        // Upload via SFTPClient using the profile's SSH ControlMaster.
-        guard let profile = profileStore?.loadProfile(id: profileID) else {
-            throw DaemonProtocolError.connectionLost
-        }
-        let executor = SystemSFTPExecutor()
-        let client = SFTPClient(executor: executor)
-        try client.upload(
-            localPath: localPath,
-            remotePath: remotePath,
-            on: profile
+        let client = try connectionManager.makeSFTPClient(
+            profileID: profileID,
+            executor: sftpExecutor
         )
-    }
-}
-
-extension RemoteProfileStore {
-    /// Loads a single profile by ID.
-    func loadProfile(id: UUID) -> RemoteConnectionProfile? {
-        try? loadAll().first { $0.id == id }
+        let worker = Task.detached(priority: .userInitiated) {
+            try client.upload(
+                localPath: localPath,
+                remotePath: remotePath,
+                destinationPolicy: .overwrite
+            )
+        }
+        let outcome = try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        switch outcome {
+        case .completed:
+            return
+        case .notCommittedWithIssues(let state):
+            throw DaemonDeployError.remoteUploadNotCommitted(state)
+        case .committedWithIssues(let state):
+            throw DaemonDeployError.remoteUploadCleanupUnconfirmed(state)
+        case .commitIndeterminate(let state):
+            throw DaemonDeployError.remoteUploadCommitIndeterminate(state)
+        }
     }
 }

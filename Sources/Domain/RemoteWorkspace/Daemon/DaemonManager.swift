@@ -1,14 +1,28 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// DaemonManager.swift - Remote daemon lifecycle orchestrator.
+// DaemonManager.swift - Profile- and lease-bound remote daemon orchestration.
 
-import Foundation
 import Combine
+import Foundation
 
-// MARK: - Daemon Managing Protocol
+struct DaemonTransportBinding {
+    let profileID: UUID
+    let connectionLeaseID: UUID
+    let transport: any ProxyUpstreamTransport
+}
+
+@MainActor
+protocol DaemonTransportProviding: AnyObject {
+    func connectionLeaseID(for profileID: UUID) -> UUID?
+    func openDaemonTransport(
+        remotePort: Int,
+        profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) throws -> DaemonTransportBinding
+}
 
 @MainActor
 protocol DaemonManaging: AnyObject {
-    var state: DaemonState { get }
+    func state(for profileID: UUID) -> DaemonState
     func deploy(profileID: UUID) async throws
     func isRunning(profileID: UUID) async -> Bool
     func connect(profileID: UUID) async throws
@@ -17,118 +31,257 @@ protocol DaemonManaging: AnyObject {
     func status(profileID: UUID) async throws -> DaemonResponse
 }
 
-// MARK: - Daemon Manager Implementation
-
-/// Orchestrates the full lifecycle of the remote cocxyd daemon.
-///
-/// Coordinates `DaemonDeployer` for upload/start/stop and
-/// `DaemonConnection` for JSON-RPC communication.
-///
-/// ## State Machine
-///
-/// `.notDeployed` → `.deploying` → `.running` → `.stopped`
-///                                              → `.upgrading` → `.running`
-///                                              → `.unreachable`
+/// Coordinates remote installation with one authenticated direct-tcpip channel
+/// per active SSH connection lease. No state or connection is shared between
+/// profiles, even when the UI changes selection while work is in flight.
 @MainActor
 final class DaemonManagerImpl: DaemonManaging, ObservableObject {
-
-    // MARK: - Published State
-
-    @Published private(set) var state: DaemonState = .notDeployed
-
-    // MARK: - Dependencies
-
-    private let deployer: DaemonDeployer
-    let connection: DaemonConnection
-
-    // MARK: - Initialization
-
-    init(deployer: DaemonDeployer, connection: DaemonConnection = DaemonConnection()) {
-        self.deployer = deployer
-        self.connection = connection
+    private struct BoundSession {
+        let connectionLeaseID: UUID
+        let connection: DaemonConnection
     }
 
-    // MARK: - Deploy
+    @Published private(set) var states: [UUID: DaemonState] = [:]
 
-    /// Deploys cocxyd.sh to the remote server.
-    ///
-    /// Uploads the script, makes it executable, and starts the daemon.
+    private let deployer: DaemonDeployer
+    private weak var transportProvider: (any DaemonTransportProviding)?
+    private var sessions: [UUID: BoundSession] = [:]
+    private var pendingConnections: [UUID: DaemonConnection] = [:]
+    private var generations: [UUID: UInt64] = [:]
+
+    init(
+        deployer: DaemonDeployer,
+        transportProvider: any DaemonTransportProviding
+    ) {
+        self.deployer = deployer
+        self.transportProvider = transportProvider
+    }
+
+    func state(for profileID: UUID) -> DaemonState {
+        states[profileID] ?? .notDeployed
+    }
+
     func deploy(profileID: UUID) async throws {
-        state = .deploying
-
+        let operationGeneration = beginOperation(profileID: profileID, state: .deploying)
         do {
             try await deployer.deploy(profileID: profileID)
+            try requireCurrent(operationGeneration, profileID: profileID)
             let port = try await deployer.start(profileID: profileID)
-            connection.connect(port: UInt16(port))
-            state = .running(version: DaemonDeployer.bundledVersion, uptime: 0)
+            try requireCurrent(operationGeneration, profileID: profileID)
+            let capability = try await deployer.readRemoteCapability(profileID: profileID)
+            try await establishConnection(
+                profileID: profileID,
+                remotePort: port,
+                capability: capability,
+                version: DaemonDeployer.bundledVersion,
+                operationGeneration: operationGeneration
+            )
         } catch {
-            state = .unreachable
+            markUnreachableIfCurrent(operationGeneration, profileID: profileID)
             throw error
         }
     }
 
-    // MARK: - Is Running
-
-    /// Checks if the daemon is currently running.
     func isRunning(profileID: UUID) async -> Bool {
         (try? await deployer.isRunning(profileID: profileID)) ?? false
     }
 
-    // MARK: - Connect
-
-    /// Connects to an already-running daemon.
-    ///
-    /// Reads the daemon's TCP port from its port file on the remote server
-    /// without starting a new instance.
     func connect(profileID: UUID) async throws {
-        guard try await deployer.isRunning(profileID: profileID) else {
-            throw DaemonProtocolError.daemonNotRunning
-        }
-
-        // Read the daemon's TCP port from its port file — NOT start a new daemon.
-        let portStr = try await deployer.readRemotePort(profileID: profileID)
-        guard let port = Int(portStr.trimmingCharacters(in: .whitespacesAndNewlines)),
-              port > 0, port <= 65535 else {
-            throw DaemonProtocolError.invalidResponse
-        }
-
-        let version = try await deployer.remoteVersion(profileID: profileID)
-        connection.connect(port: UInt16(port))
-        state = .running(version: version ?? DaemonDeployer.bundledVersion, uptime: 0)
-    }
-
-    // MARK: - Stop
-
-    /// Stops the remote daemon.
-    func stop(profileID: UUID) async throws {
-        connection.disconnect()
-        try await deployer.stop(profileID: profileID)
-        state = .stopped
-    }
-
-    // MARK: - Upgrade
-
-    /// Upgrades the daemon to the bundled version.
-    func upgrade(profileID: UUID) async throws {
-        state = .upgrading
-
+        let operationGeneration = beginOperation(profileID: profileID, state: .deploying)
         do {
-            connection.disconnect()
-            try await deployer.stop(profileID: profileID)
-            try await deployer.deploy(profileID: profileID)
-            let port = try await deployer.start(profileID: profileID)
-            connection.connect(port: UInt16(port))
-            state = .running(version: DaemonDeployer.bundledVersion, uptime: 0)
+            guard try await deployer.isRunning(profileID: profileID) else {
+                throw DaemonProtocolError.daemonNotRunning
+            }
+            try requireCurrent(operationGeneration, profileID: profileID)
+            let port = try await deployer.readRemotePort(profileID: profileID)
+            let capability = try await deployer.readRemoteCapability(profileID: profileID)
+            let version = try await deployer.remoteVersion(profileID: profileID)
+                ?? DaemonDeployer.bundledVersion
+            try await establishConnection(
+                profileID: profileID,
+                remotePort: port,
+                capability: capability,
+                version: version,
+                operationGeneration: operationGeneration
+            )
         } catch {
-            state = .unreachable
+            markUnreachableIfCurrent(operationGeneration, profileID: profileID)
             throw error
         }
     }
 
-    // MARK: - Status
+    func stop(profileID: UUID) async throws {
+        let operationGeneration = beginOperation(profileID: profileID, state: .stopped)
+        do {
+            try await deployer.stop(profileID: profileID)
+            try requireCurrent(operationGeneration, profileID: profileID)
+            states[profileID] = .stopped
+        } catch {
+            markUnreachableIfCurrent(operationGeneration, profileID: profileID)
+            throw error
+        }
+    }
 
-    /// Queries the daemon for its current status.
+    func upgrade(profileID: UUID) async throws {
+        let operationGeneration = beginOperation(profileID: profileID, state: .upgrading)
+        do {
+            try await deployer.stop(profileID: profileID)
+            try requireCurrent(operationGeneration, profileID: profileID)
+            try await deployer.deploy(profileID: profileID)
+            try requireCurrent(operationGeneration, profileID: profileID)
+            let port = try await deployer.start(profileID: profileID)
+            let capability = try await deployer.readRemoteCapability(profileID: profileID)
+            try await establishConnection(
+                profileID: profileID,
+                remotePort: port,
+                capability: capability,
+                version: DaemonDeployer.bundledVersion,
+                operationGeneration: operationGeneration
+            )
+        } catch {
+            markUnreachableIfCurrent(operationGeneration, profileID: profileID)
+            throw error
+        }
+    }
+
+    func connection(for profileID: UUID) throws -> DaemonConnection {
+        guard let session = sessions[profileID],
+              transportProvider?.connectionLeaseID(for: profileID)
+                == session.connectionLeaseID,
+              session.connection.profileID == profileID,
+              session.connection.connectionLeaseID == session.connectionLeaseID,
+              session.connection.isConnected else {
+            invalidate(profileID: profileID, expectedConnectionLeaseID: nil)
+            throw DaemonProtocolError.connectionLost
+        }
+        return session.connection
+    }
+
+    func send(
+        profileID: UUID,
+        cmd: String,
+        args: [String: String]? = nil
+    ) async throws -> DaemonResponse {
+        try await connection(for: profileID).send(cmd: cmd, args: args)
+    }
+
     func status(profileID: UUID) async throws -> DaemonResponse {
-        try await connection.send(cmd: DaemonCommand.status.rawValue)
+        try await send(profileID: profileID, cmd: DaemonCommand.status.rawValue)
+    }
+
+    /// Revokes only the daemon channel belonging to the retiring SSH lease.
+    func invalidate(
+        profileID: UUID,
+        expectedConnectionLeaseID: UUID?
+    ) {
+        let activeLease = sessions[profileID]?.connectionLeaseID
+            ?? pendingConnections[profileID]?.connectionLeaseID
+            ?? transportProvider?.connectionLeaseID(for: profileID)
+        if let expectedConnectionLeaseID,
+           activeLease != expectedConnectionLeaseID {
+            return
+        }
+
+        generations[profileID, default: 0] &+= 1
+        sessions.removeValue(forKey: profileID)?.connection.disconnect()
+        pendingConnections.removeValue(forKey: profileID)?.disconnect()
+        switch states[profileID] {
+        case .running, .deploying, .upgrading:
+            states[profileID] = .unreachable
+        default:
+            break
+        }
+    }
+
+    func shutdown() {
+        let profileIDs = Set(sessions.keys).union(pendingConnections.keys)
+        for profileID in profileIDs {
+            invalidate(profileID: profileID, expectedConnectionLeaseID: nil)
+        }
+    }
+
+    private func beginOperation(profileID: UUID, state: DaemonState) -> UInt64 {
+        generations[profileID, default: 0] &+= 1
+        sessions.removeValue(forKey: profileID)?.connection.disconnect()
+        pendingConnections.removeValue(forKey: profileID)?.disconnect()
+        states[profileID] = state
+        return generations[profileID, default: 0]
+    }
+
+    private func establishConnection(
+        profileID: UUID,
+        remotePort: Int,
+        capability: String,
+        version: String,
+        operationGeneration: UInt64
+    ) async throws {
+        try requireCurrent(operationGeneration, profileID: profileID)
+        guard let transportProvider,
+              let connectionLeaseID = transportProvider.connectionLeaseID(for: profileID) else {
+            throw DaemonProtocolError.connectionLost
+        }
+        let binding = try transportProvider.openDaemonTransport(
+            remotePort: remotePort,
+            profileID: profileID,
+            expectedConnectionLeaseID: connectionLeaseID
+        )
+        guard binding.profileID == profileID,
+              binding.connectionLeaseID == connectionLeaseID else {
+            binding.transport.cancel()
+            throw DaemonProtocolError.connectionLost
+        }
+
+        let connection = DaemonConnection(
+            profileID: profileID,
+            connectionLeaseID: connectionLeaseID,
+            authorizationIsCurrent: { [weak transportProvider] in
+                transportProvider?.connectionLeaseID(for: profileID) == connectionLeaseID
+            }
+        )
+        connection.onUnexpectedDisconnect = { [weak self, weak connection] in
+            guard let self, let connection,
+                  self.sessions[profileID]?.connection === connection else { return }
+            self.sessions.removeValue(forKey: profileID)
+            self.states[profileID] = .unreachable
+        }
+        pendingConnections[profileID] = connection
+
+        do {
+            try await connection.connect(
+                transport: binding.transport,
+                capability: capability
+            )
+            try requireCurrent(operationGeneration, profileID: profileID)
+            guard transportProvider.connectionLeaseID(for: profileID) == connectionLeaseID,
+                  pendingConnections[profileID] === connection,
+                  connection.isConnected else {
+                throw DaemonProtocolError.connectionLost
+            }
+            pendingConnections.removeValue(forKey: profileID)
+            sessions[profileID] = BoundSession(
+                connectionLeaseID: connectionLeaseID,
+                connection: connection
+            )
+            states[profileID] = .running(version: version, uptime: 0)
+        } catch {
+            if pendingConnections[profileID] === connection {
+                pendingConnections.removeValue(forKey: profileID)
+            }
+            connection.disconnect()
+            throw error
+        }
+    }
+
+    private func requireCurrent(_ generation: UInt64, profileID: UUID) throws {
+        guard generations[profileID] == generation else {
+            throw DaemonProtocolError.connectionLost
+        }
+    }
+
+    private func markUnreachableIfCurrent(_ generation: UInt64, profileID: UUID) {
+        guard generations[profileID] == generation else { return }
+        sessions.removeValue(forKey: profileID)?.connection.disconnect()
+        pendingConnections.removeValue(forKey: profileID)?.disconnect()
+        states[profileID] = .unreachable
     }
 }

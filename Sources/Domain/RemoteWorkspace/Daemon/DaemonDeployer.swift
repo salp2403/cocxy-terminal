@@ -3,6 +3,31 @@
 
 import Foundation
 
+enum DaemonDeployError: Error, Equatable, LocalizedError {
+    case bundledScriptUnavailable
+    case remoteUploadNotCommitted(SFTPUploadRecoveryState)
+    case remoteUploadCleanupUnconfirmed(SFTPUploadRecoveryState)
+    case remoteUploadCommitIndeterminate(SFTPUploadRecoveryState)
+
+    var errorDescription: String? {
+        switch self {
+        case .bundledScriptUnavailable:
+            return "The bundled remote daemon script is unavailable."
+        case .remoteUploadNotCommitted(let state):
+            return "The remote upload did not commit; inspect "
+                + "\(state.stagedPayloadPath ?? state.destinationPath) before retrying."
+        case .remoteUploadCleanupUnconfirmed(let state):
+            return "The remote upload completed; inspect "
+                + "\(state.remoteBackupPath ?? state.stagedPayloadPath ?? state.destinationPath) "
+                + "before retrying."
+        case .remoteUploadCommitIndeterminate(let state):
+            return "The remote upload result for \(state.destinationPath) is uncertain; inspect "
+                + "\(state.remoteBackupPath ?? state.stagedPayloadPath ?? state.destinationPath) "
+                + "before retrying."
+        }
+    }
+}
+
 // MARK: - Remote Platform
 
 /// Platform information detected from the remote server.
@@ -47,15 +72,52 @@ protocol DaemonDeployExecuting: AnyObject {
 final class DaemonDeployer {
 
     /// Current version of the bundled cocxyd.sh script.
-    static let bundledVersion = "1.0.0"
+    static let bundledVersion = "1.1.0"
 
     /// Remote installation path for the daemon script.
     static let remotePath = "~/.cocxy/cocxyd.sh"
 
-    private weak var executor: (any DaemonDeployExecuting)?
+    static let prepareRemoteDirectoryCommand =
+        #"test ! -L "$HOME/.cocxy" && umask 077 && mkdir -p "$HOME/.cocxy" && chmod 700 "$HOME/.cocxy""#
+    static let secureRemoteScriptCommand =
+        #"test -f "$HOME/.cocxy/cocxyd.sh" && test ! -L "$HOME/.cocxy/cocxyd.sh" && chmod 700 "$HOME/.cocxy/cocxyd.sh""#
+    static func profileNamespace(_ profileID: UUID) -> String {
+        profileID.uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
 
-    init(executor: any DaemonDeployExecuting) {
+    static func startCommand(profileID: UUID) -> String {
+        "sh \(remotePath) start \(profileNamespace(profileID))"
+    }
+
+    static func stopCommand(profileID: UUID) -> String {
+        "sh \(remotePath) stop \(profileNamespace(profileID))"
+    }
+
+    static func pingCommand(profileID: UUID) -> String {
+        "sh \(remotePath) ping \(profileNamespace(profileID))"
+    }
+
+    static func readRemotePortCommand(profileID: UUID) -> String {
+        runtimeFileCommand(profileID: profileID, filename: "cocxyd.port")
+    }
+
+    static func readRemoteCapabilityCommand(profileID: UUID) -> String {
+        runtimeFileCommand(profileID: profileID, filename: "cocxyd.cap")
+    }
+
+    private static func runtimeFileCommand(profileID: UUID, filename: String) -> String {
+        #"cat "${XDG_RUNTIME_DIR:-/tmp}/cocxyd-$(id -u)/\#(profileNamespace(profileID))/\#(filename)" 2>/dev/null"#
+    }
+
+    private weak var executor: (any DaemonDeployExecuting)?
+    private let bundledScriptURL: URL?
+
+    init(
+        executor: any DaemonDeployExecuting,
+        bundledScriptURL: URL? = Bundle.main.url(forResource: "cocxyd", withExtension: "sh")
+    ) {
         self.executor = executor
+        self.bundledScriptURL = bundledScriptURL
     }
 
     // MARK: - Platform Detection
@@ -75,29 +137,48 @@ final class DaemonDeployer {
     /// Uploads cocxyd.sh to the remote server and makes it executable.
     func deploy(profileID: UUID) async throws {
         guard let executor else { throw DaemonProtocolError.connectionLost }
+        let scriptPath = try resolvedBundledScriptPath()
 
-        // Ensure directory exists.
-        _ = try await executor.executeRemote("mkdir -p ~/.cocxy", profileID: profileID)
+        _ = try await executor.executeRemote(
+            Self.prepareRemoteDirectoryCommand,
+            profileID: profileID
+        )
 
         // Upload script.
-        guard let scriptPath = Bundle.main.path(forResource: "cocxyd", ofType: "sh") else {
-            // Fallback: look in project Resources directory.
-            let projectPath = "Resources/cocxyd.sh"
-            try await executor.uploadFile(
-                localPath: projectPath,
-                remotePath: Self.remotePath,
-                profileID: profileID
-            )
-            _ = try await executor.executeRemote("chmod +x \(Self.remotePath)", profileID: profileID)
-            return
-        }
-
         try await executor.uploadFile(
             localPath: scriptPath,
             remotePath: Self.remotePath,
             profileID: profileID
         )
-        _ = try await executor.executeRemote("chmod +x \(Self.remotePath)", profileID: profileID)
+        _ = try await executor.executeRemote(
+            Self.secureRemoteScriptCommand,
+            profileID: profileID
+        )
+    }
+
+    private func resolvedBundledScriptPath() throws -> String {
+        guard let bundledScriptURL,
+              bundledScriptURL.isFileURL else {
+            throw DaemonDeployError.bundledScriptUnavailable
+        }
+
+        let standardizedURL = bundledScriptURL.standardizedFileURL
+        let values: URLResourceValues
+        do {
+            values = try standardizedURL.resourceValues(
+                forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .isReadableKey]
+            )
+        } catch {
+            throw DaemonDeployError.bundledScriptUnavailable
+        }
+
+        guard standardizedURL.path.hasPrefix("/"),
+              values.isRegularFile == true,
+              values.isSymbolicLink != true,
+              values.isReadable == true else {
+            throw DaemonDeployError.bundledScriptUnavailable
+        }
+        return standardizedURL.path
     }
 
     // MARK: - Start / Stop
@@ -107,34 +188,76 @@ final class DaemonDeployer {
     /// Returns the TCP port the daemon is listening on.
     func start(profileID: UUID) async throws -> Int {
         guard let executor else { throw DaemonProtocolError.connectionLost }
-        let output = try await executor.executeRemote(
-            "sh \(Self.remotePath) start",
-            profileID: profileID
-        )
+        let output: String
+        do {
+            output = try await executor.executeRemote(
+                Self.startCommand(profileID: profileID),
+                profileID: profileID
+            )
+        } catch let startError {
+            guard Self.isRemoteCommandTimeout(startError) else { throw startError }
+            do {
+                return try await readRemotePort(profileID: profileID)
+            } catch {
+                throw startError
+            }
+        }
 
-        // Parse port from output: "COCXYD_PORT=<port>" or "Daemon started (PID ...)"
+        // The script publishes this only after its loopback listener is bound.
         if let portLine = output.split(separator: "\n").first(where: { $0.hasPrefix("COCXYD_PORT=") }) {
             let portStr = portLine.dropFirst("COCXYD_PORT=".count)
-            if let port = Int(portStr) { return port }
+            if let port = Int(portStr), (1...65_535).contains(port) { return port }
         }
 
         throw DaemonProtocolError.invalidResponse
     }
 
     /// Reads the TCP port of an already-running daemon from its port file.
-    func readRemotePort(profileID: UUID) async throws -> String {
+    func readRemotePort(profileID: UUID) async throws -> Int {
         guard let executor else { throw DaemonProtocolError.connectionLost }
-        let runtimeDir = "\\${XDG_RUNTIME_DIR:-/tmp}/cocxyd-$(id -u)"
-        return try await executor.executeRemote(
-            "cat \(runtimeDir)/cocxyd.port 2>/dev/null",
+        let output = try await executor.executeRemote(
+            Self.readRemotePortCommand(profileID: profileID),
             profileID: profileID
         )
+        let value = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int(value), (1...65_535).contains(port) else {
+            throw DaemonProtocolError.invalidResponse
+        }
+        return port
+    }
+
+    /// Reads the daemon's private 256-bit capability over the active SSH lease.
+    func readRemoteCapability(profileID: UUID) async throws -> String {
+        guard let executor else { throw DaemonProtocolError.connectionLost }
+        let output = try await executor.executeRemote(
+            Self.readRemoteCapabilityCommand(profileID: profileID),
+            profileID: profileID
+        )
+        let capability = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard DaemonConnection.isValidCapability(capability) else {
+            throw DaemonProtocolError.authenticationFailed
+        }
+        return capability
     }
 
     /// Stops the daemon on the remote server.
     func stop(profileID: UUID) async throws {
         guard let executor else { throw DaemonProtocolError.connectionLost }
-        _ = try await executor.executeRemote("sh \(Self.remotePath) stop", profileID: profileID)
+        do {
+            _ = try await executor.executeRemote(
+                Self.stopCommand(profileID: profileID),
+                profileID: profileID
+            )
+        } catch let stopError {
+            guard Self.isRemoteCommandTimeout(stopError) else { throw stopError }
+            let stillRunning: Bool
+            do {
+                stillRunning = try await isRunning(profileID: profileID)
+            } catch {
+                throw stopError
+            }
+            if stillRunning { throw stopError }
+        }
     }
 
     // MARK: - Version Check
@@ -164,9 +287,14 @@ final class DaemonDeployer {
     func isRunning(profileID: UUID) async throws -> Bool {
         guard let executor else { throw DaemonProtocolError.connectionLost }
         let output = try await executor.executeRemote(
-            "sh \(Self.remotePath) ping",
+            Self.pingCommand(profileID: profileID),
             profileID: profileID
         )
         return output.contains("\"pong\":true")
+    }
+
+    private static func isRemoteCommandTimeout(_ error: any Error) -> Bool {
+        if case .remoteCommandTimedOut = error as? SSHMultiplexerError { return true }
+        return false
     }
 }

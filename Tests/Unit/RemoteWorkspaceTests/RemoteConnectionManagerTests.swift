@@ -18,11 +18,27 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
     var shouldThrowOnCancelForward = false
     var forwardedPorts: [RemoteConnectionProfile.PortForward] = []
     var disconnectedProfileIDs: [UUID] = []
+    var exactlyDisconnectedIdentities: [SSHControlMasterIdentity] = []
+    var exactForwardIdentities: [SSHControlMasterIdentity] = []
+    var exactCancelIdentities: [SSHControlMasterIdentity] = []
+    var exactRemoteCommandIdentities: [SSHControlMasterIdentity] = []
     var terminatedControlPaths: [String] = []
     var lifecycleEvents: [String] = []
     var proxyTransport: (any ProxyUpstreamTransport)?
+    var shouldThrowOnAttestation = false
+    var shouldThrowOnVerification = false
+    var attestation = SSHControlSocketAttestation(
+        device: 7,
+        inode: 11,
+        peerProcessID: 12_345
+    )
     private(set) var openedProxyTargets: [ProxyTarget] = []
     private(set) var openedProxyIdentities: [SSHControlMasterIdentity] = []
+    private(set) var attestedIdentities: [SSHControlMasterIdentity] = []
+    private(set) var verifiedIdentities: [SSHControlMasterIdentity] = []
+    var executeRemoteCommandsWithProcessExecutor = false
+    var forwardAsyncError: (any Error)?
+    var connectAsyncHandler: ((RemoteConnectionProfile) async throws -> SSHControlMasterIdentity)?
 
     func connect(
         profile: RemoteConnectionProfile,
@@ -36,8 +52,20 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         }
         return SSHControlMasterIdentity(
             processID: 12_345,
-            controlPath: profile.controlPath
+            controlPath: profile.controlPath,
+            supervisorID: UUID()
         )
+    }
+
+    func connectAsync(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) async throws -> SSHControlMasterIdentity {
+        _ = executor
+        if let connectAsyncHandler {
+            return try await connectAsyncHandler(profile)
+        }
+        return try connect(profile: profile, executor: executor)
     }
 
     func disconnect(
@@ -50,6 +78,15 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         if shouldThrowOnDisconnect {
             throw SSHMultiplexerError.disconnectFailed("mock failure")
         }
+    }
+
+    func disconnectAsync(
+        profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        exactlyDisconnectedIdentities.append(expectedControlMaster)
+        try disconnect(profile: profile, executor: executor)
     }
 
     func isAlive(
@@ -88,11 +125,41 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         lifecycleEvents.append("forward")
     }
 
+    func forwardPortAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        _ = profile
+        _ = executor
+        forwardedPorts.append(forward)
+        exactForwardIdentities.append(expectedControlMaster)
+        lifecycleEvents.append("forward")
+        if let forwardAsyncError { throw forwardAsyncError }
+    }
+
     func cancelForward(
         _ forward: RemoteConnectionProfile.PortForward,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws {
+        lifecycleEvents.append("cancel")
+        if shouldThrowOnCancelForward {
+            throw SSHMultiplexerError.forwardFailed("mock cancellation failure")
+        }
+    }
+
+    func cancelForwardAsync(
+        _ forward: RemoteConnectionProfile.PortForward,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws {
+        _ = forward
+        _ = profile
+        _ = executor
+        exactCancelIdentities.append(expectedControlMaster)
         lifecycleEvents.append("cancel")
         if shouldThrowOnCancelForward {
             throw SSHMultiplexerError.forwardFailed("mock cancellation failure")
@@ -113,14 +180,78 @@ final class MockSSHMultiplexerDelegate: SSHMultiplexing, @unchecked Sendable {
         return proxyTransport
     }
 
+    func attestControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> SSHControlSocketAttestation {
+        attestedIdentities.append(expectedControlMaster)
+        if shouldThrowOnAttestation { throw SSHMultiplexerError.notConnected }
+        return attestation
+    }
+
+    func verifyControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity,
+        attestation: SSHControlSocketAttestation
+    ) throws {
+        verifiedIdentities.append(expectedControlMaster)
+        guard !shouldThrowOnVerification,
+              attestation == self.attestation,
+              attestation.peerProcessID == expectedControlMaster.processID else {
+            throw SSHMultiplexerError.notConnected
+        }
+    }
+
     var remoteCommandResults: [String: ProcessResult] = [:]
+    var afterRemoteCommand: (() -> Void)?
 
     func executeRemoteCommand(
         _ command: String,
         on profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) async throws -> ProcessResult {
-        remoteCommandResults[command] ?? ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        if executeRemoteCommandsWithProcessExecutor {
+            let result = try await executor.executeAsync(
+                command: "/bin/sh",
+                arguments: ["-c", command]
+            )
+            afterRemoteCommand?()
+            return result
+        }
+        let result = remoteCommandResults[command]
+            ?? ProcessResult(exitCode: 0, stdout: "", stderr: "")
+        afterRemoteCommand?()
+        return result
+    }
+
+    func executeRemoteCommand(
+        _ command: String,
+        on profile: RemoteConnectionProfile,
+        expectedControlMaster: SSHControlMasterIdentity,
+        executor: any ProcessExecutor
+    ) async throws -> ProcessResult {
+        exactRemoteCommandIdentities.append(expectedControlMaster)
+        return try await executeRemoteCommand(command, on: profile, executor: executor)
+    }
+}
+
+private actor OrderedConnectCompletionGate {
+    private var nextCall = 0
+    private var continuations: [Int: CheckedContinuation<SSHControlMasterIdentity, any Error>] = [:]
+
+    var pendingCalls: Set<Int> {
+        Set(continuations.keys)
+    }
+
+    func connect(profile: RemoteConnectionProfile) async throws -> SSHControlMasterIdentity {
+        _ = profile
+        nextCall += 1
+        let call = nextCall
+        return try await withCheckedThrowingContinuation { continuation in
+            continuations[call] = continuation
+        }
+    }
+
+    func resume(call: Int, identity: SSHControlMasterIdentity) {
+        continuations.removeValue(forKey: call)?.resume(returning: identity)
     }
 }
 
@@ -153,6 +284,57 @@ private final class RemoteManagerTestProxyTransport: ProxyUpstreamTransport, @un
     func cancel() {
         wasCancelled = true
         isRunning = false
+    }
+}
+
+private final class DaemonCancellationSFTPExecutor: SFTPExecutor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var startedStorage = false
+    private var cancellationObservedStorage = false
+
+    var started: Bool { lock.withLock { startedStorage } }
+    var cancellationObserved: Bool { lock.withLock { cancellationObservedStorage } }
+
+    func execute(
+        sftpCommand: String,
+        authorization: SFTPConnectionAuthorization
+    ) throws -> String {
+        _ = sftpCommand
+        _ = authorization
+        lock.withLock { startedStorage = true }
+        for _ in 0..<6_000 {
+            if Task.isCancelled {
+                lock.withLock { cancellationObservedStorage = true }
+                throw CancellationError()
+            }
+            Thread.sleep(forTimeInterval: 0.005)
+        }
+        return ""
+    }
+
+    func executeRecovery(
+        sftpCommand: String,
+        authorization: SFTPConnectionAuthorization
+    ) throws -> String {
+        _ = sftpCommand
+        _ = authorization
+        return ""
+    }
+}
+
+private final class DaemonRecordingSFTPExecutor: SFTPExecutor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var commandsStorage: [String] = []
+
+    var commands: [String] { lock.withLock { commandsStorage } }
+
+    func execute(
+        sftpCommand: String,
+        authorization: SFTPConnectionAuthorization
+    ) throws -> String {
+        _ = authorization
+        lock.withLock { commandsStorage.append(sftpCommand) }
+        return ""
     }
 }
 
@@ -241,6 +423,18 @@ private actor RemoteReconnectDelayGate {
         continuation?.resume()
         continuation = nil
     }
+}
+
+private enum RemoteCommandFixtureError: Error {
+    case processDidNotStart
+}
+
+private func waitForRemoteCommandMarker(at url: URL) async throws {
+    for _ in 0..<200 {
+        if FileManager.default.fileExists(atPath: url.path) { return }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    throw RemoteCommandFixtureError.processDidNotStart
 }
 
 // MARK: - Remote Connection Manager Tests
@@ -428,14 +622,14 @@ struct RemoteConnectionManagerTests {
         )
         await manager.connect(profile: profile)
 
-        try manager.forwardPort(forward, for: profile.id)
+        try await manager.forwardPort(forward, for: profile.id)
         #expect(multiplexer.forwardedPorts == [forward])
-        try manager.cancelForward(forward, for: profile.id)
+        try await manager.cancelForward(forward, for: profile.id)
         #expect(multiplexer.lifecycleEvents.contains("cancel"))
 
         await manager.disconnect(profileID: profile.id)
         do {
-            try manager.forwardPort(forward, for: profile.id)
+            try await manager.forwardPort(forward, for: profile.id)
             Issue.record("Expected disconnected forwarding to fail")
         } catch {
             #expect(error as? SSHMultiplexerError == .connectionFailed(
@@ -443,13 +637,356 @@ struct RemoteConnectionManagerTests {
             ))
         }
         do {
-            try manager.cancelForward(forward, for: profile.id)
+            try await manager.cancelForward(forward, for: profile.id)
             Issue.record("Expected disconnected cancellation to fail")
         } catch {
             #expect(error as? SSHMultiplexerError == .connectionFailed(
                 "No active connection for profile"
             ))
         }
+    }
+
+    @Test @MainActor func staleLeaseCannotControlReplacementForwards() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let forward = RemoteConnectionProfile.PortForward.local(
+            localPort: 8_080,
+            remotePort: 80,
+            remoteHost: "127.0.0.1"
+        )
+        await manager.connect(profile: profile)
+        let oldLeaseID = try #require(manager.connectionLeaseID(for: profile.id))
+        await manager.disconnect(profileID: profile.id)
+        await manager.connect(profile: profile)
+        let replacementLeaseID = try #require(manager.connectionLeaseID(for: profile.id))
+        #expect(replacementLeaseID != oldLeaseID)
+
+        let forwardCount = multiplexer.forwardedPorts.count
+        await #expect(throws: SSHMultiplexerError.notConnected) {
+            try await manager.forwardPort(
+                forward,
+                for: profile.id,
+                expectedConnectionLeaseID: oldLeaseID
+            )
+        }
+        await #expect(throws: SSHMultiplexerError.notConnected) {
+            try await manager.cancelForward(
+                forward,
+                for: profile.id,
+                expectedConnectionLeaseID: oldLeaseID
+            )
+        }
+        #expect(multiplexer.forwardedPorts.count == forwardCount)
+    }
+
+    @Test @MainActor func sftpClientRequiresAnAttestedConnectedLease() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(
+            name: "dev",
+            host: "server.com",
+            user: "deploy"
+        )
+        let executor = MockSFTPExecutor()
+
+        #expect(throws: SFTPClientError.notConnected) {
+            _ = try manager.makeSFTPClient(profileID: profile.id, executor: executor)
+        }
+
+        await manager.connect(profile: profile)
+        let client = try manager.makeSFTPClient(profileID: profile.id, executor: executor)
+        _ = try client.listDirectory(path: ".")
+
+        #expect(multiplexer.attestedIdentities.count == 1)
+        #expect(multiplexer.verifiedIdentities.count == 2)
+        #expect(executor.executedCommands.count == 1)
+    }
+
+    @Test @MainActor func disconnectRevokesEveryIssuedSFTPClient() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let executor = MockSFTPExecutor()
+        await manager.connect(profile: profile)
+        let client = try manager.makeSFTPClient(profileID: profile.id, executor: executor)
+
+        await manager.disconnect(profileID: profile.id)
+
+        #expect(throws: SFTPClientError.notConnected) {
+            _ = try client.listDirectory(path: ".")
+        }
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test @MainActor func reconnectRejectsClientFromPreviousLease() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let staleExecutor = MockSFTPExecutor()
+        await manager.connect(profile: profile)
+        let staleClient = try manager.makeSFTPClient(
+            profileID: profile.id,
+            executor: staleExecutor
+        )
+
+        await manager.reconnect(profileID: profile.id)
+        let currentExecutor = MockSFTPExecutor()
+        let currentClient = try manager.makeSFTPClient(
+            profileID: profile.id,
+            executor: currentExecutor
+        )
+
+        #expect(throws: SFTPClientError.notConnected) {
+            _ = try staleClient.listDirectory(path: ".")
+        }
+        _ = try currentClient.listDirectory(path: ".")
+        #expect(staleExecutor.executedCommands.isEmpty)
+        #expect(currentExecutor.executedCommands.count == 1)
+    }
+
+    @Test @MainActor func failedControlSocketVerificationRefusesSFTPClient() async {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        multiplexer.shouldThrowOnVerification = true
+
+        #expect(throws: SFTPClientError.notConnected) {
+            _ = try manager.makeSFTPClient(
+                profileID: profile.id,
+                executor: MockSFTPExecutor()
+            )
+        }
+    }
+
+    @Test @MainActor func remoteCommandIsAttestedBeforeAndAfterExecution() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.remoteCommandResults["printf ok"] = ProcessResult(
+            exitCode: 0,
+            stdout: "ok",
+            stderr: ""
+        )
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+
+        let output = try await manager.executeRemoteCommand("printf ok", profileID: profile.id)
+
+        #expect(output == "ok")
+        #expect(multiplexer.attestedIdentities.count == 1)
+        #expect(multiplexer.verifiedIdentities.count == 1)
+        #expect(multiplexer.attestedIdentities == multiplexer.verifiedIdentities)
+    }
+
+    @Test @MainActor func completedRemoteCommandSurvivesFailedPostVerification() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        multiplexer.shouldThrowOnVerification = true
+
+        let output = try await manager.executeRemoteCommand(
+            "printf ok",
+            profileID: profile.id
+        )
+
+        #expect(output.isEmpty)
+        #expect(manager.connections[profile.id] == .disconnected)
+    }
+
+    @Test @MainActor func completedRemoteMutationSurvivesPostExecutionConnectionLoss() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.remoteCommandResults["perform mutation"] = ProcessResult(
+            exitCode: 0,
+            stdout: "committed",
+            stderr: ""
+        )
+        multiplexer.afterRemoteCommand = {
+            multiplexer.shouldThrowOnVerification = true
+        }
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+
+        let output = try await manager.executeRemoteCommand(
+            "perform mutation",
+            profileID: profile.id
+        )
+
+        #expect(output == "committed")
+        #expect(manager.connections[profile.id] == .disconnected)
+    }
+
+    @Test @MainActor func remoteCommandTreatsEveryNonzeroExitAsFailure() async {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.remoteCommandResults["false"] = ProcessResult(
+            exitCode: 7,
+            stdout: "",
+            stderr: ""
+        )
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+
+        await #expect(
+            throws: SSHMultiplexerError.connectionFailed("Remote command exited with code 7")
+        ) {
+            _ = try await manager.executeRemoteCommand("false", profileID: profile.id)
+        }
+    }
+
+    @Test @MainActor func disconnectRevokesAnInFlightRemoteCommand() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        multiplexer.executeRemoteCommandsWithProcessExecutor = true
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: SystemProcessExecutor(asyncTimeoutSeconds: 2)
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-remote-command-revocation-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.appendingPathComponent("started")
+        let command = Task {
+            try await manager.executeRemoteCommand(
+                "printf started > '\(marker.path)'; /bin/sleep 30",
+                profileID: profile.id
+            )
+        }
+        try await waitForRemoteCommandMarker(at: marker)
+
+        await manager.disconnect(profileID: profile.id)
+
+        await #expect(throws: SSHMultiplexerError.notConnected) {
+            try await command.value
+        }
+    }
+
+    @Test @MainActor func daemonUploadCancellationStopsItsSFTPWorker() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let sftpExecutor = DaemonCancellationSFTPExecutor()
+        let adapter = DaemonDeployAdapter(
+            connectionManager: manager,
+            sftpExecutor: sftpExecutor
+        )
+        let localFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-daemon-upload-\(UUID().uuidString)"
+        )
+        defer { try? FileManager.default.removeItem(at: localFile) }
+        try Data("payload".utf8).write(to: localFile)
+        let upload = Task {
+            try await adapter.uploadFile(
+                localPath: localFile.path,
+                remotePath: "/tmp/cocxyd",
+                profileID: profile.id
+            )
+        }
+        for _ in 0..<200 {
+            if sftpExecutor.started { break }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(sftpExecutor.started)
+
+        upload.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await upload.value
+        }
+        #expect(sftpExecutor.cancellationObserved)
+    }
+
+    @Test @MainActor func daemonUploadExplicitlyReplacesItsManagedRemoteScript() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let sftpExecutor = DaemonRecordingSFTPExecutor()
+        let adapter = DaemonDeployAdapter(
+            connectionManager: manager,
+            sftpExecutor: sftpExecutor
+        )
+        let localFile = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-daemon-upload-\(UUID().uuidString)"
+        )
+        defer { try? FileManager.default.removeItem(at: localFile) }
+        try Data("payload".utf8).write(to: localFile)
+
+        try await adapter.uploadFile(
+            localPath: localFile.path,
+            remotePath: DaemonDeployer.remotePath,
+            profileID: profile.id
+        )
+
+        #expect(sftpExecutor.commands.count == 2)
+        #expect(sftpExecutor.commands.first?.hasPrefix("put ") == true)
+        #expect(sftpExecutor.commands.last?.hasPrefix("rename ") == true)
+        #expect(sftpExecutor.commands.last?.contains("rename -l ") == false)
+        #expect(sftpExecutor.commands.last?.hasSuffix(" '~/.cocxy/cocxyd.sh'") == true)
     }
 
     @Test @MainActor func proxyTransportUsesExactConnectedLeaseAndMasterIdentity() async throws {
@@ -635,6 +1172,43 @@ struct RemoteConnectionManagerTests {
         guard case .closeFailed = retained.status else {
             Issue.record("Expected quarantined close failure")
             return
+        }
+    }
+
+    @Test @MainActor func daemonTransportUsesRemoteLoopbackOverExactSSHLease() async throws {
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let transport = RemoteManagerTestProxyTransport()
+        multiplexer.proxyTransport = transport
+        let manager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: MockRemoteProfileStore(),
+            tunnelManager: SSHTunnelManager(),
+            executor: MockProcessExecutor()
+        )
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        await manager.connect(profile: profile)
+        let leaseID = try #require(manager.connectionLeaseID(for: profile.id))
+        let expectedTarget = try ProxyTarget(host: "127.0.0.1", port: 45_678)
+
+        let binding = try manager.openDaemonTransport(
+            remotePort: 45_678,
+            profileID: profile.id,
+            expectedConnectionLeaseID: leaseID
+        )
+
+        #expect(binding.profileID == profile.id)
+        #expect(binding.connectionLeaseID == leaseID)
+        #expect(binding.transport === transport)
+        #expect(multiplexer.openedProxyTargets == [expectedTarget])
+        #expect(multiplexer.openedProxyIdentities.count == 1)
+        #expect(multiplexer.openedProxyIdentities[0].controlPath == profile.controlPath)
+
+        #expect(throws: SSHMultiplexerError.self) {
+            try manager.openDaemonTransport(
+                remotePort: 45_678,
+                profileID: profile.id,
+                expectedConnectionLeaseID: UUID()
+            )
         }
     }
 

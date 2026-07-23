@@ -33,11 +33,11 @@ struct PortForwardingView: View {
 
     /// Executes the real SSH port forward via ControlMaster.
     /// The tunnel is published only after this operation succeeds.
-    let onForwardPort: (RemoteConnectionProfile.PortForward, UUID) throws -> Void
+    let onForwardPort: (RemoteConnectionProfile.PortForward, UUID) async throws -> Void
 
     /// Cancels the real SSH port forward via ControlMaster.
     /// The tunnel remains visible when cancellation fails.
-    let onCancelForward: (RemoteConnectionProfile.PortForward, UUID) throws -> Void
+    let onCancelForward: (RemoteConnectionProfile.PortForward, UUID) async throws -> Void
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     /// Whether the inline "add tunnel" form is expanded.
@@ -48,6 +48,7 @@ struct PortForwardingView: View {
     @State private var newLocalPort: String = ""
     @State private var newRemotePort: String = ""
     @State private var operationError: String?
+    @State private var isOperationInFlight = false
 
     // MARK: - Body
 
@@ -106,6 +107,7 @@ struct PortForwardingView: View {
                                 onRemove: {
                                     removeTunnel(tunnel)
                                 },
+                                isRemovalDisabled: isOperationInFlight,
                                 localizer: localizer
                             )
                             Divider()
@@ -221,12 +223,22 @@ struct PortForwardingView: View {
                 .font(.system(size: 11))
                 .foregroundColor(Color(nsColor: CocxyColors.subtext0))
 
-                Button(localized("common.add", fallback: "Add")) { addTunnel() }
+                Button {
+                    Task { await addTunnel() }
+                } label: {
+                    HStack(spacing: 5) {
+                        if isOperationInFlight {
+                            ProgressView()
+                                .controlSize(.mini)
+                        }
+                        Text(localized("common.add", fallback: "Add"))
+                    }
+                }
                     .buttonStyle(.borderedProminent)
                     .tint(Color(nsColor: CocxyColors.blue))
                     .font(.system(size: 11))
                     .controlSize(.small)
-                    .disabled(!isAddFormValid)
+                    .disabled(!isAddFormValid || isOperationInFlight)
             }
         }
         .padding(12)
@@ -253,7 +265,8 @@ struct PortForwardingView: View {
 
     // MARK: - Actions
 
-    private func addTunnel() {
+    private func addTunnel() async {
+        guard !isOperationInFlight else { return }
         guard let localPort = Int(newLocalPort) else { return }
 
         let forward: RemoteConnectionProfile.PortForward
@@ -268,13 +281,16 @@ struct PortForwardingView: View {
             return
         }
 
+        isOperationInFlight = true
+        defer { isOperationInFlight = false }
+
         do {
-            try PortForwardingOperations.add(
+            try await PortForwardingOperations.add(
                 forward,
                 profileID: profileID,
                 to: tunnelManager
             ) {
-                try onForwardPort(forward, profileID)
+                try await onForwardPort(forward, profileID)
             }
             operationError = nil
         } catch {
@@ -295,13 +311,18 @@ struct PortForwardingView: View {
     }
 
     private func removeTunnel(_ tunnel: ActiveTunnel) {
-        do {
-            try PortForwardingOperations.remove(tunnel, from: tunnelManager) {
-                try onCancelForward(tunnel.forward, profileID)
+        guard !isOperationInFlight else { return }
+        Task {
+            isOperationInFlight = true
+            defer { isOperationInFlight = false }
+            do {
+                try await PortForwardingOperations.remove(tunnel, from: tunnelManager) {
+                    try await onCancelForward(tunnel.forward, profileID)
+                }
+                operationError = nil
+            } catch {
+                operationError = formattedOperationError(error)
             }
-            operationError = nil
-        } catch {
-            operationError = formattedOperationError(error)
         }
     }
 
@@ -342,20 +363,39 @@ enum PortForwardingOperations {
         _ forward: RemoteConnectionProfile.PortForward,
         profileID: UUID,
         to tunnelManager: SSHTunnelManager,
-        perform: () throws -> Void
-    ) throws -> ActiveTunnel {
-        try perform()
-        return tunnelManager.addTunnel(forward: forward, for: profileID)
+        perform: () async throws -> Void
+    ) async throws -> ActiveTunnel {
+        do {
+            try await perform()
+            return tunnelManager.addTunnel(forward: forward, for: profileID)
+        } catch let error as SSHMultiplexerError {
+            if case .forwardCleanupUnconfirmed = error {
+                _ = tunnelManager.addTunnel(
+                    forward: forward,
+                    for: profileID,
+                    status: .failed(error.localizedDescription)
+                )
+            }
+            throw error
+        }
     }
 
     @discardableResult
     static func remove(
         _ tunnel: ActiveTunnel,
         from tunnelManager: SSHTunnelManager,
-        perform: () throws -> Void
-    ) throws -> Bool {
-        try perform()
-        return tunnelManager.removeTunnel(id: tunnel.id)
+        perform: () async throws -> Void
+    ) async throws -> Bool {
+        do {
+            try await perform()
+            return tunnelManager.removeTunnel(id: tunnel.id)
+        } catch {
+            tunnelManager.updateTunnelStatus(
+                id: tunnel.id,
+                status: .failed(error.localizedDescription)
+            )
+            throw error
+        }
     }
 }
 
@@ -398,6 +438,7 @@ struct TunnelRow: View {
 
     let tunnel: ActiveTunnel
     let onRemove: () -> Void
+    let isRemovalDisabled: Bool
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isHovered = false
@@ -418,6 +459,7 @@ struct TunnelRow: View {
                     .foregroundColor(Color(nsColor: CocxyColors.red).opacity(0.8))
             }
             .buttonStyle(.plain)
+            .disabled(isRemovalDisabled)
             .opacity(isHovered ? 1 : 0.62)
             .accessibilityLabel(localized("remoteWorkspace.portForward.remove.accessibility", fallback: "Remove tunnel"))
         }

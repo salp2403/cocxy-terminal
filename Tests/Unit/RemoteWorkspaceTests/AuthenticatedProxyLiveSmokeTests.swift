@@ -194,37 +194,7 @@ private func receiveLiveProxyChunk(
 @Suite("Authenticated proxy real SSH smoke", .serialized)
 struct AuthenticatedProxyLiveSmokeTests {
     private static func availableLoopbackPort() throws -> Int {
-        let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard descriptor >= 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-        defer { Darwin.close(descriptor) }
-        var address = sockaddr_in(
-            sin_len: UInt8(MemoryLayout<sockaddr_in>.size),
-            sin_family: sa_family_t(AF_INET),
-            sin_port: 0,
-            sin_addr: in_addr(s_addr: inet_addr("127.0.0.1")),
-            sin_zero: (0, 0, 0, 0, 0, 0, 0, 0)
-        )
-        let bound = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bound == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-        var result = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let named = withUnsafeMutablePointer(to: &result) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.getsockname(descriptor, $0, &length)
-            }
-        }
-        guard named == 0 else {
-            throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
-        }
-        return Int(UInt16(bigEndian: result.sin_port))
+        try LoopbackTestPortAllocator.freshPort()
     }
 
     @Test("Wrong credentials fail closed and valid credentials relay through attested MUX")

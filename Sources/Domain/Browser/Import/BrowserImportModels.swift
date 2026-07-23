@@ -234,11 +234,17 @@ enum BrowserImportLocationPathBinding {
               (!importHistory || historyPath != nil),
               (!importCookies || cookiesPath != nil),
               (!importBookmarks || bookmarksPath != nil) else { return [] }
+        let profileIdentifier = explicitProfileIdentifier(
+            source: source,
+            historyPath: historyPath,
+            cookiesPath: cookiesPath,
+            bookmarksPath: bookmarksPath
+        )
 
         return [BrowserImportLocation(
             source: source,
             profileName: profileName ?? base.profileName,
-            profileIdentifier: profileName ?? base.profileIdentifier,
+            profileIdentifier: profileIdentifier,
             historyPath: historyPath.map(URL.init(fileURLWithPath:)) ?? base.historyPath,
             cookiesPath: importCookies ? cookiesPath.map(URL.init(fileURLWithPath:)) : nil,
             bookmarksPath: importBookmarks ? bookmarksPath.map(URL.init(fileURLWithPath:)) : nil
@@ -449,6 +455,22 @@ enum BrowserImportLocationPathBinding {
                 || $0.profileName.caseInsensitiveCompare(profileName) == .orderedSame
         }
     }
+
+    private static func explicitProfileIdentifier(
+        source: BrowserImportSource,
+        historyPath: String?,
+        cookiesPath: String?,
+        bookmarksPath: String?
+    ) -> String {
+        let rawPath = historyPath ?? bookmarksPath ?? cookiesPath ?? "/"
+        let resource = URL(fileURLWithPath: rawPath).standardizedFileURL
+        var profileRoot = resource.deletingLastPathComponent()
+        if resource.lastPathComponent == "Cookies",
+           profileRoot.lastPathComponent == "Network" {
+            profileRoot.deleteLastPathComponent()
+        }
+        return "explicit:\(source.rawValue):\(profileRoot.path)"
+    }
 }
 
 struct BrowserImportPlan: Codable, Sendable, Equatable {
@@ -613,10 +635,26 @@ struct BrowserImportedCookie: Sendable, Equatable {
 struct BrowserImportedCookieBatchWriteError: LocalizedError, Sendable, Equatable {
     let importedCount: Int
     let totalCount: Int
+    let uncertainCount: Int
     let detail: String
 
+    init(
+        importedCount: Int,
+        totalCount: Int,
+        uncertainCount: Int = 0,
+        detail: String
+    ) {
+        self.importedCount = importedCount
+        self.totalCount = totalCount
+        self.uncertainCount = uncertainCount
+        self.detail = detail
+    }
+
     var errorDescription: String? {
-        "Imported \(importedCount) of \(totalCount) cookies: \(detail)"
+        let uncertainty = uncertainCount > 0
+            ? ", with \(uncertainCount) that could not be confirmed by WebKit"
+            : ""
+        return "Imported \(importedCount) of \(totalCount) cookies\(uncertainty): \(detail)"
     }
 }
 
@@ -642,10 +680,29 @@ struct BrowserImportedBookmark: Sendable, Equatable {
     }
 }
 
+enum BrowserImportIssueKind: Sendable, Equatable {
+    case cookieBatchWrite(imported: Int, total: Int, uncertain: Int)
+    case bookmarkRootConflict
+    case cancelled
+}
+
 struct BrowserImportIssue: Sendable, Equatable {
     let source: BrowserImportSource
     let profileName: String
     let message: String
+    let kind: BrowserImportIssueKind?
+
+    init(
+        source: BrowserImportSource,
+        profileName: String,
+        message: String,
+        kind: BrowserImportIssueKind? = nil
+    ) {
+        self.source = source
+        self.profileName = profileName
+        self.message = message
+        self.kind = kind
+    }
 }
 
 struct BrowserImportPreview: Sendable, Equatable {
@@ -688,15 +745,39 @@ struct BrowserImportResult: Sendable, Equatable {
     let sourceProfile: String
     let importedHistoryCount: Int
     let importedCookieCount: Int
+    let uncertainCookieCount: Int
     let importedBookmarkCount: Int
     let skippedCount: Int
     let errors: [BrowserImportIssue]
+
+    init(
+        runID: UUID,
+        status: BrowserImportStatus,
+        sourceProfile: String,
+        importedHistoryCount: Int,
+        importedCookieCount: Int,
+        uncertainCookieCount: Int = 0,
+        importedBookmarkCount: Int,
+        skippedCount: Int,
+        errors: [BrowserImportIssue]
+    ) {
+        self.runID = runID
+        self.status = status
+        self.sourceProfile = sourceProfile
+        self.importedHistoryCount = importedHistoryCount
+        self.importedCookieCount = importedCookieCount
+        self.uncertainCookieCount = uncertainCookieCount
+        self.importedBookmarkCount = importedBookmarkCount
+        self.skippedCount = skippedCount
+        self.errors = errors
+    }
 }
 
 enum BrowserImportStatus: String, Codable, Sendable, Equatable {
     case completed
     case partial
     case failed
+    case cancelled
 }
 
 struct BrowserImportAuditEntry: Codable, Sendable, Equatable {
@@ -707,10 +788,73 @@ struct BrowserImportAuditEntry: Codable, Sendable, Equatable {
     let status: BrowserImportStatus
     let importedHistoryCount: Int
     let importedCookieCount: Int
+    let uncertainCookieCount: Int
     let importedBookmarkCount: Int
     let skippedCount: Int
     let issueCount: Int
     let timestamp: Date
+
+    init(
+        runID: UUID,
+        source: BrowserImportSource,
+        sourceProfile: String,
+        targetProfileID: UUID,
+        status: BrowserImportStatus,
+        importedHistoryCount: Int,
+        importedCookieCount: Int,
+        uncertainCookieCount: Int = 0,
+        importedBookmarkCount: Int,
+        skippedCount: Int,
+        issueCount: Int,
+        timestamp: Date
+    ) {
+        self.runID = runID
+        self.source = source
+        self.sourceProfile = sourceProfile
+        self.targetProfileID = targetProfileID
+        self.status = status
+        self.importedHistoryCount = importedHistoryCount
+        self.importedCookieCount = importedCookieCount
+        self.uncertainCookieCount = uncertainCookieCount
+        self.importedBookmarkCount = importedBookmarkCount
+        self.skippedCount = skippedCount
+        self.issueCount = issueCount
+        self.timestamp = timestamp
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case runID
+        case source
+        case sourceProfile
+        case targetProfileID
+        case status
+        case importedHistoryCount
+        case importedCookieCount
+        case uncertainCookieCount
+        case importedBookmarkCount
+        case skippedCount
+        case issueCount
+        case timestamp
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        runID = try values.decode(UUID.self, forKey: .runID)
+        source = try values.decode(BrowserImportSource.self, forKey: .source)
+        sourceProfile = try values.decode(String.self, forKey: .sourceProfile)
+        targetProfileID = try values.decode(UUID.self, forKey: .targetProfileID)
+        status = try values.decode(BrowserImportStatus.self, forKey: .status)
+        importedHistoryCount = try values.decode(Int.self, forKey: .importedHistoryCount)
+        importedCookieCount = try values.decode(Int.self, forKey: .importedCookieCount)
+        uncertainCookieCount = try values.decodeIfPresent(
+            Int.self,
+            forKey: .uncertainCookieCount
+        ) ?? 0
+        importedBookmarkCount = try values.decode(Int.self, forKey: .importedBookmarkCount)
+        skippedCount = try values.decode(Int.self, forKey: .skippedCount)
+        issueCount = try values.decode(Int.self, forKey: .issueCount)
+        timestamp = try values.decode(Date.self, forKey: .timestamp)
+    }
 }
 
 protocol BrowserSourceImporting: Sendable {
@@ -742,6 +886,7 @@ enum BrowserImportError: LocalizedError, Sendable, Equatable {
     case sourceProfileUnavailable(String)
     case noImportableData(String)
     case cookieDecryptionFailed(String)
+    case bookmarkRootConflict
     case sourceChangedAfterPreview
     case cancelled
 
@@ -761,6 +906,8 @@ enum BrowserImportError: LocalizedError, Sendable, Equatable {
             return message
         case .cookieDecryptionFailed(let message):
             return message
+        case .bookmarkRootConflict:
+            return "The imported-bookmark destination conflicts with an existing item"
         case .sourceChangedAfterPreview:
             return "Browser data changed after review; refresh the preview before importing"
         case .cancelled:

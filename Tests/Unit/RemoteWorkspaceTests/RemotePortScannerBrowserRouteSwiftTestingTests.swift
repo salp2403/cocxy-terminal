@@ -14,7 +14,11 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
         profile: RemoteConnectionProfile,
         executor: any ProcessExecutor
     ) throws -> SSHControlMasterIdentity {
-        SSHControlMasterIdentity(processID: 56_789, controlPath: profile.controlPath)
+        SSHControlMasterIdentity(
+            processID: 56_789,
+            controlPath: profile.controlPath,
+            supervisorID: UUID()
+        )
     }
 
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
@@ -42,6 +46,27 @@ private final class RemotePortScannerMultiplexer: SSHMultiplexing, @unchecked Se
         executor: any ProcessExecutor
     ) throws {
         cancelledForwards.append(forward)
+    }
+
+    func attestControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity
+    ) throws -> SSHControlSocketAttestation {
+        SSHControlSocketAttestation(
+            device: 7,
+            inode: 11,
+            peerProcessID: expectedControlMaster.processID
+        )
+    }
+
+    func verifyControlMaster(
+        _ expectedControlMaster: SSHControlMasterIdentity,
+        attestation: SSHControlSocketAttestation
+    ) throws {
+        guard attestation.device == 7,
+              attestation.inode == 11,
+              attestation.peerProcessID == expectedControlMaster.processID else {
+            throw SSHMultiplexerError.notConnected
+        }
     }
 
     func executeRemoteCommand(

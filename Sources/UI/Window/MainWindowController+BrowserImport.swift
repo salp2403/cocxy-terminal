@@ -27,11 +27,19 @@ extension MainWindowController {
         }
 
         let localizer = appLocalizer()
+        let bookmarkRootTitleFormat = localizer.string(
+            BrowserImportBookmarkRootLocalization.key,
+            fallback: BrowserImportBookmarkRootLocalization.fallback
+        )
         let service = BrowserImportService(
             historyStore: browserHistoryStore,
             bookmarkStore: browserBookmarkStore,
             cookieStore: BrowserWebKitCookieImportStore(),
-            auditLogger: FileBrowserImportAuditLogger()
+            auditLogger: FileBrowserImportAuditLogger(),
+            bookmarkRootTitleFormat: bookmarkRootTitleFormat,
+            bookmarkRootTitleAliases: BrowserImportBookmarkRootLocalization.formats(
+                current: bookmarkRootTitleFormat
+            )
         )
         let viewModel = BrowserImportViewModel(
             destinationProfiles: profileManager.profiles,

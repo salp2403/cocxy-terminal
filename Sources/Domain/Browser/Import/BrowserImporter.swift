@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // BrowserImporter.swift - Browser import orchestration into Cocxy-owned stores.
 
+import CryptoKit
 import Darwin
 import Foundation
 
@@ -10,19 +11,27 @@ struct BrowserImporter: Sendable {
     let bookmarkStore: (any BrowserBookmarkStoring)?
     let cookieStore: (any BrowserImportedCookieStoring)?
     let auditLogger: (any BrowserImportAuditLogging)?
+    let bookmarkRootTitleFormat: String
+    let cancellationRequested: @Sendable () -> Bool
 
     init(
         sourceImporter: any BrowserSourceImporting,
         historyStore: (any BrowserHistoryStoring)?,
         bookmarkStore: (any BrowserBookmarkStoring)?,
         cookieStore: (any BrowserImportedCookieStoring)?,
-        auditLogger: (any BrowserImportAuditLogging)? = nil
+        auditLogger: (any BrowserImportAuditLogging)? = nil,
+        bookmarkRootTitleFormat: String = "Imported from %@ - %@",
+        bookmarkRootTitleAliases: [String] = [],
+        cancellationRequested: @escaping @Sendable () -> Bool = { Task.isCancelled }
     ) {
         self.sourceImporter = sourceImporter
         self.historyStore = historyStore
         self.bookmarkStore = bookmarkStore
         self.cookieStore = cookieStore
         self.auditLogger = auditLogger
+        self.bookmarkRootTitleFormat = bookmarkRootTitleFormat
+        _ = bookmarkRootTitleAliases
+        self.cancellationRequested = cancellationRequested
     }
 
     init(
@@ -30,26 +39,40 @@ struct BrowserImporter: Sendable {
         historyStore: (any BrowserHistoryStoring)?,
         bookmarkStore: (any BrowserBookmarkStoring)?,
         cookieStore: (any BrowserImportedCookieStoring)?,
-        auditLogger: (any BrowserImportAuditLogging)? = nil
+        auditLogger: (any BrowserImportAuditLogging)? = nil,
+        bookmarkRootTitleFormat: String = "Imported from %@ - %@",
+        bookmarkRootTitleAliases: [String] = [],
+        cancellationRequested: @escaping @Sendable () -> Bool = { Task.isCancelled }
     ) {
         self.init(
             sourceImporter: BrowserSourceImporterFactory.importer(for: source),
             historyStore: historyStore,
             bookmarkStore: bookmarkStore,
             cookieStore: cookieStore,
-            auditLogger: auditLogger
+            auditLogger: auditLogger,
+            bookmarkRootTitleFormat: bookmarkRootTitleFormat,
+            bookmarkRootTitleAliases: bookmarkRootTitleAliases,
+            cancellationRequested: cancellationRequested
         )
     }
 
     func importData(_ plan: BrowserImportPlan) throws -> BrowserImportResult {
+        try checkCancellation()
         let runID = UUID()
-        let sourceProfile = plan.locations().first?.profileName
+        let locations = plan.locations()
+        let sourceProfile = locations.first?.profileName
             ?? plan.sourceProfile
             ?? plan.source.displayName
+        let sourceProfileIdentifier = locations.first?.profileIdentifier
+            ?? plan.sourceProfile
+            ?? sourceProfile
         let preview: BrowserImportPreview
         do {
             preview = try sourceImporter.preview(plan: plan.readingCookieValues())
         } catch {
+            if isCancellation(error) {
+                throw BrowserImportError.cancelled
+            }
             recordFailedAudit(
                 runID: runID,
                 plan: plan,
@@ -58,6 +81,7 @@ struct BrowserImporter: Sendable {
             )
             throw error
         }
+        try checkCancellation()
         guard preview.itemCount > 0 else {
             recordFailedAudit(
                 runID: runID,
@@ -82,110 +106,207 @@ struct BrowserImporter: Sendable {
 
         var importedHistoryCount = 0
         var importedCookieCount = 0
+        var uncertainCookieCount = 0
         var importedBookmarkCount = 0
         var skippedCount = preview.skippedCount
         var issues = preview.errors
 
-        if plan.importHistory, let historyStore {
-            var failedHistoryCount = 0
-            var lastHistoryError: String?
-            for visit in preview.history {
-                do {
-                    let inserted = try historyStore.recordVisitIfNew(
-                        url: visit.url,
-                        title: visit.title,
-                        profileID: plan.profileID,
-                        visitedAt: visit.visitedAt
-                    )
-                    if inserted {
-                        importedHistoryCount += 1
-                    } else {
+        do {
+            if plan.importHistory, let historyStore {
+                var failedHistoryCount = 0
+                var lastHistoryError: String?
+                for visit in preview.history {
+                    try checkCancellation()
+                    do {
+                        let inserted = try historyStore.recordVisitIfNew(
+                            url: visit.url,
+                            title: visit.title,
+                            profileID: plan.profileID,
+                            visitedAt: visit.visitedAt
+                        )
+                        if inserted {
+                            importedHistoryCount += 1
+                        } else {
+                            skippedCount += 1
+                        }
+                    } catch {
+                        if isCancellation(error) { throw BrowserImportError.cancelled }
                         skippedCount += 1
+                        failedHistoryCount += 1
+                        lastHistoryError = (error as? LocalizedError)?.errorDescription
+                            ?? String(describing: error)
                     }
-                } catch {
-                    skippedCount += 1
-                    failedHistoryCount += 1
-                    lastHistoryError = (error as? LocalizedError)?.errorDescription
-                        ?? String(describing: error)
                 }
-            }
-            if failedHistoryCount > 0 {
-                let detail = lastHistoryError.map { ": \($0)" } ?? ""
-                issues.append(issue(
-                    plan,
-                    sourceProfile,
-                    "Skipped \(failedHistoryCount) history visits after write failures\(detail)"
-                ))
-            }
-        } else if !preview.history.isEmpty {
-            skippedCount += preview.history.count
-            if plan.importHistory {
-                issues.append(issue(plan, sourceProfile, "Browser history storage is unavailable"))
-            }
-        }
-
-        if plan.importCookies, let cookieStore {
-            let cookies = preview.cookies.filter { cookie in
-                if cookie.value == nil || cookie.isPartitioned {
-                    skippedCount += 1
-                    return false
-                }
-                return true
-            }
-            if !cookies.isEmpty {
-                do {
-                    try cookieStore.saveImportedCookies(cookies, profileID: plan.profileID)
-                    importedCookieCount += cookies.count
-                } catch let error as BrowserImportedCookieBatchWriteError {
-                    let completed = min(max(error.importedCount, 0), cookies.count)
-                    importedCookieCount += completed
-                    skippedCount += cookies.count - completed
-                    issues.append(issue(plan, sourceProfile, error.localizedDescription))
-                } catch {
-                    skippedCount += cookies.count
-                    issues.append(issue(plan, sourceProfile, "Cookie write failed: \(error)"))
-                }
-            }
-        } else if !preview.cookies.isEmpty {
-            skippedCount += preview.cookies.count
-            if plan.importCookies {
-                issues.append(issue(plan, sourceProfile, "Browser cookie storage is unavailable"))
-            }
-        }
-
-        if plan.importBookmarks, let bookmarkStore {
-            do {
-                let bookmarkResult = try importBookmarks(
-                    preview.bookmarks,
-                    plan: plan,
-                    sourceProfile: sourceProfile,
-                    store: bookmarkStore
-                )
-                importedBookmarkCount += bookmarkResult.imported
-                skippedCount += bookmarkResult.skipped
-                if bookmarkResult.failed > 0 {
-                    let detail = bookmarkResult.lastError.map { ": \($0)" } ?? ""
+                if failedHistoryCount > 0 {
+                    let detail = lastHistoryError.map { ": \($0)" } ?? ""
                     issues.append(issue(
                         plan,
                         sourceProfile,
-                        "Skipped \(bookmarkResult.failed) bookmarks after write failures\(detail)"
+                        "Skipped \(failedHistoryCount) history visits after write failures\(detail)"
                     ))
                 }
-            } catch {
-                skippedCount += preview.bookmarks.count
-                issues.append(issue(plan, sourceProfile, "Bookmark write failed: \(error)"))
+            } else if !preview.history.isEmpty {
+                skippedCount += preview.history.count
+                if plan.importHistory {
+                    issues.append(issue(plan, sourceProfile, "Browser history storage is unavailable"))
+                }
             }
-        } else if !preview.bookmarks.isEmpty {
-            skippedCount += preview.bookmarks.count
-            if plan.importBookmarks {
-                issues.append(issue(plan, sourceProfile, "Browser bookmark storage is unavailable"))
-            }
-        }
 
+            try checkCancellation()
+            if plan.importCookies, let cookieStore {
+                let cookies = preview.cookies.filter { cookie in
+                    if cookie.value == nil || cookie.isPartitioned {
+                        skippedCount += 1
+                        return false
+                    }
+                    return true
+                }
+                if !cookies.isEmpty {
+                    do {
+                        try cookieStore.saveImportedCookies(cookies, profileID: plan.profileID)
+                        importedCookieCount += cookies.count
+                    } catch let error as BrowserImportedCookieBatchWriteError {
+                        let completed = min(max(error.importedCount, 0), cookies.count)
+                        let uncertain = min(
+                            max(error.uncertainCount, 0),
+                            cookies.count - completed
+                        )
+                        importedCookieCount += completed
+                        uncertainCookieCount += uncertain
+                        skippedCount += cookies.count - completed - uncertain
+                        issues.append(issue(
+                            plan,
+                            sourceProfile,
+                            error.localizedDescription,
+                            kind: .cookieBatchWrite(
+                                imported: completed,
+                                total: cookies.count,
+                                uncertain: uncertain
+                            )
+                        ))
+                    } catch {
+                        if isCancellation(error) { throw BrowserImportError.cancelled }
+                        skippedCount += cookies.count
+                        issues.append(issue(plan, sourceProfile, "Cookie write failed: \(error)"))
+                    }
+                }
+            } else if !preview.cookies.isEmpty {
+                skippedCount += preview.cookies.count
+                if plan.importCookies {
+                    issues.append(issue(plan, sourceProfile, "Browser cookie storage is unavailable"))
+                }
+            }
+
+            try checkCancellation()
+            if plan.importBookmarks, let bookmarkStore {
+                do {
+                    let bookmarkResult = try importBookmarks(
+                        preview.bookmarks,
+                        plan: plan,
+                        sourceProfile: sourceProfile,
+                        sourceProfileIdentifier: sourceProfileIdentifier,
+                        store: bookmarkStore
+                    )
+                    importedBookmarkCount += bookmarkResult.imported
+                    skippedCount += bookmarkResult.skipped
+                    if bookmarkResult.failed > 0 {
+                        let detail = bookmarkResult.lastError.map { ": \($0)" } ?? ""
+                        issues.append(issue(
+                            plan,
+                            sourceProfile,
+                            "Skipped \(bookmarkResult.failed) bookmarks after write failures\(detail)"
+                        ))
+                    }
+                } catch {
+                    if isCancellation(error) { throw BrowserImportError.cancelled }
+                    skippedCount += preview.bookmarks.count
+                    if (error as? BrowserImportError) == .bookmarkRootConflict {
+                        issues.append(issue(
+                            plan,
+                            sourceProfile,
+                            BrowserImportError.bookmarkRootConflict.localizedDescription,
+                            kind: .bookmarkRootConflict
+                        ))
+                    } else {
+                        issues.append(issue(
+                            plan,
+                            sourceProfile,
+                            "Bookmark write failed: \(error)"
+                        ))
+                    }
+                }
+            } else if !preview.bookmarks.isEmpty {
+                skippedCount += preview.bookmarks.count
+                if plan.importBookmarks {
+                    issues.append(issue(plan, sourceProfile, "Browser bookmark storage is unavailable"))
+                }
+            }
+
+            try checkCancellation()
+            return finishImport(
+                runID: runID,
+                plan: plan,
+                sourceProfile: sourceProfile,
+                importedHistoryCount: importedHistoryCount,
+                importedCookieCount: importedCookieCount,
+                uncertainCookieCount: uncertainCookieCount,
+                importedBookmarkCount: importedBookmarkCount,
+                skippedCount: skippedCount,
+                issues: issues,
+                wasCancelled: false
+            )
+        } catch {
+            guard isCancellation(error) else { throw error }
+            let destinationSkipped = max(0, skippedCount - preview.skippedCount)
+            let accountedItems = importedHistoryCount
+                + importedCookieCount
+                + uncertainCookieCount
+                + importedBookmarkCount
+                + destinationSkipped
+            skippedCount += max(0, preview.itemCount - accountedItems)
+            issues.append(issue(
+                plan,
+                sourceProfile,
+                BrowserImportError.cancelled.localizedDescription,
+                kind: .cancelled
+            ))
+            return finishImport(
+                runID: runID,
+                plan: plan,
+                sourceProfile: sourceProfile,
+                importedHistoryCount: importedHistoryCount,
+                importedCookieCount: importedCookieCount,
+                uncertainCookieCount: uncertainCookieCount,
+                importedBookmarkCount: importedBookmarkCount,
+                skippedCount: skippedCount,
+                issues: issues,
+                wasCancelled: true
+            )
+        }
+    }
+
+    private func finishImport(
+        runID: UUID,
+        plan: BrowserImportPlan,
+        sourceProfile: String,
+        importedHistoryCount: Int,
+        importedCookieCount: Int,
+        uncertainCookieCount: Int,
+        importedBookmarkCount: Int,
+        skippedCount: Int,
+        issues initialIssues: [BrowserImportIssue],
+        wasCancelled: Bool
+    ) -> BrowserImportResult {
+        var issues = initialIssues
         let importedTotal = importedHistoryCount + importedCookieCount + importedBookmarkCount
-        var status: BrowserImportStatus = importedTotal == 0
-            ? .failed
-            : (issues.isEmpty ? .completed : .partial)
+        let hasDestinationChanges = importedTotal > 0 || uncertainCookieCount > 0
+        var status: BrowserImportStatus = if wasCancelled {
+            .cancelled
+        } else if hasDestinationChanges {
+            issues.isEmpty && uncertainCookieCount == 0 ? .completed : .partial
+        } else {
+            .failed
+        }
         let entry = BrowserImportAuditEntry(
             runID: runID,
             source: plan.source,
@@ -194,6 +315,7 @@ struct BrowserImporter: Sendable {
             status: status,
             importedHistoryCount: importedHistoryCount,
             importedCookieCount: importedCookieCount,
+            uncertainCookieCount: uncertainCookieCount,
             importedBookmarkCount: importedBookmarkCount,
             skippedCount: skippedCount,
             issueCount: issues.count,
@@ -212,6 +334,7 @@ struct BrowserImporter: Sendable {
             sourceProfile: sourceProfile,
             importedHistoryCount: importedHistoryCount,
             importedCookieCount: importedCookieCount,
+            uncertainCookieCount: uncertainCookieCount,
             importedBookmarkCount: importedBookmarkCount,
             skippedCount: skippedCount,
             errors: issues
@@ -222,21 +345,36 @@ struct BrowserImporter: Sendable {
         _ imported: [BrowserImportedBookmark],
         plan: BrowserImportPlan,
         sourceProfile: String,
+        sourceProfileIdentifier: String,
         store: any BrowserBookmarkStoring
     ) throws -> (imported: Int, skipped: Int, failed: Int, lastError: String?) {
+        try checkCancellation()
         guard !imported.isEmpty else { return (0, 0, 0, nil) }
         let existing = try store.loadAll()
+        try checkCancellation()
         var pending: [BrowserBookmark] = []
-        let rootTitle = "Imported from \(plan.source.displayName) - \(sourceProfile)"
+        let rootTitle = String(
+            format: bookmarkRootTitleFormat,
+            plan.source.displayName,
+            sourceProfile
+        )
+        let expectedRootID = bookmarkRootID(
+            plan: plan,
+            sourceProfileIdentifier: sourceProfileIdentifier
+        )
         let rootID: UUID
-        if let root = existing.first(where: {
-            $0.isFolder && $0.parentID == nil && $0.title == rootTitle
-        }) {
-            rootID = root.id
+        if let existingRoot = existing.first(where: { $0.id == expectedRootID }) {
+            guard existingRoot.isFolder, existingRoot.parentID == nil else {
+                throw BrowserImportError.bookmarkRootConflict
+            }
+            rootID = existingRoot.id
         } else {
-            let root = BrowserBookmark.folder(name: rootTitle)
-            pending.append(root)
-            rootID = root.id
+            pending.append(BrowserBookmark(
+                id: expectedRootID,
+                title: rootTitle,
+                isFolder: true
+            ))
+            rootID = expectedRootID
         }
 
         var foldersByPath: [[String]: UUID] = Dictionary(
@@ -250,6 +388,7 @@ struct BrowserImporter: Sendable {
         var sourceBookmarkIDs = Set<UUID>()
 
         for item in imported {
+            try checkCancellation()
             var path: [String] = []
             var parentID = rootID
             for rawComponent in item.folderPath.prefix(64) {
@@ -297,10 +436,14 @@ struct BrowserImporter: Sendable {
             knownBookmarks.insert(key)
         }
 
+        try checkCancellation()
         do {
             try store.saveBatch(pending)
             return (sourceBookmarkIDs.count, skippedCount, 0, nil)
         } catch let error as BrowserBookmarkBatchSaveError {
+            if isCancellation(error), error.savedItemIDs.isEmpty {
+                throw BrowserImportError.cancelled
+            }
             let importedCount = sourceBookmarkIDs.intersection(error.savedItemIDs).count
             let failedCount = sourceBookmarkIDs.count - importedCount
             return (
@@ -310,6 +453,7 @@ struct BrowserImporter: Sendable {
                 error.localizedDescription
             )
         } catch {
+            if isCancellation(error) { throw BrowserImportError.cancelled }
             let failedCount = sourceBookmarkIDs.count
             return (
                 0,
@@ -324,12 +468,49 @@ struct BrowserImporter: Sendable {
         "\(parentID?.uuidString ?? "root")\u{1F}\(title)\u{1F}\(url)"
     }
 
+    private func bookmarkRootID(
+        plan: BrowserImportPlan,
+        sourceProfileIdentifier: String
+    ) -> UUID {
+        let identity = [
+            "com.cocxy.browser-import.bookmark-root.v1",
+            plan.profileID.uuidString.lowercased(),
+            plan.source.rawValue,
+            sourceProfileIdentifier,
+        ].joined(separator: "\u{1F}")
+        var bytes = Array(SHA256.hash(data: Data(identity.utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x80
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
+    }
+
+    private func checkCancellation() throws {
+        guard !cancellationRequested() else { throw BrowserImportError.cancelled }
+    }
+
+    private func isCancellation(_ error: Error) -> Bool {
+        error is CancellationError
+            || cancellationRequested()
+            || (error as? BrowserImportError) == .cancelled
+    }
+
     private func issue(
         _ plan: BrowserImportPlan,
         _ sourceProfile: String,
-        _ message: String
+        _ message: String,
+        kind: BrowserImportIssueKind? = nil
     ) -> BrowserImportIssue {
-        BrowserImportIssue(source: plan.source, profileName: sourceProfile, message: message)
+        BrowserImportIssue(
+            source: plan.source,
+            profileName: sourceProfile,
+            message: message,
+            kind: kind
+        )
     }
 
     private func recordFailedAudit(

@@ -11,6 +11,7 @@ import Testing
 
 final class MockProcessExecutor: ProcessExecutor, @unchecked Sendable {
     var executedCommands: [(command: String, arguments: [String])] = []
+    var controlTimeouts: [TimeInterval] = []
     var stubbedResult: ProcessResult = ProcessResult(
         exitCode: 0,
         stdout: "Master running (pid=12345)",
@@ -38,6 +39,24 @@ final class MockProcessExecutor: ProcessExecutor, @unchecked Sendable {
             throw SSHMultiplexerError.connectionFailed("mock error")
         }
         return stubbedAsyncResult ?? stubbedResult
+    }
+
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult {
+        controlTimeouts.append(timeoutSeconds)
+        return try execute(command: command, arguments: arguments)
+    }
+
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        controlTimeouts.append(timeoutSeconds)
+        return try await executeAsync(command: command, arguments: arguments)
     }
 
     func start(command: String, arguments: [String]) throws -> any ManagedProcess {
@@ -218,6 +237,24 @@ private final class ConcurrentProfileExecutor: ProcessExecutor, @unchecked Senda
         try execute(command: command, arguments: arguments)
     }
 
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try execute(command: command, arguments: arguments)
+    }
+
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try execute(command: command, arguments: arguments)
+    }
+
     func start(command: String, arguments: [String]) throws -> any ManagedProcess {
         _ = command
         let path = controlPath(in: arguments)
@@ -247,6 +284,58 @@ private final class ConcurrentProfileExecutor: ProcessExecutor, @unchecked Senda
         arguments
             .first { $0.hasPrefix("ControlPath=") }
             .map { String($0.dropFirst("ControlPath=".count)) }
+    }
+}
+
+private final class StartThreadRecordingProcessExecutor: ProcessExecutor, @unchecked Sendable {
+    private let lock = NSLock()
+    private var startRanOnMainThreadStorage: Bool?
+    private let childProcessID: Int32 = 34_567
+
+    var startRanOnMainThread: Bool? {
+        lock.withLock { startRanOnMainThreadStorage }
+    }
+
+    func execute(command: String, arguments: [String]) throws -> ProcessResult {
+        _ = command
+        _ = arguments
+        return ProcessResult(
+            exitCode: 0,
+            stdout: "Master running (pid=\(childProcessID))",
+            stderr: ""
+        )
+    }
+
+    func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult {
+        try execute(command: command, arguments: arguments)
+    }
+
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try execute(command: command, arguments: arguments)
+    }
+
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try execute(command: command, arguments: arguments)
+    }
+
+    func start(command: String, arguments: [String]) throws -> any ManagedProcess {
+        _ = command
+        _ = arguments
+        lock.withLock { startRanOnMainThreadStorage = Thread.isMainThread }
+        return MockManagedProcess(
+            isRunning: true,
+            diagnosticOutput: "COCXY_SSH_CHILD_PID=\(childProcessID)"
+        )
     }
 }
 
@@ -298,6 +387,51 @@ private func bindProtectedUnixSocket(at path: String) throws -> Int32 {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(savedError))
     }
     return descriptor
+}
+
+private enum SystemProcessFixtureError: Error {
+    case processDidNotStart
+}
+
+private func waitForProcessIdentifiers(at url: URL) async throws -> [Int32] {
+    for _ in 0..<200 {
+        if let data = try? Data(contentsOf: url),
+           let value = String(data: data, encoding: .utf8) {
+            let processIdentifiers = value
+                .split(whereSeparator: \.isWhitespace)
+                .compactMap { Int32($0) }
+            if !processIdentifiers.isEmpty {
+                return processIdentifiers
+            }
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    throw SystemProcessFixtureError.processDidNotStart
+}
+
+private func waitForProcessesToStop(_ processIdentifiers: [Int32]) async throws -> Bool {
+    for _ in 0..<200 {
+        let anyProcessIsAlive = processIdentifiers.contains { processIdentifier in
+            guard processIdentifier > 1 else { return false }
+            if Darwin.kill(processIdentifier, 0) == 0 { return true }
+            return errno == EPERM
+        }
+        if !anyProcessIsAlive { return true }
+        try await Task.sleep(nanoseconds: 10_000_000)
+    }
+    return false
+}
+
+private let commandTestAttestation = SSHControlSocketAttestation(
+    device: 11,
+    inode: 22,
+    peerProcessID: 12_345
+)
+
+private func commandTestMultiplexer() -> SSHMultiplexer {
+    SSHMultiplexer(controlSocketAttestationProvider: { _ in
+        commandTestAttestation
+    })
 }
 
 // MARK: - SSH Multiplexer Tests
@@ -599,6 +733,152 @@ struct SSHMultiplexerTests {
         #expect(!process.isRunning)
     }
 
+    @Test func systemProcessExecutorDrainsLargeOutputWithoutDeadlock() async throws {
+        let expectedByteCount = 512 * 1_024
+        let result = try await SystemProcessExecutor(asyncTimeoutSeconds: 2).executeAsync(
+            command: "/bin/sh",
+            arguments: [
+                "-c",
+                "/usr/bin/yes 0123456789abcdef | /usr/bin/head -c \(expectedByteCount)",
+            ]
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout.utf8.count == expectedByteCount)
+        #expect(result.stderr.isEmpty)
+        #expect(!result.timedOut)
+    }
+
+    @Test func systemProcessExecutorTimesOutAndCleansItsProcessTree() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-process-timeout-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let processFile = root.appendingPathComponent("processes")
+
+        let result = try await SystemProcessExecutor(asyncTimeoutSeconds: 0.5).executeAsync(
+            command: "/bin/sh",
+            arguments: [
+                "-c",
+                "/bin/sleep 30 & printf '%s %s' \"$$\" \"$!\" > '\(processFile.path)'; wait",
+            ]
+        )
+        let processIdentifiers = try await waitForProcessIdentifiers(at: processFile)
+
+        #expect(result.exitCode == 124)
+        #expect(result.timedOut)
+        #expect(result.stderr.contains("SSH command timed out."))
+        #expect(try await waitForProcessesToStop(processIdentifiers))
+    }
+
+    @Test func controlExecutionUsesItsExplicitTimeoutAndPreservesProvenance() async throws {
+        let startedAt = ProcessInfo.processInfo.systemUptime
+        let result = try await SystemProcessExecutor(asyncTimeoutSeconds: 30).executeControlAsync(
+            command: "/bin/sh",
+            arguments: ["-c", "/bin/sleep 30"],
+            timeoutSeconds: 0.1
+        )
+        let elapsed = ProcessInfo.processInfo.systemUptime - startedAt
+
+        #expect(result.exitCode == 124)
+        #expect(result.timedOut)
+        #expect(result.stderr.contains("SSH command timed out."))
+        #expect(elapsed < 2)
+    }
+
+    @Test func independentAsyncCommandsDoNotShareASerialExecutionQueue() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-process-concurrency-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let startedFile = root.appendingPathComponent("started")
+        let releaseFile = root.appendingPathComponent("release")
+        let fastFile = root.appendingPathComponent("fast")
+        let executor = SystemProcessExecutor(asyncTimeoutSeconds: 5)
+        let slowCommand = """
+        /usr/bin/touch '\(startedFile.path)'
+        while [ ! -e '\(releaseFile.path)' ]; do /bin/sleep 0.01; done
+        """
+        let slowTask = Task {
+            try await executor.executeAsync(
+                command: "/bin/sh",
+                arguments: ["-c", slowCommand]
+            )
+        }
+        defer {
+            _ = FileManager.default.createFile(atPath: releaseFile.path, contents: Data())
+        }
+
+        for _ in 0..<200 where !FileManager.default.fileExists(atPath: startedFile.path) {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        #expect(FileManager.default.fileExists(atPath: startedFile.path))
+
+        let fastTask = Task {
+            try await executor.executeAsync(
+                command: "/usr/bin/touch",
+                arguments: [fastFile.path]
+            )
+        }
+        for _ in 0..<200 where !FileManager.default.fileExists(atPath: fastFile.path) {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let fastFinishedBeforeRelease = FileManager.default.fileExists(atPath: fastFile.path)
+        _ = FileManager.default.createFile(atPath: releaseFile.path, contents: Data())
+
+        let fastResult = try await fastTask.value
+        let slowResult = try await slowTask.value
+        #expect(fastFinishedBeforeRelease)
+        #expect(fastResult.exitCode == 0)
+        #expect(slowResult.exitCode == 0)
+    }
+
+    @Test @MainActor
+    func connectAsyncDoesNotOccupyMainActorWhileStartingProcess() async throws {
+        let executor = StartThreadRecordingProcessExecutor()
+        let profile = RemoteConnectionProfile(name: "responsive", host: "server.com")
+        let multiplexer = SSHMultiplexer()
+        let identity = try await multiplexer.connectAsync(
+            profile: profile,
+            executor: executor
+        )
+
+        #expect(executor.startRanOnMainThread == false)
+        multiplexer.terminateControlMaster(identity)
+    }
+
+    @Test func systemProcessExecutorCancellationCleansItsProcessTree() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-process-cancel-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let processFile = root.appendingPathComponent("processes")
+        let executor = SystemProcessExecutor(asyncTimeoutSeconds: 5)
+        let execution = Task {
+            try await executor.executeAsync(
+                command: "/bin/sh",
+                arguments: [
+                    "-c",
+                    "/bin/sleep 30 & printf '%s %s' \"$$\" \"$!\" > '\(processFile.path)'; wait",
+                ]
+            )
+        }
+        let processIdentifiers = try await waitForProcessIdentifiers(at: processFile)
+
+        execution.cancel()
+
+        await #expect(throws: CancellationError.self) {
+            try await execution.value
+        }
+        #expect(try await waitForProcessesToStop(processIdentifiers))
+    }
+
     @Test func supervisorExitsWhenItsManagedChildDiesFirst() throws {
         let process = try SystemProcessExecutor().start(
             command: "/bin/sh",
@@ -820,7 +1100,45 @@ struct SSHMultiplexerTests {
         #expect(call.arguments.contains("check"))
     }
 
+    @Test func controlTimeoutsAreBoundedAndReportedByOperation() async {
+        let timeout: TimeInterval = 0.25
+        let multiplexer = SSHMultiplexer(controlCommandTimeoutSeconds: timeout)
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(name: "dev", host: "server.com")
+        let forward = RemoteConnectionProfile.PortForward.local(
+            localPort: 8_080,
+            remotePort: 80
+        )
+        executor.stubbedAsyncResult = ProcessResult(
+            exitCode: 124,
+            stdout: "",
+            stderr: "SSH command timed out.",
+            timedOut: true
+        )
+
+        await #expect(
+            throws: SSHMultiplexerError.forwardTimedOut(
+                "SSH port forward request timed out"
+            )
+        ) {
+            try await multiplexer.forwardPortAsync(
+                forward,
+                on: profile,
+                executor: executor
+            )
+        }
+        await #expect(
+            throws: SSHMultiplexerError.connectionFailed(
+                "SSH ControlMaster health check timed out"
+            )
+        ) {
+            _ = try await multiplexer.isAlive(profile: profile, executor: executor)
+        }
+        #expect(executor.controlTimeouts == [timeout, timeout])
+    }
+
     @Test func controlOperationsCarryPortAndIdentity() async throws {
+        let multiplexer = commandTestMultiplexer()
         let executor = MockProcessExecutor()
         executor.stubbedAsyncResult = ProcessResult(
             exitCode: 0,
@@ -840,10 +1158,20 @@ struct SSHMultiplexerTests {
 
         _ = try multiplexer.connect(profile: profile, executor: executor)
         _ = try await multiplexer.isAlive(profile: profile, executor: executor)
-        try multiplexer.disconnect(profile: profile, executor: executor)
         _ = try await multiplexer.executeRemoteCommand("printf ok", on: profile, executor: executor)
+        try multiplexer.disconnect(profile: profile, executor: executor)
 
-        for call in executor.executedCommands {
+        let helperCall = try #require(executor.executedCommands.last)
+        let configuration = try #require(
+            try SFTPMuxSessionArgumentContract.configuration(
+                arguments: helperCall.arguments
+            )
+        )
+        #expect(configuration.controlPath == profile.controlPath)
+        #expect(configuration.attestation == commandTestAttestation)
+        #expect(configuration.request == .command("printf ok"))
+
+        for call in executor.executedCommands.dropLast() {
             #expect(call.arguments.contains("-p"))
             #expect(call.arguments.contains("2222"))
             #expect(call.arguments.contains("-i"))
@@ -856,7 +1184,48 @@ struct SSHMultiplexerTests {
         }
     }
 
+    @Test func remoteCommandReusesJumpBackedMasterWithoutConflictingJumpOptions() async throws {
+        let multiplexer = commandTestMultiplexer()
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(
+            name: "lab",
+            host: "server.com",
+            user: "deploy",
+            jumpHosts: ["jump.example"],
+            batchMode: false
+        )
+
+        _ = try multiplexer.connect(profile: profile, executor: executor)
+        _ = try await multiplexer.executeRemoteCommand(
+            "printf ok",
+            on: profile,
+            executor: executor
+        )
+        try multiplexer.disconnect(profile: profile, executor: executor)
+
+        let connectionArguments = try #require(
+            executor.executedCommands.first?.arguments
+        )
+        #expect(connectionArguments.contains("-J"))
+        #expect(connectionArguments.contains("jump.example"))
+
+        let helperArguments = try #require(
+            executor.executedCommands.last?.arguments
+        )
+        let configuration = try #require(
+            try SFTPMuxSessionArgumentContract.configuration(
+                arguments: helperArguments
+            )
+        )
+        #expect(configuration.controlPath == profile.controlPath)
+        #expect(configuration.attestation == commandTestAttestation)
+        #expect(configuration.request == .command("printf ok"))
+        #expect(!helperArguments.contains("-J"))
+        #expect(!helperArguments.contains("jump.example"))
+    }
+
     @Test func everyOpenSSHOperationBoundsOptionsBeforeDestination() async throws {
+        let multiplexer = commandTestMultiplexer()
         let executor = MockProcessExecutor()
         let profile = RemoteConnectionProfile(
             name: "lab",
@@ -870,7 +1239,6 @@ struct SSHMultiplexerTests {
 
         try multiplexer.connect(profile: profile, executor: executor)
         _ = try await multiplexer.isAlive(profile: profile, executor: executor)
-        try multiplexer.disconnect(profile: profile, executor: executor)
         try multiplexer.forwardPort(forward, on: profile, executor: executor)
         try multiplexer.cancelForward(forward, on: profile, executor: executor)
         _ = try await multiplexer.executeRemoteCommand(
@@ -878,13 +1246,96 @@ struct SSHMultiplexerTests {
             on: profile,
             executor: executor
         )
+        try multiplexer.disconnect(profile: profile, executor: executor)
 
         #expect(executor.executedCommands.count == 6)
-        for call in executor.executedCommands {
+        for call in executor.executedCommands.dropLast() {
             let boundaryIndex = try #require(call.arguments.firstIndex(of: "--"))
             let destinationIndex = call.arguments.index(after: boundaryIndex)
             #expect(call.arguments[destinationIndex] == "deploy@config_alias")
         }
+        let helperArguments = try #require(
+            executor.executedCommands.last?.arguments
+        )
+        let helperConfiguration = try #require(
+            try SFTPMuxSessionArgumentContract.configuration(
+                arguments: helperArguments
+            )
+        )
+        #expect(helperConfiguration.request == .command("printf ok"))
+    }
+
+    @Test func remoteCommandRequiresAnOwnedSupervisedMaster() async {
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(name: "lab", host: "server.com")
+
+        await #expect(throws: SSHMultiplexerError.notConnected) {
+            _ = try await multiplexer.executeRemoteCommand(
+                "printf ok",
+                on: profile,
+                executor: executor
+            )
+        }
+
+        #expect(executor.executedCommands.isEmpty)
+    }
+
+    @Test func completedRemoteCommandRetainsResultWhenMasterDisappearsAfterExecution() async throws {
+        let replacement = SSHControlSocketAttestation(
+            device: commandTestAttestation.device,
+            inode: commandTestAttestation.inode + 1,
+            peerProcessID: commandTestAttestation.peerProcessID
+        )
+        let attestations = ControlSocketAttestationSequence([
+            commandTestAttestation,
+            replacement,
+        ])
+        let multiplexer = SSHMultiplexer(
+            controlSocketAttestationProvider: { _ in try attestations.next() }
+        )
+        let executor = MockProcessExecutor()
+        executor.stubbedAsyncResult = ProcessResult(
+            exitCode: 0,
+            stdout: "committed",
+            stderr: ""
+        )
+        let profile = RemoteConnectionProfile(name: "lab", host: "server.com")
+        let identity = try multiplexer.connect(profile: profile, executor: executor)
+        defer { multiplexer.terminateControlMaster(identity) }
+
+        let result = try await multiplexer.executeRemoteCommand(
+            "perform mutation",
+            on: profile,
+            executor: executor
+        )
+
+        #expect(result.exitCode == 0)
+        #expect(result.stdout == "committed")
+        #expect(result.postExecutionConnectionState == .unavailable)
+    }
+
+    @Test func remoteCommandPreservesTimeoutProvenance() async throws {
+        let multiplexer = commandTestMultiplexer()
+        let executor = MockProcessExecutor()
+        let profile = RemoteConnectionProfile(name: "lab", host: "server.com")
+        let identity = try multiplexer.connect(profile: profile, executor: executor)
+        defer { multiplexer.terminateControlMaster(identity) }
+        executor.stubbedAsyncResult = ProcessResult(
+            exitCode: 124,
+            stdout: "partial",
+            stderr: "SSH command timed out.",
+            timedOut: true
+        )
+
+        let result = try await multiplexer.executeRemoteCommand(
+            "perform mutation",
+            on: profile,
+            executor: executor
+        )
+
+        #expect(result.exitCode == 124)
+        #expect(result.timedOut)
+        #expect(result.stdout == "partial")
     }
 
     @Test func isAliveReturnsFalseWhenConnectionDead() async throws {

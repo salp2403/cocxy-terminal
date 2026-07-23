@@ -5,6 +5,14 @@ import Foundation
 import Testing
 @testable import CocxyTerminal
 
+@MainActor
+private func waitForRelayCondition(_ condition: () -> Bool) async {
+    for _ in 0..<200 {
+        if condition() { return }
+        try? await Task.sleep(nanoseconds: 1_000_000)
+    }
+}
+
 private final class RelayTestTokenStore: RelayTokenStoring, @unchecked Sendable {
     enum TestError: Error {
         case saveFailed
@@ -251,7 +259,6 @@ struct RelayManagerTests {
             config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
             profileID: profileID
         )
-        defer { manager.closeChannel(channelID: channel.id) }
 
         let forward = try #require(forwarder.forwardedPorts.first)
         guard case let .remote(remotePort, localPort, localHost) = forward else {
@@ -262,6 +269,7 @@ struct RelayManagerTests {
         #expect(localPort != 3000)
         #expect(localPort > 0)
         #expect(localHost == "127.0.0.1")
+        await manager.closeChannel(channelID: channel.id)
     }
 
     @Test("Close channel cancels the exact broker forward and tears down security state")
@@ -274,7 +282,7 @@ struct RelayManagerTests {
         )
         let broker = context.brokerFactory.brokers[0]
 
-        context.manager.closeChannel(channelID: channel.id)
+        await context.manager.closeChannel(channelID: channel.id)
 
         #expect(context.forwarder.cancelledPorts == context.forwarder.forwardedPorts)
         #expect(broker.isStopped)
@@ -293,7 +301,7 @@ struct RelayManagerTests {
         )
         context.forwarder.shouldThrowOnCancel = true
 
-        context.manager.closeChannel(channelID: channel.id)
+        await context.manager.closeChannel(channelID: channel.id)
 
         let retained = try #require(context.manager.listChannels(profileID: profileID).first)
         guard case .closeFailed = retained.status else {
@@ -308,7 +316,7 @@ struct RelayManagerTests {
         #expect(context.tunnelManager.listTunnels(for: profileID).count == 1)
 
         context.forwarder.shouldThrowOnCancel = false
-        context.manager.closeChannel(channelID: channel.id)
+        await context.manager.closeChannel(channelID: channel.id)
 
         #expect(context.manager.listChannels(profileID: profileID).isEmpty)
         #expect(context.brokerFactory.brokers[0].isStopped)
@@ -325,7 +333,7 @@ struct RelayManagerTests {
         )
         context.forwarder.currentConnectionLeaseID = UUID()
 
-        context.manager.closeChannel(channelID: channel.id)
+        await context.manager.closeChannel(channelID: channel.id)
 
         #expect(context.forwarder.cancelledPorts.isEmpty)
         let retained = try #require(context.manager.listChannels(profileID: profileID).first)
@@ -347,6 +355,9 @@ struct RelayManagerTests {
         )
 
         context.brokerFactory.brokers[0].emitFailure(MockRelayAuthBroker.TestError.startFailed)
+        await waitForRelayCondition {
+            context.manager.listChannels(profileID: profileID).isEmpty
+        }
 
         #expect(context.forwarder.cancelledPorts == context.forwarder.forwardedPorts)
         #expect(context.manager.listChannels(profileID: profileID).isEmpty)
@@ -365,7 +376,9 @@ struct RelayManagerTests {
         context.forwarder.currentConnectionLeaseID = UUID()
 
         context.brokerFactory.brokers[0].emitFailure(MockRelayAuthBroker.TestError.startFailed)
-        await Task.yield()
+        await waitForRelayCondition {
+            !context.profileRevoker.connectionLeaseIDs.isEmpty
+        }
 
         #expect(context.forwarder.cancelledPorts.isEmpty)
         #expect(context.profileRevoker.connectionLeaseIDs == [oldLeaseID])
@@ -385,7 +398,7 @@ struct RelayManagerTests {
             profileID: profileID
         )
         context.forwarder.shouldThrowOnCancel = true
-        context.manager.closeChannel(channelID: channel.id)
+        await context.manager.closeChannel(channelID: channel.id)
         #expect(context.manager.listChannels(profileID: profileID).count == 1)
 
         context.manager.releaseChannelsAfterSessionTermination(profileID: profileID)
@@ -406,7 +419,9 @@ struct RelayManagerTests {
         context.forwarder.shouldThrowOnCancel = true
 
         context.brokerFactory.brokers[0].emitFailure(MockRelayAuthBroker.TestError.startFailed)
-        await Task.yield()
+        await waitForRelayCondition {
+            !context.profileRevoker.profileIDs.isEmpty
+        }
 
         #expect(context.profileRevoker.profileIDs == [profileID])
         let retained = try #require(context.manager.listChannels(profileID: profileID).first)
@@ -432,8 +447,9 @@ struct RelayManagerTests {
         context.forwarder.shouldThrowOnCancel = true
 
         context.brokerFactory.brokers[0].emitFailure(MockRelayAuthBroker.TestError.startFailed)
-        await Task.yield()
-        await Task.yield()
+        await waitForRelayCondition {
+            context.manager.listChannels(profileID: profileID).isEmpty
+        }
 
         #expect(context.profileRevoker.profileIDs == [profileID])
         #expect(context.manager.listChannels(profileID: profileID).isEmpty)
@@ -501,7 +517,7 @@ struct RelayManagerTests {
             profileID: profileB
         )
 
-        context.manager.closeAllChannels(profileID: profileA)
+        await context.manager.closeAllChannels(profileID: profileA)
 
         #expect(context.forwarder.cancelledPorts.count == 2)
         #expect(context.manager.listChannels(profileID: profileA).isEmpty)
@@ -577,6 +593,7 @@ struct RelayManagerTests {
             )
             Issue.record("Expected error")
         } catch {
+            #expect(context.forwarder.cancelledPorts.isEmpty)
             #expect(context.brokerFactory.brokers[0].isStopped)
             #expect(context.tokenStore.stored.isEmpty)
             #expect(context.tunnelManager.listTunnels(for: profileID).isEmpty)
@@ -700,6 +717,96 @@ struct RelayManagerTests {
         }
     }
 
+    @Test("Invalidation after SSH exposure compensates the uncertain forward")
+    @MainActor func postForwardInvalidationCompensates() async {
+        let context = makeManager()
+        let profileID = UUID()
+        let gate = MockPortForwardCompletionGate()
+        context.forwarder.forwardCompletionGate = gate
+        let task = Task { @MainActor in
+            try await context.manager.openChannel(
+                config: RelayChannelConfig(
+                    name: "stale",
+                    localPort: 3000,
+                    remotePort: 9000
+                ),
+                profileID: profileID
+            )
+        }
+
+        for _ in 0..<200 where !gate.isWaiting {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        #expect(gate.isWaiting)
+        #expect(context.forwarder.forwardedPorts.count == 1)
+        context.manager.invalidatePendingOpenings(profileID: profileID)
+        gate.resume()
+
+        await #expect(throws: CancellationError.self) {
+            _ = try await task.value
+        }
+        #expect(context.forwarder.cancelledPorts == context.forwarder.forwardedPorts)
+        #expect(context.manager.listChannels(profileID: profileID).isEmpty)
+        #expect(context.brokerFactory.brokers[0].isStopped)
+        #expect(context.tokenStore.stored.isEmpty)
+    }
+
+    @Test("A late opening quarantines the old forward without touching its replacement")
+    @MainActor func lateOpeningQuarantinesOldLease() async throws {
+        let context = makeManager()
+        let profileID = UUID()
+        let oldConnectionLeaseID = try #require(
+            context.forwarder.currentConnectionLeaseID
+        )
+        let gate = MockPortForwardCompletionGate()
+        context.forwarder.forwardCompletionGate = gate
+        let task = Task { @MainActor in
+            try await context.manager.openChannel(
+                config: RelayChannelConfig(
+                    name: "stale",
+                    localPort: 3000,
+                    remotePort: 9000
+                ),
+                profileID: profileID
+            )
+        }
+
+        for _ in 0..<200 where !gate.isWaiting {
+            try? await Task.sleep(nanoseconds: 1_000_000)
+        }
+        #expect(gate.isWaiting)
+        context.forwarder.currentConnectionLeaseID = UUID()
+        context.manager.invalidatePendingOpenings(profileID: profileID)
+        gate.resume()
+
+        await #expect(throws: SSHMultiplexerError.notConnected) {
+            _ = try await task.value
+        }
+        await waitForRelayCondition {
+            !context.profileRevoker.connectionLeaseIDs.isEmpty
+        }
+        #expect(context.forwarder.cancelledPorts.isEmpty)
+        #expect(context.profileRevoker.connectionLeaseIDs == [oldConnectionLeaseID])
+        let retained = try #require(
+            context.manager.listChannels(profileID: profileID).first
+        )
+        guard case .closeFailed = retained.status else {
+            Issue.record("Expected closeFailed quarantine status")
+            return
+        }
+        #expect(context.brokerFactory.brokers[0].isDeactivated)
+        #expect(!context.brokerFactory.brokers[0].isStopped)
+        #expect(context.tokenStore.stored[retained.id] != nil)
+
+        context.manager.releaseChannelsAfterSessionTermination(
+            profileID: profileID,
+            connectionLeaseID: oldConnectionLeaseID
+        )
+        #expect(context.manager.listChannels(profileID: profileID).isEmpty)
+        #expect(context.brokerFactory.brokers[0].isStopped)
+        #expect(context.tokenStore.stored.isEmpty)
+    }
+
     @Test("Invalid ports fail before broker or forward creation")
     @MainActor func invalidPorts() async {
         let context = makeManager()
@@ -735,10 +842,10 @@ struct RelayManagerTests {
     }
 
     @Test("Close and rotate for unknown channels are safe no-ops")
-    @MainActor func unknownChannelNoOps() throws {
+    @MainActor func unknownChannelNoOps() async throws {
         let context = makeManager()
 
-        context.manager.closeChannel(channelID: UUID())
+        await context.manager.closeChannel(channelID: UUID())
         try context.manager.rotateToken(channelID: UUID())
 
         #expect(context.forwarder.cancelledPorts.isEmpty)

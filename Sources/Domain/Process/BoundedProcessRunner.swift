@@ -7,6 +7,11 @@ import Foundation
 enum BoundedProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
     case invalidInvocation
     case systemCallFailed(operation: String, code: Int32)
+    case launchdCommandFailed(operation: String, exitCode: Int32)
+    case secureBrokerFailed(String)
+    case secureCleanupUnverified(String)
+    case secureContainmentUnavailable
+    case secureContainmentVerificationFailed
     case processTreeDidNotTerminate
     case outputDrainDidNotFinish
 
@@ -16,11 +21,48 @@ enum BoundedProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
             return "The process invocation is invalid."
         case .systemCallFailed(let operation, let code):
             return "Process operation \(operation) failed: \(Self.message(for: code))."
+        case .launchdCommandFailed:
+            return "Secure local execution could not be started."
+        case .secureBrokerFailed:
+            return "Secure local execution failed and was stopped."
+        case .secureCleanupUnverified:
+            return "Cocxy stopped the command but could not verify complete cleanup. Restart Cocxy before running more local code."
+        case .secureContainmentUnavailable:
+            return "Secure process containment is unavailable."
+        case .secureContainmentVerificationFailed:
+            return "Secure process containment could not be verified."
         case .processTreeDidNotTerminate:
             return "The process tree did not terminate cleanly."
         case .outputDrainDidNotFinish:
             return "The process output did not close after teardown."
         }
+    }
+
+    var diagnosticDescription: String {
+        if case .secureBrokerFailed(let reason) = self { return reason }
+        if case .secureCleanupUnverified(let reason) = self { return reason }
+        if case .launchdCommandFailed(let operation, let exitCode) = self {
+            return "\(operation) failed with exit code \(exitCode)"
+        }
+        return errorDescription ?? String(describing: self)
+    }
+
+    static func contextual(_ operation: String, error: Error) -> BoundedProcessRunnerError {
+        if let bounded = error as? BoundedProcessRunnerError {
+            switch bounded {
+            case .secureCleanupUnverified:
+                return .secureCleanupUnverified(
+                    "\(operation): \(bounded.diagnosticDescription)"
+                )
+            case .secureContainmentUnavailable:
+                return .secureContainmentUnavailable
+            default:
+                break
+            }
+        }
+        let detail = (error as? BoundedProcessRunnerError)?.diagnosticDescription
+            ?? error.localizedDescription
+        return .secureBrokerFailed("\(operation): \(detail)")
     }
 
     private static func message(for code: Int32) -> String {
@@ -29,16 +71,40 @@ enum BoundedProcessRunnerError: Error, LocalizedError, Equatable, Sendable {
     }
 }
 
-struct BoundedProcessResult: Equatable, Sendable {
+struct BoundedProcessResult: Codable, Equatable, Sendable {
     let exitCode: Int32
     let stdout: String
     let stderr: String
     let stdoutWasTruncated: Bool
     let stderrWasTruncated: Bool
     let timedOut: Bool
+
+    static func timeoutResult(
+        diagnostic: String?,
+        maximumRetainedBytesPerStream: Int
+    ) -> BoundedProcessResult {
+        let stderrCapture = BoundedCapturedStream(
+            limit: maximumRetainedBytesPerStream
+        )
+        return BoundedProcessResult(
+            exitCode: 124,
+            stdout: "",
+            stderr: stderrCapture.rendered(diagnostic: diagnostic),
+            stdoutWasTruncated: false,
+            stderrWasTruncated: stderrCapture.renderedWasTruncated(
+                diagnostic: diagnostic
+            ),
+            timedOut: true
+        )
+    }
 }
 
 /// Runs a process in an isolated session while bounding time, output, and descendants.
+/// Bounded execution for fixed, trusted infrastructure utilities only.
+///
+/// Snapshot-based tracking cannot contain project-controlled code that can
+/// double-fork and create a new session. Use `LaunchdProcessBrokerClient` for
+/// hooks, shells, interpreters, or any executable selected by untrusted input.
 struct BoundedProcessRunner: Sendable {
     private static let pollIntervalMilliseconds: Int32 = 20
     private static let terminationGracePeriodSeconds: TimeInterval = 0.2
@@ -46,9 +112,17 @@ struct BoundedProcessRunner: Sendable {
     private static let outputDrainWaitSeconds: TimeInterval = 0.5
 
     let maximumRetainedBytesPerStream: Int
+    let observesTaskCancellation: Bool
+    let externalCancellationRequested: @Sendable () -> Bool
 
-    init(maximumRetainedBytesPerStream: Int) {
+    init(
+        maximumRetainedBytesPerStream: Int,
+        observesTaskCancellation: Bool = true,
+        externalCancellationRequested: @escaping @Sendable () -> Bool = { false }
+    ) {
         self.maximumRetainedBytesPerStream = maximumRetainedBytesPerStream
+        self.observesTaskCancellation = observesTaskCancellation
+        self.externalCancellationRequested = externalCancellationRequested
     }
 
     func run(
@@ -59,7 +133,7 @@ struct BoundedProcessRunner: Sendable {
         timeoutSeconds: TimeInterval?,
         timeoutDiagnostic: String? = nil
     ) throws -> BoundedProcessResult {
-        try Task.checkCancellation()
+        try checkCancellation()
         guard maximumRetainedBytesPerStream > 0 else {
             throw BoundedProcessRunnerError.invalidInvocation
         }
@@ -67,76 +141,102 @@ struct BoundedProcessRunner: Sendable {
             throw BoundedProcessRunnerError.invalidInvocation
         }
 
-        let execution = try BoundedProcessExecution.spawn(
-            executableURL: executableURL,
-            arguments: arguments,
-            workingDirectory: workingDirectory,
-            environment: environment,
-            retainedBytesPerStream: maximumRetainedBytesPerStream
-        )
-        var completedCleanup = false
-        defer {
-            if !completedCleanup {
-                execution.forceCleanup()
-            }
-        }
-
         let deadline = Self.deadline(for: timeoutSeconds)
-        var stopReason: BoundedProcessStopReason?
-        var terminationStatus: Int32?
+        if let deadline, BoundedMonotonicClock.now() >= deadline {
+            return .timeoutResult(
+                diagnostic: timeoutDiagnostic,
+                maximumRetainedBytesPerStream: maximumRetainedBytesPerStream
+            )
+        }
+        let execution: BoundedProcessExecution
+        do {
+            execution = try BoundedProcessExecution.spawn(
+                executableURL: executableURL,
+                arguments: arguments,
+                workingDirectory: workingDirectory,
+                environment: environment,
+                retainedBytesPerStream: maximumRetainedBytesPerStream,
+                deadline: deadline,
+                cancellationRequested: { [self] in isCancellationRequested() }
+            )
+        } catch BoundedProcessBoundaryError.deadlineExceeded {
+            return .timeoutResult(
+                diagnostic: timeoutDiagnostic,
+                maximumRetainedBytesPerStream: maximumRetainedBytesPerStream
+            )
+        }
+        var completedCleanup = false
+        do {
+            var stopReason: BoundedProcessStopReason?
+            var terminationStatus: Int32?
 
-        while terminationStatus == nil, stopReason == nil {
-            try execution.drainAvailableOutput()
-            try execution.refreshProcessTree()
-            terminationStatus = try execution.observedTerminationStatus()
-            if terminationStatus != nil { break }
+            while terminationStatus == nil, stopReason == nil {
+                try execution.drainAvailableOutput()
+                try execution.refreshProcessTree()
+                terminationStatus = try execution.observedTerminationStatus()
+                if terminationStatus != nil { break }
 
-            if Task.isCancelled {
-                stopReason = .cancelled
-            } else if let deadline, BoundedMonotonicClock.now() >= deadline {
-                stopReason = .timedOut
-            } else {
-                try execution.pollOutput(milliseconds: Self.pollIntervalMilliseconds)
+                if isCancellationRequested() {
+                    stopReason = .cancelled
+                } else if let deadline, BoundedMonotonicClock.now() >= deadline {
+                    stopReason = .timedOut
+                } else {
+                    try execution.pollOutput(milliseconds: Self.pollIntervalMilliseconds)
+                }
             }
-        }
 
-        try execution.terminateProcessTree(
-            gracePeriodSeconds: Self.terminationGracePeriodSeconds,
-            killWaitSeconds: Self.killWaitSeconds
-        )
-        try execution.drainOutputToEnd(
-            timeoutSeconds: Self.outputDrainWaitSeconds
-        )
+            try execution.terminateProcessTree(
+                gracePeriodSeconds: Self.terminationGracePeriodSeconds,
+                killWaitSeconds: Self.killWaitSeconds
+            )
+            try execution.drainOutputToEnd(
+                timeoutSeconds: Self.outputDrainWaitSeconds
+            )
 
-        if terminationStatus == nil {
-            terminationStatus = try execution.waitForObservedTermination(
-                timeoutSeconds: Self.killWaitSeconds
-            )
-        }
-        try execution.reapLeader()
-        completedCleanup = true
+            if terminationStatus == nil {
+                terminationStatus = try execution.waitForObservedTermination(
+                    timeoutSeconds: Self.killWaitSeconds
+                )
+            }
+            try execution.reapLeader(timeoutSeconds: Self.killWaitSeconds)
+            completedCleanup = true
 
-        switch stopReason {
-        case .cancelled:
-            throw CancellationError()
-        case .timedOut:
-            return BoundedProcessResult(
-                exitCode: 124,
-                stdout: execution.stdoutString(),
-                stderr: execution.stderrString(diagnostic: timeoutDiagnostic),
-                stdoutWasTruncated: execution.stdoutWasTruncated,
-                stderrWasTruncated: execution.stderrWasTruncated,
-                timedOut: true
-            )
-        case nil:
-            return BoundedProcessResult(
-                exitCode: terminationStatus ?? 1,
-                stdout: execution.stdoutString(),
-                stderr: execution.stderrString(),
-                stdoutWasTruncated: execution.stdoutWasTruncated,
-                stderrWasTruncated: execution.stderrWasTruncated,
-                timedOut: false
-            )
+            switch stopReason {
+            case .cancelled:
+                throw CancellationError()
+            case .timedOut:
+                return BoundedProcessResult(
+                    exitCode: 124,
+                    stdout: execution.stdoutString(),
+                    stderr: execution.stderrString(diagnostic: timeoutDiagnostic),
+                    stdoutWasTruncated: execution.stdoutWasTruncated,
+                    stderrWasTruncated: execution.stderrWasTruncated(
+                        diagnostic: timeoutDiagnostic
+                    ),
+                    timedOut: true
+                )
+            case nil:
+                return BoundedProcessResult(
+                    exitCode: terminationStatus ?? 1,
+                    stdout: execution.stdoutString(),
+                    stderr: execution.stderrString(),
+                    stdoutWasTruncated: execution.stdoutWasTruncated,
+                    stderrWasTruncated: execution.stderrWasTruncated(),
+                    timedOut: false
+                )
+            }
+        } catch let originalError {
+            if !completedCleanup {
+                do {
+                    try execution.verifiedCleanup()
+                } catch {
+                    throw BoundedProcessRunnerError.contextual(
+                        "bounded process fallback cleanup",
+                        error: error
+                    )
+                }
+            }
+            throw originalError
         }
     }
 
@@ -146,6 +246,14 @@ struct BoundedProcessRunner: Sendable {
             seconds: timeoutSeconds,
             to: BoundedMonotonicClock.now()
         )
+    }
+
+    private func checkCancellation() throws {
+        if isCancellationRequested() { throw CancellationError() }
+    }
+
+    private func isCancellationRequested() -> Bool {
+        (observesTaskCancellation && Task.isCancelled) || externalCancellationRequested()
     }
 }
 
@@ -162,7 +270,7 @@ struct NotebookProcessRunner: AgentProcessRunning {
             format: "%.0f",
             (timeoutSeconds ?? 0).rounded(.towardZero)
         )
-        let result = try BoundedProcessRunner(
+        let result = try LaunchdProcessBrokerClient(
             maximumRetainedBytesPerStream: Self.maximumRetainedBytesPerStream
         ).run(
             executableURL: executableURL,
@@ -182,6 +290,10 @@ struct NotebookProcessRunner: AgentProcessRunning {
 private enum BoundedProcessStopReason {
     case cancelled
     case timedOut
+}
+
+private enum BoundedProcessBoundaryError: Error {
+    case deadlineExceeded
 }
 
 private final class BoundedProcessExecution {
@@ -221,7 +333,9 @@ private final class BoundedProcessExecution {
         arguments: [String],
         workingDirectory: URL,
         environment: [String: String]?,
-        retainedBytesPerStream: Int
+        retainedBytesPerStream: Int,
+        deadline: UInt64?,
+        cancellationRequested: @Sendable () -> Bool
     ) throws -> BoundedProcessExecution {
         guard executableURL.path.hasPrefix("/"),
               !executableURL.path.utf8.contains(0),
@@ -363,25 +477,43 @@ private final class BoundedProcessExecution {
             stderrDescriptor: stderrPipe.read,
             retainedBytesPerStream: retainedBytesPerStream
         )
+        func failAfterVerifiedCleanup(_ error: Error) throws -> Never {
+            do {
+                try execution.verifiedCleanup()
+            } catch {
+                throw BoundedProcessRunnerError.contextual(
+                    "bounded process startup cleanup",
+                    error: error
+                )
+            }
+            throw error
+        }
         // The suspended child cannot execute caller code until isolation is verified.
         guard getpgid(pid) == pid, getsid(pid) == pid else {
-            execution.forceCleanup()
-            throw BoundedProcessRunnerError.processTreeDidNotTerminate
+            try failAfterVerifiedCleanup(
+                BoundedProcessRunnerError.processTreeDidNotTerminate
+            )
         }
-        if let identity = BoundedProcessIdentity.current(for: pid) {
-            execution.trackedProcesses[pid] = identity
+        guard let identity = BoundedProcessIdentity.current(for: pid) else {
+            try failAfterVerifiedCleanup(
+                BoundedProcessRunnerError.secureContainmentVerificationFailed
+            )
         }
+        execution.trackedProcesses[pid] = identity
 
-        guard !Task.isCancelled else {
-            execution.forceCleanup()
-            throw CancellationError()
+        guard !cancellationRequested() else {
+            try failAfterVerifiedCleanup(CancellationError())
+        }
+        if let deadline, BoundedMonotonicClock.now() >= deadline {
+            try failAfterVerifiedCleanup(BoundedProcessBoundaryError.deadlineExceeded)
         }
         guard kill(pid, SIGCONT) == 0 else {
             let code = errno
-            execution.forceCleanup()
-            throw BoundedProcessRunnerError.systemCallFailed(
-                operation: "resume",
-                code: code
+            try failAfterVerifiedCleanup(
+                BoundedProcessRunnerError.systemCallFailed(
+                    operation: "resume",
+                    code: code
+                )
             )
         }
         return execution
@@ -555,21 +687,46 @@ private final class BoundedProcessExecution {
         }
     }
 
-    func reapLeader() throws {
+    func reapLeader(timeoutSeconds: TimeInterval) throws {
         guard !leaderWasReaped else { return }
+        let deadline = BoundedMonotonicClock.adding(
+            seconds: timeoutSeconds,
+            to: BoundedMonotonicClock.now()
+        )
         var status: Int32 = 0
-        while true {
-            let result = waitpid(leaderPID, &status, 0)
+        while BoundedMonotonicClock.now() < deadline {
+            let result = waitpid(leaderPID, &status, WNOHANG)
             if result == leaderPID {
                 leaderWasReaped = true
                 return
             }
+            if result == -1, errno == ECHILD {
+                leaderWasReaped = true
+                return
+            }
             if result == -1, errno == EINTR { continue }
+            if result == -1 {
+                throw BoundedProcessRunnerError.systemCallFailed(
+                    operation: "waitpid",
+                    code: errno
+                )
+            }
+            usleep(10_000)
+        }
+        let finalResult = waitpid(leaderPID, &status, WNOHANG)
+        if finalResult == leaderPID || (finalResult == -1 && errno == ECHILD) {
+            leaderWasReaped = true
+            return
+        }
+        if finalResult == -1, errno != EINTR {
             throw BoundedProcessRunnerError.systemCallFailed(
                 operation: "waitpid",
                 code: errno
             )
         }
+        throw BoundedProcessRunnerError.secureCleanupUnverified(
+            "bounded process leader \(leaderPID) could not be reaped before the cleanup deadline"
+        )
     }
 
     func stdoutString() -> String {
@@ -577,29 +734,49 @@ private final class BoundedProcessExecution {
     }
 
     var stdoutWasTruncated: Bool {
-        stdoutCapture.wasTruncated
+        stdoutCapture.renderedWasTruncated()
     }
 
     func stderrString(diagnostic: String? = nil) -> String {
         stderrCapture.rendered(diagnostic: diagnostic)
     }
 
-    var stderrWasTruncated: Bool {
-        stderrCapture.wasTruncated
+    func stderrWasTruncated(diagnostic: String? = nil) -> Bool {
+        stderrCapture.renderedWasTruncated(diagnostic: diagnostic)
     }
 
-    func forceCleanup() {
-        guard !leaderWasReaped else { return }
-        try? refreshProcessTree(force: true)
-        try? signalTrackedProcessTree(SIGKILL)
-        _ = kill(-leaderPID, SIGKILL)
-        _ = kill(leaderPID, SIGKILL)
+    func verifiedCleanup() throws {
+        var failures: [String] = []
+        do {
+            try terminateProcessTree(gracePeriodSeconds: 0, killWaitSeconds: 1)
+        } catch {
+            failures.append(Self.cleanupDetail(error))
+            if kill(-leaderPID, SIGKILL) == -1, errno != ESRCH {
+                failures.append("killpg fallback: \(String(cString: strerror(errno)))")
+            }
+            if kill(leaderPID, SIGKILL) == -1, errno != ESRCH {
+                failures.append("leader kill fallback: \(String(cString: strerror(errno)))")
+            }
+        }
         stdoutDescriptor.close()
         stderrDescriptor.close()
+        if !leaderWasReaped {
+            do {
+                try reapLeader(timeoutSeconds: 1)
+            } catch {
+                failures.append(Self.cleanupDetail(error))
+            }
+        }
+        guard failures.isEmpty else {
+            throw BoundedProcessRunnerError.secureCleanupUnverified(
+                failures.joined(separator: "; ")
+            )
+        }
+    }
 
-        var status: Int32 = 0
-        while waitpid(leaderPID, &status, 0) == -1, errno == EINTR {}
-        leaderWasReaped = true
+    private static func cleanupDetail(_ error: Error) -> String {
+        (error as? BoundedProcessRunnerError)?.diagnosticDescription
+            ?? error.localizedDescription
     }
 
     private func signalTrackedProcessTree(_ signal: Int32) throws {
@@ -690,7 +867,10 @@ private struct BoundedProcessSnapshot {
         guard pid > 0 else { return nil }
         var info = proc_bsdinfo()
         let expectedSize = Int32(MemoryLayout.size(ofValue: info))
-        let result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, expectedSize)
+        var result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, &info, expectedSize)
+        if result != expectedSize {
+            result = proc_pidinfo(pid, PROC_PIDTBSDINFO, 1, &info, expectedSize)
+        }
         guard result == expectedSize else { return nil }
         return BoundedProcessSnapshot(
             identity: BoundedProcessIdentity(
@@ -720,12 +900,7 @@ private struct BoundedProcessSnapshot {
                     Int32(buffer.count)
                 )
             }
-            guard bytes >= 0 else {
-                throw BoundedProcessRunnerError.systemCallFailed(
-                    operation: "proc_listpids",
-                    code: errno
-                )
-            }
+            try BoundedPOSIX.requireProcessListBytes(bytes)
 
             let count = Int(bytes) / MemoryLayout<pid_t>.stride
             if count < capacity {
@@ -741,7 +916,7 @@ private struct BoundedProcessSnapshot {
     }
 }
 
-private struct BoundedPipe {
+struct BoundedPipe {
     let read: BoundedOwnedFileDescriptor
     let write: BoundedOwnedFileDescriptor
 
@@ -756,6 +931,8 @@ private struct BoundedPipe {
         let read = BoundedOwnedFileDescriptor(descriptors[0])
         let write = BoundedOwnedFileDescriptor(descriptors[1])
         do {
+            try read.relocateAboveStandardDescriptors()
+            try write.relocateAboveStandardDescriptors()
             try read.setCloseOnExec()
             try write.setCloseOnExec()
         } catch {
@@ -767,7 +944,7 @@ private struct BoundedPipe {
     }
 }
 
-private final class BoundedOwnedFileDescriptor {
+final class BoundedOwnedFileDescriptor {
     private(set) var rawValue: Int32
 
     init(_ rawValue: Int32) {
@@ -793,6 +970,19 @@ private final class BoundedOwnedFileDescriptor {
         }
     }
 
+    func relocateAboveStandardDescriptors() throws {
+        guard rawValue <= STDERR_FILENO else { return }
+        let duplicate = fcntl(rawValue, F_DUPFD_CLOEXEC, STDERR_FILENO + 1)
+        guard duplicate >= 0 else {
+            throw BoundedProcessRunnerError.systemCallFailed(
+                operation: "fcntl(F_DUPFD_CLOEXEC)",
+                code: errno
+            )
+        }
+        _ = Darwin.close(rawValue)
+        rawValue = duplicate
+    }
+
     func setNonBlocking() throws {
         let flags = fcntl(rawValue, F_GETFL)
         guard flags >= 0, fcntl(rawValue, F_SETFL, flags | O_NONBLOCK) == 0 else {
@@ -804,7 +994,7 @@ private final class BoundedOwnedFileDescriptor {
     }
 }
 
-private struct BoundedCapturedStream {
+struct BoundedCapturedStream {
     let limit: Int
     private var data = Data()
     private(set) var wasTruncated = false
@@ -825,8 +1015,18 @@ private struct BoundedCapturedStream {
     }
 
     func rendered(diagnostic: String? = nil) -> String {
+        renderedValue(diagnostic: diagnostic).text
+    }
+
+    func renderedWasTruncated(diagnostic: String? = nil) -> Bool {
+        renderedValue(diagnostic: diagnostic).wasTruncated
+    }
+
+    private func renderedValue(diagnostic: String?) -> (text: String, wasTruncated: Bool) {
         let decodedUTF8Count = String(decoding: data, as: UTF8.self).utf8.count
-        let needsDiagnosticSeparator = diagnostic != nil && !data.isEmpty && data.last != UInt8(ascii: "\n")
+        let needsDiagnosticSeparator = diagnostic != nil
+            && !data.isEmpty
+            && data.last != UInt8(ascii: "\n")
         let diagnosticByteCount = diagnostic.map {
             $0.utf8.count + 1 + (needsDiagnosticSeparator ? 1 : 0)
         } ?? 0
@@ -849,12 +1049,19 @@ private struct BoundedCapturedStream {
             }
         }
         let suffixData = Data(suffix.utf8)
-        let prefixByteLimit = max(0, limit - suffixData.count)
+        let boundedSuffix = Self.boundedUTF8String(
+            decoding: suffixData.prefix(limit),
+            maximumUTF8Bytes: limit
+        )
+        let prefixByteLimit = max(0, limit - boundedSuffix.utf8.count)
         let prefix = Self.boundedUTF8String(
             decoding: data.prefix(prefixByteLimit),
             maximumUTF8Bytes: prefixByteLimit
         )
-        return prefix + suffix
+        return (
+            prefix + boundedSuffix,
+            outputWasTruncated || suffixData.count > limit
+        )
     }
 
     private static func boundedUTF8String(
@@ -874,7 +1081,7 @@ private struct BoundedCapturedStream {
     }
 }
 
-private enum BoundedCStringArray {
+enum BoundedCStringArray {
     static func withMutablePointers<T>(
         _ strings: [String],
         _ body: (UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>) throws -> T
@@ -901,7 +1108,7 @@ private enum BoundedCStringArray {
     }
 }
 
-private enum BoundedPOSIX {
+enum BoundedPOSIX {
     static func check(_ code: Int32, operation: String) throws {
         guard code == 0 else {
             throw BoundedProcessRunnerError.systemCallFailed(
@@ -910,16 +1117,31 @@ private enum BoundedPOSIX {
             )
         }
     }
+
+    static func requireProcessListBytes(
+        _ byteCount: Int32,
+        errorCode: Int32 = errno
+    ) throws {
+        guard byteCount > 0 else {
+            throw BoundedProcessRunnerError.systemCallFailed(
+                operation: "proc_listpids",
+                code: errorCode == 0 ? EIO : errorCode
+            )
+        }
+    }
 }
 
-private enum BoundedMonotonicClock {
+enum BoundedMonotonicClock {
     static func now() -> UInt64 {
         DispatchTime.now().uptimeNanoseconds
     }
 
     static func adding(seconds: TimeInterval, to base: UInt64) -> UInt64 {
         let maximumSeconds = Double(UInt64.max) / 1_000_000_000
-        let nanoseconds = UInt64(min(max(seconds, 0), maximumSeconds) * 1_000_000_000)
+        guard seconds.isFinite else { return seconds.sign == .minus ? base : UInt64.max }
+        guard seconds > 0 else { return base }
+        guard seconds < maximumSeconds else { return UInt64.max }
+        let nanoseconds = UInt64(seconds * 1_000_000_000)
         return base > UInt64.max - nanoseconds ? UInt64.max : base + nanoseconds
     }
 }

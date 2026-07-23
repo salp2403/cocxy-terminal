@@ -47,10 +47,10 @@ struct RelayClientBootstrapTests {
             config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
             profileID: UUID()
         )
-        defer { manager.closeChannel(channelID: channel.id) }
 
         let command = try #require(manager.clientCommand(for: channel.id))
         #expect(command.contains("python3 -c"))
         #expect(manager.clientToken(for: channel.id) != nil)
+        await manager.closeChannel(channelID: channel.id)
     }
 }

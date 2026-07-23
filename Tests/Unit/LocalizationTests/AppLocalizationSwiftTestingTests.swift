@@ -376,6 +376,7 @@ struct AppLocalizationSwiftTestingTests {
     @MainActor
     func remoteWorkspaceStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
 
         #expect(spanish.string("remoteWorkspace.title", fallback: "Remote Workspaces") == "Espacios remotos")
@@ -395,6 +396,42 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("remoteWorkspace.relay.processes", fallback: "Procs:") == "Procesos:")
         #expect(spanish.string("remoteWorkspace.keys.field.passphrase", fallback: "Passphrase") == "Frase de contraseña")
         #expect(spanish.string("remoteWorkspace.sftp.emptyDirectory", fallback: "Empty directory") == "Directorio vacío")
+        #expect(spanish.string("remoteWorkspace.sftp.upload.replace.title", fallback: "Replace remote item?") == "¿Reemplazar elemento remoto?")
+        #expect(spanish.string("remoteWorkspace.sftp.upload.destinationChanged", fallback: "The remote file changed after review. Refresh and try again.") == "El archivo remoto cambió después de revisarlo. Actualiza e inténtalo de nuevo.")
+        #expect(spanish.string("remoteWorkspace.sftp.upload.unsafeDestination", fallback: "Only a regular remote file can be replaced.") == "Solo se puede reemplazar un archivo remoto regular.")
+        #expect(spanish.string("remoteWorkspace.sftp.connectionUnavailable", fallback: "Reconnect this profile before using SFTP.") == "Vuelve a conectar este perfil antes de usar SFTP.")
+        let sftpErrorTranslations = [
+            "remoteWorkspace.sftp.download.remoteChanged":
+                "El archivo remoto cambió después de revisarlo. Actualiza antes de descargarlo.",
+            "remoteWorkspace.sftp.download.unsafeRemoteFile":
+                "El archivo remoto revisado ya no permite una descarga segura. Actualiza e inténtalo de nuevo.",
+            "remoteWorkspace.sftp.remove.remoteChanged":
+                "El elemento remoto cambió después de revisarlo. Actualiza antes de eliminarlo.",
+            "remoteWorkspace.sftp.remove.unsafeRemoteItem":
+                "El elemento remoto revisado ya no permite una eliminación segura. Actualiza e inténtalo de nuevo.",
+            "remoteWorkspace.sftp.error.commandFailed":
+                "El comando SFTP falló. Revisa la conexión e inténtalo de nuevo.",
+            "remoteWorkspace.sftp.error.parseFailed":
+                "La respuesta del directorio remoto no se pudo interpretar de forma segura.",
+            "remoteWorkspace.sftp.error.transferFailed":
+                "No se pudo completar la transferencia del archivo.",
+            "remoteWorkspace.sftp.error.invalidDestination":
+                "El destino de la conexión SFTP no es válido.",
+            "remoteWorkspace.sftp.error.invalidPort":
+                "El puerto de la conexión SFTP no es válido.",
+            "remoteWorkspace.sftp.error.invalidPath":
+                "La ruta remota seleccionada no es válida.",
+            "remoteWorkspace.sftp.error.invalidCommand":
+                "No se pudo preparar la operación SFTP de forma segura.",
+            "remoteWorkspace.sftp.error.localPublishFailed":
+                "No se pudo guardar de forma segura el archivo descargado.",
+            "remoteWorkspace.sftp.error.generic":
+                "No se pudo completar la operación SFTP.",
+        ]
+        for (key, translation) in sftpErrorTranslations {
+            #expect(english.string(key, fallback: "__missing_key__") != "__missing_key__")
+            #expect(spanish.string(key, fallback: "__missing_key__") == translation)
+        }
         #expect(RemoteConnectionViewModel.SubPanel.sessions.localizedLabel(using: spanish) == "Sesiones")
         #expect(RemoteConnectionViewModel.SubPanel.tunnels.localizedDetail(using: spanish) == "Redirigir puertos locales y remotos")
         #expect(ForwardTypeOption.dynamic.localizedLabel(using: spanish) == "Dinámico")

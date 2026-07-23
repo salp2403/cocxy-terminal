@@ -25,6 +25,9 @@ public struct CommandRunner {
     public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
     static let extendedCellSocketTimeoutSeconds: TimeInterval = 300
     static let browserInitScriptApprovalSocketTimeoutSeconds: TimeInterval = 605
+    // The app allows five minutes for import work, then up to 35 seconds for
+    // cancellation settlement. Approval grace is added separately below.
+    static let browserImportSocketTimeoutSeconds: TimeInterval = 340
     static let privilegedSocketApprovalGraceSeconds: TimeInterval = 65
     static let defaultBrowserActionTimeoutMilliseconds = 5_000
     static let maximumBrowserWaitTimeoutMilliseconds = 30_000
@@ -2122,6 +2125,9 @@ public struct CommandRunner {
             return extendedCellSocketTimeoutSeconds
         case .browserInitScriptAdd:
             return browserInitScriptApprovalSocketTimeoutSeconds
+        case .browserImportPreview,
+             .browserImportRun:
+            return browserImportSocketTimeoutSeconds
         case .browserClick(_, let timeoutMilliseconds),
              .browserDblClick(_, let timeoutMilliseconds),
              .browserHover(_, let timeoutMilliseconds),
