@@ -52,6 +52,13 @@ EXPECTED_REQUIREMENT=".package(url: \"${SPARKLE_LOCATION}\", exact: \"${SPARKLE_
 grep -Fq "${EXPECTED_REQUIREMENT}" "${MANIFEST_FILE}" \
     || fail "Package.swift does not use the reviewed exact Sparkle requirement."
 
+# Sparkle must be the ONLY declared dependency. A reviewed pin passing is not
+# enough: an additional unreviewed .package(...) would otherwise be compiled
+# into the signed, notarized build without any gate flagging it.
+PACKAGE_DECLARATIONS="$(grep -cE '^[[:space:]]*\.package\(' "${MANIFEST_FILE}" || true)"
+[ "${PACKAGE_DECLARATIONS}" -eq 1 ] \
+    || fail "Package.swift declares ${PACKAGE_DECLARATIONS} dependencies; only the reviewed Sparkle pin is allowed."
+
 /usr/bin/python3 - "${LOCK_FILE}" "${SPARKLE_VERSION}" "${SPARKLE_REVISION}" "${SPARKLE_LOCATION}" <<'PY'
 import json
 import pathlib
@@ -64,7 +71,13 @@ try:
 except (OSError, UnicodeError, json.JSONDecodeError) as error:
     raise SystemExit(f"ERROR: invalid Package.resolved: {error}")
 
-pins = [pin for pin in payload.get("pins", []) if pin.get("identity") == "sparkle"]
+all_pins = payload.get("pins", [])
+if len(all_pins) != 1:
+    raise SystemExit(
+        "ERROR: Package.resolved must pin exactly one dependency (Sparkle); "
+        f"found {len(all_pins)}."
+    )
+pins = [pin for pin in all_pins if pin.get("identity") == "sparkle"]
 if len(pins) != 1:
     raise SystemExit("ERROR: Package.resolved must contain exactly one Sparkle pin.")
 pin = pins[0]

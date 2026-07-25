@@ -583,6 +583,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(verifier.contains("bfb52400c3da18bb4c251ac4818c2c2e1e31c2e649a45b31c11109b6e57b34ad"))
         #expect(verifier.contains("ls-files --error-unmatch Package.resolved"))
         #expect(verifier.contains("lipo \"${SPARKLE_TOOL}\" -verify_arch x86_64 arm64"))
+        // Sparkle must be the sole dependency: reject extra manifest entries and
+        // extra resolved pins so an unreviewed package cannot slip into the build.
+        #expect(verifier.contains("only the reviewed Sparkle pin is allowed"))
+        #expect(verifier.contains("must pin exactly one dependency (Sparkle)"))
         #expect(buildScript.contains("SWIFT_FLAGS=\"--disable-automatic-resolution -c release\""))
         #expect(buildScript.contains("SWIFT_FLAGS=\"--disable-automatic-resolution\""))
         #expect(buildScript.contains("verify-swiftpm-resolution.sh\" --lock-only"))
