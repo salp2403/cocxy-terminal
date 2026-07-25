@@ -188,7 +188,11 @@ private struct NotebookSandboxExecutionPlan {
 
     private static func removeTemporaryDirectory(_ temporaryURL: URL) {
         try? FileManager.default.removeItem(at: temporaryURL)
-        try? FileManager.default.removeItem(at: temporaryURL.deletingLastPathComponent())
+        // Prune the shared `.cocxy-notebook-tmp` parent only when it is already
+        // empty. `rmdir` fails atomically (ENOTEMPTY) if a concurrent execution
+        // still owns a sibling directory there, so we never delete another
+        // run's live temporaries out from under it.
+        _ = rmdir(temporaryURL.deletingLastPathComponent().path)
     }
 
     private static func workspaceProfile(workingDirectory: URL, temporaryDirectory: URL) -> String {
