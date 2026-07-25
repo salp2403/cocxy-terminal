@@ -314,7 +314,7 @@ jobs:
             rm -f "$DEPLOY_KEY"
           }
           trap cleanup_deploy_credentials EXIT
-          printf '%s' "$SERVER_KEY" > "$DEPLOY_KEY"
+          printf '%s\n' "$SERVER_KEY" > "$DEPLOY_KEY"
           DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
           DEPLOY_PATH="${{ secrets.DEPLOY_PATH }}"
 

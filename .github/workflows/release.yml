@@ -566,7 +566,7 @@ jobs:
             rm -f "$DEPLOY_KEY" "$RELEASES_JSON"
           }
           trap cleanup_deploy_credentials EXIT
-          printf '%s' "$SERVER_KEY" > "$DEPLOY_KEY"
+          printf '%s\n' "$SERVER_KEY" > "$DEPLOY_KEY"
           VERSION="${{ steps.version.outputs.VERSION }}"
           export RELEASES_JSON VERSION
           DEPLOY_TARGET="${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}"
