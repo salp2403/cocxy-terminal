@@ -266,7 +266,7 @@ struct SOCKS5ProxyTests {
     @Test("SOCKS broker does not retain its SSH authority")
     @MainActor func doesNotRetainForwarder() throws {
         var forwarder: SOCKSTestForwarder? = SOCKSTestForwarder()
-        weak let weakForwarder = forwarder
+        weak var weakForwarder = forwarder
         let leaseID = try #require(forwarder?.leaseID)
         let proxy = SOCKS5Proxy(
             listenPort: try Self.availableLoopbackPort(),

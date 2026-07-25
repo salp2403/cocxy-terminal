@@ -333,7 +333,7 @@ struct HTTPConnectProxyTests {
     @Test("HTTP broker does not retain its SSH authority")
     @MainActor func doesNotRetainForwarder() throws {
         var forwarder: HTTPTestForwarder? = HTTPTestForwarder()
-        weak let weakForwarder = forwarder
+        weak var weakForwarder = forwarder
         let leaseID = try #require(forwarder?.leaseID)
         let proxy = HTTPConnectProxy(
             listenPort: try Self.availableLoopbackPort(),
