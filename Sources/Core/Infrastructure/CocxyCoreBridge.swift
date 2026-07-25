@@ -517,6 +517,7 @@ final class CocxyCoreBridge: TerminalEngine {
     private var surfaces: [SurfaceID: SurfaceState] = [:]
     private var reapedPTYChildren = Set<SurfaceID>()
     private var lastPTYExitPollAt: TimeInterval = 0
+    private var exitReapTimer: DispatchSourceTimer?
     private var config: TerminalEngineConfig?
     private var nativeSemanticPatterns: [TerminalSemanticNativePattern] = []
     var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
@@ -617,6 +618,8 @@ final class CocxyCoreBridge: TerminalEngine {
     deinit {
         let cleanup = {
             MainActor.assumeIsolated {
+                self.exitReapTimer?.cancel()
+                self.exitReapTimer = nil
                 let ids = Array(self.surfaces.keys)
                 for id in ids {
                     self.destroySurface(id)
@@ -747,6 +750,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
+        startExitReapTimerIfNeeded()
         return surfaceID
     }
 
@@ -1067,6 +1071,23 @@ final class CocxyCoreBridge: TerminalEngine {
         if observesProtocolV2 == true {
             _ = sendProtocolV2Viewport(for: surface, requestID: nil)
         }
+    }
+
+    /// Pumps `tick()` on a 50 ms cadence so a PTY child that exits while its
+    /// surface is deliberately kept alive to display final output is reaped
+    /// promptly, mirroring the daemon's `exitMonitorSource`. Without this pump
+    /// the in-process engine only reaps on surface teardown, leaving a
+    /// `<defunct>` child until the panel closes. Idempotent and self-throttled;
+    /// started on first surface creation and cancelled in `deinit`.
+    private func startExitReapTimerIfNeeded() {
+        guard exitReapTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 0.05, repeating: 0.05)
+        timer.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        exitReapTimer = timer
+        timer.resume()
     }
 
     func tick() {
