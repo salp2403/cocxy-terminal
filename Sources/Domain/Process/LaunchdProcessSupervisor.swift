@@ -49,12 +49,19 @@ struct LaunchdSupervisorRequest: Codable {
         }
     }
 
+    /// Kept as separately annotated sub-expressions: as a single chained sum the
+    /// two `reduce` closures push the type checker past its budget on Swift 6.1
+    /// toolchains, which fails the build instead of degrading.
     private var textByteCount: Int {
-        executablePath.utf8.count
-            + workingDirectoryPath.utf8.count
-            + arguments.reduce(0) { $0 + $1.utf8.count + 1 }
-            + environment.reduce(0) { $0 + $1.key.utf8.count + $1.value.utf8.count + 2 }
-            + (timeoutDiagnostic?.utf8.count ?? 0)
+        let pathBytes: Int = executablePath.utf8.count + workingDirectoryPath.utf8.count
+        let argumentBytes: Int = arguments.reduce(into: 0) { total, argument in
+            total += argument.utf8.count + 1
+        }
+        let environmentBytes: Int = environment.reduce(into: 0) { total, entry in
+            total += entry.key.utf8.count + entry.value.utf8.count + 2
+        }
+        let diagnosticBytes: Int = timeoutDiagnostic?.utf8.count ?? 0
+        return pathBytes + argumentBytes + environmentBytes + diagnosticBytes
     }
 }
 
