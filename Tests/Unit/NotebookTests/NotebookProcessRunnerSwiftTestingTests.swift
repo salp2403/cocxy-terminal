@@ -1237,7 +1237,25 @@ struct NotebookProcessRunnerSwiftTestingTests {
             usleep(1_000)
         }
         #expect(LaunchdProcessSnapshot.current(for: child)?.isLive == false)
-        _ = try LaunchdProcessCoalition.liveMembers(id: coalitionID)
+        // Scope the scan to processes this test owns. The real coalition of a
+        // test runner also contains foreign members (CI runner agents, the
+        // session's login process) whose stable membership is unverifiable and
+        // would abort the scan before it ever evaluates the zombie.
+        let system = LaunchdCoalitionInspection.system
+        let scoped = LaunchdCoalitionInspection(
+            processIDs: { [getpid(), child] },
+            snapshot: system.snapshot,
+            resourceID: system.resourceID,
+            signalAuthority: system.signalAuthority,
+            retryCount: system.retryCount,
+            retryDelayMicroseconds: system.retryDelayMicroseconds
+        )
+        let members = try LaunchdProcessCoalition.liveMembers(
+            id: coalitionID,
+            inspection: scoped
+        )
+        #expect(members.allSatisfy { $0.identity.pid != child })
+        #expect(members.contains { $0.identity.pid == getpid() })
     }
 
     @Test("coalition verification bounds identity retries by its absolute deadline")
