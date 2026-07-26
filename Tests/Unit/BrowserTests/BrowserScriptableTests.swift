@@ -1452,10 +1452,26 @@ final class BrowserScriptableTests: XCTestCase {
         )
         XCTAssertEqual(viewModel.initScripts.count, 1)
 
-        try await Task.sleep(for: .milliseconds(250))
+        // The prune runs from a MainActor task that sleeps for the script's own
+        // lifetime, so it competes with this test for the same executor. Waiting
+        // for the effect keeps the assertion honest — it still fails if the
+        // prune never happens — without assuming a fixed wall-clock budget on a
+        // loaded machine.
+        try await waitUntilInitScriptsArePruned(viewModel)
 
         XCTAssertTrue(viewModel.initScripts.isEmpty)
         XCTAssertEqual(synchronizedCounts.last, 0)
+    }
+
+    private func waitUntilInitScriptsArePruned(
+        _ viewModel: BrowserViewModel,
+        within timeout: Duration = .seconds(5)
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if viewModel.initScripts.isEmpty { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     func test_browserInitScriptGrantLifetimeStartsAtApproval() throws {
