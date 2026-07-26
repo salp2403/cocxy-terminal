@@ -773,10 +773,27 @@ final class BrowserViewModelTests: XCTestCase {
         vm.setDOMGrabMode(true, lifetime: 0.02)
         XCTAssertNotNil(vm.domGrabAuthorizationID)
 
-        try await Task.sleep(for: .milliseconds(80))
+        // The revocation runs from a MainActor task that sleeps for the grant's
+        // own lifetime, so it competes with this test for the same executor.
+        // Waiting for the effect keeps the assertion honest — it still fails if
+        // the grant never expires — without pinning it to a wall-clock budget.
+        try await waitUntilDOMGrabExpires(vm)
 
         XCTAssertFalse(vm.isDOMGrabActive)
         XCTAssertNil(vm.domGrabAuthorizationID)
+    }
+
+    private func waitUntilDOMGrabExpires(
+        _ viewModel: BrowserViewModel,
+        within timeout: Duration = .seconds(5)
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if !viewModel.isDOMGrabActive, viewModel.domGrabAuthorizationID == nil {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
     }
 
     func testStaleDOMGrabExpirationCannotRevokeReplacementGrant() async throws {
@@ -784,9 +801,12 @@ final class BrowserViewModelTests: XCTestCase {
         vm.setDOMGrabMode(true, lifetime: 0.02)
         let staleID = try XCTUnwrap(vm.domGrabAuthorizationID)
         vm.revokeDOMGrabAuthorization()
-        vm.setDOMGrabMode(true, lifetime: 0.3)
+        // Long enough that no scheduling delay can expire the replacement: this
+        // test is about the stale grant not revoking it, not about lifetimes.
+        vm.setDOMGrabMode(true, lifetime: 600)
         let replacementID = try XCTUnwrap(vm.domGrabAuthorizationID)
 
+        // Gives the stale grant's expiration every chance to fire.
         try await Task.sleep(for: .milliseconds(80))
 
         XCTAssertNotEqual(staleID, replacementID)
