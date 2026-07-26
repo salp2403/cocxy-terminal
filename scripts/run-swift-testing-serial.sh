@@ -53,6 +53,40 @@ fi
 
 echo "Discovered ${#suites[@]} Swift Testing suite(s)."
 
+# A suite that never returns used to consume the whole job budget in silence,
+# leaving no record of which one stalled. Bound each suite instead: the run
+# fails with the suite named, in minutes rather than at the job timeout.
+suite_timeout_seconds="${SWIFT_TESTING_SUITE_TIMEOUT_SECONDS:-600}"
+if ! [[ "$suite_timeout_seconds" =~ ^[0-9]+$ ]]; then
+  echo "error: SWIFT_TESTING_SUITE_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 1
+fi
+
+run_bounded() {
+  local suite="$1"
+  shift
+  "$@" &
+  local pid=$!
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( waited >= suite_timeout_seconds )); then
+      echo "error: Swift Testing suite '${suite}' exceeded ${suite_timeout_seconds}s and was terminated." >&2
+      kill -TERM "$pid" 2>/dev/null || true
+      local drained=0
+      while kill -0 "$pid" 2>/dev/null && (( drained < 10 )); do
+        sleep 1
+        drained=$((drained + 1))
+      done
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$pid"
+}
+
 build_dir=""
 coverage_dir=""
 profile_dir=""
@@ -74,7 +108,7 @@ for suite in "${suites[@]}"; do
   echo "::group::Swift Testing suite ${index}/${#suites[@]}: ${suite}"
   if [[ "$coverage_enabled" == true ]]; then
     find "$coverage_dir" -maxdepth 1 -name "*.profraw" -delete 2>/dev/null || true
-    swift test "${common_args[@]}" "$@" --filter "$suite"
+    run_bounded "$suite" swift test "${common_args[@]}" "$@" --filter "$suite"
     safe_suite="$(printf "%s" "$suite" | tr -c "A-Za-z0-9_.-" "_")"
     shopt -s nullglob
     suite_profiles=("$coverage_dir"/*.profraw)
@@ -87,7 +121,7 @@ for suite in "${suites[@]}"; do
       cp "$profile" "$profile_dir/${index}-${safe_suite}-$(basename "$profile")"
     done
   else
-    swift test --skip-build "${common_args[@]}" "$@" --filter "$suite"
+    run_bounded "$suite" swift test --skip-build "${common_args[@]}" "$@" --filter "$suite"
   fi
   echo "::endgroup::"
 done
