@@ -454,7 +454,13 @@ struct PTYDaemonClientSwiftTestingTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
         defer { try? FileManager.default.removeItem(at: tempDirectory) }
 
-        let connection = PTYDaemonProcessConnection(executableURL: scriptURL)
+        // Explicit and generous: this test is about the helper being reused, not
+        // about how fast a shell answers. The production default would turn a
+        // loaded machine's scheduling delay into a dropped transport.
+        let connection = PTYDaemonProcessConnection(
+            executableURL: scriptURL,
+            timeoutSeconds: 30
+        )
 
         _ = try connection.send(PTYDaemonRequest(id: "one", command: .hello))
         _ = try connection.send(PTYDaemonRequest(id: "two", command: .hello))
@@ -491,7 +497,12 @@ struct PTYDaemonClientSwiftTestingTests {
         try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: scriptURL.path)
         defer { try? FileManager.default.removeItem(at: tempDirectory) }
 
-        let connection = PTYDaemonProcessConnection(executableURL: scriptURL)
+        // Generous for the same reason as above: the subject is event ordering,
+        // not the latency of a shell subprocess on a busy runner.
+        let connection = PTYDaemonProcessConnection(
+            executableURL: scriptURL,
+            timeoutSeconds: 30
+        )
 
         _ = try connection.send(PTYDaemonRequest(id: "hello", command: .hello))
         let event = try connection.receiveEvent(timeout: 0)
