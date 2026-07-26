@@ -2721,14 +2721,17 @@ struct LaunchdControlClient {
             }
             return .matching(snapshot)
         }
-        guard let reportedPID = snapshot.pid else { return .matching(snapshot) }
-        guard let kernelCoalitionID = LaunchdProcessCoalition.resourceID(
-            for: reportedPID
-        ) else {
-            return .conflicting(
-                "owner domain coalition mismatch (expected "
-                    + "\(expectedCoalitionID), observed unknown)"
-            )
+        // No live process to interrogate: launchd either published no pid, or
+        // published one the kernel can no longer resolve because the supervisor
+        // already exited. Both are the same absence of testimony, never a
+        // contradiction — a finished execution must stay reconcilable. The
+        // caller corroborates these records through `jobCorroborates`, which
+        // requires the persisted state to belong to this boot.
+        guard let reportedPID = snapshot.pid,
+              let kernelCoalitionID = LaunchdProcessCoalition.resourceID(
+                  for: reportedPID
+              ) else {
+            return .matching(snapshot)
         }
         guard kernelCoalitionID == expectedCoalitionID else {
             return .conflicting(
