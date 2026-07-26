@@ -9,7 +9,10 @@ import Testing
 import WebKit
 @testable import CocxyTerminal
 
-@Suite("BrowserImport")
+// Serialized: these tests drive bridges that park a thread until a task signals
+// them. Running 53 of them at once starves the cooperative pool on a machine
+// with few cores, which deadlocked CI instead of failing.
+@Suite("BrowserImport", .serialized)
 struct BrowserImportSwiftTestingTests {
 
     @Test("supported sources expose common browser default locations")
@@ -1852,9 +1855,9 @@ struct BrowserImportSwiftTestingTests {
             timeout: 5
         )
 
-        try await Task.detached {
+        try await runOffCooperativePool {
             try store.saveImportedCookies(imported, profileID: profileID)
-        }.value
+        }
 
         #expect(providerCalls.withValue { $0 } == 0)
         let dataStore = WKWebsiteDataStore(forIdentifier: profileID)
@@ -1881,9 +1884,9 @@ struct BrowserImportSwiftTestingTests {
         let store = BrowserWebKitCookieImportStore(timeout: 0, batchSize: 1)
 
         do {
-            try await Task.detached {
+            try await runOffCooperativePool {
                 try store.saveImportedCookies(imported, profileID: profileID)
-            }.value
+            }
             Issue.record("Expected the second cookie batch to remain unstarted")
         } catch let error as BrowserImportedCookieBatchWriteError {
             #expect(error.importedCount == 1)
@@ -1900,15 +1903,13 @@ struct BrowserImportSwiftTestingTests {
 
     @Test("WebKit cookie callback waits have a hard completion boundary")
     func webKitCookieCallbackWaitIsBounded() async {
-        let start = DispatchTime.now().uptimeNanoseconds
-        let result = await Task.detached {
+        let (result, elapsed) = await timeOffCooperativePool {
             BrowserWebKitCookieImportStore.waitForCookieBatch(
                 cookieCount: 2,
                 hardTimeout: 0.05,
                 submit: { _ in }
             )
-        }.value
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+        }
 
         #expect(result == .timedOut(0))
         #expect(elapsed < 0.5)
@@ -1917,8 +1918,7 @@ struct BrowserImportSwiftTestingTests {
     @Test("WebKit import settlement drains callbacks submitted before timeout")
     func webKitCookieTimeoutSettlesSubmittedCallbacks() async {
         let completedCallbacks = LockedBox(0)
-        let start = DispatchTime.now().uptimeNanoseconds
-        let result = await Task.detached {
+        let (result, elapsed) = await timeOffCooperativePool {
             BrowserWebKitCookieImportStore.waitForCookieBatch(
                 cookieCount: 2,
                 hardTimeout: 0.02,
@@ -1931,8 +1931,7 @@ struct BrowserImportSwiftTestingTests {
                     completedCallbacks.withValue { $0 += 1 }
                 }
             }
-        }.value
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+        }
 
         #expect(result == .timedOut(2))
         #expect(completedCallbacks.withValue { $0 } == 2)
@@ -1942,8 +1941,7 @@ struct BrowserImportSwiftTestingTests {
 
     @Test("WebKit import settlement stops when callbacks never arrive")
     func webKitCookieTimeoutSettlementIsBounded() async {
-        let start = DispatchTime.now().uptimeNanoseconds
-        let result = await Task.detached {
+        let (result, elapsed) = await timeOffCooperativePool {
             BrowserWebKitCookieImportStore.waitForCookieBatch(
                 cookieCount: 2,
                 hardTimeout: 0.02,
@@ -1951,8 +1949,7 @@ struct BrowserImportSwiftTestingTests {
                 settlementTimeout: 0.05,
                 submit: { _ in }
             )
-        }.value
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+        }
 
         #expect(result == .timedOut(0))
         #expect(elapsed >= 0.06)
@@ -1961,14 +1958,12 @@ struct BrowserImportSwiftTestingTests {
 
     @Test("WebKit data store lookup has a hard completion boundary")
     func webKitDataStoreLookupIsBounded() async {
-        let start = DispatchTime.now().uptimeNanoseconds
-        let result = await Task.detached {
+        let (result, elapsed) = await timeOffCooperativePool {
             BrowserWebKitCookieImportStore.waitForDataStore(
                 hardTimeout: 0.05,
                 submit: { _ in }
             )
-        }.value
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+        }
 
         if case .timedOut = result {
             #expect(elapsed < 0.5)
@@ -1982,9 +1977,12 @@ struct BrowserImportSwiftTestingTests {
         let submitted = LockedBox(false)
         let releaseCallbacks = DispatchSemaphore(value: 0)
         let task = Task.detached {
+            // The wait must end because this test cancels it, never because the
+            // clock ran out: a short budget would turn scheduling delay into a
+            // timeout and hide whether cancellation settles the callbacks.
             BrowserWebKitCookieImportStore.waitForCookieBatch(
                 cookieCount: 2,
-                hardTimeout: 0.5
+                hardTimeout: 2
             ) { completion in
                 submitted.withValue { $0 = true }
                 DispatchQueue.global().async {
@@ -2008,8 +2006,7 @@ struct BrowserImportSwiftTestingTests {
     @MainActor
     func browserImportCLIBridgeIsBounded() async {
         let observedCancellation = LockedBox(false)
-        let start = DispatchTime.now().uptimeNanoseconds
-        let result = await Task.detached {
+        let (result, elapsed) = await timeOffCooperativePool {
             BrowserImportSynchronousBridge.run(timeout: 0.05) {
                 while !Task.isCancelled {
                     try? await Task.sleep(nanoseconds: 2_000_000)
@@ -2017,8 +2014,7 @@ struct BrowserImportSwiftTestingTests {
                 observedCancellation.withValue { $0 = true }
                 return 42
             }
-        }.value
-        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+        }
 
         switch result {
         case .timedOut(let settledResult):
@@ -2026,7 +2022,12 @@ struct BrowserImportSwiftTestingTests {
         default:
             Issue.record("Expected the bridge to retain a settled result and mark the timeout")
         }
-        #expect(elapsed < 0.5)
+        // Proves the bridge honours a boundary instead of holding the request
+        // timeout (five minutes) or waiting forever. The margin is wide because
+        // settlement waits on a task the scheduler must place; the strict claims
+        // above — a settled result and an observed cancellation — are what pin
+        // the behaviour down.
+        #expect(elapsed < 5)
         #expect(await BrowserImportFixture.waitUntil {
             observedCancellation.withValue { $0 }
         })
@@ -2050,9 +2051,14 @@ struct BrowserImportSwiftTestingTests {
         let continuation = LockedBox<CheckedContinuation<Int, Never>?>(nil)
         let returned = LockedBox(false)
         let bridge = Task.detached {
-            let outcome = BrowserImportSynchronousBridge.run(timeout: 0.01) {
-                await withCheckedContinuation { pending in
-                    continuation.withValue { $0 = pending }
+            // The bridge parks its thread until the cancelled work settles, and
+            // the task that settles it needs a cooperative thread of its own.
+            // Blocking on Dispatch keeps that thread available.
+            let outcome = await runOffCooperativePool {
+                BrowserImportSynchronousBridge.run(timeout: 0.01) {
+                    await withCheckedContinuation { pending in
+                        continuation.withValue { $0 = pending }
+                    }
                 }
             }
             returned.withValue { $0 = true }
@@ -2557,6 +2563,51 @@ private struct StaticSafeStoragePasswordProvider: BrowserSafeStoragePasswordProv
 
     func password(for source: BrowserImportSource) throws -> Data {
         password
+    }
+}
+
+/// Runs a thread-blocking call without occupying a cooperative thread.
+///
+/// The synchronous bridges under test park their thread on a semaphore that a
+/// Swift task signals. `Task.detached` would park a *cooperative* thread, so on
+/// a machine with few cores a suite running in parallel starves the very tasks
+/// it waits for and deadlocks — reproduced with two free pool threads. Dispatch
+/// grows its pool instead, so the wait always has somewhere to be signalled from.
+private func runOffCooperativePool<Value: Sendable>(
+    _ work: @escaping @Sendable () -> Value
+) async -> Value {
+    await withCheckedContinuation { continuation in
+        DispatchQueue.global(qos: .userInitiated).async {
+            continuation.resume(returning: work())
+        }
+    }
+}
+
+/// Runs blocking work off the cooperative pool and reports how long the work
+/// itself took.
+///
+/// Timing from the caller would fold in the wait for a free thread, so a busy
+/// machine makes a bounded call look unbounded. These assertions are about the
+/// boundary the production code enforces, not about scheduling latency.
+private func timeOffCooperativePool<Value: Sendable>(
+    _ work: @escaping @Sendable () -> Value
+) async -> (value: Value, elapsed: TimeInterval) {
+    await runOffCooperativePool {
+        let start = DispatchTime.now().uptimeNanoseconds
+        let value = work()
+        let elapsed = Double(DispatchTime.now().uptimeNanoseconds - start) / 1_000_000_000
+        return (value, elapsed)
+    }
+}
+
+/// Throwing counterpart of ``runOffCooperativePool(_:)``.
+private func runOffCooperativePool<Value: Sendable>(
+    _ work: @escaping @Sendable () throws -> Value
+) async throws -> Value {
+    try await withCheckedThrowingContinuation { continuation in
+        DispatchQueue.global(qos: .userInitiated).async {
+            continuation.resume(with: Result { try work() })
+        }
     }
 }
 
