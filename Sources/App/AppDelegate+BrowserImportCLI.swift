@@ -12,6 +12,14 @@ enum BrowserImportSynchronousBridgeOutcome<Result: Sendable>: Sendable {
 enum BrowserImportSynchronousBridge {
     static let requestTimeout: TimeInterval = 5 * 60
 
+    /// Upper bound on how long a cancelled import may take to settle.
+    ///
+    /// The wait exists so a reply never races a store mutation, but it must not
+    /// be unbounded: the thread that signals it is a task, and a caller that
+    /// parks a cooperative thread here can starve the very task it waits for.
+    /// Generous enough that a settling import always wins it in practice.
+    static let cancellationSettlementTimeout: TimeInterval = 30
+
     static func run<Result: Sendable>(
         timeout: TimeInterval,
         operation: @escaping @Sendable () async -> Result
@@ -27,8 +35,16 @@ enum BrowserImportSynchronousBridge {
         let boundedTimeout = timeout.isFinite ? max(timeout, 0) : 0
         guard semaphore.wait(timeout: .now() + boundedTimeout) == .success else {
             task.cancel()
-            // Imports mutate app-owned stores, so cancellation must settle before replying.
-            semaphore.wait()
+            // Imports mutate app-owned stores, so cancellation must settle before
+            // replying — but only within a bound. An unbounded wait deadlocks
+            // whenever the caller occupies the thread the settling task needs.
+            guard semaphore.wait(
+                timeout: .now() + Self.cancellationSettlementTimeout
+            ) == .success else {
+                // Settlement is unattestable, so report no result rather than one
+                // that a still-running import could contradict.
+                return .unavailable
+            }
             guard let result = box.withValue({ $0 }) else { return .unavailable }
             return .timedOut(settledResult: result)
         }
