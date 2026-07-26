@@ -356,9 +356,6 @@ private final class LaunchdCoalitionExecution {
                     "launchd supervisor coalition is unavailable or not isolated"
                 )
             }
-            execution.leaderIdentity = leaderSnapshot.identity
-            execution.coalitionID = coalitionID
-
             guard jobSnapshot.pid == leaderPID else {
                 throw BoundedProcessRunnerError.secureBrokerFailed(
                     "launchd PID mismatch (expected \(leaderPID), observed \(jobSnapshot.pid ?? -1))"
@@ -374,32 +371,23 @@ private final class LaunchdCoalitionExecution {
                     "launchd coalition mismatch (expected \(coalitionID), observed \(reportedCoalitionID))"
                 )
             }
-            // The scan above accepts the first snapshot carrying a pid, which on
-            // releases that do publish a coalition block can still predate it,
-            // leaving the corroboration nothing to compare. Read once more now
-            // that the kernel has settled, so those releases keep cross-checking
-            // launchd against the kernel deterministically instead of by timing.
-            // A failed re-read weakens nothing: isolation is already proven for
-            // this pid, and the boundary is re-checked by the handoff below.
-            if jobSnapshot.resourceCoalitionID == nil,
-               let settled = try? execution.control.snapshot(
-                   domain: domain,
-                   label: artifacts.label,
-                   boundary: boundary
-               ),
-               settled.pid == leaderPID,
-               let settledCoalitionID = settled.resourceCoalitionID,
-               settledCoalitionID != coalitionID {
-                throw BoundedProcessRunnerError.secureBrokerFailed(
-                    "launchd coalition mismatch (expected \(coalitionID), observed \(settledCoalitionID))"
-                )
-            }
+            // The second witness of this coalition is the supervisor's own
+            // kernel reading, echoed in its acknowledgement and required to
+            // match in `releaseInvocation`. That check is deterministic on every
+            // supported release, so nothing here depends on whether the running
+            // macOS publishes a coalition block.
             guard LaunchdProcessSnapshot.current(for: leaderPID)?.identity
                     == leaderSnapshot.identity else {
                 throw BoundedProcessRunnerError.secureBrokerFailed(
                     "launchd leader identity changed before release"
                 )
             }
+            // Adopted only once every guard above has held: the failure path
+            // terminates `execution.coalitionID`, so recording it earlier would
+            // let a rejected handoff signal a coalition this broker had not yet
+            // corroborated as its own.
+            execution.leaderIdentity = leaderSnapshot.identity
+            execution.coalitionID = coalitionID
             do {
                 try artifacts.acceptSupervisor(
                     expectedIdentity: leaderSnapshot.identity,
@@ -435,6 +423,7 @@ private final class LaunchdCoalitionExecution {
                 try artifacts.releaseInvocation(
                     supervisorRequest,
                     ownerLivenessDescriptor: ownerLivenessDescriptor,
+                    expectedCoalitionID: coalitionID,
                     boundary: boundary
                 )
             } catch {

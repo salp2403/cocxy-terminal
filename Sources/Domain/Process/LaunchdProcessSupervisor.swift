@@ -88,29 +88,40 @@ struct LaunchdSupervisorMessage: Codable, Equatable {
     let kind: LaunchdSupervisorMessageKind
     let accepted: Bool?
     let completion: LaunchdSupervisorCompletion?
+    /// The coalition the supervisor read for itself from the kernel.
+    ///
+    /// The broker derives the same value independently from `proc_pidinfo`, so
+    /// echoing it here gives the handoff a second, release-independent witness:
+    /// `launchctl print` publishes a coalition block only on some macOS
+    /// releases, and this frame does not depend on it at all.
+    let coalitionID: UInt64?
 
-    static let acknowledged = LaunchdSupervisorMessage(
-        kind: .acknowledged,
-        accepted: true,
-        completion: nil
-    )
+    static func acknowledged(coalitionID: UInt64) -> Self {
+        LaunchdSupervisorMessage(
+            kind: .acknowledged,
+            accepted: true,
+            completion: nil,
+            coalitionID: coalitionID
+        )
+    }
 
     static func completed(_ completion: LaunchdSupervisorCompletion) -> Self {
         LaunchdSupervisorMessage(
             kind: .completed,
             accepted: nil,
-            completion: completion
+            completion: completion,
+            coalitionID: nil
         )
     }
 
     func validate() throws {
         switch kind {
         case .acknowledged:
-            guard accepted == true, completion == nil else {
+            guard accepted == true, completion == nil, coalitionID != nil else {
                 throw BoundedProcessRunnerError.secureContainmentVerificationFailed
             }
         case .completed:
-            guard accepted == nil, let completion else {
+            guard accepted == nil, coalitionID == nil, let completion else {
                 throw BoundedProcessRunnerError.secureContainmentVerificationFailed
             }
             try completion.validate()
@@ -372,7 +383,7 @@ enum LaunchdProcessSupervisorEntry {
 
         do {
             try connection.writeFrame(
-                LaunchdSupervisorMessage.acknowledged,
+                LaunchdSupervisorMessage.acknowledged(coalitionID: coalitionID),
                 deadline: { acknowledgementDeadline },
                 pollHook: {}
             )

@@ -568,10 +568,26 @@ enum LaunchdOwnedJobEvidence {
 struct LaunchdSupervisorHandshakeState {
     private var pendingCompletion: LaunchdSupervisorCompletion?
 
-    mutating func acceptInitial(_ message: LaunchdSupervisorMessage) throws {
+    /// Accepts the supervisor's first frame, requiring it to agree with the
+    /// coalition the broker proved against the kernel.
+    ///
+    /// Both sides read `proc_pidinfo` independently, so this comparison is the
+    /// release-independent cross-check of the handoff: it holds on every
+    /// supported macOS version, including the ones whose `launchctl print`
+    /// publishes no coalition block at all.
+    mutating func acceptInitial(
+        _ message: LaunchdSupervisorMessage,
+        expectedCoalitionID: UInt64
+    ) throws {
         try message.validate()
         switch message.kind {
         case .acknowledged:
+            guard message.coalitionID == expectedCoalitionID else {
+                throw BoundedProcessRunnerError.secureBrokerFailed(
+                    "supervisor coalition mismatch (expected \(expectedCoalitionID), "
+                        + "observed \(message.coalitionID.map(String.init) ?? "none"))"
+                )
+            }
             return
         case .completed:
             guard let completion = message.completion else {
@@ -840,6 +856,7 @@ final class LaunchdProcessArtifacts {
     func releaseInvocation(
         _ request: LaunchdSupervisorRequest,
         ownerLivenessDescriptor: Int32,
+        expectedCoalitionID: UInt64,
         boundary: LaunchdExecutionBoundary
     ) throws {
         guard let supervisorConnection, ownerLivenessDescriptor >= 0 else {
@@ -862,7 +879,10 @@ final class LaunchdProcessArtifacts {
             deadline: { deadline },
             pollHook: { try boundary.check() }
         )
-        try supervisorHandshake.acceptInitial(message)
+        try supervisorHandshake.acceptInitial(
+            message,
+            expectedCoalitionID: expectedCoalitionID
+        )
     }
 
     func readSupervisorCompletion(deadline: UInt64) throws -> LaunchdSupervisorCompletion {
@@ -1391,9 +1411,19 @@ final class LaunchdProcessArtifacts {
         }
         if snapshot.state == "not running" {
             if snapshot.resourceCoalitionID != nil { return true }
-            guard let reportedPID = snapshot.pid else { return bootScope == .current }
-            return LaunchdProcessCoalition.resourceID(for: reportedPID)
-                == state.coalitionID
+            guard let reportedPID = snapshot.pid,
+                  let observedCoalitionID = LaunchdProcessCoalition.resourceID(
+                      for: reportedPID
+                  ) else {
+                // A stopped job leaves no process to interrogate: either launchd
+                // published no pid, or it published a stale one the kernel can no
+                // longer resolve. Neither is a contradiction, so corroboration
+                // falls to the persisted state proving it belongs to this boot —
+                // treating it as a mismatch would strand a cleanly finished
+                // execution as permanently unverifiable.
+                return bootScope == .current
+            }
+            return observedCoalitionID == state.coalitionID
         }
         guard snapshot.pid == state.supervisorIdentity.pid,
               let supervisor = LaunchdProcessSnapshot.current(

@@ -822,10 +822,40 @@ struct NotebookProcessRunnerSwiftTestingTests {
             pollHook: {}
         )
         var handshake = LaunchdSupervisorHandshakeState()
-        try handshake.acceptInitial(received)
+        try handshake.acceptInitial(received, expectedCoalitionID: 4_242)
 
         #expect(received == expectedMessage)
         #expect(handshake.takePendingCompletion() == expected)
+        #expect(handshake.takePendingCompletion() == nil)
+    }
+
+    @Test("the handshake rejects an acknowledgement from another coalition")
+    func handshakeRejectsForeignSupervisorCoalition() throws {
+        var handshake = LaunchdSupervisorHandshakeState()
+
+        #expect(throws: BoundedProcessRunnerError.self) {
+            try handshake.acceptInitial(
+                LaunchdSupervisorMessage.acknowledged(coalitionID: 9_001),
+                expectedCoalitionID: 4_242
+            )
+        }
+        // An acknowledgement without any coalition testimony is refused too, so
+        // the cross-check cannot be skipped by omitting the field.
+        #expect(throws: BoundedProcessRunnerError.self) {
+            try handshake.acceptInitial(
+                LaunchdSupervisorMessage(
+                    kind: .acknowledged,
+                    accepted: true,
+                    completion: nil,
+                    coalitionID: nil
+                ),
+                expectedCoalitionID: 4_242
+            )
+        }
+        try handshake.acceptInitial(
+            LaunchdSupervisorMessage.acknowledged(coalitionID: 4_242),
+            expectedCoalitionID: 4_242
+        )
         #expect(handshake.takePendingCompletion() == nil)
     }
 
