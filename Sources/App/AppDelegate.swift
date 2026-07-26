@@ -2146,7 +2146,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusDetailsProvider: {
                 syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {
                     delegateRef.value?.runtimeStatusDetailsForCLI() ?? [:]
-                } ?? ["launch_status": "warming"]
+                } ?? {
+                    // The main actor is still busy, which is exactly when launch
+                    // timings are worth reporting. They come from a lock-guarded
+                    // store, so answer with what was measured instead of an empty
+                    // "warming" reply; the deferred counters stay out because only
+                    // the main actor knows them.
+                    var details = AppLaunchTimingRecorder.timingFields()
+                    details["launch_status"] = "warming"
+                    return details
+                }()
             },
             themeEngineProvider: {
                 if Thread.isMainThread {

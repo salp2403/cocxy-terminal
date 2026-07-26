@@ -207,18 +207,20 @@ struct AppLaunchTimingSnapshot: Equatable, Sendable {
         durationsNanoseconds[step]
     }
 
-    func statusFields() -> [String: String] {
+    /// Launch measurements that depend only on the recorded step durations.
+    ///
+    /// Deliberately excludes everything derived from the deferred-warm-up queue,
+    /// which only the main actor can answer: this is the subset a status caller
+    /// can report truthfully while the main actor is still busy, which is
+    /// precisely when launch diagnostics are worth having.
+    func timingFields() -> [String: String] {
         var fields: [String: String] = [
-            "launch_status": pendingDeferredWarmupSteps == 0 ? "ready" : "warming",
             "launch_recorded_steps": "\(recordedSteps.count)",
             "launch_critical_path_ms": Self.formatMilliseconds(criticalPathNanoseconds),
             "launch_critical_path_budget_ms": Self.formatMilliseconds(
                 UInt64(ColdStartBudget.internalCriticalPathBudgetMilliseconds * 1_000_000),
                 trimIntegerFraction: true
-            ),
-            "launch_deferred_completed": "\(completedDeferredWarmupSteps)",
-            "launch_deferred_pending": "\(pendingDeferredWarmupSteps)",
-            "launch_deferred_total": "\(AppLaunchStep.deferredWarmupSteps.count)"
+            )
         ]
 
         if let slowestStep {
@@ -231,6 +233,15 @@ struct AppLaunchTimingSnapshot: Equatable, Sendable {
                 slowestCriticalPathStep.durationNanoseconds
             )
         }
+        return fields
+    }
+
+    func statusFields() -> [String: String] {
+        var fields = timingFields()
+        fields["launch_status"] = pendingDeferredWarmupSteps == 0 ? "ready" : "warming"
+        fields["launch_deferred_completed"] = "\(completedDeferredWarmupSteps)"
+        fields["launch_deferred_pending"] = "\(pendingDeferredWarmupSteps)"
+        fields["launch_deferred_total"] = "\(AppLaunchStep.deferredWarmupSteps.count)"
         return fields
     }
 
@@ -288,6 +299,15 @@ enum AppLaunchTimingRecorder {
         pendingDeferredWarmupBatches: [[AppLaunchStep]]
     ) -> AppLaunchTimingSnapshot {
         store.snapshot(pendingDeferredWarmupBatches: pendingDeferredWarmupBatches)
+    }
+
+    /// Launch timings readable without the main actor.
+    ///
+    /// The backing store is lock-guarded, so a status caller that could not
+    /// reach the main actor still reports what was measured instead of nothing.
+    /// The deferred-warm-up counters are omitted rather than guessed.
+    static func timingFields() -> [String: String] {
+        store.snapshot(pendingDeferredWarmupBatches: []).timingFields()
     }
 
     static func resetForTesting() {
