@@ -282,7 +282,12 @@ private final class LaunchdCoalitionExecution {
                         "launchd supervisor exited before handoff: \(execution.stderrString())"
                     )
                 }
-                if candidate.pid != nil, candidate.resourceCoalitionID != nil {
+                // `launchctl print` only publishes a coalition block on macOS
+                // versions that expose one, so waiting for that field would
+                // never finish on the releases that omit it. The pid is
+                // published everywhere, and the coalition is proven against the
+                // kernel below, which answers on every supported release.
+                if candidate.pid != nil {
                     jobSnapshot = candidate
                     break
                 }
@@ -326,8 +331,27 @@ private final class LaunchdCoalitionExecution {
                         + execution.stderrString()
                 )
             }
-            guard let coalitionID = LaunchdProcessCoalition.resourceID(for: leaderPID),
-                  coalitionID != supervisorCoalitionID else {
+            // The kernel is the authority on coalition membership. Waiting for
+            // launchd to publish the coalition used to settle the job before it
+            // was read; poll the kernel within the same boundary instead, so a
+            // supervisor observed before launchd finishes moving it out of this
+            // process's coalition is retried rather than rejected outright.
+            let coalitionDeadline = try boundary.boundedDeadline(maximum: 2)
+            var isolatedCoalitionID: UInt64?
+            while true {
+                if let candidate = LaunchdProcessCoalition.resourceID(for: leaderPID),
+                   candidate != supervisorCoalitionID {
+                    isolatedCoalitionID = candidate
+                    break
+                }
+                guard LaunchdMonotonicClock.now() < coalitionDeadline else { break }
+                try boundary.check()
+                usleep(Self.scanIntervalMicroseconds)
+            }
+            guard let coalitionID = isolatedCoalitionID else {
+                // An exhausted execution budget stays a timeout, exactly as it
+                // does when the supervisor identity never settles.
+                try boundary.check()
                 throw BoundedProcessRunnerError.secureBrokerFailed(
                     "launchd supervisor coalition is unavailable or not isolated"
                 )
@@ -340,9 +364,34 @@ private final class LaunchdCoalitionExecution {
                     "launchd PID mismatch (expected \(leaderPID), observed \(jobSnapshot.pid ?? -1))"
                 )
             }
-            guard jobSnapshot.resourceCoalitionID == coalitionID else {
+            // launchd corroborates the kernel whenever it publishes a coalition;
+            // a disagreement stays a hard failure. Releases that publish no
+            // coalition block report nothing to contradict, and the kernel
+            // reading above already proved isolation for this very pid.
+            if let reportedCoalitionID = jobSnapshot.resourceCoalitionID,
+               reportedCoalitionID != coalitionID {
                 throw BoundedProcessRunnerError.secureBrokerFailed(
-                    "launchd coalition mismatch (expected \(coalitionID), observed \(jobSnapshot.resourceCoalitionID ?? 0))"
+                    "launchd coalition mismatch (expected \(coalitionID), observed \(reportedCoalitionID))"
+                )
+            }
+            // The scan above accepts the first snapshot carrying a pid, which on
+            // releases that do publish a coalition block can still predate it,
+            // leaving the corroboration nothing to compare. Read once more now
+            // that the kernel has settled, so those releases keep cross-checking
+            // launchd against the kernel deterministically instead of by timing.
+            // A failed re-read weakens nothing: isolation is already proven for
+            // this pid, and the boundary is re-checked by the handoff below.
+            if jobSnapshot.resourceCoalitionID == nil,
+               let settled = try? execution.control.snapshot(
+                   domain: domain,
+                   label: artifacts.label,
+                   boundary: boundary
+               ),
+               settled.pid == leaderPID,
+               let settledCoalitionID = settled.resourceCoalitionID,
+               settledCoalitionID != coalitionID {
+                throw BoundedProcessRunnerError.secureBrokerFailed(
+                    "launchd coalition mismatch (expected \(coalitionID), observed \(settledCoalitionID))"
                 )
             }
             guard LaunchdProcessSnapshot.current(for: leaderPID)?.identity

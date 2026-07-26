@@ -283,6 +283,66 @@ struct NotebookProcessRunnerSwiftTestingTests {
         #expect(inactive.exitCode == 7)
     }
 
+    @Test("parses launchd status published without any coalition block")
+    func parsesLaunchdStatusWithoutCoalitionBlock() throws {
+        // macOS releases before the coalition block was published print no
+        // coalition for a job at all. The snapshot must stay usable so the
+        // kernel can supply the coalition for the pid launchd reported.
+        let running = try #require(LaunchdJobSnapshot(output: """
+        gui/504/dev.cocxy.example = {
+            active count = 1
+            path = /private/tmp/example/job.plist
+            type = LaunchAgent
+            state = running
+
+            program = /bin/sleep
+            arguments = {
+                /bin/sleep
+                30
+            }
+
+            domain = gui/504 [100019]
+            asid = 100019
+            minimum runtime = 10
+            exit timeout = 5
+            runs = 1
+            pid = 2874
+            immediate reason = speculative
+            forks = 0
+            execs = 1
+            last exit code = (never exited)
+
+            spawn type = daemon (3)
+            jetsam priority = 40
+            properties = runatload | inferred program
+        }
+        """))
+        let stopped = try #require(LaunchdJobSnapshot(output: """
+        gui/504/dev.cocxy.example = {
+            active count = 0
+            state = not running
+
+            domain = gui/504 [100019]
+            runs = 1
+            last exit code = 0
+
+            properties = runatload | inferred program
+        }
+        """))
+
+        #expect(running.state == "running")
+        #expect(running.pid == 2874)
+        #expect(running.runCount == 1)
+        #expect(running.resourceCoalitionID == nil)
+        #expect(running.exitCode == nil)
+        #expect(running.terminatingSignal == nil)
+        #expect(stopped.state == "not running")
+        #expect(stopped.pid == nil)
+        #expect(stopped.runCount == 1)
+        #expect(stopped.resourceCoalitionID == nil)
+        #expect(stopped.exitCode == EXIT_SUCCESS)
+    }
+
     @Test("classifies launchd absence, presence, and indeterminate control results")
     func classifiesLaunchdPresenceWithoutCollapsingUnknown() throws {
         let absent = BoundedProcessResult(
@@ -1520,25 +1580,29 @@ struct NotebookProcessRunnerSwiftTestingTests {
         )
         var sentinelSnapshot: LaunchdJobSnapshot?
         var sentinelProcessIdentity: LaunchdProcessIdentity?
+        var sentinelKernelCoalitionID: UInt64?
         while LaunchdMonotonicClock.now() < sentinelDeadline {
             let snapshot = try control.snapshot(
                 domain: sentinelDomain,
                 label: sentinelLabel
             )
+            // The kernel owns the coalition on every supported release; the
+            // launchd record is required to agree only where it publishes one.
             if let pid = snapshot.pid,
-               let coalitionID = snapshot.resourceCoalitionID,
                let processSnapshot = LaunchdProcessSnapshot.current(for: pid),
                processSnapshot.isLive,
-               LaunchdProcessCoalition.resourceID(for: pid) == coalitionID {
+               let coalitionID = LaunchdProcessCoalition.resourceID(for: pid),
+               snapshot.resourceCoalitionID.map({ $0 == coalitionID }) ?? true {
                 sentinelSnapshot = snapshot
                 sentinelProcessIdentity = processSnapshot.identity
+                sentinelKernelCoalitionID = coalitionID
                 break
             }
             usleep(10_000)
         }
         let runningSentinel = try #require(sentinelSnapshot)
         let sentinelPID = try #require(runningSentinel.pid)
-        let sentinelCoalitionID = try #require(runningSentinel.resourceCoalitionID)
+        let sentinelCoalitionID = try #require(sentinelKernelCoalitionID)
         let sentinelIdentity = try #require(sentinelProcessIdentity)
         if let testCoalitionID = LaunchdProcessCoalition.resourceID(for: getpid()) {
             try #require(sentinelCoalitionID != testCoalitionID)
@@ -1621,7 +1685,13 @@ struct NotebookProcessRunnerSwiftTestingTests {
             label: sentinelLabel
         )
         #expect(survivingSentinel.pid == sentinelPID)
-        #expect(survivingSentinel.resourceCoalitionID == sentinelCoalitionID)
+        #expect(
+            survivingSentinel.resourceCoalitionID.map { $0 == sentinelCoalitionID }
+                ?? true
+        )
+        #expect(
+            LaunchdProcessCoalition.resourceID(for: sentinelPID) == sentinelCoalitionID
+        )
         #expect(
             LaunchdProcessSnapshot.current(for: sentinelPID)?.identity
                 == sentinelIdentity
@@ -1916,7 +1986,12 @@ struct NotebookProcessRunnerSwiftTestingTests {
             from: stateData
         )
         #expect(state.domain == domain)
-        #expect(state.coalitionID == stopped.resourceCoalitionID)
+        // The supervisor persisted the coalition the kernel reported for itself,
+        // so it must be a real coalition isolated from this process; launchd's
+        // own record has to agree wherever the release publishes one.
+        #expect(state.coalitionID != 0)
+        #expect(state.coalitionID != LaunchdProcessCoalition.resourceID(for: getpid()))
+        #expect(stopped.resourceCoalitionID.map { $0 == state.coalitionID } ?? true)
         #expect(state.payloadMayHaveRun)
 
         try #require(lease).emergencyCleanup()

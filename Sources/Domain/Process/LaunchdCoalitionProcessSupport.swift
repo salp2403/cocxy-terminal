@@ -1046,9 +1046,12 @@ final class LaunchdProcessArtifacts {
             domain: state.domain,
             label: state.label
         )
+        // The kernel already proved this process belongs to the persisted
+        // coalition above; launchd only corroborates when it publishes a
+        // coalition block, which not every supported macOS release does.
         guard case .present(let job) = presence,
               job.pid == getpid(),
-              job.resourceCoalitionID == state.coalitionID else {
+              Self.launchdCoalitionCorroborates(job, expected: state.coalitionID) else {
             throw BoundedProcessRunnerError.secureContainmentVerificationFailed
         }
 
@@ -1174,10 +1177,14 @@ final class LaunchdProcessArtifacts {
             case .absent:
                 break
             case .present(let job):
+                // The coalition is proven against the kernel for this very
+                // process; launchd's coalition block, when the running macOS
+                // release publishes one, must agree with it.
                 guard matchingDomain == nil,
                       job.state != "not running",
                       job.pid == getpid(),
-                      job.resourceCoalitionID == coalitionID else {
+                      LaunchdProcessCoalition.resourceID(for: getpid()) == coalitionID,
+                      Self.launchdCoalitionCorroborates(job, expected: coalitionID) else {
                     throw BoundedProcessRunnerError.secureContainmentVerificationFailed
                 }
                 matchingDomain = domain
@@ -1189,6 +1196,21 @@ final class LaunchdProcessArtifacts {
             throw BoundedProcessRunnerError.secureContainmentVerificationFailed
         }
         return matchingDomain
+    }
+
+    /// Reports whether launchd's own coalition record contradicts `expected`.
+    ///
+    /// `launchctl print` publishes a coalition block only on macOS releases that
+    /// expose one. A published coalition must agree with the coalition the
+    /// kernel reported for the same process; an omitted block states nothing and
+    /// therefore contradicts nothing. Callers must have proven the coalition
+    /// against `LaunchdProcessCoalition.resourceID(for:)` before relying on this.
+    private static func launchdCoalitionCorroborates(
+        _ job: LaunchdJobSnapshot,
+        expected: UInt64
+    ) -> Bool {
+        guard let reportedCoalitionID = job.resourceCoalitionID else { return true }
+        return reportedCoalitionID == expected
     }
 
     static func matches(lease: LaunchdProcessLease) -> Bool {
@@ -1297,7 +1319,11 @@ final class LaunchdProcessArtifacts {
         )
         if bootScope == .unverifiable {
             guard case .matching(let snapshot) = ownerEvidence,
-                  jobCorroborates(state: state, snapshot: snapshot) else {
+                  jobCorroborates(
+                      state: state,
+                      snapshot: snapshot,
+                      bootScope: bootScope
+                  ) else {
                 throw BoundedProcessRunnerError.secureCleanupUnverified(
                     "legacy execution state could not be corroborated by its launchd job"
                 )
@@ -1308,7 +1334,11 @@ final class LaunchdProcessArtifacts {
         var permitsBootout = ownerEvidence.permitsBootoutAttempt
         switch ownerEvidence {
         case .matching(let snapshot):
-            guard jobCorroborates(state: state, snapshot: snapshot) else {
+            guard jobCorroborates(
+                state: state,
+                snapshot: snapshot,
+                bootScope: bootScope
+            ) else {
                 permitsBootout = false
                 uncertainties.append("owner launchd job identity contradicted persisted state")
                 break
@@ -1341,12 +1371,30 @@ final class LaunchdProcessArtifacts {
         )
     }
 
+    /// Decides whether an owner-domain launchd record corroborates persisted state.
+    ///
+    /// The coalition evidence is ranked by how strong it is, never skipped:
+    /// a coalition published by launchd must equal the persisted one; when the
+    /// running macOS release publishes no coalition block, the kernel answers
+    /// for the pid launchd reported; and when launchd reports no process at all
+    /// there is nothing left to interrogate, so the persisted state must prove
+    /// it belongs to this boot. That last requirement is what stops a record
+    /// left by a previous boot from authorising the termination of a coalition
+    /// ID that the current boot may have handed to an unrelated coalition.
     private static func jobCorroborates(
         state: LaunchdPersistedExecutionState,
-        snapshot: LaunchdJobSnapshot
+        snapshot: LaunchdJobSnapshot,
+        bootScope: LaunchdPersistedBootScope
     ) -> Bool {
-        guard snapshot.resourceCoalitionID == state.coalitionID else { return false }
-        if snapshot.state == "not running" { return true }
+        if let reportedCoalitionID = snapshot.resourceCoalitionID {
+            guard reportedCoalitionID == state.coalitionID else { return false }
+        }
+        if snapshot.state == "not running" {
+            if snapshot.resourceCoalitionID != nil { return true }
+            guard let reportedPID = snapshot.pid else { return bootScope == .current }
+            return LaunchdProcessCoalition.resourceID(for: reportedPID)
+                == state.coalitionID
+        }
         guard snapshot.pid == state.supervisorIdentity.pid,
               let supervisor = LaunchdProcessSnapshot.current(
                   for: state.supervisorIdentity.pid
@@ -1513,7 +1561,11 @@ final class LaunchdProcessArtifacts {
 
             if bootScope == .unverifiable {
                 if case .matching(let snapshot) = ownerEvidence,
-                   jobCorroborates(state: state, snapshot: snapshot) {
+                   jobCorroborates(
+                       state: state,
+                       snapshot: snapshot,
+                       bootScope: bootScope
+                   ) {
                     // A matching live launchd record safely migrates legacy state.
                 } else if case .absent = ownerEvidence {
                     let foreignUncertainties = control.nonOwnerDomainUncertainties(
@@ -1553,7 +1605,11 @@ final class LaunchdProcessArtifacts {
             var permitsBootout = ownerEvidence.permitsBootoutAttempt
             switch ownerEvidence {
             case .matching(let snapshot):
-                guard jobCorroborates(state: state, snapshot: snapshot) else {
+                guard jobCorroborates(
+                    state: state,
+                    snapshot: snapshot,
+                    bootScope: bootScope
+                ) else {
                     permitsBootout = false
                     uncertainties.append(
                         "owner launchd job identity contradicted persisted state"
@@ -2596,14 +2652,9 @@ struct LaunchdControlClient {
             case .absent:
                 return .absent
             case .present(let snapshot):
-                if snapshot.resourceCoalitionID == expectedCoalitionID {
-                    return .matching(snapshot)
-                }
-                let observed = snapshot.resourceCoalitionID.map { String($0) }
-                    ?? "unknown"
-                return .conflicting(
-                    "owner domain coalition mismatch (expected "
-                        + "\(expectedCoalitionID), observed \(observed))"
+                return Self.coalitionEvidence(
+                    for: snapshot,
+                    expectedCoalitionID: expectedCoalitionID
                 )
             case .unknown(let exitCode):
                 return .unknown(
@@ -2615,6 +2666,47 @@ struct LaunchdControlClient {
                 "owner domain inspection failed: \(Self.errorDetail(error))"
             )
         }
+    }
+
+    /// Weighs a present owner job against the coalition the caller expects.
+    ///
+    /// `launchctl print` publishes a coalition block only on macOS releases that
+    /// expose one, so a missing block is an absence of testimony, never a
+    /// contradiction. The kernel is asked about the very pid launchd reported,
+    /// which is at least as strong as the field it replaces. When launchd
+    /// reports no process either, the record carries no coalition testimony at
+    /// all: it is still the owner job for this unique label, and corroborating
+    /// it is left to the caller, which weighs the persisted state's boot scope
+    /// before permitting any bootout.
+    private static func coalitionEvidence(
+        for snapshot: LaunchdJobSnapshot,
+        expectedCoalitionID: UInt64
+    ) -> LaunchdOwnedJobEvidence {
+        if let reportedCoalitionID = snapshot.resourceCoalitionID {
+            guard reportedCoalitionID == expectedCoalitionID else {
+                return .conflicting(
+                    "owner domain coalition mismatch (expected "
+                        + "\(expectedCoalitionID), observed \(reportedCoalitionID))"
+                )
+            }
+            return .matching(snapshot)
+        }
+        guard let reportedPID = snapshot.pid else { return .matching(snapshot) }
+        guard let kernelCoalitionID = LaunchdProcessCoalition.resourceID(
+            for: reportedPID
+        ) else {
+            return .conflicting(
+                "owner domain coalition mismatch (expected "
+                    + "\(expectedCoalitionID), observed unknown)"
+            )
+        }
+        guard kernelCoalitionID == expectedCoalitionID else {
+            return .conflicting(
+                "owner domain coalition mismatch (expected "
+                    + "\(expectedCoalitionID), observed \(kernelCoalitionID))"
+            )
+        }
+        return .matching(snapshot)
     }
 
     func nonOwnerDomainUncertainties(
