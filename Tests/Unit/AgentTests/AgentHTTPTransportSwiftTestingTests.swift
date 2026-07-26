@@ -152,6 +152,13 @@ private final class BoundedHTTPTestURLProtocol: URLProtocol, @unchecked Sendable
 
     private let stateLock = NSLock()
     private var stopped = false
+    /// Serial so the scripted body chunks always reach the client before the
+    /// completion that follows them. On a concurrent queue the staggered blocks
+    /// carry no ordering guarantee once their deadlines pass together, which on
+    /// a loaded machine delivers "finished" first and empties the response.
+    private let deliveryQueue = DispatchQueue(
+        label: "dev.cocxy.tests.bounded-http-delivery"
+    )
 
     override class func canInit(with request: URLRequest) -> Bool {
         request.url?.host == "bounded-http.test"
@@ -239,7 +246,7 @@ private final class BoundedHTTPTestURLProtocol: URLProtocol, @unchecked Sendable
     }
 
     private func send(_ data: Data, id: String, after delay: TimeInterval) {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) { [self] in
+        deliveryQueue.asyncAfter(deadline: .now() + delay) { [self] in
             guard isActive else { return }
             Self.recorder.recordBytes(data.count, id: id)
             client?.urlProtocol(self, didLoad: data)
@@ -247,7 +254,7 @@ private final class BoundedHTTPTestURLProtocol: URLProtocol, @unchecked Sendable
     }
 
     private func finish(after delay: TimeInterval) {
-        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + delay) { [self] in
+        deliveryQueue.asyncAfter(deadline: .now() + delay) { [self] in
             guard isActive else { return }
             client?.urlProtocolDidFinishLoading(self)
         }
