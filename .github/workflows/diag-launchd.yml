@@ -1,0 +1,72 @@
+name: Diag launchd print fields
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci/diag-launchd]
+
+permissions:
+  contents: read
+
+jobs:
+  diag:
+    name: launchctl print fields (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26]
+    steps:
+      - name: OS report
+        run: sw_vers
+
+      - name: Bootstrap a trivial job and dump launchctl print verbatim
+        run: |
+          set +e
+          LABEL="dev.cocxy.diag.$RANDOM"
+          PLIST="$RUNNER_TEMP/$LABEL.plist"
+          cat > "$PLIST" <<PLISTEOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>Label</key><string>$LABEL</string>
+            <key>ProgramArguments</key>
+            <array><string>/bin/sleep</string><string>30</string></array>
+            <key>RunAtLoad</key><true/>
+          </dict>
+          </plist>
+          PLISTEOF
+          echo "── bootstrap gui/$UID ──"
+          launchctl bootstrap "gui/$UID" "$PLIST"; echo "bootstrap exit: $?"
+
+          for ATTEMPT in 1 2 3; do
+            echo ""
+            echo "════════ launchctl print, intento $ATTEMPT ════════"
+            launchctl print "gui/$UID/$LABEL" > "$RUNNER_TEMP/print-$ATTEMPT.txt" 2>&1
+            echo "print exit: $?"
+            echo "── campos que exige el parser ──"
+            grep -nE "^[[:space:]]*(pid|state) =" "$RUNNER_TEMP/print-$ATTEMPT.txt" || echo "  SIN pid/state"
+            grep -nE "resource coalition|jetsam coalition" "$RUNNER_TEMP/print-$ATTEMPT.txt" || echo "  SIN bloque de coalicion"
+            sleep 2
+          done
+
+          echo ""
+          echo "════════ SALIDA COMPLETA (intento 3) ════════"
+          cat "$RUNNER_TEMP/print-3.txt"
+
+          echo ""
+          echo "════════ ¿el proceso sigue vivo? ════════"
+          pgrep -fl "sleep 30" | head -3 || echo "  ningun sleep vivo"
+
+          launchctl bootout "gui/$UID/$LABEL" 2>/dev/null; echo "bootout exit: $?"
+          exit 0
+
+      - name: Upload raw print output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: launchctl-print-${{ matrix.os }}
+          path: ${{ runner.temp }}/print-*.txt
+          retention-days: 1
