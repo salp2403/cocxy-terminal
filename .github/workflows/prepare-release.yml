@@ -2,8 +2,8 @@ name: Prepare Release
 
 # Bumps `Resources/Info.plist` to the target version, commits the bump
 # to `main`, and creates the release tag on top of that commit. The
-# existing `Release` workflow takes it from there when the tag is
-# pushed.
+# existing `Release` workflow takes it from there through a second,
+# default-branch repository dispatch.
 #
 # Separating the bump from the release build closes the historical
 # drift where `git checkout <tag>` returned source with the previous
@@ -12,19 +12,16 @@ name: Prepare Release
 # source-only checkouts, audits, and forensic bisects reproduce what
 # GitHub Releases publishes.
 #
-# The workflow is intentionally `workflow_dispatch`-only so the dev
-# chooses the moment and the exact version. Safety guards reject
-# invalid formats, existing tags, and anything other than a push from
+# The workflow accepts only a repository dispatch, so GitHub loads this
+# privileged definition from the default branch. Safety guards reject
+# invalid formats, existing tags, and anything other than trusted
 # `main`. All operations are idempotent — re-running for the same
 # version with a matching `Info.plist` is a no-op.
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version without the leading `v` (for example `0.1.80`).'
-        required: true
-        type: string
+  repository_dispatch:
+    types:
+      - prepare-stable-release
 
 permissions:
   contents: write
@@ -32,29 +29,30 @@ permissions:
 jobs:
   prepare:
     name: Bump Info.plist and tag
+    if: github.ref == 'refs/heads/main'
     runs-on: macos-15
     timeout-minutes: 10
 
     steps:
       - name: Checkout main
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
-          ref: main
+          ref: ${{ github.sha }}
           fetch-depth: 0
           lfs: true
-          persist-credentials: true
-          # Checkout with the release PAT so the git auth header persisted
-          # by actions/checkout carries workflow-trigger privileges. Using
-          # the default GITHUB_TOKEN here poisons the persisted extraheader
-          # and keeps the subsequent tag push from waking the Release
-          # workflow even when the remote URL is rewritten later.
-          token: ${{ secrets.RELEASE_PUSH_TOKEN }}
+          persist-credentials: false
 
       - name: Validate version format
+        env:
+          REQUESTED_VERSION: ${{ github.event.client_payload.version }}
         run: |
-          VERSION="${{ inputs.version }}"
+          VERSION="$REQUESTED_VERSION"
           if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Invalid version '$VERSION'. Expected semver format X.Y.Z (no leading v)."
+            exit 1
+          fi
+          if [ "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]; then
+            echo "::error::Release preparation is not running from its default-branch event commit."
             exit 1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -71,6 +69,27 @@ jobs:
         id: current
         run: |
           CURRENT=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)
+          if ! [[ "$CURRENT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Current Info.plist version is invalid: ${CURRENT}"
+            exit 1
+          fi
+          IFS=. read -r candidate_major candidate_minor candidate_patch <<< "$VERSION"
+          IFS=. read -r current_major current_minor current_patch <<< "$CURRENT"
+          candidate_major=$((10#$candidate_major))
+          candidate_minor=$((10#$candidate_minor))
+          candidate_patch=$((10#$candidate_patch))
+          current_major=$((10#$current_major))
+          current_minor=$((10#$current_minor))
+          current_patch=$((10#$current_patch))
+          if [ "$candidate_major" -lt "$current_major" ] \
+              || { [ "$candidate_major" -eq "$current_major" ] \
+                  && [ "$candidate_minor" -lt "$current_minor" ]; } \
+              || { [ "$candidate_major" -eq "$current_major" ] \
+                  && [ "$candidate_minor" -eq "$current_minor" ] \
+                  && [ "$candidate_patch" -lt "$current_patch" ]; }; then
+            echo "::error::Target version ${VERSION} is older than current Info.plist version ${CURRENT}."
+            exit 1
+          fi
           echo "CURRENT=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "Info.plist currently at ${CURRENT}"
 
@@ -102,22 +121,37 @@ jobs:
           git tag -a "v${VERSION}" -m "Cocxy Terminal v${VERSION}"
 
       - name: Push main then tag
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PUSH_TOKEN }}
         run: |
           # Push main first so the tagged commit is reachable on the
-          # default branch before the release workflow fires. Pushing
-          # the tag second keeps the Release workflow trigger idempotent
-          # — it always builds from a commit visible on main.
+          # default branch before dispatching the trusted Release workflow.
+          # Pushing the tag second guarantees that provenance validation can
+          # resolve an annotated tag whose commit is already visible on main.
           #
-          # The checkout step above already wired the RELEASE_PUSH_TOKEN
-          # (a PAT with `repo` + `workflow` scope) into the persisted git
-          # auth header. Using that PAT instead of the default GITHUB_TOKEN
-          # is what lets the resulting tag push wake the Release workflow
-          # on its own — GitHub strips derived-workflow triggers for
-          # actions taken with GITHUB_TOKEN as an anti-loop safeguard.
+          # The PAT is exposed only to this push step. GitHub suppresses
+          # derived workflow triggers for pushes made with GITHUB_TOKEN.
+          ASKPASS="$RUNNER_TEMP/cocxy-prepare-release-git-askpass"
+          cat > "$ASKPASS" <<'ASKPASS_EOF'
+          #!/bin/bash
+          case "$1" in
+            *Username*) printf '%s\n' 'x-access-token' ;;
+            *Password*) printf '%s\n' "$GH_TOKEN" ;;
+            *) exit 1 ;;
+          esac
+          ASKPASS_EOF
+          chmod 700 "$ASKPASS"
+          trap 'rm -f "$ASKPASS"' EXIT
           if [ "${{ steps.commit.outputs.SKIPPED }}" = "0" ]; then
-            git push origin main
+            GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 git push origin HEAD:main
           fi
-          git push origin "v${VERSION}"
+          GIT_ASKPASS="$ASKPASS" GIT_TERMINAL_PROMPT=0 git push origin "v${VERSION}"
+          RELEASE_COMMIT="$(git rev-parse HEAD)"
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/dispatches" \
+            -f event_type=stable-release \
+            -f "client_payload[version]=${VERSION}" \
+            -f "client_payload[tag]=v${VERSION}" \
+            -f "client_payload[commit]=${RELEASE_COMMIT}"
 
       - name: Summary
         run: |

@@ -160,29 +160,31 @@ struct WorktreeCLIArgumentParserTests {
         }
     }
 
-    @Test("worktree remove --force sets force=true")
-    func removeForceFlag() throws {
-        let parsed = try CLIArgumentParser.parse(
-            ["worktree", "remove", "abc123", "--force"]
-        )
-        switch parsed {
-        case .worktreeRemove(_, let force):
-            #expect(force)
-        default:
-            Issue.record("Expected worktreeRemove")
+    @Test("worktree remove rejects --force")
+    func removeRejectsForceFlag() {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse(
+                ["worktree", "remove", "abc123", "--force"]
+            )
         }
     }
 
-    @Test("worktree remove -f is the short alias for --force")
-    func removeForceShortAlias() throws {
-        let parsed = try CLIArgumentParser.parse(
-            ["worktree", "remove", "abc123", "-f"]
-        )
-        switch parsed {
-        case .worktreeRemove(_, let force):
-            #expect(force)
-        default:
-            Issue.record("Expected worktreeRemove")
+    @Test("worktree remove rejects -f")
+    func removeRejectsForceShortAlias() {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse(
+                ["worktree", "remove", "abc123", "-f"]
+            )
+        }
+    }
+
+    @Test("worktree remove never treats a force flag as the id", arguments: [
+        "--force",
+        "-f"
+    ])
+    func removeRejectsForceFlagInIDPosition(_ flag: String) {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse(["worktree", "remove", flag])
         }
     }
 
@@ -205,18 +207,49 @@ struct WorktreeCLIArgumentParserTests {
 
     // MARK: - cleanup merged
 
-    @Test("worktree cleanup-merged parses base-ref, dry-run, and force")
-    func cleanupMergedParsesFlags() throws {
+    @Test("worktree cleanup-merged requires dry-run and preserves base-ref")
+    func cleanupMergedRequiresDryRunAndPreservesBaseRef() throws {
         let parsed = try CLIArgumentParser.parse([
             "worktree", "cleanup-merged",
             "--base-ref", "main",
-            "--dry-run",
-            "--force"
+            "--dry-run"
         ])
         #expect(parsed == .worktreeCleanupMerged(
             baseRef: "main",
-            force: true,
+            force: false,
             dryRun: true
+        ))
+    }
+
+    @Test("worktree cleanup-merged rejects a missing --dry-run")
+    func cleanupMergedRejectsMissingDryRun() {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse([
+                "worktree", "cleanup-merged",
+                "--base-ref", "main"
+            ])
+        }
+    }
+
+    @Test("worktree cleanup-merged rejects --force")
+    func cleanupMergedRejectsForce() {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse([
+                "worktree", "cleanup-merged",
+                "--dry-run",
+                "--force"
+            ])
+        }
+    }
+
+    @Test("worktree help exposes only the non-forced IPC surface")
+    func helpExposesOnlyNonForcedSurface() {
+        let help = CLIArgumentParser.helpText()
+
+        #expect(help.contains("cocxy worktree remove <id>"))
+        #expect(!help.contains("cocxy worktree remove <id> [--force]"))
+        #expect(help.contains(
+            "cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]"
         ))
     }
 

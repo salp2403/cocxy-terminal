@@ -19,9 +19,9 @@ import Foundation
 
 /// Actor wrapping every `gh` subprocess invocation.
 ///
-/// The service never caches results — the Pane view model owns cache
-/// semantics and invalidation. Keeping the actor stateless also means
-/// tests can reuse a single instance across scenarios without reset.
+/// The service never caches remote results — the Pane view model owns cache
+/// semantics and invalidation. The only retained state is the short-lived
+/// replay ledger for approved local-socket mutations.
 actor GitHubService {
 
     // MARK: Dependencies (injectable for tests)
@@ -35,16 +35,22 @@ actor GitHubService {
     /// a background task for every call and add yield points we cannot
     /// observe from tests.
     typealias Runner = @Sendable (URL, [String], TimeInterval) throws -> GitHubCLIResult
+    typealias DateProvider = @Sendable () -> Date
 
     private let runner: Runner
     private let pullRequestTemplateFiller: PRTemplateFiller
+    private let dateProvider: DateProvider
+    /// Expiring IDs consumed before any approved socket mutation reaches `gh`.
+    private var consumedSocketMutationAuthorizationIDs: [UUID: Date] = [:]
 
     init(
         runner: @escaping Runner = GitHubService.defaultRunner,
-        pullRequestTemplateFiller: PRTemplateFiller = PRTemplateFiller()
+        pullRequestTemplateFiller: PRTemplateFiller = PRTemplateFiller(),
+        dateProvider: @escaping DateProvider = { Date() }
     ) {
         self.runner = runner
         self.pullRequestTemplateFiller = pullRequestTemplateFiller
+        self.dateProvider = dateProvider
     }
 
     /// Production default: route through `GitHubCLI.run` with its built-in
@@ -116,7 +122,7 @@ actor GitHubService {
         let normalizedState = Self.normalizeState(state, allowed: ["open", "closed", "merged", "all"], fallback: "open")
         let args = [
             "pr", "list",
-            "--json", "number,title,state,author,headRefName,baseRefName,labels,isDraft,reviewDecision,url,updatedAt",
+            "--json", GitHubPullRequest.ghJSONFields,
             "--state", normalizedState,
             "--limit", "\(clampedLimit)",
         ]
@@ -143,12 +149,14 @@ actor GitHubService {
     func viewPullRequest(
         number: Int,
         at directory: URL,
+        repository: GitHubRepositoryAuthority? = nil,
         timeoutSeconds: TimeInterval = 10.0
     ) async throws -> GitHubPullRequest {
-        let args = [
+        var args = [
             "pr", "view", "\(number)",
-            "--json", "number,title,state,author,headRefName,baseRefName,labels,isDraft,reviewDecision,url,updatedAt",
+            "--json", GitHubPullRequest.ghJSONFields,
         ]
+        Self.appendRepository(repository, to: &args)
         let result = try runner(directory, args, timeoutSeconds)
         if result.terminationStatus != 0 {
             throw GitHubCLI.classifyError(
@@ -309,12 +317,14 @@ actor GitHubService {
     func pullRequestNumber(
         forBranch branch: String,
         at directory: URL,
+        repository: GitHubRepositoryAuthority? = nil,
         timeoutSeconds: TimeInterval = 10.0
     ) async throws -> Int? {
         let trimmed = branch.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        let args = ["pr", "view", trimmed, "--json", "number"]
+        var args = ["pr", "view", trimmed, "--json", "number"]
+        Self.appendRepository(repository, to: &args)
         let result = try runner(directory, args, timeoutSeconds)
         if result.terminationStatus != 0 {
             // "no pull requests found for branch foo" is the canonical
@@ -351,6 +361,7 @@ actor GitHubService {
         action: GitHubPullRequestReviewAction,
         body: String?,
         at directory: URL,
+        repository: GitHubRepositoryAuthority? = nil,
         timeoutSeconds: TimeInterval = 30.0
     ) async throws {
         var args = ["pr", "review"]
@@ -362,6 +373,7 @@ actor GitHubService {
            !body.isEmpty {
             args.append(contentsOf: ["--body", body])
         }
+        Self.appendRepository(repository, to: &args)
 
         let result = try runner(directory, args, timeoutSeconds)
         if result.terminationStatus != 0 {
@@ -371,6 +383,31 @@ actor GitHubService {
                 exitCode: result.terminationStatus
             )
         }
+    }
+
+    func reviewPullRequest(
+        authorizedBy grant: GitHubSocketMutationAuthorizationGrant,
+        at directory: URL,
+        now: Date = Date(),
+        timeoutSeconds: TimeInterval = 30.0
+    ) async throws {
+        guard case .review(let number, let action, let body) = grant.request.intent else {
+            throw GitHubSocketMutationAuthorizationError.invalidOrExpired
+        }
+        let repository = try await consumeSocketMutationAuthorization(
+            grant,
+            at: directory,
+            now: now,
+            timeoutSeconds: timeoutSeconds
+        )
+        try await reviewPullRequest(
+            number: number,
+            action: action,
+            body: body,
+            at: directory,
+            repository: repository,
+            timeoutSeconds: timeoutSeconds
+        )
     }
 
     // MARK: - PR review threads
@@ -552,9 +589,10 @@ actor GitHubService {
     func mergePullRequest(
         request: GitHubMergeRequest,
         at directory: URL,
+        repository: GitHubRepositoryAuthority? = nil,
         timeoutSeconds: TimeInterval = 60.0
     ) async throws -> GitHubPullRequest {
-        let args = Self.mergeArguments(for: request)
+        let args = Self.mergeArguments(for: request, repository: repository)
         let result = try runner(directory, args, timeoutSeconds)
 
         // `gh pr merge` sometimes exits 0 while printing "will be
@@ -572,12 +610,14 @@ actor GitHubService {
             if let merged = try? await viewPullRequest(
                 number: request.pullRequestNumber,
                 at: directory,
+                repository: repository,
                 timeoutSeconds: timeoutSeconds
             ), merged.state == .merged {
                 if request.deleteBranch {
                     try deleteHeadBranchIfStillPresent(
                         for: merged,
                         at: directory,
+                        repository: repository,
                         timeoutSeconds: timeoutSeconds
                     )
                 }
@@ -596,6 +636,7 @@ actor GitHubService {
         let merged = try await viewPullRequest(
             number: request.pullRequestNumber,
             at: directory,
+            repository: repository,
             timeoutSeconds: timeoutSeconds
         )
 
@@ -603,11 +644,36 @@ actor GitHubService {
             try deleteHeadBranchIfStillPresent(
                 for: merged,
                 at: directory,
+                repository: repository,
                 timeoutSeconds: timeoutSeconds
             )
         }
 
         return merged
+    }
+
+    @discardableResult
+    func mergePullRequest(
+        authorizedBy grant: GitHubSocketMutationAuthorizationGrant,
+        at directory: URL,
+        now: Date = Date(),
+        timeoutSeconds: TimeInterval = 60.0
+    ) async throws -> GitHubPullRequest {
+        guard case .merge(let request) = grant.request.intent else {
+            throw GitHubSocketMutationAuthorizationError.invalidOrExpired
+        }
+        let repository = try await consumeSocketMutationAuthorization(
+            grant,
+            at: directory,
+            now: now,
+            timeoutSeconds: timeoutSeconds
+        )
+        return try await mergePullRequest(
+            request: request,
+            at: directory,
+            repository: repository,
+            timeoutSeconds: timeoutSeconds
+        )
     }
 
     @discardableResult
@@ -672,7 +738,8 @@ actor GitHubService {
 
     private static func mergeArguments(
         for request: GitHubMergeRequest,
-        auto: Bool = false
+        auto: Bool = false,
+        repository: GitHubRepositoryAuthority? = nil
     ) -> [String] {
         var args: [String] = [
             "pr", "merge", "\(request.pullRequestNumber)",
@@ -691,6 +758,7 @@ actor GitHubService {
         if let body = request.body, !body.isEmpty {
             args.append(contentsOf: ["--body", body])
         }
+        appendRepository(repository, to: &args)
         return args
     }
 
@@ -731,13 +799,16 @@ actor GitHubService {
     private func deleteHeadBranchIfStillPresent(
         for merged: GitHubPullRequest,
         at directory: URL,
+        repository approvedRepository: GitHubRepositoryAuthority? = nil,
         timeoutSeconds: TimeInterval
     ) throws {
         let headRef = merged.headRefName.trimmingCharacters(in: .whitespacesAndNewlines)
         let baseRef = merged.baseRefName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard merged.state == .merged,
               !headRef.isEmpty,
-              headRef != baseRef else {
+              headRef != baseRef,
+              merged.isCrossRepository == false,
+              let headRepository = merged.headRepository else {
             return
         }
 
@@ -747,21 +818,45 @@ actor GitHubService {
             let name: String
         }
 
-        let repoResult = try runner(
-            directory,
-            ["repo", "view", "--json", "owner,name"],
-            timeoutSeconds
-        )
-        guard repoResult.terminationStatus == 0 else {
+        let repository: GitHubRepositoryAuthority
+        if let approvedRepository {
+            repository = approvedRepository
+        } else {
+            let repoResult = try runner(
+                directory,
+                ["repo", "view", "--json", "owner,name"],
+                timeoutSeconds
+            )
+            guard repoResult.terminationStatus == 0 else {
+                return
+            }
+            let repo = try GitHubJSONDecoder.decode(RepoIdentity.self, from: repoResult.stdout)
+            guard let discovered = GitHubRepositoryAuthority(
+                host: "github.com",
+                ownerLogin: repo.owner.login,
+                name: repo.name
+            ) else {
+                return
+            }
+            repository = discovered
+        }
+        guard headRepository.matches(
+            ownerLogin: repository.ownerLogin,
+            name: repository.name
+        ) else {
             return
         }
-        let repo = try GitHubJSONDecoder.decode(RepoIdentity.self, from: repoResult.stdout)
 
         let encodedRef = headRef.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? headRef
-        let endpoint = "repos/\(repo.owner.login)/\(repo.name)/git/refs/heads/\(encodedRef)"
+        let endpoint = "repos/\(repository.ownerLogin)/\(repository.name)/git/refs/heads/\(encodedRef)"
+        var deleteArguments = ["api"]
+        if approvedRepository != nil {
+            deleteArguments.append(contentsOf: ["--hostname", repository.host])
+        }
+        deleteArguments.append(contentsOf: ["-X", "DELETE", endpoint])
         let deleteResult = try runner(
             directory,
-            ["api", "-X", "DELETE", endpoint],
+            deleteArguments,
             timeoutSeconds
         )
         if deleteResult.terminationStatus == 0 {
@@ -774,6 +869,53 @@ actor GitHubService {
            lower.contains("no ref found") {
             return
         }
+    }
+
+    private func consumeSocketMutationAuthorization(
+        _ grant: GitHubSocketMutationAuthorizationGrant,
+        at directory: URL,
+        now: Date,
+        timeoutSeconds: TimeInterval
+    ) async throws -> GitHubRepositoryAuthority {
+        consumedSocketMutationAuthorizationIDs = consumedSocketMutationAuthorizationIDs.filter {
+            $0.value > now
+        }
+        guard grant.isValid(for: directory, at: now) else {
+            throw GitHubSocketMutationAuthorizationError.invalidOrExpired
+        }
+        let request = grant.request
+        guard consumedSocketMutationAuthorizationIDs[request.id] == nil else {
+            throw GitHubSocketMutationAuthorizationError.alreadyConsumed
+        }
+
+        consumedSocketMutationAuthorizationIDs[request.id] = request.expiresAt
+        let remainingAuthorizationLifetime = request.expiresAt.timeIntervalSince(now)
+        guard remainingAuthorizationLifetime > 0 else {
+            throw GitHubSocketMutationAuthorizationError.invalidOrExpired
+        }
+        let repository = try await currentRepo(
+            at: directory,
+            timeoutSeconds: min(timeoutSeconds, remainingAuthorizationLifetime)
+        )
+        // Repository discovery can consume the rest of the approval window.
+        // Revalidate at the sink immediately before constructing any mutating
+        // `gh` invocation; a stale grant must never authorize the next call.
+        let sinkDate = max(now, dateProvider())
+        guard grant.isValid(for: directory, at: sinkDate) else {
+            throw GitHubSocketMutationAuthorizationError.invalidOrExpired
+        }
+        guard request.context.repository.matches(repository) else {
+            throw GitHubSocketMutationAuthorizationError.repositoryChanged
+        }
+        return request.context.repository
+    }
+
+    private static func appendRepository(
+        _ repository: GitHubRepositoryAuthority?,
+        to arguments: inout [String]
+    ) {
+        guard let repository else { return }
+        arguments.append(contentsOf: ["--repo", repository.ghSelector])
     }
 
     /// Normalises a user-supplied state string to a value the `gh`

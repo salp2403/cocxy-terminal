@@ -16,6 +16,14 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         return url
     }
 
+    private func installExecutableScript(at url: URL, contents: String) throws {
+        try contents.write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: url.path
+        )
+    }
+
     @Test("add source and install local plugin refreshes state")
     @MainActor
     func addSourceAndInstallRefreshesState() throws {
@@ -58,6 +66,58 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         #expect(viewModel.plugins[0].id == "sample-plugin")
         #expect(viewModel.signatureStatus(for: "sample-plugin") == .unsignedAllowed)
         #expect(viewModel.statusMessage == "Installed sample-plugin.")
+    }
+
+    @Test("remote plugin installation leaves the main actor responsive")
+    @MainActor
+    func remotePluginInstallationRunsOffMainActor() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fakeGit = root.appendingPathComponent("git")
+        try installExecutableScript(
+            at: fakeGit,
+            contents: """
+            #!/bin/sh
+            destination=
+            for argument in "$@"; do destination="$argument"; done
+            /bin/sleep 0.5
+            /bin/mkdir -p "$destination"
+            /usr/bin/printf 'name = "Remote Plugin"\nversion = "1.0.0"\nauthor = "Dev"\n' > "$destination/cocxy-plugin.toml"
+            """
+        )
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let installer = PluginInstaller(
+            pluginsDirectory: pluginsDirectory,
+            gitProcessRunner: MarketplaceGitProcessRunner(
+                gitExecutableURL: fakeGit,
+                workingDirectory: root,
+                timeoutSeconds: 5
+            )
+        )
+        let viewModel = PluginMarketplaceViewModel(
+            sourceStore: PluginSourceStore(fileURL: root.appendingPathComponent("sources.json")),
+            installer: installer,
+            pluginManager: PluginManager(pluginsDirectory: pluginsDirectory.path),
+            bundledCatalog: BundledPluginCatalog(pluginsDirectory: nil)
+        )
+        viewModel.installURLText = "https://example.test/remote-plugin.git"
+
+        let installation = Task { @MainActor in
+            try await viewModel.installPluginInBackground(replaceExisting: false)
+        }
+        for _ in 0..<100 where !viewModel.isInstallingPlugin {
+            await Task.yield()
+        }
+
+        #expect(viewModel.isInstallingPlugin)
+        viewModel.sourceDisplayName = "Responsive"
+        #expect(viewModel.sourceDisplayName == "Responsive")
+
+        try await installation.value
+
+        #expect(!viewModel.isInstallingPlugin)
+        #expect(viewModel.plugins.map(\.id) == ["remote-plugin"])
+        #expect(viewModel.statusMessage == "Installed remote-plugin.")
     }
 
     @Test("plugin marketplace exposes signature badge labels")
@@ -122,6 +182,50 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
         #expect(viewModel.statusMessage == "Installed cocxy-bundled.")
     }
 
+    @Test("background bundled install and uninstall refresh installed state")
+    @MainActor
+    func backgroundBundledInstallAndUninstallRefreshState() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let bundled = root.appendingPathComponent("bundled", isDirectory: true)
+        let plugin = bundled.appendingPathComponent("cocxy-bundled", isDirectory: true)
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        try """
+        name = "Bundled Plugin"
+        version = "1.0.0"
+        author = "Cocxy"
+        events = ["session-start"]
+        """.write(
+            to: plugin.appendingPathComponent(PluginManifest.marketplaceManifestFileName),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let viewModel = PluginMarketplaceViewModel(
+            sourceStore: PluginSourceStore(fileURL: root.appendingPathComponent("sources.json")),
+            installer: PluginInstaller(pluginsDirectory: pluginsDirectory),
+            pluginManager: PluginManager(pluginsDirectory: pluginsDirectory.path),
+            bundledCatalog: BundledPluginCatalog(pluginsDirectory: bundled)
+        )
+
+        try await viewModel.installBundledPluginInBackground(
+            id: "cocxy-bundled",
+            replaceExisting: false
+        )
+
+        #expect(!viewModel.isInstallingPlugin)
+        #expect(viewModel.plugins.map(\.id) == ["cocxy-bundled"])
+        #expect(viewModel.statusMessage == "Installed cocxy-bundled.")
+
+        try await viewModel.uninstallPluginInBackground(id: "cocxy-bundled")
+
+        #expect(!viewModel.isInstallingPlugin)
+        #expect(viewModel.plugins.isEmpty)
+        #expect(viewModel.statusMessage == "Uninstalled cocxy-bundled.")
+    }
+
     @Test("enabling plugin with unapproved capabilities opens approval request")
     @MainActor
     func enablingPluginWithUnapprovedCapabilitiesOpensApprovalRequest() throws {
@@ -173,7 +277,7 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
 
     @Test("Spanish localizer updates plugin marketplace statuses")
     @MainActor
-    func spanishLocalizerUpdatesPluginMarketplaceStatuses() throws {
+    func spanishLocalizerUpdatesPluginMarketplaceStatuses() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
         let bundle = try #require(localizationBundle())
@@ -186,17 +290,79 @@ struct PluginMarketplaceViewModelSwiftTestingTests {
             localizer: spanish
         )
 
-        viewModel.checkForPluginUpdates()
+        await viewModel.checkForPluginUpdates()
 
         #expect(viewModel.statusMessage == "No se encontraron actualizaciones.")
         #expect(
             viewModel.localizedErrorDescription(PluginMarketplaceViewModelError.missingURL)
                 == "Ingresa una URL de plugin o una ruta local."
         )
+        #expect(
+            viewModel.localizedErrorDescription(PluginManagerError.registryBusy)
+                == "Aún se está ejecutando un plugin. Inténtalo de nuevo cuando termine."
+        )
 
         viewModel.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
 
         #expect(viewModel.statusMessage == "No updates found.")
+        #expect(
+            viewModel.localizedErrorDescription(PluginManagerError.registryBusy)
+                == "A plugin is still running. Try again when it finishes."
+        )
+    }
+
+    @Test("failed plugin update checks are not reported as no updates")
+    @MainActor
+    func failedPluginUpdateCheckReportsFailureAndRelocalizes() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bundle = try #require(localizationBundle())
+        let pluginsDirectory = root.appendingPathComponent("plugins", isDirectory: true)
+        let pluginDirectory = pluginsDirectory.appendingPathComponent(
+            "offline-plugin",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: pluginDirectory,
+            withIntermediateDirectories: true
+        )
+        try """
+        name = "Offline Plugin"
+        version = "1.0.0"
+        author = "Dev"
+        """.write(
+            to: pluginDirectory.appendingPathComponent(
+                PluginManifest.marketplaceManifestFileName
+            ),
+            atomically: true,
+            encoding: .utf8
+        )
+        let updateSourceStore = PluginUpdateSourceStore(pluginsDirectory: pluginsDirectory)
+        let sourceURL = try #require(URL(string: "https://example.test/offline-plugin.git"))
+        try updateSourceStore.save(
+            try #require(PluginUpdateSource.remoteRepository(sourceURL)),
+            for: "offline-plugin"
+        )
+        let updater = PluginUpdater(sourceStore: updateSourceStore) { _ in
+            throw PluginUpdaterError.gitFailed(128)
+        }
+        let viewModel = PluginMarketplaceViewModel(
+            sourceStore: PluginSourceStore(fileURL: root.appendingPathComponent("sources.json")),
+            installer: PluginInstaller(pluginsDirectory: pluginsDirectory),
+            pluginManager: PluginManager(pluginsDirectory: pluginsDirectory.path),
+            bundledCatalog: BundledPluginCatalog(pluginsDirectory: nil),
+            updater: updater,
+            localizer: AppLocalizer(languagePreference: .english, bundle: bundle)
+        )
+
+        await viewModel.checkForPluginUpdates()
+
+        #expect(viewModel.availableUpdates.isEmpty)
+        #expect(viewModel.statusMessage == "Could not check plugin updates. 1 source failed.")
+
+        viewModel.updateLocalizer(AppLocalizer(languagePreference: .spanish, bundle: bundle))
+
+        #expect(viewModel.statusMessage == "No se pudieron buscar actualizaciones. Falló 1 fuente.")
     }
 
     @Test("plugin marketplace keeps a stable top scroll anchor")

@@ -136,12 +136,19 @@ struct AgentTeamCreatorSheet: View {
 
 extension MainWindowController: AgentTeamPaneLaunching {
     func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
+        spawnAgentTeamPane(launchSpec: launchSpec, targetTabID: nil)
+    }
+
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        targetTabID: UUID?
+    ) -> Bool {
         let before = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count
         spawnSubagentPanel(
             subagentId: launchSpec.teammateID,
             sessionId: launchSpec.teamID,
             agentType: "\(launchSpec.teammateName) - \(launchSpec.provider.displayName)",
-            targetTabId: visibleTabID?.rawValue ?? tabManager.activeTabID?.rawValue,
+            targetTabId: targetTabID ?? visibleTabID?.rawValue ?? tabManager.activeTabID?.rawValue,
             allowReadableGridReflow: true
         )
         let after = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count

@@ -65,6 +65,37 @@ struct AppLaunchSignpostsSwiftTestingTests {
         #expect(snapshot.statusFields()["launch_critical_path_budget_ms"] == "50")
     }
 
+    @Test("launch timings stay readable when the main actor cannot be reached")
+    func timingFieldsAreAvailableWithoutTheMainActor() {
+        AppLaunchTimingRecorder.resetForTesting()
+        AppLaunchTimingRecorder.record(.configService, durationNanoseconds: 2_000_000)
+        AppLaunchTimingRecorder.record(.socketServer, durationNanoseconds: 4_000_000)
+
+        let fields = AppLaunchTimingRecorder.timingFields()
+
+        // The measurements a busy-main-actor status reply must still carry, so
+        // cold-start diagnostics do not vanish exactly when the app is loaded.
+        #expect(fields["launch_critical_path_ms"] == "6.00")
+        #expect(fields["launch_critical_path_budget_ms"] == "50")
+        #expect(fields["launch_recorded_steps"] == "2")
+        #expect(fields["launch_slowest_step"] == AppLaunchStep.socketServer.label)
+
+        // Anything only the main actor can answer must be absent rather than
+        // guessed: reporting "0 pending" off the main actor would be a lie.
+        #expect(fields["launch_status"] == nil)
+        #expect(fields["launch_deferred_pending"] == nil)
+        #expect(fields["launch_deferred_completed"] == nil)
+        #expect(fields["launch_deferred_total"] == nil)
+
+        // The full status reply keeps every field it had before.
+        let statusFields = AppLaunchTimingRecorder
+            .snapshot(pendingDeferredWarmupBatches: [])
+            .statusFields()
+        #expect(statusFields["launch_critical_path_ms"] == fields["launch_critical_path_ms"])
+        #expect(statusFields["launch_status"] == "ready")
+        #expect(statusFields["launch_deferred_pending"] == "0")
+    }
+
     @Test("timing snapshot reports pending warmup and the slowest recorded launch step")
     func timingSnapshotReportsPendingWarmupAndSlowestStep() {
         AppLaunchTimingRecorder.resetForTesting()

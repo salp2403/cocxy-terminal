@@ -3,6 +3,7 @@
 
 import XCTest
 import Combine
+import WebKit
 @testable import CocxyTerminal
 
 // MARK: - Browser Scriptable Tests
@@ -15,15 +16,31 @@ import Combine
 final class BrowserScriptableTests: XCTestCase {
 
     private var viewModel: BrowserViewModel!
+    private var initScriptBridgeToken: NSObject!
 
     override func setUp() {
         super.setUp()
         viewModel = BrowserViewModel()
+        initScriptBridgeToken = NSObject()
+        installTestInitScriptBridge()
     }
 
     override func tearDown() {
+        initScriptBridgeToken = nil
         viewModel = nil
         super.tearDown()
+    }
+
+    private func installTestInitScriptBridge(
+        synchronizer: @escaping BrowserAutomationBridgeStore.InitScriptSynchronizer = { _ in
+            .success("synchronized")
+        }
+    ) {
+        viewModel.attachInitScriptBridge(
+            browserViewID: UUID(),
+            webViewIdentifier: ObjectIdentifier(initScriptBridgeToken),
+            synchronizer: synchronizer
+        )
     }
 
     // MARK: - CLICommandName Browser Cases
@@ -41,6 +58,7 @@ final class BrowserScriptableTests: XCTestCase {
             "browser-add-script",
             "browser-add-style",
             "browser-init-script-add",
+            "browser-init-script-remove",
             "browser-init-scripts-list",
             "browser-get-text",
             "browser-list-tabs",
@@ -117,6 +135,7 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertTrue(allRawValues.contains("browser-add-script"))
         XCTAssertTrue(allRawValues.contains("browser-add-style"))
         XCTAssertTrue(allRawValues.contains("browser-init-script-add"))
+        XCTAssertTrue(allRawValues.contains("browser-init-script-remove"))
         XCTAssertTrue(allRawValues.contains("browser-init-scripts-list"))
         XCTAssertTrue(allRawValues.contains("browser-list-tabs"))
         XCTAssertTrue(allRawValues.contains("browser-snapshot"))
@@ -293,6 +312,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserNavigate_withURL_returnsSuccess() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -311,6 +331,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserNavigate_withMissingURL_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -328,6 +349,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserNavigate_withNilBrowserVM_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: nil
@@ -346,6 +368,7 @@ final class BrowserScriptableTests: XCTestCase {
     func test_browserNavigate_withProviderOverride_usesDynamicBrowserViewModel() {
         let providedViewModel: BrowserViewModel? = viewModel
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModelProviderOverride: { providedViewModel }
@@ -365,6 +388,7 @@ final class BrowserScriptableTests: XCTestCase {
     func test_browserNavigate_usesNavigationProviderWhenPanelMustBeOpened() {
         let providedViewModel: BrowserViewModel? = viewModel
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: nil,
@@ -386,6 +410,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserBack_returnsSuccess() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -399,6 +424,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserForward_returnsSuccess() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -412,6 +438,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserReload_returnsSuccess() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -426,6 +453,7 @@ final class BrowserScriptableTests: XCTestCase {
     func test_browserGetState_returnsCurrentState() {
         viewModel.navigate(to: "https://example.com")
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -440,6 +468,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserGetState_withNilBrowserVM_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: nil
@@ -449,6 +478,73 @@ final class BrowserScriptableTests: XCTestCase {
 
         XCTAssertFalse(response.success)
         XCTAssertTrue(response.error?.contains("not available") == true)
+    }
+
+    func test_browserGetState_rejectsPageDriftBetweenApprovalAndRead() throws {
+        viewModel.navigate(to: "https://approved.example")
+        let webViewToken = NSObject()
+        viewModel.installAutomationWebView(identifier: ObjectIdentifier(webViewToken))
+        let approvedIdentity = try XCTUnwrap(viewModel.currentAutomationPageIdentity())
+        let model = viewModel!
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                SocketPrivilegedCommandAuthorizationGrant(
+                    request: request,
+                    context: SocketPrivilegedCommandContext(
+                        scope: .browserPage,
+                        windowControllerIdentifier: nil,
+                        tabID: nil,
+                        workingDirectory: "/tmp",
+                        surfaceID: nil,
+                        browserViewModelIdentifier: approvedIdentity.viewModelIdentifier,
+                        browserTabID: approvedIdentity.tabID,
+                        browserURL: approvedIdentity.url,
+                        browserWebViewIdentifier: approvedIdentity.webViewIdentifier,
+                        browserNavigationGeneration: approvedIdentity.navigationGeneration,
+                        targetDisplayName: approvedIdentity.url
+                    )
+                )
+            },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModelProviderOverride: {
+                syncOnMainActor {
+                    model.markAutomationNavigationBoundary()
+                    return model
+                }
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "browser-state-drift",
+            command: "browser-get-state",
+            params: nil
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Approved browser page is no longer current")
+    }
+
+    func test_automationPageIdentity_invalidatesAtNavigationBoundary() throws {
+        viewModel.navigate(to: "https://approved.example")
+        let webViewToken = NSObject()
+        let webViewIdentifier = ObjectIdentifier(webViewToken)
+        viewModel.installAutomationWebView(identifier: webViewIdentifier)
+        let approvedIdentity = try XCTUnwrap(viewModel.currentAutomationPageIdentity())
+
+        XCTAssertTrue(viewModel.isCurrentAutomationPage(
+            approvedIdentity,
+            webViewIdentifier: webViewIdentifier,
+            webViewURL: approvedIdentity.url
+        ))
+
+        viewModel.markAutomationNavigationBoundary()
+
+        XCTAssertFalse(viewModel.isCurrentAutomationPage(
+            approvedIdentity,
+            webViewIdentifier: webViewIdentifier,
+            webViewURL: approvedIdentity.url
+        ))
     }
 
     func test_browserStateSave_writesStateSnapshotFile() throws {
@@ -467,6 +563,7 @@ final class BrowserScriptableTests: XCTestCase {
             """)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -505,6 +602,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"loaded","cookies":"1","localStorage":"1","sessionStorage":"1"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -531,6 +629,7 @@ final class BrowserScriptableTests: XCTestCase {
             BrowserScriptEvaluationResult.success("eval:\(script)")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -555,6 +654,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"added","type":"script","id":"cocxy-script-1"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -580,6 +680,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"added","type":"style","id":"cocxy-style-1"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -598,14 +699,17 @@ final class BrowserScriptableTests: XCTestCase {
     }
 
     func test_browserInitScriptAdd_recordsAndInstallsScript() {
-        viewModel.initScriptInstaller = { script, _ in
-            XCTAssertEqual(script, "window.__initSmoke = true;")
-            return .success("installed")
+        var synchronizedScripts: [BrowserInitScript] = []
+        installTestInitScriptBridge { scripts in
+            synchronizedScripts = scripts
+            return .success("synchronized")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
-            browserViewModel: viewModel
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { _ in true }
         )
 
         let response = handler.handleCommand(SocketRequest(
@@ -618,13 +722,304 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertEqual(response.data?["status"], "added")
         XCTAssertEqual(response.data?["installed"], "true")
         XCTAssertEqual(response.data?["length"], "26")
+        XCTAssertEqual(response.data?["origin"], "http://localhost:3000")
+        XCTAssertEqual(response.data?["browserProfileID"], "default")
+        XCTAssertEqual(response.data?["remoteBrowserProfileID"], "local")
+        XCTAssertEqual(response.data?["mainFrameOnly"], "true")
+        XCTAssertNotNil(response.data?["expiresAt"])
         XCTAssertEqual(viewModel.initScripts.count, 1)
+        XCTAssertEqual(viewModel.initScripts.first?.source, "window.__initSmoke = true;")
+        XCTAssertEqual(viewModel.initScripts.first?.mainFrameOnly, true)
+        XCTAssertEqual(synchronizedScripts, viewModel.initScripts)
     }
 
-    func test_browserInitScriptsList_returnsRegisteredScripts() {
-        _ = viewModel.addInitScript("window.__first = 1;")
-        _ = viewModel.addInitScript("window.__second = 2;")
+    func test_browserInitScriptAdd_deniesByDefaultWithoutRetainingSource() {
+        var synchronizerCalledWithSource = false
+        installTestInitScriptBridge { scripts in
+            synchronizerCalledWithSource = synchronizerCalledWithSource || !scripts.isEmpty
+            return .success("synchronized")
+        }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-default-deny",
+            command: "browser-init-script-add",
+            params: ["script": "window.__mustNotPersist = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Browser init script approval is unavailable")
+        XCTAssertFalse(synchronizerCalledWithSource)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_deniedApprovalDoesNotRetainOrInstall() {
+        var synchronizerCalledWithSource = false
+        installTestInitScriptBridge { scripts in
+            synchronizerCalledWithSource = synchronizerCalledWithSource || !scripts.isEmpty
+            return .success("synchronized")
+        }
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { request in
+                XCTAssertEqual(request.script, "window.__denied = true;")
+                XCTAssertEqual(request.context.origin.serialized, "http://localhost:3000")
+                return false
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-denied",
+            command: "browser-init-script-add",
+            params: ["script": "window.__denied = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Browser init script approval was denied")
+        XCTAssertFalse(synchronizerCalledWithSource)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_rejectsContextDriftAfterApproval() {
+        let model = viewModel!
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: model,
+            browserInitScriptAuthorizationProvider: { _ in
+                syncOnMainActor {
+                    model.navigate(to: "https://example.com/changed")
+                }
+                return true
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-context-drift",
+            command: "browser-init-script-add",
+            params: ["script": "window.__staleApproval = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Browser context changed during approval")
+        XCTAssertTrue(model.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAddRejectsRemoteRouteDriftWithStableIDs() {
+        let model = viewModel!
+        let remoteProfile = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote",
+            host: "before.example",
+            user: "developer",
+            localForwardedPorts: [3000: 43_000]
+        )
+        model.attachRemoteBrowserProfile(remoteProfile)
+        model.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: Set([remoteProfile.connectionProfileID])
+        )
+        model.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: remoteProfile.connectionProfileID,
+            forwardedPortMappings: remoteProfile.localForwardedPorts
+        )
+        let changedRemoteProfile: RemoteBrowserProfile = {
+            var profile = remoteProfile
+            profile.host = "after.example"
+            return profile
+        }()
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: model,
+            browserInitScriptAuthorizationProvider: { _ in
+                syncOnMainActor {
+                    model.attachRemoteBrowserProfile(changedRemoteProfile)
+                }
+                return true
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-remote-route-drift",
+            command: "browser-init-script-add",
+            params: ["script": "window.__staleRemoteRoute = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Browser context changed during approval")
+        XCTAssertTrue(model.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_rollsBackWhenWebKitInstallFails() {
+        installTestInitScriptBridge { _ in
+            .failure("WebKit unavailable")
+        }
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { _ in true }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-install-failure",
+            command: "browser-init-script-add",
+            params: ["script": "window.__rollback = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "WebKit unavailable")
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_rollsBackWhenWebKitBridgeIsMissing() {
+        viewModel.detachInitScriptBridge(
+            webViewIdentifier: ObjectIdentifier(initScriptBridgeToken)
+        )
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { _ in true }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-no-bridge",
+            command: "browser-init-script-add",
+            params: ["script": "window.__noBridge = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Browser page is not ready for init scripts")
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_rejectsOversizedUnicodeBeforeApproval() {
+        let script = "a" + String(
+            repeating: "\u{0301}",
+            count: BrowserInitScriptSecurity.maximumSourceByteCount
+        )
+        XCTAssertEqual(script.count, 1)
+        XCTAssertGreaterThan(script.utf8.count, BrowserInitScriptSecurity.maximumSourceByteCount)
+        let authorizationCalled = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { _ in
+                authorizationCalled.withValue { $0 = true }
+                return true
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-unicode-size",
+            command: "browser-init-script-add",
+            params: ["script": script]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(
+            response.error,
+            "Script size \(script.utf8.count) exceeds maximum \(BrowserInitScriptSecurity.maximumSourceByteCount) UTF-8 bytes"
+        )
+        XCTAssertFalse(authorizationCalled.withValue { $0 })
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_rejectsViewModelDriftDuringBridgeVerification() {
+        let originalViewModel = viewModel!
+        let alternateViewModel = BrowserViewModel()
+        let modelProvider = LockedBox<BrowserViewModel?>(originalViewModel)
+        installTestInitScriptBridge { scripts in
+            if !scripts.isEmpty {
+                modelProvider.withValue { $0 = alternateViewModel }
+            }
+            return .success("synchronized")
+        }
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModelProviderOverride: {
+                modelProvider.withValue { $0 }
+            },
+            browserInitScriptAuthorizationProvider: { _ in true }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-model-drift",
+            command: "browser-init-script-add",
+            params: ["script": "window.__wrongModel = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Browser context changed during approval")
+        XCTAssertTrue(originalViewModel.initScripts.isEmpty)
+        XCTAssertTrue(alternateViewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAdd_enforcesManageableActiveGrantLimitBeforeApproval() throws {
+        for index in 0..<BrowserInitScriptSecurity.maximumActiveScripts {
+            let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+                source: .localCLI,
+                script: "window.__grant\(index) = true;"
+            ))
+            _ = try viewModel.addInitScript(authorization: authorization)
+        }
+        let authorizationCalled = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { _ in
+                authorizationCalled.withValue { $0 = true }
+                return true
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-capacity",
+            command: "browser-init-script-add",
+            params: ["script": "window.__overCapacity = true;"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(
+            response.error,
+            "Maximum active browser init scripts reached (\(BrowserInitScriptSecurity.maximumActiveScripts))"
+        )
+        XCTAssertFalse(authorizationCalled.withValue { $0 })
+        XCTAssertEqual(viewModel.initScripts.count, BrowserInitScriptSecurity.maximumActiveScripts)
+    }
+
+    func test_browserInitScriptsList_returnsRegisteredScripts() throws {
+        let first = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__first = 1;"
+        ))
+        let second = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .agentMode,
+            script: "window.__second = 2;"
+        ))
+        _ = try viewModel.addInitScript(authorization: first)
+        _ = try viewModel.addInitScript(authorization: second)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -639,10 +1034,646 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "ok")
         XCTAssertEqual(response.data?["count"], "2")
-        XCTAssertEqual(response.data?["script_0_length"], "19")
-        XCTAssertEqual(response.data?["script_1_length"], "20")
+        XCTAssertEqual(
+            Set([
+                response.data?["script_0_length"],
+                response.data?["script_1_length"]
+            ].compactMap { $0 }),
+            Set(["19", "20"])
+        )
+        XCTAssertNotNil(response.data?["script_0_browserViewID"])
+        XCTAssertEqual(response.data?["script_0_origin"], "http://localhost:3000")
+        XCTAssertEqual(response.data?["script_0_browserProfileID"], "default")
+        XCTAssertEqual(response.data?["script_0_remoteBrowserProfileID"], "local")
+        XCTAssertEqual(response.data?["script_0_mainFrameOnly"], "true")
+        XCTAssertNotNil(response.data?["script_0_expiresAt"])
         XCTAssertNotNil(response.data?["script_0_id"])
         XCTAssertNotNil(response.data?["script_1_id"])
+    }
+
+    func test_browserInitScriptRemove_revokesRegisteredScript() throws {
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__removeMe = true;"
+        ))
+        let script = try viewModel.addInitScript(authorization: authorization)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-remove",
+            command: "browser-init-script-remove",
+            params: ["id": script.id.uuidString]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["status"], "removed")
+        XCTAssertEqual(response.data?["id"], script.id.uuidString)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptRemoveFindsGrantInInactiveBrowserModel() throws {
+        let inactiveModel = BrowserViewModel()
+        let inactiveBridgeToken = NSObject()
+        inactiveModel.attachInitScriptBridge(
+            browserViewID: UUID(),
+            webViewIdentifier: ObjectIdentifier(inactiveBridgeToken),
+            synchronizer: { _ in .success("synchronized") }
+        )
+        let authorization = try XCTUnwrap(inactiveModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__inactiveGrant = true;"
+        ))
+        let script = try inactiveModel.addInitScript(authorization: authorization)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserViewModelsProviderOverride: { [viewModel, inactiveModel] in
+                [viewModel, inactiveModel].compactMap { $0 }
+            }
+        )
+
+        let listResponse = handler.handleCommand(SocketRequest(
+            id: "binit-list-inactive",
+            command: "browser-init-scripts-list",
+            params: nil
+        ))
+        XCTAssertTrue(listResponse.success)
+        XCTAssertEqual(listResponse.data?["count"], "1")
+        XCTAssertEqual(listResponse.data?["script_0_id"], script.id.uuidString)
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "binit-remove-inactive",
+            command: "browser-init-script-remove",
+            params: ["id": script.id.uuidString]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertTrue(inactiveModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAuthorizationRejectsReplacementWebView() throws {
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__wrongView = true;"
+        ))
+        let replacementBridgeToken = NSObject()
+        viewModel.attachInitScriptBridge(
+            browserViewID: UUID(),
+            webViewIdentifier: ObjectIdentifier(replacementBridgeToken),
+            synchronizer: { _ in .success("synchronized") }
+        )
+
+        XCTAssertFalse(viewModel.isInitScriptAuthorizationCurrent(authorization))
+        XCTAssertThrowsError(try viewModel.addInitScript(authorization: authorization)) { error in
+            XCTAssertEqual(error as? BrowserInitScriptRegistrationError, .contextChanged)
+        }
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptAuthorizationIsSingleUse() throws {
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__singleUse = true;"
+        ))
+        let script = try viewModel.addInitScript(authorization: authorization)
+        XCTAssertTrue(viewModel.removeInitScript(id: script.id))
+
+        XCTAssertThrowsError(try viewModel.addInitScript(authorization: authorization)) { error in
+            XCTAssertEqual(
+                error as? BrowserInitScriptRegistrationError,
+                .authorizationConsumed
+            )
+        }
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptRegistrationRevalidatesSourceLimits() throws {
+        let validRequest = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__valid = true;"
+        ))
+        let emptyRequest = BrowserInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "",
+            context: validRequest.context,
+            tabDisplayTitle: validRequest.tabDisplayTitle,
+            remoteDisplayTitle: validRequest.remoteDisplayTitle
+        )
+
+        XCTAssertThrowsError(try viewModel.addInitScript(authorization: emptyRequest)) { error in
+            XCTAssertEqual(error as? BrowserInitScriptRegistrationError, .invalidSource)
+        }
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptRuntimeGateBindsTabOriginAndMainFrame() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        viewModel.currentURL = URL(string: "https://example.com/account")
+        let originalTabID = try XCTUnwrap(viewModel.activeTabID)
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__scoped = true;",
+            at: now
+        ))
+        let script = try viewModel.addInitScript(
+            authorization: authorization,
+            at: now
+        )
+        let approvedOrigin = try XCTUnwrap(BrowserOrigin(url: URL(string: "https://example.com/next")!))
+        let otherOrigin = try XCTUnwrap(BrowserOrigin(url: URL(string: "https://other.example/")!))
+
+        XCTAssertEqual(
+            viewModel.authorizedInitScriptSource(
+                id: script.id,
+                origin: approvedOrigin,
+                isMainFrame: true,
+                at: now.addingTimeInterval(1)
+            ),
+            script.source
+        )
+        XCTAssertNil(viewModel.authorizedInitScriptSource(
+            id: script.id,
+            origin: otherOrigin,
+            isMainFrame: true,
+            at: now.addingTimeInterval(1)
+        ))
+        XCTAssertNil(viewModel.authorizedInitScriptSource(
+            id: script.id,
+            origin: approvedOrigin,
+            isMainFrame: false,
+            at: now.addingTimeInterval(1)
+        ))
+
+        viewModel.addBrowserTab(url: URL(string: "https://example.com/other-tab")!)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        XCTAssertNil(viewModel.authorizedInitScriptSource(
+            id: script.id,
+            origin: approvedOrigin,
+            isMainFrame: true,
+            at: now.addingTimeInterval(1)
+        ))
+
+        viewModel.selectBrowserTab(originalTabID)
+        XCTAssertNil(viewModel.authorizedInitScriptSource(
+            id: script.id,
+            origin: approvedOrigin,
+            isMainFrame: true,
+            at: now.addingTimeInterval(1)
+        ))
+        viewModel.closeBrowserTab(originalTabID)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptMainNavigationRevokesBeforeLeavingOrigin() throws {
+        var cancellationCount = 0
+        viewModel.attachInitScriptBridge(
+            browserViewID: UUID(),
+            webViewIdentifier: ObjectIdentifier(initScriptBridgeToken),
+            navigationCanceller: { cancellationCount += 1 },
+            synchronizer: { _ in .success("synchronized") }
+        )
+        viewModel.currentURL = URL(string: "https://example.com/account")
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__navigationScoped = true;"
+        ))
+        _ = try viewModel.addInitScript(authorization: authorization)
+
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: URL(string: "https://example.com/next"),
+            isMainFrame: true
+        )
+        XCTAssertEqual(viewModel.initScripts.count, 1)
+
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: URL(string: "https://other.example/frame"),
+            isMainFrame: false
+        )
+        XCTAssertEqual(viewModel.initScripts.count, 1)
+
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: URL(string: "about:blank"),
+            isMainFrame: true
+        )
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        XCTAssertEqual(cancellationCount, 0)
+
+        let replacementAuthorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__explicitlyRemoved = true;"
+        ))
+        let replacementScript = try viewModel.addInitScript(
+            authorization: replacementAuthorization
+        )
+        XCTAssertTrue(viewModel.removeInitScript(id: replacementScript.id))
+        XCTAssertEqual(cancellationCount, 1)
+    }
+
+    func test_browserInitScriptIdentityChangesRevokeActiveGrantsImmediately() throws {
+        viewModel.currentURL = URL(string: "https://example.com/account")
+
+        func addGrant(_ marker: String) throws {
+            let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+                source: .localCLI,
+                script: "window.__\(marker) = true;"
+            ))
+            _ = try viewModel.addInitScript(authorization: authorization)
+        }
+
+        try addGrant("profile")
+        viewModel.activeProfileID = UUID()
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+
+        try addGrant("remote")
+        var remoteProfile = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote",
+            host: "remote.example",
+            localForwardedPorts: [3000: 43_000]
+        )
+        viewModel.attachRemoteBrowserProfile(remoteProfile)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        viewModel.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: Set([remoteProfile.connectionProfileID])
+        )
+        viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: remoteProfile.connectionProfileID,
+            forwardedPortMappings: remoteProfile.localForwardedPorts
+        )
+
+        try addGrant("forward")
+        remoteProfile.localForwardedPorts = [3000: 43_001]
+        viewModel.attachRemoteBrowserProfile(remoteProfile)
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        viewModel.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: Set([remoteProfile.connectionProfileID])
+        )
+        viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: remoteProfile.connectionProfileID,
+            forwardedPortMappings: remoteProfile.localForwardedPorts
+        )
+
+        try addGrant("clearRemote")
+        viewModel.clearRemoteBrowserProfile()
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptRemoteLeaseLossRevokesAndBlocksReauthorization() throws {
+        let connectionProfileID = UUID()
+        let remoteProfile = RemoteBrowserProfile(
+            connectionProfileID: connectionProfileID,
+            name: "Remote",
+            host: "remote.example",
+            localForwardedPorts: [3000: 43_000]
+        )
+        viewModel.attachRemoteBrowserProfile(remoteProfile)
+        XCTAssertNil(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__unverifiedLease = true;"
+        ))
+        viewModel.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: Set([connectionProfileID])
+        )
+        viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: connectionProfileID,
+            forwardedPortMappings: [3000: 43_000]
+        )
+        let firstAuthorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__forwardLease = true;"
+        ))
+        _ = try viewModel.addInitScript(authorization: firstAuthorization)
+
+        viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: nil,
+            forwardedPortMappings: [:]
+        )
+
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        XCTAssertNil(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__staleForward = true;"
+        ))
+        let staleForwardResponse = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserViewModel: viewModel,
+            browserInitScriptAuthorizationProvider: { _ in true }
+        ).handleCommand(SocketRequest(
+            id: "binit-stale-forward",
+            command: "browser-init-script-add",
+            params: ["script": "window.__staleForward = true;"]
+        ))
+        XCTAssertFalse(staleForwardResponse.success)
+        XCTAssertEqual(
+            staleForwardResponse.error,
+            "Browser remote connection or forward is no longer active"
+        )
+
+        viewModel.updateInitScriptRemoteForwardLeaseAvailability(
+            scanningProfileID: connectionProfileID,
+            forwardedPortMappings: [3000: 43_000]
+        )
+        let secondAuthorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__connectionLease = true;"
+        ))
+        _ = try viewModel.addInitScript(authorization: secondAuthorization)
+
+        viewModel.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: []
+        )
+
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        XCTAssertNil(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__staleConnection = true;"
+        ))
+
+        viewModel.updateInitScriptRemoteConnectionAvailability(
+            activeConnectionProfileIDs: Set([connectionProfileID])
+        )
+        XCTAssertNotNil(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__restoredLease = true;"
+        ))
+    }
+
+    func test_browserInitScriptExpiresAndPrunesSourceAtBoundary() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .agentMode,
+            script: "window.__expires = true;",
+            at: now
+        ))
+        let script = try viewModel.addInitScript(
+            authorization: authorization,
+            at: now
+        )
+        let origin = authorization.context.origin
+
+        XCTAssertNotNil(viewModel.authorizedInitScriptSource(
+            id: script.id,
+            origin: origin,
+            isMainFrame: true,
+            at: now.addingTimeInterval(599.999)
+        ))
+        XCTAssertNil(viewModel.authorizedInitScriptSource(
+            id: script.id,
+            origin: origin,
+            isMainFrame: true,
+            at: now.addingTimeInterval(600)
+        ))
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+    }
+
+    func test_browserInitScriptExpirationTimerPrunesWithoutFurtherOperations() async throws {
+        var synchronizedCounts: [Int] = []
+        installTestInitScriptBridge { scripts in
+            synchronizedCounts.append(scripts.count)
+            return .success("synchronized")
+        }
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__shortLived = true;"
+        ))
+
+        _ = try viewModel.addInitScript(
+            authorization: authorization,
+            lifetime: 0.05
+        )
+        XCTAssertEqual(viewModel.initScripts.count, 1)
+
+        // The prune runs from a MainActor task that sleeps for the script's own
+        // lifetime, so it competes with this test for the same executor. Waiting
+        // for the effect keeps the assertion honest — it still fails if the
+        // prune never happens — without assuming a fixed wall-clock budget on a
+        // loaded machine.
+        try await waitUntilInitScriptsArePruned(viewModel)
+
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+        XCTAssertEqual(synchronizedCounts.last, 0)
+    }
+
+    private func waitUntilInitScriptsArePruned(
+        _ viewModel: BrowserViewModel,
+        within timeout: Duration = .seconds(5)
+    ) async throws {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if viewModel.initScripts.isEmpty { return }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+
+    func test_browserInitScriptGrantLifetimeStartsAtApproval() throws {
+        let requestedAt = Date(timeIntervalSince1970: 1_800_000_000)
+        let approvedAt = requestedAt.addingTimeInterval(120)
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: "window.__fullLifetime = true;",
+            at: requestedAt
+        ))
+
+        let script = try viewModel.addInitScript(
+            authorization: authorization,
+            at: approvedAt
+        )
+
+        XCTAssertEqual(script.createdAt, approvedAt)
+        XCTAssertEqual(
+            script.expiresAt,
+            approvedAt.addingTimeInterval(BrowserInitScriptAuthorizationRequest.authorizationLifetime)
+        )
+    }
+
+    func test_browserInitScriptWebKitManagedSetPreservesUnrelatedScriptsAndSupportsRemoval() throws {
+        let payload = "window.__secretInitPayload = 'must-not-enter-user-script';"
+        let baselineSource = """
+        \(BrowserInitScriptWebKitSupport.managedSourcePrefix)external */
+        window.__cocxyBaselineInstrumentation = true;
+        """
+        let configuration = WKWebViewConfiguration()
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: baselineSource,
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        ))
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        BrowserInitScriptWebKitSupport.install(on: webView, viewModel: viewModel)
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: payload
+        ))
+        let script = try viewModel.addInitScript(authorization: authorization)
+
+        let userScripts = configuration.userContentController.userScripts
+        let managedScript = try XCTUnwrap(userScripts.last)
+        XCTAssertEqual(userScripts.count, 2)
+        XCTAssertEqual(userScripts.first?.source, baselineSource)
+        XCTAssertTrue(managedScript.source.hasPrefix(BrowserInitScriptWebKitSupport.managedSourcePrefix))
+        XCTAssertTrue(managedScript.source.contains(script.id.uuidString))
+        XCTAssertTrue(managedScript.source.contains(payload))
+        XCTAssertTrue(managedScript.source.contains("(0, eval)("))
+        XCTAssertTrue(managedScript.source.contains("window.location.origin === \"http://localhost:3000\""))
+        XCTAssertEqual(managedScript.injectionTime, .atDocumentStart)
+        XCTAssertTrue(managedScript.isForMainFrameOnly)
+
+        XCTAssertTrue(viewModel.removeInitScript(id: script.id))
+        XCTAssertEqual(configuration.userContentController.userScripts.map(\.source), [baselineSource])
+        BrowserInitScriptWebKitSupport.uninstall(from: webView, viewModel: viewModel)
+    }
+
+    func test_browserInitScriptWebKitRuntimeExecutesApprovedSourceAndHonorsRevocation() async throws {
+        let payload = "window.__cocxyApprovedInitRuntime = true;"
+        viewModel.currentURL = URL(string: "https://example.com/account")
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        BrowserInitScriptWebKitSupport.install(on: webView, viewModel: viewModel)
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: payload
+        ))
+        _ = try viewModel.addInitScript(authorization: authorization)
+        let navigationWaiter = BrowserInitScriptNavigationWaiter()
+
+        try await navigationWaiter.loadHTML(
+            """
+            <html><head><script>
+            window.__sawApprovedInitAtFirstPageScript = window.__cocxyApprovedInitRuntime === true;
+            </script></head><body>approved</body></html>
+            """,
+            in: webView
+        )
+
+        let pageValue = try await webView.evaluateJavaScript(
+            "window.__cocxyApprovedInitRuntime === true"
+        )
+        let firstPageScriptValue = try await webView.evaluateJavaScript(
+            "window.__sawApprovedInitAtFirstPageScript === true"
+        )
+        let pageCanReachHandler = try await webView.evaluateJavaScript("""
+        typeof window.webkit !== 'undefined' &&
+        typeof window.webkit.messageHandlers.cocxyApprovedInitScript !== 'undefined'
+        """)
+        XCTAssertEqual(pageValue as? Bool, true)
+        XCTAssertEqual(firstPageScriptValue as? Bool, true)
+        XCTAssertEqual(pageCanReachHandler as? Bool, false)
+
+        try await navigationWaiter.loadHTML(
+            """
+            <html><head><meta http-equiv="Content-Security-Policy" content="script-src 'none'"></head>
+            <body>strict CSP</body></html>
+            """,
+            in: webView
+        )
+        let strictCSPValue = try await webView.evaluateJavaScript(
+            "window.__cocxyApprovedInitRuntime === true"
+        )
+        XCTAssertEqual(strictCSPValue as? Bool, true)
+
+        try await navigationWaiter.loadHTML(
+            "<html><body>other origin</body></html>",
+            baseURL: URL(string: "https://other.example")!,
+            in: webView
+        )
+        let otherOriginValue = try await webView.evaluateJavaScript(
+            "typeof window.__cocxyApprovedInitRuntime === 'undefined'"
+        )
+        XCTAssertEqual(otherOriginValue as? Bool, true)
+        XCTAssertEqual(viewModel.initScripts.count, 1)
+
+        viewModel.currentURL = URL(string: "https://other.example/")
+        XCTAssertTrue(viewModel.initScripts.isEmpty)
+
+        viewModel.currentURL = URL(string: "https://example.com/account")
+        let revocationAuthorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: payload
+        ))
+        let revokedScript = try viewModel.addInitScript(
+            authorization: revocationAuthorization
+        )
+        XCTAssertTrue(viewModel.removeInitScript(id: revokedScript.id))
+        try await navigationWaiter.loadHTML("<html><body>revoked</body></html>", in: webView)
+
+        let revokedValue = try await webView.evaluateJavaScript(
+            "typeof window.__cocxyApprovedInitRuntime === 'undefined'"
+        )
+        XCTAssertEqual(revokedValue as? Bool, true)
+        BrowserInitScriptWebKitSupport.uninstall(from: webView, viewModel: viewModel)
+    }
+
+    func test_browserInitScriptSourceCannotEscapeOriginGuardSyntax() async throws {
+        let attemptedEscape = """
+        }
+        window.__escapedInitOriginGuard = true;
+        if (false) {
+        """
+        viewModel.currentURL = URL(string: "https://example.com/account")
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        BrowserInitScriptWebKitSupport.install(on: webView, viewModel: viewModel)
+        let authorization = try XCTUnwrap(viewModel.makeInitScriptAuthorizationRequest(
+            source: .localCLI,
+            script: attemptedEscape
+        ))
+        _ = try viewModel.addInitScript(authorization: authorization)
+        let navigationWaiter = BrowserInitScriptNavigationWaiter()
+
+        try await navigationWaiter.loadHTML(
+            "<html><body>other origin</body></html>",
+            baseURL: URL(string: "https://other.example")!,
+            in: webView
+        )
+
+        let escapedValue = try await webView.evaluateJavaScript(
+            "typeof window.__escapedInitOriginGuard === 'undefined'"
+        )
+        XCTAssertEqual(escapedValue as? Bool, true)
+        XCTAssertEqual(viewModel.initScripts.count, 1)
+        BrowserInitScriptWebKitSupport.uninstall(from: webView, viewModel: viewModel)
+    }
+
+    func test_browserInitScriptApprovalPreviewEscapesInvisibleControlCharacters() {
+        let source = "literal\\u{202E}\nsafe\u{202E}hidden\u{200B}\nnext\tcolumn\u{0000}"
+
+        XCTAssertEqual(
+            BrowserInitScriptSecurity.approvalPreview(source),
+            "literal\\\\u{202E}\nsafe\\u{202E}hidden\\u{200B}\nnext\\u{0009}column\\u{0000}"
+        )
+    }
+
+    func test_browserInitScriptMetadataPreviewPreventsFieldInjectionAndBoundsLength() {
+        let metadata = "Trusted\\u{000A}\nOrigin: https://spoofed.example\t" + String(
+            repeating: "x",
+            count: 600
+        )
+        let preview = BrowserInitScriptSecurity.approvalMetadataPreview(metadata)
+
+        XCTAssertFalse(preview.contains("\n"))
+        XCTAssertTrue(preview.contains("Trusted\\\\u{000A}\\u{000A}Origin:"))
+        XCTAssertTrue(preview.hasSuffix("..."))
+    }
+
+    func test_browserOriginNormalizesDefaultPortsAndRejectsNonWebSchemes() throws {
+        XCTAssertEqual(
+            try XCTUnwrap(BrowserOrigin(url: URL(string: "HTTPS://Example.COM:443/account")!)).serialized,
+            "https://example.com"
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(BrowserOrigin(url: URL(string: "http://example.com:8080/")!)).serialized,
+            "http://example.com:8080"
+        )
+        XCTAssertNil(BrowserOrigin(url: URL(fileURLWithPath: "/tmp/index.html")))
     }
 
     func test_browserDialogs_returnsPendingDialogMetadata() {
@@ -654,6 +1685,7 @@ final class BrowserScriptableTests: XCTestCase {
             completion: { _ in }
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -686,6 +1718,7 @@ final class BrowserScriptableTests: XCTestCase {
             completion: { resolution = $0 }
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -716,6 +1749,7 @@ final class BrowserScriptableTests: XCTestCase {
             completion: { resolution = $0 }
         )
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -737,6 +1771,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserEval_withMissingScript_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -754,6 +1789,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserEval_withOversizedScript_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -772,6 +1808,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserEval_withExactMaxSize_returnsSuccess() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -792,6 +1829,7 @@ final class BrowserScriptableTests: XCTestCase {
             BrowserScriptEvaluationResult.success(script.contains("innerText") ? "page text" : "")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -806,6 +1844,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserGetText_withNilBrowserVM_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: nil
@@ -820,6 +1859,7 @@ final class BrowserScriptableTests: XCTestCase {
     func test_browserListTabs_returnsTabData() {
         viewModel.addBrowserTab(url: URL(string: "https://github.com")!)
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -836,6 +1876,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserListTabs_withNilBrowserVM_returnsError() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: nil
@@ -859,6 +1900,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"accessibility":[{"ref":"b1","role":"button","name":"Save"}],"dom":[{"tag":"button","ref":"b1","visible":"true"}],"visual":{"viewportWidth":"1024","viewportHeight":"768"},"page":{"url":"https://example.com","title":"Example","readyState":"complete"},"network":{"resourceCount":"2","resources":[{"url":"https://example.com/app.js"}]}}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -899,6 +1941,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","capturedAt":"2026-05-16T12:00:00Z","page":{"url":"https://example.com","origin":"https://example.com","title":"Example","readyState":"complete","favicon":"https://example.com/favicon.ico"},"visual":{"viewportWidth":"1024","viewportHeight":"768","scrollX":"0","scrollY":"12"},"focused":{"present":"true","ref":"field-1"},"target":{"present":"true","ref":"card-1","name":"Card"},"dom":[{"ref":"card-1","tag":"section","name":"Card"}],"network":{"resourceCount":"2","entries":[{"url":"https://example.com/app.js","initiatorType":"script","duration":"5","transferSize":"12"}]}}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -940,6 +1983,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"clicked","ref":"id-save","actionable":"true","reason":"ok","attempts":"1","elapsedMs":"8","before":"{}","after":"{}","diff":"{\"changed\":\"false\",\"count\":\"0\"}","explanation":"Action clicked on id-save completed; no observable DOM summary change."}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -961,6 +2005,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("clicked")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -988,6 +2033,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"clicked","ref":"b1","actionable":"true","reason":"ok","attempts":"2","elapsedMs":"64","before":"{\"target\":{\"name\":\"Save\"}}","after":"{\"target\":{\"name\":\"Saved\"}}","diff":"{\"changed\":\"true\",\"count\":\"1\"}","explanation":"Action clicked on b1 completed with 1 observable change(s); first change: target.name."}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1021,6 +2067,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"timeout","ref":"b1","actionable":"false","reason":"not-visible","attempts":"25","elapsedMs":"1250"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1058,6 +2105,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .file(path: outputPath, byteCount: 4)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1088,6 +2136,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("dblclicked")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1109,6 +2158,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("hovered")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1130,6 +2180,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("focused")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1152,6 +2203,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("filled")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1189,6 +2241,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"uploaded","ref":"file-1","fileName":"fixture.txt","bytes":"20"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1216,6 +2269,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("typed")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1242,6 +2296,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"typed","ref":"active","actionable":"true","reason":"ok","before":"{\"target\":{\"value\":\"\"}}","after":"{\"target\":{\"value\":\"hello\"}}","diff":"{\"changed\":\"true\",\"count\":\"1\"}","explanation":"Action typed on active completed with 1 observable change(s); first change: target.value."}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1277,6 +2332,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"pressed","ref":"active","actionable":"true","reason":"ok","before":"{\"activeRef\":\"input-1\"}","after":"{\"activeRef\":\"input-1\"}","diff":"{\"changed\":\"false\",\"count\":\"0\"}","explanation":"Action pressed on active completed; no observable DOM summary change."}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1306,6 +2362,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("keydown")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1326,6 +2383,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("keyup")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1347,6 +2405,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("checked")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1368,6 +2427,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("unchecked")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1389,6 +2449,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("selected")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1417,6 +2478,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"scrolled","ref":"page","actionable":"true","reason":"ok","before":"{\"scroll\":{\"y\":\"0\"}}","after":"{\"scroll\":{\"y\":\"24\"}}","diff":"{\"changed\":\"true\",\"count\":\"1\"}","explanation":"Action scrolled on page completed with 1 observable change(s); first change: scroll.y."}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1446,6 +2508,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("scrolled")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1469,6 +2532,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("<html><body>ready</body></html>")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1490,6 +2554,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("<section data-cocxy-ref=\"card-1\">ready</section>")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1517,6 +2582,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("hello")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1540,6 +2606,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","value":"https://cocxy.dev"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1565,6 +2632,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("Cocxy")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1585,6 +2653,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("3")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1607,6 +2676,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","x":"1","y":"2","width":"300","height":"40"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1631,6 +2701,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","styles":"{\"color\":\"rgb(1, 2, 3)\"}"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1657,6 +2728,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","visible":"true","reason":"visible"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1679,6 +2751,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","enabled":"false","reason":"disabled"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1701,6 +2774,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","checked":"true"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1723,6 +2797,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"[{"ref":"b1","role":"button","name":"Save"}]"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1749,6 +2824,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"[{"ref":"e1","role":"button","name":"Deploy"}]"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1770,6 +2846,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"[{"ref":"submit-1","role":"button","name":"Submit"}]"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1796,6 +2873,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"[{"ref":"row-2","role":"div","name":"Second"}]"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1820,6 +2898,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .dataURL("data:image/png;base64,AAA=", byteCount: 3)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1842,6 +2921,7 @@ final class BrowserScriptableTests: XCTestCase {
             )
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1858,6 +2938,7 @@ final class BrowserScriptableTests: XCTestCase {
         viewModel.recordConsoleEntry(level: "log", message: "ready")
         viewModel.recordConsoleEntry(level: "error", message: "failed")
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1879,6 +2960,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("found")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1899,6 +2981,7 @@ final class BrowserScriptableTests: XCTestCase {
     func test_browserCookiesList_parsesDocumentCookiePairs() {
         viewModel.scriptEvaluator = { _, _ in .success("sid=abc; theme=dark") }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1921,6 +3004,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("ok")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1952,6 +3036,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"[{"key":"theme","value":"dark"},{"key":"token","value":"abc"}]"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -1980,6 +3065,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success(#"{"status":"ok","value":"hello"}"#)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2006,6 +3092,7 @@ final class BrowserScriptableTests: XCTestCase {
             return .success("ok")
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2044,6 +3131,7 @@ final class BrowserScriptableTests: XCTestCase {
             """)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2075,6 +3163,7 @@ final class BrowserScriptableTests: XCTestCase {
             """)
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2117,6 +3206,7 @@ final class BrowserScriptableTests: XCTestCase {
             startedAt: startedAt
         ))
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2142,6 +3232,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserImportPreview_routesToImportProvider() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserImportProvider: { kind, params in
@@ -2166,6 +3257,7 @@ final class BrowserScriptableTests: XCTestCase {
 
     func test_browserImportRun_routesToImportProvider() {
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserImportProvider: { kind, params in
@@ -2188,6 +3280,65 @@ final class BrowserScriptableTests: XCTestCase {
         XCTAssertEqual(response.data?["cookies"], "1")
     }
 
+    func test_browserImportPreviewToken_isValidatedBeforeProviderDispatch() {
+        let providerCalled = LockedBox(false)
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserImportProvider: { _, _ in
+                providerCalled.withValue { $0 = true }
+                return (true, [:])
+            }
+        )
+
+        let malformed = handler.handleCommand(SocketRequest(
+            id: "bir-token-malformed",
+            command: "browser-import-run",
+            params: ["source": "chrome", "preview-token": "not-a-token"]
+        ))
+        let previewOnly = handler.handleCommand(SocketRequest(
+            id: "bip-token-not-allowed",
+            command: "browser-import-preview",
+            params: ["source": "chrome", "preview-token": String(repeating: "a", count: 64)]
+        ))
+
+        XCTAssertFalse(malformed.success)
+        XCTAssertEqual(malformed.error, "Invalid browser import preview token")
+        XCTAssertFalse(previewOnly.success)
+        XCTAssertEqual(previewOnly.error, "preview-token is only valid for browser-import-run")
+        XCTAssertFalse(providerCalled.withValue { $0 })
+    }
+
+    func test_browserImportFailure_preservesStructuredDiagnostics() {
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            browserImportProvider: { _, _ in
+                (false, [
+                    "status": "failed",
+                    "run_id": "run-123",
+                    "history": "0",
+                    "errors": "1",
+                    "error_0": "Default: history write failed",
+                ])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "bir-failed",
+            command: "browser-import-run",
+            params: ["source": "chrome"]
+        ))
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Default: history write failed")
+        XCTAssertEqual(response.data?["status"], "failed")
+        XCTAssertEqual(response.data?["run_id"], "run-123")
+        XCTAssertEqual(response.data?["errors"], "1")
+    }
+
     // MARK: - Browser Navigation Actions Emitted by Handler
 
     func test_browserBack_emitsGoBackAction() {
@@ -2196,6 +3347,7 @@ final class BrowserScriptableTests: XCTestCase {
             .sink { receivedAction = $0 }
 
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2215,6 +3367,7 @@ final class BrowserScriptableTests: XCTestCase {
             .sink { receivedAction = $0 }
 
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2234,6 +3387,7 @@ final class BrowserScriptableTests: XCTestCase {
             .sink { receivedAction = $0 }
 
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
             hookEventReceiver: nil,
             browserViewModel: viewModel
@@ -2245,5 +3399,52 @@ final class BrowserScriptableTests: XCTestCase {
             XCTFail("Expected .reload action, got \(String(describing: receivedAction))")
         }
         cancellable.cancel()
+    }
+}
+
+@MainActor
+private final class BrowserInitScriptNavigationWaiter: NSObject, WKNavigationDelegate {
+    private var continuation: CheckedContinuation<Void, Error>?
+
+    func loadHTML(
+        _ html: String,
+        baseURL: URL = URL(string: "https://example.com")!,
+        in webView: WKWebView
+    ) async throws {
+        webView.navigationDelegate = self
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            webView.loadHTMLString(html, baseURL: baseURL)
+        }
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
+        finish()
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFail navigation: WKNavigation?,
+        withError error: Error
+    ) {
+        finish(error: error)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didFailProvisionalNavigation navigation: WKNavigation?,
+        withError error: Error
+    ) {
+        finish(error: error)
+    }
+
+    private func finish(error: Error? = nil) {
+        guard let continuation else { return }
+        self.continuation = nil
+        if let error {
+            continuation.resume(throwing: error)
+        } else {
+            continuation.resume()
+        }
     }
 }

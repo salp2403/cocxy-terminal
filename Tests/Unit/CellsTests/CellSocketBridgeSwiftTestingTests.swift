@@ -20,6 +20,9 @@ final class CellSocketBridgeSwiftTestingTests: XCTestCase {
     func testCellSocketDispatchesToInjectedProvider() {
         let capture = CellCLIProviderCapture()
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                .internalTrusted(for: request)
+            },
             tabManager: nil,
             hookEventReceiver: nil,
             cellCLIProvider: { kind, params in

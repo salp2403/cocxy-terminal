@@ -405,6 +405,7 @@ final class PreferencesViewModelTests: XCTestCase {
                 copyOnSelect: false,
                 clipboardPasteProtection: false,
                 clipboardReadAccess: .deny,
+                clipboardWriteAccess: .allow,
                 imageMemoryLimitMB: 512,
                 imageFileTransfer: true,
                 enableSixelImages: false,
@@ -459,6 +460,8 @@ final class PreferencesViewModelTests: XCTestCase {
         XCTAssertTrue(toml.contains("cursor-opacity = 0.55"))
         XCTAssertTrue(toml.contains("mouse-hide-while-typing = false"))
         XCTAssertTrue(toml.contains("copy-on-select = false"))
+        XCTAssertTrue(toml.contains("clipboard-read-access = \"deny\""))
+        XCTAssertTrue(toml.contains("clipboard-write-access = \"allow\""))
         XCTAssertTrue(toml.contains("[security]"))
         XCTAssertTrue(toml.contains("require-signed-templates = true"))
         XCTAssertTrue(toml.contains("require-signed-macros = true"))

@@ -416,15 +416,20 @@ final class CLIArgumentParserTests: XCTestCase {
     func testParseWebStartWithOptions() throws {
         let result = try CLIArgumentParser.parse([
             "web", "start",
-            "--bind", "0.0.0.0",
+            "--bind", "127.0.0.1",
             "--port", "9000",
-            "--token", "secret",
             "--fps", "30"
         ])
         XCTAssertEqual(
             result,
-            .webStart(bindAddress: "0.0.0.0", port: 9000, token: "secret", fps: 30)
+            .webStart(bindAddress: "127.0.0.1", port: 9000, fps: 30)
         )
+    }
+
+    func testParseWebStartRejectsCallerSuppliedToken() {
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "web", "start", "--token", "caller-selected"
+        ]))
     }
 
     func testParseWebStatus() throws {
@@ -771,6 +776,10 @@ final class RequestBuilderTests: XCTestCase {
     }
 
     func testBuildBrowserAutomationV2Requests() {
+        let split = runner.buildRequest(from: .browserSplit)
+        XCTAssertEqual(split.command, "browser-split")
+        XCTAssertNil(split.params)
+
         let dblClick = runner.buildRequest(from: .browserDblClick(ref: "button-1"))
         XCTAssertEqual(dblClick.command, "browser-dblclick")
         XCTAssertEqual(dblClick.params?["ref"], "button-1")
@@ -870,6 +879,14 @@ final class RequestBuilderTests: XCTestCase {
         let initScriptAdd = runner.buildRequest(from: .browserInitScriptAdd(script: "window.ready = true"))
         XCTAssertEqual(initScriptAdd.command, "browser-init-script-add")
         XCTAssertEqual(initScriptAdd.params?["script"], "window.ready = true")
+        XCTAssertEqual(
+            runner.socketClient(for: .browserInitScriptAdd(script: "window.ready = true")).timeoutSeconds,
+            CommandRunner.browserInitScriptApprovalSocketTimeoutSeconds
+        )
+
+        let initScriptRemove = runner.buildRequest(from: .browserInitScriptRemove(id: "script-id"))
+        XCTAssertEqual(initScriptRemove.command, "browser-init-script-remove")
+        XCTAssertEqual(initScriptRemove.params?["id"], "script-id")
 
         let initScriptsList = runner.buildRequest(from: .browserInitScriptsList)
         XCTAssertEqual(initScriptsList.command, "browser-init-scripts-list")
@@ -1056,13 +1073,13 @@ final class RequestBuilderTests: XCTestCase {
 
     func testBuildWebStartRequest() {
         let request = runner.buildRequest(
-            from: .webStart(bindAddress: "127.0.0.1", port: 7770, token: "abc", fps: 60)
+            from: .webStart(bindAddress: "127.0.0.1", port: 7770, fps: 60)
         )
 
         XCTAssertEqual(request.command, "web-start")
         XCTAssertEqual(request.params?["bind"], "127.0.0.1")
         XCTAssertEqual(request.params?["port"], "7770")
-        XCTAssertEqual(request.params?["token"], "abc")
+        XCTAssertNil(request.params?["token"])
         XCTAssertEqual(request.params?["fps"], "60")
     }
 
@@ -1283,6 +1300,65 @@ final class RequestBuilderTests: XCTestCase {
 
 /// Tests for `OutputFormatter`: verify correct output for each command type.
 final class OutputFormatterTests: XCTestCase {
+
+    func testFailureDiagnosticsRemainStructuredJSON() throws {
+        let output = OutputFormatter.formatDiagnosticData([
+            "status": "failed",
+            "run_id": "run-123",
+            "errors": "1",
+        ])
+        let data = try XCTUnwrap(output.data(using: .utf8))
+        let decoded = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: String])
+
+        XCTAssertEqual(decoded["status"], "failed")
+        XCTAssertEqual(decoded["run_id"], "run-123")
+        XCTAssertEqual(decoded["errors"], "1")
+    }
+
+    func testFormatWebStartShowsUsableGeneratedCredentialOnce() {
+        let response = CLISocketResponse(
+            id: "web-start",
+            success: true,
+            data: [
+                "running": "true",
+                "bind": "127.0.0.1",
+                "port": "7770",
+                "auth_required": "true",
+                "authorization": "Bearer generated-token",
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .webStart(bindAddress: nil, port: nil, fps: nil),
+            response: response
+        )
+
+        XCTAssertTrue(output.contains("URL: http://127.0.0.1:7770/"))
+        XCTAssertTrue(output.contains("Access token (shown once): generated-token"))
+        XCTAssertFalse(output.contains("Access token (shown once): Bearer "))
+    }
+
+    func testFormatWebStatusBracketsIPv6LoopbackURL() {
+        let response = CLISocketResponse(
+            id: "web-status",
+            success: true,
+            data: [
+                "running": "true",
+                "bind": "::1",
+                "port": "7770",
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(
+            command: .webStatus,
+            response: response
+        )
+
+        XCTAssertTrue(output.contains("URL: http://[::1]:7770/"))
+        XCTAssertTrue(output.contains("Bind: [::1]:7770"))
+    }
 
     // MARK: - 23. Notify success message
 
@@ -1821,7 +1897,7 @@ final class OutputFormatterTests: XCTestCase {
             error: nil
         )
         let output = OutputFormatter.formatSuccess(
-            command: .tabConfigExport(name: "api", output: "/tmp/shared-api.toml", force: false),
+            command: .tabConfigExport(name: "api", output: "shared-api.toml", force: false),
             response: response
         )
         XCTAssertEqual(output, "Tab config exported: /tmp/shared-api.toml")
@@ -1953,15 +2029,15 @@ final class CommandRunnerTests: XCTestCase {
 
         XCTAssertEqual(
             runner.socketClient(for: .browserClick(ref: "button-1")).timeoutSeconds,
-            8
+            8 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
         XCTAssertEqual(
             runner.socketClient(for: .browserClick(ref: "button-1", timeoutMilliseconds: 250)).timeoutSeconds,
-            SocketClient.defaultTimeoutSeconds
+            3.25 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
         XCTAssertEqual(
             runner.socketClient(for: .browserClick(ref: "button-1", timeoutMilliseconds: 60_000)).timeoutSeconds,
-            63
+            63 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
 
         let alreadyExtended = CommandRunner(
@@ -1969,7 +2045,7 @@ final class CommandRunnerTests: XCTestCase {
         )
         XCTAssertEqual(
             alreadyExtended.socketClient(for: .browserClick(ref: "button-1", timeoutMilliseconds: 60_000)).timeoutSeconds,
-            90
+            63 + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
     }
 
@@ -1980,11 +2056,13 @@ final class CommandRunnerTests: XCTestCase {
 
         XCTAssertEqual(
             runner.socketClient(for: .cellCreate(.init(provider: "gcp"))).timeoutSeconds,
-            300
+            CommandRunner.extendedCellSocketTimeoutSeconds
+                + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
         XCTAssertEqual(
             runner.socketClient(for: .cellDestroy(cellID: "cell-1", provider: nil, force: true)).timeoutSeconds,
-            300
+            CommandRunner.extendedCellSocketTimeoutSeconds
+                + CommandRunner.privilegedSocketApprovalGraceSeconds
         )
 
         let alreadyExtended = CommandRunner(
@@ -1993,6 +2071,24 @@ final class CommandRunnerTests: XCTestCase {
         XCTAssertEqual(
             alreadyExtended.socketClient(for: .cellCreate(.init(provider: "aws"))).timeoutSeconds,
             600
+        )
+    }
+
+    func testBrowserImportCommandsCoverServerWorkAndCancellationSettlement() {
+        let runner = CommandRunner(
+            socketClient: SocketClient(socketPath: "/tmp/nonexistent.sock")
+        )
+        let options = BrowserImportCLIOptions(source: "chrome")
+        let expected = CommandRunner.browserImportSocketTimeoutSeconds
+            + CommandRunner.privilegedSocketApprovalGraceSeconds
+
+        XCTAssertEqual(
+            runner.socketClient(for: .browserImportPreview(options)).timeoutSeconds,
+            expected
+        )
+        XCTAssertEqual(
+            runner.socketClient(for: .browserImportRun(options)).timeoutSeconds,
+            expected
         )
     }
 
@@ -2088,7 +2184,7 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testAllCommandsExist() {
         // Keep this explicit so new socket-facing verbs update help,
         // descriptions, parser coverage, and formatter coverage together.
-        XCTAssertEqual(CLICommand.allCases.count, 230)
+        XCTAssertEqual(CLICommand.allCases.count, 232)
     }
 
     // MARK: - 39. Raw values match server protocol
@@ -2130,6 +2226,7 @@ final class CLICommandDefinitionTests: XCTestCase {
 
     func testBrowserUsageExamplesMatchPublicParserShape() throws {
         XCTAssertEqual(CLICommand.browserNavigate.usageExample, "cocxy browser navigate <url>")
+        XCTAssertEqual(CLICommand.browserSplit.usageExample, "cocxy browser split")
         XCTAssertEqual(CLICommand.browserBack.usageExample, "cocxy browser back")
         XCTAssertEqual(CLICommand.browserForward.usageExample, "cocxy browser forward")
         XCTAssertEqual(CLICommand.browserReload.usageExample, "cocxy browser reload")
@@ -2140,6 +2237,7 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(CLICommand.browserAddScript.usageExample, "cocxy browser add script <script>")
         XCTAssertEqual(CLICommand.browserAddStyle.usageExample, "cocxy browser add style <css>")
         XCTAssertEqual(CLICommand.browserInitScriptAdd.usageExample, "cocxy browser init scripts add <script>")
+        XCTAssertEqual(CLICommand.browserInitScriptRemove.usageExample, "cocxy browser init scripts remove <id>")
         XCTAssertEqual(CLICommand.browserInitScriptsList.usageExample, "cocxy browser init scripts list")
         XCTAssertEqual(CLICommand.browserDialogs.usageExample, "cocxy browser dialogs")
         XCTAssertEqual(CLICommand.browserDialogAccept.usageExample, "cocxy browser dialog accept [id] [--text <text>]")
@@ -2207,6 +2305,28 @@ final class CLICommandDefinitionTests: XCTestCase {
         }
         XCTAssertEqual(url, "https://example.com")
 
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "split"]),
+            .browserSplit
+        )
+        XCTAssertThrowsError(try CLIArgumentParser.parse(["browser", "split", "extra"])) { error in
+            XCTAssertEqual(
+                error as? CLIError,
+                .invalidArgument(
+                    command: "browser split",
+                    argument: "extra",
+                    reason: "Browser split does not take arguments."
+                )
+            )
+        }
+        XCTAssertEqual(
+            OutputFormatter.formatSuccess(
+                command: .browserSplit,
+                response: CLISocketResponse(id: "browser-split", success: true, data: nil, error: nil)
+            ),
+            "Browser split opened."
+        )
+
         guard case .browserEval(let script) = try CLIArgumentParser.parse(["browser", "eval", "document.title"]) else {
             return XCTFail("browser eval should parse through the public CLI shape")
         }
@@ -2224,6 +2344,18 @@ final class CLICommandDefinitionTests: XCTestCase {
             try CLIArgumentParser.parse(["browser", "init", "scripts", "add", "window.ready", "=", "true"]),
             .browserInitScriptAdd(script: "window.ready = true")
         )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["browser", "init", "scripts", "remove", "script-id"]),
+            .browserInitScriptRemove(id: "script-id")
+        )
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse(["browser", "init", "scripts", "remove"])
+        ) { error in
+            XCTAssertEqual(
+                error as? CLIError,
+                .missingArgument(command: "browser init scripts remove", argument: "id")
+            )
+        }
         XCTAssertEqual(
             try CLIArgumentParser.parse(["browser", "init", "scripts", "list"]),
             .browserInitScriptsList
@@ -2564,6 +2696,7 @@ final class CLICommandDefinitionTests: XCTestCase {
         guard case .browserImportPreview(let previewOptions) = try CLIArgumentParser.parse([
             "browser", "import", "preview",
             "--source", "chrome",
+            "--source-profile", "Profile 7",
             "--history", "/tmp/History",
             "--cookies", "/tmp/Cookies",
             "--domain", "example.com",
@@ -2572,17 +2705,20 @@ final class CLICommandDefinitionTests: XCTestCase {
             return XCTFail("browser import preview should parse import options")
         }
         XCTAssertEqual(previewOptions.source, "chrome")
+        XCTAssertEqual(previewOptions.sourceProfile, "Profile 7")
         XCTAssertEqual(previewOptions.historyPath, "/tmp/History")
         XCTAssertEqual(previewOptions.cookiesPath, "/tmp/Cookies")
         XCTAssertEqual(previewOptions.domainWhitelist, ["example.com"])
         XCTAssertFalse(previewOptions.importBookmarks)
 
+        let previewToken = String(repeating: "A", count: 64)
         guard case .browserImportRun(let runOptions) = try CLIArgumentParser.parse([
             "browser", "import", "run",
             "--source", "firefox",
             "--profile", "00000000-0000-0000-0000-000000000001",
             "--max-history-days", "7",
             "--exclude-domain", "blocked.example",
+            "--preview-token", previewToken,
         ]) else {
             return XCTFail("browser import run should parse import options")
         }
@@ -2590,6 +2726,19 @@ final class CLICommandDefinitionTests: XCTestCase {
         XCTAssertEqual(runOptions.profileID, "00000000-0000-0000-0000-000000000001")
         XCTAssertEqual(runOptions.maxHistoryDays, 7)
         XCTAssertEqual(runOptions.domainBlacklist, ["blocked.example"])
+        XCTAssertEqual(runOptions.previewToken, previewToken.lowercased())
+        XCTAssertEqual(runOptions.socketParams["preview-token"], previewToken.lowercased())
+
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "browser", "import", "preview",
+            "--source", "chrome",
+            "--preview-token", previewToken,
+        ]))
+        XCTAssertThrowsError(try CLIArgumentParser.parse([
+            "browser", "import", "run",
+            "--source", "chrome",
+            "--preview-token", "not-a-token",
+        ]))
     }
 
     func testRemoteUsageExamplesMatchPublicParserShape() throws {
@@ -2654,14 +2803,14 @@ final class CLICommandDefinitionTests: XCTestCase {
     func testTabConfigExportUsageMatchesPublicParserShape() throws {
         XCTAssertEqual(
             CLICommand.tabConfigExport.usageExample,
-            "cocxy tab config export <name> --output <path> [--force]"
+            "cocxy tab config export <name> --output <file.toml> [--force]"
         )
         XCTAssertEqual(
             try CLIArgumentParser.parse([
                 "tab", "config", "export", "api",
-                "--output", "/tmp/shared-api.toml",
+                "--output", "shared-api.toml",
             ]),
-            .tabConfigExport(name: "api", output: "/tmp/shared-api.toml", force: false)
+            .tabConfigExport(name: "api", output: "shared-api.toml", force: false)
         )
     }
 }

@@ -138,6 +138,93 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         #expect(!searchedPaths.contains("id_rsa"))
     }
 
+    @Test("protected directory roots and descendants are denied across read tools")
+    func protectedDirectoryRootsAndDescendantsAreDeniedAcrossReadTools() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let secretsDirectory = root.appendingPathComponent("secrets", isDirectory: true)
+        let nestedSecretsDirectory = root.appendingPathComponent("Sources/Secrets", isDirectory: true)
+        try FileManager.default.createDirectory(at: secretsDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: nestedSecretsDirectory, withIntermediateDirectories: true)
+        try "DEMO_CREDENTIAL=synthetic-placeholder\n".write(
+            to: secretsDirectory.appendingPathComponent("demo.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try "NESTED_CREDENTIAL=synthetic-placeholder\n".write(
+            to: nestedSecretsDirectory.appendingPathComponent("nested.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        let workspace = AgentWorkspace(rootURL: root)
+        let executor = AgentReadOnlyToolExecutor(workspace: workspace)
+        let directRead = try await executor.execute(AgentToolCall(
+            id: "call-read-protected-descendant",
+            toolID: "read_file",
+            arguments: ["path": .string("secrets/demo.txt")]
+        ))
+        let nestedRead = try await executor.execute(AgentToolCall(
+            id: "call-read-nested-protected-descendant",
+            toolID: "read_file",
+            arguments: ["path": .string("Sources/Secrets/nested.txt")]
+        ))
+        let scopedList = try await executor.execute(AgentToolCall(
+            id: "call-list-protected-root",
+            toolID: "list_directory",
+            arguments: ["path": .string("secrets")]
+        ))
+        let scopedGrep = try await executor.execute(AgentToolCall(
+            id: "call-grep-protected-root",
+            toolID: "grep",
+            arguments: [
+                "path": .string("secrets"),
+                "pattern": .string("CREDENTIAL"),
+            ]
+        ))
+        let rootList = try await executor.execute(AgentToolCall(
+            id: "call-list-root-with-protected-directory",
+            toolID: "list_directory",
+            arguments: ["path": .string(".")]
+        ))
+        let rootGrep = try await executor.execute(AgentToolCall(
+            id: "call-grep-root-with-protected-directory",
+            toolID: "grep",
+            arguments: ["pattern": .string("synthetic-placeholder")]
+        ))
+        let fileSearch = try await executor.execute(AgentToolCall(
+            id: "call-search-files-with-protected-directory",
+            toolID: "search_files",
+            arguments: ["pattern": .string("*.txt")]
+        ))
+        let codebaseSearch = try await executor.execute(AgentToolCall(
+            id: "call-search-codebase-with-protected-directory",
+            toolID: "search_codebase",
+            arguments: ["query": .string("synthetic-placeholder")]
+        ))
+
+        for result in [directRead, nestedRead, scopedList, scopedGrep] {
+            #expect(result.status == AgentToolResultStatus.failure)
+            #expect(result.error?.code == "workspace_sensitive_path")
+        }
+        let listedPaths = try arrayValue(contentObject(rootList)["entries"]).compactMap { entry -> String? in
+            guard case .object(let object) = entry else { return nil }
+            return object["path"]?.stringValue
+        }
+        #expect(!listedPaths.contains("secrets"))
+        #expect(try arrayValue(contentObject(rootGrep)["matches"]).isEmpty)
+        #expect(try arrayValue(contentObject(fileSearch)["paths"]).isEmpty)
+        #expect(try arrayValue(contentObject(codebaseSearch)["results"]).isEmpty)
+
+        #expect(throws: AgentWorkspaceError.protectedSensitivePath("secrets/new.txt")) {
+            try workspace.resolveWritableFile("secrets/new.txt", allowCreate: true)
+        }
+        #expect(AgentSensitivePathPolicy.isProtected(relativePath: "secrets", isDirectory: true))
+        #expect(!AgentSensitivePathPolicy.isProtected(relativePath: "secrets", isDirectory: false))
+        #expect(AgentSensitivePathPolicy.isProtected(relativePath: "secrets/demo.txt", isDirectory: false))
+        #expect(AgentSensitivePathPolicy.isProtected(relativePath: "Sources/Secrets/nested.txt", isDirectory: false))
+    }
+
     @Test("search_files matches glob patterns and skips hidden and gitignored files")
     func searchFilesMatchesGlobAndSkipsIgnoredFiles() async throws {
         let root = try makeWorkspace()
@@ -392,7 +479,118 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
 
         #expect(useResult.status == .success)
         #expect(useContent["skillIDs"] == .array([.string("custom-agent-skill")]))
+        #expect(useContent["skillIdentities"] == .array([
+            .object([
+                "id": .string("custom-agent-skill"),
+                "source": .string("project"),
+            ]),
+        ]))
         #expect(useContent["instructions"]?.stringValue?.contains("Prefer project conventions") == true)
+    }
+
+    @Test("use_skill binds the listed source and rejects naked collisions or source drift")
+    func useSkillBindsListedSourceAndRejectsAmbiguity() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let builtIns = root.appendingPathComponent("built-in-skills", isDirectory: true)
+        let user = root.appendingPathComponent("user-skills", isDirectory: true)
+        let project = root.appendingPathComponent("project-skills", isDirectory: true)
+        try writeSkill(
+            id: "review-pr",
+            name: "Bundled Review",
+            summary: "Trusted bundled guidance",
+            body: "Use the exact bundled body.",
+            in: builtIns
+        )
+        let registry = SkillRegistry(directories: [
+            SkillDirectory(url: builtIns, source: .builtIn),
+            SkillDirectory(url: user, source: .user),
+            SkillDirectory(url: project, source: .project),
+        ])
+        let executor = AgentReadOnlyToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            skillRegistry: registry
+        )
+
+        let initialList = try await executor.execute(AgentToolCall(
+            id: "call-list-initial-skill",
+            toolID: "list_skills"
+        ))
+        let initialSkills = try arrayValue(contentObject(initialList)["skills"])
+        #expect(skillSources(id: "review-pr", in: initialSkills) == ["built-in"])
+
+        try writeSkill(
+            id: "review-pr",
+            name: "User Review",
+            summary: "User guidance",
+            body: "Do not redirect to the user body.",
+            in: user
+        )
+        try writeSkill(
+            id: "review-pr",
+            name: "Project Review",
+            summary: "Project guidance",
+            body: "Do not redirect to the project body.",
+            in: project
+        )
+
+        let collidingList = try await executor.execute(AgentToolCall(
+            id: "call-list-colliding-skills",
+            toolID: "list_skills"
+        ))
+        let collidingSkills = try arrayValue(contentObject(collidingList)["skills"])
+        #expect(skillSources(id: "review-pr", in: collidingSkills) == ["built-in", "project", "user"])
+
+        let naked = try await executor.execute(AgentToolCall(
+            id: "call-use-ambiguous-skill",
+            toolID: "use_skill",
+            arguments: ["id": .string("review-pr")]
+        ))
+        #expect(naked.status == .failure)
+        #expect(naked.error?.code == "skill_error")
+        #expect(naked.error?.message.contains("ambiguous across sources") == true)
+
+        let exact = try await executor.execute(AgentToolCall(
+            id: "call-use-exact-skill",
+            toolID: "use_skill",
+            arguments: [
+                "id": .string("review-pr"),
+                "source": .string("built-in"),
+            ]
+        ))
+        let exactContent = try contentObject(exact)
+        #expect(exact.status == .success)
+        #expect(exactContent["skillIdentities"] == .array([
+            .object([
+                "id": .string("review-pr"),
+                "source": .string("built-in"),
+            ]),
+        ]))
+        #expect(exactContent["instructions"]?.stringValue?.contains("Use the exact bundled body.") == true)
+        #expect(exactContent["instructions"]?.stringValue?.contains("Do not redirect") == false)
+
+        try FileManager.default.removeItem(at: builtIns)
+        let drifted = try await executor.execute(AgentToolCall(
+            id: "call-use-missing-source",
+            toolID: "use_skill",
+            arguments: [
+                "id": .string("review-pr"),
+                "source": .string("built-in"),
+            ]
+        ))
+        #expect(drifted.status == .failure)
+        #expect(drifted.error?.message == "Skill not found: review-pr [built-in]")
+
+        let invalidSource = try await executor.execute(AgentToolCall(
+            id: "call-use-invalid-source",
+            toolID: "use_skill",
+            arguments: [
+                "id": .string("review-pr"),
+                "source": .string("remote"),
+            ]
+        ))
+        #expect(invalidSource.status == .failure)
+        #expect(invalidSource.error?.message == "Invalid skill source: remote")
     }
 
     @Test("git_status executes read-only git status in workspace")
@@ -477,8 +675,8 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         #expect(result.error?.message.contains("fatal: not a git repository") == true)
     }
 
-    @Test("read_terminal_output uses injected terminal output provider")
-    func readTerminalOutputUsesInjectedProvider() async throws {
+    @Test("read_terminal_output requires approval before capturing terminal state")
+    func readTerminalOutputRequiresApprovalBeforeCapture() async throws {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let terminalProvider = RecordingTerminalOutputProvider(output: "block one\nblock two\n")
@@ -492,11 +690,9 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
             toolID: "read_terminal_output",
             arguments: ["limit": .number(2)]
         ))
-        let resultContent = try contentObject(result)
-
-        #expect(result.status == AgentToolResultStatus.success)
-        #expect(resultContent["output"]?.stringValue == "block one\nblock two\n")
-        #expect(terminalProvider.requestedLimits == [2])
+        #expect(result.status == AgentToolResultStatus.failure)
+        #expect(result.error?.code == "sensitive_read_approval_required")
+        #expect(terminalProvider.requestedLimits.isEmpty)
     }
 
     @Test("read_terminal_output fails closed without terminal provider")
@@ -511,7 +707,7 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         ))
 
         #expect(result.status == AgentToolResultStatus.failure)
-        #expect(result.error?.code == "terminal_output_unavailable")
+        #expect(result.error?.code == "sensitive_read_approval_required")
     }
 
     @Test("read_lsp_diagnostics uses injected diagnostics provider with limit")
@@ -583,9 +779,23 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
         body: String,
         in root: URL
     ) throws {
-        let directory = root
-            .appendingPathComponent(".cocxy/skills", isDirectory: true)
-            .appendingPathComponent(id, isDirectory: true)
+        try writeSkill(
+            id: id,
+            name: name,
+            summary: summary,
+            body: body,
+            in: root.appendingPathComponent(".cocxy/skills", isDirectory: true)
+        )
+    }
+
+    private func writeSkill(
+        id: String,
+        name: String,
+        summary: String,
+        body: String,
+        in root: URL
+    ) throws {
+        let directory = root.appendingPathComponent(id, isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try """
         ---
@@ -597,6 +807,16 @@ struct AgentReadOnlyToolExecutorSwiftTestingTests {
 
         \(body)
         """.write(to: directory.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+    }
+
+    private func skillSources(id: String, in entries: [AgentJSONValue]) -> [String] {
+        entries.compactMap { entry in
+            guard case .object(let object) = entry,
+                  object["id"]?.stringValue == id else {
+                return nil
+            }
+            return object["source"]?.stringValue
+        }
     }
 
     private func contentObject(_ result: AgentToolResult) throws -> [String: AgentJSONValue] {
@@ -677,15 +897,36 @@ private struct AgentProcessCall: Equatable {
 
 private final class RecordingTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
     private(set) var requestedLimits: [Int] = []
+    private(set) var capturedSelections: [AgentTerminalOutputSelection] = []
     private let output: String
 
     init(output: String) {
         self.output = output
     }
 
-    func latestCommandBlockOutputs(limit: Int) -> String {
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection {
         requestedLimits.append(limit)
-        return output
+        return AgentTerminalOutputSelection(
+            source: .activeTerminal,
+            surfaceID: "test-surface",
+            blockLimit: limit,
+            blockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 100),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+    }
+
+    func captureCommandBlockOutputs(selection: AgentTerminalOutputSelection) -> AgentTerminalOutputSnapshot {
+        capturedSelections.append(selection)
+        return AgentTerminalOutputSnapshot(
+            source: selection.source,
+            surfaceID: selection.surfaceID,
+            blockLimit: selection.blockLimit,
+            blockCount: selection.blockCount,
+            blockReferences: selection.blockReferences,
+            output: output
+        )
     }
 }
 

@@ -24,6 +24,11 @@ enum CodebaseVectorStoreError: Error, Sendable, Equatable {
     case nonFiniteEmbedding(String)
 }
 
+struct CodebaseVectorStorePathRemoval: Sendable, Equatable {
+    let removedPathCount: Int
+    let remainingRecordCount: Int
+}
+
 struct CodebaseVectorStore: Sendable {
     private let storageURL: URL
     private let fileURL: URL
@@ -93,6 +98,25 @@ struct CodebaseVectorStore: Sendable {
 
     func remove(paths: [String]) throws {
         try remove(paths: Set(paths))
+    }
+
+    @discardableResult
+    func removePaths(where shouldRemove: (String) -> Bool) throws -> CodebaseVectorStorePathRemoval {
+        let records = try loadRecords()
+        let removedPaths = Set(records.filter { shouldRemove($0.path) }.map(\.path))
+        guard !removedPaths.isEmpty else {
+            return CodebaseVectorStorePathRemoval(
+                removedPathCount: 0,
+                remainingRecordCount: records.count
+            )
+        }
+
+        let remainingRecords = records.filter { !removedPaths.contains($0.path) }
+        try saveRecords(remainingRecords)
+        return CodebaseVectorStorePathRemoval(
+            removedPathCount: removedPaths.count,
+            remainingRecordCount: remainingRecords.count
+        )
     }
 
     func search(

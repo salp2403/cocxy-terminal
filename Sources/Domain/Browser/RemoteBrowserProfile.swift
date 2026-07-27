@@ -79,7 +79,8 @@ struct RemoteBrowserProfile: Codable, Equatable, Sendable {
         let socksPort: Int?
         let httpConnectPort: Int?
         switch proxyState {
-        case .active(let socks, let http):
+        case .active(let profileID, let socks, let http)
+            where profileID == remoteConnectionProfile.id:
             socksPort = socks
             httpConnectPort = http
         default:
@@ -91,7 +92,10 @@ struct RemoteBrowserProfile: Codable, Equatable, Sendable {
             localForwardedPorts: localForwardedPorts,
             socksPort: socksPort,
             httpConnectPort: httpConnectPort,
-            proxyHealth: RemoteBrowserProxyHealth(proxyState: proxyState),
+            proxyHealth: RemoteBrowserProxyHealth(
+                proxyState: proxyState,
+                for: remoteConnectionProfile.id
+            ),
             createdAt: createdAt
         )
     }
@@ -104,16 +108,16 @@ enum RemoteBrowserProxyHealth: String, Codable, Equatable, Sendable {
     case degraded
     case failed
 
-    init(proxyState: ProxyState) {
+    init(proxyState: ProxyState, for profileID: UUID? = nil) {
         switch proxyState {
         case .off:
             self = .disconnected
-        case .starting, .failover:
-            self = .connecting
-        case .active:
-            self = .active
-        case .failing:
-            self = .failed
+        case .starting(let owner), .failover(let owner):
+            self = profileID.map { $0 == owner } ?? true ? .connecting : .disconnected
+        case .active(let owner, _, _):
+            self = profileID.map { $0 == owner } ?? true ? .active : .disconnected
+        case .failing(let owner, _):
+            self = profileID.map { owner == nil || $0 == owner } ?? true ? .failed : .disconnected
         }
     }
 
@@ -187,14 +191,18 @@ extension RemoteBrowserProfile {
 
     mutating func apply(proxyState: ProxyState) {
         switch proxyState {
-        case .active(let socks, let http):
+        case .active(let profileID, let socks, let http)
+            where profileID == connectionProfileID:
             socksPort = socks
             httpConnectPort = http
         default:
             socksPort = nil
             httpConnectPort = nil
         }
-        proxyHealth = RemoteBrowserProxyHealth(proxyState: proxyState)
+        proxyHealth = RemoteBrowserProxyHealth(
+            proxyState: proxyState,
+            for: connectionProfileID
+        )
     }
 
     func applying(proxyState: ProxyState) -> RemoteBrowserProfile {

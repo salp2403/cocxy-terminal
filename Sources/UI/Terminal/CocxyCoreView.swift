@@ -1475,7 +1475,13 @@ final class CocxyCoreView: NSView {
             let count = max(1, Int(abs(delta)))
             for _ in 0..<count {
                 var buf = [UInt8](repeating: 0, count: 16)
-                let n = encodeMouseButton(button, terminal: state.terminal, event: event, buf: &buf)
+                let n = encodeMouseButton(
+                    button,
+                    terminal: state.terminal,
+                    mouseMode: mouseMode,
+                    event: event,
+                    buf: &buf
+                )
                 if n > 0 {
                     _ = bridge.writeBytes(Array(buf.prefix(n)), to: sid)
                 }
@@ -1614,14 +1620,29 @@ final class CocxyCoreView: NSView {
         )
     }
 
-    /// Encode a mouse button event for SGR mouse mode.
+    /// Encode a mouse button event for the active terminal mouse mode.
     private func encodeMouseButton(
         _ button: UInt8,
         terminal: OpaquePointer,
+        mouseMode: UInt8,
         event: NSEvent,
         buf: inout [UInt8]
     ) -> Int {
         let pos = cellPosition(for: event, terminal: terminal)
+        guard mouseMode == 6 else {
+            let bytes: [UInt8] = [
+                0x1B,
+                0x5B,
+                0x4D,
+                UInt8(clamping: Int(button) + 32),
+                UInt8(clamping: Int(pos.col) + 33),
+                UInt8(clamping: Int(pos.row) + 33),
+            ]
+            let count = min(bytes.count, buf.count)
+            buf.replaceSubrange(0..<count, with: bytes[0..<count])
+            return count
+        }
+
         let seq = "\u{1B}[<\(button);\(pos.col + 1);\(pos.row + 1)M"
         let bytes = Array(seq.utf8)
         let count = min(bytes.count, buf.count)

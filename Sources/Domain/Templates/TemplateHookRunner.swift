@@ -4,15 +4,24 @@
 import Foundation
 
 struct ProjectTemplateHookRunner {
+    static let defaultTimeoutSeconds: TimeInterval = 300
+    static let maximumRetainedBytesPerStream = 1 * 1_024 * 1_024
+
     private let sandbox: ProjectTemplateHookSandbox
     private let fileManager: FileManager
+    private let timeoutSeconds: TimeInterval
+    private let retainedBytesPerStream: Int
 
     init(
         sandbox: ProjectTemplateHookSandbox = ProjectTemplateHookSandbox(),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        timeoutSeconds: TimeInterval = Self.defaultTimeoutSeconds,
+        retainedBytesPerStream: Int = Self.maximumRetainedBytesPerStream
     ) {
         self.sandbox = sandbox
         self.fileManager = fileManager
+        self.timeoutSeconds = timeoutSeconds
+        self.retainedBytesPerStream = retainedBytesPerStream
     }
 
     func run(
@@ -61,38 +70,26 @@ struct ProjectTemplateHookRunner {
         phase: ProjectTemplateHookPhase,
         workingDirectory: URL
     ) throws -> ProjectTemplateHookExecution {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = [command.executable] + command.arguments
-        process.currentDirectoryURL = workingDirectory
-        process.environment = [
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
-            "COCXY_TEMPLATE_HOOK": "1",
-        ]
-
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-
-        try process.run()
-        process.waitUntilExit()
-
-        let stdoutText = String(
-            data: stdout.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
-        let stderrText = String(
-            data: stderr.fileHandleForReading.readDataToEndOfFile(),
-            encoding: .utf8
-        ) ?? ""
+        let result = try LaunchdProcessBrokerClient(
+            maximumRetainedBytesPerStream: retainedBytesPerStream
+        ).run(
+            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: [command.executable] + command.arguments,
+            workingDirectory: workingDirectory,
+            environment: [
+                "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
+                "COCXY_TEMPLATE_HOOK": "1",
+            ],
+            timeoutSeconds: timeoutSeconds,
+            timeoutDiagnostic: "Template hook timed out."
+        )
 
         let execution = ProjectTemplateHookExecution(
             phase: phase,
             command: originalCommand,
-            exitCode: process.terminationStatus,
-            stdout: stdoutText,
-            stderr: stderrText
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr
         )
         guard execution.exitCode == 0 else {
             throw ProjectTemplateHookError.commandFailed(

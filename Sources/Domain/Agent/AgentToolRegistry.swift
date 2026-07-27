@@ -209,17 +209,18 @@ enum AgentBuiltInTools {
         AgentToolDescriptor(
             id: "list_skills",
             displayName: "List Skills",
-            description: "List local built-in, user, and project skills available to the agent.",
+            description: "List source-qualified local built-in, user, and project skills available to the agent.",
             capability: .read
         ),
         AgentToolDescriptor(
             id: "use_skill",
             displayName: "Use Skill",
-            description: "Load one local skill and return its reusable instructions.",
+            description: "Load one local skill and return its reusable instructions. Pass the source from list_skills; an id alone is accepted only when unambiguous.",
             capability: .read,
             inputSchema: AgentToolInputSchema(
                 properties: [
                     "id": AgentToolInputProperty(.string, description: "Skill identifier to load."),
+                    "source": AgentToolInputProperty(.string, description: "Optional exact source returned by list_skills: built-in, user, or project."),
                 ],
                 required: ["id"]
             )
@@ -294,7 +295,10 @@ enum AgentBuiltInTools {
             capability: .computerUse,
             inputSchema: AgentToolInputSchema(
                 properties: [
-                    "text": AgentToolInputProperty(.string, description: "Text to type. Approval previews redact the content."),
+                    "text": AgentToolInputProperty(
+                        .string,
+                        description: "Text to type. Approval shows the exact escaped text and its global-focus destination."
+                    ),
                 ],
                 required: ["text"]
             )

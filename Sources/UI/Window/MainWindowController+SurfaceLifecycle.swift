@@ -228,6 +228,10 @@ extension MainWindowController {
                 surfaceID: capturedSurfaceID,
                 in: cocxyView
             )
+        } else if let daemonView = surfaceView as? PTYDaemonHostView {
+            daemonView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
+                self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
+            }
         }
     }
 
@@ -452,6 +456,9 @@ extension MainWindowController {
         savedTabSplitViews.removeAll()
         savedTabSplitSurfaceViews.removeAll()
         savedTabSplitViewModels.removeAll()
+        for panelViews in savedTabPanelContentViews.values {
+            revokeBrowserAuthorizations(in: Array(panelViews.values))
+        }
         savedTabPanelContentViews.removeAll()
 
         // Gather all tab surfaces (includes the primary surface since
@@ -505,6 +512,7 @@ extension MainWindowController {
         deferredRestoredTabLoader = nil
         surfaceImageDetectors.removeAll()
         surfaceOutputDispatchers.removeAll()
+        revokeBrowserAuthorizations(in: Array(panelContentViews.values))
         panelContentViews.removeAll()
 
         // Clear all inline image overlays before releasing surface views.

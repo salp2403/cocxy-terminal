@@ -51,13 +51,13 @@
   --fs-2xl: 2rem;
   --fs-3xl: 2.7rem;
 
-  /* Typography scale (fluid via clamp) */
-  --fs-fluid-3xl: clamp(2.4rem, 4.5vw + 1rem, 4rem);
-  --fs-fluid-2xl: clamp(1.7rem, 2.5vw + 0.8rem, 2.5rem);
-  --fs-fluid-xl: clamp(1.3rem, 1.5vw + 0.8rem, 1.6rem);
+  /* Responsive typography scale (fixed breakpoint steps) */
+  --fs-fluid-3xl: 2.4rem;
+  --fs-fluid-2xl: 1.7rem;
+  --fs-fluid-xl: 1.3rem;
 
   /* Letter-spacing tracking */
-  --tracking-tight: -0.015em;
+  --tracking-tight: 0;
   --tracking-normal: 0;
   --tracking-wide: 0.04em;
 
@@ -178,4 +178,20 @@
   --grad-section-band: radial-gradient(ellipse at 50% 0%, rgba(49, 95, 205, 0.05), transparent 60%);
   --glass-sheen: linear-gradient(120deg, transparent 30%, rgba(255, 255, 255, 0.50) 50%, transparent 70%);
   --shadow-inset-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.55);
+}
+
+@media (min-width: 760px) {
+  :root {
+    --fs-fluid-3xl: 3.2rem;
+    --fs-fluid-2xl: 2.1rem;
+    --fs-fluid-xl: 1.45rem;
+  }
+}
+
+@media (min-width: 1200px) {
+  :root {
+    --fs-fluid-3xl: 4rem;
+    --fs-fluid-2xl: 2.5rem;
+    --fs-fluid-xl: 1.6rem;
+  }
 }

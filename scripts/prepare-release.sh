@@ -8,14 +8,14 @@
 #   ./scripts/prepare-release.sh 0.1.80
 #
 # The script validates the version format locally to fail fast, then
-# dispatches the workflow via `gh` so the bump + tag happen on a
+# sends a repository dispatch via `gh` so the bump + tag happen on a
 # clean GitHub runner instead of the dev's machine. The workflow
 # itself is idempotent and re-runnable — if it fails mid-way the dev
 # can re-trigger without leaving the repo in a broken state.
 #
 # After the workflow finishes the release pipeline (build / sign /
-# notarize / DMG / GitHub Release / website / Homebrew) fires
-# automatically when the tag push lands.
+# notarize / DMG / GitHub Release / website / Homebrew) is dispatched
+# from the trusted default-branch workflow after the tag push lands.
 #
 # Requirements: `gh` CLI authenticated against the repo with at least
 # `repo:write` permission (same token already used for pushes).
@@ -102,8 +102,9 @@ if ! [[ "$CURRENT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "error: invalid current Info.plist version '$CURRENT_VERSION'" >&2
     exit 73
 fi
-if ! version_greater_than "$VERSION" "$CURRENT_VERSION"; then
-    echo "error: target version '$VERSION' must be greater than current Info.plist version '$CURRENT_VERSION'" >&2
+if [ "$VERSION" != "$CURRENT_VERSION" ] \
+    && ! version_greater_than "$VERSION" "$CURRENT_VERSION"; then
+    echo "error: target version '$VERSION' must not be older than current Info.plist version '$CURRENT_VERSION'" >&2
     exit 71
 fi
 
@@ -159,12 +160,17 @@ if [ "$DRY_RUN" -eq 1 ]; then
 fi
 
 echo "Dispatching Prepare Release workflow for v${VERSION}..."
-"$GH_BIN" workflow run prepare-release.yml \
-    --ref main \
-    -f version="$VERSION"
+REPOSITORY="$("$GH_BIN" repo view --json nameWithOwner --jq '.nameWithOwner')"
+if [ -z "$REPOSITORY" ]; then
+    echo "error: unable to resolve the GitHub repository for release dispatch" >&2
+    exit 74
+fi
+"$GH_BIN" api --method POST "repos/${REPOSITORY}/dispatches" \
+    -f event_type=prepare-stable-release \
+    -f "client_payload[version]=${VERSION}"
 
 echo
 echo "Triggered. Watch the run with:"
 echo "  gh run watch \$(gh run list --workflow=prepare-release.yml --limit 1 --json databaseId --jq '.[0].databaseId')"
 echo
-echo "When it finishes the Release workflow will fire on the tag push."
+echo "When it finishes it will dispatch the trusted Release workflow."

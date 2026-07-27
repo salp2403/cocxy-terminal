@@ -7,21 +7,29 @@ import FoundationModels
 #endif
 
 struct AgentHTTPRequest: Sendable, Equatable {
+    enum RetryPolicy: Sendable, Equatable {
+        case standard
+        case singleAttempt
+    }
+
     let url: URL
     let method: String
     let headers: [String: String]
     let body: Data
+    let retryPolicy: RetryPolicy
 
     init(
         url: URL,
         method: String = "POST",
         headers: [String: String],
-        body: Data
+        body: Data,
+        retryPolicy: RetryPolicy = .standard
     ) {
         self.url = url
         self.method = method
         self.headers = headers
         self.body = body
+        self.retryPolicy = retryPolicy
     }
 }
 
@@ -34,7 +42,62 @@ protocol AgentHTTPTransport: Sendable {
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse
 }
 
+enum AgentHTTPTransportError: Error, Sendable, Equatable {
+    case invalidResponse
+    case invalidContentLength
+    case responseTooLarge(maximumBytes: Int)
+}
+
+extension AgentHTTPTransportError: LocalizedError {
+    var errorDescription: String? {
+        switch self {
+        case .invalidResponse:
+            return "Agent HTTP transport received a non-HTTP response."
+        case .invalidContentLength:
+            return "Agent HTTP transport received an invalid Content-Length header."
+        case .responseTooLarge(let maximumBytes):
+            return "Agent HTTP response exceeds the maximum size of \(maximumBytes) bytes."
+        }
+    }
+}
+
+private final class AgentHTTPRedirectDenyingDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        completionHandler(nil)
+    }
+}
+
 struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
+    static let defaultMaximumResponseBytes = 16 * 1_024 * 1_024
+    private static let accumulationChunkBytes = 16 * 1_024
+
+    private let maximumResponseBytes: Int
+    private let redirectDelegate: AgentHTTPRedirectDenyingDelegate
+    private let session: URLSession
+
+    init(
+        maximumResponseBytes: Int = Self.defaultMaximumResponseBytes,
+        sessionConfiguration: URLSessionConfiguration = .default
+    ) {
+        precondition(maximumResponseBytes > 0, "Agent HTTP response budget must be positive")
+        self.maximumResponseBytes = maximumResponseBytes
+        let configuration = (sessionConfiguration.copy() as? URLSessionConfiguration)
+            ?? sessionConfiguration
+        let redirectDelegate = AgentHTTPRedirectDenyingDelegate()
+        self.redirectDelegate = redirectDelegate
+        self.session = URLSession(
+            configuration: configuration,
+            delegate: redirectDelegate,
+            delegateQueue: nil
+        )
+    }
+
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
         var urlRequest = URLRequest(url: request.url)
         urlRequest.httpMethod = request.method
@@ -43,9 +106,71 @@ struct URLSessionAgentHTTPTransport: AgentHTTPTransport {
             urlRequest.setValue(value, forHTTPHeaderField: name)
         }
 
-        let (data, response) = try await URLSession.shared.data(for: urlRequest)
-        let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-        return AgentHTTPResponse(statusCode: statusCode, data: data)
+        let (bytes, response) = try await session.bytes(for: urlRequest)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            bytes.task.cancel()
+            throw AgentHTTPTransportError.invalidResponse
+        }
+
+        do {
+            try validateContentLength(of: httpResponse)
+            let data = try await receive(bytes)
+            return AgentHTTPResponse(statusCode: httpResponse.statusCode, data: data)
+        } catch {
+            bytes.task.cancel()
+            throw error
+        }
+    }
+
+    private func validateContentLength(of response: HTTPURLResponse) throws {
+        let headerLength = try response.value(forHTTPHeaderField: "Content-Length").map { rawValue in
+            let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty,
+                  trimmed.utf8.allSatisfy({ (48...57).contains($0) }),
+                  let parsed = UInt64(trimmed) else {
+                throw AgentHTTPTransportError.invalidContentLength
+            }
+            return parsed
+        }
+
+        let expectedLength = response.expectedContentLength
+        if expectedLength >= 0,
+           let headerLength,
+           UInt64(expectedLength) != headerLength {
+            throw AgentHTTPTransportError.invalidContentLength
+        }
+
+        if let headerLength, headerLength > UInt64(maximumResponseBytes) {
+            throw AgentHTTPTransportError.responseTooLarge(maximumBytes: maximumResponseBytes)
+        }
+        if expectedLength > Int64(maximumResponseBytes) {
+            throw AgentHTTPTransportError.responseTooLarge(maximumBytes: maximumResponseBytes)
+        }
+    }
+
+    private func receive(_ bytes: URLSession.AsyncBytes) async throws -> Data {
+        var data = Data()
+        var chunk: [UInt8] = []
+        chunk.reserveCapacity(Self.accumulationChunkBytes)
+        var receivedBytes = 0
+
+        for try await byte in bytes {
+            guard receivedBytes < maximumResponseBytes else {
+                throw AgentHTTPTransportError.responseTooLarge(
+                    maximumBytes: maximumResponseBytes
+                )
+            }
+            receivedBytes += 1
+            chunk.append(byte)
+
+            if chunk.count == Self.accumulationChunkBytes {
+                data.append(contentsOf: chunk)
+                chunk.removeAll(keepingCapacity: true)
+            }
+        }
+
+        data.append(contentsOf: chunk)
+        return data
     }
 }
 
@@ -66,18 +191,19 @@ struct RetryingAgentHTTPTransport: AgentHTTPTransport {
 
     func send(_ request: AgentHTTPRequest) async throws -> AgentHTTPResponse {
         var lastError: Error?
+        let attemptLimit = request.retryPolicy == .singleAttempt ? 1 : maxAttempts
 
-        for attempt in 1...maxAttempts {
+        for attempt in 1...attemptLimit {
             do {
                 let response = try await base.send(request)
-                guard shouldRetry(statusCode: response.statusCode), attempt < maxAttempts else {
+                guard shouldRetry(statusCode: response.statusCode), attempt < attemptLimit else {
                     return response
                 }
             } catch {
-                lastError = error
-                guard attempt < maxAttempts else {
+                guard shouldRetry(error: error), attempt < attemptLimit else {
                     throw error
                 }
+                lastError = error
             }
 
             await sleep(attempt)
@@ -97,6 +223,16 @@ struct RetryingAgentHTTPTransport: AgentHTTPTransport {
             || (500...599).contains(statusCode)
     }
 
+    private func shouldRetry(error: Error) -> Bool {
+        if error is AgentHTTPTransportError || error is CancellationError {
+            return false
+        }
+        if let urlError = error as? URLError, urlError.code == .cancelled {
+            return false
+        }
+        return true
+    }
+
     private static let defaultSleep: @Sendable (Int) async -> Void = { attempt in
         let clampedAttempt = min(max(1, attempt), 4)
         let nanoseconds = UInt64(100_000_000) << UInt64(clampedAttempt - 1)
@@ -109,6 +245,7 @@ enum AgentProviderClientError: Error, Sendable, Equatable {
     case invalidResponseBody
     case httpStatus(Int, String)
     case attachmentUnavailable(String)
+    case sensitiveDataConsentRequired
     case missingResponseChoice
 }
 
@@ -123,6 +260,8 @@ extension AgentProviderClientError: LocalizedError {
             return "Agent provider request failed with HTTP \(statusCode): \(message)"
         case .attachmentUnavailable(let displayName):
             return "Image attachment is unavailable: \(displayName)."
+        case .sensitiveDataConsentRequired:
+            return "Sensitive terminal output requires consent for the current provider and tool call."
         case .missingResponseChoice:
             return "Agent provider response did not include a usable message."
         }
@@ -812,6 +951,7 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        try validateSensitiveDataConsent(in: messages, provider: .openai)
         let requestMessages = try openAIMessages(from: messages)
         let request = try AgentHTTPRequest(
             url: endpointURL,
@@ -824,7 +964,8 @@ struct OpenAIAgentLLMClient: AgentLLMClient {
                 "messages": requestMessages,
                 "tools": openAITools(from: toolRegistry.descriptors),
                 "tool_choice": "auto",
-            ])
+            ]),
+            retryPolicy: sensitiveRequestRetryPolicy(for: messages)
         )
         let response = try await transport.send(request)
         try validate(response)
@@ -857,6 +998,7 @@ struct AnthropicAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        try validateSensitiveDataConsent(in: messages, provider: .anthropic)
         let requestMessages = try anthropicMessages(from: messages)
         var body: [String: Any] = [
             "model": model,
@@ -879,7 +1021,8 @@ struct AnthropicAgentLLMClient: AgentLLMClient {
                 "anthropic-version": "2023-06-01",
                 "Content-Type": "application/json",
             ],
-            body: jsonData(body)
+            body: jsonData(body),
+            retryPolicy: sensitiveRequestRetryPolicy(for: messages)
         )
         let response = try await transport.send(request)
         try validate(response)
@@ -909,6 +1052,7 @@ struct GoogleAgentLLMClient: AgentLLMClient {
     }
 
     func nextResponse(for messages: [AgentMessage]) async throws -> AgentLLMResponse {
+        try validateSensitiveDataConsent(in: messages, provider: .google)
         let escapedModel = model.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? model
         let requestContents = try googleContents(from: messages)
         let request = try AgentHTTPRequest(
@@ -920,12 +1064,42 @@ struct GoogleAgentLLMClient: AgentLLMClient {
             body: jsonData([
                 "contents": requestContents,
                 "tools": googleTools(from: toolRegistry.descriptors),
-            ])
+            ]),
+            retryPolicy: sensitiveRequestRetryPolicy(for: messages)
         )
         let response = try await transport.send(request)
         try validate(response)
         return try parseGoogleResponse(response.data, fallbackModel: model)
     }
+}
+
+private func validateSensitiveDataConsent(
+    in messages: [AgentMessage],
+    provider: AgentProviderKind
+) throws {
+    var hasActiveDisclosure = false
+    for message in messages
+    where message.role == .tool && message.toolName == "read_terminal_output" {
+        if AgentSensitiveDataPolicy.isSafeOmittedTerminalOutput(message) {
+            continue
+        }
+        guard !hasActiveDisclosure,
+              let consent = message.sensitiveDataConsent,
+              AgentSensitiveDataPolicy.validatesConsent(
+                  consent,
+                  for: message,
+                  provider: provider
+              ) else {
+            throw AgentProviderClientError.sensitiveDataConsentRequired
+        }
+        hasActiveDisclosure = true
+    }
+}
+
+private func sensitiveRequestRetryPolicy(
+    for messages: [AgentMessage]
+) -> AgentHTTPRequest.RetryPolicy {
+    messages.contains { $0.sensitiveDataConsent != nil } ? .singleAttempt : .standard
 }
 
 private func validate(_ response: AgentHTTPResponse) throws {

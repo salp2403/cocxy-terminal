@@ -37,18 +37,27 @@ final class RelayKeychainStore: RelayTokenStoring {
     private let service = "com.cocxy.relay"
 
     func save(token: RelayToken, channelID: UUID) throws {
-        // Delete existing entry first (idempotent).
-        try? delete(channelID: channelID)
-
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: channelID.uuidString,
+        ]
+        let attributes: [String: Any] = [
             kSecValueData as String: token.secret,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let updateStatus = SecItemUpdate(
+            query as CFDictionary,
+            attributes as CFDictionary
+        )
+        if updateStatus == errSecSuccess { return }
+        guard updateStatus == errSecItemNotFound else {
+            throw KeychainError.saveFailed(updateStatus)
+        }
+
+        let item = query.merging(attributes) { _, replacement in replacement }
+        let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status)
         }

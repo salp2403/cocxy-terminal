@@ -164,4 +164,27 @@ struct BrowserDOMGrabPayloadFormatterSwiftTestingTests {
         #expect(pageLines.count == 1)
         #expect(!pageLines.first!.contains("\nSecond"))
     }
+
+    @Test("terminal control characters are removed before review")
+    func terminalControlCharactersAreRemoved() {
+        let payload = makePayload(
+            selector: "button\u{0}#submit",
+            pageTitle: "Example\u{1B}[201~\u{202E}hidden",
+            visibleText: "first\u{1B}[201~\u{2066}\u{2028}second\u{7}"
+        )
+
+        let result = BrowserDOMGrabPayloadFormatter.format(payload)
+
+        #expect(!result.unicodeScalars.contains(where: {
+            $0.value < 0x20 && $0.value != 0x0A
+        }))
+        #expect(!result.unicodeScalars.contains(where: {
+            (0x7F...0x9F).contains($0.value)
+        }))
+        #expect(!result.unicodeScalars.contains(where: {
+            (0x202A...0x202E).contains($0.value) ||
+                (0x2066...0x2069).contains($0.value)
+        }))
+        #expect(result.contains("first[201~\nsecond"))
+    }
 }

@@ -43,4 +43,72 @@ struct TrustedAuthorRegistrySwiftTestingTests {
         let attributes = try FileManager.default.attributesOfItem(atPath: registryURL.path)
         #expect(attributes[.posixPermissions] as? Int == 0o600)
     }
+
+    @Test("default registry path is shared under Cocxy security storage")
+    func defaultRegistryPathIsCanonical() {
+        #expect(TrustedAuthorRegistry.defaultFileURL.path.hasSuffix(
+            "/.cocxy/security/trusted-authors.json"
+        ))
+    }
+
+    @Test("default loading fails closed for malformed registry data")
+    func defaultLoadingFailsClosed() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let registryURL = directory.appendingPathComponent("trusted-authors.json")
+        try Data("not-json".utf8).write(to: registryURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: registryURL.path
+        )
+
+        let registry = TrustedAuthorRegistry.loadDefault(from: registryURL)
+
+        #expect(registry.entries.isEmpty)
+        #expect(registry.fileURL == registryURL)
+    }
+
+    @Test("registry rejects duplicate trust identities before persistence")
+    func registryRejectsDuplicateKeyIDs() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let keyPair = try SignatureKeyPair.generate(author: "Cocxy")
+        let entry = TrustedAuthorEntry(
+            keyID: keyPair.keyID,
+            displayName: "Cocxy",
+            publicKey: keyPair.publicKey
+        )
+        let registry = TrustedAuthorRegistry(
+            entries: [entry, entry],
+            fileURL: directory.appendingPathComponent("trusted-authors.json")
+        )
+
+        #expect(throws: TrustedAuthorRegistryError.duplicateKeyID(keyPair.keyID)) {
+            try registry.save()
+        }
+    }
+
+    @Test("registry refuses symbolic-link storage")
+    func registryRejectsSymbolicLinks() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let target = directory.appendingPathComponent("target.json")
+        let link = directory.appendingPathComponent("trusted-authors.json")
+        try Data("[]".utf8).write(to: target)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o600],
+            ofItemAtPath: target.path
+        )
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+        #expect(throws: TrustedAuthorRegistryError.unsafeRegistryFile) {
+            _ = try TrustedAuthorRegistry.load(from: link)
+        }
+    }
 }

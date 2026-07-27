@@ -20,7 +20,7 @@ struct CocxyDRemoteSSHBootstrapperSwiftTestingTests {
         #expect(parsed.profile.port == 2222)
         #expect(parsed.profile.identityFile == "~/.ssh/deploy")
         #expect(parsed.profile.autoReconnect == false)
-        #expect(parsed.directSSHCommand == "ssh -p 2222 -i ~/.ssh/deploy deploy@example.test")
+        #expect(parsed.directSSHCommand == "ssh -p 2222 -i ~/.ssh/deploy -- deploy@example.test")
     }
 
     @Test("rejects empty destination")
@@ -28,6 +28,85 @@ struct CocxyDRemoteSSHBootstrapperSwiftTestingTests {
         #expect(throws: CocxyDRemoteSSHBootstrapError.invalidDestination) {
             _ = try CocxyDRemoteSSHBootstrapper.makeProfile(destination: "   ", port: nil, identityFile: nil)
         }
+    }
+
+    @Test(
+        "rejects unsafe or ambiguous destinations",
+        arguments: [
+            "-oProxyCommand=/bin/true",
+            "user@-oProxyCommand=/bin/true",
+            "example.test with-space",
+            " example.test",
+            "example.test\nother",
+            "first@second@example.test",
+            "@example.test",
+            "user@",
+            "999.1.1.1",
+            "example.test:22",
+        ]
+    )
+    @MainActor func rejectsUnsafeOrAmbiguousDestination(_ destination: String) {
+        #expect(throws: CocxyDRemoteSSHBootstrapError.invalidDestination) {
+            _ = try CocxyDRemoteSSHBootstrapper.makeProfile(
+                destination: destination,
+                port: nil,
+                identityFile: nil
+            )
+        }
+    }
+
+    @Test("accepts host aliases and canonical IP literals")
+    @MainActor func acceptsAliasesAndIPAddresses() throws {
+        let alias = try CocxyDRemoteSSHBootstrapper.makeProfile(
+            destination: "deploy@prod_web+blue",
+            port: nil,
+            identityFile: nil
+        )
+        let ipv4 = try CocxyDRemoteSSHBootstrapper.makeProfile(
+            destination: "192.0.2.10",
+            port: nil,
+            identityFile: nil
+        )
+        let ipv6 = try CocxyDRemoteSSHBootstrapper.makeProfile(
+            destination: "deploy@[2001:db8::10]",
+            port: nil,
+            identityFile: nil
+        )
+
+        #expect(alias.profile.user == "deploy")
+        #expect(alias.profile.host == "prod_web+blue")
+        #expect(ipv4.profile.host == "192.0.2.10")
+        #expect(ipv6.profile.user == "deploy")
+        #expect(ipv6.profile.host == "2001:db8::10")
+        #expect(ipv6.directSSHCommand == "ssh -- deploy@2001:db8::10")
+    }
+
+    @Test("invalid destination is not persisted or connected")
+    @MainActor func invalidDestinationHasNoSideEffects() async {
+        let profileStore = MockRemoteProfileStore()
+        let connectionManager = MockCocxyDRemoteConnectionManager()
+        let platformDetector = MockCocxyDRemotePlatformDetector()
+        let uploader = MockCocxyDRemoteBinaryUploader()
+        let bootstrapper = CocxyDRemoteSSHBootstrapper(
+            profileStore: profileStore,
+            connectionManager: connectionManager,
+            platformDetector: platformDetector,
+            uploader: uploader
+        )
+
+        let result = await bootstrapper.bootstrap(
+            destination: "-oProxyCommand=/bin/true",
+            port: nil,
+            identityFile: nil
+        )
+
+        #expect(result.profile == nil)
+        #expect(result.mode == .fallback(reason: "invalidDestination"))
+        #expect(result.directSSHCommand == "ssh -- -oProxyCommand=/bin/true")
+        #expect(profileStore.profiles.isEmpty)
+        #expect(connectionManager.connectedProfiles.isEmpty)
+        #expect(platformDetector.detectedProfileIDs.isEmpty)
+        #expect(uploader.uploadedProfileIDs.isEmpty)
     }
 
     @Test("connects, detects platform, verifies upload, and returns daemon ready")
@@ -58,8 +137,8 @@ struct CocxyDRemoteSSHBootstrapperSwiftTestingTests {
         #expect(platformDetector.detectedProfileIDs == [profileStore.profiles[0].id])
         #expect(uploader.uploadedProfileIDs == [profileStore.profiles[0].id])
         #expect(result.mode == .daemonReady(uploaded: true, remotePath: "~/.cocxy/bin/cocxyd-remote"))
-        #expect(result.directSSHCommand == "ssh dev@example.test")
-        #expect(result.daemonStdioCommand == "ssh dev@example.test ~/.cocxy/bin/cocxyd-remote serve --stdio")
+        #expect(result.directSSHCommand == "ssh -- dev@example.test")
+        #expect(result.daemonStdioCommand == "ssh -- dev@example.test ~/.cocxy/bin/cocxyd-remote serve --stdio")
     }
 
     @Test("falls back to direct ssh when control connection fails")
@@ -80,7 +159,7 @@ struct CocxyDRemoteSSHBootstrapperSwiftTestingTests {
         let result = await bootstrapper.bootstrap(destination: "example.test", port: 2200, identityFile: nil)
 
         #expect(result.mode == .fallback(reason: "auth failed"))
-        #expect(result.directSSHCommand == "ssh -p 2200 example.test")
+        #expect(result.directSSHCommand == "ssh -p 2200 -- example.test")
         #expect(platformDetector.detectedProfileIDs.isEmpty)
         #expect(uploader.uploadedProfileIDs.isEmpty)
     }

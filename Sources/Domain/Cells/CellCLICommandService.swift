@@ -5,6 +5,87 @@ import Foundation
 
 final class CellCLICommandService: @unchecked Sendable {
     private static let maxSocketStdoutBytes = 48_000
+    static let maxCloudInitBytes = 64 * 1_024
+
+    static let createLocalResourcePathKeys = [
+        "identity",
+        "known-hosts",
+        "known-hosts-file",
+        "config",
+        "path",
+    ]
+
+    struct CloudInitLocalResourceReference: Equatable, Sendable {
+        enum Style: Equatable, Sendable {
+            case plain
+            case awsFile
+            case awsFileB
+        }
+
+        let path: String
+        let style: Style
+
+        func binding(to canonicalPath: String) -> String {
+            switch style {
+            case .plain:
+                return canonicalPath
+            case .awsFile:
+                return "file://\(canonicalPath)"
+            case .awsFileB:
+                return "fileb://\(canonicalPath)"
+            }
+        }
+    }
+
+    static func createLocalResourcePathValues(
+        in params: [String: String]
+    ) -> [String: String] {
+        var paths = createLocalResourcePathKeys.reduce(into: [String: String]()) {
+            result, key in
+            if let value = params[key] {
+                result[key] = value
+            }
+        }
+        if let reference = cloudInitLocalResourceReference(in: params) {
+            paths["cloud-init"] = reference.path
+        }
+        return paths
+    }
+
+    static func cloudInitLocalResourceReference(
+        in params: [String: String]
+    ) -> CloudInitLocalResourceReference? {
+        guard let providerName = params["provider"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              let provider = CellProviderKind(rawValue: providerName),
+              let rawValue = params["cloud-init"] else {
+            return nil
+        }
+        let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return nil }
+
+        switch provider {
+        case .aws:
+            let lowered = value.lowercased()
+            if lowered.hasPrefix("fileb://") {
+                return CloudInitLocalResourceReference(
+                    path: String(value.dropFirst("fileb://".count)),
+                    style: .awsFileB
+                )
+            }
+            if lowered.hasPrefix("file://") {
+                return CloudInitLocalResourceReference(
+                    path: String(value.dropFirst("file://".count)),
+                    style: .awsFile
+                )
+            }
+            return nil
+        case .gcp, .azure:
+            return CloudInitLocalResourceReference(path: value, style: .plain)
+        default:
+            return nil
+        }
+    }
 
     private let providers: [CellProviderKind: any CellProvider]
     private let leaseManager: CellLeaseManager
@@ -36,6 +117,9 @@ final class CellCLICommandService: @unchecked Sendable {
     }
 
     func perform(kind: String, params: [String: String]) async -> (success: Bool, data: [String: String]) {
+        if let validationError = Self.requestValidationError(kind: kind, params: params) {
+            return (false, ["error": validationError])
+        }
         do {
             switch kind {
             case "create":
@@ -57,6 +141,144 @@ final class CellCLICommandService: @unchecked Sendable {
             }
         } catch {
             return (false, ["error": Self.describe(error)])
+        }
+    }
+
+    static func requestValidationError(
+        kind: String,
+        params: [String: String]
+    ) -> String? {
+        func trimmed(_ key: String) -> String? {
+            guard let value = params[key]?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !value.isEmpty else {
+                return nil
+            }
+            return value
+        }
+
+        func validateProvider(required: Bool) -> String? {
+            guard let provider = trimmed("provider") else {
+                return required ? "Missing required param: provider" : nil
+            }
+            guard CellProviderKind(rawValue: provider) != nil else {
+                return "Unsupported cell provider: \(provider)"
+            }
+            return nil
+        }
+
+        func validateCellID() -> String? {
+            guard let rawCellID = trimmed("cell-id") else {
+                return "Missing required param: cell-id"
+            }
+            guard UUID(uuidString: rawCellID) != nil else {
+                return "Invalid cell id: \(rawCellID)"
+            }
+            return nil
+        }
+
+        func validateBoolean(_ key: String) -> String? {
+            guard let value = trimmed(key) else { return nil }
+            guard value.lowercased() == "true" || value.lowercased() == "false" else {
+                return "Invalid boolean for \(key): \(value)"
+            }
+            return nil
+        }
+
+        func validateLocalResourcePath(_ key: String) -> String? {
+            guard let value = params[key] else { return nil }
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  value.utf8.count <= 4_096,
+                  !value.contains("\0") else {
+                return "Invalid local resource path for \(key)"
+            }
+            return nil
+        }
+
+        func validateCloudInit(for provider: CellProviderKind) -> String? {
+            guard let rawValue = params["cloud-init"] else { return nil }
+            let value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !value.isEmpty else { return nil }
+            switch provider {
+            case .aws:
+                if let reference = cloudInitLocalResourceReference(in: params) {
+                    return validateLocalResourcePathValue(
+                        reference.path,
+                        key: "cloud-init"
+                    )
+                }
+                guard rawValue.utf8.count <= maxCloudInitBytes else {
+                    return "AWS inline cloud-init exceeds the 65536-byte limit"
+                }
+                return nil
+            case .gcp, .azure:
+                guard let reference = cloudInitLocalResourceReference(in: params) else {
+                    return "Invalid local resource path for cloud-init"
+                }
+                return validateLocalResourcePathValue(
+                    reference.path,
+                    key: "cloud-init"
+                )
+            default:
+                return nil
+            }
+        }
+
+        func validateLocalResourcePathValue(_ value: String, key: String) -> String? {
+            guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  value.utf8.count <= 4_096,
+                  !value.contains("\0") else {
+                return "Invalid local resource path for \(key)"
+            }
+            return nil
+        }
+
+        switch kind {
+        case "create":
+            if let error = validateProvider(required: true) {
+                return error
+            }
+            for key in createLocalResourcePathKeys {
+                if let error = validateLocalResourcePath(key) {
+                    return error
+                }
+            }
+            guard let providerName = trimmed("provider"),
+                  let provider = CellProviderKind(rawValue: providerName) else {
+                return "Missing required param: provider"
+            }
+            return validateCloudInit(for: provider)
+
+        case "list":
+            return nil
+
+        case "exec":
+            if let error = validateCellID() ?? validateProvider(required: false) {
+                return error
+            }
+            guard let rawArgv = trimmed("argv-json") else {
+                return "Missing required param: argv-json"
+            }
+            guard let data = rawArgv.data(using: .utf8),
+                  let argv = try? JSONDecoder().decode([String].self, from: data) else {
+                return "Invalid command argv JSON"
+            }
+            return argv.isEmpty ? "Missing command argv" : nil
+
+        case "attach":
+            return validateCellID()
+                ?? validateProvider(required: false)
+                ?? validateBoolean("open-tab")
+
+        case "destroy":
+            return validateCellID()
+                ?? validateProvider(required: false)
+                ?? validateBoolean("force")
+
+        case "logs", "status":
+            return validateCellID() ?? validateProvider(required: false)
+
+        default:
+            return "Unknown cell action: \(kind)"
         }
     }
 
@@ -103,7 +325,11 @@ final class CellCLICommandService: @unchecked Sendable {
             "instance-profile",
             "cloud-init",
         ] {
-            if let value = params[key]?.nilIfEmpty {
+            if key == "cloud-init",
+               let value = params[key],
+               !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                metadata[key] = value
+            } else if let value = params[key]?.nilIfEmpty {
                 metadata[key] = value
             }
         }

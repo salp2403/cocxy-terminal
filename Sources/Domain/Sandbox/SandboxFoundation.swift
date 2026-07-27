@@ -2,6 +2,7 @@
 // SandboxFoundation.swift - Shared sandbox capability, profile, executor, and audit primitives.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Capabilities
 
@@ -33,6 +34,11 @@ extension PluginCapability {
 
 // MARK: - Profile Builder
 
+enum SandboxProfileBasePolicy: Sendable, Equatable {
+    case denyByDefault
+    case isolateFilesystemAndNetwork
+}
+
 struct SandboxProfileBuilder: Sendable {
     func profile(
         capabilities: Set<SandboxCapability>,
@@ -42,13 +48,28 @@ struct SandboxProfileBuilder: Sendable {
         readableLiteralPaths: [URL] = [],
         writableLiteralPaths: [URL] = [],
         executableSubpaths: [URL] = [],
-        includeSystemReadBaseline: Bool = false
+        includeSystemReadBaseline: Bool = false,
+        additionalDeniedLiteralPaths: [URL] = [],
+        basePolicy: SandboxProfileBasePolicy = .denyByDefault
     ) -> String {
-        var lines = [
-            "(version 1)",
-            "(deny default)",
-            "(allow process-fork)",
-        ]
+        var lines: [String]
+        switch basePolicy {
+        case .denyByDefault:
+            lines = [
+                "(version 1)",
+                "(deny default)",
+                "(allow process-fork)",
+            ]
+        case .isolateFilesystemAndNetwork:
+            lines = [
+                "(version 1)",
+                "(allow default)",
+                "(deny network*)",
+                "(deny file-read*)",
+                "(deny file-write*)",
+                "(deny process-exec)",
+            ]
+        }
 
         if includeSystemReadBaseline {
             lines.append("(allow sysctl-read)")
@@ -87,7 +108,33 @@ struct SandboxProfileBuilder: Sendable {
             lines.append("(allow network-outbound)")
         }
 
+        let deniedLiteralPaths = Self.sortedPaths(
+            Self.controlCredentialLiteralPaths + additionalDeniedLiteralPaths
+        )
+        if includeSystemReadBaseline || capabilities.contains(.filesystemRead) {
+            lines.append(contentsOf: Self.schemeRules(
+                decision: "deny",
+                operation: "file-read*",
+                literals: deniedLiteralPaths,
+                subpaths: []
+            ))
+        }
+        if capabilities.contains(.filesystemWrite) {
+            lines.append(contentsOf: Self.schemeRules(
+                decision: "deny",
+                operation: "file-write*",
+                literals: deniedLiteralPaths,
+                subpaths: []
+            ))
+        }
+
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    static var controlCredentialLiteralPaths: [URL] {
+        [URL(fileURLWithPath: SocketAuthenticationCredential.path(
+            forSocketPath: SocketServerConstants.socketPath
+        ))]
     }
 
     static func parentDirectoryLiterals(for url: URL) -> [URL] {
@@ -135,15 +182,16 @@ struct SandboxProfileBuilder: Sendable {
     }
 
     private static func schemeRules(
+        decision: String = "allow",
         operation: String,
         literals: [String],
         subpaths: [String]
     ) -> [String] {
         let literalRules = literals.map {
-            #"(allow \#(operation) (literal "\#(schemeString($0))"))"#
+            #"(\#(decision) \#(operation) (literal "\#(schemeString($0))"))"#
         }
         let subpathRules = subpaths.map {
-            #"(allow \#(operation) (subpath "\#(schemeString($0))"))"#
+            #"(\#(decision) \#(operation) (subpath "\#(schemeString($0))"))"#
         }
         return literalRules + subpathRules
     }
@@ -182,12 +230,10 @@ struct SandboxProfileBuilder: Sendable {
         "/Applications/Xcode.app/Contents/Developer",
         "/Library/Developer/CommandLineTools",
         "/opt/homebrew",
-        "/private/tmp",
         "/private/var/db",
         "/private/var/select",
         "/private/etc",
         "/etc",
-        "/tmp",
         "/usr/local",
     ]
 

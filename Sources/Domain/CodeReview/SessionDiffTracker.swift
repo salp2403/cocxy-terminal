@@ -257,14 +257,23 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 case .sinceSessionStart:
                     diffWorkingDirectory = snapshot.repoRoot ?? snapshot.workingDirectory
                     if let baseRef = snapshot.ref, !baseRef.isEmpty {
-                        rawDiff = try self.gitRunner(diffWorkingDirectory, ["diff", "--no-color", baseRef, "--"])
+                        let revision = try GitRevisionArgument(baseRef).value
+                        rawDiff = try self.gitRunner(
+                            diffWorkingDirectory,
+                            ["diff", "--no-color", "--end-of-options", revision, "--"]
+                        )
                     } else {
                         rawDiff = try self.gitRunner(diffWorkingDirectory, ["diff", "--no-color", "--"])
                     }
                 case .vsBranch:
                     diffWorkingDirectory = snapshot.workingDirectory
-                    let targetRef = reference ?? snapshot.ref ?? "HEAD"
-                    rawDiff = try self.gitRunner(diffWorkingDirectory, ["diff", "--no-color", targetRef, "--", "."])
+                    let targetRef = try GitRevisionArgument(
+                        reference ?? snapshot.ref ?? "HEAD"
+                    ).value
+                    rawDiff = try self.gitRunner(
+                        diffWorkingDirectory,
+                        ["diff", "--no-color", "--end-of-options", targetRef, "--", "."]
+                    )
                 }
 
                 let statusOutput = try self.gitRunner(diffWorkingDirectory, ["status", "--porcelain"])
@@ -285,16 +294,16 @@ final class SessionDiffTrackerImpl: SessionDiffTracking, @unchecked Sendable {
                 }
 
                 let existingPaths = Set(diffs.map(\.filePath))
+                let fileAccess = try? CodeReviewWorkspaceFileAccess(rootURL: diffWorkingDirectory)
                 for (path, status) in statusMap where !existingPaths.contains(path) {
                     guard status == .untracked || status == .added else { continue }
-                    let fileURL = diffWorkingDirectory.appendingPathComponent(path)
-                    guard let data = try? Data(contentsOf: fileURL),
-                          let content = String(data: data, encoding: .utf8) else {
+                    guard let fileAccess,
+                          let fileSnapshot = try? fileAccess.read(relativePath: path) else {
                         continue
                     }
                     let synthetic = DiffParser.makeSyntheticAddedFileDiff(
                         filePath: path,
-                        fileContent: content,
+                        fileContent: fileSnapshot.content,
                         agentName: snapshot.fileAgentNames[path]
                     )
                     diffs.append(

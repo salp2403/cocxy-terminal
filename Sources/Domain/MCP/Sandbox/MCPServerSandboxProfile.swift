@@ -46,7 +46,7 @@ struct MCPServerSandboxProfile: Sendable, Equatable {
         switch server.transport {
         case .stdio(_, _, _, let workingDirectory):
             let configuredDirectory = workingDirectory.map { [Self.directoryURL(for: $0)] } ?? []
-            return configuredDirectory + argumentReadableParentDirectories + additionalReadableURLs
+            return configuredDirectory + argumentReadableDirectories + additionalReadableURLs
         case .http:
             return additionalReadableURLs
         }
@@ -95,17 +95,26 @@ struct MCPServerSandboxProfile: Sendable, Equatable {
     private var argumentReadableLiterals: [URL] {
         switch server.transport {
         case .stdio(_, let arguments, _, let workingDirectory):
-            return arguments.compactMap { Self.argumentURL(for: $0, workingDirectory: workingDirectory) }
+            return arguments.compactMap { argument in
+                guard let url = Self.argumentURL(for: argument, workingDirectory: workingDirectory),
+                      Self.hasStableArgumentResolution(url) else {
+                    return nil
+                }
+                return url
+            }
         case .http:
             return []
         }
     }
 
-    private var argumentReadableParentDirectories: [URL] {
-        argumentReadableLiterals.map { url in
-            var directoryURL = url
-            directoryURL.deleteLastPathComponent()
-            return directoryURL
+    private var argumentReadableDirectories: [URL] {
+        argumentReadableLiterals.compactMap { url in
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                return nil
+            }
+            return url.resolvingSymlinksInPath().standardizedFileURL
         }
     }
 
@@ -115,6 +124,7 @@ struct MCPServerSandboxProfile: Sendable, Equatable {
             return arguments.enumerated().compactMap { index, argument in
                 guard index > 0,
                       let url = Self.argumentURL(for: argument, workingDirectory: workingDirectory),
+                      Self.hasStableArgumentResolution(url),
                       Self.parentDirectoryExists(for: url),
                       !FileManager.default.fileExists(atPath: url.path)
                 else {
@@ -138,6 +148,31 @@ struct MCPServerSandboxProfile: Sendable, Equatable {
             return nil
         }
         return directoryURL(for: workingDirectory).appendingPathComponent(argument)
+    }
+
+    private static func hasStableArgumentResolution(_ url: URL) -> Bool {
+        let lexicalPath = url.standardizedFileURL.path
+        let resolvedPath = url.resolvingSymlinksInPath().standardizedFileURL.path
+        guard lexicalPath != resolvedPath else { return true }
+
+        return [
+            (alias: "/tmp", canonical: "/private/tmp"),
+            (alias: "/var", canonical: "/private/var"),
+            (alias: "/etc", canonical: "/private/etc"),
+        ].contains { pair in
+            path(resolvedPath, matches: lexicalPath, replacing: pair.alias, with: pair.canonical)
+                || path(lexicalPath, matches: resolvedPath, replacing: pair.alias, with: pair.canonical)
+        }
+    }
+
+    private static func path(
+        _ candidate: String,
+        matches source: String,
+        replacing alias: String,
+        with canonical: String
+    ) -> Bool {
+        guard source == alias || source.hasPrefix(alias + "/") else { return false }
+        return candidate == canonical + String(source.dropFirst(alias.count))
     }
 
     private static func parentDirectoryExists(for url: URL) -> Bool {

@@ -18,10 +18,19 @@ import CocxyVault
 /// - Output formatting to `OutputFormatter`.
 public struct CommandRunner {
     static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
-    static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 65
+    // Worst-case approved merge path is 265s: repo/branch/PR resolution,
+    // the 60s approval window, merge, refresh, and optional branch deletion.
+    // Keep a response margin without allowing an unbounded socket wait.
+    static let extendedGitHubMutationSocketTimeoutSeconds: TimeInterval = 300
     public static let extendedGitAssistantSocketTimeoutSeconds: TimeInterval = 65
     static let extendedCellSocketTimeoutSeconds: TimeInterval = 300
+    static let browserInitScriptApprovalSocketTimeoutSeconds: TimeInterval = 605
+    // The app allows five minutes for import work, then up to 35 seconds for
+    // cancellation settlement. Approval grace is added separately below.
+    static let browserImportSocketTimeoutSeconds: TimeInterval = 340
+    static let privilegedSocketApprovalGraceSeconds: TimeInterval = 65
     static let defaultBrowserActionTimeoutMilliseconds = 5_000
+    static let maximumBrowserWaitTimeoutMilliseconds = 30_000
     static let browserActionSocketGraceSeconds: TimeInterval = 3
 
     /// The socket client to use for communication.
@@ -39,8 +48,7 @@ public struct CommandRunner {
     public init(
         socketClient: SocketClient = SocketClient(),
         signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
-        trustedAuthorRegistryURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".cocxy/security/trusted-authors.json"),
+        trustedAuthorRegistryURL: URL = TrustedAuthorRegistry.defaultFileURL,
         vaultStore: any VaultSessionStoring = VaultSessionStore.defaultStore(),
         vaultUserStateStore: VaultUserStateStore = VaultUserStateStore(),
         vaultSearchIndexFactory: @escaping () throws -> VaultSearchIndex = { try VaultSearchIndex() }
@@ -191,10 +199,14 @@ public struct CommandRunner {
             return CLIResult(exitCode: 0, stdout: output, stderr: "")
         } else {
             let errorMessage = response.error ?? "Unknown error"
+            var formattedError = CLIError.serverError(errorMessage).userMessage
+            if let diagnostics = response.data, !diagnostics.isEmpty {
+                formattedError += "\n" + OutputFormatter.formatDiagnosticData(diagnostics)
+            }
             return CLIResult(
                 exitCode: 1,
                 stdout: "",
-                stderr: CLIError.serverError(errorMessage).userMessage
+                stderr: formattedError
             )
         }
     }
@@ -769,34 +781,12 @@ public struct CommandRunner {
                 return try Data(contentsOf: manifestURL)
             }
             let pluginURL = url.appendingPathComponent("cocxy-plugin.toml")
-            if FileManager.default.fileExists(atPath: pluginURL.path),
-               let content = try? String(contentsOf: pluginURL, encoding: .utf8) {
-                return Self.canonicalPluginManifestPayload(from: content)
+            if FileManager.default.fileExists(atPath: pluginURL.path) {
+                return try PluginPackageSignaturePayload.payload(at: url)
             }
             throw CLIError.invalidArgument(command: "signatures", argument: url.path, reason: "Directory has no supported manifest")
         }
         return try Data(contentsOf: url)
-    }
-
-    private static func canonicalPluginManifestPayload(from content: String) -> Data {
-        let signatureKeys: Set<String> = [
-            "signature",
-            "signature-algorithm",
-            "signature-key-id",
-            "signature-author",
-            "signature-timestamp",
-            "signature-payload-sha256",
-        ]
-        var lines = content.components(separatedBy: .newlines).filter { line in
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            guard let separator = trimmed.firstIndex(of: "=") else { return true }
-            let key = trimmed[..<separator].trimmingCharacters(in: .whitespaces)
-            return !signatureKeys.contains(key)
-        }
-        while let last = lines.last, last.trimmingCharacters(in: .whitespaces).isEmpty {
-            lines.removeLast()
-        }
-        return Data((lines.joined(separator: "\n") + "\n").utf8)
     }
 
     private func signatureSidecarURL(for url: URL) -> URL {
@@ -1354,6 +1344,9 @@ public struct CommandRunner {
                 id: requestID, command: "browser-navigate", params: ["url": url]
             )
 
+        case .browserSplit:
+            return CLISocketRequest(id: requestID, command: "browser-split", params: nil)
+
         case .browserBack:
             return CLISocketRequest(id: requestID, command: "browser-back", params: nil)
 
@@ -1404,6 +1397,13 @@ public struct CommandRunner {
                 id: requestID,
                 command: "browser-init-script-add",
                 params: ["script": script]
+            )
+
+        case .browserInitScriptRemove(let id):
+            return CLISocketRequest(
+                id: requestID,
+                command: "browser-init-script-remove",
+                params: ["id": id]
             )
 
         case .browserInitScriptsList:
@@ -1775,11 +1775,10 @@ public struct CommandRunner {
 
         // MARK: Web Terminal (v5)
 
-        case .webStart(let bindAddress, let port, let token, let fps):
+        case .webStart(let bindAddress, let port, let fps):
             var params: [String: String] = [:]
             if let bindAddress { params["bind"] = bindAddress }
             if let port { params["port"] = "\(port)" }
-            if let token { params["token"] = token }
             if let fps { params["fps"] = "\(fps)" }
             return CLISocketRequest(id: requestID, command: "web-start", params: params.isEmpty ? nil : params)
 
@@ -2085,9 +2084,13 @@ public struct CommandRunner {
     }
 
     func socketClient(for command: ParsedCommand) -> SocketClient {
+        let requestCommand = buildRequest(from: command).command
+        let approvalGrace = Self.requiresPrivilegedSocketApproval(requestCommand)
+            ? Self.privilegedSocketApprovalGraceSeconds
+            : 0
         let timeoutSeconds = max(
             socketClient.timeoutSeconds,
-            Self.socketTimeoutSeconds(for: command)
+            Self.socketTimeoutSeconds(for: command) + approvalGrace
         )
         guard timeoutSeconds != socketClient.timeoutSeconds else {
             return socketClient
@@ -2102,11 +2105,11 @@ public struct CommandRunner {
         switch command {
         case .githubStatus,
              .githubPRs,
-             .githubIssues,
+             .githubIssues:
+            return extendedGitHubReadSocketTimeoutSeconds
+        case .githubPRMerge,
              .reviewApprove,
              .reviewRequestChanges:
-            return extendedGitHubReadSocketTimeoutSeconds
-        case .githubPRMerge:
             return extendedGitHubMutationSocketTimeoutSeconds
         case .gitAssistantCommitMessage,
              .gitAssistantPRDraft,
@@ -2120,6 +2123,11 @@ public struct CommandRunner {
              .cellLogs,
              .cellStatus:
             return extendedCellSocketTimeoutSeconds
+        case .browserInitScriptAdd:
+            return browserInitScriptApprovalSocketTimeoutSeconds
+        case .browserImportPreview,
+             .browserImportRun:
+            return browserImportSocketTimeoutSeconds
         case .browserClick(_, let timeoutMilliseconds),
              .browserDblClick(_, let timeoutMilliseconds),
              .browserHover(_, let timeoutMilliseconds),
@@ -2136,6 +2144,8 @@ public struct CommandRunner {
              .browserScroll(_, _, let timeoutMilliseconds),
              .browserScrollIntoView(_, let timeoutMilliseconds):
             return browserActionSocketTimeoutSeconds(timeoutMilliseconds: timeoutMilliseconds)
+        case .browserWait(_, let timeoutMilliseconds):
+            return browserWaitSocketTimeoutSeconds(timeoutMilliseconds: timeoutMilliseconds)
         default:
             return SocketClient.defaultTimeoutSeconds
         }
@@ -2144,6 +2154,16 @@ public struct CommandRunner {
     static func browserActionSocketTimeoutSeconds(timeoutMilliseconds: Int?) -> TimeInterval {
         let milliseconds = timeoutMilliseconds ?? defaultBrowserActionTimeoutMilliseconds
         return Double(milliseconds) / 1_000.0 + browserActionSocketGraceSeconds
+    }
+
+    static func browserWaitSocketTimeoutSeconds(timeoutMilliseconds: Int?) -> TimeInterval {
+        let requested = timeoutMilliseconds ?? defaultBrowserActionTimeoutMilliseconds
+        let milliseconds = min(max(requested, 0), maximumBrowserWaitTimeoutMilliseconds)
+        return Double(milliseconds) / 1_000.0 + browserActionSocketGraceSeconds
+    }
+
+    static func requiresPrivilegedSocketApproval(_ commandName: String) -> Bool {
+        CocxyPrivilegedSocketCommandPolicy.requiresApproval(commandName)
     }
 }
 

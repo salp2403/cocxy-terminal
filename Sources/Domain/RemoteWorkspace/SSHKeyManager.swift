@@ -57,6 +57,10 @@ struct SSHKeyInfo: Identifiable, Sendable {
 enum SSHKeyManagerError: Error, Equatable {
     case keyNotFound(String)
     case fingerprintFailed(String)
+    case invalidKeyName(String)
+    case keyAlreadyExists(String)
+    case unsupportedPassphrase
+    case passphraseTooLong(maximumBytes: Int)
     case generationFailed(String)
     case agentError(String)
     case keychainImportFailed(String)
@@ -69,6 +73,14 @@ extension SSHKeyManagerError: LocalizedError {
             return "SSH key not found: \(path)"
         case .fingerprintFailed(let message):
             return "Could not read SSH key fingerprint: \(message)"
+        case .invalidKeyName(let name):
+            return "Invalid SSH key name: \(name)"
+        case .keyAlreadyExists(let path):
+            return "An SSH key already exists at \(path)."
+        case .unsupportedPassphrase:
+            return "SSH key passphrases cannot contain null bytes, newlines, or carriage returns."
+        case .passphraseTooLong(let maximumBytes):
+            return "SSH key passphrases cannot exceed \(maximumBytes) UTF-8 bytes."
         case .generationFailed(let message):
             return "Could not generate SSH key: \(message)"
         case .agentError(let message):
@@ -87,11 +99,10 @@ protocol SSHKeyExecuting: Sendable {
     func execute(command: String, arguments: [String], stdinData: Data) throws -> ProcessResult
 }
 
-extension SSHKeyExecuting {
-    /// Default implementation that ignores stdin, for backward compatibility.
-    func execute(command: String, arguments: [String], stdinData: Data) throws -> ProcessResult {
-        try execute(command: command, arguments: arguments)
-    }
+enum SSHAskpassContract {
+    static let environmentKey = "COCXY_SSH_ASKPASS"
+    static let environmentValue = "1"
+    static let maximumPassphraseBytes = 4_096
 }
 
 // MARK: - Key File System Protocol
@@ -100,6 +111,8 @@ extension SSHKeyExecuting {
 protocol SSHKeyFileSystem: Sendable {
     func listDirectory(at path: String) throws -> [String]
     func fileExists(at path: String) -> Bool
+    func createDirectory(at path: String) throws
+    func removeFile(at path: String) throws
 }
 
 // MARK: - SSH Key Manager
@@ -227,34 +240,58 @@ final class SSHKeyManager: Sendable {
 
     /// Generates a new SSH key pair.
     ///
-    /// Passes the passphrase via stdin pipe instead of command-line arguments
-    /// to prevent it from appearing in process listings (`ps`).
-    /// The `-N` flag reads from stdin when given an empty string argument
-    /// combined with piped input.
+    /// Passes the passphrase through the executor's private credential channel
+    /// instead of command-line arguments, then verifies the resulting key.
     ///
     /// - Parameters:
     ///   - type: The cryptographic algorithm to use.
     ///   - name: The file name for the new key (stored in the SSH directory).
     ///   - passphrase: The passphrase to protect the key (empty string for none).
     func generateKey(type: SSHKeyType, name: String, passphrase: String) throws {
-        let keyPath = "\(sshDirectoryPath)/\(name)"
-
-        // ssh-keygen expects the passphrase twice (passphrase + confirmation)
-        // when reading from stdin. We provide both separated by a newline.
-        let stdinContent = "\(passphrase)\n\(passphrase)\n"
-        guard let stdinData = stdinContent.data(using: .utf8) else {
-            throw SSHKeyManagerError.generationFailed("Failed to encode passphrase")
+        guard Self.isValidKeyName(name) else {
+            throw SSHKeyManagerError.invalidKeyName(name)
         }
+        guard !passphrase.unicodeScalars.contains(where: { scalar in
+            scalar.value == 0 || scalar.value == 10 || scalar.value == 13
+        }) else {
+            throw SSHKeyManagerError.unsupportedPassphrase
+        }
+        guard passphrase.utf8.count <= SSHAskpassContract.maximumPassphraseBytes else {
+            throw SSHKeyManagerError.passphraseTooLong(
+                maximumBytes: SSHAskpassContract.maximumPassphraseBytes
+            )
+        }
+
+        let keyPath = "\(sshDirectoryPath)/\(name)"
+        let publicKeyPath = "\(keyPath).pub"
+        try fileSystem.createDirectory(at: sshDirectoryPath)
+        guard !fileSystem.fileExists(at: keyPath),
+              !fileSystem.fileExists(at: publicKeyPath) else {
+            throw SSHKeyManagerError.keyAlreadyExists(keyPath)
+        }
+
+        var generationSucceeded = false
+        defer {
+            if !generationSucceeded {
+                try? fileSystem.removeFile(at: keyPath)
+                try? fileSystem.removeFile(at: publicKeyPath)
+            }
+        }
+
+        let stdinData = Data("\(passphrase)\n\(passphrase)\n".utf8)
 
         let result = try executor.execute(
             command: "/usr/bin/ssh-keygen",
-            arguments: ["-t", type.rawValue, "-f", keyPath],
+            arguments: ["-q", "-t", type.rawValue, "-f", keyPath],
             stdinData: stdinData
         )
 
         guard result.exitCode == 0 else {
             throw SSHKeyManagerError.generationFailed(result.stderr)
         }
+
+        try verifyGeneratedKey(at: keyPath, passphrase: passphrase)
+        generationSucceeded = true
     }
 
     // MARK: - Agent Operations
@@ -339,5 +376,49 @@ final class SSHKeyManager: Sendable {
         return message.contains("illegal option")
             || message.contains("unknown option")
             || message.contains("unrecognized option")
+    }
+
+    private func verifyGeneratedKey(at keyPath: String, passphrase: String) throws {
+        let emptyPassphraseResult = try executor.execute(
+            command: "/usr/bin/ssh-keygen",
+            arguments: ["-y", "-P", "", "-f", keyPath]
+        )
+
+        if passphrase.isEmpty {
+            guard emptyPassphraseResult.exitCode == 0 else {
+                throw SSHKeyManagerError.generationFailed(
+                    "The generated private key could not be verified with an empty passphrase."
+                )
+            }
+            return
+        }
+
+        guard emptyPassphraseResult.exitCode != 0 else {
+            throw SSHKeyManagerError.generationFailed(
+                "The generated private key is not protected by the requested passphrase."
+            )
+        }
+
+        let requestedPassphraseResult = try executor.execute(
+            command: "/usr/bin/ssh-keygen",
+            arguments: ["-y", "-f", keyPath],
+            stdinData: Data("\(passphrase)\n".utf8)
+        )
+        guard requestedPassphraseResult.exitCode == 0 else {
+            throw SSHKeyManagerError.generationFailed(
+                "The generated private key did not accept the requested passphrase."
+            )
+        }
+    }
+
+    private static func isValidKeyName(_ name: String) -> Bool {
+        guard (1...128).contains(name.utf8.count),
+              name != ".",
+              name != "..",
+              !name.contains("/"),
+              !name.unicodeScalars.contains(where: { $0.value < 32 || $0.value == 127 }) else {
+            return false
+        }
+        return (name as NSString).lastPathComponent == name
     }
 }

@@ -314,6 +314,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var browserHostingView: NSHostingView<BrowserPanelView>?
     var isBrowserVisible: Bool = false
     var remoteBrowserProxyStateCancellable: AnyCancellable?
+    var remoteBrowserProxySession: RemoteBrowserProxySession?
+    var remoteBrowserProxyRenewalTask: Task<Void, Never>?
+    weak var remoteBrowserRouteViewModel: BrowserViewModel?
+    weak var remoteBrowserOpeningViewModel: BrowserViewModel?
+    var remoteBrowserOpeningID: UUID?
+    var remoteBrowserRouteProfile: RemoteConnectionProfile?
+    var remoteBrowserRouteSuggestion: RemoteBrowserOpenSuggestion?
+    var remoteBrowserOpenGeneration: UInt64 = 0
 
     var codeReviewViewModel: CodeReviewPanelViewModel?
     var codeReviewHostingView: NSHostingView<CodeReviewPanelView>?
@@ -447,6 +455,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     var browserBookmarksHostingView: NSView?
     var isBrowserBookmarksVisible: Bool = false
+
+    /// Browser import sheet retained for the lifetime of its asynchronous work.
+    var browserImportSheetWindow: NSWindow?
 
     /// Preferences window, retained to prevent premature deallocation.
     var preferencesWindow: NSWindow?
@@ -645,6 +656,20 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Tests inject a presenter so they can verify the toolbar action does
     /// not close a split before the user confirms.
     var focusedPaneCloseConfirmationPresenter: ((String, String, @escaping (Bool) -> Void) -> Void)?
+
+    /// Optional test seam for exact browser init-script approval.
+    var browserInitScriptAuthorizationPresenter: ((BrowserInitScriptAuthorizationRequest) -> Bool)?
+    var isBrowserInitScriptAuthorizationPresented = false
+
+    /// Optional test seam for one-time tab-config startup approval.
+    var tabConfigStartupAuthorizationPresenter: ((TabConfigStartupAuthorizationRequest) -> Bool)?
+    var isTabConfigStartupAuthorizationPresented = false
+    var consumedTabConfigStartupAuthorizationIDs: Set<UUID> = []
+
+    /// Optional test seam for one-time local-socket GitHub mutations.
+    var githubSocketMutationAuthorizationPresenter: ((GitHubSocketMutationAuthorizationRequest) -> Bool)?
+    var isGitHubSocketMutationAuthorizationPresented = false
+    var consumedGitHubSocketMutationAuthorizationIDs: [UUID: Date] = [:]
 
     /// Inline image renderers keyed by surface view identity.
     /// Lazily created per surface view in +SurfaceLifecycle.
@@ -1697,8 +1722,29 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         smartRoutingViewModel = nil
         notificationPanelViewModel?.onNavigateToTab = nil
         notificationPanelViewModel = nil
+        remoteBrowserOpenGeneration &+= 1
+        remoteBrowserOpeningID = nil
+        remoteBrowserOpeningViewModel = nil
         remoteBrowserProxyStateCancellable?.cancel()
         remoteBrowserProxyStateCancellable = nil
+        remoteBrowserProxyRenewalTask?.cancel()
+        remoteBrowserProxyRenewalTask = nil
+        if let capability = remoteBrowserProxySession?.capability
+            ?? remoteBrowserRouteViewModel?.activeRemoteBrowserProxyCapability {
+            BrowserWebsiteDataStoreFactory.releaseRemoteDataStore(for: capability)
+        }
+        remoteBrowserProxySession?.stop()
+        remoteBrowserProxySession = nil
+        remoteBrowserRouteViewModel?.onRetryRemoteBrowserRoute = nil
+        remoteBrowserRouteViewModel = nil
+        remoteBrowserRouteProfile = nil
+        remoteBrowserRouteSuggestion = nil
+        browserViewModel?.revokeDOMGrabAuthorization()
+        browserViewModel?.revokeAllInitScripts()
+        revokeBrowserAuthorizations(in: Array(panelContentViews.values))
+        for panelViews in savedTabPanelContentViews.values {
+            revokeBrowserAuthorizations(in: Array(panelViews.values))
+        }
         browserViewModel = nil
         timelineHostingView?.removeFromSuperview()
         timelineHostingView = nil
@@ -2210,6 +2256,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // 1. Save the outgoing tab's split state.
         if let outgoing = displayedTabID, outgoing != tabID {
             // Persist the live split hierarchy for the outgoing tab.
+            browserViewModel?.revokeDOMGrabAuthorization()
+            for panelView in panelContentViews.values {
+                browserViewModel(containedIn: panelView)?.revokeDOMGrabAuthorization()
+            }
             if let splitView = activeSplitView {
                 splitView.removeFromSuperview()
                 savedTabSplitViews[outgoing] = splitView

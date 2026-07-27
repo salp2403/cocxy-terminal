@@ -63,7 +63,18 @@ extension MainWindowController {
     /// Opens a browser panel appended at the end of the split tree.
     /// The browser tab receives focus so it appears selected in the tab strip.
     @objc func splitWithBrowserAction(_ sender: Any?) {
-        performVisualSplitWithPanel(isVertical: true, panel: .browser(), appendToEnd: true, focusNewPanel: true)
+        _ = openBrowserSplit()
+    }
+
+    /// Opens a browser panel and reports whether the split was actually created.
+    @discardableResult
+    func openBrowserSplit() -> Bool {
+        performVisualSplitWithPanel(
+            isVertical: true,
+            panel: .browser(),
+            appendToEnd: true,
+            focusNewPanel: true
+        )
     }
 
     /// Opens a markdown panel appended at the end of the split tree.
@@ -225,6 +236,9 @@ extension MainWindowController {
                 profileManager: browserProfileManager,
                 onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
                 onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+                onImportData: { [weak self] profileID in
+                    self?.showBrowserImportWizard(profileID: profileID)
+                },
                 onDismiss: { [weak self] in self?.closePanel(contentID: contentID) },
                 localizer: appLocalizer(),
                 layout: .splitPane
@@ -762,6 +776,7 @@ extension MainWindowController {
         let viewToRemove: NSView
         if let panelView = closingPanelView {
             viewToRemove = panelView
+            revokeBrowserAuthorizations(in: [panelView])
             if let editorView = panelView as? EditorView {
                 closeEditorLSPIfNeeded(editorView: editorView, tabID: currentTabID)
                 closeEditorCompletionIfNeeded(editorView: editorView)

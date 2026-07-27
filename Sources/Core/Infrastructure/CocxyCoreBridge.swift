@@ -26,6 +26,33 @@ private let cocxyInputLog = Logger(
     category: "input"
 )
 
+enum OSC52ClipboardLimits {
+    static let maximumWriteBytes = 1024 * 1024
+}
+
+private enum CapturedClipboardEvent: Sendable {
+    case write(Data)
+    case read(selection: UInt8)
+}
+
+private func captureClipboardEvent(
+    _ event: cocxycore_clipboard_event
+) -> CapturedClipboardEvent? {
+    switch event.event_type {
+    case 0:
+        guard event.text_len > 0,
+              event.text_len <= OSC52ClipboardLimits.maximumWriteBytes,
+              let pointer = event.text_ptr else {
+            return nil
+        }
+        return .write(Data(bytes: pointer, count: event.text_len))
+    case 1:
+        return .read(selection: event.selection)
+    default:
+        return nil
+    }
+}
+
 struct TerminalLigatureDiagnostics: Equatable, Sendable, Encodable {
     let enabled: Bool
     let cacheHits: UInt32
@@ -345,13 +372,30 @@ struct WebTerminalConfiguration: Equatable, Sendable {
         self.firstConnectionHandler = firstConnectionHandler
     }
 
-    static let `default` = WebTerminalConfiguration(
-        bindAddress: "127.0.0.1",
-        port: 7770,
-        authToken: "",
-        maxConnections: 4,
-        maxFrameRate: 60
-    )
+    static let defaultBindAddress = "127.0.0.1"
+    static let defaultPort: UInt16 = 7770
+    static let defaultMaxConnections: UInt16 = 4
+    static let defaultMaxFrameRate: UInt32 = 60
+    static let maximumAuthenticationTokenByteCount = 127
+
+    static func normalizedLoopbackBindAddress(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        switch trimmed {
+        case "127.0.0.1", "::1":
+            return trimmed
+        default:
+            return nil
+        }
+    }
+
+    static func isValidAuthenticationToken(_ value: String) -> Bool {
+        let bytes = Array(value.utf8)
+        guard !bytes.isEmpty,
+              bytes.count <= maximumAuthenticationTokenByteCount else {
+            return false
+        }
+        return bytes.allSatisfy { (0x21...0x7E).contains($0) }
+    }
 
     static func == (lhs: WebTerminalConfiguration, rhs: WebTerminalConfiguration) -> Bool {
         lhs.bindAddress == rhs.bindAddress
@@ -471,10 +515,14 @@ final class CocxyCoreBridge: TerminalEngine {
     // MARK: - State
 
     private var surfaces: [SurfaceID: SurfaceState] = [:]
+    private var reapedPTYChildren = Set<SurfaceID>()
+    private var lastPTYExitPollAt: TimeInterval = 0
+    private var exitReapTimer: DispatchSourceTimer?
     private var config: TerminalEngineConfig?
     private var nativeSemanticPatterns: [TerminalSemanticNativePattern] = []
     var clipboardService: any ClipboardServiceProtocol = SystemClipboardService()
     var clipboardReadAuthorizationHandler: ((NSWindow?) -> Bool)?
+    var clipboardWriteAuthorizationHandler: ((NSWindow?) -> Bool)?
 
     /// Observer fired by `sendKeyEvent` / `sendText` for every input
     /// attempt, with either `.delivered` (bytes reached the PTY) or
@@ -570,6 +618,8 @@ final class CocxyCoreBridge: TerminalEngine {
     deinit {
         let cleanup = {
             MainActor.assumeIsolated {
+                self.exitReapTimer?.cancel()
+                self.exitReapTimer = nil
                 let ids = Array(self.surfaces.keys)
                 for id in ids {
                     self.destroySurface(id)
@@ -653,11 +703,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // 7. Create PTY read loop
         let masterFd = cocxycore_pty_master_fd(pty)
-        guard masterFd >= 0 else {
+        guard masterFd >= 0,
+              TerminalProcessBoundary.setCloseOnExec(masterFd) else {
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             contextBox.release()
-            throw TerminalEngineError.surfaceCreationFailed(reason: "Invalid PTY master fd")
+            throw TerminalEngineError.surfaceCreationFailed(reason: "Invalid PTY master fd configuration")
         }
 
         // Per-surface lock that serializes PTY feed (background) and frame
@@ -670,6 +721,7 @@ final class CocxyCoreBridge: TerminalEngine {
             masterFd: masterFd,
             terminal: terminal,
             pty: pty,
+            childPID: childPid,
             contextBox: contextBox,
             surfaceID: surfaceID,
             terminalLock: terminalLock
@@ -694,14 +746,17 @@ final class CocxyCoreBridge: TerminalEngine {
             configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
             configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes
         )
+        reapedPTYChildren.remove(surfaceID)
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
+        startExitReapTimerIfNeeded()
         return surfaceID
     }
 
     func destroySurface(_ id: SurfaceID) {
         guard let state = surfaces.removeValue(forKey: id) else { return }
+        reapedPTYChildren.remove(id)
 
         state.pendingFallbackWorkingDirectoryProbe?.cancel()
 
@@ -1018,10 +1073,40 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    /// Pumps `tick()` on a 50 ms cadence so a PTY child that exits while its
+    /// surface is deliberately kept alive to display final output is reaped
+    /// promptly, mirroring the daemon's `exitMonitorSource`. Without this pump
+    /// the in-process engine only reaps on surface teardown, leaving a
+    /// `<defunct>` child until the panel closes. Idempotent and self-throttled;
+    /// started on first surface creation and cancelled in `deinit`.
+    private func startExitReapTimerIfNeeded() {
+        guard exitReapTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: .main)
+        timer.schedule(deadline: .now() + 0.05, repeating: 0.05)
+        timer.setEventHandler { [weak self] in
+            MainActor.assumeIsolated { self?.tick() }
+        }
+        exitReapTimer = timer
+        timer.resume()
+    }
+
     func tick() {
-        // CocxyCore does not have a global tick. Each surface's DispatchSource
-        // handles I/O independently. This method exists for protocol conformance.
-        // Process polling happens in the read source event handler.
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastPTYExitPollAt >= 0.05 else { return }
+        lastPTYExitPollAt = now
+
+        for surfaceID in Array(surfaces.keys) where !reapedPTYChildren.contains(surfaceID) {
+            let didReap = withTerminalLock(surfaceID) { state -> Bool in
+                cocxycore_terminal_poll_processes(state.terminal)
+                var waitResult = cocxycore_pty_wait_result()
+                _ = cocxycore_pty_wait_check(state.pty, &waitResult)
+                guard cocxycore_pty_is_alive(state.pty) == false else { return false }
+                return TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID)
+            }
+            if didReap == true {
+                reapedPTYChildren.insert(surfaceID)
+            }
+        }
     }
 
     func setOutputHandler(
@@ -2082,6 +2167,38 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? []
     }
 
+    func completedCommandBlockReferences(
+        for surface: SurfaceID,
+        limit: UInt32
+    ) -> [TerminalCommandBlockReference] {
+        withTerminalLock(surface) { state in
+            guard limit > 0, let iterator = cocxycore_block_iterator_create(state.terminal) else {
+                return []
+            }
+            defer { cocxycore_block_iterator_destroy(iterator) }
+
+            var references: [TerminalCommandBlockReference] = []
+            while cocxycore_block_iterator_next(iterator) {
+                let blockID = cocxycore_block_iterator_current_id(iterator)
+                guard blockID != 0 else { continue }
+                var metadata = cocxycore_block_metadata()
+                guard cocxycore_block_get_metadata(state.terminal, blockID, &metadata),
+                      metadata.id == blockID,
+                      metadata.end_time_ns > 0,
+                      Self.isCommandBlockType(metadata.block_type) else {
+                    continue
+                }
+                references.append(TerminalCommandBlockReference(
+                    id: blockID,
+                    endTimeNs: metadata.end_time_ns
+                ))
+            }
+
+            let maxCount = Int(min(limit, 64))
+            return references.count > maxCount ? Array(references.suffix(maxCount)) : references
+        } ?? []
+    }
+
     func commandBlock(for surface: SurfaceID, blockID: UInt64) -> TerminalCommandBlock? {
         let block: TerminalCommandBlock?? = withTerminalLock(surface) { state in
             Self.commandBlock(from: state.terminal, blockID: blockID)
@@ -2111,9 +2228,7 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         let blockType = metadata.block_type
-        let isCommandBlock = blockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue)
-            || blockType == UInt8(COCXYCORE_BLOCK_ERROR_OUTPUT.rawValue)
-        guard isCommandBlock else { return nil }
+        guard isCommandBlockType(blockType) else { return nil }
 
         return TerminalCommandBlock(
             id: metadata.id,
@@ -2129,6 +2244,11 @@ final class CocxyCoreBridge: TerminalEngine {
             streamID: metadata.stream_id,
             blockType: blockType
         )
+    }
+
+    private static func isCommandBlockType(_ blockType: UInt8) -> Bool {
+        blockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue)
+            || blockType == UInt8(COCXYCORE_BLOCK_ERROR_OUTPUT.rawValue)
     }
 
     private static func optionalString(from pointer: UnsafePointer<CChar>?, length: Int) -> String? {
@@ -2378,8 +2498,16 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     func startWebTerminal(
         for surface: SurfaceID,
-        configuration: WebTerminalConfiguration = .default
+        configuration: WebTerminalConfiguration
     ) -> WebTerminalStatus? {
+        guard WebTerminalConfiguration.normalizedLoopbackBindAddress(
+            configuration.bindAddress
+        ) == configuration.bindAddress,
+        WebTerminalConfiguration.isValidAuthenticationToken(
+            configuration.authToken
+        ) else {
+            return nil
+        }
         guard var state = surfaces[surface] else { return nil }
 
         if let existing = state.webServer {
@@ -2686,6 +2814,7 @@ final class CocxyCoreBridge: TerminalEngine {
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
+        clipboardWriteAccess: ClipboardWriteAccess? = nil,
         appLanguage: AppLanguage? = nil,
         hookIntegration: HookIntegrationConfig? = nil,
         ligaturesEnabled: Bool? = nil,
@@ -2709,6 +2838,7 @@ final class CocxyCoreBridge: TerminalEngine {
             windowPaddingX: windowPaddingX,
             windowPaddingY: windowPaddingY,
             clipboardReadAccess: clipboardReadAccess,
+            clipboardWriteAccess: clipboardWriteAccess,
             appLanguage: appLanguage,
             hookIntegration: hookIntegration,
             ligaturesEnabled: ligaturesEnabled,
@@ -3188,6 +3318,7 @@ final class CocxyCoreBridge: TerminalEngine {
         masterFd: Int32,
         terminal: OpaquePointer,
         pty: OpaquePointer,
+        childPID: Int32,
         contextBox: Unmanaged<CallbackContext>,
         surfaceID: SurfaceID,
         terminalLock: NSLock
@@ -3212,6 +3343,8 @@ final class CocxyCoreBridge: TerminalEngine {
             // point of view.
             terminalLock.lock()
 
+            let wasAltScreen = cocxycore_terminal_is_alt_screen(terminal)
+
             // Feed bytes through terminal pipeline (parser → executor → screen)
             cocxycore_terminal_feed(terminal, buf, bytesRead)
 
@@ -3233,12 +3366,18 @@ final class CocxyCoreBridge: TerminalEngine {
             // Poll process tracker (non-blocking kqueue check)
             cocxycore_terminal_poll_processes(terminal)
 
+            let altScreenChanged = wasAltScreen != cocxycore_terminal_is_alt_screen(terminal)
+
             terminalLock.unlock()
 
             // Notify output handler with raw bytes
             let data = Data(bytes: buf, count: bytesRead)
             DispatchQueue.main.async { [weak self] in
-                (self?.surfaces[surfaceID]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
+                let hostView = self?.surfaces[surfaceID]?.hostView as? TerminalHostView
+                if altScreenChanged {
+                    hostView?.updateInteractionMetrics()
+                }
+                hostView?.requestImmediateRedraw()
                 self?.surfaces[surfaceID]?.outputHandler?(data)
                 self?.probeWorkingDirectoryAfterOutputIfNeeded(for: surfaceID)
             }
@@ -3246,6 +3385,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         source.setCancelHandler {
             cocxycore_terminal_detach_pty(terminal)
+            _ = TerminalProcessBoundary.terminateAndReapPTYChild(childPID)
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             contextBox.release()
@@ -3307,11 +3447,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // Clipboard (OSC 52)
         cocxycore_terminal_set_clipboard_callback(terminal, { event, ctx in
-            guard let ctx = ctx, let event = event else { return }
-            let eventCopy = event.pointee
+            guard let ctx = ctx,
+                  let event = event,
+                  let capturedEvent = captureClipboardEvent(event.pointee) else { return }
             let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
             DispatchQueue.main.async {
-                box.bridge?.handleClipboardEvent(eventCopy, for: box.surfaceID)
+                box.bridge?.handleClipboardEvent(capturedEvent, for: box.surfaceID)
             }
         }, context)
 
@@ -3419,34 +3560,55 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func handleClipboardEvent(
-        _ event: cocxycore_clipboard_event,
+        _ event: CapturedClipboardEvent,
         for surfaceID: SurfaceID
     ) {
         guard let state = surfaces[surfaceID] else { return }
 
-        if event.event_type == 0 {
-            // Set clipboard (OSC 52 write)
-            if let ptr = event.text_ptr, event.text_len > 0 {
-                let text = String(
-                    bytes: UnsafeBufferPointer(start: ptr, count: event.text_len),
-                    encoding: .utf8
-                ) ?? ""
-                if !text.isEmpty {
-                    clipboardService.write(text)
-                }
-            }
-        } else {
-            handleClipboardReadRequest(event, surfaceID: surfaceID, window: state.hostView?.window)
+        switch event {
+        case .write(let data):
+            writeOSC52ClipboardContent(data, for: state.hostView?.window)
+        case .read(let selection):
+            handleClipboardReadRequest(
+                selection: selection,
+                surfaceID: surfaceID,
+                window: state.hostView?.window
+            )
         }
     }
 
     private func handleClipboardReadRequest(
-        _ event: cocxycore_clipboard_event,
+        selection: UInt8,
         surfaceID: SurfaceID,
         window: NSWindow?
     ) {
         let content = resolvedClipboardReadContent(for: window)
-        sendClipboardResponse(selection: event.selection, content: content, to: surfaceID)
+        sendClipboardResponse(selection: selection, content: content, to: surfaceID)
+    }
+
+    @discardableResult
+    func writeOSC52ClipboardContent(_ data: Data, for window: NSWindow?) -> Bool {
+        guard !data.isEmpty,
+              data.count <= OSC52ClipboardLimits.maximumWriteBytes,
+              let text = String(data: data, encoding: .utf8),
+              !text.isEmpty,
+              isClipboardWriteAuthorized(for: window) else {
+            return false
+        }
+
+        clipboardService.write(text)
+        return true
+    }
+
+    private func isClipboardWriteAuthorized(for window: NSWindow?) -> Bool {
+        switch config?.clipboardWriteAccess ?? .prompt {
+        case .allow:
+            return true
+        case .deny:
+            return false
+        case .prompt:
+            return requestClipboardWriteAuthorization(for: window)
+        }
     }
 
     func resolvedClipboardReadContent(for window: NSWindow?) -> String {
@@ -3497,6 +3659,52 @@ final class CocxyCoreBridge: TerminalEngine {
             ),
             primaryButton: localizer.string("terminal.clipboardRead.allow", fallback: "Allow"),
             secondaryButton: localizer.string("terminal.clipboardRead.deny", fallback: "Deny")
+        )
+    }
+
+    private func requestClipboardWriteAuthorization(for window: NSWindow?) -> Bool {
+        if let handler = clipboardWriteAuthorizationHandler {
+            return handler(window)
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        let copy = Self.localizedClipboardWriteAuthorizationCopy(
+            localizer: AppLocalizer(languagePreference: config?.appLanguage ?? .system)
+        )
+        alert.messageText = copy.messageText
+        alert.informativeText = copy.informativeText
+        alert.addButton(withTitle: copy.primaryButton)
+        alert.addButton(withTitle: copy.secondaryButton)
+
+        if let window {
+            window.makeKeyAndOrderFront(nil)
+        }
+
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    static func localizedClipboardWriteAuthorizationCopy(localizer: AppLocalizer) -> AppAlertCopy {
+        AppAlertCopy(
+            messageText: localizer.string(
+                "terminal.clipboardWrite.title",
+                fallback: "Allow clipboard change?"
+            ),
+            informativeText: localizer.string(
+                "terminal.clipboardWrite.message",
+                fallback: """
+                A terminal program requested permission to replace the system clipboard via OSC 52. \
+                Allow only if you trust the running program and expected this request.
+                """
+            ),
+            primaryButton: localizer.string(
+                "terminal.clipboardWrite.allow",
+                fallback: "Allow Once"
+            ),
+            secondaryButton: localizer.string(
+                "terminal.clipboardWrite.deny",
+                fallback: "Block"
+            )
         )
     }
 
@@ -3632,7 +3840,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         let acceptsOneShotConnection = webState.stopAfterFirstConnection
             && webState.oneShotAcceptedConnectionID == nil
-            && (eventType == 3 || (eventType == 0 && webState.authToken.isEmpty))
+            && eventType == 3
         if acceptsOneShotConnection {
             webState.oneShotAcceptedConnectionID = connectionID
             firstConnectionHandler?()
@@ -3776,8 +3984,8 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func destroyWebServer(_ webState: SurfaceState.WebServerState) {
-        cocxycore_web_detach_terminal(webState.handle)
         cocxycore_web_stop(webState.handle)
+        cocxycore_web_detach_terminal(webState.handle)
         cocxycore_web_destroy(webState.handle)
     }
 

@@ -1,85 +1,106 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// ProxyControlView.swift - UI for SOCKS5/HTTP CONNECT proxy control.
+// ProxyControlView.swift - Authenticated local proxy controls.
 
+import AppKit
 import SwiftUI
-import Combine
 
-// MARK: - Proxy Control View
+enum SensitivePasteboardWriter {
+    static let concealedType = NSPasteboard.PasteboardType("org.nspasteboard.ConcealedType")
+    static let transientType = NSPasteboard.PasteboardType("org.nspasteboard.TransientType")
 
-/// Sub-panel for managing the SOCKS5 and HTTP CONNECT proxy.
-///
-/// Connected to `ProxyManagerImpl` for real SSH dynamic forward operations.
-/// Toggles directly call `enableSOCKS`, `enableHTTPConnect`, and `disable`.
+    @discardableResult
+    static func write(_ value: String, to pasteboard: NSPasteboard) -> Int? {
+        let pasteboardItem = NSPasteboardItem()
+        guard pasteboardItem.setString(value, forType: .string),
+              pasteboardItem.setData(Data(), forType: concealedType),
+              pasteboardItem.setData(Data(), forType: transientType) else {
+            return nil
+        }
+
+        pasteboard.clearContents()
+        guard pasteboard.writeObjects([pasteboardItem]) else { return nil }
+        return pasteboard.changeCount
+    }
+}
+
 struct ProxyControlView: View {
+    private enum CopiedCredential: Equatable {
+        case username
+        case socksPassword
+        case httpConnectPassword
+    }
 
     let profileID: UUID
     @ObservedObject var viewModel: RemoteConnectionViewModel
     @ObservedObject var proxyManager: ProxyManagerImpl
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
-    @State private var socksPort: String = "1080"
-    @State private var httpPort: String = "8888"
-    @State private var systemWideEnabled = false
-    @State private var newExclusion: String = ""
-    @State private var exclusions: [String] = []
+    @State private var socksPort = "1080"
+    @State private var httpPort = "8888"
     @State private var errorMessage: String?
-
-    /// Persisted across enable/disable calls so savedState survives.
-    @State private var systemProxyConfigurator = SystemProxyConfigurator(
-        networkConfigurator: SystemNetworkConfigurator(),
-        pacWriter: DiskPACFileWriter()
-    )
-
-    // MARK: - Body
+    @State private var isUpdating = false
+    @State private var revealsSOCKSPassword = false
+    @State private var revealsHTTPConnectPassword = false
+    @State private var copiedCredential: CopiedCredential?
+    @State private var passwordPasteboardChangeCount: Int?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                connectionGate
+                if viewModel.isConnected(profileID) {
+                    statusSection
+                    Divider()
+                    socksSection
+                    if isOwnedSession {
+                        Divider()
+                        credentialsSection
+                        Divider()
+                        httpConnectSection
+                        Divider()
+                        statsSection
+                    }
+                    Divider()
+                    systemIntegrationSection
+                    if let errorMessage {
+                        Divider()
+                        errorSection(errorMessage)
+                    }
+                } else {
+                    disconnectedState
+                }
             }
             .padding(12)
         }
-    }
-
-    // MARK: - Connection Gate
-
-    /// Shows content only when the profile is connected.
-    @ViewBuilder
-    private var connectionGate: some View {
-        if viewModel.isConnected(profileID) {
-            statusSection
-            Divider()
-            socksSection
-            Divider()
-            httpConnectSection
-            Divider()
-            systemWideSection
-            if isSOCKSActive {
-                Divider()
-                statsSection
-            }
-            Divider()
-            exclusionsSection
-            if let errorMessage {
-                Divider()
-                errorSection(errorMessage)
-            }
-        } else {
-            VStack(spacing: 8) {
-                Spacer()
-                Image(systemName: "network.badge.shield.half.filled")
-                    .font(.system(size: 24))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-                Text(localized("remoteWorkspace.proxy.connectFirst", fallback: "Connect to the profile first to enable proxy"))
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onChange(of: proxyManager.activeSince) { _, _ in
+            resetCredentialPresentation()
+        }
+        .onChange(of: profileID) { _, _ in
+            resetCredentialPresentation()
+        }
+        .onChange(of: activeHTTPPort) { _, _ in
+            resetCredentialPresentation()
+        }
+        .onDisappear {
+            resetCredentialPresentation()
         }
     }
 
-    // MARK: - Status Section
+    private var disconnectedState: some View {
+        VStack(spacing: 8) {
+            Spacer()
+            Image(systemName: "network.badge.shield.half.filled")
+                .font(.system(size: 24))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+            Text(localized(
+                "remoteWorkspace.proxy.connectFirst",
+                fallback: "Connect to the profile first to enable proxy"
+            ))
+            .font(.system(size: 11))
+            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, minHeight: 180)
+    }
 
     private var statusSection: some View {
         HStack(spacing: 8) {
@@ -89,194 +110,359 @@ struct ProxyControlView: View {
             Text(statusText)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
+                .lineLimit(2)
             Spacer()
+            if isUpdating {
+                ProgressView()
+                    .controlSize(.small)
+                    .accessibilityLabel(localized(
+                        "remoteWorkspace.proxy.updating",
+                        fallback: "Updating proxy"
+                    ))
+            }
         }
     }
 
     private var statusColor: Color {
+        guard proxyManager.state.profileID == nil || proxyManager.state.profileID == profileID else {
+            return Color(nsColor: CocxyColors.overlay1)
+        }
         switch proxyManager.state {
         case .off: return Color(nsColor: CocxyColors.overlay1)
-        case .starting: return Color.yellow
-        case .active: return Color.green
-        case .failing: return Color.red
-        case .failover: return Color.orange
+        case .starting: return .yellow
+        case .active: return .green
+        case .failing: return .red
+        case .failover: return .orange
         }
     }
 
     private var statusText: String {
+        guard proxyManager.state.profileID == nil || proxyManager.state.profileID == profileID else {
+            return localized(
+                "remoteWorkspace.proxy.status.otherProfile",
+                fallback: "Proxy session belongs to another profile"
+            )
+        }
         switch proxyManager.state {
-        case .off: return localized("remoteWorkspace.proxy.status.off", fallback: "Proxy Off")
-        case .starting: return localized("remoteWorkspace.proxy.status.starting", fallback: "Starting...")
-        case .active(let socks, let http):
+        case .off:
+            return localized("remoteWorkspace.proxy.status.off", fallback: "Proxy Off")
+        case .starting:
+            return localized("remoteWorkspace.proxy.status.starting", fallback: "Starting...")
+        case .active(_, let socks, let http):
             if let http {
                 return String(
-                    format: localized("remoteWorkspace.proxy.status.active.socksHttp", fallback: "Active - SOCKS5:%d HTTP:%d"),
+                    format: localized(
+                        "remoteWorkspace.proxy.status.active.socksHttp",
+                        fallback: "Active - SOCKS5:%d HTTP:%d"
+                    ),
                     socks,
                     http
                 )
             }
             return String(
-                format: localized("remoteWorkspace.proxy.status.active.socks", fallback: "Active - SOCKS5:%d"),
+                format: localized(
+                    "remoteWorkspace.proxy.status.active.socks",
+                    fallback: "Active - SOCKS5:%d"
+                ),
                 socks
             )
-        case .failing(let reason):
+        case .failing(_, let reason):
             return String(
-                format: localized("remoteWorkspace.proxy.status.failing", fallback: "Failing: %@"),
+                format: localized(
+                    "remoteWorkspace.proxy.status.failing",
+                    fallback: "Failing: %@"
+                ),
                 reason
             )
-        case .failover: return localized("remoteWorkspace.proxy.status.failover", fallback: "Failover in progress...")
+        case .failover:
+            return localized(
+                "remoteWorkspace.proxy.status.failover",
+                fallback: "Failover in progress..."
+            )
         }
     }
-
-    private var isSOCKSActive: Bool {
-        if case .active = proxyManager.state { return true }
-        return false
-    }
-
-    // MARK: - SOCKS Section
 
     private var socksSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(localized("remoteWorkspace.proxy.socksTitle", fallback: "SOCKS5 Proxy"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(nsColor: CocxyColors.text))
+                Label {
+                    Text(localized("remoteWorkspace.proxy.socksTitle", fallback: "SOCKS5 Proxy"))
+                } icon: {
+                    Image(systemName: "shield.lefthalf.filled")
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
                 Spacer()
-                Toggle("", isOn: Binding(
-                    get: { isSOCKSActive },
-                    set: { enabled in
-                        if enabled {
-                            enableSOCKS()
-                        } else {
-                            disableProxy()
+                Toggle(
+                    localized("remoteWorkspace.proxy.socksTitle", fallback: "SOCKS5 Proxy"),
+                    isOn: Binding(
+                        get: { isOwnedSession },
+                        set: { enabled in
+                            enabled ? enableSOCKS() : disableProxy()
                         }
-                    }
-                ))
+                    )
+                )
+                .labelsHidden()
                 .toggleStyle(.switch)
                 .controlSize(.small)
+                .disabled(isUpdating)
+                .accessibilityLabel(localized(
+                    "remoteWorkspace.proxy.socksToggle",
+                    fallback: "Authenticated SOCKS5 proxy"
+                ))
             }
 
-            if isSOCKSActive {
-                HStack(spacing: 4) {
-                    Text(localized("remoteWorkspace.proxy.port", fallback: "Port:"))
-                        .font(.system(size: 10))
-                        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                    Text(socksPort)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(Color(nsColor: CocxyColors.text))
-                }
+            if let activePort = activeSOCKSPort {
+                endpointRow(label: localized("remoteWorkspace.proxy.port", fallback: "Port:"), value: "127.0.0.1:\(activePort)")
             } else {
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     Text(localized("remoteWorkspace.proxy.port", fallback: "Port:"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     TextField("1080", text: $socksPort)
                         .font(.system(size: 10, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
+                        .frame(width: 72)
+                        .accessibilityLabel(localized(
+                            "remoteWorkspace.proxy.socksPort",
+                            fallback: "SOCKS5 port"
+                        ))
                 }
+            }
+
+            if proxyManager.activeProfileID != nil && !isOwnedSession {
+                Text(localized(
+                    "remoteWorkspace.proxy.otherProfileDetail",
+                    fallback: "Enabling here replaces the proxy session on the other profile."
+                ))
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
 
-    // MARK: - HTTP CONNECT Section
-
-    private var httpConnectSection: some View {
-        let httpActive: Bool = {
-            if case .active(_, let http) = proxyManager.state { return http != nil }
-            return false
-        }()
-
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(localized("remoteWorkspace.proxy.httpTitle", fallback: "HTTP CONNECT"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(nsColor: CocxyColors.text))
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { httpActive },
-                    set: { enabled in
-                        if enabled {
-                            enableHTTPConnect()
-                        }
-                        // Disabling HTTP CONNECT requires full proxy disable + re-enable SOCKS.
-                    }
+    private var credentialsSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Label {
+                Text(localized(
+                    "remoteWorkspace.proxy.credentials",
+                    fallback: "Client Credentials"
                 ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .disabled(!isSOCKSActive)
+            } icon: {
+                Image(systemName: "key.horizontal")
+            }
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(Color(nsColor: CocxyColors.text))
+
+            credentialRow(
+                label: localized("remoteWorkspace.proxy.username", fallback: "Username"),
+                value: ProxyCredentials.username,
+                displayValue: ProxyCredentials.username,
+                item: .username,
+                copyLabel: localized(
+                    "remoteWorkspace.proxy.copyUsername",
+                    fallback: "Copy proxy username"
+                )
+            )
+
+            if let credentials = proxyManager.credentials(for: profileID) {
+                passwordCredentialRow(
+                    label: localized(
+                        "remoteWorkspace.proxy.socksPassword",
+                        fallback: "SOCKS Password"
+                    ),
+                    credentials: credentials,
+                    item: .socksPassword,
+                    revealsPassword: $revealsSOCKSPassword,
+                    copyLabel: localized(
+                        "remoteWorkspace.proxy.copySOCKSPassword",
+                        fallback: "Copy SOCKS password"
+                    )
+                )
             }
 
-            if !isSOCKSActive {
-                Text(localized("remoteWorkspace.proxy.enableSocksFirst", fallback: "Enable SOCKS5 first"))
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            } else if !httpActive {
-                HStack(spacing: 4) {
+            if let credentials = proxyManager.httpConnectCredentials(for: profileID) {
+                passwordCredentialRow(
+                    label: localized(
+                        "remoteWorkspace.proxy.httpPassword",
+                        fallback: "HTTP Password"
+                    ),
+                    credentials: credentials,
+                    item: .httpConnectPassword,
+                    revealsPassword: $revealsHTTPConnectPassword,
+                    copyLabel: localized(
+                        "remoteWorkspace.proxy.copyHTTPPassword",
+                        fallback: "Copy HTTP password"
+                    )
+                )
+            }
+        }
+    }
+
+    private func credentialRow(
+        label: String,
+        value: String,
+        displayValue: String,
+        item: CopiedCredential,
+        copyLabel: String
+    ) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                .frame(width: 84, alignment: .leading)
+            Text(displayValue)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+            Spacer()
+            copyButton(value: value, item: item, label: copyLabel)
+        }
+    }
+
+    private func passwordCredentialRow(
+        label: String,
+        credentials: ProxyCredentials,
+        item: CopiedCredential,
+        revealsPassword: Binding<Bool>,
+        copyLabel: String
+    ) -> some View {
+        let visibilityLabel = localized(
+            revealsPassword.wrappedValue
+                ? "remoteWorkspace.proxy.hidePassword"
+                : "remoteWorkspace.proxy.revealPassword",
+            fallback: revealsPassword.wrappedValue
+                ? "Hide password"
+                : "Reveal password"
+        )
+        let passwordVisibilityLabel = "\(visibilityLabel): \(label)"
+
+        return HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                .frame(width: 84, alignment: .leading)
+                .lineLimit(2)
+            Text(
+                revealsPassword.wrappedValue
+                    ? credentials.password
+                    : String(repeating: "*", count: 16)
+            )
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.disabled)
+            Spacer(minLength: 4)
+            Button(action: { revealsPassword.wrappedValue.toggle() }) {
+                Image(systemName: revealsPassword.wrappedValue ? "eye.slash" : "eye")
+                    .frame(width: 16, height: 16)
+            }
+            .buttonStyle(.plain)
+            .help(passwordVisibilityLabel)
+            .accessibilityLabel(passwordVisibilityLabel)
+            copyButton(
+                value: credentials.password,
+                item: item,
+                label: copyLabel
+            )
+        }
+    }
+
+    private func copyButton(
+        value: String,
+        item: CopiedCredential,
+        label: String
+    ) -> some View {
+        Button(action: { copySensitiveText(value, item: item) }) {
+            Image(systemName: copiedCredential == item ? "checkmark" : "doc.on.doc")
+                .frame(width: 16, height: 16)
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private var httpConnectSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label {
+                    Text(localized("remoteWorkspace.proxy.httpTitle", fallback: "HTTP CONNECT"))
+                } icon: {
+                    Image(systemName: "arrow.left.arrow.right")
+                }
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+                Spacer()
+                Toggle(
+                    localized("remoteWorkspace.proxy.httpTitle", fallback: "HTTP CONNECT"),
+                    isOn: Binding(
+                        get: { activeHTTPPort != nil },
+                        set: { enabled in
+                            enabled ? enableHTTPConnect() : disableHTTPConnect()
+                        }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .disabled(isUpdating)
+                .accessibilityLabel(localized(
+                    "remoteWorkspace.proxy.httpToggle",
+                    fallback: "Authenticated HTTP CONNECT proxy"
+                ))
+            }
+
+            if let activePort = activeHTTPPort {
+                endpointRow(label: localized("remoteWorkspace.proxy.port", fallback: "Port:"), value: "127.0.0.1:\(activePort)")
+            } else {
+                HStack(spacing: 6) {
                     Text(localized("remoteWorkspace.proxy.port", fallback: "Port:"))
                         .font(.system(size: 10))
                         .foregroundColor(Color(nsColor: CocxyColors.overlay1))
                     TextField("8888", text: $httpPort)
                         .font(.system(size: 10, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
-                        .frame(width: 60)
+                        .frame(width: 72)
+                        .accessibilityLabel(localized(
+                            "remoteWorkspace.proxy.httpPort",
+                            fallback: "HTTP CONNECT port"
+                        ))
                 }
             }
         }
     }
 
-    // MARK: - System-Wide Section
-
-    private var systemWideSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(localized("remoteWorkspace.proxy.systemWideTitle", fallback: "System-Wide Proxy"))
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(nsColor: CocxyColors.text))
-                Spacer()
-                Toggle("", isOn: Binding(
-                    get: { systemWideEnabled },
-                    set: { enabled in
-                        if enabled {
-                            enableSystemProxy()
-                        } else {
-                            disableSystemProxy()
-                        }
-                    }
-                ))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .disabled(!isSOCKSActive)
-            }
-
-            if isSOCKSActive {
-                Text(
-                    localized(
-                        "remoteWorkspace.proxy.systemWide.detail",
-                        fallback: "Routes all macOS traffic through the SSH tunnel. Requires admin password."
-                    )
-                )
-                    .font(.system(size: 9))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-                    .lineLimit(2)
-            }
+    private func endpointRow(label: String, value: String) -> some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 10))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            Text(value)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
         }
     }
-
-    // MARK: - Stats Section
 
     private var statsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(localized("remoteWorkspace.proxy.stats", fallback: "Stats"))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
-
-            HStack(spacing: 12) {
-                statItem(label: localized("remoteWorkspace.proxy.stats.uptime", fallback: "Uptime"), value: formatUptime(proxyManager.uptimeSeconds))
-                statItem(
-                    label: localized("remoteWorkspace.proxy.stats.httpConnections", fallback: "HTTP Connections"),
-                    value: "\(proxyManager.httpConnectProxy?.activeConnectionCount ?? 0)"
-                )
+            SwiftUI.TimelineView(.periodic(from: Date.now, by: 1.0)) { context in
+                HStack(spacing: 16) {
+                    statItem(
+                        label: localized("remoteWorkspace.proxy.stats.uptime", fallback: "Uptime"),
+                        value: formatUptime(at: context.date)
+                    )
+                    statItem(
+                        label: localized(
+                            "remoteWorkspace.proxy.stats.connections",
+                            fallback: "Connections"
+                        ),
+                        value: "\((proxyManager.socksProxy?.activeConnectionCount ?? 0) + (proxyManager.httpConnectProxy?.activeConnectionCount ?? 0))"
+                    )
+                }
             }
         }
     }
@@ -286,175 +472,163 @@ struct ProxyControlView: View {
             Text(label)
                 .font(.system(size: 9))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-            Text(verbatim: value)
+            Text(value)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
         }
     }
 
-    private func formatUptime(_ seconds: TimeInterval) -> String {
-        guard seconds > 0 else { return "—" }
-        if let since = proxyManager.activeSince {
-            let elapsed = Date().timeIntervalSince(since)
-            let h = Int(elapsed) / 3600
-            let m = (Int(elapsed) % 3600) / 60
-            let s = Int(elapsed) % 60
-            if h > 0 { return "\(h)h \(m)m" }
-            return "\(m)m \(s)s"
-        }
-        return "—"
-    }
-
-    // MARK: - Exclusions Section
-
-    private var exclusionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(localized("remoteWorkspace.proxy.bypassList", fallback: "Bypass List"))
+    private var systemIntegrationSection: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lock.shield")
+                .font(.system(size: 12))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(localized(
+                    "remoteWorkspace.proxy.systemWideTitle",
+                    fallback: "System Proxy"
+                ))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(Color(nsColor: CocxyColors.text))
-
-            ForEach(ProxyExclusionList.defaultExclusions, id: \.self) { pattern in
-                HStack(spacing: 4) {
-                    Image(systemName: "lock")
-                        .font(.system(size: 8))
-                        .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-                    Text(pattern)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                }
+                Text(localized(
+                    "remoteWorkspace.proxy.systemWide.secureUnavailable",
+                    fallback: "Unavailable for authenticated proxy sessions"
+                ))
+                .font(.system(size: 9))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay0))
             }
-
-            ForEach(exclusions, id: \.self) { pattern in
-                HStack(spacing: 4) {
-                    Text(pattern)
-                        .font(.system(size: 10, design: .monospaced))
-                        .foregroundColor(Color(nsColor: CocxyColors.text))
-                    Spacer()
-                    Button(action: { exclusions.removeAll { $0 == pattern } }) {
-                        Image(systemName: "xmark.circle")
-                            .font(.system(size: 10))
-                            .foregroundColor(Color(nsColor: CocxyColors.overlay0))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            HStack(spacing: 4) {
-                TextField("*.example.com", text: $newExclusion)
-                    .font(.system(size: 10, design: .monospaced))
-                    .textFieldStyle(.roundedBorder)
-                Button(action: addExclusion) {
-                    Image(systemName: "plus.circle")
-                        .font(.system(size: 12))
-                }
-                .buttonStyle(.plain)
-                .disabled(newExclusion.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            Spacer()
         }
+        .accessibilityElement(children: .combine)
     }
 
-    // MARK: - Error Section
-
     private func errorSection(_ message: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(alignment: .top, spacing: 6) {
             Image(systemName: "exclamationmark.triangle")
                 .font(.system(size: 10))
                 .foregroundColor(.red)
             Text(message)
                 .font(.system(size: 10))
                 .foregroundColor(.red)
-                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
-    // MARK: - Actions
+    private var isOwnedSession: Bool {
+        proxyManager.activeProfileID == profileID
+    }
+
+    private var activeSOCKSPort: Int? {
+        guard case .active(let owner, let port, _) = proxyManager.state,
+              owner == profileID else { return nil }
+        return port
+    }
+
+    private var activeHTTPPort: Int? {
+        guard case .active(let owner, _, let port) = proxyManager.state,
+              owner == profileID else { return nil }
+        return port
+    }
 
     private func enableSOCKS() {
-        guard let port = Int(socksPort), (1...65535).contains(port) else {
-            errorMessage = localized("remoteWorkspace.proxy.error.invalidPort", fallback: "Invalid port number")
+        guard let port = Int(socksPort), (1...65_535).contains(port) else {
+            errorMessage = localized(
+                "remoteWorkspace.proxy.error.invalidPort",
+                fallback: "Invalid port number"
+            )
             return
         }
-        errorMessage = nil
-        Task {
-            do {
-                try await proxyManager.enableSOCKS(port: port, profileID: profileID)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
+        runProxyAction {
+            try await proxyManager.enableSOCKS(port: port, profileID: profileID)
         }
     }
 
     private func enableHTTPConnect() {
-        guard let port = Int(httpPort), (1...65535).contains(port) else {
-            errorMessage = localized("remoteWorkspace.proxy.error.invalidHTTPPort", fallback: "Invalid HTTP port number")
+        guard let port = Int(httpPort), (1...65_535).contains(port) else {
+            errorMessage = localized(
+                "remoteWorkspace.proxy.error.invalidHTTPPort",
+                fallback: "Invalid HTTP port number"
+            )
             return
         }
+        runProxyAction {
+            try await proxyManager.enableHTTPConnect(port: port, profileID: profileID)
+        }
+    }
+
+    private func disableHTTPConnect() {
+        runProxyAction {
+            await proxyManager.disableHTTPConnect(profileID: profileID)
+        }
+    }
+
+    private func disableProxy() {
+        runProxyAction {
+            await proxyManager.disable(profileID: profileID)
+        }
+    }
+
+    private func runProxyAction(
+        _ action: @escaping @MainActor () async throws -> Void
+    ) {
+        guard !isUpdating else { return }
         errorMessage = nil
-        Task {
+        isUpdating = true
+        Task { @MainActor in
+            defer { isUpdating = false }
             do {
-                try await proxyManager.enableHTTPConnect(port: port, profileID: profileID)
+                try await action()
             } catch {
                 errorMessage = error.localizedDescription
             }
         }
     }
 
-    private func disableProxy() {
-        errorMessage = nil
-        Task {
-            await proxyManager.disable(profileID: profileID)
+    private func copySensitiveText(_ value: String, item: CopiedCredential) {
+        let pasteboard = NSPasteboard.general
+        guard let changeCount = SensitivePasteboardWriter.write(value, to: pasteboard) else {
+            errorMessage = localized(
+                "remoteWorkspace.proxy.error.copyFailed",
+                fallback: "Could not copy the credential"
+            )
+            return
         }
-    }
+        passwordPasteboardChangeCount = item == .username ? nil : changeCount
+        copiedCredential = item
 
-    private func enableSystemProxy() {
-        errorMessage = nil
-        Task {
-            do {
-                let interface = try SystemNetworkConfigurator().detectActiveInterface()
-                let socksPortInt = Int(socksPort) ?? 1080
-                let httpActive: Bool = {
-                    if case .active(_, let http) = proxyManager.state { return http != nil }
-                    return false
-                }()
-                let httpPortInt = httpActive ? Int(httpPort) : nil
-                try systemProxyConfigurator.activateProxy(
-                    interface: interface,
-                    socksPort: socksPortInt,
-                    httpPort: httpPortInt,
-                    exclusions: ProxyExclusionList(custom: exclusions)
-                )
-                systemWideEnabled = true
-            } catch {
-                errorMessage = String(
-                    format: localized("remoteWorkspace.proxy.error.systemProxy", fallback: "System proxy: %@"),
-                    error.localizedDescription
-                )
-                systemWideEnabled = false
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            if copiedCredential == item { copiedCredential = nil }
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)
+            guard pasteboard.changeCount == changeCount else { return }
+            pasteboard.clearContents()
+            if passwordPasteboardChangeCount == changeCount {
+                passwordPasteboardChangeCount = nil
             }
         }
     }
 
-    private func disableSystemProxy() {
-        errorMessage = nil
-        Task {
-            do {
-                let interface = try SystemNetworkConfigurator().detectActiveInterface()
-                try systemProxyConfigurator.deactivateProxy(interface: interface)
-            } catch {
-                errorMessage = String(
-                    format: localized("remoteWorkspace.proxy.error.systemProxyRestore", fallback: "System proxy restore: %@"),
-                    error.localizedDescription
-                )
-            }
-            systemWideEnabled = false
+    private func resetCredentialPresentation() {
+        revealsSOCKSPassword = false
+        revealsHTTPConnectPassword = false
+        copiedCredential = nil
+        guard let changeCount = passwordPasteboardChangeCount else { return }
+        let pasteboard = NSPasteboard.general
+        if pasteboard.changeCount == changeCount {
+            pasteboard.clearContents()
         }
+        passwordPasteboardChangeCount = nil
     }
 
-    private func addExclusion() {
-        let trimmed = newExclusion.trimmingCharacters(in: .whitespaces)
-        guard !trimmed.isEmpty, !exclusions.contains(trimmed) else { return }
-        exclusions.append(trimmed)
-        newExclusion = ""
+    private func formatUptime(at date: Date) -> String {
+        guard let activeSince = proxyManager.activeSince else { return "-" }
+        let elapsed = max(0, Int(date.timeIntervalSince(activeSince)))
+        let hours = elapsed / 3_600
+        let minutes = (elapsed % 3_600) / 60
+        let seconds = elapsed % 60
+        return hours > 0 ? "\(hours)h \(minutes)m" : "\(minutes)m \(seconds)s"
     }
 
     private func localized(_ key: String, fallback: String) -> String {

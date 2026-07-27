@@ -167,23 +167,46 @@ struct AgentLoop {
         let activeThreadID = Self.normalizedThreadID(threadID)
             ?? Self.threadID(forToolCallID: approvedRequest.call.id, in: messages)
         let toolResult = try await toolExecutor.execute(approvedRequest.call)
-        try append(
-            AgentMessage(
-                id: idGenerator.nextMessageID(role: .tool),
-                role: .tool,
-                content: try Self.encodedToolResult(toolResult),
-                toolName: toolResult.toolID,
-                toolCallID: toolResult.callID,
-                threadID: activeThreadID,
-                parentMessageID: Self.assistantMessageID(
-                    forToolCallID: approvedRequest.call.id,
-                    in: messages,
-                    threadID: activeThreadID
-                ) ?? Self.lastMessageID(in: messages, threadID: activeThreadID)
-            ),
-            conversationID: conversationID,
-            messages: &messages
+        let encodedToolResult = try Self.encodedToolResult(toolResult)
+        let sensitiveConsent: AgentSensitiveDataConsent?
+        if toolResult.toolID == AgentSensitiveDataPolicy.terminalOutputToolID {
+            guard let binding = approvedRequest.sensitiveReadBinding,
+                  let consent = binding.consent(
+                      for: toolResult,
+                      encodedToolResult: encodedToolResult
+                  ) else {
+                throw AgentToolApprovalError.staleContext
+            }
+            sensitiveConsent = consent
+        } else {
+            guard approvedRequest.sensitiveReadBinding == nil else {
+                throw AgentToolApprovalError.staleContext
+            }
+            sensitiveConsent = nil
+        }
+        let toolMessage = AgentMessage(
+            id: idGenerator.nextMessageID(role: .tool),
+            role: .tool,
+            content: encodedToolResult,
+            toolName: toolResult.toolID,
+            toolCallID: toolResult.callID,
+            threadID: activeThreadID,
+            parentMessageID: Self.assistantMessageID(
+                forToolCallID: approvedRequest.call.id,
+                in: messages,
+                threadID: activeThreadID
+            ) ?? Self.lastMessageID(in: messages, threadID: activeThreadID),
+            sensitiveDataConsent: sensitiveConsent
         )
+        if sensitiveConsent == nil {
+            try append(
+                toolMessage,
+                conversationID: conversationID,
+                messages: &messages
+            )
+        } else {
+            messages.append(toolMessage)
+        }
 
         return try await continueRun(
             conversationID: conversationID,
@@ -207,6 +230,10 @@ struct AgentLoop {
 
         for _ in 0..<configuration.maxIterations {
             let response = try await provider.nextResponse(for: messages)
+            try replaceConsumedSensitiveMessages(
+                conversationID: conversationID,
+                messages: &messages
+            )
             if let usage = response.usage {
                 await usageRecorder?(usage)
             }
@@ -273,17 +300,37 @@ struct AgentLoop {
         for call: AgentToolCall,
         reason: AgentToolPromptReason
     ) async -> AgentToolApprovalRequest? {
-        let preview: AgentToolApprovalPreview
+        let previewContext: AgentToolApprovalPreviewContext
         if let toolPreviewer {
             do {
-                preview = try await toolPreviewer.preview(for: call)
+                previewContext = try await toolPreviewer.approvalPreview(for: call)
             } catch {
                 return nil
             }
         } else {
-            preview = defaultPreview(for: call, reason: reason)
+            previewContext = AgentToolApprovalPreviewContext(
+                preview: defaultPreview(for: call, reason: reason)
+            )
         }
-        return AgentToolApprovalRequest(call: call, reason: reason, preview: preview)
+
+        if AgentToolApprovalBinding.targetKind(for: call) != nil,
+           previewContext.binding == nil {
+            return nil
+        }
+        switch reason {
+        case .sensitiveDataAccessRequired:
+            guard previewContext.sensitiveReadBinding != nil else { return nil }
+        default:
+            guard previewContext.sensitiveReadBinding == nil else { return nil }
+        }
+
+        return AgentToolApprovalRequest(
+            call: call,
+            reason: reason,
+            preview: previewContext.preview,
+            binding: previewContext.binding,
+            sensitiveReadBinding: previewContext.sensitiveReadBinding
+        )
     }
 
     private func defaultPreview(
@@ -309,6 +356,12 @@ struct AgentLoop {
                 title: "Approve external tool",
                 body: "Allow \(toolID) to call a configured local MCP server."
             )
+        case .sensitiveDataAccessRequired(let toolID):
+            return AgentToolApprovalPreview(
+                kind: .sensitiveData,
+                title: "Share sensitive data",
+                body: "Review the destination and bounded context for \(toolID)."
+            )
         case .diffPreviewRequired(let toolID):
             return AgentToolApprovalPreview(
                 kind: .diff,
@@ -331,6 +384,17 @@ struct AgentLoop {
     ) throws {
         messages.append(message)
         try conversationStore?.append(message, conversationID: conversationID)
+    }
+
+    private func replaceConsumedSensitiveMessages(
+        conversationID: String,
+        messages: inout [AgentMessage]
+    ) throws {
+        for index in messages.indices where messages[index].sensitiveDataConsent != nil {
+            let omitted = try AgentSensitiveDataPolicy.omittedTerminalOutputMessage(from: messages[index])
+            messages[index] = omitted
+            try conversationStore?.append(omitted, conversationID: conversationID)
+        }
     }
 
     private static func encodedToolResult(_ result: AgentToolResult) throws -> String {

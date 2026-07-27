@@ -2257,12 +2257,24 @@ struct ICloudSyncPreferencesSection: View {
                     viewModel.localizedString("preferences.iCloud.enable", fallback: "Enable iCloud Drive sync"),
                     isOn: $viewModel.iCloudSyncEnabled
                 )
+                .disabled(viewModel.iCloudSyncIsBusy)
                 .help(
                     viewModel.localizedString(
                         "preferences.iCloud.enable.help",
                         fallback: "Exports selected local Cocxy artifacts to the user's iCloud Drive."
                     )
                 )
+
+                if let operation = viewModel.iCloudSyncOperation {
+                    HStack(spacing: 8) {
+                        ProgressView()
+                            .controlSize(.small)
+                        Text(iCloudSyncOperationTitle(operation))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityElement(children: .combine)
+                }
             }
 
             Section(viewModel.localizedString("preferences.iCloud.encryption.section", fallback: "Encryption")) {
@@ -2286,33 +2298,40 @@ struct ICloudSyncPreferencesSection: View {
                     text: $viewModel.iCloudSyncMasterPasswordDraft
                 )
                     .textFieldStyle(.roundedBorder)
+                    .disabled(viewModel.iCloudSyncIsBusy)
 
                 HStack {
-                    Button(
-                        viewModel.localizedString(
-                            "preferences.iCloud.masterPassword.save",
-                            fallback: "Save Master Password"
-                        )
-                    ) {
+                    Button {
                         saveICloudSyncMasterPassword()
-                    }
-                    .disabled(trimmedICloudSyncMasterPasswordDraft.isEmpty)
-
-                    Button(
-                        viewModel.localizedString(
-                            "preferences.iCloud.masterPassword.delete",
-                            fallback: "Delete Saved Password"
+                    } label: {
+                        Label(
+                            viewModel.localizedString(
+                                "preferences.iCloud.masterPassword.save",
+                                fallback: "Save Master Password"
+                            ),
+                            systemImage: "key.fill"
                         )
-                    ) {
-                        deleteICloudSyncMasterPassword()
                     }
-                    .disabled(!viewModel.hasSavedICloudSyncMasterPassword())
+                    .disabled(trimmedICloudSyncMasterPasswordDraft.isEmpty || viewModel.iCloudSyncIsBusy)
+
+                    Button(role: .destructive) {
+                        deleteICloudSyncMasterPassword()
+                    } label: {
+                        Label(
+                            viewModel.localizedString(
+                                "preferences.iCloud.masterPassword.delete",
+                                fallback: "Delete Saved Password"
+                            ),
+                            systemImage: "trash"
+                        )
+                    }
+                    .disabled(!viewModel.iCloudSyncHasSavedMasterPassword || viewModel.iCloudSyncIsBusy)
 
                     Spacer()
                 }
 
                 Text(
-                    viewModel.hasSavedICloudSyncMasterPassword()
+                    viewModel.iCloudSyncHasSavedMasterPassword
                         ? viewModel.localizedString(
                             "preferences.iCloud.masterPassword.saved",
                             fallback: "A master password is saved in the macOS Keychain."
@@ -2339,7 +2358,7 @@ struct ICloudSyncPreferencesSection: View {
                     text: $viewModel.iCloudSyncDirectoryName
                 )
                     .textFieldStyle(.roundedBorder)
-                    .disabled(!viewModel.iCloudSyncEnabled)
+                    .disabled(!viewModel.iCloudSyncEnabled || viewModel.iCloudSyncIsBusy)
                 LabeledContent(
                     viewModel.localizedString("preferences.iCloud.conflictPolicy", fallback: "Conflict policy"),
                     value: viewModel.localizedString("preferences.iCloud.conflictPolicy.manual", fallback: "manual")
@@ -2355,15 +2374,27 @@ struct ICloudSyncPreferencesSection: View {
                             set: { viewModel.setICloudSyncArtifactKind(kind, enabled: $0) }
                         )
                     )
-                    .disabled(!viewModel.iCloudSyncEnabled)
+                    .disabled(!viewModel.iCloudSyncEnabled || viewModel.iCloudSyncIsBusy)
                 }
             }
 
             Section(viewModel.localizedString("preferences.iCloud.manualExport.section", fallback: "Manual Export")) {
-                Button(viewModel.localizedString("preferences.iCloud.export", fallback: "Export Encrypted Artifacts")) {
+                Button {
                     exportICloudSyncArtifacts()
+                } label: {
+                    Label(
+                        viewModel.localizedString(
+                            "preferences.iCloud.export",
+                            fallback: "Export Encrypted Artifacts"
+                        ),
+                        systemImage: "icloud.and.arrow.up"
+                    )
                 }
-                .disabled(!viewModel.iCloudSyncEnabled || !viewModel.hasSavedICloudSyncMasterPassword())
+                .disabled(
+                    !viewModel.iCloudSyncEnabled
+                        || !viewModel.iCloudSyncHasSavedMasterPassword
+                        || viewModel.iCloudSyncIsBusy
+                )
 
                 if let status = viewModel.iCloudSyncExportStatus {
                     Text(status)
@@ -2374,10 +2405,22 @@ struct ICloudSyncPreferencesSection: View {
             }
 
             Section(viewModel.localizedString("preferences.iCloud.manualImport.section", fallback: "Manual Import")) {
-                Button(viewModel.localizedString("preferences.iCloud.import", fallback: "Import Remote Artifacts")) {
+                Button {
                     importICloudSyncArtifacts()
+                } label: {
+                    Label(
+                        viewModel.localizedString(
+                            "preferences.iCloud.import",
+                            fallback: "Import Remote Artifacts"
+                        ),
+                        systemImage: "icloud.and.arrow.down"
+                    )
                 }
-                .disabled(!viewModel.iCloudSyncEnabled || !viewModel.hasSavedICloudSyncMasterPassword())
+                .disabled(
+                    !viewModel.iCloudSyncEnabled
+                        || !viewModel.iCloudSyncHasSavedMasterPassword
+                        || viewModel.iCloudSyncIsBusy
+                )
 
                 if let status = viewModel.iCloudSyncImportStatus {
                     Text(status)
@@ -2401,24 +2444,34 @@ struct ICloudSyncPreferencesSection: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             HStack {
-                                Button(
-                                    viewModel.localizedString(
-                                        "preferences.iCloud.conflict.keepLocal",
-                                        fallback: "Keep Local"
-                                    )
-                                ) {
+                                Button {
                                     resolveICloudSyncConflict(conflict, resolution: .keepLocal)
-                                }
-
-                                Button(
-                                    viewModel.localizedString(
-                                        "preferences.iCloud.conflict.useRemote",
-                                        fallback: "Use Remote"
+                                } label: {
+                                    Label(
+                                        viewModel.localizedString(
+                                            "preferences.iCloud.conflict.keepLocal",
+                                            fallback: "Keep Local"
+                                        ),
+                                        systemImage: "internaldrive"
                                     )
-                                ) {
-                                    resolveICloudSyncConflict(conflict, resolution: .useRemote)
                                 }
-                                .disabled(!viewModel.hasSavedICloudSyncMasterPassword())
+                                .disabled(viewModel.iCloudSyncIsBusy)
+
+                                Button {
+                                    resolveICloudSyncConflict(conflict, resolution: .useRemote)
+                                } label: {
+                                    Label(
+                                        viewModel.localizedString(
+                                            "preferences.iCloud.conflict.useRemote",
+                                            fallback: "Use Remote"
+                                        ),
+                                        systemImage: "icloud.and.arrow.down"
+                                    )
+                                }
+                                .disabled(
+                                    !viewModel.iCloudSyncHasSavedMasterPassword
+                                        || viewModel.iCloudSyncIsBusy
+                                )
                             }
                         }
                     }
@@ -2429,6 +2482,9 @@ struct ICloudSyncPreferencesSection: View {
         }
         .formStyle(.grouped)
         .navigationTitle(viewModel.localizedString("preferences.section.iCloudSync", fallback: "iCloud Sync"))
+        .task {
+            await viewModel.refreshICloudSyncMasterPasswordAvailability()
+        }
     }
 
     private func iCloudSyncArtifactTitle(_ kind: ICloudSyncArtifactKind) -> String {
@@ -2450,59 +2506,110 @@ struct ICloudSyncPreferencesSection: View {
         viewModel.iCloudSyncMasterPasswordDraft.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func saveICloudSyncMasterPassword() {
-        do {
-            try viewModel.saveICloudSyncMasterPasswordDraft()
-        } catch {
-            viewModel.iCloudSyncMasterPasswordStatus = String(
-                format: viewModel.localizedString(
-                    "preferences.iCloud.masterPassword.save.failed",
-                    fallback: "Failed to save master password: %@"
-                ),
-                error.localizedDescription
+    private func iCloudSyncOperationTitle(_ operation: ICloudSyncOperation) -> String {
+        switch operation {
+        case .checkingMasterPassword:
+            return viewModel.localizedString(
+                "preferences.iCloud.progress.checkingPassword",
+                fallback: "Checking Keychain..."
             )
+        case .savingMasterPassword:
+            return viewModel.localizedString(
+                "preferences.iCloud.progress.savingPassword",
+                fallback: "Saving master password..."
+            )
+        case .deletingMasterPassword:
+            return viewModel.localizedString(
+                "preferences.iCloud.progress.deletingPassword",
+                fallback: "Deleting master password..."
+            )
+        case .exporting:
+            return viewModel.localizedString(
+                "preferences.iCloud.progress.exporting",
+                fallback: "Exporting encrypted artifacts..."
+            )
+        case .importing:
+            return viewModel.localizedString(
+                "preferences.iCloud.progress.importing",
+                fallback: "Importing encrypted artifacts..."
+            )
+        case .resolvingConflict:
+            return viewModel.localizedString(
+                "preferences.iCloud.progress.resolvingConflict",
+                fallback: "Resolving conflict..."
+            )
+        }
+    }
+
+    private func saveICloudSyncMasterPassword() {
+        Task { @MainActor in
+            do {
+                try await viewModel.saveICloudSyncMasterPasswordDraft()
+            } catch is CancellationError {
+                return
+            } catch {
+                viewModel.iCloudSyncMasterPasswordStatus = String(
+                    format: viewModel.localizedString(
+                        "preferences.iCloud.masterPassword.save.failed",
+                        fallback: "Failed to save master password: %@"
+                    ),
+                    error.localizedDescription
+                )
+            }
         }
     }
 
     private func deleteICloudSyncMasterPassword() {
-        do {
-            try viewModel.deleteICloudSyncMasterPassword()
-        } catch {
-            viewModel.iCloudSyncMasterPasswordStatus = String(
-                format: viewModel.localizedString(
-                    "preferences.iCloud.masterPassword.delete.failed",
-                    fallback: "Failed to delete master password: %@"
-                ),
-                error.localizedDescription
-            )
+        Task { @MainActor in
+            do {
+                try await viewModel.deleteICloudSyncMasterPassword()
+            } catch is CancellationError {
+                return
+            } catch {
+                viewModel.iCloudSyncMasterPasswordStatus = String(
+                    format: viewModel.localizedString(
+                        "preferences.iCloud.masterPassword.delete.failed",
+                        fallback: "Failed to delete master password: %@"
+                    ),
+                    error.localizedDescription
+                )
+            }
         }
     }
 
     private func exportICloudSyncArtifacts() {
-        do {
-            _ = try viewModel.exportICloudSyncArtifactsNow()
-        } catch {
-            viewModel.iCloudSyncExportStatus = String(
-                format: viewModel.localizedString(
-                    "preferences.iCloud.export.failed",
-                    fallback: "Failed to export encrypted artifacts: %@"
-                ),
-                error.localizedDescription
-            )
+        Task { @MainActor in
+            do {
+                _ = try await viewModel.exportICloudSyncArtifactsNow()
+            } catch is CancellationError {
+                return
+            } catch {
+                viewModel.iCloudSyncExportStatus = String(
+                    format: viewModel.localizedString(
+                        "preferences.iCloud.export.failed",
+                        fallback: "Failed to export encrypted artifacts: %@"
+                    ),
+                    error.localizedDescription
+                )
+            }
         }
     }
 
     private func importICloudSyncArtifacts() {
-        do {
-            _ = try viewModel.importICloudSyncArtifactsNow()
-        } catch {
-            viewModel.iCloudSyncImportStatus = String(
-                format: viewModel.localizedString(
-                    "preferences.iCloud.import.failed",
-                    fallback: "Failed to import encrypted artifacts: %@"
-                ),
-                error.localizedDescription
-            )
+        Task { @MainActor in
+            do {
+                _ = try await viewModel.importICloudSyncArtifactsNow()
+            } catch is CancellationError {
+                return
+            } catch {
+                viewModel.iCloudSyncImportStatus = String(
+                    format: viewModel.localizedString(
+                        "preferences.iCloud.import.failed",
+                        fallback: "Failed to import encrypted artifacts: %@"
+                    ),
+                    error.localizedDescription
+                )
+            }
         }
     }
 
@@ -2510,16 +2617,23 @@ struct ICloudSyncPreferencesSection: View {
         _ conflict: ICloudSyncImportConflict,
         resolution: ICloudSyncConflictResolution
     ) {
-        do {
-            _ = try viewModel.resolveICloudSyncConflict(conflict, resolution: resolution)
-        } catch {
-            viewModel.iCloudSyncImportStatus = String(
-                format: viewModel.localizedString(
-                    "preferences.iCloud.conflict.resolve.failed",
-                    fallback: "Failed to resolve conflict: %@"
-                ),
-                error.localizedDescription
-            )
+        Task { @MainActor in
+            do {
+                _ = try await viewModel.resolveICloudSyncConflict(
+                    conflict,
+                    resolution: resolution
+                )
+            } catch is CancellationError {
+                return
+            } catch {
+                viewModel.iCloudSyncImportStatus = String(
+                    format: viewModel.localizedString(
+                        "preferences.iCloud.conflict.resolve.failed",
+                        fallback: "Failed to resolve conflict: %@"
+                    ),
+                    error.localizedDescription
+                )
+            }
         }
     }
 }

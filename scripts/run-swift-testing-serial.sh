@@ -7,10 +7,18 @@ set -euo pipefail
 # while preventing AppKit/Dispatch-heavy suites from over-parallelizing.
 
 common_args=(
+  --disable-automatic-resolution
   --disable-xctest
   --skip PerformanceTests
   --skip CocxyCorePerformanceBenchmarks
 )
+
+# Tests that park a thread on a synchronous bridge starve the cooperative pool
+# when the runner has few cores: the tasks meant to unblock them never get a
+# thread, and the suite stalls instead of failing. Each suite already gets its
+# own process here, so running its tests one at a time costs little and removes
+# that whole failure mode.
+run_args=(--no-parallel)
 
 coverage_enabled=false
 list_extra_args=()
@@ -52,13 +60,47 @@ fi
 
 echo "Discovered ${#suites[@]} Swift Testing suite(s)."
 
+# A suite that never returns used to consume the whole job budget in silence,
+# leaving no record of which one stalled. Bound each suite instead: the run
+# fails with the suite named, in minutes rather than at the job timeout.
+suite_timeout_seconds="${SWIFT_TESTING_SUITE_TIMEOUT_SECONDS:-600}"
+if ! [[ "$suite_timeout_seconds" =~ ^[0-9]+$ ]]; then
+  echo "error: SWIFT_TESTING_SUITE_TIMEOUT_SECONDS must be a positive integer" >&2
+  exit 1
+fi
+
+run_bounded() {
+  local suite="$1"
+  shift
+  "$@" &
+  local pid=$!
+  local waited=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if (( waited >= suite_timeout_seconds )); then
+      echo "error: Swift Testing suite '${suite}' exceeded ${suite_timeout_seconds}s and was terminated." >&2
+      kill -TERM "$pid" 2>/dev/null || true
+      local drained=0
+      while kill -0 "$pid" 2>/dev/null && (( drained < 10 )); do
+        sleep 1
+        drained=$((drained + 1))
+      done
+      kill -KILL "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+      return 124
+    fi
+    sleep 1
+    waited=$((waited + 1))
+  done
+  wait "$pid"
+}
+
 build_dir=""
 coverage_dir=""
 profile_dir=""
 merged_profile=""
 coverage_json=""
 if [[ "$coverage_enabled" == true ]]; then
-  build_dir="$(swift build --show-bin-path)"
+  build_dir="$(swift build --disable-automatic-resolution --show-bin-path)"
   coverage_dir="$build_dir/codecov"
   profile_dir="$build_dir/swift-testing-serial-profraw"
   merged_profile="$coverage_dir/swift-testing-serial.profdata"
@@ -73,7 +115,7 @@ for suite in "${suites[@]}"; do
   echo "::group::Swift Testing suite ${index}/${#suites[@]}: ${suite}"
   if [[ "$coverage_enabled" == true ]]; then
     find "$coverage_dir" -maxdepth 1 -name "*.profraw" -delete 2>/dev/null || true
-    swift test "${common_args[@]}" "$@" --filter "$suite"
+    run_bounded "$suite" swift test "${common_args[@]}" "${run_args[@]}" "$@" --filter "$suite"
     safe_suite="$(printf "%s" "$suite" | tr -c "A-Za-z0-9_.-" "_")"
     shopt -s nullglob
     suite_profiles=("$coverage_dir"/*.profraw)
@@ -86,7 +128,7 @@ for suite in "${suites[@]}"; do
       cp "$profile" "$profile_dir/${index}-${safe_suite}-$(basename "$profile")"
     done
   else
-    swift test --skip-build "${common_args[@]}" "$@" --filter "$suite"
+    run_bounded "$suite" swift test --skip-build "${common_args[@]}" "${run_args[@]}" "$@" --filter "$suite"
   fi
   echo "::endgroup::"
 done

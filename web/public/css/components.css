@@ -167,6 +167,10 @@
   background: color-mix(in srgb, var(--color-panel) 85%, var(--color-accent));
 }
 
+.button:active {
+  transform: scale(0.97);
+}
+
 .section {
   padding-block: var(--space-16);
 }

@@ -64,6 +64,7 @@ final class SocketProtocolTests: XCTestCase {
         XCTAssertEqual(decoded.id, "raw-1")
         XCTAssertEqual(decoded.command, "new-tab")
         XCTAssertEqual(decoded.params?["dir"], "/tmp")
+        XCTAssertNil(decoded.authenticationToken)
     }
 
     // MARK: - 2. SocketResponse Codable round-trip
@@ -86,7 +87,8 @@ final class SocketProtocolTests: XCTestCase {
     func testSocketResponseFailureCodableRoundTrip() throws {
         let response = SocketResponse.failure(
             id: "resp-2",
-            error: "Unknown command: foo"
+            error: "Unknown command: foo",
+            data: ["status": "failed", "run_id": "run-123"]
         )
 
         let encoded = try JSONEncoder().encode(response)
@@ -94,7 +96,8 @@ final class SocketProtocolTests: XCTestCase {
 
         XCTAssertEqual(decoded.id, "resp-2")
         XCTAssertFalse(decoded.success)
-        XCTAssertNil(decoded.data)
+        XCTAssertEqual(decoded.data?["status"], "failed")
+        XCTAssertEqual(decoded.data?["run_id"], "run-123")
         XCTAssertEqual(decoded.error, "Unknown command: foo")
     }
 

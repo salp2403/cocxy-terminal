@@ -2,6 +2,7 @@
 // SocketServerTests.swift - Tests for the Unix Domain Socket server.
 
 import XCTest
+import CocxyShared
 @testable import CocxyTerminal
 
 // MARK: - Mock Command Handler
@@ -236,7 +237,15 @@ enum SocketTestClient {
             do {
                 let fd = try connect(to: socketPath)
                 defer { Darwin.close(fd) }
-                let response = try sendRequest(request, on: fd)
+                let token = try SocketAuthenticationCredential.read(
+                    from: SocketAuthenticationCredential.path(
+                        forSocketPath: socketPath
+                    )
+                )
+                let response = try sendRequest(
+                    request.authenticated(with: token),
+                    on: fd
+                )
                 completion(.success(response))
             } catch {
                 completion(.failure(error))
@@ -303,6 +312,7 @@ final class SocketServerTests: XCTestCase {
 
     private var testSocketPath: String!
     private var testSocketDirectory: String!
+    private var authenticationStore: TestSocketAuthenticationStore!
 
     override func setUp() {
         super.setUp()
@@ -310,6 +320,7 @@ final class SocketServerTests: XCTestCase {
         testSocketDirectory = NSTemporaryDirectory()
             .appending("cocxy-test-\(uniqueID)")
         testSocketPath = testSocketDirectory.appending("/test.sock")
+        authenticationStore = TestSocketAuthenticationStore()
     }
 
     override func tearDown() {
@@ -317,6 +328,7 @@ final class SocketServerTests: XCTestCase {
         try? FileManager.default.removeItem(atPath: testSocketDirectory)
         testSocketPath = nil
         testSocketDirectory = nil
+        authenticationStore = nil
         super.tearDown()
     }
 
@@ -329,7 +341,8 @@ final class SocketServerTests: XCTestCase {
     ) throws -> (SocketServerImpl, MockSocketCommandHandler) {
         let server = SocketServerImpl(
             socketPath: testSocketPath,
-            commandHandler: handler
+            commandHandler: handler,
+            authenticationStore: authenticationStore
         )
         try server.start()
         try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
@@ -363,6 +376,29 @@ final class SocketServerTests: XCTestCase {
         }
     }
 
+    /// Performs a transport round-trip without adding the credential. Used
+    /// only by negative authentication tests.
+    private func performRawRoundTrip(
+        request: SocketRequest
+    ) throws -> SocketResponse {
+        let expectation = expectation(description: "Raw round-trip for \(request.id)")
+        var result: Result<SocketResponse, Error>!
+
+        DispatchQueue.global(qos: .userInitiated).async { [testSocketPath] in
+            do {
+                let fd = try SocketTestClient.connect(to: testSocketPath!)
+                defer { Darwin.close(fd) }
+                result = .success(try SocketTestClient.sendRequest(request, on: fd))
+            } catch {
+                result = .failure(error)
+            }
+            expectation.fulfill()
+        }
+
+        wait(for: [expectation], timeout: 5.0)
+        return try result.get()
+    }
+
     // MARK: - 1. Socket file creation with 0600 permissions
 
     @MainActor
@@ -376,6 +412,284 @@ final class SocketServerTests: XCTestCase {
         XCTAssertEqual(
             permBits, 0o600,
             "Socket permissions should be 0600 (owner-only), got \(String(permBits, radix: 8))"
+        )
+    }
+
+    @MainActor
+    func testSocketPermissionTamperingRestartsWithProtectedMetadata() throws {
+        let (server, _) = try startServer()
+        defer { server.stop() }
+        let oldToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
+
+        XCTAssertEqual(Darwin.chmod(testSocketPath, 0o666), 0)
+        XCTAssertFalse(server.isHealthy)
+
+        server.restartIfNeeded()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+
+        let attributes = try FileManager.default.attributesOfItem(
+            atPath: testSocketPath
+        )
+        let permissions = (attributes[.posixPermissions] as? Int) ?? 0
+        let newToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
+        XCTAssertEqual(permissions & 0o777, 0o600)
+        XCTAssertNotEqual(newToken, oldToken)
+        XCTAssertTrue(server.isHealthy)
+    }
+
+    @MainActor
+    func testStartCreatesProtectedRotatingAuthenticationCredential() throws {
+        let (server, _) = try startServer()
+        defer { server.stop() }
+
+        let token = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
+        let attributes = try FileManager.default.attributesOfItem(
+            atPath: server.authenticationTokenPath
+        )
+        let permissions = (attributes[.posixPermissions] as? Int) ?? 0
+
+        XCTAssertTrue(SocketAuthenticationCredential.isValidToken(token))
+        XCTAssertEqual(permissions & 0o777, 0o600)
+        XCTAssertEqual(authenticationStore.token(for: testSocketPath), token)
+        XCTAssertTrue(server.isHealthy)
+    }
+
+    @MainActor
+    func testMissingAuthenticationTokenIsRejectedBeforeDispatch() throws {
+        let handler = MockSocketCommandHandler()
+        let (server, _) = try startServer(handler: handler)
+        defer { server.stop() }
+
+        let response = try performRawRoundTrip(
+            request: SocketRequest(id: "auth-missing", command: "status", params: nil)
+        )
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Socket authentication failed")
+        XCTAssertTrue(handler.receivedRequests.isEmpty)
+    }
+
+    @MainActor
+    func testIncorrectAuthenticationTokenIsRejectedBeforeDispatch() throws {
+        let handler = MockSocketCommandHandler()
+        let (server, _) = try startServer(handler: handler)
+        defer { server.stop() }
+        let incorrectToken = String(
+            repeating: "0",
+            count: SocketAuthenticationCredential.encodedTokenLength
+        )
+
+        let response = try performRawRoundTrip(
+            request: SocketRequest(
+                id: "auth-wrong",
+                command: "status",
+                params: nil,
+                authenticationToken: incorrectToken
+            )
+        )
+
+        XCTAssertFalse(response.success)
+        XCTAssertEqual(response.error, "Socket authentication failed")
+        XCTAssertTrue(handler.receivedRequests.isEmpty)
+    }
+
+    @MainActor
+    func testValidAuthenticationIsStrippedBeforeDomainDispatch() throws {
+        let handler = MockSocketCommandHandler()
+        let (server, _) = try startServer(handler: handler)
+        defer { server.stop() }
+
+        let response = try performRoundTrip(
+            request: SocketRequest(id: "auth-valid", command: "status", params: nil)
+        )
+
+        XCTAssertTrue(response.success)
+        XCTAssertNil(handler.receivedRequests.first?.authenticationToken)
+    }
+
+    @MainActor
+    func testCredentialLossRestartsServerAndInvalidatesOldToken() throws {
+        let handler = MockSocketCommandHandler()
+        let (server, _) = try startServer(handler: handler)
+        defer { server.stop() }
+        let oldToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
+
+        SocketAuthenticationCredential.remove(at: server.authenticationTokenPath)
+        XCTAssertFalse(server.isHealthy)
+        server.restartIfNeeded()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+
+        let newToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
+        XCTAssertNotEqual(newToken, oldToken)
+
+        let staleResponse = try performRawRoundTrip(
+            request: SocketRequest(
+                id: "auth-stale",
+                command: "status",
+                params: nil,
+                authenticationToken: oldToken
+            )
+        )
+        XCTAssertFalse(staleResponse.success)
+
+        let freshResponse = try performRoundTrip(
+            request: SocketRequest(id: "auth-fresh", command: "status", params: nil)
+        )
+        XCTAssertTrue(freshResponse.success)
+    }
+
+    @MainActor
+    func testRestartInvalidatesAlreadyAcceptedConnection() throws {
+        let (server, _) = try startServer()
+        defer { server.stop() }
+        let oldToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
+        let clientFD = try SocketTestClient.connect(to: testSocketPath)
+        defer { Darwin.close(clientFD) }
+
+        let initial = try SocketTestClient.sendRequest(
+            SocketRequest(
+                id: "persistent-before",
+                command: "status",
+                params: nil,
+                authenticationToken: oldToken
+            ),
+            on: clientFD
+        )
+        XCTAssertTrue(initial.success)
+
+        SocketAuthenticationCredential.remove(at: server.authenticationTokenPath)
+        server.restartIfNeeded()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+
+        XCTAssertThrowsError(try SocketTestClient.sendRequest(
+            SocketRequest(
+                id: "persistent-after",
+                command: "status",
+                params: nil,
+                authenticationToken: oldToken
+            ),
+            on: clientFD
+        ))
+    }
+
+    @MainActor
+    func testStopRemovesCredentialAndKeychainRecord() throws {
+        let (server, _) = try startServer()
+        let tokenPath = server.authenticationTokenPath
+        XCTAssertTrue(FileManager.default.fileExists(atPath: tokenPath))
+
+        server.stop()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: tokenPath))
+        XCTAssertNil(authenticationStore.token(for: testSocketPath))
+        XCTAssertTrue(authenticationStore.wasDeleted(testSocketPath))
+    }
+
+    @MainActor
+    func testStopNeverRecursivelyRemovesSubstitutedDirectory() throws {
+        let (server, _) = try startServer()
+        XCTAssertEqual(Darwin.unlink(testSocketPath), 0)
+        try FileManager.default.createDirectory(
+            atPath: testSocketPath,
+            withIntermediateDirectories: false
+        )
+        let sentinel = testSocketPath.appending("/keep.txt")
+        XCTAssertTrue(FileManager.default.createFile(
+            atPath: sentinel,
+            contents: Data("keep".utf8)
+        ))
+
+        server.stop()
+
+        var metadata = stat()
+        XCTAssertEqual(lstat(testSocketPath, &metadata), 0)
+        XCTAssertEqual(
+            metadata.st_mode & mode_t(S_IFMT),
+            mode_t(S_IFDIR)
+        )
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinel))
+    }
+
+    @MainActor
+    func testOldServerStopPreservesReplacementSession() throws {
+        let firstHandler = MockSocketCommandHandler()
+        let firstServer = SocketServerImpl(
+            socketPath: testSocketPath,
+            commandHandler: firstHandler,
+            authenticationStore: authenticationStore
+        )
+        try firstServer.start()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+        let firstToken = try SocketAuthenticationCredential.read(
+            from: firstServer.authenticationTokenPath
+        )
+
+        XCTAssertEqual(Darwin.unlink(testSocketPath), 0)
+
+        let replacementHandler = MockSocketCommandHandler()
+        let replacementServer = SocketServerImpl(
+            socketPath: testSocketPath,
+            commandHandler: replacementHandler,
+            authenticationStore: authenticationStore
+        )
+        try replacementServer.start()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+        let replacementToken = try SocketAuthenticationCredential.read(
+            from: replacementServer.authenticationTokenPath
+        )
+        XCTAssertNotEqual(replacementToken, firstToken)
+
+        firstServer.restartIfNeeded()
+
+        XCTAssertFalse(firstServer.isRunning)
+        XCTAssertTrue(replacementServer.isHealthy)
+        XCTAssertEqual(
+            authenticationStore.token(for: testSocketPath),
+            replacementToken
+        )
+        let response = try performRoundTrip(
+            request: SocketRequest(
+                id: "replacement-session",
+                command: "status",
+                params: nil
+            )
+        )
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(
+            replacementHandler.receivedRequests.first?.id,
+            "replacement-session"
+        )
+        XCTAssertTrue(firstHandler.receivedRequests.isEmpty)
+
+        replacementServer.stop()
+        firstServer.restartIfNeeded()
+        try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
+        defer { firstServer.stop() }
+
+        XCTAssertTrue(firstServer.isHealthy)
+        let recoveredResponse = try performRoundTrip(
+            request: SocketRequest(
+                id: "recovered-original-session",
+                command: "status",
+                params: nil
+            )
+        )
+        XCTAssertTrue(recoveredResponse.success)
+        XCTAssertEqual(
+            firstHandler.receivedRequests.first?.id,
+            "recovered-original-session"
         )
     }
 
@@ -398,11 +712,83 @@ final class SocketServerTests: XCTestCase {
     }
 
     @MainActor
+    func testStartReplacesDanglingSocketSymlinkWithoutTouchingTarget() throws {
+        try FileManager.default.createDirectory(
+            atPath: testSocketDirectory,
+            withIntermediateDirectories: true
+        )
+        let missingTarget = testSocketDirectory.appending("/missing.sock")
+        try FileManager.default.createSymbolicLink(
+            atPath: testSocketPath,
+            withDestinationPath: missingTarget
+        )
+
+        let (server, _) = try startServer()
+        defer { server.stop() }
+
+        var metadata = stat()
+        XCTAssertEqual(lstat(testSocketPath, &metadata), 0)
+        XCTAssertEqual(
+            metadata.st_mode & mode_t(S_IFMT),
+            mode_t(S_IFSOCK)
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: missingTarget))
+        XCTAssertTrue(server.isHealthy)
+    }
+
+    @MainActor
+    func testStartRejectsSymbolicLinkSocketDirectory() throws {
+        let targetDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-auth-target-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: targetDirectory) }
+        try FileManager.default.createDirectory(
+            at: targetDirectory,
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            atPath: testSocketDirectory,
+            withDestinationPath: targetDirectory.path
+        )
+        let server = SocketServerImpl(
+            socketPath: testSocketPath,
+            commandHandler: MockSocketCommandHandler(),
+            authenticationStore: authenticationStore
+        )
+
+        XCTAssertThrowsError(try server.start()) { error in
+            guard case CLISocketError.bindFailed = error else {
+                XCTFail("Expected bindFailed, got \(error)")
+                return
+            }
+        }
+        XCTAssertFalse(server.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: testSocketPath))
+    }
+
+    @MainActor
+    func testAuthenticationStoreFailureRollsBackBoundSocket() throws {
+        authenticationStore.failSave = true
+        let server = SocketServerImpl(
+            socketPath: testSocketPath,
+            commandHandler: MockSocketCommandHandler(),
+            authenticationStore: authenticationStore
+        )
+
+        XCTAssertThrowsError(try server.start())
+        XCTAssertFalse(server.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: testSocketPath))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: server.authenticationTokenPath
+        ))
+    }
+
+    @MainActor
     func testStartDoesNotStealLiveSocketFromAnotherServer() throws {
         let firstHandler = MockSocketCommandHandler()
         let firstServer = SocketServerImpl(
             socketPath: testSocketPath,
-            commandHandler: firstHandler
+            commandHandler: firstHandler,
+            authenticationStore: authenticationStore
         )
         try firstServer.start()
         try SocketTestClient.waitUntilReady(socketPath: testSocketPath)
@@ -410,7 +796,8 @@ final class SocketServerTests: XCTestCase {
 
         let secondServer = SocketServerImpl(
             socketPath: testSocketPath,
-            commandHandler: MockSocketCommandHandler()
+            commandHandler: MockSocketCommandHandler(),
+            authenticationStore: authenticationStore
         )
 
         XCTAssertThrowsError(try secondServer.start()) { error in
@@ -571,7 +958,8 @@ final class SocketServerTests: XCTestCase {
         let handler = MockSocketCommandHandler()
         let server = SocketServerImpl(
             socketPath: testSocketPath,
-            commandHandler: handler
+            commandHandler: handler,
+            authenticationStore: authenticationStore
         )
         XCTAssertFalse(server.isRunning)
     }
@@ -615,17 +1003,26 @@ final class SocketServerTests: XCTestCase {
 
         let expectation = expectation(description: "Multiple requests")
         var responses: [SocketResponse] = []
+        let authenticationToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
 
-        DispatchQueue.global().async { [testSocketPath] in
+        DispatchQueue.global().async { [testSocketPath, authenticationToken] in
             do {
                 let fd = try SocketTestClient.connect(to: testSocketPath!)
                 defer { Darwin.close(fd) }
 
                 let req1 = SocketRequest(id: "multi-1", command: "status", params: nil)
-                responses.append(try SocketTestClient.sendRequest(req1, on: fd))
+                responses.append(try SocketTestClient.sendRequest(
+                    req1.authenticated(with: authenticationToken),
+                    on: fd
+                ))
 
                 let req2 = SocketRequest(id: "multi-2", command: "notify", params: ["message": "hi"])
-                responses.append(try SocketTestClient.sendRequest(req2, on: fd))
+                responses.append(try SocketTestClient.sendRequest(
+                    req2.authenticated(with: authenticationToken),
+                    on: fd
+                ))
             } catch {
                 XCTFail("Error: \(error)")
             }
@@ -653,17 +1050,23 @@ final class SocketServerTests: XCTestCase {
         let group = DispatchGroup()
         var results: [SocketResponse] = []
         let resultsLock = NSLock()
+        let authenticationToken = try SocketAuthenticationCredential.read(
+            from: server.authenticationTokenPath
+        )
 
         for i in 0..<3 {
             group.enter()
-            DispatchQueue.global().async { [testSocketPath] in
+            DispatchQueue.global().async { [testSocketPath, authenticationToken] in
                 defer { group.leave() }
                 do {
                     let fd = try SocketTestClient.connect(to: testSocketPath!)
                     defer { Darwin.close(fd) }
 
                     let req = SocketRequest(id: "conc-\(i)", command: "status", params: nil)
-                    let resp = try SocketTestClient.sendRequest(req, on: fd)
+                    let resp = try SocketTestClient.sendRequest(
+                        req.authenticated(with: authenticationToken),
+                        on: fd
+                    )
 
                     resultsLock.lock()
                     results.append(resp)

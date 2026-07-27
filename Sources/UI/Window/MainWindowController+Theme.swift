@@ -144,6 +144,7 @@ extension MainWindowController {
             old?.appearance.windowPaddingY != config.appearance.windowPaddingY ||
             old?.general.shell != config.general.shell ||
             old?.terminal.clipboardReadAccess != config.terminal.clipboardReadAccess ||
+            old?.terminal.clipboardWriteAccess != config.terminal.clipboardWriteAccess ||
             old?.terminal.imageMemoryLimitMB != config.terminal.imageMemoryLimitMB ||
             old?.terminal.imageFileTransfer != config.terminal.imageFileTransfer ||
             old?.terminal.enableSixelImages != config.terminal.enableSixelImages ||

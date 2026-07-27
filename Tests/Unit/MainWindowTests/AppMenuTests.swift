@@ -195,6 +195,17 @@ final class FileMenuItemTests: XCTestCase {
         XCTAssertNotNil(moveTab, "File menu must have 'Move Tab to New Window' item")
     }
 
+    func testFileMenuHasBrowserImportItem() {
+        let importItem = fileMenu.items.first(where: { $0.title == "Import Browser Data..." })
+
+        XCTAssertNotNil(importItem, "File menu must expose browser data import")
+        XCTAssertEqual(
+            importItem?.action,
+            #selector(MainWindowController.showBrowserImportAction(_:)),
+            "Browser import item must open the native import wizard"
+        )
+    }
+
     func testFileMenuHasContinuityCameraImportItem() {
         let importItem = fileMenu.items.first {
             $0.identifier == NSMenuItem.importFromDeviceIdentifier

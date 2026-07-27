@@ -86,6 +86,42 @@ struct WorktreeCLIIntegrationHelperTests {
         #expect(message.contains(".cocxy.toml"))
     }
 
+    @MainActor
+    @Test("AppDelegate bridge rejects forced removal before resolving tab context")
+    func bridgeRejectsForcedRemovalBeforeContext() async {
+        let result = await AppDelegate().performWorktreeCLIRequest(
+            kind: "remove",
+            params: ["id": "abc123", "force": "true"]
+        )
+
+        #expect(!result.0)
+        #expect(result.1["error"]?.contains("retry without --force") == true)
+    }
+
+    @MainActor
+    @Test("AppDelegate bridge requires dry-run before resolving cleanup context")
+    func bridgeRequiresCleanupDryRunBeforeContext() async {
+        let result = await AppDelegate().performWorktreeCLIRequest(
+            kind: "cleanup-merged",
+            params: ["base-ref": "main"]
+        )
+
+        #expect(!result.0)
+        #expect(result.1["error"]?.contains("preview-only") == true)
+    }
+
+    @MainActor
+    @Test("AppDelegate bridge rejects forced cleanup even in dry-run mode")
+    func bridgeRejectsForcedCleanupBeforeContext() async {
+        let result = await AppDelegate().performWorktreeCLIRequest(
+            kind: "cleanup-merged",
+            params: ["dry-run": "true", "force": "true"]
+        )
+
+        #expect(!result.0)
+        #expect(result.1["error"]?.contains("not available through the CLI bridge") == true)
+    }
+
     @Test("worktree tab close policy uses the owning tab project config")
     func projectConfigOverridesWorktreeClosePolicy() {
         let globalWorktree = WorktreeConfig(

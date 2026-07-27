@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AgentCommandAllowlist.swift - User-controlled local command approval rules.
+// AgentCommandAllowlist.swift - User-controlled local command rules.
 
 import Foundation
 
@@ -54,6 +54,7 @@ struct AgentCommandAllowlist: AgentCommandAllowlistLoading {
                 if key == "exact" {
                     rules.append(.exact(normalized))
                 } else {
+                    // Keep existing files readable while prefix rules remain prompt-only.
                     rules.append(.prefix(normalized))
                 }
             }

@@ -47,7 +47,7 @@ struct NotebookExecutionSummary: Sendable, Equatable {
 struct NotebookExecutor: Sendable {
     private let processRunner: any AgentProcessRunning
 
-    init(processRunner: any AgentProcessRunning = AgentProcessRunner()) {
+    init(processRunner: any AgentProcessRunning = NotebookProcessRunner()) {
         self.processRunner = processRunner
     }
 
@@ -152,22 +152,47 @@ private struct NotebookSandboxExecutionPlan {
             }
             let temporaryURL = try Self.createTemporaryDirectory(in: workingDirectory)
             let temporaryPath = Self.canonicalSandboxPath(temporaryURL)
+            let cacheDirectories = [
+                (key: "CLANG_MODULE_CACHE_PATH", name: "clang-module-cache"),
+                (key: "SWIFTPM_MODULECACHE_OVERRIDE", name: "swiftpm-module-cache"),
+                (key: "XDG_CACHE_HOME", name: "cache"),
+            ]
+            do {
+                for cacheDirectory in cacheDirectories {
+                    try FileManager.default.createDirectory(
+                        at: temporaryURL.appendingPathComponent(cacheDirectory.name, isDirectory: true),
+                        withIntermediateDirectories: true
+                    )
+                }
+            } catch {
+                Self.removeTemporaryDirectory(temporaryURL)
+                throw error
+            }
             executableURL = sandboxURL
             arguments = [
                 "-p",
                 Self.workspaceProfile(workingDirectory: workingDirectory, temporaryDirectory: temporaryURL),
                 "/usr/bin/env",
                 "TMPDIR=\(temporaryPath)",
-                command.executableURL.path,
-            ] + command.arguments
+            ] + cacheDirectories.map {
+                "\($0.key)=\(temporaryPath)/\($0.name)"
+            } + [command.executableURL.path] + command.arguments
             cleanupURL = temporaryURL
         }
     }
 
     func cleanup() {
         guard let cleanupURL else { return }
-        try? FileManager.default.removeItem(at: cleanupURL)
-        try? FileManager.default.removeItem(at: cleanupURL.deletingLastPathComponent())
+        Self.removeTemporaryDirectory(cleanupURL)
+    }
+
+    private static func removeTemporaryDirectory(_ temporaryURL: URL) {
+        try? FileManager.default.removeItem(at: temporaryURL)
+        // Prune the shared `.cocxy-notebook-tmp` parent only when it is already
+        // empty. `rmdir` fails atomically (ENOTEMPTY) if a concurrent execution
+        // still owns a sibling directory there, so we never delete another
+        // run's live temporaries out from under it.
+        _ = rmdir(temporaryURL.deletingLastPathComponent().path)
     }
 
     private static func workspaceProfile(workingDirectory: URL, temporaryDirectory: URL) -> String {

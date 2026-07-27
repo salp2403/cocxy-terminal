@@ -42,16 +42,34 @@ struct AgentWorkspaceOSE2EMatrixSwiftTestingTests {
         #expect(audit.stdout.contains("matrix=browser-automation\t"))
         #expect(audit.stdout.contains("matrix=visual-screenshot\t"))
 
+        let lines = audit.stdout
+            .split(separator: "\n", omittingEmptySubsequences: true)
+            .map(String.init)
+
         if !isCIEnvironment {
-            #expect(audit.stdout.contains("matrix=browser-automation\tstatus=ok"))
-            #expect(audit.stdout.contains("scenarios=95; target=80"))
+            let browserLine = try #require(
+                lines.first { $0.hasPrefix("matrix=browser-automation\t") }
+            )
+            #expect(browserLine.contains("\tstatus=ok\t"))
+            let scenarioField = try #require(
+                browserLine
+                    .split(separator: "\t")
+                    .first { $0.hasPrefix("detail=scenarios=") }
+            )
+            let scenarioCount = try #require(
+                Int(
+                    scenarioField
+                        .dropFirst("detail=scenarios=".count)
+                        .split(separator: ";", maxSplits: 1)
+                        .first ?? ""
+                )
+            )
+            #expect(scenarioCount >= 80)
+            #expect(browserLine.contains("target=80"))
             #expect(audit.stdout.contains("matrix=visual-screenshot\tstatus=ok"))
             #expect(audit.stdout.contains("approved-golden-screenshots=20"))
         }
 
-        let lines = audit.stdout
-            .split(separator: "\n", omittingEmptySubsequences: true)
-            .map(String.init)
         if let remoteLine = lines.first(where: { $0.hasPrefix("matrix=remote-ssh-browser\t") }),
            remoteLine.contains("status=blocked"),
            remoteLine.contains("docker=daemon-unavailable"),

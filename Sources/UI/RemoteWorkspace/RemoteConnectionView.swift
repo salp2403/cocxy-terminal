@@ -57,7 +57,7 @@ final class RemoteConnectionViewModel: ObservableObject {
             switch self {
             case .sessions: return "Persistent shell sessions"
             case .tunnels: return "Forward local and remote ports"
-            case .proxy: return "System proxy controls"
+            case .proxy: return "Authenticated local proxy"
             case .relay: return "Relay channels"
             case .daemon: return "Remote helper daemon"
             case .keys: return "SSH identities"
@@ -82,20 +82,24 @@ final class RemoteConnectionViewModel: ObservableObject {
     @Published var quickConnectText: String = ""
     @Published var isEditorPresented = false
     @Published var editingProfile: RemoteConnectionProfile?
+    @Published private(set) var profileEditorViewModel: RemoteProfileEditorViewModel?
     @Published private(set) var collapsedGroups: Set<String> = []
+    @Published private(set) var profileActionErrorMessage: String?
+    @Published private(set) var connectionStates: [UUID: RemoteConnectionManager.ConnectionState] = [:]
 
     // MARK: - Dependencies
 
     let connectionManager: RemoteConnectionManager
     let tunnelManager: SSHTunnelManager
-    private let profileStore: RemoteProfileStore
+    private let profileStore: any RemoteProfileStoring
     private var localizer: AppLocalizer
     private var transientProfileIDs: Set<UUID> = []
+    private var cancellables: Set<AnyCancellable> = []
 
     // MARK: - Initialization
 
     init(
-        profileStore: RemoteProfileStore,
+        profileStore: any RemoteProfileStoring,
         connectionManager: RemoteConnectionManager,
         tunnelManager: SSHTunnelManager,
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
@@ -104,6 +108,13 @@ final class RemoteConnectionViewModel: ObservableObject {
         self.connectionManager = connectionManager
         self.tunnelManager = tunnelManager
         self.localizer = localizer
+        self.connectionStates = connectionManager.connections
+
+        connectionManager.$connections
+            .sink { [weak self] states in
+                self?.connectionStates = states
+            }
+            .store(in: &cancellables)
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
@@ -127,7 +138,7 @@ final class RemoteConnectionViewModel: ObservableObject {
 
     /// Returns the connection state for a given profile.
     func connectionState(for profileID: UUID) -> RemoteConnectionManager.ConnectionState {
-        connectionManager.connections[profileID] ?? .disconnected
+        connectionStates[profileID] ?? .disconnected
     }
 
     /// Whether a profile is currently connected.
@@ -221,22 +232,30 @@ final class RemoteConnectionViewModel: ObservableObject {
     }
 
     func presentNewProfile() {
-        editingProfile = nil
-        isEditorPresented = true
+        presentProfileEditor(profile: nil)
     }
 
     func presentEditProfile(_ profile: RemoteConnectionProfile) {
+        presentProfileEditor(profile: profile)
+    }
+
+    private func presentProfileEditor(profile: RemoteConnectionProfile?) {
         editingProfile = profile
+        let editorViewModel = RemoteProfileEditorViewModel(
+            profile: profile,
+            existingGroups: existingGroups
+        )
+        editorViewModel.onSave = { [weak self] profile in
+            guard let self else { return }
+            try self.saveProfile(profile)
+        }
+        profileEditorViewModel = editorViewModel
         isEditorPresented = true
     }
 
-    func saveProfile(_ profile: RemoteConnectionProfile) {
-        do {
-            try profileStore.save(profile)
-            loadProfiles()
-        } catch {
-            // Profile save failures are handled silently for now.
-        }
+    func saveProfile(_ profile: RemoteConnectionProfile) throws {
+        try profileStore.save(profile)
+        loadProfiles()
     }
 
     func deleteProfile(_ profile: RemoteConnectionProfile) {
@@ -248,7 +267,8 @@ final class RemoteConnectionViewModel: ObservableObject {
         }
     }
 
-    func duplicateProfile(_ profile: RemoteConnectionProfile) {
+    @discardableResult
+    func duplicateProfile(_ profile: RemoteConnectionProfile) -> Bool {
         let copy = RemoteConnectionProfile(
             name: "\(profile.name) (\(localizer.string("remoteWorkspace.profile.copySuffix", fallback: "copy")))",
             host: profile.host,
@@ -260,11 +280,49 @@ final class RemoteConnectionViewModel: ObservableObject {
             group: profile.group,
             envVars: profile.envVars,
             keepAliveInterval: profile.keepAliveInterval,
+            strictHostKeyChecking: profile.strictHostKeyChecking,
+            knownHostsFile: profile.knownHostsFile,
+            batchMode: profile.batchMode,
             autoReconnect: profile.autoReconnect,
             proxyExclusions: profile.proxyExclusions,
             relayChannels: profile.relayChannels
         )
-        saveProfile(copy)
+        do {
+            try saveProfile(copy)
+            profileActionErrorMessage = nil
+            return true
+        } catch {
+            let format = localizer.string(
+                "remoteWorkspace.profile.duplicateFailed",
+                fallback: "Could not duplicate \"%@\": %@"
+            )
+            profileActionErrorMessage = String(
+                format: format,
+                profile.name,
+                profileStoreErrorDescription(error)
+            )
+            return false
+        }
+    }
+
+    func dismissProfileActionError() {
+        profileActionErrorMessage = nil
+    }
+
+    private func profileStoreErrorDescription(_ error: Error) -> String {
+        guard let storeError = error as? RemoteProfileStoreError else {
+            return error.localizedDescription
+        }
+
+        switch storeError {
+        case let .saveFailed(message), let .deleteFailed(message), let .loadFailed(message):
+            return message
+        case .profileNotFound:
+            return localizer.string(
+                "remoteWorkspace.profile.error.notFound",
+                fallback: "The profile no longer exists."
+            )
+        }
     }
 
     // MARK: - Quick Connect Parsing
@@ -341,7 +399,7 @@ struct RemoteConnectionView: View {
     var remotePortScanner: RemotePortScanner?
 
     /// Opens a detected remote dev server in the browser.
-    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) -> Void)?
+    var onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) async -> Bool)?
 
     /// Forced `NSAppearance` for the translucent panel background.
     ///
@@ -354,6 +412,7 @@ struct RemoteConnectionView: View {
     /// Sub-panel view models created lazily and retained for the panel lifetime.
     @State private var keyManagerVM: SSHKeyManagerViewModel?
     @State private var sftpBrowserVM: SFTPBrowserViewModel?
+    @State private var isSFTPSetupUnavailable = false
 
     static let panelWidth: CGFloat = 380
     static let subPanelPickerMinimumItemWidth: CGFloat = 78
@@ -391,10 +450,38 @@ struct RemoteConnectionView: View {
             viewModel.updateLocalizer(localizer)
         }
         .onChange(of: viewModel.selectedProfileID) { _, _ in
+            sftpBrowserVM?.cancelPendingWork()
             sftpBrowserVM = nil
+            isSFTPSetupUnavailable = false
+        }
+        .onChange(of: viewModel.connectionStates) { _, _ in
+            guard let profileID = viewModel.selectedProfileID,
+                  viewModel.isConnected(profileID) else {
+                sftpBrowserVM?.cancelPendingWork()
+                sftpBrowserVM = nil
+                isSFTPSetupUnavailable = false
+                return
+            }
         }
         .sheet(isPresented: $viewModel.isEditorPresented) {
             editorSheet
+        }
+        .alert(
+            localized("remoteWorkspace.profile.actionFailed.title", fallback: "Profile action failed"),
+            isPresented: Binding(
+                get: { viewModel.profileActionErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        viewModel.dismissProfileActionError()
+                    }
+                }
+            )
+        ) {
+            Button(localized("common.ok", fallback: "OK"), role: .cancel) {
+                viewModel.dismissProfileActionError()
+            }
+        } message: {
+            Text(viewModel.profileActionErrorMessage ?? "")
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel(localized("remoteWorkspace.accessibility", fallback: "Remote Workspaces"))
@@ -711,14 +798,29 @@ struct RemoteConnectionView: View {
                         tunnelManager: viewModel.tunnelManager,
                         profileID: profileID,
                         onForwardPort: { forward, profID in
-                            try? viewModel.connectionManager.forwardPort(forward, for: profID)
+                            try await viewModel.connectionManager.forwardPort(
+                                forward,
+                                for: profID
+                            )
                         },
                         onCancelForward: { forward, profID in
-                            try? viewModel.connectionManager.cancelForward(forward, for: profID)
+                            try await viewModel.connectionManager.cancelForward(
+                                forward,
+                                for: profID
+                            )
                         },
                         localizer: localizer
                     )
-                    remoteBrowserSuggestions(profile: profile)
+                    .id(profileID)
+                    if let remotePortScanner {
+                        RemoteBrowserSuggestionsSection(
+                            scanner: remotePortScanner,
+                            profile: profile,
+                            isConnected: viewModel.isConnected(profileID),
+                            onOpenRemoteBrowser: onOpenRemoteBrowser,
+                            localizer: localizer
+                        )
+                    }
                 }
             } else {
                 selectProfilePlaceholder(
@@ -727,91 +829,6 @@ struct RemoteConnectionView: View {
                 )
             }
         }
-    }
-
-    @ViewBuilder
-    private func remoteBrowserSuggestions(profile: RemoteConnectionProfile) -> some View {
-        let suggestions = remotePortScanner?.browserOpenSuggestions
-            .filter { $0.profileID == profile.id }
-            .sorted { $0.remotePort < $1.remotePort } ?? []
-
-        if !suggestions.isEmpty {
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "globe.badge.chevron.backward")
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color(nsColor: CocxyColors.blue))
-                    Text(localized("remoteWorkspace.browserSuggestions.title", fallback: "Remote Browser"))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(Color(nsColor: CocxyColors.text))
-                    Spacer()
-                }
-
-                ForEach(suggestions) { suggestion in
-                    remoteBrowserSuggestionRow(profile: profile, suggestion: suggestion)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
-        }
-    }
-
-    private func remoteBrowserSuggestionRow(
-        profile: RemoteConnectionProfile,
-        suggestion: RemoteBrowserOpenSuggestion
-    ) -> some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(
-                    String(
-                        format: localized("remoteWorkspace.browserSuggestions.port", fallback: "localhost:%d"),
-                        suggestion.remotePort
-                    )
-                )
-                .font(.system(size: 11, weight: .medium, design: .monospaced))
-                .foregroundColor(Color(nsColor: CocxyColors.text))
-
-                Text(suggestion.process ?? localized("remoteWorkspace.browserSuggestions.unknownProcess", fallback: "remote service"))
-                    .font(.system(size: 10))
-                    .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            Text("127.0.0.1:\(suggestion.localPort)")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
-                .lineLimit(1)
-
-            Button(action: { onOpenRemoteBrowser?(profile, suggestion) }) {
-                Image(systemName: "arrow.up.forward.square")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(Color(nsColor: CocxyColors.blue))
-            }
-            .buttonStyle(.plain)
-            .frame(width: 24, height: 24)
-            .disabled(onOpenRemoteBrowser == nil)
-            .accessibilityLabel(
-                String(
-                    format: localized("remoteWorkspace.browserSuggestions.open.accessibility", fallback: "Open remote port %d in browser"),
-                    suggestion.remotePort
-                )
-            )
-            .help(localized("remoteWorkspace.browserSuggestions.open", fallback: "Open in Browser"))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 6)
-                .stroke(Color(nsColor: CocxyColors.surface1).opacity(0.55), lineWidth: 1)
-        )
     }
 
     private var proxySubPanel: some View {
@@ -824,6 +841,7 @@ struct RemoteConnectionView: View {
                     proxyManager: proxyManager,
                     localizer: localizer
                 )
+                .id(profileID)
             } else {
                 selectProfilePlaceholder(
                     icon: "network.badge.shield.half.filled",
@@ -843,6 +861,7 @@ struct RemoteConnectionView: View {
                     relayManager: relayManager,
                     localizer: localizer
                 )
+                .id(profileID)
             } else {
                 selectProfilePlaceholder(
                     icon: "point.3.connected.trianglepath.dotted",
@@ -862,6 +881,7 @@ struct RemoteConnectionView: View {
                     daemonManager: daemonManager,
                     localizer: localizer
                 )
+                .id(profileID)
             } else {
                 selectProfilePlaceholder(
                     icon: "server.rack",
@@ -888,16 +908,39 @@ struct RemoteConnectionView: View {
 
     private var sftpSubPanel: some View {
         Group {
-            if let vm = sftpBrowserVM {
+            if isSFTPSetupUnavailable {
+                VStack(spacing: 10) {
+                    Spacer()
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 24))
+                        .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                    Text(localized(
+                        "remoteWorkspace.sftp.connectionUnavailable",
+                        fallback: "Reconnect this profile before using SFTP."
+                    ))
+                    .font(.system(size: 11))
+                    .foregroundColor(Color(nsColor: CocxyColors.overlay0))
+                    .multilineTextAlignment(.center)
+                    Button {
+                        setupSFTPBrowser()
+                    } label: {
+                        Label(
+                            localized("common.retry", fallback: "Retry"),
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                    .controlSize(.small)
+                    Spacer()
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+            } else if let vm = sftpBrowserVM {
                 SFTPBrowserView(viewModel: vm, localizer: localizer)
             } else if let profileID = viewModel.selectedProfileID,
-                      let profile = viewModel.profiles.first(where: { $0.id == profileID }),
-                      let executor = sftpExecutor {
+                      viewModel.isConnected(profileID),
+                      sftpExecutor != nil {
                 Color.clear.onAppear {
-                    let client = SFTPClient(executor: executor)
-                    let vm = SFTPBrowserViewModel(sftpClient: client, profile: profile)
-                    sftpBrowserVM = vm
-                    vm.loadDirectory()
+                    setupSFTPBrowser()
                 }
             } else {
                 selectProfilePlaceholder(
@@ -905,6 +948,30 @@ struct RemoteConnectionView: View {
                     text: localized("remoteWorkspace.placeholder.sftp", fallback: "Select a connected profile to browse files")
                 )
             }
+        }
+    }
+
+    private func setupSFTPBrowser() {
+        guard let profileID = viewModel.selectedProfileID,
+              viewModel.isConnected(profileID),
+              let executor = sftpExecutor else {
+            sftpBrowserVM = nil
+            isSFTPSetupUnavailable = false
+            return
+        }
+        do {
+            let client = try viewModel.connectionManager.makeSFTPClient(
+                profileID: profileID,
+                executor: executor
+            )
+            sftpBrowserVM = SFTPBrowserViewModel(
+                sftpClient: client,
+                localizer: localizer
+            )
+            isSFTPSetupUnavailable = false
+        } catch {
+            sftpBrowserVM = nil
+            isSFTPSetupUnavailable = true
         }
     }
 
@@ -927,14 +994,350 @@ struct RemoteConnectionView: View {
     // MARK: - Editor Sheet
 
     private var editorSheet: some View {
-        let editorVM = RemoteProfileEditorViewModel(
-            profile: viewModel.editingProfile,
-            existingGroups: viewModel.existingGroups
-        )
-        editorVM.onSave = { [weak viewModel] profile in
-            viewModel?.saveProfile(profile)
+        Group {
+            if let editorViewModel = viewModel.profileEditorViewModel {
+                RemoteProfileEditor(viewModel: editorViewModel, localizer: localizer)
+            }
         }
-        return RemoteProfileEditor(viewModel: editorVM, localizer: localizer)
+    }
+
+    private func localized(_ key: String, fallback: String) -> String {
+        localizer.string(key, fallback: fallback)
+    }
+}
+
+// MARK: - Remote Browser Suggestions
+
+private struct RemoteBrowserSuggestionsSection: View {
+    @ObservedObject var scanner: RemotePortScanner
+    let profile: RemoteConnectionProfile
+    let isConnected: Bool
+    let onOpenRemoteBrowser: ((RemoteConnectionProfile, RemoteBrowserOpenSuggestion) async -> Bool)?
+    var localizer: AppLocalizer
+
+    @State private var errorMessage: String?
+    @State private var isSwitchConfirmationPresented = false
+
+    private var isActiveProfile: Bool {
+        scanner.isScanning && scanner.scanningProfileID == profile.id
+    }
+
+    private var visibleRemotePorts: [Int] {
+        scanner.detectedPorts.map(\.port).sorted()
+    }
+
+    var body: some View {
+        Divider()
+        VStack(alignment: .leading, spacing: 8) {
+            header
+            content
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(nsColor: CocxyColors.crust).opacity(0.35))
+        .confirmationDialog(
+            localized(
+                "remoteWorkspace.browserSuggestions.switch.title",
+                fallback: "Switch Remote Browser connection?"
+            ),
+            isPresented: $isSwitchConfirmationPresented
+        ) {
+            Button(
+                localized(
+                    "remoteWorkspace.browserSuggestions.switch.action",
+                    fallback: "Close remote routes and switch"
+                ),
+                role: .destructive,
+                action: activateScan
+            )
+            Button(localized("common.cancel", fallback: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(
+                localized(
+                    "remoteWorkspace.browserSuggestions.switch.message",
+                    fallback: "Protected browser routes on the other connection will be closed."
+                )
+            )
+        }
+        .alert(
+            localized("remoteWorkspace.browserSuggestions.error.title", fallback: "Remote Browser failed"),
+            isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )
+        ) {
+            Button(localized("common.ok", fallback: "OK"), role: .cancel) {
+                errorMessage = nil
+            }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var header: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "globe.badge.chevron.backward")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(nsColor: CocxyColors.blue))
+            Text(localized("remoteWorkspace.browserSuggestions.title", fallback: "Remote Browser"))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+            Spacer()
+
+            if isActiveProfile {
+                if scanner.isRefreshing {
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 24, height: 24)
+                        .accessibilityLabel(
+                            localized("remoteWorkspace.browserSuggestions.scanning", fallback: "Scanning remote ports")
+                        )
+                } else {
+                    Button(action: refresh) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .frame(width: 24, height: 24)
+                    .foregroundColor(Color(nsColor: CocxyColors.blue))
+                    .accessibilityLabel(
+                        localized("remoteWorkspace.browserSuggestions.refresh.accessibility", fallback: "Refresh remote ports")
+                    )
+                    .help(localized("remoteWorkspace.browserSuggestions.refresh", fallback: "Refresh Ports"))
+                }
+            } else {
+                Button(action: requestScan) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .font(.system(size: 11, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .foregroundColor(
+                    isConnected
+                        ? Color(nsColor: CocxyColors.blue)
+                        : Color(nsColor: CocxyColors.overlay0)
+                )
+                .disabled(!isConnected)
+                .accessibilityLabel(
+                    localized("remoteWorkspace.browserSuggestions.scan.accessibility", fallback: "Scan this remote connection")
+                )
+                .help(localized("remoteWorkspace.browserSuggestions.scan", fallback: "Scan Connection"))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if !isConnected {
+            statusRow(
+                icon: "bolt.slash",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.disconnected",
+                    fallback: "Connect this profile to discover services."
+                )
+            )
+        } else if !isActiveProfile {
+            statusRow(
+                icon: "dot.radiowaves.left.and.right",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.inactive",
+                    fallback: "Port discovery is inactive for this connection."
+                )
+            )
+        } else if scanner.scanError != nil {
+            statusRow(
+                icon: "exclamationmark.triangle",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.scanFailed",
+                    fallback: "Could not scan this connection."
+                )
+            )
+        } else if scanner.isRefreshing && visibleRemotePorts.isEmpty {
+            statusRow(
+                icon: "magnifyingglass",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.scanning",
+                    fallback: "Scanning remote ports"
+                )
+            )
+        } else if visibleRemotePorts.isEmpty {
+            statusRow(
+                icon: "network.slash",
+                text: localized(
+                    "remoteWorkspace.browserSuggestions.empty",
+                    fallback: "No listening ports detected."
+                )
+            )
+        } else {
+            ForEach(visibleRemotePorts, id: \.self) { remotePort in
+                serviceRow(remotePort: remotePort)
+            }
+        }
+    }
+
+    private func statusRow(icon: String, text: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .medium))
+                .frame(width: 16)
+            Text(text)
+                .font(.system(size: 10))
+                .lineLimit(2)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+        .padding(.horizontal, 8)
+        .frame(minHeight: 34)
+    }
+
+    private func serviceRow(remotePort: Int) -> some View {
+        let info = scanner.detectedPorts.first { $0.port == remotePort }
+        let isBusy = scanner.busyPorts.contains(remotePort)
+
+        return HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(
+                    String(
+                        format: localized("remoteWorkspace.browserSuggestions.port", fallback: "Remote :%d"),
+                        remotePort
+                    )
+                )
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.text))
+
+                Text(
+                    info?.process
+                        ?? localized("remoteWorkspace.browserSuggestions.unknownProcess", fallback: "remote service")
+                )
+                .font(.system(size: 10))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                .lineLimit(1)
+            }
+            .layoutPriority(1)
+
+            Spacer(minLength: 4)
+
+            Text(info?.address ?? "--")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            if isBusy {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 24, height: 24)
+            } else {
+                Button(action: { open(remotePort: remotePort) }) {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(nsColor: CocxyColors.blue))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 24, height: 24)
+                .disabled(onOpenRemoteBrowser == nil)
+                .accessibilityLabel(
+                    String(
+                        format: localized(
+                            "remoteWorkspace.browserSuggestions.open.accessibility",
+                            fallback: "Open remote port %d in browser"
+                        ),
+                        remotePort
+                    )
+                )
+                .help(
+                    localized(
+                        "remoteWorkspace.browserSuggestions.secureOpen",
+                        fallback: "Open Securely in Browser"
+                    )
+                )
+            }
+        }
+        .padding(.horizontal, 8)
+        .frame(minHeight: 40)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(nsColor: CocxyColors.surface0).opacity(0.72))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(Color(nsColor: CocxyColors.surface1).opacity(0.55), lineWidth: 1)
+        )
+    }
+
+    private func requestScan() {
+        guard isConnected else { return }
+        if scanner.scanningProfileID != nil,
+           scanner.scanningProfileID != profile.id {
+            isSwitchConfirmationPresented = true
+        } else {
+            activateScan()
+        }
+    }
+
+    private func activateScan() {
+        errorMessage = nil
+        scanner.startScanning(profileID: profile.id)
+    }
+
+    private func refresh() {
+        Task { @MainActor in
+            await scanner.refreshNow()
+        }
+    }
+
+    private func open(remotePort: Int) {
+        guard let onOpenRemoteBrowser else {
+            errorMessage = localized(
+                "remoteWorkspace.browserSuggestions.browserUnavailable",
+                fallback: "No browser surface is available."
+            )
+            return
+        }
+        Task { @MainActor in
+            do {
+                _ = try await RemoteBrowserOpeningOperation.open(
+                    remotePort: remotePort,
+                    profile: profile,
+                    scanner: scanner,
+                    opener: onOpenRemoteBrowser
+                )
+            } catch {
+                errorMessage = localizedError(error)
+            }
+        }
+    }
+
+    private func localizedError(_ error: Error) -> String {
+        guard let scannerError = error as? RemotePortScannerError else {
+            return localized(
+                "remoteWorkspace.browserSuggestions.error.generic",
+                fallback: "The remote browser operation could not be completed."
+            )
+        }
+        let key: String
+        let fallback: String
+        switch scannerError {
+        case .inactive:
+            key = "remoteWorkspace.browserSuggestions.error.inactive"
+            fallback = "Port discovery is not active for this connection."
+        case .portNotDetected:
+            key = "remoteWorkspace.browserSuggestions.error.notDetected"
+            fallback = "The remote service is no longer available."
+        case .operationInProgress:
+            key = "remoteWorkspace.browserSuggestions.error.inProgress"
+            fallback = "Another operation is already in progress for this port."
+        case .invalidBrowserURL:
+            key = "remoteWorkspace.browserSuggestions.error.forwardFailed"
+            fallback = "The remote service could not be opened."
+        case .browserUnavailable:
+            key = "remoteWorkspace.browserSuggestions.browserUnavailable"
+            fallback = "No browser surface is available."
+        case .scanFailed:
+            key = "remoteWorkspace.browserSuggestions.scanFailed"
+            fallback = "Could not scan this connection."
+        }
+        return localized(key, fallback: fallback)
     }
 
     private func localized(_ key: String, fallback: String) -> String {

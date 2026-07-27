@@ -63,6 +63,19 @@ struct PluginCapabilityGrantStoreSwiftTestingTests {
         #expect(try store.allGrants().map(\.pluginID).sorted() == ["alpha", "beta"])
     }
 
+    @Test("store revokes every grant for one plugin without touching others")
+    func storeRevokesAllGrantsForOnePlugin() throws {
+        let store = PluginCapabilityGrantStore(backend: MemoryPluginCapabilityGrantBackingStore())
+        try store.grant(.networkClient, for: "alpha", reason: nil)
+        try store.grant(.filesystemRead, for: "alpha", reason: nil)
+        try store.grant(.filesystemWrite, for: "beta", reason: nil)
+
+        try store.revokeAll(for: "alpha")
+
+        #expect(try store.grants(for: "alpha").isEmpty)
+        #expect(try store.grants(for: "beta").map(\.capability) == [.filesystemWrite])
+    }
+
     @Test("grant account encoding round trips plugin identifiers safely")
     func grantAccountEncodingRoundTripsPluginIdentifiersSafely() throws {
         let grant = PluginCapabilityGrant(

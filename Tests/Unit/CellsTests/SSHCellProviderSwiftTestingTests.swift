@@ -217,8 +217,15 @@ private final class RecordingSSHCellMultiplexer: SSHMultiplexing, @unchecked Sen
         profile.controlPath
     }
 
-    func connect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {
+    func connect(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) throws -> SSHControlMasterIdentity {
         state.withValue { $0.connectedProfiles.append(profile) }
+        return SSHControlMasterIdentity(
+            processID: 34_567,
+            controlPath: profile.controlPath
+        )
     }
 
     func newSession(profile: RemoteConnectionProfile) -> String {
@@ -227,6 +234,16 @@ private final class RecordingSSHCellMultiplexer: SSHMultiplexing, @unchecked Sen
 
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool {
         state.withValue { $0.alive }
+    }
+
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool {
+        _ = identity
+        return state.withValue { $0.alive }
+    }
+
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity) {
+        _ = identity
+        state.withValue { $0.alive = false }
     }
 
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {
@@ -262,5 +279,23 @@ private struct RecordingSSHCellProcessExecutor: ProcessExecutor {
 
     func executeAsync(command: String, arguments: [String]) async throws -> ProcessResult {
         ProcessResult(exitCode: 0, stdout: "", stderr: "")
+    }
+
+    func executeControl(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try execute(command: command, arguments: arguments)
+    }
+
+    func executeControlAsync(
+        command: String,
+        arguments: [String],
+        timeoutSeconds: TimeInterval
+    ) async throws -> ProcessResult {
+        _ = timeoutSeconds
+        return try await executeAsync(command: command, arguments: arguments)
     }
 }

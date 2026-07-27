@@ -87,11 +87,15 @@ struct AgentWorkspace {
         guard contains(resolved) else {
             throw AgentWorkspaceError.outsideRoot(rawPath)
         }
-        guard fileManager.fileExists(atPath: resolved.path) else {
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: resolved.path, isDirectory: &isDirectory) else {
             throw AgentWorkspaceError.notFound(relativePath(for: resolved))
         }
         let relativePath = relativePath(for: resolved)
-        guard !AgentSensitivePathPolicy.isProtected(relativePath: relativePath) else {
+        guard !AgentSensitivePathPolicy.isProtected(
+            relativePath: relativePath,
+            isDirectory: isDirectory.boolValue
+        ) else {
             throw AgentWorkspaceError.protectedSensitivePath(relativePath)
         }
 
@@ -152,7 +156,10 @@ struct AgentWorkspace {
             throw AgentWorkspaceError.outsideRoot(rawPath)
         }
         let relativePath = relativePath(for: resolved)
-        guard !AgentSensitivePathPolicy.isProtected(relativePath: relativePath) else {
+        guard !AgentSensitivePathPolicy.isProtected(
+            relativePath: relativePath,
+            isDirectory: exists ? isDirectory.boolValue : false
+        ) else {
             throw AgentWorkspaceError.protectedSensitivePath(relativePath)
         }
         if exists {
@@ -181,7 +188,7 @@ struct AgentWorkspace {
 }
 
 enum AgentSensitivePathPolicy {
-    static func isProtected(relativePath: String, isDirectory: Bool = false) -> Bool {
+    static func isProtected(relativePath: String, isDirectory: Bool) -> Bool {
         let normalized = relativePath
             .replacingOccurrences(of: "\\", with: "/")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -194,13 +201,14 @@ enum AgentSensitivePathPolicy {
         }
 
         guard let filename = components.last else { return false }
+        let directoryComponents = isDirectory ? components : Array(components.dropLast())
+        if directoryComponents.contains(where: protectedDirectoryNames.contains) {
+            return true
+        }
         if protectedFilenames.contains(filename) {
             return true
         }
         if protectedSuffixes.contains(where: filename.hasSuffix) {
-            return true
-        }
-        if isDirectory, protectedDirectoryNames.contains(filename) {
             return true
         }
         return false

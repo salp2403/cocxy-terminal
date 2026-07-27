@@ -1,6 +1,8 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // TabConfigStore.swift - Local TOML-backed reusable tab configurations.
 
+import CryptoKit
+import Darwin
 import Foundation
 
 // MARK: - Tab Config
@@ -36,6 +38,138 @@ struct TabConfig: Equatable, Sendable {
         self.command = command
         self.environment = environment
         self.theme = theme
+    }
+}
+
+struct TabConfigSnapshot: Equatable, Sendable {
+    let config: TabConfig
+    let sourceData: Data
+    let sourceDigest: String
+}
+
+enum TabConfigLaunchOrigin: Equatable, Sendable {
+    case localSocket
+    case userInterface
+}
+
+struct TabConfigStartupAuthorizationRequest: Equatable, Sendable {
+    let id: UUID
+    let configName: String
+    let sourceDigest: String
+    let workingDirectory: String
+    let destinationTabID: TabID
+    let launchOrigin: TabConfigLaunchOrigin
+    let command: String?
+    let environment: [String: String]
+    let startupInput: String
+    let expiresAt: Date
+}
+
+enum TabConfigStartupSecurity {
+    static let authorizationLifetime: TimeInterval = 60
+
+    static func makeAuthorizationRequest(
+        snapshot: TabConfigSnapshot,
+        workingDirectory: URL,
+        destinationTabID: TabID,
+        launchOrigin: TabConfigLaunchOrigin,
+        now: Date = Date()
+    ) -> TabConfigStartupAuthorizationRequest? {
+        guard launchOrigin == .userInterface else { return nil }
+        guard let startupInput = startupInput(for: snapshot.config) else { return nil }
+        return TabConfigStartupAuthorizationRequest(
+            id: UUID(),
+            configName: snapshot.config.name,
+            sourceDigest: snapshot.sourceDigest,
+            workingDirectory: workingDirectory.standardizedFileURL.path,
+            destinationTabID: destinationTabID,
+            launchOrigin: launchOrigin,
+            command: snapshot.config.command?.trimmingCharacters(in: .whitespacesAndNewlines),
+            environment: snapshot.config.environment,
+            startupInput: startupInput,
+            expiresAt: now.addingTimeInterval(authorizationLifetime)
+        )
+    }
+
+    static func startupInput(for config: TabConfig) -> String? {
+        let assignments = config.environment
+            .keys
+            .sorted()
+            .compactMap { key -> String? in
+                guard let value = config.environment[key],
+                      TabConfigTOMLCodec.isValidEnvironmentKey(key) else {
+                    return nil
+                }
+                return "\(key)=\(shellSingleQuoted(value))"
+            }
+
+        if let command = config.command?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !command.isEmpty {
+            return (assignments + [command]).joined(separator: " ") + "\r"
+        }
+
+        guard !assignments.isEmpty else { return nil }
+        return "export \(assignments.joined(separator: " "))\r"
+    }
+
+    static func approvalPreview(_ request: TabConfigStartupAuthorizationRequest) -> String {
+        escapedPreview(
+            request.startupInput,
+            preservingTerminalLineBreaks: true,
+            maximumScalars: nil
+        )
+    }
+
+    static func sourceDigest(for data: Data) -> String {
+        SHA256.hash(data: data)
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
+    static func approvalMetadataPreview(_ value: String) -> String {
+        escapedPreview(
+            value,
+            preservingTerminalLineBreaks: false,
+            maximumScalars: 512
+        )
+    }
+
+    private static func shellSingleQuoted(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+
+    private static func escapedPreview(
+        _ value: String,
+        preservingTerminalLineBreaks: Bool,
+        maximumScalars: Int?
+    ) -> String {
+        var preview = ""
+        var scalarCount = 0
+        for scalar in value.unicodeScalars {
+            if let maximumScalars, scalarCount >= maximumScalars {
+                preview += "..."
+                break
+            }
+            scalarCount += 1
+
+            if scalar == "\\" {
+                preview += "\\\\"
+            } else if preservingTerminalLineBreaks, scalar == "\t" {
+                preview += "\\t"
+            } else if preservingTerminalLineBreaks, scalar == "\n" {
+                preview += "\\n\n"
+            } else if preservingTerminalLineBreaks, scalar == "\r" {
+                preview += "\\r"
+            } else {
+                switch scalar.properties.generalCategory {
+                case .control, .format, .lineSeparator, .paragraphSeparator:
+                    preview += String(format: "\\u{%04X}", scalar.value)
+                default:
+                    preview.unicodeScalars.append(scalar)
+                }
+            }
+        }
+        return preview
     }
 }
 
@@ -190,14 +324,19 @@ enum TabConfigTOMLCodec {
 // MARK: - Tab Config Store
 
 struct TabConfigStore {
+    private static let maximumConfigBytes = 1_048_576
+
     let rootDirectory: URL
+    let socketExportDirectory: URL
     private let fileManager: FileManager
 
     init(
         rootDirectory: URL = TabConfigStore.defaultRootDirectory,
+        socketExportDirectory: URL = TabConfigStore.defaultSocketExportDirectory,
         fileManager: FileManager = .default
     ) {
         self.rootDirectory = rootDirectory.standardizedFileURL
+        self.socketExportDirectory = socketExportDirectory.standardizedFileURL
         self.fileManager = fileManager
     }
 
@@ -205,6 +344,35 @@ struct TabConfigStore {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy")
             .appendingPathComponent("tabs")
+    }
+
+    static var defaultSocketExportDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cocxy")
+            .appendingPathComponent("exports")
+            .appendingPathComponent("tab-configs")
+    }
+
+    static func validatedSocketExportLeafName(_ rawName: String) throws -> String {
+        guard rawName == rawName.trimmingCharacters(in: .whitespacesAndNewlines),
+              !rawName.isEmpty,
+              rawName.utf8.count <= 128,
+              rawName.hasSuffix(".toml"),
+              rawName.first != ".",
+              !rawName.contains(".."),
+              !rawName.contains("/"),
+              !rawName.contains("\\"),
+              !rawName.contains("\0") else {
+            throw TabConfigStoreError.invalidName(rawName)
+        }
+
+        let allowed = CharacterSet(
+            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+        )
+        guard rawName.unicodeScalars.allSatisfy({ allowed.contains($0) }) else {
+            throw TabConfigStoreError.invalidName(rawName)
+        }
+        return rawName
     }
 
     static func suggestedName(from displayTitle: String) -> String {
@@ -245,12 +413,19 @@ struct TabConfigStore {
     }
 
     func load(named name: String) throws -> TabConfig {
-        let target = try fileURL(forName: name)
-        guard fileManager.fileExists(atPath: target.path) else {
-            throw TabConfigStoreError.notFound(name)
+        try loadSnapshot(named: name).config
+    }
+
+    func loadSnapshot(named name: String) throws -> TabConfigSnapshot {
+        let data = try readSourceData(named: name)
+        guard let source = String(data: data, encoding: .utf8) else {
+            throw TabConfigStoreError.invalidConfig("source is not bounded UTF-8 TOML")
         }
-        let source = try String(contentsOf: target, encoding: .utf8)
-        return try TabConfigTOMLCodec.parse(source)
+        return TabConfigSnapshot(
+            config: try TabConfigTOMLCodec.parse(source),
+            sourceData: data,
+            sourceDigest: TabConfigStartupSecurity.sourceDigest(for: data)
+        )
     }
 
     func export(named name: String, to destinationURL: URL, overwrite: Bool = false) throws -> URL {
@@ -277,6 +452,30 @@ struct TabConfigStore {
             ofItemAtPath: target.path
         )
         return target.standardizedFileURL
+    }
+
+    /// Publishes a socket-requested export beneath a fixed owner-only root.
+    /// The caller supplies only a validated leaf name; descriptor-relative
+    /// publication prevents parent and final-component symlink redirection.
+    func exportForSocket(named name: String, fileName: String, overwrite: Bool = false) throws -> URL {
+        let leafName = try Self.validatedSocketExportLeafName(fileName)
+        let data = try loadSnapshot(named: name).sourceData
+
+        do {
+            let writer = try ProjectTemplateSecureDestinationWriter(
+                destinationURL: socketExportDirectory,
+                policy: .ownerOnlyPrivateFiles
+            )
+            try writer.write(data, relativePath: leafName, overwrite: overwrite)
+        } catch ProjectTemplateError.destinationExists {
+            throw TabConfigStoreError.destinationExists(
+                socketExportDirectory.appendingPathComponent(leafName).path
+            )
+        } catch {
+            throw TabConfigStoreError.invalidConfig("socket export destination is unsafe")
+        }
+
+        return socketExportDirectory.appendingPathComponent(leafName).standardizedFileURL
     }
 
     func listNames() throws -> [String] {
@@ -316,6 +515,72 @@ struct TabConfigStore {
             attributes: [.posixPermissions: 0o700]
         )
         return destination
+    }
+
+    private func readSourceData(named name: String) throws -> Data {
+        let source = try fileURL(forName: name)
+        let descriptor = source.path.withCString {
+            Darwin.open($0, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        }
+        if descriptor < 0, errno == ENOENT {
+            throw TabConfigStoreError.notFound(name)
+        }
+        guard descriptor >= 0 else {
+            throw TabConfigStoreError.invalidConfig("source path is unsafe")
+        }
+        defer { Darwin.close(descriptor) }
+
+        var initialMetadata = stat()
+        guard Darwin.fstat(descriptor, &initialMetadata) == 0,
+              Self.isRegularFile(initialMetadata),
+              initialMetadata.st_uid == geteuid(),
+              initialMetadata.st_nlink == 1,
+              initialMetadata.st_size >= 0,
+              initialMetadata.st_size <= off_t(Self.maximumConfigBytes),
+              initialMetadata.st_mode & mode_t(S_IWGRP | S_IWOTH) == 0 else {
+            throw TabConfigStoreError.invalidConfig("source file is unsafe")
+        }
+
+        var data = Data()
+        data.reserveCapacity(Int(initialMetadata.st_size))
+        var buffer = [UInt8](repeating: 0, count: 64 * 1_024)
+        while true {
+            let count = buffer.withUnsafeMutableBytes {
+                Darwin.read(descriptor, $0.baseAddress, $0.count)
+            }
+            if count < 0, errno == EINTR { continue }
+            guard count >= 0 else {
+                throw TabConfigStoreError.invalidConfig("source file could not be read")
+            }
+            if count == 0 { break }
+            guard count <= Self.maximumConfigBytes - data.count else {
+                throw TabConfigStoreError.invalidConfig("source file exceeds the size limit")
+            }
+            data.append(contentsOf: buffer.prefix(count))
+        }
+
+        var finalMetadata = stat()
+        guard Darwin.fstat(descriptor, &finalMetadata) == 0,
+              Self.sameSourceVersion(initialMetadata, finalMetadata),
+              data.count == Int(finalMetadata.st_size) else {
+            throw TabConfigStoreError.invalidConfig("source file changed while reading")
+        }
+        return data
+    }
+
+    private static func sameSourceVersion(_ lhs: stat, _ rhs: stat) -> Bool {
+        lhs.st_dev == rhs.st_dev
+            && lhs.st_ino == rhs.st_ino
+            && lhs.st_size == rhs.st_size
+            && lhs.st_mode == rhs.st_mode
+            && lhs.st_mtimespec.tv_sec == rhs.st_mtimespec.tv_sec
+            && lhs.st_mtimespec.tv_nsec == rhs.st_mtimespec.tv_nsec
+            && lhs.st_ctimespec.tv_sec == rhs.st_ctimespec.tv_sec
+            && lhs.st_ctimespec.tv_nsec == rhs.st_ctimespec.tv_nsec
+    }
+
+    private static func isRegularFile(_ metadata: stat) -> Bool {
+        metadata.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG)
     }
 
     func fileURL(forName name: String) throws -> URL {

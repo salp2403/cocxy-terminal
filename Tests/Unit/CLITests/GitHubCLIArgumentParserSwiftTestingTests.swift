@@ -29,8 +29,6 @@ struct GitHubCLIArgumentParserSwiftTestingTests {
             .githubStatus,
             .githubPRs(state: nil, limit: nil),
             .githubIssues(state: nil, limit: nil),
-            .reviewApprove(prNumber: nil, body: nil, readBodyFromStdin: false),
-            .reviewRequestChanges(prNumber: nil, body: nil, readBodyFromStdin: false),
         ]
 
         for command in commands {
@@ -41,26 +39,32 @@ struct GitHubCLIArgumentParserSwiftTestingTests {
         }
     }
 
-    @Test("GitHub merge command uses mutation socket timeout budget")
-    func githubMergeCommandUsesMutationSocketTimeoutBudget() {
+    @Test("GitHub mutation commands use the approval-aware socket timeout budget")
+    func githubMutationCommandsUseApprovalAwareSocketTimeoutBudget() {
         let runner = CommandRunner(
             socketClient: SocketClient(
                 socketPath: "/tmp/cocxy-github-merge-timeout.sock",
                 timeoutSeconds: SocketClient.defaultTimeoutSeconds
             )
         )
-        let client = runner.socketClient(
-            for: .githubPRMerge(
+        let commands: [ParsedCommand] = [
+            .githubPRMerge(
                 method: .squash,
                 prNumber: nil,
                 deleteBranch: true,
                 subject: nil,
                 body: nil
-            )
-        )
+            ),
+            .reviewApprove(prNumber: 42, body: nil, readBodyFromStdin: false),
+            .reviewRequestChanges(prNumber: 42, body: "Fix it", readBodyFromStdin: false),
+        ]
 
-        #expect(client.socketPath == "/tmp/cocxy-github-merge-timeout.sock")
-        #expect(client.timeoutSeconds == CommandRunner.extendedGitHubMutationSocketTimeoutSeconds)
+        for command in commands {
+            let client = runner.socketClient(for: command)
+            #expect(client.socketPath == "/tmp/cocxy-github-merge-timeout.sock")
+            #expect(client.timeoutSeconds == CommandRunner.extendedGitHubMutationSocketTimeoutSeconds)
+            #expect(client.timeoutSeconds == 300)
+        }
     }
 
     @Test("non GitHub commands keep the default socket timeout budget")
@@ -153,6 +157,52 @@ struct GitHubCLIArgumentParserSwiftTestingTests {
         #expect(result.exitCode == 0)
         #expect(result.stdout.contains("cocxy github pr-merge"))
         #expect(result.stderr.isEmpty)
+    }
+
+    @Test("`cocxy github pr-merge` keeps the branch by default")
+    func githubPRMerge_keepsBranchByDefault() throws {
+        let command = try CLIArgumentParser.parse([
+            "github", "pr-merge", "--squash"
+        ])
+
+        guard case .githubPRMerge(_, _, let deleteBranch, _, _) = command else {
+            Issue.record("Expected .githubPRMerge, got \(command)")
+            return
+        }
+        #expect(!deleteBranch)
+    }
+
+    @Test("`cocxy github pr-merge --delete-branch` opts into branch deletion")
+    func githubPRMerge_acceptsDeleteBranchFlag() throws {
+        let command = try CLIArgumentParser.parse([
+            "github", "pr-merge", "--merge", "--delete-branch"
+        ])
+
+        guard case .githubPRMerge(_, _, let deleteBranch, _, _) = command else {
+            Issue.record("Expected .githubPRMerge, got \(command)")
+            return
+        }
+        #expect(deleteBranch)
+    }
+
+    @Test("`cocxy github pr-merge --no-delete-branch` explicitly keeps the branch")
+    func githubPRMerge_acceptsNoDeleteBranchFlag() throws {
+        let command = try CLIArgumentParser.parse([
+            "github", "pr-merge", "--rebase", "--no-delete-branch"
+        ])
+
+        guard case .githubPRMerge(_, _, let deleteBranch, _, _) = command else {
+            Issue.record("Expected .githubPRMerge, got \(command)")
+            return
+        }
+        #expect(!deleteBranch)
+    }
+
+    @Test("GitHub merge help advertises both explicit branch choices")
+    func githubPRMerge_helpAdvertisesBothBranchChoices() {
+        let help = CLIArgumentParser.helpText()
+
+        #expect(help.contains("[--delete-branch|--no-delete-branch]"))
     }
 
     @Test("`cocxy github bogus` throws invalidArgument")

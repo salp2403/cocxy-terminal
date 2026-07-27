@@ -9,6 +9,7 @@ enum PTYDaemonReadiness: Equatable {
     case helperMissing
     case helperUnhealthy(String)
     case helperVersionMismatch(actual: String, expected: String)
+    case protocolVersionMismatch(actual: Int, expected: Int)
     case helperHealthyButSurfaceBridgeUnavailable(PTYDaemonHello)
     case terminalSurfaceBridgeAvailable(PTYDaemonHello)
 
@@ -20,6 +21,7 @@ enum PTYDaemonReadiness: Equatable {
              .helperMissing,
              .helperUnhealthy,
              .helperVersionMismatch,
+             .protocolVersionMismatch,
              .helperHealthyButSurfaceBridgeUnavailable:
             return true
         }
@@ -35,6 +37,8 @@ enum PTYDaemonReadiness: Equatable {
             return "PTY daemon requested but helper handshake failed (\(reason)); using in-process CocxyCore bridge."
         case .helperVersionMismatch(let actual, let expected):
             return "PTY daemon helper version \(actual) does not match app version \(expected); using in-process CocxyCore bridge."
+        case .protocolVersionMismatch(let actual, let expected):
+            return "PTY daemon protocol version \(actual) does not match required version \(expected); using in-process CocxyCore bridge."
         case .helperHealthyButSurfaceBridgeUnavailable:
             return "PTY daemon helper is healthy but does not expose the complete terminal engine and host renderer capability set; using in-process CocxyCore bridge."
         case .terminalSurfaceBridgeAvailable:
@@ -95,6 +99,12 @@ struct PTYDaemonReadinessResolver {
 
         switch handshake(helperURL) {
         case .success(let hello):
+            guard hello.protocolVersion == PTYDaemonProtocol.protocolVersion else {
+                return .protocolVersionMismatch(
+                    actual: hello.protocolVersion,
+                    expected: PTYDaemonProtocol.protocolVersion
+                )
+            }
             if let expectedHelperVersion,
                expectedHelperVersion != "dev",
                hello.version != expectedHelperVersion

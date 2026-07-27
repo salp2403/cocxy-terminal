@@ -10,6 +10,7 @@ import Testing
 private final class InMemoryPluginFileSystem: PluginFileSystem, @unchecked Sendable {
     var files: [String: String] = [:]
     var directories: Set<String> = []
+    var writeError: (any Error)?
 
     func directoryExists(at path: String) -> Bool {
         directories.contains(path)
@@ -33,6 +34,7 @@ private final class InMemoryPluginFileSystem: PluginFileSystem, @unchecked Senda
     }
 
     func writeFile(at path: String, contents: String) throws {
+        if let writeError { throw writeError }
         files[path] = contents
     }
 }
@@ -151,6 +153,7 @@ struct PluginManagerTests {
         try manager.enablePlugin(id: "test-plugin")
 
         #expect(manager.plugins[0].isEnabled == true)
+        #expect(manager.enabledPlugins.map(\.id) == ["test-plugin"])
     }
 
     @Test @MainActor func disablePlugin() throws {
@@ -203,6 +206,32 @@ struct PluginManagerTests {
         #expect(throws: PluginManagerError.self) {
             try manager.disablePlugin(id: "test-plugin")
         }
+    }
+
+    @Test @MainActor func statePersistenceFailureRollsBackEnableAndDisable() throws {
+        let (fs, basePath) = makeFS(plugins: [
+            (id: "test-plugin", manifest: sampleManifest),
+        ])
+        let manager = PluginManager(fileSystem: fs, pluginsDirectory: basePath)
+        manager.scanPlugins()
+        fs.writeError = NSError(domain: "PluginManagerTests", code: 77)
+
+        #expect(throws: (any Error).self) {
+            try manager.enablePlugin(id: "test-plugin")
+        }
+
+        #expect(manager.plugins[0].isEnabled == false)
+        #expect(manager.enabledPlugins.isEmpty)
+
+        fs.writeError = nil
+        try manager.enablePlugin(id: "test-plugin")
+        fs.writeError = NSError(domain: "PluginManagerTests", code: 78)
+
+        #expect(throws: (any Error).self) {
+            try manager.disablePlugin(id: "test-plugin")
+        }
+
+        #expect(manager.plugins[0].isEnabled == true)
     }
 
     // MARK: - Queries
@@ -273,37 +302,55 @@ struct PluginManagerTests {
         #expect(state.lastTriggeredAt == nil)
     }
 
-    @Test func legacyManifestWithoutCapabilitiesUsesCompatibilityGrants() {
-        let manifest = PluginManifest(
-            id: "legacy-plugin",
-            name: "Legacy",
-            description: "Existing plugin",
-            version: "1.0.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: "/tmp/legacy",
-            manifestFileName: PluginManifest.legacyManifestFileName,
-            capabilities: []
+    @Test @MainActor func legacyManifestReceivesNoImplicitCapabilitiesOrSensitiveEnvironment() throws {
+        let (fs, basePath) = makeFS(plugins: [
+            (
+                id: "legacy-plugin",
+                manifest: "name = \"Legacy\"\nevents = [\"session-start\"]"
+            ),
+        ])
+        fs.files["\(basePath)/legacy-plugin/on-session-start.sh"] = "exit 0"
+        let sandbox = RecordingPluginManagerSandbox()
+        let manager = PluginManager(
+            fileSystem: fs,
+            pluginsDirectory: basePath,
+            sandbox: sandbox,
+            grantedCapabilitiesProvider: { _ in Set(PluginCapability.allCases) }
+        )
+        manager.scanPlugins()
+        try manager.enablePlugin(id: "legacy-plugin")
+
+        manager.dispatchEvent(
+            .sessionStart,
+            environment: ["COCXY_RICH_INPUT_TEXT": "do not disclose"]
         )
 
-        #expect(manifest.usesLegacyCompatibilityCapabilities)
+        #expect(sandbox.executions.count == 1)
+        #expect(sandbox.executions[0].capabilities.isEmpty)
+        #expect(sandbox.executions[0].environment == ["COCXY_EVENT": "session-start"])
+    }
+}
+
+private final class RecordingPluginManagerSandbox: PluginSandboxing, @unchecked Sendable {
+    struct Execution {
+        let environment: [String: String]
+        let capabilities: Set<PluginCapability>
     }
 
-    @Test func marketplaceManifestWithoutCapabilitiesDoesNotUseCompatibilityGrants() {
-        let manifest = PluginManifest(
-            id: "new-plugin",
-            name: "New",
-            description: "New plugin",
-            version: "1.0.0",
-            author: "Dev",
-            minCocxyVersion: nil,
-            events: [],
-            directoryPath: "/tmp/new",
-            manifestFileName: PluginManifest.marketplaceManifestFileName,
-            capabilities: []
-        )
+    private(set) var executions: [Execution] = []
 
-        #expect(!manifest.usesLegacyCompatibilityCapabilities)
+    func execute(
+        scriptPath: String,
+        environment: [String: String],
+        pluginID: String,
+        pluginDirectory: String,
+        capabilities: Set<PluginCapability>,
+        authorization: PluginExecutionAuthorization
+    ) {
+        guard authorization.isValid() else { return }
+        executions.append(Execution(
+            environment: environment,
+            capabilities: capabilities
+        ))
     }
 }

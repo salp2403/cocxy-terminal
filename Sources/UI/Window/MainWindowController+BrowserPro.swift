@@ -98,39 +98,32 @@ extension MainWindowController {
     /// browser layer.
     func wireDOMGrabCallback(for viewModel: BrowserViewModel) {
         viewModel.onDOMGrabPayload = { [weak self] payload in
-            _ = self?.injectBrowserDOMGrabPayload(payload)
+            _ = self?.presentBrowserDOMGrabPayloadForReview(payload)
         }
     }
 
-    /// Writes a formatted DOM grab into the active terminal pane.
-    ///
-    /// The text goes through the shared `TerminalEngine.sendText` path
-    /// used by paste and programmatic input. The bracketed-paste markers
-    /// are only added when the receiving terminal has the mode active —
-    /// the same check `CocxyCoreView.handlePaste` runs — so a recently
-    /// launched shell or a TUI that opted out never sees the marker
-    /// bytes leak as visible `[200~` / `[201~` characters in the prompt.
+    /// Presents a formatted DOM grab in Rich Input before any terminal I/O.
+    /// The user can inspect, edit, submit, or cancel the page-controlled
+    /// content. This explicit review boundary remains available even when the
+    /// general automatic Rich Input preference is disabled.
     @discardableResult
-    func injectBrowserDOMGrabPayload(_ payload: BrowserDOMGrabPayload) -> Bool {
-        // Mode probing uses the CocxyCore capability projection because
-        // generic TerminalEngine implementations do not expose the C-side
-        // terminal handle. Non-Cocxy engines no-op with a UI beep, matching
-        // the existing optional-chain failure behavior.
-        guard let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-              let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge,
-              let state = cocxyBridge.surfaceState(for: surfaceID) else {
+    func presentBrowserDOMGrabPayloadForReview(_ payload: BrowserDOMGrabPayload) -> Bool {
+        guard let surfaceView = activeTerminalSurfaceView as? CocxyCoreView else {
             NSSound.beep()
             return false
         }
 
         let formatted = BrowserDOMGrabPayloadFormatter.format(payload)
-        let payloadText = BrowserDOMGrabPayloadInjection.wrap(
-            formatted,
-            bracketedPasteActive: cocxycore_terminal_mode_bracketed_paste(state.terminal)
-        )
-        cocxyBridge.sendText(payloadText, to: surfaceID)
-
-        focusActiveTerminalSurface()
+        let tabID = surfaceView.terminalViewModel?.surfaceID.flatMap(tabID(for:))
+        guard presentRichInputComposer(
+            TerminalRichInputRequest(text: formatted),
+            for: surfaceView,
+            tabID: tabID,
+            requiresExplicitReview: true
+        ) else {
+            NSSound.beep()
+            return false
+        }
         return true
     }
 

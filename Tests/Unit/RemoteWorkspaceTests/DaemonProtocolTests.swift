@@ -32,6 +32,20 @@ struct DaemonProtocolTests {
         #expect(json.contains("my-session"))
     }
 
+    @Test("Encode request keeps a canonical top-level header before nested IDs")
+    func encodeRequestCanonicalHeader() throws {
+        let request = DaemonRequest(
+            id: "req-7",
+            cmd: "session.kill",
+            args: ["id": "session-9"]
+        )
+
+        let json = try request.jsonLine()
+
+        #expect(json.hasPrefix(#"{"proto":1,"id":"req-7","cmd":"session.kill","args":"#))
+        #expect(json.contains(#""id":"session-9""#))
+    }
+
     @Test("Encode request ends with newline")
     func encodeRequestNewline() throws {
         let req = DaemonRequest(id: "1", cmd: "ping")

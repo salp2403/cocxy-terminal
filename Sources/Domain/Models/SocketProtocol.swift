@@ -29,6 +29,35 @@ struct SocketRequest: Codable, Sendable, Equatable {
 
     /// Command-specific parameters. Nil when the command takes no arguments.
     let params: [String: String]?
+
+    /// Per-app-session capability read by the bundled CLI from the protected
+    /// credential file. The transport strips it before domain dispatch.
+    let authenticationToken: String?
+
+    init(
+        id: String,
+        command: String,
+        params: [String: String]?,
+        authenticationToken: String? = nil
+    ) {
+        self.id = id
+        self.command = command
+        self.params = params
+        self.authenticationToken = authenticationToken
+    }
+
+    func authenticated(with token: String) -> SocketRequest {
+        SocketRequest(
+            id: id,
+            command: command,
+            params: params,
+            authenticationToken: token
+        )
+    }
+
+    func removingAuthenticationToken() -> SocketRequest {
+        SocketRequest(id: id, command: command, params: params)
+    }
 }
 
 // MARK: - Socket Response
@@ -61,7 +90,7 @@ struct SocketResponse: Codable, Sendable, Equatable {
     /// Whether the command was executed successfully.
     let success: Bool
 
-    /// Command-specific response data. Nil on error.
+    /// Command-specific response data. Failures may include structured diagnostics.
     let data: [String: String]?
 
     /// Error message when `success` is `false`. Nil on success.
@@ -73,8 +102,12 @@ struct SocketResponse: Codable, Sendable, Equatable {
     }
 
     /// Convenience factory for a failed response.
-    static func failure(id: String, error: String) -> SocketResponse {
-        SocketResponse(id: id, success: false, data: nil, error: error)
+    static func failure(
+        id: String,
+        error: String,
+        data: [String: String]? = nil
+    ) -> SocketResponse {
+        SocketResponse(id: id, success: false, data: data, error: error)
     }
 }
 

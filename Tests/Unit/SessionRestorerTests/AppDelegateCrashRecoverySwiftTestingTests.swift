@@ -199,7 +199,7 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         #expect(restoreButton.isEnabled == false)
         #expect(parent.childWindows?.contains { $0 === offer.window } == true)
 
-        try await Task.sleep(nanoseconds: 80_000_000)
+        await waitForOfferDetachment(from: parent, window: offer.window)
 
         #expect(parent.childWindows?.contains { $0 === offer.window } != true)
     }
@@ -247,6 +247,25 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
             environment: ["COCXY_MEMORY_BASELINE_BENCHMARK": "0"]
         ))
         #expect(!AppDelegate.shouldBypassQuitConfirmationForAutomation(environment: [:]))
+    }
+
+    /// Polls until the offer window stops being a child of `parent`, up to a
+    /// generous ceiling.
+    ///
+    /// The detachment is produced by a block the scheduler must place on the
+    /// main queue (`restoreDismissalDelay`), so a fixed clock measures
+    /// scheduler latency on a loaded runner rather than the restore handoff
+    /// under test. The `#expect` that follows is unchanged, so an offer that
+    /// never detaches still fails the test.
+    private func waitForOfferDetachment(
+        from parent: NSWindow,
+        window: NSWindow?,
+        timeout: TimeInterval = 5.0
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while parent.childWindows?.contains(where: { $0 === window }) == true, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     private func localizationBundle() -> Bundle? {

@@ -26,6 +26,10 @@ protocol BrowserBookmarkStoring: Sendable {
     /// - Throws: If the storage cannot be written.
     func save(_ bookmark: BrowserBookmark) throws
 
+    /// Saves a prepared import batch. Implementations should commit atomically;
+    /// the default records exact IDs if a legacy store stops partway through.
+    func saveBatch(_ bookmarks: [BrowserBookmark]) throws
+
     /// Updates an existing bookmark or folder.
     ///
     /// Matches by `id`. No-op if not found.
@@ -64,6 +68,30 @@ protocol BrowserBookmarkStoring: Sendable {
     /// - Parameter parentID: The parent folder ID. Nil returns root items.
     /// - Returns: Direct children sorted by sort order.
     func children(of parentID: UUID?) -> [BrowserBookmark]
+}
+
+struct BrowserBookmarkBatchSaveError: LocalizedError, Sendable, Equatable {
+    let savedItemIDs: Set<UUID>
+    let detail: String
+
+    var errorDescription: String? { detail }
+}
+
+extension BrowserBookmarkStoring {
+    func saveBatch(_ bookmarks: [BrowserBookmark]) throws {
+        var savedItemIDs = Set<UUID>()
+        do {
+            for bookmark in bookmarks {
+                try save(bookmark)
+                savedItemIDs.insert(bookmark.id)
+            }
+        } catch {
+            throw BrowserBookmarkBatchSaveError(
+                savedItemIDs: savedItemIDs,
+                detail: (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+            )
+        }
+    }
 }
 
 // MARK: - JSON Bookmark Store
@@ -110,9 +138,29 @@ final class JSONBrowserBookmarkStore: BrowserBookmarkStoring, @unchecked Sendabl
     }
 
     func save(_ bookmark: BrowserBookmark) throws {
+        try saveBatch([bookmark])
+    }
+
+    func saveBatch(_ additions: [BrowserBookmark]) throws {
+        guard !additions.isEmpty else { return }
         try queue.sync {
-            bookmarks.append(bookmark)
-            try persist()
+            let existingIDs = Set(bookmarks.map(\.id))
+            let additionIDs = Set(additions.map(\.id))
+            guard additionIDs.count == additions.count,
+                  existingIDs.isDisjoint(with: additionIDs) else {
+                throw BrowserBookmarkBatchSaveError(
+                    savedItemIDs: [],
+                    detail: "Bookmark batch contains duplicate identifiers"
+                )
+            }
+            let previousCount = bookmarks.count
+            bookmarks.append(contentsOf: additions)
+            do {
+                try persist()
+            } catch {
+                bookmarks.removeSubrange(previousCount..<bookmarks.count)
+                throw error
+            }
         }
     }
 

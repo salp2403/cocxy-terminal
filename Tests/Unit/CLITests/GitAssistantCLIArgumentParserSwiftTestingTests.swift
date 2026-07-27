@@ -55,8 +55,10 @@ struct GitAssistantCLIArgumentParserSwiftTestingTests {
         )
 
         #expect(client.socketPath == "/tmp/cocxy-git-assistant.sock")
-        #expect(client.timeoutSeconds == CommandRunner.extendedGitAssistantSocketTimeoutSeconds)
-        #expect(releaseNotesClient.timeoutSeconds == CommandRunner.extendedGitAssistantSocketTimeoutSeconds)
+        let expectedTimeout = CommandRunner.extendedGitAssistantSocketTimeoutSeconds
+            + CommandRunner.privilegedSocketApprovalGraceSeconds
+        #expect(client.timeoutSeconds == expectedTimeout)
+        #expect(releaseNotesClient.timeoutSeconds == expectedTimeout)
     }
 
     @Test("formatter prints generated drafts")

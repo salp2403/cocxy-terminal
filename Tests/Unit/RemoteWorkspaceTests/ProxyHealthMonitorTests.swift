@@ -25,6 +25,25 @@ final class MockHealthProbe: HealthProbing {
     }
 }
 
+@MainActor
+private final class SuspendedHealthProbe: HealthProbing {
+    private var continuation: CheckedContinuation<Bool, Never>?
+    private(set) var isWaiting = false
+
+    func probe() async -> Bool {
+        await withCheckedContinuation { continuation in
+            self.continuation = continuation
+            isWaiting = true
+        }
+    }
+
+    func resume(returning result: Bool) {
+        isWaiting = false
+        continuation?.resume(returning: result)
+        continuation = nil
+    }
+}
+
 // MARK: - Mock Proxy State Delegate
 
 /// Records state change notifications from the health monitor.
@@ -42,6 +61,28 @@ final class MockProxyStateDelegate: ProxyHealthDelegate {
 
 @Suite("ProxyHealthMonitor")
 struct ProxyHealthMonitorTests {
+
+    @Test("TCP health probe accepts only explicit literal loopback endpoints")
+    @MainActor func tcpProbeRequiresLoopbackEndpoint() {
+        #expect(TCPHealthProbe(loopbackHost: "127.0.0.1", port: 1_080) != nil)
+        #expect(TCPHealthProbe(loopbackHost: "127.255.255.254", port: 65_535) != nil)
+        #expect(TCPHealthProbe(loopbackHost: "::1", port: 8_888) != nil)
+
+        let externalOrAmbiguousHosts = [
+            "1.1.1.1",
+            "8.8.8.8",
+            "0.0.0.0",
+            "::",
+            "::ffff:127.0.0.1",
+            "localhost",
+            "example.com",
+        ]
+        for host in externalOrAmbiguousHosts {
+            #expect(TCPHealthProbe(loopbackHost: host, port: 443) == nil)
+        }
+
+        #expect(TCPHealthProbe(loopbackHost: "127.0.0.1", port: 0) == nil)
+    }
 
     @Test("Initial state is unknown")
     @MainActor func initialState() {
@@ -154,6 +195,32 @@ struct ProxyHealthMonitorTests {
         #expect(delegate.stateChanges.count == 4)
         #expect(delegate.stateChanges[0] == .healthy)
         #expect(delegate.stateChanges[3] == .failing)
+    }
+
+    @Test("stopped monitor ignores an in-flight probe result")
+    @MainActor func stoppedMonitorIgnoresInFlightProbe() async {
+        let probe = SuspendedHealthProbe()
+        let delegate = MockProxyStateDelegate()
+        let monitor = ProxyHealthMonitor(
+            probe: probe,
+            consecutiveFailuresThreshold: 1
+        )
+        monitor.delegate = delegate
+
+        let check = Task { @MainActor in
+            await monitor.checkOnce()
+        }
+        for _ in 0..<50 where !probe.isWaiting {
+            await Task.yield()
+        }
+        #expect(probe.isWaiting)
+
+        monitor.stopMonitoring()
+        probe.resume(returning: false)
+        await check.value
+
+        #expect(monitor.state == .unknown)
+        #expect(delegate.stateChanges.isEmpty)
     }
 
     @Test("ProxyHealthState equality")

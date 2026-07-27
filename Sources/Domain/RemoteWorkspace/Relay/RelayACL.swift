@@ -5,23 +5,27 @@ import Foundation
 
 // MARK: - Relay ACL
 
-/// Controls which processes and hosts can use a relay channel.
+/// Stores relay policy, including identity fields retained for config compatibility.
 ///
-/// Evaluation requires both process name and remote host to pass.
+/// The broker enforces `maxConnections`. Process and remote-host identity cannot
+/// be inferred from an SSH reverse-forward peer and must not be presented as live
+/// controls until authenticated origin metadata is available.
+/// Evaluation requires both process name and remote host to pass when a caller
+/// has an independent, trustworthy source for those values.
 /// An empty `allowedProcesses` list permits all processes.
 /// An empty `allowedRemoteHosts` list uses the default (`["127.0.0.1"]`).
 struct RelayACL: Codable, Sendable, Equatable {
 
-    /// Process names allowed to use this channel (empty = all allowed).
+    /// Legacy process-policy metadata for callers with authenticated process identity.
     let allowedProcesses: [String]
 
     /// Maximum number of simultaneous connections.
     let maxConnections: Int
 
-    /// Maximum bandwidth in bytes per second (nil = unlimited).
+    /// Reserved bandwidth-policy metadata; the current broker does not enforce it.
     let maxBandwidthBytesPerSec: Int?
 
-    /// Remote hosts allowed to connect (empty defaults to localhost only).
+    /// Legacy host-policy metadata for callers with authenticated origin identity.
     let allowedRemoteHosts: [String]
 
     init(

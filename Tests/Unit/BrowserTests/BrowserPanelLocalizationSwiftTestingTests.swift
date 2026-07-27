@@ -96,6 +96,20 @@ struct BrowserPanelLocalizationSwiftTestingTests {
         #expect(folderCopy.informativeText == "¿Seguro que quieres eliminar esta carpeta y todo su contenido?")
     }
 
+    @Test("browser import wizard localizes every navigation step")
+    func browserImportWizardLocalizes() throws {
+        let bundle = try #require(localizationBundle())
+        let localizer = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(BrowserImportWizardView.localizedTitle(using: localizer) == "Importar datos del navegador")
+        #expect(BrowserImportWizardView.localizedStepTitle(.source, using: localizer) == "Origen")
+        #expect(BrowserImportWizardView.localizedStepTitle(.data, using: localizer) == "Datos")
+        #expect(BrowserImportWizardView.localizedStepTitle(.filters, using: localizer) == "Filtros")
+        #expect(BrowserImportWizardView.localizedStepTitle(.review, using: localizer) == "Revisión")
+        #expect(BrowserImportWizardView.localizedHistoryRange(.ninetyDays, using: localizer) == "90 días")
+        #expect(localizer.string("menu.file.importBrowserData", fallback: "Import Browser Data...") == "Importar datos del navegador...")
+    }
+
     private func localizationBundle() -> Bundle? {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))

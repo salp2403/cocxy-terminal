@@ -15,42 +15,104 @@ private struct PTYDaemonMessageEnvelope: Decodable {
     let event: PTYDaemonEvent.Kind?
 }
 
-private final class PTYDaemonProcessMessageBuffer: @unchecked Sendable {
-    private let pendingBytes = LockedBox<Data>(Data())
-    private let responses = LockedBox<[String: PTYDaemonResponse]>([:])
-    private let events = LockedBox<[PTYDaemonEvent]>([])
+final class PTYDaemonProcessMessageBuffer: @unchecked Sendable {
+    private struct BufferedEvent {
+        let value: PTYDaemonEvent
+        let retainedBytes: Int
+    }
+
+    private struct BufferedResponse {
+        let value: PTYDaemonResponse
+        let retainedBytes: Int
+    }
+
+    private struct State {
+        var generation: UInt64 = 0
+        var pendingBytes = Data()
+        var responses: [String: BufferedResponse] = [:]
+        var responseBytes = 0
+        var events: [BufferedEvent] = []
+        var eventHead = 0
+        var eventBytes = 0
+        var disconnected = false
+    }
+
+    private static let maximumPendingBytes = 32 * 1_024 * 1_024
+    private static let maximumResponseCount = 256
+    private static let maximumResponseBytes = 64 * 1_024 * 1_024
+    private static let maximumEventCount = 2_048
+    private static let maximumEventBytes = 64 * 1_024 * 1_024
+
+    private let state = LockedBox(State())
     private let responseSemaphore = DispatchSemaphore(value: 0)
     private let eventSemaphore = DispatchSemaphore(value: 0)
 
-    func reset() {
-        pendingBytes.withValue { $0.removeAll(keepingCapacity: false) }
-        responses.withValue { $0.removeAll(keepingCapacity: false) }
-        events.withValue { $0.removeAll(keepingCapacity: false) }
+    @discardableResult
+    func reset() -> UInt64 {
+        state.withValue { state in
+            state.generation &+= 1
+            state.pendingBytes.removeAll(keepingCapacity: false)
+            state.responses.removeAll(keepingCapacity: false)
+            state.responseBytes = 0
+            state.events.removeAll(keepingCapacity: false)
+            state.eventHead = 0
+            state.eventBytes = 0
+            state.disconnected = false
+            return state.generation
+        }
     }
 
-    func ingest(_ chunk: Data) {
-        guard chunk.isEmpty == false else { return }
-        let lines = pendingBytes.withValue { buffer -> [Data] in
-            buffer.append(chunk)
-            var complete: [Data] = []
-            while let newline = buffer.firstIndex(of: 0x0A) {
-                complete.append(Data(buffer.prefix(through: newline)))
-                buffer.removeSubrange(buffer.startIndex...newline)
-            }
-            return complete
+    func markDisconnected(generation: UInt64) {
+        let didDisconnect = state.withValue { state in
+            guard state.generation == generation,
+                  state.disconnected == false else { return false }
+            disconnect(&state)
+            return true
         }
+        signalDisconnectIfNeeded(didDisconnect)
+    }
 
-        for line in lines {
-            store(line)
+    func ingest(_ chunk: Data, generation: UInt64) {
+        guard chunk.isEmpty == false else { return }
+        let extraction = state.withValue { state -> (lines: [Data], disconnected: Bool) in
+            guard state.generation == generation,
+                  state.disconnected == false else { return ([], false) }
+            guard chunk.count <= Self.maximumPendingBytes - state.pendingBytes.count else {
+                disconnect(&state)
+                return ([], true)
+            }
+
+            state.pendingBytes.append(chunk)
+            var complete: [Data] = []
+            var unconsumedStart = state.pendingBytes.startIndex
+            while let newline = state.pendingBytes[unconsumedStart...].firstIndex(of: 0x0A) {
+                complete.append(Data(state.pendingBytes[unconsumedStart...newline]))
+                unconsumedStart = state.pendingBytes.index(after: newline)
+            }
+            if unconsumedStart > state.pendingBytes.startIndex {
+                state.pendingBytes.removeSubrange(state.pendingBytes.startIndex..<unconsumedStart)
+            }
+            return (complete, false)
+        }
+        signalDisconnectIfNeeded(extraction.disconnected)
+
+        for line in extraction.lines {
+            store(line, generation: generation)
         }
     }
 
     func waitForResponse(id: String, timeout: TimeInterval) -> PTYDaemonResponse? {
         let deadline = Date().addingTimeInterval(timeout)
         while true {
-            if let response = responses.withValue({ $0.removeValue(forKey: id) }) {
-                return response
+            let buffered = state.withValue { state -> (PTYDaemonResponse?, Bool) in
+                if let response = state.responses.removeValue(forKey: id) {
+                    state.responseBytes -= response.retainedBytes
+                    return (response.value, state.disconnected)
+                }
+                return (nil, state.disconnected)
             }
+            if let response = buffered.0 { return response }
+            if buffered.1 { return nil }
             let remaining = deadline.timeIntervalSinceNow
             guard remaining > 0 else { return nil }
             if responseSemaphore.wait(timeout: .now() + remaining) == .timedOut {
@@ -60,9 +122,10 @@ private final class PTYDaemonProcessMessageBuffer: @unchecked Sendable {
     }
 
     func receiveEvent(timeout: TimeInterval) -> PTYDaemonEvent? {
-        if let event = events.withValue({ $0.isEmpty ? nil : $0.removeFirst() }) {
+        if let event = popEvent() {
             return event
         }
+        if state.withValue({ $0.disconnected }) { return nil }
         guard timeout > 0 else { return nil }
 
         let deadline = Date().addingTimeInterval(timeout)
@@ -72,28 +135,95 @@ private final class PTYDaemonProcessMessageBuffer: @unchecked Sendable {
             if eventSemaphore.wait(timeout: .now() + remaining) == .timedOut {
                 return nil
             }
-            if let event = events.withValue({ $0.isEmpty ? nil : $0.removeFirst() }) {
+            if let event = popEvent() {
                 return event
             }
+            if state.withValue({ $0.disconnected }) { return nil }
         }
     }
 
-    private func store(_ line: Data) {
+    var isDisconnected: Bool {
+        state.withValue { $0.disconnected }
+    }
+
+    private func store(_ line: Data, generation: UInt64) {
         do {
             let envelope = try PTYDaemonLineCodec.decode(PTYDaemonMessageEnvelope.self, fromLine: line)
             if envelope.event != nil {
                 let event = try PTYDaemonLineCodec.decode(PTYDaemonEvent.self, fromLine: line)
-                events.withValue { $0.append(event) }
-                eventSemaphore.signal()
+                let result = state.withValue { state -> (stored: Bool, disconnected: Bool) in
+                    guard state.generation == generation,
+                          state.disconnected == false else { return (false, false) }
+                    let liveEventCount = state.events.count - state.eventHead
+                    guard liveEventCount < Self.maximumEventCount,
+                          line.count <= Self.maximumEventBytes - state.eventBytes else {
+                        disconnect(&state)
+                        return (false, true)
+                    }
+                    state.events.append(BufferedEvent(value: event, retainedBytes: line.count))
+                    state.eventBytes += line.count
+                    return (true, false)
+                }
+                if result.stored { eventSemaphore.signal() }
+                signalDisconnectIfNeeded(result.disconnected)
             } else {
                 let response = try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: line)
-                responses.withValue { $0[response.id] = response }
-                responseSemaphore.signal()
+                let result = state.withValue { state -> (stored: Bool, disconnected: Bool) in
+                    guard state.generation == generation,
+                          state.disconnected == false else { return (false, false) }
+                    let replacedBytes = state.responses[response.id]?.retainedBytes ?? 0
+                    let nextBytes = state.responseBytes - replacedBytes + line.count
+                    let isNewID = state.responses[response.id] == nil
+                    guard (!isNewID || state.responses.count < Self.maximumResponseCount),
+                          nextBytes <= Self.maximumResponseBytes else {
+                        disconnect(&state)
+                        return (false, true)
+                    }
+                    state.responses[response.id] = BufferedResponse(
+                        value: response,
+                        retainedBytes: line.count
+                    )
+                    state.responseBytes = nextBytes
+                    return (true, false)
+                }
+                if result.stored { responseSemaphore.signal() }
+                signalDisconnectIfNeeded(result.disconnected)
             }
         } catch {
-            // The daemon protocol is fail-closed: malformed lines are ignored
-            // so a bad helper cannot crash the app process.
+            markDisconnected(generation: generation)
         }
+    }
+
+    private func popEvent() -> PTYDaemonEvent? {
+        state.withValue { state in
+            guard state.eventHead < state.events.count else { return nil }
+            let buffered = state.events[state.eventHead]
+            state.eventHead += 1
+            state.eventBytes -= buffered.retainedBytes
+
+            if state.eventHead >= 256,
+               state.eventHead * 2 >= state.events.count {
+                state.events.removeFirst(state.eventHead)
+                state.eventHead = 0
+            }
+            return buffered.value
+        }
+    }
+
+    private func disconnect(_ state: inout State) {
+        state.pendingBytes.removeAll(keepingCapacity: false)
+        state.responses.removeAll(keepingCapacity: false)
+        state.responseBytes = 0
+        state.events.removeAll(keepingCapacity: false)
+        state.eventHead = 0
+        state.eventBytes = 0
+        state.disconnected = true
+    }
+
+    private func signalDisconnectIfNeeded(_ didDisconnect: Bool) {
+        guard didDisconnect else { return }
+        responseSemaphore.signal()
+        eventSemaphore.signal()
     }
 }
 
@@ -118,7 +248,10 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
     }
 
     deinit {
-        process?.terminate()
+        outputPipe?.fileHandleForReading.readabilityHandler = nil
+        try? inputPipe?.fileHandleForWriting.close()
+        try? outputPipe?.fileHandleForReading.close()
+        Self.stop(process)
     }
 
     func send(_ request: PTYDaemonRequest) throws -> PTYDaemonResponse {
@@ -127,10 +260,25 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
             throw TerminalEngineError.initializationFailed(reason: "PTY daemon transport is not connected")
         }
 
-        inputPipe.fileHandleForWriting.write(try PTYDaemonLineCodec.encode(request))
-        guard let response = messageBuffer.waitForResponse(id: request.id, timeout: timeoutSeconds) else {
+        let encoded = try PTYDaemonLineCodec.encode(request)
+        guard TerminalProcessBoundary.writeAll(
+            encoded,
+            to: inputPipe.fileHandleForWriting.fileDescriptor,
+            maximumWaitMilliseconds: 1_000
+        ) else {
             resetProcess()
-            throw TerminalEngineError.initializationFailed(reason: "PTY daemon request timed out")
+            throw TerminalEngineError.initializationFailed(
+                reason: "PTY daemon transport write failed"
+            )
+        }
+        guard let response = messageBuffer.waitForResponse(id: request.id, timeout: timeoutSeconds) else {
+            let transportDropped = messageBuffer.isDisconnected
+            resetProcess()
+            throw TerminalEngineError.initializationFailed(
+                reason: transportDropped
+                    ? "PTY daemon transport was dropped"
+                    : "PTY daemon request timed out"
+            )
         }
         if request.command == .shutdown {
             resetProcess()
@@ -195,6 +343,12 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
 
         let input = Pipe()
         let output = Pipe()
+        guard TerminalProcessBoundary.setNoSigPipe(input.fileHandleForWriting.fileDescriptor),
+              TerminalProcessBoundary.setNonBlocking(input.fileHandleForWriting.fileDescriptor) else {
+            throw TerminalEngineError.initializationFailed(
+                reason: "PTY daemon transport could not disable SIGPIPE"
+            )
+        }
         process.standardInput = input
         process.standardOutput = output
         process.standardError = Pipe()
@@ -205,9 +359,14 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
             throw TerminalEngineError.initializationFailed(reason: String(describing: error))
         }
 
-        messageBuffer.reset()
-        output.fileHandleForReading.readabilityHandler = { [messageBuffer] handle in
-            messageBuffer.ingest(handle.availableData)
+        let generation = messageBuffer.reset()
+        output.fileHandleForReading.readabilityHandler = { [messageBuffer, generation] handle in
+            let data = handle.availableData
+            if data.isEmpty {
+                messageBuffer.markDisconnected(generation: generation)
+            } else {
+                messageBuffer.ingest(data, generation: generation)
+            }
         }
 
         self.process = process
@@ -216,16 +375,37 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
     }
 
     private func resetProcess() {
+        let runningProcess = process
         outputPipe?.fileHandleForReading.readabilityHandler = nil
         inputPipe?.fileHandleForWriting.closeFile()
         outputPipe?.fileHandleForReading.closeFile()
         inputPipe = nil
         outputPipe = nil
-        if process?.isRunning == true {
-            process?.terminate()
-        }
         process = nil
+        Self.stop(runningProcess)
         messageBuffer.reset()
+    }
+
+    private nonisolated static func stop(_ process: Process?) {
+        guard let process else { return }
+
+        if waitForExit(process, timeout: 2) == false, process.isRunning {
+            process.terminate()
+        }
+        if waitForExit(process, timeout: 0.25) == false, process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+        }
+        if waitForExit(process, timeout: 1), process.isRunning == false {
+            process.waitUntilExit()
+        }
+    }
+
+    private nonisolated static func waitForExit(_ process: Process, timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return process.isRunning == false
     }
 }
 
@@ -248,6 +428,11 @@ final class PTYDaemonClient: TerminalEngine {
         guard response.ok, let hello = response.hello else {
             throw TerminalEngineError.initializationFailed(
                 reason: response.error ?? "PTY daemon did not return hello"
+            )
+        }
+        guard hello.protocolVersion == PTYDaemonProtocol.protocolVersion else {
+            throw TerminalEngineError.initializationFailed(
+                reason: "PTY daemon protocol version \(hello.protocolVersion) does not match required version \(PTYDaemonProtocol.protocolVersion)"
             )
         }
         guard hello.supportsTerminalEngineAdapter else {
@@ -321,8 +506,16 @@ final class PTYDaemonClient: TerminalEngine {
     }
 
     func sendText(_ text: String, to surface: SurfaceID) {
-        let data = Data(text.utf8).base64EncodedString()
-        _ = try? sendSurfaceRequest(surface, command: .surfaceWrite, payload: ["bytesBase64": data])
+        sendRawBytes(Data(text.utf8), to: surface)
+    }
+
+    func sendRawBytes(_ data: Data, to surface: SurfaceID) {
+        guard data.isEmpty == false else { return }
+        _ = try? sendSurfaceRequest(
+            surface,
+            command: .surfaceWrite,
+            payload: ["bytesBase64": data.base64EncodedString()]
+        )
     }
 
     func sendPreeditText(_ text: String, to surface: SurfaceID) {
@@ -377,7 +570,12 @@ final class PTYDaemonClient: TerminalEngine {
     }
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
-        _ = try? sendSurfaceRequest(surfaceID, command: .surfaceScroll, payload: ["lineNumber": "\(lineNumber)"])
+        scrollSurface(surfaceID: surfaceID, payload: ["lineNumber": "\(lineNumber)"])
+    }
+
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {
+        guard deltaRows != 0 else { return }
+        scrollSurface(surfaceID: surfaceID, payload: ["deltaRows": "\(deltaRows)"])
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
@@ -425,7 +623,7 @@ final class PTYDaemonClient: TerminalEngine {
         }
         return TerminalProcessMonitorRegistration(
             shellPID: process.shellPID,
-            ptyMasterFD: process.ptyMasterFD,
+            ptyMasterFD: process.ptyMasterFD ?? -1,
             shellIdentity: identity
         )
     }
@@ -452,6 +650,19 @@ final class PTYDaemonClient: TerminalEngine {
                 throw TerminalEngineError.initializationFailed(reason: "PTY daemon surface failed reattach")
             }
             return try connection.send(request)
+        }
+    }
+
+    private func scrollSurface(surfaceID: SurfaceID, payload: [String: String]) {
+        guard let response = try? sendSurfaceRequest(
+            surfaceID,
+            command: .surfaceScroll,
+            payload: payload
+        ), response.ok else {
+            return
+        }
+        if let frame = response.frame {
+            frameHandlers[surfaceID]?(frame)
         }
     }
 

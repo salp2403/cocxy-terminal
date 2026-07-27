@@ -120,13 +120,12 @@ extension AppSocketCommandHandler {
 
     /// Returns timeline events, optionally scoped to a tab.
     func handleTimelineShow(_ request: SocketRequest) -> SocketResponse {
-        guard let provider = timelineQueryProvider else {
-            return .failure(id: request.id, error: "Timeline not available")
-        }
-
         if let tabID = request.params?["tabId"],
            UUID(uuidString: tabID) == nil {
             return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
+        }
+        guard let provider = timelineQueryProvider else {
+            return .failure(id: request.id, error: "Timeline not available")
         }
 
         guard let result = provider(request.params?["tabId"]),
@@ -150,10 +149,6 @@ extension AppSocketCommandHandler {
     ///
     /// Optional params: `format` ("json" or "markdown", default "json").
     func handleTimelineExport(_ request: SocketRequest) -> SocketResponse {
-        guard let exporter = timelineExportProvider else {
-            return .failure(id: request.id, error: "Timeline not available")
-        }
-
         if let tabID = request.params?["tabId"],
            UUID(uuidString: tabID) == nil {
             return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
@@ -162,6 +157,9 @@ extension AppSocketCommandHandler {
         let rawFormat = request.params?["format"] ?? "json"
         guard let format = normalizedTimelineFormat(rawFormat) else {
             return .failure(id: request.id, error: "Invalid format: \(rawFormat). Use 'json' or 'markdown'")
+        }
+        guard let exporter = timelineExportProvider else {
+            return .failure(id: request.id, error: "Timeline not available")
         }
 
         guard let data = exporter(request.params?["tabId"], format) else {
@@ -336,15 +334,21 @@ extension AppSocketCommandHandler {
     /// Toggles the search bar in the active terminal.
     func handleSearch(_ request: SocketRequest) -> SocketResponse {
         if let query = request.params?["query"] {
-            guard let provider = searchProvider else {
-                return .failure(id: request.id, error: "Search not available")
-            }
-            let regex = parseBool(request.params?["regex"]) ?? false
-            let caseSensitive = parseBool(request.params?["caseSensitive"]) ?? false
-
             if let tabID = request.params?["tabId"],
                UUID(uuidString: tabID) == nil {
                 return .failure(id: request.id, error: "Invalid UUID format for param: tabId")
+            }
+            if let rawRegex = request.params?["regex"], parseBool(rawRegex) == nil {
+                return .failure(id: request.id, error: "Invalid boolean for param: regex")
+            }
+            if let rawCaseSensitive = request.params?["caseSensitive"],
+               parseBool(rawCaseSensitive) == nil {
+                return .failure(id: request.id, error: "Invalid boolean for param: caseSensitive")
+            }
+            let regex = parseBool(request.params?["regex"]) ?? false
+            let caseSensitive = parseBool(request.params?["caseSensitive"]) ?? false
+            guard let provider = searchProvider else {
+                return .failure(id: request.id, error: "Search not available")
             }
 
             guard let result = provider(query, regex, caseSensitive, request.params?["tabId"]),
@@ -404,6 +408,38 @@ private func parseBool(_ rawValue: String?) -> Bool? {
     }
 }
 
+enum SocketTerminalKeySequence {
+    static func sequence(for keyName: String) -> String? {
+        switch keyName.lowercased() {
+        case "enter", "return": return "\r"
+        case "tab": return "\t"
+        case "escape", "esc": return "\u{1B}"
+        case "backspace", "bs": return "\u{7F}"
+        case "space": return " "
+        case "up": return "\u{1B}[A"
+        case "down": return "\u{1B}[B"
+        case "right": return "\u{1B}[C"
+        case "left": return "\u{1B}[D"
+        case "delete", "del": return "\u{1B}[3~"
+        case "home": return "\u{1B}[H"
+        case "end": return "\u{1B}[F"
+        case "pageup", "pgup": return "\u{1B}[5~"
+        case "pagedown", "pgdn": return "\u{1B}[6~"
+        case "insert", "ins": return "\u{1B}[2~"
+        case "ctrl-c": return "\u{03}"
+        case "ctrl-d": return "\u{04}"
+        case "ctrl-z": return "\u{1A}"
+        case "ctrl-l": return "\u{0C}"
+        case "ctrl-a": return "\u{01}"
+        case "ctrl-e": return "\u{05}"
+        case "ctrl-k": return "\u{0B}"
+        case "ctrl-u": return "\u{15}"
+        case "ctrl-w": return "\u{17}"
+        default: return nil
+        }
+    }
+}
+
 private func encodedJSONString<T: Encodable>(_ value: T) -> String? {
     let encoder = JSONEncoder()
     if #available(macOS 10.13, *) {
@@ -423,11 +459,11 @@ extension AppSocketCommandHandler {
     ///
     /// Required params: `text` (the string to send).
     func handleSend(_ request: SocketRequest) -> SocketResponse {
-        guard let provider = sendTextProvider else {
-            return .failure(id: request.id, error: "Terminal not available")
-        }
         guard let text = request.params?["text"], !text.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: text")
+        }
+        guard let provider = sendTextProvider else {
+            return .failure(id: request.id, error: "Terminal not available")
         }
         let sent = provider(text)
         if sent {
@@ -440,11 +476,14 @@ extension AppSocketCommandHandler {
     ///
     /// Required params: `key` (key name like "enter", "tab", "escape", "backspace").
     func handleSendKey(_ request: SocketRequest) -> SocketResponse {
-        guard let provider = sendKeyProvider else {
-            return .failure(id: request.id, error: "Terminal not available")
-        }
         guard let key = request.params?["key"], !key.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: key")
+        }
+        guard SocketTerminalKeySequence.sequence(for: key) != nil else {
+            return .failure(id: request.id, error: "Unknown key: \(key)")
+        }
+        guard let provider = sendKeyProvider else {
+            return .failure(id: request.id, error: "Terminal not available")
         }
         let sent = provider(key)
         if sent {
@@ -500,16 +539,34 @@ extension AppSocketCommandHandler {
     /// Required params: `destination` (user@host format).
     /// Optional params: `port`, `identity` (path to SSH key).
     func handleSSH(_ request: SocketRequest) -> SocketResponse {
+        guard let rawDestination = request.params?["destination"], !rawDestination.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: destination (user@host)")
+        }
+        let destination: SSHConnectionDestination
+        do {
+            destination = try SSHConnectionDestination(rawDestination)
+        } catch {
+            return .failure(id: request.id, error: "Invalid SSH destination (expected host or user@host)")
+        }
+        let port: Int?
+        if let rawPort = request.params?["port"] {
+            guard let parsedPort = Int(rawPort), (1...65_535).contains(parsedPort) else {
+                return .failure(id: request.id, error: "Invalid SSH port: \(rawPort)")
+            }
+            port = parsedPort
+        } else {
+            port = nil
+        }
+        let identityFile = request.params?["identity"]
+        if let identityFile,
+           validatedFileURL(fromCLIPath: identityFile) == nil {
+            return .failure(id: request.id, error: "Invalid SSH identity path")
+        }
         guard let provider = sshProvider else {
             return .failure(id: request.id, error: "SSH not available")
         }
-        guard let destination = request.params?["destination"], !destination.isEmpty else {
-            return .failure(id: request.id, error: "Missing required param: destination (user@host)")
-        }
-        let port = request.params?["port"].flatMap { Int($0) }
-        let identityFile = request.params?["identity"]
 
-        guard let result = provider(destination, port, identityFile) else {
+        guard let result = provider(destination.value, port, identityFile) else {
             return .failure(id: request.id, error: "Failed to open SSH session")
         }
 
@@ -517,7 +574,7 @@ extension AppSocketCommandHandler {
             "status": "connected",
             "id": result.id,
             "title": result.title,
-            "destination": destination
+            "destination": destination.value
         ])
     }
 }

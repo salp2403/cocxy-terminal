@@ -56,12 +56,14 @@ final class BrowserContentView: NSView {
 
     /// Handler retained while the current WKWebView is alive.
     private var domGrabHandler: BrowserDOMGrabHandler?
+    private var domGrabNavigationGenerations: [ObjectIdentifier: UInt64] = [:]
 
     /// The URL text field.
     private var urlField: NSTextField?
 
     /// Compact Local/Remote route indicator in the browser toolbar.
     private var routeIndicatorLabel: NSTextField?
+    private var routeLocalButton: NSButton?
 
     /// Combine subscriptions.
     private var cancellables = Set<AnyCancellable>()
@@ -134,16 +136,20 @@ final class BrowserContentView: NSView {
         let monitor = networkMonitor
         let capture = consoleCapture
         let wv = webView
+        let model = viewModel
         // Schedule cleanup on main actor since deinit is nonisolated.
         // observations and cancellables are released by ARC (KVO observations
         // are invalidated on dealloc; AnyCancellable cancels on dealloc).
         Task { @MainActor in
+            model.revokeDOMGrabAuthorization()
+            model.revokeAllInitScripts()
             monitor?.stopMonitoring()
             wv?.navigationDelegate = nil
             wv?.uiDelegate = nil
             if let wv {
                 capture?.uninstall(from: wv)
                 BrowserDOMGrabWebKitSupport.uninstall(from: wv)
+                BrowserInitScriptWebKitSupport.uninstall(from: wv, viewModel: model)
             }
         }
     }
@@ -236,6 +242,21 @@ final class BrowserContentView: NSView {
         routeIndicator.widthAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
         routeIndicator.heightAnchor.constraint(equalToConstant: 20).isActive = true
         self.routeIndicatorLabel = routeIndicator
+
+        let routeLocalButton = createToolbarButton(
+            symbol: "house",
+            action: #selector(switchRemoteBrowserToLocalAction)
+        )
+        routeLocalButton.toolTip = localized(
+            "browser.route.notice.switchLocal",
+            fallback: "Switch to local"
+        )
+        routeLocalButton.setAccessibilityLabel(routeLocalButton.toolTip ?? "Switch to local")
+        routeLocalButton.translatesAutoresizingMaskIntoConstraints = false
+        rightStack.addArrangedSubview(routeLocalButton)
+        routeLocalButton.widthAnchor.constraint(equalToConstant: 20).isActive = true
+        routeLocalButton.heightAnchor.constraint(equalToConstant: 20).isActive = true
+        self.routeLocalButton = routeLocalButton
         updateRouteIndicator(remoteProfile: viewModel.activeRemoteBrowserProfile)
 
         if let profileManager {
@@ -358,8 +379,11 @@ final class BrowserContentView: NSView {
     private func installWebViewForActiveProfile(loadCurrentURL: Bool) {
         let previousWebView = webView
         if let previousWebView {
+            viewModel.revokeDOMGrabAuthorization()
+            viewModel.revokeAllInitScripts()
             consoleCapture?.uninstall(from: previousWebView)
             BrowserDOMGrabWebKitSupport.uninstall(from: previousWebView)
+            BrowserInitScriptWebKitSupport.uninstall(from: previousWebView, viewModel: viewModel)
         }
         networkMonitor?.stopMonitoring()
         observations.removeAll()
@@ -370,12 +394,18 @@ final class BrowserContentView: NSView {
 
         let config = WKWebViewConfiguration()
         config.preferences.isElementFullscreenEnabled = true
-        if let profileID = viewModel.activeProfileID {
-            config.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
-        }
+        config.websiteDataStore = BrowserWebsiteDataStoreFactory.make(
+            profileID: viewModel.activeProfileID,
+            remoteCapability: viewModel.activeRemoteBrowserProxyCapability
+        )
+        let remoteNetworkIsolationReady = BrowserWebsiteDataStoreFactory
+            .installRemoteNetworkIsolation(
+                on: config,
+                capability: viewModel.activeRemoteBrowserProxyCapability
+            )
         let domGrabHandler = BrowserDOMGrabHandler()
-        domGrabHandler.onPayload = { [weak viewModel] payload in
-            viewModel?.handleDOMGrabPayload(payload)
+        domGrabHandler.onPayload = { [weak viewModel] authorizationID, payload in
+            viewModel?.handleDOMGrabPayload(payload, authorizationID: authorizationID)
         }
         BrowserDOMGrabWebKitSupport.install(on: config, handler: domGrabHandler)
         self.domGrabHandler = domGrabHandler
@@ -388,7 +418,6 @@ final class BrowserContentView: NSView {
         BrowserWebViewAppearance.configure(wv)
         addSubview(wv, positioned: .below, relativeTo: toolbarContainer)
         webView = wv
-        BrowserWebKitAutomationBridge.install(on: viewModel, webView: wv)
 
         let topAnchor = findBarHostingView?.bottomAnchor ?? toolbarContainer?.bottomAnchor ?? self.topAnchor
         let bottomAnchor = devToolsHostingView?.topAnchor ?? downloadsHostingView?.topAnchor ?? self.bottomAnchor
@@ -424,11 +453,13 @@ final class BrowserContentView: NSView {
         })
 
         installBrowserInstrumentation()
+        BrowserWebKitAutomationBridge.install(on: viewModel, webView: wv)
 
-        if loadCurrentURL, let url = viewModel.currentURL {
+        if loadCurrentURL, remoteNetworkIsolationReady, let url = viewModel.currentURL {
             wv.load(URLRequest(url: url))
+        } else if !remoteNetworkIsolationReady {
+            viewModel.markRemoteBrowserProxyFailed("Remote browser isolation is unavailable")
         }
-        BrowserDOMGrabWebKitSupport.setEnabled(viewModel.isDOMGrabActive, on: wv)
     }
 
     // MARK: - ViewModel Binding
@@ -471,6 +502,16 @@ final class BrowserContentView: NSView {
                 self?.updateRouteIndicator(remoteProfile: remoteProfile)
             }
             .store(in: &cancellables)
+
+        viewModel.$activeRemoteBrowserProxyCapability
+            .map { $0?.id }
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.installWebViewForActiveProfile(loadCurrentURL: true)
+            }
+            .store(in: &cancellables)
     }
 
     private func handleNavigation(_ action: BrowserViewModel.NavigationAction) {
@@ -490,8 +531,17 @@ final class BrowserContentView: NSView {
                     NSLog("[Cocxy] JS eval error: %@", error.localizedDescription)
                 }
             }
-        case .setDOMGrabEnabled(let enabled):
-            BrowserDOMGrabWebKitSupport.setEnabled(enabled, on: webView)
+        case .setDOMGrabAuthorization(let authorizationID):
+            BrowserDOMGrabWebKitSupport.setAuthorization(
+                authorizationID,
+                on: webView
+            ) { [weak viewModel] applied in
+                guard let authorizationID else { return }
+                viewModel?.handleDOMGrabWebKitUpdate(
+                    authorizationID: authorizationID,
+                    applied: applied
+                )
+            }
         }
     }
 
@@ -517,6 +567,10 @@ final class BrowserContentView: NSView {
 
     @objc private func reloadAction(_ sender: Any?) {
         viewModel.reload()
+    }
+
+    @objc private func switchRemoteBrowserToLocalAction(_ sender: Any?) {
+        viewModel.clearRemoteBrowserProfile()
     }
 
     @objc private func toggleDOMGrabAction(_ sender: Any?) {
@@ -584,6 +638,7 @@ final class BrowserContentView: NSView {
                 : localized("browser.route.local.accessibility", fallback: "Local browser route")
         )
         routeIndicatorLabel.setAccessibilityValue(remoteProfile?.displayTitle ?? routeIndicatorLabel.toolTip)
+        routeLocalButton?.isHidden = !isRemote
     }
 
     private func routeIndicatorTint(for remoteProfile: RemoteBrowserProfile?) -> NSColor {
@@ -730,10 +785,30 @@ extension BrowserContentView: WKNavigationDelegate {
         decidePolicyFor navigationAction: WKNavigationAction,
         decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
     ) {
-        guard BrowserNavigationPolicy.allows(navigationAction.request.url) else {
+        guard viewModel.allowsNavigationForActiveRemoteRoute(navigationAction.request.url),
+              BrowserNavigationPolicy.allows(navigationAction.request.url) else {
             decisionHandler(.cancel)
             return
         }
+        viewModel.revokeDOMGrabAuthorizationForNavigation(
+            isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+        )
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: navigationAction.request.url,
+            isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+        )
+        decisionHandler(.allow)
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        decidePolicyFor navigationResponse: WKNavigationResponse,
+        decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+    ) {
+        viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+            url: navigationResponse.response.url,
+            isMainFrame: navigationResponse.isForMainFrame
+        )
         decisionHandler(.allow)
     }
 
@@ -742,8 +817,8 @@ extension BrowserContentView: WKNavigationDelegate {
         didReceive challenge: URLAuthenticationChallenge,
         completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
     ) {
-        // Allow self-signed certificates for localhost dev servers.
-        if challenge.protectionSpace.host == "localhost" || challenge.protectionSpace.host == "127.0.0.1" {
+        // Development trust is local-only or bound to the active remote alias.
+        if viewModel.allowsDevelopmentServerTrust(host: challenge.protectionSpace.host) {
             if let trust = challenge.protectionSpace.serverTrust {
                 completionHandler(.useCredential, URLCredential(trust: trust))
                 return
@@ -752,39 +827,61 @@ extension BrowserContentView: WKNavigationDelegate {
         completionHandler(.performDefaultHandling, nil)
     }
 
-    nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            self.viewModel.isLoading = false
-            self.viewModel.recordRemoteBrowserNavigationSucceeded(url: webView.url)
-            if let url = webView.url?.absoluteString {
-                self.viewModel.recordPageVisit(url: url, title: webView.title)
-            }
-            BrowserDOMGrabWebKitSupport.setEnabled(
-                self.viewModel.isDOMGrabActive,
-                on: webView
-            )
+    func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        viewModel.markAutomationNavigationBoundary()
+        trackDOMGrabNavigation(navigation)
+        viewModel.isLoading = true
+    }
+
+    func webView(
+        _ webView: WKWebView,
+        didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+    ) {
+        viewModel.markAutomationNavigationBoundary()
+        trackDOMGrabNavigation(navigation)
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        completeDOMGrabNavigation(navigation)
+        viewModel.isLoading = false
+        viewModel.recordRemoteBrowserNavigationSucceeded(url: webView.url)
+        if let url = webView.url?.absoluteString {
+            viewModel.recordPageVisit(url: url, title: webView.title)
         }
     }
 
-    nonisolated func webView(
+    func webView(
         _ webView: WKWebView,
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: Error
     ) {
-        Task { @MainActor [weak self] in
-            self?.showErrorPage(error: error, failedURL: webView.url)
-        }
+        completeDOMGrabNavigation(navigation)
+        showErrorPage(error: error, failedURL: webView.url)
     }
 
-    nonisolated func webView(
+    func webView(
         _ webView: WKWebView,
         didFail navigation: WKNavigation!,
         withError error: Error
     ) {
-        Task { @MainActor [weak self] in
-            self?.showErrorPage(error: error, failedURL: webView.url)
-        }
+        completeDOMGrabNavigation(navigation)
+        showErrorPage(error: error, failedURL: webView.url)
+    }
+
+    private func completeDOMGrabNavigation(_ navigation: WKNavigation?) {
+        guard let navigation,
+              let generation = domGrabNavigationGenerations.removeValue(
+                  forKey: ObjectIdentifier(navigation)
+              ) else { return }
+        viewModel.completeDOMGrabNavigation(generation: generation)
+    }
+
+    private func trackDOMGrabNavigation(_ navigation: WKNavigation?) {
+        let generation = viewModel.revokeDOMGrabAuthorizationForNavigation(
+            isMainFrame: true
+        )
+        guard let navigation, let generation else { return }
+        domGrabNavigationGenerations[ObjectIdentifier(navigation)] = generation
     }
 }
 

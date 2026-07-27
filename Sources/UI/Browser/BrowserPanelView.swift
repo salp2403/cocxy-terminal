@@ -46,6 +46,7 @@ struct BrowserPanelView: View {
     var profileManager: BrowserProfileManager?
     var onToggleHistory: (() -> Void)?
     var onToggleBookmarks: (() -> Void)?
+    var onImportData: ((UUID) -> Void)?
     var onDismiss: () -> Void
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
@@ -191,6 +192,7 @@ struct BrowserPanelView: View {
                         )
                     },
                     onManageProfiles: nil,
+                    onImportData: onImportData,
                     localizer: localizer
                 )
             }
@@ -224,39 +226,55 @@ struct BrowserPanelView: View {
             ?? localized("browser.route.local.detail", fallback: "Browser traffic uses local networking")
 
         return HStack(spacing: 4) {
-            Image(systemName: symbol)
-                .font(.system(size: 9, weight: .semibold))
-            Text(label)
-                .font(.system(size: 10, weight: .semibold))
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Image(systemName: symbol)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 10, weight: .semibold))
+                    .lineLimit(1)
+            }
+            .foregroundColor(tint)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            .background(
+                Capsule()
+                    .fill(
+                        isRemote
+                            ? tint.opacity(0.12)
+                            : Color(nsColor: CocxyColors.surface0).opacity(0.72)
+                    )
+            )
+            .overlay(
+                Capsule()
+                    .stroke(
+                        isRemote
+                            ? tint.opacity(0.35)
+                            : Color(nsColor: CocxyColors.surface1).opacity(0.7),
+                        lineWidth: 1
+                    )
+            )
+            .help(detail)
+            .accessibilityLabel(
+                isRemote
+                    ? localized("browser.route.remote.accessibility", fallback: "Remote browser route")
+                    : localized("browser.route.local.accessibility", fallback: "Local browser route")
+            )
+            .accessibilityValue(remoteProfile?.displayTitle ?? detail)
+
+            if isRemote {
+                Button(action: { viewModel.clearRemoteBrowserProfile() }) {
+                    Image(systemName: "house")
+                        .font(.system(size: 9, weight: .semibold))
+                }
+                .buttonStyle(.plain)
+                .frame(width: 20, height: 20)
+                .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                .help(localized("browser.route.notice.switchLocal", fallback: "Switch to local"))
+                .accessibilityLabel(
+                    localized("browser.route.notice.switchLocal", fallback: "Switch to local")
+                )
+            }
         }
-        .foregroundColor(tint)
-        .padding(.horizontal, 7)
-        .frame(height: 20)
-        .background(
-            Capsule()
-                .fill(
-                    isRemote
-                        ? tint.opacity(0.12)
-                        : Color(nsColor: CocxyColors.surface0).opacity(0.72)
-                )
-        )
-        .overlay(
-            Capsule()
-                .stroke(
-                    isRemote
-                        ? tint.opacity(0.35)
-                        : Color(nsColor: CocxyColors.surface1).opacity(0.7),
-                    lineWidth: 1
-                )
-        )
-        .help(detail)
-        .accessibilityLabel(
-            isRemote
-                ? localized("browser.route.remote.accessibility", fallback: "Remote browser route")
-                : localized("browser.route.local.accessibility", fallback: "Local browser route")
-        )
-        .accessibilityValue(remoteProfile?.displayTitle ?? detail)
     }
 
     private func routeBadgeTint(for remoteProfile: RemoteBrowserProfile?) -> Color {
@@ -721,7 +739,10 @@ struct BrowserPanelView: View {
                         }
                     }
                 )
-                .id(viewModel.activeProfileID)
+                .id(
+                    "\(viewModel.activeProfileID?.uuidString ?? "default")"
+                        + ":\(viewModel.activeRemoteBrowserProxyCapability?.id.uuidString ?? "local")"
+                )
             } else {
                 emptyStateView
             }
@@ -920,9 +941,15 @@ struct WebViewRepresentable: NSViewRepresentable {
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
-        if let profileID = viewModel.activeProfileID {
-            configuration.websiteDataStore = WKWebsiteDataStore(forIdentifier: profileID)
-        }
+        configuration.websiteDataStore = BrowserWebsiteDataStoreFactory.make(
+            profileID: viewModel.activeProfileID,
+            remoteCapability: viewModel.activeRemoteBrowserProxyCapability
+        )
+        let remoteNetworkIsolationReady = BrowserWebsiteDataStoreFactory
+            .installRemoteNetworkIsolation(
+                on: configuration,
+                capability: viewModel.activeRemoteBrowserProxyCapability
+            )
         BrowserDOMGrabWebKitSupport.install(
             on: configuration,
             handler: context.coordinator.domGrabHandler
@@ -952,8 +979,10 @@ struct WebViewRepresentable: NSViewRepresentable {
         // This is load-bearing for profile switches: SwiftUI recreates the
         // WKWebView with a new data store, then this initial load lands in
         // the correct profile even if the publish happened before subscribe.
-        if let url = viewModel.currentURL {
+        if remoteNetworkIsolationReady, let url = viewModel.currentURL {
             webView.load(URLRequest(url: url))
+        } else if !remoteNetworkIsolationReady {
+            viewModel.markRemoteBrowserProxyFailed("Remote browser isolation is unavailable")
         }
 
         return webView
@@ -970,6 +999,14 @@ struct WebViewRepresentable: NSViewRepresentable {
         // not by SwiftUI diffs. This avoids re-entrant navigation loops.
     }
 
+    static func dismantleNSView(_ nsView: WKWebView, coordinator: Coordinator) {
+        coordinator.revokeDOMGrabAuthorization()
+        BrowserDOMGrabWebKitSupport.uninstall(from: nsView)
+        coordinator.uninstallInitScripts(from: nsView)
+        nsView.navigationDelegate = nil
+        nsView.uiDelegate = nil
+    }
+
     func makeCoordinator() -> Coordinator {
         Coordinator(viewModel: viewModel, localizer: localizer)
     }
@@ -984,6 +1021,7 @@ struct WebViewRepresentable: NSViewRepresentable {
         private var cancellables = Set<AnyCancellable>()
         private weak var installedConsoleCapture: BrowserConsoleCapture?
         private weak var installedNetworkMonitor: BrowserNetworkMonitor?
+        private var domGrabNavigationGenerations: [ObjectIdentifier: UInt64] = [:]
         let domGrabHandler: BrowserDOMGrabHandler
         weak var webView: WKWebView?
 
@@ -992,9 +1030,21 @@ struct WebViewRepresentable: NSViewRepresentable {
             self.localizer = localizer
             self.domGrabHandler = BrowserDOMGrabHandler()
             super.init()
-            self.domGrabHandler.onPayload = { [weak viewModel] payload in
-                viewModel?.handleDOMGrabPayload(payload)
+            self.domGrabHandler.onPayload = { [weak viewModel] authorizationID, payload in
+                viewModel?.handleDOMGrabPayload(payload, authorizationID: authorizationID)
             }
+        }
+
+        func revokeInitScripts() {
+            viewModel.revokeAllInitScripts()
+        }
+
+        func revokeDOMGrabAuthorization() {
+            viewModel.revokeDOMGrabAuthorization()
+        }
+
+        func uninstallInitScripts(from webView: WKWebView) {
+            BrowserInitScriptWebKitSupport.uninstall(from: webView, viewModel: viewModel)
         }
 
         func installInstrumentationIfNeeded(
@@ -1051,8 +1101,17 @@ struct WebViewRepresentable: NSViewRepresentable {
                                 NSLog("[Cocxy] JS eval error: %@", error.localizedDescription)
                             }
                         }
-                    case .setDOMGrabEnabled(let enabled):
-                        BrowserDOMGrabWebKitSupport.setEnabled(enabled, on: webView)
+                    case .setDOMGrabAuthorization(let authorizationID):
+                        BrowserDOMGrabWebKitSupport.setAuthorization(
+                            authorizationID,
+                            on: webView
+                        ) { [weak self] applied in
+                            guard let authorizationID else { return }
+                            self?.viewModel.handleDOMGrabWebKitUpdate(
+                                authorizationID: authorizationID,
+                                applied: applied
+                            )
+                        }
                     }
                 }
                 .store(in: &cancellables)
@@ -1061,13 +1120,24 @@ struct WebViewRepresentable: NSViewRepresentable {
         // MARK: - WKNavigationDelegate
 
         func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+            viewModel.markAutomationNavigationBoundary()
+            trackDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = true
                 self.syncNavigationState(from: webView)
             }
         }
 
+        func webView(
+            _ webView: WKWebView,
+            didReceiveServerRedirectForProvisionalNavigation navigation: WKNavigation!
+        ) {
+            viewModel.markAutomationNavigationBoundary()
+            trackDOMGrabNavigation(navigation)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+            completeDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
@@ -1075,14 +1145,11 @@ struct WebViewRepresentable: NSViewRepresentable {
                 if let url = webView.url?.absoluteString {
                     self.viewModel.recordPageVisit(url: url, title: webView.title)
                 }
-                BrowserDOMGrabWebKitSupport.setEnabled(
-                    self.viewModel.isDOMGrabActive,
-                    on: webView
-                )
             }
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            completeDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
@@ -1102,6 +1169,7 @@ struct WebViewRepresentable: NSViewRepresentable {
             didFailProvisionalNavigation navigation: WKNavigation!,
             withError error: Error
         ) {
+            completeDOMGrabNavigation(navigation)
             Task { @MainActor in
                 self.viewModel.isLoading = false
                 self.syncNavigationState(from: webView)
@@ -1122,10 +1190,30 @@ struct WebViewRepresentable: NSViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping @MainActor @Sendable (WKNavigationActionPolicy) -> Void
         ) {
-            guard BrowserNavigationPolicy.allows(navigationAction.request.url) else {
+            guard viewModel.allowsNavigationForActiveRemoteRoute(navigationAction.request.url),
+                  BrowserNavigationPolicy.allows(navigationAction.request.url) else {
                 decisionHandler(.cancel)
                 return
             }
+            viewModel.revokeDOMGrabAuthorizationForNavigation(
+                isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+            )
+            viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+                url: navigationAction.request.url,
+                isMainFrame: navigationAction.targetFrame?.isMainFrame == true
+            )
+            decisionHandler(.allow)
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            decidePolicyFor navigationResponse: WKNavigationResponse,
+            decisionHandler: @escaping @MainActor @Sendable (WKNavigationResponsePolicy) -> Void
+        ) {
+            viewModel.revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+                url: navigationResponse.response.url,
+                isMainFrame: navigationResponse.isForMainFrame
+            )
             decisionHandler(.allow)
         }
 
@@ -1137,9 +1225,26 @@ struct WebViewRepresentable: NSViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             if navigationAction.targetFrame == nil {
+                viewModel.revokeDOMGrabAuthorizationForNavigation(isMainFrame: true)
                 webView.load(navigationAction.request)
             }
             return nil
+        }
+
+        private func completeDOMGrabNavigation(_ navigation: WKNavigation?) {
+            guard let navigation,
+                  let generation = domGrabNavigationGenerations.removeValue(
+                      forKey: ObjectIdentifier(navigation)
+                  ) else { return }
+            viewModel.completeDOMGrabNavigation(generation: generation)
+        }
+
+        private func trackDOMGrabNavigation(_ navigation: WKNavigation?) {
+            let generation = viewModel.revokeDOMGrabAuthorizationForNavigation(
+                isMainFrame: true
+            )
+            guard let navigation, let generation else { return }
+            domGrabNavigationGenerations[ObjectIdentifier(navigation)] = generation
         }
 
         func webView(
@@ -1222,13 +1327,13 @@ struct WebViewRepresentable: NSViewRepresentable {
             )
         }
 
-        /// Allows HTTPS certificate errors for localhost dev servers.
+        /// Allows development certificates only for the current route authority.
         func webView(
             _ webView: WKWebView,
             didReceive challenge: URLAuthenticationChallenge,
             completionHandler: @escaping @MainActor @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void
         ) {
-            if challenge.protectionSpace.host == "localhost" || challenge.protectionSpace.host == "127.0.0.1",
+            if viewModel.allowsDevelopmentServerTrust(host: challenge.protectionSpace.host),
                let trust = challenge.protectionSpace.serverTrust {
                 completionHandler(.useCredential, URLCredential(trust: trust))
             } else {

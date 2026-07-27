@@ -1193,6 +1193,62 @@ struct CocxyCoreViewTests {
         #expect(harness.view.commandBlockOverlayView != nil)
     }
 
+    @Test("scroll wheel uses X10 mouse encoding when SGR mouse mode is not active")
+    func scrollWheelUsesX10MouseEncodingWhenSGRMouseModeIsNotActive() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1000h", into: state.terminal)
+
+        let diagnostics = try #require(harness.bridge.modeDiagnostics(for: harness.surfaceID))
+        #expect(diagnostics.mouseTrackingMode > 0)
+        #expect(diagnostics.mouseTrackingMode != 6)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
+
+        let expected = Data([0x1B, 0x5B, 0x4D, 0x60, 0x21, 0x21])
+        try await waitUntil {
+            output.data.containsSubsequence(expected)
+        }
+
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("scroll wheel keeps SGR encoding after button tracking enables SGR mode")
+    func scrollWheelKeepsSGREncodingAfterButtonTrackingEnablesSGRMode() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+
+        let diagnostics = try #require(harness.bridge.modeDiagnostics(for: harness.surfaceID))
+        #expect(diagnostics.mouseTrackingMode == 6)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
+
+        let expected = Data("\u{001B}[<64;1;1M".utf8)
+        try await waitUntil {
+            output.data.containsSubsequence(expected)
+        }
+
+        #expect(output.data.containsSubsequence(expected))
+        #expect(!output.data.containsSubsequence(Data([0x1B, 0x5B, 0x4D, 0x60, 0x21, 0x21])))
+    }
+
     @Test("active agent scroll uses local viewport when terminal mouse mode is enabled")
     func activeAgentScrollUsesLocalViewportInMouseMode() throws {
         let harness = try makeViewHarness()
@@ -1645,6 +1701,13 @@ private func numberedTerminalLines(_ count: Int) -> String {
     (0..<count)
         .map { "line-\($0)" }
         .joined(separator: "\r\n") + "\r\n"
+}
+
+private extension Data {
+    func containsSubsequence(_ needle: Data) -> Bool {
+        guard needle.isEmpty == false, needle.count <= count else { return false }
+        return range(of: needle) != nil
+    }
 }
 
 private func makeCommandBlock(

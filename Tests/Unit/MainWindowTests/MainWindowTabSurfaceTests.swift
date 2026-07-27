@@ -1877,6 +1877,78 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
+    func testClosingBrowserSplitRevokesOwnedRemoteRoute() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+        controller.splitWithBrowserAction(nil)
+
+        guard let splitManager = controller.activeSplitManager,
+              let browserLeaf = splitManager.rootNode.allLeafIDs().first(where: {
+                  splitManager.panelType(for: $0.terminalID) == .browser
+              }),
+              let hostingView = controller.panelContentViews[browserLeaf.terminalID]
+                as? NSHostingView<BrowserPanelView>
+        else {
+            XCTFail("Expected a browser split")
+            return
+        }
+        let browserViewModel = hostingView.rootView.viewModel
+        let profileID = UUID()
+        let capability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: controller.windowID,
+            profileID: profileID,
+            remotePort: 3_000,
+            localProxyPort: 53_000,
+            credentials: ProxyCredentials(password: "split-route-secret"),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        XCTAssertNotNil(browserViewModel.openRemoteBrokeredRoute(
+            RemoteBrowserProfile(
+                connectionProfileID: profileID,
+                name: "Split Remote",
+                host: "remote.internal"
+            ),
+            capability: capability
+        ))
+        controller.remoteBrowserRouteViewModel = browserViewModel
+
+        controller.closeSplitAction(nil)
+
+        XCTAssertNil(browserViewModel.activeRemoteBrowserProxyCapability)
+        XCTAssertNil(browserViewModel.activeRemoteBrowserProfile)
+        XCTAssertNil(controller.remoteBrowserRouteViewModel)
+        XCTAssertNil(controller.panelContentViews[browserLeaf.terminalID])
+    }
+
+    func testCLIBrowserSplitReportsFailureWhenPaneLimitPreventsCreation() {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        setPanelTestCanvas(width: 2600, height: 760, on: controller)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        controller.window?.makeKeyAndOrderFront(nil)
+
+        for _ in 1..<MainWindowController.maxPaneCount {
+            XCTAssertTrue(delegate.openBrowserSplitForCLI())
+        }
+
+        XCTAssertEqual(controller.activeSplitManager?.rootNode.leafCount, MainWindowController.maxPaneCount)
+        XCTAssertNotNil(controller.activeBrowserViewModel())
+        XCTAssertFalse(
+            delegate.openBrowserSplitForCLI(),
+            "The CLI must not report success when the pane limit prevents a new browser split"
+        )
+    }
+
     func testTabSwitchPreservesFocusedMarkdownPanelSelection() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

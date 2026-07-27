@@ -180,6 +180,30 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.historyVisibleStart(for: surfaceID) == maxVisibleStart)
     }
 
+    @Test("PTY alt-screen transitions force host interaction metric sync")
+    func ptyAltScreenTransitionsForceHostInteractionMetricSync() async throws {
+        let bridge = try makeBridge()
+        let script = try makeAltScreenTransitionScript()
+        defer { try? FileManager.default.removeItem(at: script.rootDirectory) }
+        let hostView = InteractionMetricsTrackingHostView(
+            frame: NSRect(x: 0, y: 0, width: 800, height: 400)
+        )
+
+        let surfaceID = try bridge.createSurface(
+            in: hostView,
+            workingDirectory: script.rootDirectory,
+            command: script.scriptURL.path
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        let baseline = hostView.updateInteractionMetricsCount
+
+        try await waitUntil(timeoutNanoseconds: 3_000_000_000, pollNanoseconds: 10_000_000) {
+            hostView.updateInteractionMetricsCount >= baseline + 2
+        }
+
+        #expect(hostView.updateInteractionMetricsCount >= baseline + 2)
+    }
+
     @Test("visibleLineText returns nil for an unknown surface")
     func visibleLineTextReturnsNilForUnknownSurface() throws {
         let bridge = try makeBridge()
@@ -224,6 +248,52 @@ struct CocxyCoreBridgeTests {
 
         bridge.recordWebTerminalEventForTesting(eventType: 1, connectionID: 7, for: surfaceID)
 
+        #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
+    }
+
+    @Test("web terminal rejects empty malformed and non-loopback configurations")
+    func webTerminalRejectsUnsafeConfigurations() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let unsafeConfigurations = [
+            WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "",
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+            WebTerminalConfiguration(
+                bindAddress: "0.0.0.0",
+                port: 0,
+                authToken: "valid-token",
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+            WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: String(repeating: "a", count: 128),
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+            WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "line\nbreak",
+                maxConnections: 1,
+                maxFrameRate: 30
+            ),
+        ]
+
+        for configuration in unsafeConfigurations {
+            #expect(bridge.startWebTerminal(
+                for: surfaceID,
+                configuration: configuration
+            ) == nil)
+        }
         #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
     }
 
@@ -281,6 +351,88 @@ struct CocxyCoreBridgeTests {
         }
 
         #expect(bridge.webTerminalStatus(for: surfaceID) == nil)
+    }
+
+    @Test("repeated one-shot disconnects stop streaming before terminal detach")
+    func repeatedOneShotDisconnectsRemainRaceFree() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        for iteration in 0..<12 {
+            let token = "race-token-\(iteration)"
+            let status = try #require(bridge.startWebTerminal(
+                for: surfaceID,
+                configuration: WebTerminalConfiguration(
+                    bindAddress: "127.0.0.1",
+                    port: 0,
+                    authToken: token,
+                    maxConnections: 1,
+                    maxFrameRate: 240,
+                    stopAfterFirstConnection: true
+                )
+            ))
+
+            let probe = try WebSocketTestProbe(port: status.port, bearerToken: token)
+            _ = try await probe.receive(containing: "\"type\":\"auth_ok\"")
+            probe.close()
+
+            try await waitUntil(timeoutNanoseconds: 5_000_000_000) {
+                bridge.webTerminalStatus(for: surfaceID) == nil
+            }
+        }
+    }
+
+    @Test("web terminal rejects a foreign browser origin before WebSocket upgrade")
+    func webTerminalRejectsForeignOriginBeforeUpgrade() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let status = try #require(bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "origin-token",
+                maxConnections: 1,
+                maxFrameRate: 30
+            )
+        ))
+
+        let foreignOriginProbe = try WebSocketTestProbe(
+            port: status.port,
+            bearerToken: "origin-token",
+            origin: "https://attacker.example"
+        )
+        defer { foreignOriginProbe.close() }
+
+        do {
+            _ = try await foreignOriginProbe.receive(
+                containing: "\"type\":\"auth_ok\"",
+                timeoutNanoseconds: 2_000_000_000
+            )
+            Issue.record("Foreign Origin unexpectedly completed the WebSocket upgrade")
+        } catch {
+            #expect(foreignOriginProbe.responseStatusCode == 403)
+        }
+
+        let afterForeignOrigin = try #require(bridge.webTerminalStatus(for: surfaceID))
+        #expect(afterForeignOrigin.connectionCount == 0)
+        #expect(afterForeignOrigin.lastEventType == nil)
+
+        let allowedOriginProbe = try WebSocketTestProbe(
+            port: status.port,
+            bearerToken: "origin-token",
+            origin: "http://127.0.0.1:\(status.port)"
+        )
+        defer { allowedOriginProbe.close() }
+        _ = try await allowedOriginProbe.receive(containing: "\"type\":\"auth_ok\"")
+
+        try await waitUntil {
+            bridge.webTerminalStatus(for: surfaceID)?.lastEventType == "auth_ok"
+        }
+        #expect(bridge.webTerminalStatus(for: surfaceID)?.connectionCount == 1)
     }
 
     @Test("TUI status glyphs stay narrow so incremental redraws do not smear text")
@@ -941,6 +1093,89 @@ struct CocxyCoreBridgeTests {
         #expect(clipboard.readCallCount == 1)
     }
 
+    @Test("OSC 52 clipboard writes require an explicit allow policy")
+    func osc52ClipboardWritesHonorAllowPolicy() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .allow)
+
+        let didWrite = bridge.writeOSC52ClipboardContent(Data("replacement".utf8), for: nil)
+
+        #expect(didWrite)
+        #expect(clipboard.writtenTexts == ["replacement"])
+    }
+
+    @Test("OSC 52 deny policy preserves the existing clipboard")
+    func osc52ClipboardWritesHonorDenyPolicy() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .deny)
+
+        let didWrite = bridge.writeOSC52ClipboardContent(Data("replacement".utf8), for: nil)
+
+        #expect(!didWrite)
+        #expect(clipboard.writtenTexts.isEmpty)
+    }
+
+    @Test("OSC 52 prompt writes only after one explicit approval")
+    func osc52ClipboardPromptHonorsDecision() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .prompt)
+        var approvals = [false, true]
+        bridge.clipboardWriteAuthorizationHandler = { _ in approvals.removeFirst() }
+
+        let denied = bridge.writeOSC52ClipboardContent(Data("blocked".utf8), for: nil)
+        let allowed = bridge.writeOSC52ClipboardContent(Data("approved".utf8), for: nil)
+
+        #expect(!denied)
+        #expect(allowed)
+        #expect(clipboard.writtenTexts == ["approved"])
+    }
+
+    @Test("OSC 52 malformed and oversized writes fail before authorization")
+    func osc52ClipboardWritesRejectInvalidPayloads() throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .prompt)
+        var authorizationCalls = 0
+        bridge.clipboardWriteAuthorizationHandler = { _ in
+            authorizationCalls += 1
+            return true
+        }
+
+        #expect(!bridge.writeOSC52ClipboardContent(Data(), for: nil))
+        #expect(!bridge.writeOSC52ClipboardContent(Data([0xFF]), for: nil))
+        #expect(!bridge.writeOSC52ClipboardContent(
+            Data(repeating: 0x61, count: OSC52ClipboardLimits.maximumWriteBytes + 1),
+            for: nil
+        ))
+        #expect(authorizationCalls == 0)
+        #expect(clipboard.writtenTexts.isEmpty)
+    }
+
+    @Test("native OSC 52 parser callback enforces clipboard write policy")
+    func nativeOSC52ParserCallbackEnforcesWritePolicy() async throws {
+        let bridge = try makeBridge()
+        let clipboard = RecordingClipboardService(content: "existing")
+        bridge.clipboardService = clipboard
+        bridge.updateDefaults(clipboardWriteAccess: .allow)
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}]52;c;ZnJvbS1uYXRpdmUtcGFyc2Vy\u{07}", to: state.terminal)
+
+        try await waitUntil {
+            clipboard.writtenTexts == ["from-native-parser"]
+        }
+        #expect(clipboard.writtenTexts == ["from-native-parser"])
+    }
+
     @Test("clipboard read authorization copy follows configured app language")
     func clipboardReadAuthorizationCopyFollowsConfiguredAppLanguage() throws {
         let localizer = AppLocalizer(
@@ -954,6 +1189,21 @@ struct CocxyCoreBridgeTests {
         #expect(copy.informativeText.contains("OSC 52"))
         #expect(copy.primaryButton == "Permitir")
         #expect(copy.secondaryButton == "Denegar")
+    }
+
+    @Test("clipboard write authorization copy follows configured app language")
+    func clipboardWriteAuthorizationCopyFollowsConfiguredAppLanguage() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        let copy = CocxyCoreBridge.localizedClipboardWriteAuthorizationCopy(localizer: localizer)
+
+        #expect(copy.messageText == "¿Permitir cambio del portapapeles?")
+        #expect(copy.informativeText.contains("OSC 52"))
+        #expect(copy.primaryButton == "Permitir una vez")
+        #expect(copy.secondaryButton == "Bloquear")
     }
 
     @Test("parseWorkingDirectoryURL accepts file URLs and plain paths")
@@ -1046,10 +1296,38 @@ struct CocxyCoreBridgeTests {
         }
 
         let output = bridge.latestCommandBlockOutputs(for: surfaceID, limit: 3)
+        let blockReferences = bridge.completedCommandBlockReferences(for: surfaceID, limit: 3)
 
         #expect(output == "line-1\nline-2\nline-3")
+        #expect(blockReferences.count == 3)
+        #expect(blockReferences.map(\.id) == bridge.commandBlocks(for: surfaceID, limit: 3).map(\.id))
+        #expect(bridge.completedCommandBlockReferences(for: surfaceID, limit: 0).isEmpty)
+        #expect(bridge.completedCommandBlockReferences(for: SurfaceID(), limit: 3).isEmpty)
         #expect(bridge.latestCommandBlockOutputs(for: surfaceID, limit: 0) == "")
         #expect(bridge.latestCommandBlockOutputs(for: SurfaceID(), limit: 3) == "")
+    }
+
+    @Test("command block references expose only completed immutable command blocks")
+    func commandBlockReferencesExposeOnlyCompletedBlocks() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "\u{1B}]133;B\u{7}" +
+            "echo pending\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "pending output\r\n",
+            to: state.terminal
+        )
+
+        #expect(bridge.completedCommandBlockReferences(for: surfaceID, limit: 3).isEmpty)
+
+        feed("\u{1B}]133;D;0\u{7}", to: state.terminal)
+
+        #expect(bridge.completedCommandBlockReferences(for: surfaceID, limit: 3).count == 1)
     }
 
     @Test("shell integration env injects zsh wrapper when resources are available")
@@ -1300,6 +1578,7 @@ private func makeUXPolishPalette() -> ThemePalette {
 private final class RecordingClipboardService: ClipboardServiceProtocol {
     private let content: String?
     private(set) var readCallCount = 0
+    private(set) var writtenTexts: [String] = []
 
     init(content: String?) {
         self.content = content
@@ -1310,7 +1589,9 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
         return content
     }
 
-    func write(_ text: String) {}
+    func write(_ text: String) {
+        writtenTexts.append(text)
+    }
 
     func clear() {}
 }
@@ -1344,9 +1625,52 @@ private func makeTemporaryDirectory(named prefix: String) throws -> URL {
     return directory
 }
 
+private func makeAltScreenTransitionScript() throws -> (rootDirectory: URL, scriptURL: URL) {
+    let rootDirectory = try makeTemporaryDirectory(named: "cocxy-alt-screen-transition")
+    let scriptURL = rootDirectory.appendingPathComponent("alt-screen.sh")
+    try """
+    #!/bin/sh
+    printf '\\033[?1049h'
+    sleep 0.15
+    printf '\\033[?1049l'
+    sleep 0.15
+    exec /bin/cat
+    """.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o755],
+        ofItemAtPath: scriptURL.path
+    )
+    return (rootDirectory, scriptURL)
+}
+
 private func feed(_ text: String, to terminal: OpaquePointer) {
     let bytes = Array(text.utf8)
     cocxycore_terminal_feed(terminal, bytes, bytes.count)
+}
+
+@MainActor
+private final class InteractionMetricsTrackingHostView: NSView, TerminalHostingView {
+    var terminalViewModel: TerminalViewModel?
+    var onFileDrop: (([URL]) -> Bool)?
+    var onUserInputSubmitted: (() -> Void)?
+    var onFramePresented: (() -> Void)?
+    private(set) var updateInteractionMetricsCount = 0
+    private(set) var requestImmediateRedrawCount = 0
+
+    func syncSizeWithTerminal() {}
+    func showNotificationRing(color: NSColor) {}
+    func hideNotificationRing() {}
+    func handleShellPrompt(row: Int, column: Int) {}
+    func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {}
+    func refreshDisplayLinkAnchor() {}
+
+    func updateInteractionMetrics() {
+        updateInteractionMetricsCount += 1
+    }
+
+    func requestImmediateRedraw() {
+        requestImmediateRedrawCount += 1
+    }
 }
 
 func readPreedit(from terminal: OpaquePointer) -> String {
@@ -1358,9 +1682,18 @@ func readPreedit(from terminal: OpaquePointer) -> String {
     return String(decoding: buffer.prefix(copied), as: UTF8.self)
 }
 
+/// Polls `condition` until it holds, or records a failure once the cap
+/// expires.
+///
+/// Most callers wait for a real PTY round-trip against a freshly spawned
+/// child: spawn, write, echo, read source, main-queue hop. The default cap
+/// is deliberately generous because it is a cap, not a wait — the loop
+/// returns the instant the condition holds, so a green run pays only the
+/// poll interval, while a loaded 3-vCPU machine is not failed for being
+/// slow. The `Issue.record` below still fires if the effect never arrives.
 func waitUntil(
-    timeoutNanoseconds: UInt64 = 1_500_000_000,
-    pollNanoseconds: UInt64 = 50_000_000,
+    timeoutNanoseconds: UInt64 = 5_000_000_000,
+    pollNanoseconds: UInt64 = 10_000_000,
     condition: @escaping @Sendable @MainActor () -> Bool
 ) async throws {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
@@ -1369,6 +1702,9 @@ func waitUntil(
             return
         }
         try await Task.sleep(nanoseconds: pollNanoseconds)
+    }
+    if await MainActor.run(body: condition) {
+        return
     }
     Issue.record("Timed out waiting for condition")
 }
@@ -1391,14 +1727,21 @@ private final class WebSocketTestProbe: @unchecked Sendable {
     private let session: URLSession
     private let task: URLSessionWebSocketTask
 
-    init(port: UInt16, bearerToken: String) throws {
+    init(port: UInt16, bearerToken: String, origin: String? = nil) throws {
         let url = try #require(URL(string: "ws://127.0.0.1:\(port)/"))
         var request = URLRequest(url: url)
         request.setValue("Bearer \(bearerToken)", forHTTPHeaderField: "Authorization")
+        if let origin {
+            request.setValue(origin, forHTTPHeaderField: "Origin")
+        }
         let configuration = URLSessionConfiguration.ephemeral
         self.session = URLSession(configuration: configuration)
         self.task = session.webSocketTask(with: request)
         task.resume()
+    }
+
+    var responseStatusCode: Int? {
+        (task.response as? HTTPURLResponse)?.statusCode
     }
 
     func receive(

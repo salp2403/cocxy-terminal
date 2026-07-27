@@ -309,6 +309,16 @@ public enum MarkdownSlideExporter {
         .slide-content th, .slide-content td { border: 1px solid #45475a; padding: 8px 12px; text-align: left; }
         .slide-content th { background: #313244; font-weight: 600; }
         .slide-content img { max-width: 100%; border-radius: 6px; }
+        .slide-content img[data-cocxy-image-blocked] {
+            display: inline-block;
+            min-width: 180px;
+            min-height: 56px;
+            padding: 12px;
+            border: 1px solid #45475a;
+            background: #181825;
+            color: #a6adc8;
+            object-fit: contain;
+        }
         .slide-content mark { background: #f9e2af; color: #11111b; padding: 0 0.15em; border-radius: 3px; }
         .slide-content .footnotes { margin-top: 1.6em; font-size: 0.82em; color: #bac2de; }
         .controls {

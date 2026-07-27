@@ -10,11 +10,16 @@ import Testing
 final class MockSSHKeyExecutor: SSHKeyExecuting, @unchecked Sendable {
     var executedCommands: [(command: String, arguments: [String])] = []
     var lastStdinData: Data?
+    var stdinPayloads: [Data] = []
     var stubbedResults: [String: ProcessResult] = [:]
     var defaultResult = ProcessResult(exitCode: 0, stdout: "", stderr: "")
+    var resultProvider: ((String, [String]) -> ProcessResult)?
 
     func execute(command: String, arguments: [String]) throws -> ProcessResult {
         executedCommands.append((command, arguments))
+        if let resultProvider {
+            return resultProvider(command, arguments)
+        }
         let key = "\(command) \(arguments.joined(separator: " "))"
         return stubbedResults[key] ?? defaultResult
     }
@@ -22,6 +27,10 @@ final class MockSSHKeyExecutor: SSHKeyExecuting, @unchecked Sendable {
     func execute(command: String, arguments: [String], stdinData: Data) throws -> ProcessResult {
         executedCommands.append((command, arguments))
         lastStdinData = stdinData
+        stdinPayloads.append(stdinData)
+        if let resultProvider {
+            return resultProvider(command, arguments)
+        }
         let key = "\(command) \(arguments.joined(separator: " "))"
         return stubbedResults[key] ?? defaultResult
     }
@@ -32,6 +41,8 @@ final class MockSSHKeyExecutor: SSHKeyExecuting, @unchecked Sendable {
 final class MockSSHKeyFileSystem: SSHKeyFileSystem, @unchecked Sendable {
     var files: [String: Bool] = [:]
     var directoryContents: [String] = []
+    var createdDirectories: [String] = []
+    var removedFiles: [String] = []
 
     func listDirectory(at path: String) throws -> [String] {
         directoryContents
@@ -39,6 +50,15 @@ final class MockSSHKeyFileSystem: SSHKeyFileSystem, @unchecked Sendable {
 
     func fileExists(at path: String) -> Bool {
         files[path] ?? false
+    }
+
+    func createDirectory(at path: String) throws {
+        createdDirectories.append(path)
+    }
+
+    func removeFile(at path: String) throws {
+        removedFiles.append(path)
+        files[path] = false
     }
 }
 
@@ -198,6 +218,12 @@ struct SSHKeyManagerTests {
 
     @Test func generateKeyBuildsCorrectCommand() throws {
         let executor = MockSSHKeyExecutor()
+        executor.resultProvider = { _, arguments in
+            if arguments == ["-y", "-P", "", "-f", "/test/.ssh/deploy_key"] {
+                return ProcessResult(exitCode: 1, stdout: "", stderr: "incorrect passphrase")
+            }
+            return ProcessResult(exitCode: 0, stdout: "ssh-ed25519 public-key", stderr: "")
+        }
         let manager = SSHKeyManager(
             fileSystem: MockSSHKeyFileSystem(),
             executor: executor,
@@ -206,7 +232,7 @@ struct SSHKeyManagerTests {
 
         try manager.generateKey(type: .ed25519, name: "deploy_key", passphrase: "secret")
 
-        #expect(executor.executedCommands.count == 1)
+        #expect(executor.executedCommands.count == 3)
         let call = executor.executedCommands[0]
         #expect(call.command == "/usr/bin/ssh-keygen")
         #expect(call.arguments.contains("-t"))
@@ -216,6 +242,11 @@ struct SSHKeyManagerTests {
         // Passphrase must NOT appear in arguments (passed via stdin).
         #expect(!call.arguments.contains("-N"))
         #expect(!call.arguments.contains("secret"))
+        #expect(executor.executedCommands.allSatisfy { !$0.arguments.contains("secret") })
+        #expect(executor.stdinPayloads == [
+            Data("secret\nsecret\n".utf8),
+            Data("secret\n".utf8),
+        ])
     }
 
     @Test func generateKeyWithEmptyPassphrase() throws {
@@ -231,6 +262,120 @@ struct SSHKeyManagerTests {
         let call = executor.executedCommands[0]
         // Passphrase must NOT appear in arguments, even if empty.
         #expect(!call.arguments.contains("-N"))
+        #expect(executor.executedCommands.count == 2)
+        #expect(executor.stdinPayloads == [Data("\n\n".utf8)])
+    }
+
+    @Test func generateKeyRejectsUnsafeNamesAndMultilinePassphrases() {
+        let executor = MockSSHKeyExecutor()
+        let fileSystem = MockSSHKeyFileSystem()
+        let manager = SSHKeyManager(
+            fileSystem: fileSystem,
+            executor: executor,
+            sshDirectoryPath: "/test/.ssh"
+        )
+
+        #expect(throws: SSHKeyManagerError.invalidKeyName("../outside")) {
+            try manager.generateKey(type: .ed25519, name: "../outside", passphrase: "secret")
+        }
+        #expect(throws: SSHKeyManagerError.unsupportedPassphrase) {
+            try manager.generateKey(type: .ed25519, name: "safe-key", passphrase: "line1\nline2")
+        }
+        let oversizedPassphrase = String(
+            repeating: "a",
+            count: SSHAskpassContract.maximumPassphraseBytes + 1
+        )
+        #expect(throws: SSHKeyManagerError.passphraseTooLong(
+            maximumBytes: SSHAskpassContract.maximumPassphraseBytes
+        )) {
+            try manager.generateKey(
+                type: .ed25519,
+                name: "safe-key",
+                passphrase: oversizedPassphrase
+            )
+        }
+        #expect(executor.executedCommands.isEmpty)
+        #expect(fileSystem.createdDirectories.isEmpty)
+    }
+
+    @Test func generateKeyRefusesAnUnencryptedPostconditionAndRemovesPartialFiles() {
+        let executor = MockSSHKeyExecutor()
+        let fileSystem = MockSSHKeyFileSystem()
+        let manager = SSHKeyManager(
+            fileSystem: fileSystem,
+            executor: executor,
+            sshDirectoryPath: "/test/.ssh"
+        )
+
+        #expect(throws: SSHKeyManagerError.generationFailed(
+            "The generated private key is not protected by the requested passphrase."
+        )) {
+            try manager.generateKey(type: .ed25519, name: "deploy_key", passphrase: "secret")
+        }
+        #expect(fileSystem.removedFiles == [
+            "/test/.ssh/deploy_key",
+            "/test/.ssh/deploy_key.pub",
+        ])
+    }
+
+    @Test func generateKeyRefusesToReplaceAnExistingKeyPair() {
+        let executor = MockSSHKeyExecutor()
+        let fileSystem = MockSSHKeyFileSystem()
+        fileSystem.files["/test/.ssh/deploy_key.pub"] = true
+        let manager = SSHKeyManager(
+            fileSystem: fileSystem,
+            executor: executor,
+            sshDirectoryPath: "/test/.ssh"
+        )
+
+        #expect(throws: SSHKeyManagerError.keyAlreadyExists("/test/.ssh/deploy_key")) {
+            try manager.generateKey(type: .ed25519, name: "deploy_key", passphrase: "secret")
+        }
+        #expect(executor.executedCommands.isEmpty)
+        #expect(fileSystem.removedFiles.isEmpty)
+    }
+
+    @Test func systemExecutorGeneratesAKeyProtectedByTheRequestedPassphrase() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-ssh-key-system-test-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let executable = repositoryRoot()
+            .appendingPathComponent(".build/debug/CocxyTerminal")
+        let executor = SystemSSHKeyExecutor(askpassExecutableURL: executable)
+        let manager = SSHKeyManager(
+            fileSystem: DiskSSHKeyFileSystem(),
+            executor: executor,
+            sshDirectoryPath: root.path
+        )
+        let passphrase = "test passphrase \\ with spaces " + String(UnicodeScalar(0x00E9)!)
+        let keyPath = root.appendingPathComponent("protected_key").path
+
+        try manager.generateKey(type: .ed25519, name: "protected_key", passphrase: passphrase)
+
+        let attributes = try FileManager.default.attributesOfItem(atPath: keyPath)
+        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
+        let emptyResult = try executor.execute(
+            command: "/usr/bin/ssh-keygen",
+            arguments: ["-y", "-P", "", "-f", keyPath]
+        )
+        #expect(emptyResult.exitCode != 0)
+        let requestedResult = try executor.execute(
+            command: "/usr/bin/ssh-keygen",
+            arguments: ["-y", "-f", keyPath],
+            stdinData: Data("\(passphrase)\n".utf8)
+        )
+        #expect(requestedResult.exitCode == 0)
+        #expect(requestedResult.stdout.hasPrefix("ssh-ed25519 "))
+
+        let unprotectedKeyPath = root.appendingPathComponent("unprotected_key").path
+        try manager.generateKey(type: .ed25519, name: "unprotected_key", passphrase: "")
+        let unprotectedResult = try executor.execute(
+            command: "/usr/bin/ssh-keygen",
+            arguments: ["-y", "-P", "", "-f", unprotectedKeyPath]
+        )
+        #expect(unprotectedResult.exitCode == 0)
+        #expect(unprotectedResult.stdout.hasPrefix("ssh-ed25519 "))
     }
 
     // MARK: - Agent Operations
@@ -384,5 +529,13 @@ struct SSHKeyManagerTests {
         #expect(SSHKeyType.ecdsa.rawValue == "ecdsa")
         #expect(SSHKeyType.dsa.rawValue == "dsa")
         #expect(SSHKeyType.unknown.rawValue == "unknown")
+    }
+
+    private func repositoryRoot() -> URL {
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 }

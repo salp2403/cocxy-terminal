@@ -43,6 +43,9 @@ struct BrowserProfileSelector: View {
     /// When nil, the "Manage Profiles" button is hidden.
     let onManageProfiles: (() -> Void)?
 
+    /// Opens browser import with the selected Cocxy profile as destination.
+    var onImportData: ((UUID) -> Void)? = nil
+
     /// Local app-language resolver.
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
@@ -138,6 +141,18 @@ struct BrowserProfileSelector: View {
                 }
             }
             .accessibilityLabel(localized("browser.profile.create", fallback: "Create new profile"))
+
+            if let onImportData {
+                Button { onImportData(profileManager.activeProfileID) } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "tray.and.arrow.down")
+                            .font(.system(size: 10))
+                        Text(localized("browser.import.menu", fallback: "Import Browser Data..."))
+                            .font(.system(size: 12))
+                    }
+                }
+                .accessibilityLabel(localized("browser.import.accessibility", fallback: "Import browser data"))
+            }
 
             if let onManageProfiles {
                 Button(action: onManageProfiles) {

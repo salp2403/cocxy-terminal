@@ -29,6 +29,7 @@ struct BrowserMCPToolSwiftTestingTests {
         #expect(try #require(tools.first { $0.name == "browser_scroll" })
             .inputSchema.properties["x"]?.type == "number")
         #expect(try #require(tools.first { $0.name == "browser_eval" }).inputSchema.required == ["script"])
+        #expect(try #require(tools.first { $0.name == "browser_init_script_remove" }).inputSchema.required == ["id"])
         #expect(try #require(tools.first { $0.name == "browser_cookies_set" }).inputSchema.required == ["name", "value"])
         #expect(try #require(tools.first { $0.name == "browser_cookies_set" })
             .inputSchema.properties["secure"]?.type == "boolean")
@@ -162,9 +163,27 @@ struct BrowserMCPToolSwiftTestingTests {
         let provider = BrowserMCPToolProvider(executor: RecordingBrowserMCPCommandExecutor(response: [:]))
 
         let result = await provider.callTool(name: "browser_fill", arguments: ["ref": .string("input-1")])
+        let remove = await provider.callTool(name: "browser_init_script_remove", arguments: [:])
 
         #expect(result.isError == true)
         #expect(result.content == [.text("Missing required argument: text")])
+        #expect(remove.isError == true)
+        #expect(remove.content == [.text("Missing required argument: id")])
+    }
+
+    @Test("browser MCP routes init-script revocation to the shared socket handler")
+    func routesInitScriptRevocation() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: ["status": "removed"])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        _ = await provider.callTool(
+            name: "browser_init_script_remove",
+            arguments: ["id": .string("grant-id")]
+        )
+
+        #expect(await executor.commands == [
+            BrowserMCPCommand(socketCommand: .browserInitScriptRemove, params: ["id": "grant-id"]),
+        ])
     }
 
     @Test("browser MCP rejects oversized script and style payloads")
@@ -183,6 +202,142 @@ struct BrowserMCPToolSwiftTestingTests {
         #expect(style.content == [
             .text("browser_add_style css length 10001 exceeds maximum 10000 characters"),
         ])
+    }
+
+    @Test("browser MCP rejects non-finite fractional and unrepresentable numbers without executing")
+    func rejectsUnsafeNumbersWithoutExecuting() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+        let invalidNumbers = [
+            Double.nan,
+            Double.infinity,
+            -Double.infinity,
+            1e300,
+            -1e300,
+            1.5,
+        ]
+
+        for number in invalidNumbers {
+            let result = await provider.callTool(name: "browser_scroll", arguments: [
+                "x": .number(number),
+                "y": .number(0),
+            ])
+
+            #expect(result.isError == true)
+            #expect(result.content == [
+                .text("browser_scroll x must be a finite, representable integer"),
+            ])
+        }
+        #expect(await executor.commands.isEmpty)
+    }
+
+    @Test("browser MCP enforces numeric domains before executing socket commands")
+    func enforcesNumericDomainsBeforeExecuting() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        let results = [
+            await provider.callTool(name: "browser_context", arguments: ["around": .number(21)]),
+            await provider.callTool(name: "browser_click", arguments: [
+                "ref": .string("button-1"),
+                "timeout": .number(99),
+            ]),
+            await provider.callTool(name: "browser_wait", arguments: [
+                "selector": .string(".ready"),
+                "timeout": .number(30_001),
+            ]),
+            await provider.callTool(name: "browser_scroll", arguments: [
+                "x": .number(100_001),
+                "y": .number(0),
+            ]),
+            await provider.callTool(name: "browser_find_nth", arguments: [
+                "index": .number(-1),
+                "selector": .string(".row"),
+            ]),
+            await provider.callTool(name: "browser_cookies_set", arguments: [
+                "name": .string("sid"),
+                "value": .string("abc"),
+                "max-age": .number(-1),
+            ]),
+            await provider.callTool(name: "browser_network", arguments: ["tail": .number(0)]),
+        ]
+
+        #expect(results.allSatisfy { $0.isError })
+        #expect(await executor.commands.isEmpty)
+    }
+
+    @Test("browser MCP accepts established numeric domain boundaries")
+    func acceptsEstablishedNumericDomainBoundaries() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        let results = [
+            await provider.callTool(name: "browser_context", arguments: [
+                "around": .number(20),
+                "console": .number(100),
+                "network": .number(100),
+            ]),
+            await provider.callTool(name: "browser_click", arguments: [
+                "ref": .string("button-1"),
+                "timeout": .number(60_000),
+            ]),
+            await provider.callTool(name: "browser_wait", arguments: [
+                "selector": .string(".ready"),
+                "timeout": .number(30_000),
+            ]),
+            await provider.callTool(name: "browser_scroll", arguments: [
+                "x": .number(-100_000),
+                "y": .number(100_000),
+            ]),
+            await provider.callTool(name: "browser_find_nth", arguments: [
+                "index": .number(0),
+                "selector": .string(".row"),
+            ]),
+            await provider.callTool(name: "browser_cookies_set", arguments: [
+                "name": .string("sid"),
+                "value": .string("abc"),
+                "max-age": .number(0),
+            ]),
+            await provider.callTool(name: "browser_network", arguments: ["tail": .number(1)]),
+        ]
+
+        #expect(results.allSatisfy { !$0.isError })
+        #expect(await executor.commands.count == results.count)
+    }
+
+    @Test("browser MCP handles exact Int64 boundaries without trapping")
+    func handlesInt64BoundariesWithoutTrapping() async {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+        let largestRepresentableInt64Double = Double(Int64.max).nextDown
+
+        let accepted = await provider.callTool(name: "browser_find_nth", arguments: [
+            "index": .number(largestRepresentableInt64Double),
+            "selector": .string(".row"),
+        ])
+        let rejected = await provider.callTool(name: "browser_find_nth", arguments: [
+            "index": .number(Double(Int64.max)),
+            "selector": .string(".row"),
+        ])
+
+        #expect(accepted.isError == false)
+        #expect(rejected.isError == true)
+        #expect(await executor.commands.count == 1)
+    }
+
+    @Test("browser MCP preserves fractional scalar formatting for text fields")
+    func preservesFractionalTextScalarFormatting() async throws {
+        let executor = RecordingBrowserMCPCommandExecutor(response: [:])
+        let provider = BrowserMCPToolProvider(executor: executor)
+
+        let result = await provider.callTool(name: "browser_fill", arguments: [
+            "ref": .string("input-1"),
+            "text": .number(1.5),
+        ])
+        let command = try #require(await executor.commands.first)
+
+        #expect(result.isError == false)
+        #expect(command.params["text"] == "1.5")
     }
 
     @Test("browser MCP tools bridge to external Agent descriptors")
@@ -280,6 +435,7 @@ private let expectedBrowserMCPToolNames = [
     "browser_add_script",
     "browser_add_style",
     "browser_init_script_add",
+    "browser_init_script_remove",
     "browser_init_scripts_list",
     "browser_dialogs",
     "browser_dialog_accept",

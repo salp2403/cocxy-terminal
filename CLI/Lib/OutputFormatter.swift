@@ -14,6 +14,10 @@ import Foundation
 /// - `config-path`, `config-get`: Data-driven output.
 public enum OutputFormatter {
 
+    public static func formatDiagnosticData(_ data: [String: String]) -> String {
+        formatDataAsJSON(data)
+    }
+
     /// Formats a successful response for terminal output.
     ///
     /// - Parameters:
@@ -275,6 +279,8 @@ public enum OutputFormatter {
 
         case .browserNavigate:
             return "Navigated."
+        case .browserSplit:
+            return "Browser split opened."
         case .browserBack:
             return "Navigated back."
         case .browserForward:
@@ -294,6 +300,8 @@ public enum OutputFormatter {
         case .browserAddStyle:
             return formatDataOrJSON(response: response)
         case .browserInitScriptAdd:
+            return formatDataOrJSON(response: response)
+        case .browserInitScriptRemove:
             return formatDataOrJSON(response: response)
         case .browserInitScriptsList:
             return formatDataOrJSON(response: response)
@@ -754,7 +762,9 @@ public enum OutputFormatter {
                 let bind = data["web_bind"] ?? "127.0.0.1"
                 let port = data["web_port"] ?? "0"
                 let connections = data["web_connections"] ?? "0"
-                lines.append("Web terminal: running on \(bind):\(port) (\(connections) clients)")
+                lines.append(
+                    "Web terminal: running on \(formattedWebHost(bind)):\(port) (\(connections) clients)"
+                )
             } else {
                 lines.append("Web terminal: stopped")
             }
@@ -769,13 +779,22 @@ public enum OutputFormatter {
         var lines = [defaultHeadline]
         lines.append("Status: \(running ? "running" : "stopped")")
         if let bind = data["bind"], let port = data["port"] {
-            lines.append("Bind: \(bind):\(port)")
+            let host = formattedWebHost(bind)
+            lines.append("URL: http://\(host):\(port)/")
+            lines.append("Bind: \(host):\(port)")
         }
         if let fps = data["max_fps"] {
             lines.append("Max FPS: \(fps)")
         }
         if let authRequired = data["auth_required"] {
             lines.append("Auth required: \(boolText(authRequired))")
+        }
+        if let authorization = data["authorization"] {
+            let bearerPrefix = "Bearer "
+            let accessToken = authorization.hasPrefix(bearerPrefix)
+                ? String(authorization.dropFirst(bearerPrefix.count))
+                : authorization
+            lines.append("Access token (shown once): \(accessToken)")
         }
         if let oneShot = data["one_shot"] {
             lines.append("One shot: \(boolText(oneShot))")
@@ -787,6 +806,10 @@ public enum OutputFormatter {
             lines.append("Last event: \(lastEvent)")
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func formattedWebHost(_ bindAddress: String) -> String {
+        bindAddress.contains(":") ? "[\(bindAddress)]" : bindAddress
     }
 
     private static func boolText(_ value: String) -> String {

@@ -36,35 +36,31 @@ struct ProjectTemplateScaffolder {
             variables: template.variables,
             values: values
         )
-        let destination = destinationURL.standardizedFileURL
-        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        let destinationWriter = try ProjectTemplateSecureDestinationWriter(
+            destinationURL: destinationURL
+        )
 
         var createdFiles: [String] = []
         for file in try templateFiles(in: template.filesURL) {
             let relativePath = try relativeTemplatePath(fileURL: file, filesRoot: template.filesURL)
             let renderedPath = try resolver.render(relativePath, values: resolvedValues)
-            let outputURL = try safeOutputURL(for: renderedPath, destination: destination)
-
-            if fileManager.fileExists(atPath: outputURL.path), !overwrite {
-                throw ProjectTemplateError.destinationExists(renderedPath)
-            }
 
             guard let content = String(data: try Data(contentsOf: file), encoding: .utf8) else {
                 throw ProjectTemplateError.nonUTF8TemplateFile(relativePath)
             }
             let renderedContent = try resolver.render(content, values: resolvedValues)
-            try fileManager.createDirectory(
-                at: outputURL.deletingLastPathComponent(),
-                withIntermediateDirectories: true
+            try destinationWriter.write(
+                Data(renderedContent.utf8),
+                relativePath: renderedPath,
+                overwrite: overwrite
             )
-            try renderedContent.write(to: outputURL, atomically: true, encoding: .utf8)
             createdFiles.append(renderedPath)
         }
 
         return ProjectTemplateScaffoldResult(
             createdFiles: createdFiles.sorted(),
             hookPlan: ProjectTemplateHookPlan(
-                workingDirectory: destination,
+                workingDirectory: destinationWriter.destinationURL,
                 pre: try template.hooks.pre.map { try resolver.render($0, values: resolvedValues) },
                 post: try template.hooks.post.map { try resolver.render($0, values: resolvedValues) }
             )
@@ -107,26 +103,5 @@ struct ProjectTemplateScaffolder {
             throw ProjectTemplateError.unsafeOutputPath(filePath)
         }
         return String(filePath.dropFirst(prefix.count))
-    }
-
-    private func safeOutputURL(for relativePath: String, destination: URL) throws -> URL {
-        guard !relativePath.isEmpty,
-              !relativePath.hasPrefix("/"),
-              !relativePath.contains("\0") else {
-            throw ProjectTemplateError.unsafeOutputPath(relativePath)
-        }
-
-        let components = relativePath.split(separator: "/", omittingEmptySubsequences: false)
-        guard components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
-            throw ProjectTemplateError.unsafeOutputPath(relativePath)
-        }
-
-        let outputURL = destination.appendingPathComponent(relativePath).standardizedFileURL
-        let destinationPath = destination.path.hasSuffix("/") ? destination.path : "\(destination.path)/"
-        guard outputURL.path.hasPrefix(destinationPath) else {
-            throw ProjectTemplateError.unsafeOutputPath(relativePath)
-        }
-
-        return outputURL
     }
 }

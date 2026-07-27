@@ -2,6 +2,7 @@
 // ClaudeSettingsManager.swift - Reads/writes Claude Code settings.json for hooks management.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Claude Settings Manager
 
@@ -16,7 +17,7 @@ import Foundation
 /// ```json
 /// {
 ///   "matcher": "",
-///   "hooks": [{ "type": "command", "command": "cocxy hook-handler" }]
+///   "hooks": [{ "type": "command", "command": "<Cocxy shell guard>" }]
 /// }
 /// ```
 public struct ClaudeSettingsManager {
@@ -35,9 +36,19 @@ public struct ClaudeSettingsManager {
         return hookCommand(forExecutablePath: resolved)
     }()
 
+    /// Claude hooks are global, so reject unrelated shells in the hook shell
+    /// before paying the cost of launching the Cocxy CLI process.
+    static let claudeHookCommand = guardedHookCommand(cocxyHookCommand)
+
     static let installedAppCLIPath = "/Applications/Cocxy Terminal.app/Contents/Resources/cocxy"
     private static let ephemeralPathPrefixes = ["/private/tmp/", "/tmp/"]
     private static let ephemeralPathSubstrings = ["/TemporaryItems/", "/AppTranslocation/", "/build/"]
+
+    static let ownedUnguardedHookCommands: Set<String> = [
+        cocxyHookCommand,
+        "cocxy hook-handler",
+        "\(shellSingleQuoted(installedAppCLIPath)) hook-handler",
+    ]
 
     static func hookCommand(
         forExecutablePath executablePath: String,
@@ -74,6 +85,10 @@ public struct ClaudeSettingsManager {
 
     static func shellSingleQuoted(_ value: String) -> String {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    static func guardedHookCommand(_ command: String) -> String {
+        HookCommandProcessGuard.wrapTrustedShellCommand(command)
     }
 
     static func hookCommand(for source: AgentSource?) -> String {
@@ -189,14 +204,15 @@ public struct ClaudeSettingsManager {
             let desiredEntry: [String: Any] = [
                 "matcher": "",
                 "hooks": [
-                    ["type": "command", "command": Self.cocxyHookCommand]
+                    ["type": "command", "command": Self.claudeHookCommand]
                 ]
             ]
 
             let reconciliation = Self.reconciledHookEntries(
                 eventHooks,
                 desiredEntry: desiredEntry,
-                expectedCommand: Self.cocxyHookCommand
+                expectedCommand: Self.claudeHookCommand,
+                rejectedCommands: Self.ownedUnguardedHookCommands
             )
             eventHooks = reconciliation.entries
             modified = modified || reconciliation.modified
@@ -408,7 +424,8 @@ public struct ClaudeSettingsManager {
     static func reconciledHookEntries(
         _ eventHooks: [[String: Any]],
         desiredEntry: [String: Any],
-        expectedCommand: String
+        expectedCommand: String,
+        rejectedCommands: Set<String> = []
     ) -> (entries: [[String: Any]], modified: Bool) {
         let cocxyIndices = eventHooks.indices.filter {
             hookEntryContainsCocxyCommand(eventHooks[$0])
@@ -421,7 +438,8 @@ public struct ClaudeSettingsManager {
         if let keeperIndex = cocxyIndices.first(where: {
             hookEntryContainsAcceptableCocxyCommand(
                 eventHooks[$0],
-                expectedCommand: expectedCommand
+                expectedCommand: expectedCommand,
+                rejectedCommands: rejectedCommands
             )
         }) {
             guard cocxyIndices.count > 1 else {
@@ -457,13 +475,17 @@ public struct ClaudeSettingsManager {
 
     static func hookEntryContainsAcceptableCocxyCommand(
         _ hookEntry: [String: Any],
-        expectedCommand: String
+        expectedCommand: String,
+        rejectedCommands: Set<String>
     ) -> Bool {
         guard let hookCommands = hookEntry["hooks"] as? [[String: Any]] else {
             return false
         }
         return hookCommands.contains { command in
             guard let commandString = command["command"] as? String else {
+                return false
+            }
+            guard !rejectedCommands.contains(commandString) else {
                 return false
             }
             return Self.isAcceptableInstalledHookCommand(

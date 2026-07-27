@@ -462,24 +462,27 @@ final class MemoryLeakTests: XCTestCase {
 
     /// Creates a SocketServerImpl, starts it, stops it, sets to nil.
     @MainActor
-    func test_socketServer_lifecycle_doesNotLeak() {
-        let tempSocketPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-test-\(UUID().uuidString).sock")
+    func test_socketServer_lifecycle_doesNotLeak() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cx-\(UUID().uuidString.prefix(12))")
+        let tempSocketPath = tempDirectory
+            .appendingPathComponent("test.sock")
             .path
 
         let mockHandler = MemoryTestMockSocketHandler()
         var server: SocketServerImpl? = SocketServerImpl(
             socketPath: tempSocketPath,
-            commandHandler: mockHandler
+            commandHandler: mockHandler,
+            authenticationStore: TestSocketAuthenticationStore()
         )
         let weakRef = WeakReference(server)
 
         defer {
-            try? FileManager.default.removeItem(atPath: tempSocketPath)
+            try? FileManager.default.removeItem(at: tempDirectory)
         }
 
         // Start and stop the server.
-        try? server?.start()
+        try server?.start()
         XCTAssertTrue(server?.isRunning ?? false)
 
         server?.stop()
@@ -496,22 +499,25 @@ final class MemoryLeakTests: XCTestCase {
     /// Verifies that stopping the server removes the socket file.
     /// If the socket file persists, it represents a resource leak.
     @MainActor
-    func test_socketServer_stop_removesSocketFile() {
-        let tempSocketPath = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-test-\(UUID().uuidString).sock")
+    func test_socketServer_stop_removesSocketFile() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cx-\(UUID().uuidString.prefix(12))")
+        let tempSocketPath = tempDirectory
+            .appendingPathComponent("test.sock")
             .path
 
         let mockHandler = MemoryTestMockSocketHandler()
         let server = SocketServerImpl(
             socketPath: tempSocketPath,
-            commandHandler: mockHandler
+            commandHandler: mockHandler,
+            authenticationStore: TestSocketAuthenticationStore()
         )
 
         defer {
-            try? FileManager.default.removeItem(atPath: tempSocketPath)
+            try? FileManager.default.removeItem(at: tempDirectory)
         }
 
-        try? server.start()
+        try server.start()
         XCTAssertTrue(server.isRunning)
 
         server.stop()

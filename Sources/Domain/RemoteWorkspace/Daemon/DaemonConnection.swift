@@ -1,184 +1,294 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// DaemonConnection.swift - JSON-RPC multiplex connection to remote daemon.
+// DaemonConnection.swift - Lease-bound JSON-RPC transport to the remote daemon.
 
 import Foundation
-import Network
 
-// MARK: - Daemon Connection
-
-/// Manages the communication channel to a remote cocxyd daemon.
+/// One authenticated daemon channel carried by an attested SSH direct-tcpip stream.
 ///
-/// Communication flows through an SSH reverse tunnel to the daemon's TCP port.
-/// Requests are multiplexed by ID, allowing concurrent operations.
-/// A heartbeat (ping every 30s) detects connection loss.
+/// The connection is bound to an exact remote profile lease. Every request is
+/// prefixed with an in-memory 256-bit capability and has an absolute response
+/// timeout, so a stale SSH session or silent peer cannot retain control.
 @MainActor
 final class DaemonConnection: ObservableObject {
+    private struct PendingRequest {
+        let continuation: CheckedContinuation<DaemonResponse, any Error>
+        let timeoutTask: Task<Void, Never>
+    }
 
-    // MARK: - State
+    nonisolated static let maximumFrameBytes = 1 * 1_024 * 1_024
 
     @Published private(set) var isConnected = false
 
-    // MARK: - Configuration
-
+    let profileID: UUID
+    let connectionLeaseID: UUID
     let heartbeatInterval: TimeInterval
+    let requestTimeout: TimeInterval
+    var onUnexpectedDisconnect: (@MainActor () -> Void)?
 
-    // MARK: - Internal
-
-    private var connection: NWConnection?
-    private var pendingRequests: [String: CheckedContinuation<DaemonResponse, any Error>] = [:]
+    private let authorizationIsCurrent: @MainActor () -> Bool
+    private var transport: (any ProxyUpstreamTransport)?
+    private var capability = ""
+    private var pendingRequests: [String: PendingRequest] = [:]
     private var heartbeatTask: Task<Void, Never>?
-    private var requestCounter: Int = 0
+    private var requestCounter: UInt64 = 0
     private var receiveBuffer = Data()
+    private var generation: UInt64 = 0
 
-    init(heartbeatInterval: TimeInterval = 30.0) {
-        self.heartbeatInterval = heartbeatInterval
+    init(
+        profileID: UUID,
+        connectionLeaseID: UUID,
+        heartbeatInterval: TimeInterval = 30,
+        requestTimeout: TimeInterval = 10,
+        authorizationIsCurrent: @escaping @MainActor () -> Bool
+    ) {
+        self.profileID = profileID
+        self.connectionLeaseID = connectionLeaseID
+        self.heartbeatInterval = max(0.1, heartbeatInterval)
+        self.requestTimeout = max(0.1, requestTimeout)
+        self.authorizationIsCurrent = authorizationIsCurrent
     }
 
-    // MARK: - Connect
-
-    /// Connects to the daemon via the reverse tunnel's local endpoint.
-    ///
-    /// - Parameter port: The local port of the SSH reverse tunnel.
-    func connect(port: UInt16) {
-        let nwPort = NWEndpoint.Port(rawValue: port)!
-        connection = NWConnection(
-            host: .ipv4(.loopback),
-            port: nwPort,
-            using: .tcp
-        )
-
-        connection?.stateUpdateHandler = { [weak self] state in
-            Task { @MainActor in
-                switch state {
-                case .ready:
-                    self?.isConnected = true
-                    self?.startHeartbeat()
-                    self?.startReceiving()
-                case .failed, .cancelled:
-                    self?.isConnected = false
-                    self?.stopHeartbeat()
-                    self?.failAllPending(DaemonProtocolError.connectionLost)
-                default:
-                    break
-                }
-            }
+    /// Completes the SSH stream handshake and an authenticated ping before returning.
+    func connect(
+        transport: any ProxyUpstreamTransport,
+        capability: String
+    ) async throws {
+        disconnect()
+        guard Self.isValidCapability(capability), authorizationIsCurrent() else {
+            transport.cancel()
+            throw DaemonProtocolError.authenticationFailed
         }
 
-        connection?.start(queue: .main)
+        self.transport = transport
+        self.capability = capability
+        let connectionGeneration = generation
+
+        do {
+            try await transport.waitUntilReady()
+            guard generation == connectionGeneration,
+                  self.transport === transport,
+                  transport.isRunning,
+                  authorizationIsCurrent() else {
+                throw DaemonProtocolError.connectionLost
+            }
+
+            isConnected = true
+            startReceiving(generation: connectionGeneration)
+            let response = try await send(
+                cmd: DaemonCommand.ping.rawValue,
+                timeout: requestTimeout
+            )
+            guard response.ok,
+                  response.data?["pong"] as? Bool == true,
+                  authorizationIsCurrent() else {
+                throw DaemonProtocolError.authenticationFailed
+            }
+            startHeartbeat(generation: connectionGeneration)
+        } catch {
+            disconnect()
+            throw error
+        }
     }
 
-    /// Disconnects from the daemon.
     func disconnect() {
-        stopHeartbeat()
-        connection?.cancel()
-        connection = nil
+        generation &+= 1
+        heartbeatTask?.cancel()
+        heartbeatTask = nil
+        transport?.cancel()
+        transport = nil
+        capability.removeAll(keepingCapacity: false)
+        receiveBuffer.removeAll(keepingCapacity: false)
         isConnected = false
         failAllPending(DaemonProtocolError.connectionLost)
     }
 
-    // MARK: - Send Request
-
-    /// Sends a command to the daemon and waits for the response.
-    ///
-    /// - Parameters:
-    ///   - cmd: The daemon command to execute.
-    ///   - args: Optional arguments.
-    /// - Returns: The daemon's response.
-    func send(cmd: String, args: [String: String]? = nil) async throws -> DaemonResponse {
-        guard isConnected, let connection else {
+    func send(
+        cmd: String,
+        args: [String: String]? = nil,
+        timeout: TimeInterval? = nil
+    ) async throws -> DaemonResponse {
+        try Task.checkCancellation()
+        guard isConnected,
+              authorizationIsCurrent(),
+              let transport,
+              transport.isRunning,
+              Self.isValidCapability(capability) else {
+            disconnect()
             throw DaemonProtocolError.daemonNotRunning
         }
 
-        requestCounter += 1
-        let reqID = "req-\(requestCounter)"
-
-        let request = DaemonRequest(id: reqID, cmd: cmd, args: args)
+        requestCounter &+= 1
+        let requestID = "req-\(requestCounter)"
+        let request = DaemonRequest(id: requestID, cmd: cmd, args: args)
         let jsonLine = try request.jsonLine()
-        let data = Data(jsonLine.utf8)
+        let frame = Data("\(capability)\t\(jsonLine)".utf8)
+        guard frame.count <= Self.maximumFrameBytes else {
+            throw DaemonProtocolError.encodingFailed
+        }
+        let boundedTimeout = max(0.1, timeout ?? requestTimeout)
 
-        return try await withCheckedThrowingContinuation { continuation in
-            pendingRequests[reqID] = continuation
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation {
+                (continuation: CheckedContinuation<DaemonResponse, any Error>) in
+                let timeoutTask = Task { @MainActor [weak self] in
+                    do {
+                        try await Task.sleep(
+                            nanoseconds: UInt64(boundedTimeout * 1_000_000_000)
+                        )
+                    } catch {
+                        return
+                    }
+                    self?.finishRequest(
+                        id: requestID,
+                        result: .failure(DaemonProtocolError.timeout)
+                    )
+                }
+                pendingRequests[requestID] = PendingRequest(
+                    continuation: continuation,
+                    timeoutTask: timeoutTask
+                )
 
-            connection.send(content: data, completion: .contentProcessed { [weak self] error in
-                if let error {
+                transport.send(frame) { [weak self] result in
+                    guard case .failure(let error) = result else { return }
                     Task { @MainActor in
-                        // Remove-then-resume atomically on MainActor to prevent
-                        // double-resume race with failAllPending().
-                        if let cont = self?.pendingRequests.removeValue(forKey: reqID) {
-                            cont.resume(throwing: error)
-                        }
+                        self?.finishRequest(id: requestID, result: .failure(error))
                     }
                 }
-            })
+            }
+        } onCancel: { [weak self] in
+            Task { @MainActor in
+                self?.finishRequest(id: requestID, result: .failure(CancellationError()))
+            }
         }
     }
 
-    // MARK: - Receive
+    private func startReceiving(generation expectedGeneration: UInt64) {
+        guard generation == expectedGeneration,
+              isConnected,
+              authorizationIsCurrent(),
+              let transport else {
+            failConnection(DaemonProtocolError.connectionLost)
+            return
+        }
 
-    private func startReceiving() {
-        connection?.receive(minimumIncompleteLength: 1, maximumLength: 65536) {
-            [weak self] data, _, isComplete, error in
-
+        transport.receive(maximumLength: 65_536) { [weak self] result in
             Task { @MainActor in
-                guard let self else { return }
-
-                if let data {
-                    self.receiveBuffer.append(data)
-                    self.processBuffer()
-                }
-
-                if isComplete || error != nil {
-                    self.isConnected = false
-                    self.failAllPending(DaemonProtocolError.connectionLost)
+                guard let self, self.generation == expectedGeneration else { return }
+                guard self.authorizationIsCurrent() else {
+                    self.failConnection(DaemonProtocolError.connectionLost)
                     return
                 }
-
-                self.startReceiving()
+                switch result {
+                case .success(let data?):
+                    self.receiveBuffer.append(data)
+                    guard self.receiveBuffer.count <= Self.maximumFrameBytes else {
+                        self.failConnection(DaemonProtocolError.invalidResponse)
+                        return
+                    }
+                    do {
+                        try self.processBuffer()
+                    } catch {
+                        self.failConnection(error)
+                        return
+                    }
+                    self.startReceiving(generation: expectedGeneration)
+                case .success(nil):
+                    self.failConnection(DaemonProtocolError.connectionLost)
+                case .failure(let error):
+                    self.failConnection(error)
+                }
             }
         }
     }
 
-    private func processBuffer() {
-        // Split on newlines — each line is a JSON response.
+    private func processBuffer() throws {
         while let newlineIndex = receiveBuffer.firstIndex(of: UInt8(ascii: "\n")) {
-            let lineData = receiveBuffer[receiveBuffer.startIndex..<newlineIndex]
+            let lineData = Data(receiveBuffer[..<newlineIndex])
             receiveBuffer = Data(receiveBuffer[(newlineIndex + 1)...])
-
-            guard let line = String(data: lineData, encoding: .utf8),
-                  let response = try? DaemonResponse.parse(line)
-            else { continue }
-
-            // Dispatch to pending request.
-            if let id = response.id, let continuation = pendingRequests.removeValue(forKey: id) {
-                continuation.resume(returning: response)
+            guard !lineData.isEmpty,
+                  lineData.count <= Self.maximumFrameBytes,
+                  let line = String(data: lineData, encoding: .utf8) else {
+                throw DaemonProtocolError.invalidResponse
+            }
+            let response = try DaemonResponse.parse(line)
+            guard let responseID = response.id else {
+                throw DaemonProtocolError.invalidResponse
+            }
+            if pendingRequests[responseID] != nil {
+                finishRequest(id: responseID, result: .success(response))
             }
         }
     }
 
-    // MARK: - Heartbeat
-
-    private func startHeartbeat() {
-        stopHeartbeat()
-        heartbeatTask = Task { [weak self] in
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: UInt64((self?.heartbeatInterval ?? 30) * 1_000_000_000))
-                guard let self, self.isConnected else { return }
-                _ = try? await self.send(cmd: DaemonCommand.ping.rawValue)
+    private func startHeartbeat(generation expectedGeneration: UInt64) {
+        heartbeatTask?.cancel()
+        heartbeatTask = Task { @MainActor [weak self] in
+            while let self, !Task.isCancelled {
+                do {
+                    try await Task.sleep(
+                        nanoseconds: UInt64(self.heartbeatInterval * 1_000_000_000)
+                    )
+                } catch {
+                    return
+                }
+                guard self.generation == expectedGeneration,
+                      self.isConnected,
+                      self.authorizationIsCurrent() else {
+                    self.failConnection(DaemonProtocolError.connectionLost)
+                    return
+                }
+                do {
+                    let response = try await self.send(cmd: DaemonCommand.ping.rawValue)
+                    guard response.ok, response.data?["pong"] as? Bool == true else {
+                        throw DaemonProtocolError.invalidResponse
+                    }
+                } catch {
+                    self.failConnection(error)
+                    return
+                }
             }
         }
     }
 
-    private func stopHeartbeat() {
+    private func finishRequest(
+        id: String,
+        result: Result<DaemonResponse, any Error>
+    ) {
+        guard let pending = pendingRequests.removeValue(forKey: id) else { return }
+        pending.timeoutTask.cancel()
+        pending.continuation.resume(with: result)
+    }
+
+    private func failConnection(_ error: any Error) {
+        let shouldNotify = isConnected
+        generation &+= 1
         heartbeatTask?.cancel()
         heartbeatTask = nil
+        transport?.cancel()
+        transport = nil
+        capability.removeAll(keepingCapacity: false)
+        receiveBuffer.removeAll(keepingCapacity: false)
+        isConnected = false
+        failAllPending(error)
+        if shouldNotify {
+            onUnexpectedDisconnect?()
+        }
     }
 
-    // MARK: - Helpers
-
     private func failAllPending(_ error: any Error) {
-        for (_, continuation) in pendingRequests {
-            continuation.resume(throwing: error)
-        }
+        let pending = pendingRequests.values
         pendingRequests.removeAll()
+        for request in pending {
+            request.timeoutTask.cancel()
+            request.continuation.resume(throwing: error)
+        }
+    }
+
+    nonisolated static func isValidCapability(_ value: String) -> Bool {
+        guard value.utf8.count == 64 else { return false }
+        return value.utf8.allSatisfy { byte in
+            (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
+                || (UInt8(ascii: "a")...UInt8(ascii: "f")).contains(byte)
+        }
     }
 }

@@ -76,7 +76,7 @@ extension MarkdownContentView {
     }
 
     func copyAsHTML() {
-        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let html = safeImageHTML(MarkdownHTMLRenderer.renderDocument(document))
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(html, forType: .html)
@@ -84,7 +84,7 @@ extension MarkdownContentView {
     }
 
     func copyAsRichText() {
-        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let html = safeImageHTML(MarkdownHTMLRenderer.renderDocument(document))
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
 
@@ -98,7 +98,7 @@ extension MarkdownContentView {
     }
 
     func copyAsPlainText() {
-        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let html = safeImageHTML(MarkdownHTMLRenderer.renderDocument(document))
         let plain = attributedString(fromHTML: html)?.string
             ?? html.replacingOccurrences(
                 of: "<[^>]+>",
@@ -127,6 +127,93 @@ extension MarkdownContentView {
             ],
             documentAttributes: nil
         )
+    }
+
+    private func safeImageHTML(_ html: String) -> String {
+        MarkdownImageInliner.makeSafeHTML(
+            in: html,
+            baseDirectory: filePath?.deletingLastPathComponent()
+        ).html
+    }
+
+    func manageRemoteImages() {
+        let unapprovedHosts = previewView.unapprovedRemoteImageHosts
+        if unapprovedHosts.isEmpty {
+            guard !previewView.approvedRemoteImageHosts.isEmpty else { return }
+            presentRemoteImageAlert(
+                title: actionLocalizer.string(
+                    "markdown.remoteImages.disable.title",
+                    fallback: "Disable Remote Images?"
+                ),
+                message: actionLocalizer.string(
+                    "markdown.remoteImages.disable.message",
+                    fallback: "Remote images will be blocked again for this document."
+                ),
+                actionTitle: actionLocalizer.string(
+                    "markdown.remoteImages.disable.action",
+                    fallback: "Disable"
+                )
+            ) { [weak self] in
+                self?.previewView.resetRemoteImageApprovals()
+            }
+            return
+        }
+
+        let hosts = unapprovedHosts.sorted().map { "- \($0)" }.joined(separator: "\n")
+        let messageFormat = actionLocalizer.string(
+            "markdown.remoteImages.load.message",
+            fallback: "This document requests images from:\n\n%@\n\nLoading them shares your network address and request metadata with those hosts."
+        )
+        presentRemoteImageAlert(
+            title: actionLocalizer.string(
+                "markdown.remoteImages.load.title",
+                fallback: "Load Remote Images?"
+            ),
+            message: String(format: messageFormat, hosts),
+            actionTitle: actionLocalizer.string(
+                "markdown.remoteImages.load.action",
+                fallback: "Load Images"
+            )
+        ) { [weak self] in
+            guard let self else { return }
+            self.previewView.approveRemoteImageHosts(unapprovedHosts) { [weak self] succeeded in
+                guard let self, !succeeded else { return }
+                let alert = NSAlert()
+                alert.alertStyle = .warning
+                alert.messageText = self.actionLocalizer.string(
+                    "markdown.remoteImages.failed.title",
+                    fallback: "Remote Images Remain Blocked"
+                )
+                alert.informativeText = self.actionLocalizer.string(
+                    "markdown.remoteImages.failed.message",
+                    fallback: "Cocxy could not install the WebKit image policy for this document."
+                )
+                alert.runModal()
+            }
+        }
+    }
+
+    private func presentRemoteImageAlert(
+        title: String,
+        message: String,
+        actionTitle: String,
+        action: @escaping () -> Void
+    ) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: actionTitle)
+        alert.addButton(withTitle: actionLocalizer.string("common.cancel", fallback: "Cancel"))
+        if let window {
+            alert.beginSheetModal(for: window) { response in
+                if response == .alertFirstButtonReturn {
+                    action()
+                }
+            }
+        } else if alert.runModal() == .alertFirstButtonReturn {
+            action()
+        }
     }
 
     func exportPDF() {
@@ -161,12 +248,10 @@ extension MarkdownContentView {
             guard let self, let rawHTML = html else { return }
 
             // Inline local images as base64 data URIs for a truly standalone export.
-            let standalone: String
-            if let baseDir {
-                standalone = MarkdownImageInliner.inlineLocalImages(in: rawHTML, baseDirectory: baseDir)
-            } else {
-                standalone = rawHTML
-            }
+            let standalone = MarkdownImageInliner.makeSafeHTML(
+                in: rawHTML,
+                baseDirectory: baseDir
+            ).html
 
             let panel = NSSavePanel()
             let copy = Self.localizedExportPanelCopy(kind: .html, using: self.actionLocalizer)
@@ -198,9 +283,10 @@ extension MarkdownContentView {
         )
 
         // Inline local images for a truly standalone presentation file.
-        if let baseDir = filePath?.deletingLastPathComponent() {
-            html = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: baseDir)
-        }
+        html = MarkdownImageInliner.makeSafeHTML(
+            in: html,
+            baseDirectory: filePath?.deletingLastPathComponent()
+        ).html
 
         let panel = NSSavePanel()
         let copy = Self.localizedExportPanelCopy(kind: .slides, using: actionLocalizer)

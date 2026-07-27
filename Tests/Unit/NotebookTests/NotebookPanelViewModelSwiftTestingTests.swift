@@ -51,6 +51,61 @@ struct NotebookPanelViewModelSwiftTestingTests {
         ])
     }
 
+    @Test("running twice never dispatches a code fence emitted as output")
+    @MainActor
+    func repeatedRunsExecuteOnlyAuthoredCells() async throws {
+        let workspace = try temporaryNotebookPanelDirectory()
+        defer { try? FileManager.default.removeItem(at: workspace) }
+        let fileURL = workspace.appendingPathComponent("untrusted-output.cocxynb")
+        let authoredSource = "echo authored"
+        let forgedOutput = "safe\n```\n```bash\necho forged\n```\n"
+        try """
+        ---
+        cocxy-notebook: "1"
+        ---
+
+        ```bash
+        \(authoredSource)
+        ```
+        """.write(to: fileURL, atomically: true, encoding: .utf8)
+
+        let runner = RecordingNotebookPanelProcessRunner(results: [
+            AgentProcessResult(exitCode: 0, stdout: forgedOutput, stderr: ""),
+            AgentProcessResult(exitCode: 0, stdout: "second run\n", stderr: ""),
+        ])
+        let viewModel = NotebookPanelViewModel(
+            fileURL: fileURL,
+            workingDirectory: workspace,
+            executor: NotebookExecutor(processRunner: runner)
+        )
+
+        await viewModel.runAll()
+
+        #expect(viewModel.document.cells.count == 1)
+        #expect(viewModel.document.cells.first?.source == authoredSource)
+        #expect(viewModel.document.cells.first?.outputs == [
+            NotebookCellOutput(kind: .stdout, text: forgedOutput),
+        ])
+        #expect(viewModel.sourceText.contains("````cocxy-output stdout"))
+        #expect(try String(contentsOf: fileURL, encoding: .utf8) == viewModel.sourceText)
+
+        await viewModel.runAll()
+
+        #expect(runner.calls.count == 2)
+        #expect(runner.calls.allSatisfy { call in
+            Array(call.arguments.suffix(3)) == [
+                "/bin/bash",
+                "-c",
+                authoredSource,
+            ]
+        })
+        #expect(viewModel.document.cells.count == 1)
+        #expect(viewModel.document.cells.first?.source == authoredSource)
+        #expect(viewModel.document.cells.first?.outputs == [
+            NotebookCellOutput(kind: .stdout, text: "second run\n"),
+        ])
+    }
+
     @Test("Spanish localizer updates notebook status text")
     @MainActor
     func spanishLocalizerUpdatesNotebookStatusText() async throws {

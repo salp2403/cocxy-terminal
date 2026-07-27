@@ -138,6 +138,12 @@ struct RemoteConnectionProfile: Identifiable, Codable, Equatable, Sendable {
 
 extension RemoteConnectionProfile {
 
+    /// Per-process namespace prevents stale or foreign ControlMaster sockets
+    /// from colliding with a new Cocxy launch.
+    private static let controlSocketSessionID = String(
+        UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased().prefix(8)
+    )
+
     /// Defines a port forwarding rule for an SSH connection.
     enum PortForward: Codable, Equatable, Sendable {
 
@@ -149,19 +155,19 @@ extension RemoteConnectionProfile {
         /// Equivalent to `ssh -R remotePort:localHost:localPort`.
         case remote(remotePort: Int, localPort: Int, localHost: String = "localhost")
 
-        /// Dynamic SOCKS proxy on the given local port.
-        /// Equivalent to `ssh -D localPort`.
+        /// Legacy dynamic proxy entry retained only for profile compatibility.
+        /// Runtime code rejects this case and uses the authenticated proxy broker.
         case dynamic(localPort: Int)
 
-        /// The SSH command-line flag for this port forward.
-        var sshFlag: String {
+        /// Display-only SSH flag for executable local and remote forwards.
+        var sshFlag: String? {
             switch self {
             case let .local(localPort, remotePort, remoteHost):
                 return "-L \(localPort):\(remoteHost):\(remotePort)"
             case let .remote(remotePort, localPort, localHost):
                 return "-R \(remotePort):\(localHost):\(localPort)"
-            case let .dynamic(localPort):
-                return "-D \(localPort)"
+            case .dynamic:
+                return nil
             }
         }
 
@@ -198,11 +204,21 @@ extension RemoteConnectionProfile {
         return result
     }
 
-    /// Unique socket path for SSH ControlMaster multiplexing.
+    /// Profile-isolated socket path for SSH ControlMaster multiplexing.
     ///
     /// Returns an absolute path by expanding the home directory.
     /// SSH ControlMaster requires a fully resolved path for socket files.
     var controlPath: String {
+        let home = NSHomeDirectory()
+        let profileID = id.uuidString
+            .replacingOccurrences(of: "-", with: "")
+            .lowercased()
+            .prefix(20)
+        return "\(home)/.config/cocxy/sockets/\(Self.controlSocketSessionID)/\(profileID).sock"
+    }
+
+    /// Socket layout used before profiles were isolated by UUID.
+    var legacyControlPath: String {
         let effectivePort = port ?? 22
         let home = NSHomeDirectory()
         if let user {
@@ -241,7 +257,9 @@ extension RemoteConnectionProfile {
 
         // Port forwards.
         for forward in portForwards {
-            parts.append(forward.sshFlag)
+            if let sshFlag = forward.sshFlag {
+                parts.append(sshFlag)
+            }
         }
 
         // Keep-alive.

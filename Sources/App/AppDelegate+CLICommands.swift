@@ -61,6 +61,10 @@ extension AppDelegate {
 
     @MainActor
     private func activeTerminalSurfaceForCLI() -> (controller: MainWindowController, surfaceID: SurfaceID)? {
+        if let context = activePrivilegedSocketCommandContext {
+            guard context.scope == .terminalSurface else { return nil }
+            return privilegedSocketTerminalTarget(for: context)
+        }
         guard let controller = focusedWindowController() ?? windowController else { return nil }
         guard let surfaceID = controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
@@ -769,6 +773,12 @@ extension AppDelegate {
     @MainActor
     func browserViewModelForExternalNavigationCLI() -> BrowserViewModel? {
         (focusedWindowController() ?? windowController)?.browserViewModelForExternalNavigation()
+    }
+
+    @MainActor
+    func openBrowserSplitForCLI() -> Bool {
+        guard let controller = focusedWindowController() ?? windowController else { return false }
+        return controller.openBrowserSplit()
     }
 
     @MainActor

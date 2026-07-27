@@ -246,6 +246,7 @@ struct CommandBackedCloudCellProviderSwiftTestingTests {
 
         #expect(cell.provider == .aws)
         #expect(cell.metadata["externalID"] == "i-0abc1234def567890")
+        #expect(cell.metadata["cloud-init"] == nil)
         #expect(attach.argv == [
             "aws",
             "ssm", "start-session",
@@ -365,6 +366,7 @@ struct CommandBackedCloudCellProviderSwiftTestingTests {
         #expect(cell.provider == .gcp)
         #expect(cell.metadata["externalID"] == "gcp-lab")
         #expect(cell.metadata["identity"] == nil)
+        #expect(cell.metadata["cloud-init"] == nil)
         #expect(attach.argv == [
             "gcloud",
             "compute", "ssh", "deploy@gcp-lab",
@@ -470,6 +472,7 @@ struct CommandBackedCloudCellProviderSwiftTestingTests {
         #expect(cell.provider == .azure)
         #expect(cell.metadata["externalID"] == "azure-lab")
         #expect(cell.metadata["identity"] == nil)
+        #expect(cell.metadata["cloud-init"] == nil)
         #expect(attach.argv == [
             "az",
             "ssh", "vm",

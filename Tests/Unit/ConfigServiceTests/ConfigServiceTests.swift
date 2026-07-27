@@ -38,6 +38,8 @@ final class ConfigServiceDefaultTests: XCTestCase {
         XCTAssertEqual(config.appearance.tabPosition, .left)
         XCTAssertEqual(config.appearance.windowPadding, 8)
         XCTAssertFalse(config.appearance.ligatures)
+        XCTAssertEqual(config.terminal.clipboardReadAccess, .prompt)
+        XCTAssertEqual(config.terminal.clipboardWriteAccess, .prompt)
         XCTAssertEqual(config.terminal.imageMemoryLimitMB, 256)
         XCTAssertFalse(config.terminal.imageFileTransfer)
         XCTAssertTrue(config.terminal.enableSixelImages)
@@ -111,6 +113,7 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         scrollback-lines = 25000
         clipboard-paste-protection = false
         clipboard-read-access = "deny"
+        clipboard-write-access = "allow"
         image-memory-limit-mb = 512
         image-file-transfer = true
         enable-sixel-images = false
@@ -172,6 +175,7 @@ final class ConfigServiceFullParsingTests: XCTestCase {
         XCTAssertEqual(config.terminal.scrollbackLines, 25000)
         XCTAssertFalse(config.terminal.clipboardPasteProtection)
         XCTAssertEqual(config.terminal.clipboardReadAccess, .deny)
+        XCTAssertEqual(config.terminal.clipboardWriteAccess, .allow)
         XCTAssertEqual(config.terminal.imageMemoryLimitMB, 512)
         XCTAssertTrue(config.terminal.imageFileTransfer)
         XCTAssertFalse(config.terminal.enableSixelImages)

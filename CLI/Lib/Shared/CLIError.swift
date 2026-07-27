@@ -8,12 +8,15 @@ import Foundation
 /// Errors that can occur during CLI operations.
 ///
 /// Each error produces a clear, actionable message for the user.
-public enum CLIError: Error, Equatable {
+public enum CLIError: Error, Equatable, Sendable {
     /// The Cocxy Terminal app is not running (connection refused).
     case appNotRunning
 
     /// Permission denied when connecting to the socket.
     case permissionDenied
+
+    /// The app session credential is missing, malformed, or unsafe to read.
+    case authenticationUnavailable
 
     /// The connection timed out waiting for a response.
     case timeout
@@ -46,6 +49,8 @@ public enum CLIError: Error, Equatable {
             return "Error: Cocxy Terminal is not running. Start the app first."
         case .permissionDenied:
             return "Error: Permission denied connecting to Cocxy Terminal socket."
+        case .authenticationUnavailable:
+            return "Error: Cocxy Terminal CLI authentication is unavailable. Restart the app and try again."
         case .timeout:
             return "Error: Connection timed out waiting for Cocxy Terminal response."
         case .unknownCommand(let command):

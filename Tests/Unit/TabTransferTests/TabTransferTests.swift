@@ -4,6 +4,7 @@
 import Testing
 import Foundation
 import AppKit
+import SwiftUI
 @testable import CocxyTerminal
 
 @MainActor
@@ -380,5 +381,74 @@ struct MainWindowControllerTransferTests {
         transferredBuffer?.append(Data("after-transfer\n".utf8))
         #expect(destination.tabOutputBuffers[tabID]?.lines == ["before-transfer", "after-transfer"])
         #expect(source.tabOutputBuffers[tabID] == nil)
+    }
+
+    @Test("Transfer revokes browser grants and rebinds DOM review to destination window")
+    func transferRebindsBrowserAuthorizationContext() throws {
+        let source = MainWindowController(bridge: MockTerminalEngine())
+        let destination = MainWindowController(bridge: MockTerminalEngine())
+        let registry = makeRegistry()
+        source.sessionRegistry = registry
+        destination.sessionRegistry = registry
+        source.showWindow(nil)
+        destination.showWindow(nil)
+
+        let tabID = try #require(source.tabManager.tabs.first?.id)
+        source.newTabAction(nil)
+
+        let browserViewModel = BrowserViewModel()
+        source.wireDOMGrabCallback(for: browserViewModel)
+        let browserPanel = NSHostingView(rootView: BrowserPanelView(
+            viewModel: browserViewModel,
+            onDismiss: {}
+        ))
+        source.savedTabPanelContentViews[tabID] = [UUID(): browserPanel]
+        browserViewModel.setDOMGrabMode(true)
+        #expect(browserViewModel.domGrabAuthorizationID != nil)
+        let remoteProfileID = UUID()
+        let capability = RemoteBrowserProxyCapability(
+            id: UUID(),
+            ownerWindowID: source.windowID,
+            profileID: remoteProfileID,
+            remotePort: 3_000,
+            localProxyPort: 53_000,
+            credentials: ProxyCredentials(password: "transfer-route-secret"),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        let remoteProfile = RemoteBrowserProfile(
+            connectionProfileID: remoteProfileID,
+            name: "Transferred Remote",
+            host: "remote.internal"
+        )
+        #expect(browserViewModel.openRemoteBrokeredRoute(
+            remoteProfile,
+            capability: capability
+        ) != nil)
+        source.remoteBrowserRouteViewModel = browserViewModel
+        let routeGeneration = source.remoteBrowserOpenGeneration
+
+        _ = makeRegisteredSession(for: source, tabID: tabID, in: registry)
+        #expect(source.transferTab(tabID, to: destination))
+
+        #expect(browserViewModel.isDOMGrabActive == false)
+        #expect(browserViewModel.domGrabAuthorizationID == nil)
+        #expect(browserViewModel.activeRemoteBrowserProxyCapability == nil)
+        #expect(browserViewModel.activeRemoteBrowserProfile == nil)
+        #expect(source.remoteBrowserRouteViewModel == nil)
+        #expect(source.remoteBrowserOpenGeneration > routeGeneration)
+
+        let payload = BrowserDOMGrabPayload(
+            selector: "button#transfer",
+            pageURL: URL(string: "https://cocxy.dev/transfer")!,
+            pageTitle: "Transferred browser",
+            visibleText: "Review in destination"
+        )
+        browserViewModel.onDOMGrabPayload?(payload)
+
+        #expect(source.richInputViewModel == nil)
+        #expect(
+            destination.richInputViewModel?.text
+                == BrowserDOMGrabPayloadFormatter.format(payload)
+        )
     }
 }

@@ -102,6 +102,13 @@ actor WorktreeService {
     /// throws `collisionAfterRetries`.
     static let maximumCollisionRetries: Int = 3
 
+    private static let gitSafetyOverrides = [
+        "-c", "core.hooksPath=/dev/null",
+        "-c", "core.fsmonitor=false",
+    ]
+    private static let filterConfigurationPattern =
+        #"^filter\..*\.(clean|smudge|process|required)$"#
+
     // MARK: Dependencies (injectable for tests)
 
     private let gitExecutableURLProvider: @Sendable () -> URL?
@@ -613,17 +620,98 @@ actor WorktreeService {
             throw WorktreeServiceError.gitUnavailable
         }
         do {
+            let filterOverrides = try gitFilterOverrides(
+                at: workingDirectory,
+                gitExecutableURL: gitURL
+            )
             return try CodeReviewGit.run(
                 workingDirectory: workingDirectory,
-                arguments: arguments,
+                arguments: Self.gitSafetyOverrides + filterOverrides + arguments,
                 gitExecutableURLOverride: gitURL
             )
+        } catch let error as WorktreeServiceError {
+            throw error
         } catch {
             throw WorktreeServiceError.gitCommandFailed(
                 command: "git " + arguments.joined(separator: " "),
                 stderr: "\(error)",
                 exitCode: -1
             )
+        }
+    }
+
+    /// Repository attributes can select any configured clean, smudge, or process
+    /// filter during checkout. Discover the effective driver names and override
+    /// each executable entry for every managed Git operation.
+    private func gitFilterOverrides(
+        at workingDirectory: URL,
+        gitExecutableURL: URL
+    ) throws -> [String] {
+        let arguments = [
+            "config", "--includes", "--null", "--name-only",
+            "--get-regexp", Self.filterConfigurationPattern,
+        ]
+        let result = try CodeReviewGit.run(
+            workingDirectory: workingDirectory,
+            arguments: arguments,
+            gitExecutableURLOverride: gitExecutableURL
+        )
+        if result.terminationStatus == 1 { return [] }
+        guard result.terminationStatus == 0 else {
+            throw WorktreeServiceError.gitCommandFailed(
+                command: "git config --get-regexp filter",
+                stderr: result.stderr,
+                exitCode: result.terminationStatus
+            )
+        }
+
+        var drivers = Set<String>()
+        for rawName in result.stdout.split(separator: "\0", omittingEmptySubsequences: true) {
+            let name = String(rawName)
+            let lowercased = name.lowercased()
+            let suffix = [".clean", ".smudge", ".process", ".required"]
+                .first(where: lowercased.hasSuffix)
+            guard let suffix,
+                  lowercased.hasPrefix("filter."),
+                  name.utf8.count <= 1_024,
+                  !name.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
+            else {
+                throw WorktreeServiceError.gitCommandFailed(
+                    command: "git config --get-regexp filter",
+                    stderr: "Git returned an unsafe filter configuration key.",
+                    exitCode: -1
+                )
+            }
+            let start = name.index(name.startIndex, offsetBy: "filter.".count)
+            let end = name.index(name.endIndex, offsetBy: -suffix.count)
+            let driver = String(name[start..<end])
+            let isSafeDriver = !driver.isEmpty
+                && driver.utf8.count <= 128
+                && driver.utf8.allSatisfy { byte in
+                    (UInt8(ascii: "a")...UInt8(ascii: "z")).contains(byte)
+                        || (UInt8(ascii: "A")...UInt8(ascii: "Z")).contains(byte)
+                        || (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(byte)
+                        || byte == UInt8(ascii: ".")
+                        || byte == UInt8(ascii: "_")
+                        || byte == UInt8(ascii: "-")
+                }
+            guard isSafeDriver else {
+                throw WorktreeServiceError.gitCommandFailed(
+                    command: "git config --get-regexp filter",
+                    stderr: "Git returned an unsafe filter driver name.",
+                    exitCode: -1
+                )
+            }
+            drivers.insert(driver)
+        }
+
+        return drivers.sorted().flatMap { driver in
+            [
+                "-c", "filter.\(driver).clean=/bin/cat",
+                "-c", "filter.\(driver).smudge=/bin/cat",
+                "-c", "filter.\(driver).process=",
+                "-c", "filter.\(driver).required=false",
+            ]
         }
     }
 }

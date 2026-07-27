@@ -36,6 +36,10 @@ struct AgentPanelSkillOption: Identifiable, Sendable, Equatable {
     let name: String
     let summary: String
     let source: SkillSource
+
+    var identity: SkillIdentity {
+        SkillIdentity(id: id, source: source)
+    }
 }
 
 struct AgentComputerUseStatus: Sendable, Equatable {
@@ -290,7 +294,7 @@ private extension AgentComputerUseStatus.Phase {
 final class AgentPanelViewModel: ObservableObject {
     @Published var promptDraft: String = ""
     @Published private(set) var availableSkills: [AgentPanelSkillOption] = []
-    @Published private(set) var selectedSkillIDs: Set<String> = []
+    @Published private(set) var selectedSkillIdentities: Set<SkillIdentity> = []
     @Published private(set) var messages: [AgentMessage] = []
     @Published private(set) var state: AgentPanelState = .idle
     @Published private(set) var statusText: String = "Ready."
@@ -350,7 +354,7 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     var selectedSkillsCount: Int {
-        selectedSkillIDs.count
+        selectedSkillIdentities.count
     }
 
     var computerUseStatus: AgentComputerUseStatus? {
@@ -380,15 +384,16 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     func isSkillSelected(_ skillID: String) -> Bool {
-        selectedSkillIDs.contains(skillID)
+        guard let skill = availableSkills.first(where: { $0.id == skillID }) else { return false }
+        return selectedSkillIdentities.contains(skill.identity)
     }
 
     func setSkill(_ skillID: String, selected: Bool) {
-        guard availableSkills.contains(where: { $0.id == skillID }) else { return }
+        guard let skill = availableSkills.first(where: { $0.id == skillID }) else { return }
         if selected {
-            selectedSkillIDs.insert(skillID)
+            selectedSkillIdentities.insert(skill.identity)
         } else {
-            selectedSkillIDs.remove(skillID)
+            selectedSkillIdentities.remove(skill.identity)
         }
     }
 
@@ -496,7 +501,7 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     func approvePendingTool() async {
-        guard let request = pendingApproval else { return }
+        guard state != .running, let request = pendingApproval else { return }
         let response = pendingApprovalResponseDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         if request.preview.kind == .userInput, response.isEmpty {
             return
@@ -530,6 +535,10 @@ final class AgentPanelViewModel: ObservableObject {
             messages = result.messages
             applyStopReason(result.stopReason)
         } catch {
+            if error as? AgentToolApprovalError == .staleContext {
+                pendingApproval = nil
+                pendingApprovalResponseDraft = ""
+            }
             let description = AgentErrorPresentation.message(for: error)
             state = .failed(description)
             statusText = description
@@ -555,11 +564,11 @@ final class AgentPanelViewModel: ObservableObject {
                     source: $0.source
                 )
             }
-            let availableIDs = Set(availableSkills.map(\.id))
-            selectedSkillIDs = selectedSkillIDs.intersection(availableIDs)
+            let availableIdentities = Set(availableSkills.map(\.identity))
+            selectedSkillIdentities = selectedSkillIdentities.intersection(availableIdentities)
         } catch {
             availableSkills = []
-            selectedSkillIDs = []
+            selectedSkillIdentities = []
             if configuration.enabled {
                 statusText = "Failed to load skills: \(AgentErrorPresentation.message(for: error))"
             }
@@ -567,19 +576,22 @@ final class AgentPanelViewModel: ObservableObject {
     }
 
     private func historyWithSelectedSkills() throws -> [AgentMessage] {
-        guard !selectedSkillIDs.isEmpty else {
+        guard !selectedSkillIdentities.isEmpty else {
             return messages
         }
 
         let invocation = try SkillInvoker(registry: skillRegistry)
-            .makeInvocation(skillIDs: Array(selectedSkillIDs))
+            .makeInvocation(skillIdentities: Array(selectedSkillIdentities))
         let context = """
         Selected local skills:
         \(invocation.instructions)
         """
+        let invocationID = invocation.skillIdentities
+            .map { "\($0.source.rawValue)-\($0.id)" }
+            .joined(separator: "-")
         return messages + [
             AgentMessage(
-                id: "agent-panel-selected-skills-\(invocation.skillIDs.joined(separator: "-"))",
+                id: "agent-panel-selected-skills-\(invocationID)",
                 role: .system,
                 content: context
             ),
@@ -629,6 +641,8 @@ final class AgentPanelViewModel: ObservableObject {
             return "Approve computer action \(toolID)."
         case .externalToolApprovalRequired(let toolID):
             return "Approve external tool \(toolID)."
+        case .sensitiveDataAccessRequired:
+            return "Review terminal output before sharing."
         case .userInputRequired(let toolID):
             return "Agent requested input for \(toolID)."
         }

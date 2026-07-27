@@ -2,6 +2,17 @@
 // SocketServer.swift - Unix Domain Socket server for CLI companion.
 
 import Foundation
+import CocxyShared
+
+private struct SocketPathIdentity: Equatable, Sendable {
+    let device: dev_t
+    let inode: ino_t
+
+    init(metadata: stat) {
+        device = metadata.st_dev
+        inode = metadata.st_ino
+    }
+}
 
 // MARK: - Socket Server
 
@@ -10,6 +21,10 @@ import Foundation
 /// Security measures (see ADR-006 and THREAT-MODEL.md):
 /// - Socket file permissions: `0600` (owner-only read/write).
 /// - UID verification via `getpeereid()` on every connection.
+/// - A cryptographically random token is rotated on every server start,
+///   persisted in Keychain, and required on every request.
+/// - The bundled CLI receives the token through a no-follow `0600` file in
+///   the private socket directory; unsafe files fail closed.
 /// - Closed command enum — no eval, no arbitrary execution.
 /// - Stale socket cleanup on startup.
 /// - Maximum 64 KB message size to prevent DoS.
@@ -46,11 +61,26 @@ final class SocketServerImpl: CLISocketServing {
     /// Path to the Unix Domain Socket file.
     let socketPath: String
 
+    /// Ephemeral token file read by the bundled CLI.
+    let authenticationTokenPath: String
+
     /// Handler that processes validated commands.
     private let commandHandler: SocketCommandHandling
 
+    /// Keychain-backed storage for the active session token.
+    private let authenticationStore: any SocketAuthenticationStoring
+
+    /// In-memory token used for constant-time request validation.
+    private var authenticationToken: String?
+
+    /// Session-specific Keychain record identity owned by this app instance.
+    private var authenticationRecord: SocketAuthenticationRecord?
+
     /// The server socket file descriptor. -1 when not running.
     private var serverFD: Int32 = -1
+
+    /// Filesystem identity of the socket path bound by this instance.
+    private var socketPathIdentity: SocketPathIdentity?
 
     /// Whether the accept loop should continue.
     ///
@@ -60,6 +90,9 @@ final class SocketServerImpl: CLISocketServing {
     /// when the main actor performed deallocation while the background
     /// loop was blocked waiting for main-thread access. (T-053)
     private let shouldAcceptConnectionsFlag = LockedValue<Bool>(false)
+
+    /// Invalidates old accept loops before a restart can reuse an fd number.
+    private let acceptGeneration = LockedValue<UInt64>(0)
 
     /// Background queue for the accept loop.
     ///
@@ -93,24 +126,53 @@ final class SocketServerImpl: CLISocketServing {
     ///   - socketPath: Path to the Unix Domain Socket file.
     ///     Defaults to `SocketServerConstants.socketPath`.
     ///   - commandHandler: The handler that processes validated commands.
+    ///   - authenticationStore: Session-token persistence. Production uses
+    ///     Keychain; tests inject an isolated in-memory store.
     init(
         socketPath: String = SocketServerConstants.socketPath,
-        commandHandler: SocketCommandHandling
+        commandHandler: SocketCommandHandling,
+        authenticationStore: any SocketAuthenticationStoring = KeychainSocketAuthenticationStore()
     ) {
         self.socketPath = socketPath
         self.commandHandler = commandHandler
+        self.authenticationTokenPath = SocketAuthenticationCredential.path(
+            forSocketPath: socketPath
+        )
+        self.authenticationStore = authenticationStore
     }
 
     deinit {
+        let wasRunning = isRunning
+        let descriptor = serverFD
+        let path = socketPath
+        let tokenPath = authenticationTokenPath
+        let store = authenticationStore
+        let token = authenticationToken
+        let authenticationRecord = authenticationRecord
+        let socketIdentity = socketPathIdentity
+        let acceptFlag = shouldAcceptConnectionsFlag
+        let generation = acceptGeneration
+
         // Safety net: ensure resources are released even if stop() was not called.
         // This prevents socket file leaks and orphaned accept loops on deallocation.
-        if isRunning {
-            shouldAcceptConnectionsFlag.withLock { $0 = false }
-            if serverFD >= 0 {
-                Darwin.shutdown(serverFD, SHUT_RDWR)
-                Darwin.close(serverFD)
+        if wasRunning {
+            acceptFlag.withLock { $0 = false }
+            generation.withLock { $0 &+= 1 }
+            if descriptor >= 0 {
+                Darwin.shutdown(descriptor, SHUT_RDWR)
+                Darwin.close(descriptor)
             }
-            removeStaleSocketFile()
+        }
+        if let socketIdentity {
+            Self.unlinkPath(at: path, matching: socketIdentity)
+        }
+        if let token,
+           let fileToken = try? SocketAuthenticationCredential.read(from: tokenPath),
+           SocketAuthenticationCredential.securelyMatches(fileToken, expected: token) {
+            SocketAuthenticationCredential.remove(at: tokenPath)
+        }
+        if let authenticationRecord {
+            try? store.delete(record: authenticationRecord)
         }
     }
 
@@ -131,7 +193,23 @@ final class SocketServerImpl: CLISocketServing {
         try createSocketDirectory()
         try removeSocketFileIfStaleOrThrowIfActive()
         try bindSocket()
-        startAcceptLoop()
+
+        do {
+            let token = try SocketAuthenticationTokenGenerator.generate()
+            authenticationToken = token
+            authenticationRecord = try authenticationStore.save(
+                token: token,
+                socketPath: socketPath
+            )
+            try SocketAuthenticationCredential.write(
+                token,
+                to: authenticationTokenPath
+            )
+            startAcceptLoop(authenticationToken: token)
+        } catch {
+            rollbackOwnedSocketAfterFailedStart()
+            throw error
+        }
 
         isRunning = true
     }
@@ -146,6 +224,7 @@ final class SocketServerImpl: CLISocketServing {
         guard isRunning else { return }
 
         shouldAcceptConnectionsFlag.withLock { $0 = false }
+        acceptGeneration.withLock { $0 &+= 1 }
 
         if serverFD >= 0 {
             // Shutdown will cause the accept() call to return with an error,
@@ -155,7 +234,8 @@ final class SocketServerImpl: CLISocketServing {
             serverFD = -1
         }
 
-        removeStaleSocketFile()
+        removeOwnedSocketFile()
+        removeOwnedAuthentication()
         isRunning = false
     }
 
@@ -171,7 +251,21 @@ final class SocketServerImpl: CLISocketServing {
     /// probe catches that stale endpoint so the health timer can restart
     /// the listener.
     var isHealthy: Bool {
-        guard isRunning, serverFD >= 0 else { return false }
+        guard isRunning,
+              serverFD >= 0,
+              let socketPathIdentity,
+              Self.protectedSocketIdentity(at: socketPath) == socketPathIdentity,
+              let authenticationToken,
+              let fileToken = try? SocketAuthenticationCredential.read(
+                  from: authenticationTokenPath
+              ),
+              SocketAuthenticationCredential.securelyMatches(
+                  fileToken,
+                  expected: authenticationToken
+              )
+        else {
+            return false
+        }
         return Self.socketAcceptsConnections(at: socketPath)
     }
 
@@ -180,18 +274,13 @@ final class SocketServerImpl: CLISocketServing {
     ///
     /// This handles edge cases where the socket file is removed externally
     /// (e.g., by a race condition during window reopen). The old fd is
-    /// closed and a fresh socket is created.
+    /// closed and a fresh socket is created. If another live instance owns
+    /// the path temporarily, later health ticks retry after it exits.
     func restartIfNeeded() {
-        guard isRunning, !isHealthy else { return }
-
-        // Close the old fd (it's bound to a deleted inode).
-        if serverFD >= 0 {
-            shouldAcceptConnectionsFlag.withLock { $0 = false }
-            Darwin.shutdown(serverFD, SHUT_RDWR)
-            Darwin.close(serverFD)
-            serverFD = -1
+        if isRunning {
+            guard !isHealthy else { return }
+            stop()
         }
-        isRunning = false
 
         // Restart with a fresh socket.
         do {
@@ -228,11 +317,34 @@ final class SocketServerImpl: CLISocketServing {
                 attributes: [.posixPermissions: 0o700]
             )
         }
-    }
 
-    /// Removes a stale socket file left from a previous crash.
-    private nonisolated func removeStaleSocketFile() {
-        try? FileManager.default.removeItem(atPath: socketPath)
+        let directoryFD = directory.withCString {
+            Darwin.open($0, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        }
+        guard directoryFD >= 0 else {
+            throw CLISocketError.bindFailed(
+                path: directory,
+                reason: "Socket directory must be a user-owned directory, not a symbolic link"
+            )
+        }
+        defer { Darwin.close(directoryFD) }
+
+        var metadata = stat()
+        guard Darwin.fstat(directoryFD, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
+              metadata.st_uid == geteuid()
+        else {
+            throw CLISocketError.bindFailed(
+                path: directory,
+                reason: "Socket directory must be a user-owned directory, not a symbolic link"
+            )
+        }
+        guard Darwin.fchmod(directoryFD, 0o700) == 0 else {
+            throw CLISocketError.bindFailed(
+                path: directory,
+                reason: "Could not restrict socket directory permissions: \(String(cString: strerror(errno)))"
+            )
+        }
     }
 
     /// Removes the socket path only when it is stale. If another live
@@ -240,14 +352,28 @@ final class SocketServerImpl: CLISocketServing {
     /// it intact and fail this server start instead of stealing the CLI
     /// endpoint from the running app.
     private nonisolated func removeSocketFileIfStaleOrThrowIfActive() throws {
-        guard FileManager.default.fileExists(atPath: socketPath) else { return }
-        if Self.socketAcceptsConnections(at: socketPath) {
+        var metadata = stat()
+        guard lstat(socketPath, &metadata) == 0 else {
+            if errno == ENOENT { return }
+            throw CLISocketError.bindFailed(
+                path: socketPath,
+                reason: "Could not inspect existing socket path: \(String(cString: strerror(errno)))"
+            )
+        }
+
+        let isSocket = (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK)
+        if isSocket, Self.socketAcceptsConnections(at: socketPath) {
             throw CLISocketError.bindFailed(
                 path: socketPath,
                 reason: "Socket already accepts connections; another Cocxy Terminal instance is running"
             )
         }
-        removeStaleSocketFile()
+        guard Darwin.unlink(socketPath) == 0 else {
+            throw CLISocketError.bindFailed(
+                path: socketPath,
+                reason: "Could not remove stale socket path: \(String(cString: strerror(errno)))"
+            )
+        }
     }
 
     /// Fast AF_UNIX connect probe used for both startup stale-file
@@ -279,6 +405,37 @@ final class SocketServerImpl: CLISocketServing {
             }
         }
         return result == 0
+    }
+
+    /// Verifies the path still names the owner-only Unix socket created by
+    /// this server. Health checks use the same invariant enforced at bind.
+    private nonisolated static func protectedSocketIdentity(
+        at path: String
+    ) -> SocketPathIdentity? {
+        var metadata = stat()
+        guard lstat(path, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFSOCK),
+              metadata.st_uid == geteuid(),
+              metadata.st_nlink == 1,
+              (metadata.st_mode & 0o777) == SocketServerConstants.socketPermissions
+        else {
+            return nil
+        }
+        return SocketPathIdentity(metadata: metadata)
+    }
+
+    private nonisolated static func pathIdentity(at path: String) -> SocketPathIdentity? {
+        var metadata = stat()
+        guard lstat(path, &metadata) == 0 else { return nil }
+        return SocketPathIdentity(metadata: metadata)
+    }
+
+    private nonisolated static func unlinkPath(
+        at path: String,
+        matching expectedIdentity: SocketPathIdentity
+    ) {
+        guard pathIdentity(at: path) == expectedIdentity else { return }
+        _ = Darwin.unlink(path)
     }
 
     /// Creates, binds, and starts listening on the AF_UNIX socket.
@@ -337,12 +494,21 @@ final class SocketServerImpl: CLISocketServing {
             )
         }
 
-        // 5. Explicit chmod as defense-in-depth (socket already created with 0600 via umask).
-        chmod(socketPath, SocketServerConstants.socketPermissions)
+        // 5. Validate the no-follow path instead of chmodding by pathname.
+        //    The restrictive umask above created it as 0600 atomically; a
+        //    pathname chmod could follow a symlink if the entry were swapped.
+        guard let boundIdentity = Self.protectedSocketIdentity(at: socketPath) else {
+            Darwin.close(fd)
+            throw CLISocketError.bindFailed(
+                path: socketPath,
+                reason: "Bound socket did not retain owner-only socket metadata"
+            )
+        }
 
         // 6. Start listening.
         guard Darwin.listen(fd, SocketServerConstants.listenBacklog) == 0 else {
             Darwin.close(fd)
+            Self.unlinkPath(at: socketPath, matching: boundIdentity)
             throw CLISocketError.bindFailed(
                 path: socketPath,
                 reason: "listen() failed: \(String(cString: strerror(errno)))"
@@ -350,30 +516,77 @@ final class SocketServerImpl: CLISocketServing {
         }
 
         serverFD = fd
+        socketPathIdentity = boundIdentity
+    }
+
+    private func removeOwnedSocketFile() {
+        if let socketPathIdentity {
+            Self.unlinkPath(at: socketPath, matching: socketPathIdentity)
+        }
+        socketPathIdentity = nil
+    }
+
+    private func removeOwnedAuthentication() {
+        if let authenticationToken,
+           let fileToken = try? SocketAuthenticationCredential.read(
+               from: authenticationTokenPath
+           ),
+           SocketAuthenticationCredential.securelyMatches(
+               fileToken,
+               expected: authenticationToken
+           ) {
+            SocketAuthenticationCredential.remove(at: authenticationTokenPath)
+        }
+        if let authenticationRecord {
+            try? authenticationStore.delete(record: authenticationRecord)
+        }
+        authenticationRecord = nil
+        authenticationToken = nil
+    }
+
+    /// Cleans up only resources created after this instance successfully
+    /// bound the path. It is never called when another live server owns it.
+    private func rollbackOwnedSocketAfterFailedStart() {
+        shouldAcceptConnectionsFlag.withLock { $0 = false }
+        acceptGeneration.withLock { $0 &+= 1 }
+        if serverFD >= 0 {
+            Darwin.shutdown(serverFD, SHUT_RDWR)
+            Darwin.close(serverFD)
+            serverFD = -1
+        }
+        removeOwnedSocketFile()
+        removeOwnedAuthentication()
     }
 
     // MARK: - Private: Accept Loop
 
     /// Starts the background accept loop.
-    private func startAcceptLoop() {
+    private func startAcceptLoop(authenticationToken: String) {
         shouldAcceptConnectionsFlag.withLock { $0 = true }
+        let generation = acceptGeneration.withLock { value -> UInt64 in
+            value &+= 1
+            return value
+        }
         let fd = serverFD
         let path = socketPath
         let handler = commandHandler
         let connCount = activeConnectionCount
         let flagRef = shouldAcceptConnectionsFlag
+        let generationRef = acceptGeneration
 
         acceptQueue.async {
             SocketConnectionHandler.acceptLoop(
                 serverFD: fd,
                 socketPath: path,
                 commandHandler: handler,
+                authenticationToken: authenticationToken,
                 activeConnectionCount: connCount,
                 shouldContinue: {
                     // Thread-safe read without main-thread synchronization.
                     // This avoids the deadlock risk of DispatchQueue.main.sync
                     // when the main actor is simultaneously deallocating this object.
                     flagRef.withLock { $0 }
+                        && generationRef.withLock { $0 == generation }
                 }
             )
         }
@@ -425,8 +638,9 @@ enum SocketConnectionHandler {
         serverFD: Int32,
         socketPath: String,
         commandHandler: SocketCommandHandling,
+        authenticationToken: String,
         activeConnectionCount: LockedValue<Int>,
-        shouldContinue: @escaping () -> Bool
+        shouldContinue: @escaping @Sendable () -> Bool
     ) {
         // `.userInitiated` matches the accept queue — CLI round-trips are
         // synchronous from the user's perspective, so per-connection work
@@ -485,7 +699,9 @@ enum SocketConnectionHandler {
             connectionQueue.async {
                 handleConnection(
                     clientFD: clientFD,
-                    commandHandler: commandHandler
+                    commandHandler: commandHandler,
+                    authenticationToken: authenticationToken,
+                    sessionIsValid: shouldContinue
                 )
                 activeConnectionCount.withLock { count in
                     count -= 1
@@ -504,7 +720,9 @@ enum SocketConnectionHandler {
     /// 5. Sends responses back.
     static func handleConnection(
         clientFD: Int32,
-        commandHandler: SocketCommandHandling
+        commandHandler: SocketCommandHandling,
+        authenticationToken: String,
+        sessionIsValid: @escaping @Sendable () -> Bool
     ) {
         defer { Darwin.close(clientFD) }
 
@@ -530,6 +748,8 @@ enum SocketConnectionHandler {
 
         // Message read loop: supports multiple requests per connection.
         while true {
+            guard sessionIsValid() else { return }
+
             // Read the 4-byte length header.
             guard let headerData = readExactly(fd: clientFD, count: SocketMessageFraming.headerSize) else {
                 return // Client disconnected or read error.
@@ -548,11 +768,16 @@ enum SocketConnectionHandler {
             guard let payloadData = readExactly(fd: clientFD, count: Int(payloadLength)) else {
                 return
             }
+            guard sessionIsValid() else { return }
 
             // Try to decode the request. If JSON is malformed, send an error response.
             let response: SocketResponse
             if let request = try? JSONDecoder().decode(SocketRequest.self, from: payloadData) {
-                response = processRequest(request, commandHandler: commandHandler)
+                response = processRequest(
+                    request,
+                    commandHandler: commandHandler,
+                    authenticationToken: authenticationToken
+                )
             } else {
                 response = SocketResponse.failure(
                     id: "unknown",
@@ -641,8 +866,19 @@ enum SocketConnectionHandler {
     /// internally.
     private static func processRequest(
         _ request: SocketRequest,
-        commandHandler: SocketCommandHandling
+        commandHandler: SocketCommandHandling,
+        authenticationToken: String
     ) -> SocketResponse {
+        guard SocketAuthenticationCredential.securelyMatches(
+            request.authenticationToken,
+            expected: authenticationToken
+        ) else {
+            return .failure(
+                id: request.id,
+                error: "Socket authentication failed"
+            )
+        }
+
         // Validate command against the closed enum.
         guard CLICommandName(rawValue: request.command) != nil else {
             return .failure(
@@ -651,7 +887,7 @@ enum SocketConnectionHandler {
             )
         }
 
-        return commandHandler.handleCommand(request)
+        return commandHandler.handleCommand(request.removingAuthenticationToken())
     }
 
     /// Writes a length-prefixed JSON response to a socket.

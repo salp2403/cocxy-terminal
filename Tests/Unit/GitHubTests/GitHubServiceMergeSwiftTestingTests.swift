@@ -75,6 +75,9 @@ struct GitHubServiceMergeSwiftTestingTests {
       "state": "MERGED",
       "author": {"login": "octocat"},
       "headRefName": "feature/test",
+      "headRepository": {"name": "repo"},
+      "headRepositoryOwner": {"login": "owner"},
+      "isCrossRepository": false,
       "baseRefName": "main",
       "labels": [],
       "isDraft": false,
@@ -91,6 +94,9 @@ struct GitHubServiceMergeSwiftTestingTests {
       "state": "OPEN",
       "author": {"login": "octocat"},
       "headRefName": "feature/test",
+      "headRepository": {"name": "repo"},
+      "headRepositoryOwner": {"login": "owner"},
+      "isCrossRepository": false,
       "baseRefName": "main",
       "labels": [],
       "isDraft": false,
@@ -106,6 +112,36 @@ struct GitHubServiceMergeSwiftTestingTests {
       "name": "repo"
     }
     """
+
+    private static func mergedPullRequestJSON(
+        headOwner: String? = "owner",
+        headRepositoryName: String? = "repo",
+        isCrossRepository: Bool? = false,
+        headRefName: String = "feature/test"
+    ) throws -> String {
+        let data = try #require(mergedPRJSON.data(using: .utf8))
+        var object = try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        object["headRefName"] = headRefName
+        if let headOwner {
+            object["headRepositoryOwner"] = ["login": headOwner]
+        } else {
+            object.removeValue(forKey: "headRepositoryOwner")
+        }
+        if let headRepositoryName {
+            object["headRepository"] = ["name": headRepositoryName]
+        } else {
+            object.removeValue(forKey: "headRepository")
+        }
+        if let isCrossRepository {
+            object["isCrossRepository"] = isCrossRepository
+        } else {
+            object.removeValue(forKey: "isCrossRepository")
+        }
+        let encoded = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
+        return try #require(String(data: encoded, encoding: .utf8))
+    }
 
     private static let cleanMergeabilityJSON = """
     {
@@ -322,6 +358,132 @@ struct GitHubServiceMergeSwiftTestingTests {
         ])
     }
 
+    @Test("fork head metadata never deletes a colliding base branch")
+    func forkHeadNeverDeletesBaseBranch() async throws {
+        let spy = RunnerSpy()
+        let forkJSON = try Self.mergedPullRequestJSON(
+            headOwner: "contributor",
+            headRepositoryName: "repo",
+            isCrossRepository: true
+        )
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: forkJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        let merged = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        #expect(merged.state == .merged)
+        #expect(!spy.allInvocations.contains(where: { $0.args.first == "api" }))
+        #expect(!spy.allInvocations.contains(where: { Self.matchesRepoIdentity($0.args) }))
+    }
+
+    @Test("mismatched head repository identity blocks deletion even with same-repo flag")
+    func mismatchedHeadRepositoryIdentityBlocksDelete() async throws {
+        let spy = RunnerSpy()
+        let inconsistentJSON = try Self.mergedPullRequestJSON(
+            headOwner: "different-owner",
+            headRepositoryName: "repo",
+            isCrossRepository: false
+        )
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: inconsistentJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesRepoIdentity,
+                 result: GitHubCLIResult(stdout: Self.repoIdentityJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        _ = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        #expect(spy.allInvocations.contains(where: { Self.matchesRepoIdentity($0.args) }))
+        #expect(!spy.allInvocations.contains(where: { $0.args.first == "api" }))
+    }
+
+    @Test("missing or malformed head repository metadata fails closed")
+    func missingHeadRepositoryMetadataSkipsDelete() async throws {
+        for json in [
+            try Self.mergedPullRequestJSON(
+                headOwner: nil,
+                headRepositoryName: nil,
+                isCrossRepository: nil
+            ),
+            try Self.mergedPullRequestJSON(
+                headOwner: "",
+                headRepositoryName: "repo",
+                isCrossRepository: false
+            ),
+        ] {
+            let spy = RunnerSpy()
+            spy.stub(matching: Self.matchesMerge,
+                     result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+            spy.stub(matching: Self.matchesView,
+                     result: GitHubCLIResult(stdout: json, stderr: "", terminationStatus: 0))
+
+            let service = GitHubService(runner: spy.runner)
+            _ = try await service.mergePullRequest(
+                request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+                at: Self.workingDirectory
+            )
+
+            #expect(!spy.allInvocations.contains(where: { $0.args.first == "api" }))
+            #expect(!spy.allInvocations.contains(where: { Self.matchesRepoIdentity($0.args) }))
+        }
+    }
+
+    @Test("same repository identity comparison is case insensitive")
+    func sameRepositoryIdentityComparisonIsCaseInsensitive() async throws {
+        let spy = RunnerSpy()
+        let mixedCaseRepoJSON = """
+        {"owner": {"login": "OWNER"}, "name": "REPO"}
+        """
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: Self.mergedPRJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesRepoIdentity,
+                 result: GitHubCLIResult(stdout: mixedCaseRepoJSON, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesAPI,
+                 result: GitHubCLIResult(stdout: "", stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        _ = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        let endpoint = try #require(
+            spy.allInvocations.first(where: { $0.args.first == "api" })?.args.last
+        )
+        #expect(endpoint == "repos/OWNER/REPO/git/refs/heads/feature/test")
+    }
+
+    @Test("head branch equal to base branch skips explicit deletion")
+    func headEqualToBaseSkipsDelete() async throws {
+        let spy = RunnerSpy()
+        let json = try Self.mergedPullRequestJSON(headRefName: "main")
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: json, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        _ = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        #expect(!spy.allInvocations.contains(where: { $0.args.first == "api" }))
+        #expect(!spy.allInvocations.contains(where: { Self.matchesRepoIdentity($0.args) }))
+    }
+
     @Test("deleteBranch=true treats an already-deleted head ref as success")
     func deleteBranchAlreadyDeletedHeadRefIsSuccess() async throws {
         let spy = RunnerSpy()
@@ -371,6 +533,52 @@ struct GitHubServiceMergeSwiftTestingTests {
 
         #expect(pr.state == .merged)
         #expect(spy.allInvocations.contains(where: { $0.args.first == "api" }))
+    }
+
+    @Test("non-zero recovery path also skips fork branch deletion")
+    func nonZeroRecoverySkipsForkBranchDeletion() async throws {
+        let spy = RunnerSpy()
+        let forkJSON = try Self.mergedPullRequestJSON(
+            headOwner: "contributor",
+            isCrossRepository: true
+        )
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: "merged", stderr: "local cleanup failed", terminationStatus: 1))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: forkJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        let merged = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash, deleteBranch: true),
+            at: Self.workingDirectory
+        )
+
+        #expect(merged.state == .merged)
+        #expect(!spy.allInvocations.contains(where: { $0.args.first == "api" }))
+        #expect(!spy.allInvocations.contains(where: { Self.matchesRepoIdentity($0.args) }))
+    }
+
+    @Test("pull request hydration requests head repository provenance")
+    func pullRequestHydrationRequestsHeadRepositoryProvenance() async throws {
+        let spy = RunnerSpy()
+        spy.stub(matching: Self.matchesMerge,
+                 result: GitHubCLIResult(stdout: Self.mergeSuccessStdout, stderr: "", terminationStatus: 0))
+        spy.stub(matching: Self.matchesView,
+                 result: GitHubCLIResult(stdout: Self.mergedPRJSON, stderr: "", terminationStatus: 0))
+
+        let service = GitHubService(runner: spy.runner)
+        _ = try await service.mergePullRequest(
+            request: GitHubMergeRequest(pullRequestNumber: 42, method: .squash),
+            at: Self.workingDirectory
+        )
+
+        let viewArgs = try #require(
+            spy.allInvocations.first(where: { Self.matchesPullRequestView($0.args) })?.args
+        )
+        let fields = try #require(viewArgs.dropFirst().first(where: { $0.contains("headRefName") }))
+        #expect(fields.contains("headRepository"))
+        #expect(fields.contains("headRepositoryOwner"))
+        #expect(fields.contains("isCrossRepository"))
     }
 
     // MARK: - mergePullRequest error classification

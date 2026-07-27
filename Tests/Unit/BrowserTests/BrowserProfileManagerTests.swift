@@ -247,6 +247,54 @@ struct BrowserProfileManagerTests {
         #expect(store.savedProfiles.first(where: { $0.id == created.id })?.remoteProfile == nil)
     }
 
+    @Test("Import reservation keeps a local destination stable until release")
+    func importReservationKeepsDestinationStable() throws {
+        let store = MockBrowserProfileStore()
+        let manager = BrowserProfileManager(store: store)
+        var target = manager.createProfile(name: "Import Target", icon: "tray", colorHex: "#FFF")
+        let reservation = try #require(manager.beginImport(to: target.id))
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote",
+            host: "remote.internal"
+        )
+
+        target.name = "Changed During Import"
+        manager.updateProfile(target)
+        manager.attachRemoteProfile(remote, to: target.id)
+        manager.deleteProfile(id: target.id)
+
+        #expect(manager.hasActiveImport(for: target.id))
+        #expect(manager.beginImport(to: target.id) == nil)
+        #expect(manager.profiles.first(where: { $0.id == target.id })?.name == "Import Target")
+        #expect(manager.profiles.first(where: { $0.id == target.id })?.remoteProfile == nil)
+
+        manager.endImport(reservation)
+        #expect(!manager.hasActiveImport(for: target.id))
+        manager.updateProfile(target)
+        #expect(manager.profiles.first(where: { $0.id == target.id })?.name == "Changed During Import")
+    }
+
+    @Test("Import reservation rejects unavailable and remote destinations")
+    func importReservationRejectsInvalidDestinations() {
+        let store = MockBrowserProfileStore()
+        let manager = BrowserProfileManager(store: store)
+        let remote = RemoteBrowserProfile(
+            connectionProfileID: UUID(),
+            name: "Remote",
+            host: "remote.internal"
+        )
+        let remoteTarget = manager.createProfile(
+            name: "Remote",
+            icon: "network",
+            colorHex: "#FFF",
+            remoteProfile: remote
+        )
+
+        #expect(manager.beginImport(to: UUID()) == nil)
+        #expect(manager.beginImport(to: remoteTarget.id) == nil)
+    }
+
     // MARK: - Active Profile
 
     @Test("activeProfile returns the currently active profile")

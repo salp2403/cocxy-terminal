@@ -65,6 +65,37 @@ extension AppDelegate {
         kind: String,
         params: [String: String]
     ) async -> (Bool, [String: String]) {
+        if kind == "remove", let rawForce = params["force"] {
+            guard let force = Self.parseBool(rawForce) else {
+                return (false, ["error": "worktree-remove received an invalid force value."])
+            }
+            guard !force else {
+                return (
+                    false,
+                    ["error": "Forced worktree removal is disabled for CLI requests. Commit, stash, or discard the worktree changes, then retry without --force."]
+                )
+            }
+        }
+        if kind == "cleanup-merged" {
+            if let rawForce = params["force"] {
+                guard let force = Self.parseBool(rawForce) else {
+                    return (false, ["error": "worktree-cleanup-merged received an invalid force value."])
+                }
+                guard !force else {
+                    return (
+                        false,
+                        ["error": "Forced merged-worktree cleanup is not available through the CLI bridge."]
+                    )
+                }
+            }
+            guard params["dry-run"].flatMap(Self.parseBool) == true else {
+                return (
+                    false,
+                    ["error": "worktree-cleanup-merged is preview-only through the CLI bridge; pass --dry-run."]
+                )
+            }
+        }
+
         let contextSnapshot = await MainActor.run { () -> WorktreeCLIContext? in
             self.buildWorktreeCLIContext()
         }
@@ -359,11 +390,10 @@ extension AppDelegate {
         guard let id = params["id"]?.nilIfEmpty else {
             return (false, ["error": "worktree-remove requires --id <worktree-id>"])
         }
-        let force = Self.parseBool(params["force"]) ?? false
 
         let removed = try await service.remove(
             id: id,
-            force: force,
+            force: false,
             originRepoPath: context.originRepoPath,
             store: store
         )
@@ -400,34 +430,16 @@ extension AppDelegate {
         service: WorktreeService
     ) async throws -> (Bool, [String: String]) {
         let baseRef = params["base-ref"]?.nilIfEmpty ?? context.config.worktree.baseRef
-        let force = Self.parseBool(params["force"]) ?? false
-        let dryRun = Self.parseBool(params["dry-run"]) ?? false
-
-        if dryRun {
-            let plan = try await service.mergedCleanupPlan(
-                originRepoPath: context.originRepoPath,
-                baseRef: baseRef,
-                force: force,
-                store: store
-            )
-            return (true, Self.cleanupMergedPayload(
-                plan: plan,
-                removed: [],
-                status: "dry-run"
-            ))
-        }
-
-        let result = try await service.cleanupMergedWorktrees(
+        let plan = try await service.mergedCleanupPlan(
             originRepoPath: context.originRepoPath,
             baseRef: baseRef,
-            force: force,
+            force: false,
             store: store
         )
-        await clearWorktreeTabBindings(ids: Set(result.removed.map(\.id)))
         return (true, Self.cleanupMergedPayload(
-            plan: result.plan,
-            removed: result.removed,
-            status: "cleaned"
+            plan: plan,
+            removed: [],
+            status: "dry-run"
         ))
     }
 
@@ -543,7 +555,7 @@ extension AppDelegate {
         case .worktreeNotFound(let id):
             return "Worktree not found: \(id)"
         case .uncommittedChanges(let path, _):
-            return "Worktree has uncommitted changes at \(path). Commit or pass --force to override."
+            return "Worktree has uncommitted changes at \(path). Commit, stash, or discard those changes, then retry."
         case .manifestError(let underlying):
             return "Manifest error: \(underlying)"
         }

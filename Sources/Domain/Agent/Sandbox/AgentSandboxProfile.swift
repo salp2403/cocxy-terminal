@@ -48,7 +48,6 @@ private extension AgentProviderKind {
 struct AgentSandboxedProcessRunner: AgentProcessRunning {
     let base: any AgentProcessRunning
     let workspaceURL: URL
-    let configURL: URL
     let enabled: Bool
     let sandboxExecutor: SandboxExecutor
     let profileBuilder: SandboxProfileBuilder
@@ -57,8 +56,6 @@ struct AgentSandboxedProcessRunner: AgentProcessRunning {
     init(
         base: any AgentProcessRunning,
         workspaceURL: URL,
-        configURL: URL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".config/cocxy", isDirectory: true),
         enabled: Bool = true,
         sandboxExecutor: SandboxExecutor = SandboxExecutor(),
         profileBuilder: SandboxProfileBuilder = SandboxProfileBuilder(),
@@ -66,9 +63,6 @@ struct AgentSandboxedProcessRunner: AgentProcessRunning {
     ) {
         self.base = base
         self.workspaceURL = workspaceURL
-            .resolvingSymlinksInPath()
-            .standardizedFileURL
-        self.configURL = configURL
             .resolvingSymlinksInPath()
             .standardizedFileURL
         self.enabled = enabled
@@ -135,7 +129,7 @@ struct AgentSandboxedProcessRunner: AgentProcessRunning {
     func commandProfile(executableURL: URL) -> String {
         profileBuilder.profile(
             capabilities: [.filesystemRead, .filesystemWrite, .processExec],
-            readablePaths: [workspaceURL, configURL],
+            readablePaths: [workspaceURL],
             writablePaths: [workspaceURL],
             executablePaths: [executableURL],
             readableLiteralPaths: SandboxProfileBuilder.parentDirectoryLiterals(for: workspaceURL),

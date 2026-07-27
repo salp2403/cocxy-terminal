@@ -143,6 +143,7 @@ public enum CLICommand: String, CaseIterable {
     // MARK: - Browser (v2)
 
     case browserNavigate = "browser-navigate"
+    case browserSplit = "browser-split"
     case browserBack = "browser-back"
     case browserForward = "browser-forward"
     case browserReload = "browser-reload"
@@ -153,6 +154,7 @@ public enum CLICommand: String, CaseIterable {
     case browserAddScript = "browser-add-script"
     case browserAddStyle = "browser-add-style"
     case browserInitScriptAdd = "browser-init-script-add"
+    case browserInitScriptRemove = "browser-init-script-remove"
     case browserInitScriptsList = "browser-init-scripts-list"
     case browserDialogs = "browser-dialogs"
     case browserDialogAccept = "browser-dialog-accept"
@@ -356,8 +358,8 @@ public enum CLICommand: String, CaseIterable {
         case .reviewRefresh: return "Refresh the agent code review diff"
         case .reviewSubmit: return "Submit all pending review comments to the active agent"
         case .reviewStats: return "Print the current agent code review statistics"
-        case .reviewApprove: return "Approve the active GitHub pull request, reading an optional body from stdin"
-        case .reviewRequestChanges: return "Request changes on the active GitHub pull request, reading an optional body from stdin"
+        case .reviewApprove: return "Approve a GitHub pull request after one-time in-app approval"
+        case .reviewRequestChanges: return "Request changes on a GitHub pull request after one-time in-app approval"
 
         // Tab extended
         case .tabRename: return "Rename a tab by UUID"
@@ -454,6 +456,7 @@ public enum CLICommand: String, CaseIterable {
 
         // Browser
         case .browserNavigate: return "Navigate the embedded browser to a URL"
+        case .browserSplit: return "Open a browser split pane alongside the active terminal"
         case .browserBack: return "Go back in browser history"
         case .browserForward: return "Go forward in browser history"
         case .browserReload: return "Reload the current browser page"
@@ -463,7 +466,8 @@ public enum CLICommand: String, CaseIterable {
         case .browserEval: return "Evaluate JavaScript in the active browser tab"
         case .browserAddScript: return "Add and execute an inline script in the active browser page"
         case .browserAddStyle: return "Add an inline stylesheet to the active browser page"
-        case .browserInitScriptAdd: return "Register a script to run at document start on future browser page loads"
+        case .browserInitScriptAdd: return "Request a 10-minute init-script grant for future loads on the active browser origin"
+        case .browserInitScriptRemove: return "Prevent future injections from a registered browser init script"
         case .browserInitScriptsList: return "List registered browser document-start init scripts"
         case .browserDialogs: return "List pending and recently handled JavaScript dialogs"
         case .browserDialogAccept: return "Accept the oldest pending or selected JavaScript dialog"
@@ -558,7 +562,7 @@ public enum CLICommand: String, CaseIterable {
         case .notificationList: return "List recent notifications as JSON"
         case .notificationClear: return "Clear notification badge and unread count"
         case .ssh: return "Open SSH session in a new tab"
-        case .webStart: return "Start the CocxyCore web terminal for the focused surface"
+        case .webStart: return "Start an authenticated loopback web terminal for the focused surface"
         case .webStop: return "Stop the CocxyCore web terminal for the focused surface"
         case .webStatus: return "Show CocxyCore web terminal status for the focused surface"
         case .streamList: return "List CocxyCore process streams for the focused surface"
@@ -601,9 +605,9 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeAdd: return "Create a cocxy-managed git worktree and attach it to the active tab"
         case .worktreeList: return "List every cocxy-managed git worktree for the active tab's repo as JSON"
         case .worktreeFocus: return "Focus an existing cocxy-managed git worktree, reopening it in a tab when needed"
-        case .worktreeRemove: return "Remove a cocxy-managed git worktree (refuses when dirty unless --force)"
+        case .worktreeRemove: return "Remove a clean cocxy-managed git worktree"
         case .worktreePrune: return "Drop manifest entries whose worktree git no longer tracks"
-        case .worktreeCleanupMerged: return "Clean up merged cocxy-managed git worktrees after a dry-run preflight"
+        case .worktreeCleanupMerged: return "Preview merged cocxy-managed git worktree cleanup without deleting anything"
 
         // GitHub pane v0.1.84
         case .githubStatus: return "Return gh auth + repository summary for the active tab as JSON"
@@ -613,7 +617,7 @@ public enum CLICommand: String, CaseIterable {
         case .githubRefresh: return "Refresh the GitHub pane data on the focused window"
 
         // GitHub PR merge v0.1.86
-        case .githubPRMerge: return "Merge a pull request via gh (squash, merge, or rebase)"
+        case .githubPRMerge: return "Merge a pull request after one-time in-app approval; branch deletion is opt-in"
 
         // Git Assistant
         case .gitAssistantCommitMessage: return "Generate a commit message from the active tab's staged diff"
@@ -647,11 +651,11 @@ public enum CLICommand: String, CaseIterable {
         // Tab extended
         case .tabRename: return "cocxy tab rename <id> <name>"
         case .tabMove: return "cocxy tab move <id> <position>"
-        case .tabConfigSave: return "cocxy tab config save <name> [--command <cmd>] [--theme <theme>] [--env KEY=VALUE]"
+        case .tabConfigSave: return "cocxy tab config save <name> [--theme <theme>] [--env KEY=VALUE]"
         case .tabConfigOpen: return "cocxy tab config open <name>"
         case .tabConfigList: return "cocxy tab config list"
         case .tabConfigPath: return "cocxy tab config path <name>"
-        case .tabConfigExport: return "cocxy tab config export <name> --output <path> [--force]"
+        case .tabConfigExport: return "cocxy tab config export <name> --output <file.toml> [--force]"
 
         // Split extended
         case .splitList: return "cocxy split list [--json]"
@@ -739,6 +743,7 @@ public enum CLICommand: String, CaseIterable {
 
         // Browser
         case .browserNavigate: return "cocxy browser navigate <url>"
+        case .browserSplit: return "cocxy browser split"
         case .browserBack: return "cocxy browser back"
         case .browserForward: return "cocxy browser forward"
         case .browserReload: return "cocxy browser reload"
@@ -749,6 +754,7 @@ public enum CLICommand: String, CaseIterable {
         case .browserAddScript: return "cocxy browser add script <script>"
         case .browserAddStyle: return "cocxy browser add style <css>"
         case .browserInitScriptAdd: return "cocxy browser init scripts add <script>"
+        case .browserInitScriptRemove: return "cocxy browser init scripts remove <id>"
         case .browserInitScriptsList: return "cocxy browser init scripts list"
         case .browserDialogs: return "cocxy browser dialogs"
         case .browserDialogAccept: return "cocxy browser dialog accept [id] [--text <text>]"
@@ -843,7 +849,7 @@ public enum CLICommand: String, CaseIterable {
         case .notificationList: return "cocxy notification list [--limit <n>]"
         case .notificationClear: return "cocxy notification clear"
         case .ssh: return "cocxy ssh user@host [-p port] [-i key]"
-        case .webStart: return "cocxy web start [--bind <address>] [--port <port>] [--token <token>] [--fps <n>]"
+        case .webStart: return "cocxy web start [--bind <loopback-address>] [--port <port>] [--fps <n>]"
         case .webStop: return "cocxy web stop"
         case .webStatus: return "cocxy web status"
         case .streamList: return "cocxy stream list"
@@ -886,9 +892,9 @@ public enum CLICommand: String, CaseIterable {
         case .worktreeAdd: return "cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]"
         case .worktreeList: return "cocxy worktree list"
         case .worktreeFocus: return "cocxy worktree focus <id>"
-        case .worktreeRemove: return "cocxy worktree remove <id> [--force]"
+        case .worktreeRemove: return "cocxy worktree remove <id>"
         case .worktreePrune: return "cocxy worktree prune"
-        case .worktreeCleanupMerged: return "cocxy worktree cleanup-merged [--base-ref <ref>] [--force] [--dry-run]"
+        case .worktreeCleanupMerged: return "cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]"
 
         // GitHub pane v0.1.84
         case .githubStatus: return "cocxy github status"
@@ -898,7 +904,7 @@ public enum CLICommand: String, CaseIterable {
         case .githubRefresh: return "cocxy github refresh"
 
         // GitHub PR merge v0.1.86
-        case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--no-delete-branch] [--subject <text>] [--body <text>]"
+        case .githubPRMerge: return "cocxy github pr-merge --squash|--merge|--rebase [--pr <n>] [--delete-branch|--no-delete-branch] [--subject <text>] [--body <text>]"
 
         // Git Assistant
         case .gitAssistantCommitMessage: return "cocxy git-assistant commit-message"

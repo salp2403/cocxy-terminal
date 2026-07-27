@@ -81,39 +81,20 @@ struct CocxyCoreBridgeLockingTests {
 
         // Simulate the background PTY read loop holding the lock around
         // `cocxycore_terminal_feed`. If `resize` does not try to acquire the
-        // lock, it will complete immediately; if it does, it must wait for
-        // the holder to release it and the elapsed time will be at least
-        // `holdDuration` minus a small setup margin.
-        let holdDuration: TimeInterval = 0.200
-        let setupMargin: TimeInterval = 0.080
-        let expectedMinimum = holdDuration - setupMargin
-
-        let background = DispatchQueue.global(qos: .userInteractive)
-        let holderAcquired = DispatchSemaphore(value: 0)
-
+        // lock it returns while the holder is still inside its critical
+        // section, so the probe never sees the holder's release marker.
         let state = try #require(bridge.surfaceState(for: surfaceID))
-        let lock = state.terminalLock
 
-        background.async {
-            lock.lock()
-            holderAcquired.signal()
-            Thread.sleep(forTimeInterval: holdDuration)
-            lock.unlock()
+        let waitedForHolder = Self.waitedForBackgroundLockHolder(lock: state.terminalLock) {
+            bridge.resize(
+                surfaceID,
+                to: TerminalSize(columns: 80, rows: 24, pixelWidth: 640, pixelHeight: 384)
+            )
         }
 
-        // Wait until the background queue actually holds the lock.
-        holderAcquired.wait()
-
-        let start = Date()
-        bridge.resize(
-            surfaceID,
-            to: TerminalSize(columns: 80, rows: 24, pixelWidth: 640, pixelHeight: 384)
-        )
-        let elapsed = Date().timeIntervalSince(start)
-
         #expect(
-            elapsed >= expectedMinimum,
-            "resize completed in \(elapsed)s, expected ≥ \(expectedMinimum)s (serialized against background holder)"
+            waitedForHolder,
+            "resize returned before the background holder released the terminal lock"
         )
     }
 
@@ -141,32 +122,15 @@ struct CocxyCoreBridgeLockingTests {
         let (surfaceID, _) = try Self.createSurface(using: bridge)
         defer { bridge.destroySurface(surfaceID) }
 
-        let holdDuration: TimeInterval = 0.200
-        let setupMargin: TimeInterval = 0.080
-        let expectedMinimum = holdDuration - setupMargin
-
-        let background = DispatchQueue.global(qos: .userInteractive)
-        let holderAcquired = DispatchSemaphore(value: 0)
-
         let state = try #require(bridge.surfaceState(for: surfaceID))
-        let lock = state.terminalLock
 
-        background.async {
-            lock.lock()
-            holderAcquired.signal()
-            Thread.sleep(forTimeInterval: holdDuration)
-            lock.unlock()
+        let waitedForHolder = Self.waitedForBackgroundLockHolder(lock: state.terminalLock) {
+            bridge.applyFont(family: "Menlo", size: 14.0, to: surfaceID)
         }
 
-        holderAcquired.wait()
-
-        let start = Date()
-        bridge.applyFont(family: "Menlo", size: 14.0, to: surfaceID)
-        let elapsed = Date().timeIntervalSince(start)
-
         #expect(
-            elapsed >= expectedMinimum,
-            "applyFont completed in \(elapsed)s, expected ≥ \(expectedMinimum)s (serialized against background holder)"
+            waitedForHolder,
+            "applyFont returned before the background holder released the terminal lock"
         )
     }
 
@@ -203,37 +167,20 @@ struct CocxyCoreBridgeLockingTests {
         let (surfaceID, _) = try Self.createSurface(using: bridge)
         defer { bridge.destroySurface(surfaceID) }
 
-        let holdDuration: TimeInterval = 0.200
-        let setupMargin: TimeInterval = 0.080
-        let expectedMinimum = holdDuration - setupMargin
-
-        let background = DispatchQueue.global(qos: .userInteractive)
-        let holderAcquired = DispatchSemaphore(value: 0)
-
         let state = try #require(bridge.surfaceState(for: surfaceID))
-        let lock = state.terminalLock
-
-        background.async {
-            lock.lock()
-            holderAcquired.signal()
-            Thread.sleep(forTimeInterval: holdDuration)
-            lock.unlock()
-        }
-
-        holderAcquired.wait()
 
         // Use the same arrow-left key event that the existing
         // CocxyCoreBridgeTests use to exercise encode_key — keyCode 123,
         // no characters, no modifiers, key-down.
         let arrowLeft = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true)
 
-        let start = Date()
-        _ = bridge.sendKeyEvent(arrowLeft, to: surfaceID)
-        let elapsed = Date().timeIntervalSince(start)
+        let waitedForHolder = Self.waitedForBackgroundLockHolder(lock: state.terminalLock) {
+            _ = bridge.sendKeyEvent(arrowLeft, to: surfaceID)
+        }
 
         #expect(
-            elapsed >= expectedMinimum,
-            "sendKeyEvent completed in \(elapsed)s, expected ≥ \(expectedMinimum)s (serialized against background holder)"
+            waitedForHolder,
+            "sendKeyEvent returned before the background holder released the terminal lock"
         )
     }
 
@@ -254,30 +201,23 @@ struct CocxyCoreBridgeLockingTests {
         let (surfaceID, _) = try Self.createSurface(using: bridge)
         defer { bridge.destroySurface(surfaceID) }
 
-        // Hold the lock on a background queue. A key-up event must NOT wait
-        // for the lock — the early `guard event.isKeyDown` exits before any
-        // lock acquisition. We measure that the call returns near-instantly
-        // even with the lock held.
-        let background = DispatchQueue.global(qos: .userInteractive)
-        let holderAcquired = DispatchSemaphore(value: 0)
+        // Hold the lock on a background queue and keep holding it across the
+        // call. A key-up event must NOT wait for the lock — the early
+        // `guard event.isKeyDown` exits before any lock acquisition, so the
+        // holder is still inside its critical section when the call returns.
         let state = try #require(bridge.surfaceState(for: surfaceID))
-        let lock = state.terminalLock
-
-        background.async {
-            lock.lock()
-            holderAcquired.signal()
-            Thread.sleep(forTimeInterval: 0.200)
-            lock.unlock()
-        }
-        holderAcquired.wait()
 
         let arrowLeftUp = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: false)
-        let start = Date()
-        let handled = bridge.sendKeyEvent(arrowLeftUp, to: surfaceID)
-        let elapsed = Date().timeIntervalSince(start)
+        var handled = true
+        let waitedForHolder = Self.waitedForRetainedLockHolder(lock: state.terminalLock) {
+            handled = bridge.sendKeyEvent(arrowLeftUp, to: surfaceID)
+        }
 
         #expect(handled == false)
-        #expect(elapsed < 0.050, "key-up returned in \(elapsed)s, expected < 0.050s (no lock acquisition)")
+        #expect(
+            waitedForHolder == false,
+            "key-up waited for the terminal lock; the early `guard event.isKeyDown` must return first"
+        )
     }
 
     // MARK: - PTY write serialization
@@ -290,30 +230,21 @@ struct CocxyCoreBridgeLockingTests {
 
         let state = try #require(bridge.surfaceState(for: surfaceID))
         let lock = state.terminalLock
-        let holdDuration: TimeInterval = 0.150
-        let setupMargin: TimeInterval = 0.060
-        let expectedMinimum = holdDuration - setupMargin
 
-        let sendTextElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let sendTextWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.sendText("claude --version\r", to: surfaceID)
         }
         #expect(
-            sendTextElapsed >= expectedMinimum,
-            "sendText completed in \(sendTextElapsed)s, expected ≥ \(expectedMinimum)s"
+            sendTextWaited,
+            "sendText returned before the background holder released the terminal lock"
         )
 
-        let writeBytesElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let writeBytesWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             _ = bridge.writeBytes([0x63, 0x6C, 0x61, 0x75, 0x64, 0x65], to: surfaceID)
         }
         #expect(
-            writeBytesElapsed >= expectedMinimum,
-            "writeBytes completed in \(writeBytesElapsed)s, expected ≥ \(expectedMinimum)s"
+            writeBytesWaited,
+            "writeBytes returned before the background holder released the terminal lock"
         )
     }
 
@@ -327,71 +258,48 @@ struct CocxyCoreBridgeLockingTests {
 
         let state = try #require(bridge.surfaceState(for: surfaceID))
         let lock = state.terminalLock
-        let holdDuration: TimeInterval = 0.150
-        let setupMargin: TimeInterval = 0.060
-        let expectedMinimum = holdDuration - setupMargin
-        let background = DispatchQueue.global(qos: .userInteractive)
 
-        // Helper: spawns a background queue that holds the lock for
-        // `holdDuration`, then runs `op` on the current thread and reports
-        // how long it took. If `op` correctly waits for the lock, the
-        // elapsed time will be ≥ expectedMinimum. If it does not, the call
-        // will return almost instantly and the assertion below catches it.
-        func measureUnderHolder(op: () -> Void) -> TimeInterval {
-            let acquired = DispatchSemaphore(value: 0)
-            background.async {
-                lock.lock()
-                acquired.signal()
-                Thread.sleep(forTimeInterval: holdDuration)
-                lock.unlock()
-            }
-            acquired.wait()
-            let start = Date()
-            op()
-            return Date().timeIntervalSince(start)
-        }
-
-        let preeditElapsed = measureUnderHolder {
+        let preeditWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.sendPreeditText("hola", to: surfaceID)
         }
         #expect(
-            preeditElapsed >= expectedMinimum,
-            "sendPreeditText completed in \(preeditElapsed)s, expected ≥ \(expectedMinimum)s"
+            preeditWaited,
+            "sendPreeditText returned before the background holder released the terminal lock"
         )
 
         // notifyFocus(true) is the first focus signal — lastReportedFocus
         // starts at nil, so the inner guard does NOT short-circuit and the
         // lock is taken.
-        let focusElapsed = measureUnderHolder {
+        let focusWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.notifyFocus(true, for: surfaceID)
         }
         #expect(
-            focusElapsed >= expectedMinimum,
-            "notifyFocus completed in \(focusElapsed)s, expected ≥ \(expectedMinimum)s"
+            focusWaited,
+            "notifyFocus returned before the background holder released the terminal lock"
         )
 
-        let ligaturesElapsed = measureUnderHolder {
+        let ligaturesWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.applyLigaturesEnabled(false, to: surfaceID)
         }
         #expect(
-            ligaturesElapsed >= expectedMinimum,
-            "applyLigaturesEnabled completed in \(ligaturesElapsed)s, expected ≥ \(expectedMinimum)s"
+            ligaturesWaited,
+            "applyLigaturesEnabled returned before the background holder released the terminal lock"
         )
 
-        let themeElapsed = measureUnderHolder {
+        let themeWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.applyTheme(Self.makeTestPalette(), to: surfaceID)
         }
         #expect(
-            themeElapsed >= expectedMinimum,
-            "applyTheme completed in \(themeElapsed)s, expected ≥ \(expectedMinimum)s"
+            themeWaited,
+            "applyTheme returned before the background holder released the terminal lock"
         )
 
-        let streamElapsed = measureUnderHolder {
+        let streamWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             _ = bridge.setCurrentStream(0, for: surfaceID)
         }
         #expect(
-            streamElapsed >= expectedMinimum,
-            "setCurrentStream completed in \(streamElapsed)s, expected ≥ \(expectedMinimum)s"
+            streamWaited,
+            "setCurrentStream returned before the background holder released the terminal lock"
         )
     }
 
@@ -404,29 +312,19 @@ struct CocxyCoreBridgeLockingTests {
         // First call drives lastReportedFocus from nil → true.
         bridge.notifyFocus(true, for: surfaceID)
 
-        // Hold the lock; the second `notifyFocus(true, ...)` should
-        // short-circuit at the `state.lastReportedFocus != focused` guard
-        // and return immediately without contending for the lock.
-        let background = DispatchQueue.global(qos: .userInteractive)
-        let acquired = DispatchSemaphore(value: 0)
+        // Hold the lock across the call; the second `notifyFocus(true, ...)`
+        // should short-circuit at the `state.lastReportedFocus != focused`
+        // guard and return without contending for the lock, so the holder is
+        // still inside its critical section when the call returns.
         let state = try #require(bridge.surfaceState(for: surfaceID))
-        let lock = state.terminalLock
 
-        background.async {
-            lock.lock()
-            acquired.signal()
-            Thread.sleep(forTimeInterval: 0.200)
-            lock.unlock()
+        let waitedForHolder = Self.waitedForRetainedLockHolder(lock: state.terminalLock) {
+            bridge.notifyFocus(true, for: surfaceID)
         }
-        acquired.wait()
-
-        let start = Date()
-        bridge.notifyFocus(true, for: surfaceID)
-        let elapsed = Date().timeIntervalSince(start)
 
         #expect(
-            elapsed < 0.050,
-            "duplicate notifyFocus took \(elapsed)s; the early-return guard must skip the lock"
+            waitedForHolder == false,
+            "duplicate notifyFocus waited for the terminal lock; the early-return guard must skip it"
         )
     }
 
@@ -440,14 +338,8 @@ struct CocxyCoreBridgeLockingTests {
 
         let state = try #require(bridge.surfaceState(for: surfaceID))
         let lock = state.terminalLock
-        let holdDuration: TimeInterval = 0.150
-        let setupMargin: TimeInterval = 0.060
-        let expectedMinimum = holdDuration - setupMargin
 
-        let applyImageSettingsElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let applyImageSettingsWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.applyImageSettings(
                 memoryLimitBytes: 128 * 1024 * 1024,
                 fileTransferEnabled: true,
@@ -460,63 +352,48 @@ struct CocxyCoreBridgeLockingTests {
             )
         }
         #expect(
-            applyImageSettingsElapsed >= expectedMinimum,
-            "applyImageSettings completed in \(applyImageSettingsElapsed)s, expected ≥ \(expectedMinimum)s"
+            applyImageSettingsWaited,
+            "applyImageSettings returned before the background holder released the terminal lock"
         )
 
-        let requestCapabilitiesElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let requestCapabilitiesWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             _ = bridge.requestProtocolV2Capabilities(for: surfaceID)
         }
         #expect(
-            requestCapabilitiesElapsed >= expectedMinimum,
-            "requestProtocolV2Capabilities completed in \(requestCapabilitiesElapsed)s, expected ≥ \(expectedMinimum)s"
+            requestCapabilitiesWaited,
+            "requestProtocolV2Capabilities returned before the background holder released the terminal lock"
         )
 
-        let sendViewportElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let sendViewportWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             _ = bridge.sendProtocolV2Viewport(for: surfaceID, requestID: "lock-test")
         }
         #expect(
-            sendViewportElapsed >= expectedMinimum,
-            "sendProtocolV2Viewport completed in \(sendViewportElapsed)s, expected ≥ \(expectedMinimum)s"
+            sendViewportWaited,
+            "sendProtocolV2Viewport returned before the background holder released the terminal lock"
         )
 
-        let sendMessageElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let sendMessageWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             _ = bridge.sendProtocolV2Message(type: "ping", json: #"{"ok":true}"#, to: surfaceID)
         }
         #expect(
-            sendMessageElapsed >= expectedMinimum,
-            "sendProtocolV2Message completed in \(sendMessageElapsed)s, expected ≥ \(expectedMinimum)s"
+            sendMessageWaited,
+            "sendProtocolV2Message returned before the background holder released the terminal lock"
         )
 
-        let scrollToResultElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let scrollToResultWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.scrollToSearchResult(surfaceID: surfaceID, lineNumber: 5)
         }
         #expect(
-            scrollToResultElapsed >= expectedMinimum,
-            "scrollToSearchResult completed in \(scrollToResultElapsed)s, expected ≥ \(expectedMinimum)s"
+            scrollToResultWaited,
+            "scrollToSearchResult returned before the background holder released the terminal lock"
         )
 
-        let scrollViewportElapsed = Self.measureUnderBackgroundLockHolder(
-            lock: lock,
-            holdDuration: holdDuration
-        ) {
+        let scrollViewportWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.scrollViewport(surfaceID: surfaceID, deltaRows: 1)
         }
         #expect(
-            scrollViewportElapsed >= expectedMinimum,
-            "scrollViewport completed in \(scrollViewportElapsed)s, expected ≥ \(expectedMinimum)s"
+            scrollViewportWaited,
+            "scrollViewport returned before the background holder released the terminal lock"
         )
     }
 
@@ -530,26 +407,8 @@ struct CocxyCoreBridgeLockingTests {
 
         let state = try #require(bridge.surfaceState(for: surfaceID))
         let lock = state.terminalLock
-        let holdDuration: TimeInterval = 0.150
-        let setupMargin: TimeInterval = 0.060
-        let expectedMinimum = holdDuration - setupMargin
-        let background = DispatchQueue.global(qos: .userInteractive)
 
-        func measureUnderHolder(op: () -> Void) -> TimeInterval {
-            let acquired = DispatchSemaphore(value: 0)
-            background.async {
-                lock.lock()
-                acquired.signal()
-                Thread.sleep(forTimeInterval: holdDuration)
-                lock.unlock()
-            }
-            acquired.wait()
-            let start = Date()
-            op()
-            return Date().timeIntervalSince(start)
-        }
-
-        let setElapsed = measureUnderHolder {
+        let setWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.setSelection(
                 for: surfaceID,
                 startRow: 0,
@@ -559,16 +418,16 @@ struct CocxyCoreBridgeLockingTests {
             )
         }
         #expect(
-            setElapsed >= expectedMinimum,
-            "setSelection completed in \(setElapsed)s, expected ≥ \(expectedMinimum)s"
+            setWaited,
+            "setSelection returned before the background holder released the terminal lock"
         )
 
-        let clearElapsed = measureUnderHolder {
+        let clearWaited = Self.waitedForBackgroundLockHolder(lock: lock) {
             bridge.clearSelection(for: surfaceID)
         }
         #expect(
-            clearElapsed >= expectedMinimum,
-            "clearSelection completed in \(clearElapsed)s, expected ≥ \(expectedMinimum)s"
+            clearWaited,
+            "clearSelection returned before the background holder released the terminal lock"
         )
     }
 
@@ -662,24 +521,110 @@ struct CocxyCoreBridgeLockingTests {
         )
     }
 
-    static func measureUnderBackgroundLockHolder(
-        lock: NSLock,
-        holdDuration: TimeInterval,
-        operation: () -> Void
-    ) -> TimeInterval {
-        let background = DispatchQueue.global(qos: .userInteractive)
-        let acquired = DispatchSemaphore(value: 0)
+    // MARK: - Lock contention probes
 
-        background.async {
+    /// How long the background holder keeps the terminal lock while the
+    /// operation under test runs.
+    private static let lockHoldDuration: TimeInterval = 0.200
+
+    /// How long the background holder of `waitedForRetainedLockHolder`
+    /// keeps the lock when the test never gets to release it because the
+    /// call under test blocked on the lock. Only reached on a regression;
+    /// it exists so a regression fails instead of hanging the suite.
+    private static let blockedCallSafetyTimeout: TimeInterval = 5.0
+
+    /// Runs `operation` while a background queue holds `lock`, and reports
+    /// whether the holder had already published its release when the
+    /// operation returned.
+    ///
+    /// These probes used to time the call and require a lower bound
+    /// (`elapsed >= holdDuration - margin`). A clock measures the
+    /// scheduler, not the product: the main thread can be preempted between
+    /// the holder's signal and the start of the measurement, so a correctly
+    /// serialized call reports an elapsed time under the bound and the test
+    /// fails without a regression. The marker below is causal instead of
+    /// temporal — the holder publishes `released` immediately before
+    /// `unlock()`, so an operation that really waits for the lock cannot
+    /// return before that write, while one that skips the lock returns
+    /// while the holder still owns it and observes `false`.
+    static func waitedForBackgroundLockHolder(
+        lock: NSLock,
+        operation: () -> Void
+    ) -> Bool {
+        let probe = LockHolderProbe()
+        let acquired = DispatchSemaphore(value: 0)
+        let holdDuration = lockHoldDuration
+
+        DispatchQueue.global(qos: .userInteractive).async {
             lock.lock()
             acquired.signal()
             Thread.sleep(forTimeInterval: holdDuration)
+            probe.markReleased()
             lock.unlock()
         }
 
         acquired.wait()
-        let start = Date()
         operation()
-        return Date().timeIntervalSince(start)
+        return probe.didRelease
+    }
+
+    /// Runs `operation` while a background queue holds `lock` and keeps
+    /// holding it until this call releases it, and reports whether the
+    /// operation ended up waiting for that lock.
+    ///
+    /// Used by the negative cases (a key-up event, a duplicate focus
+    /// notification), which must return WITHOUT contending for the lock.
+    /// Timing them and requiring an upper bound is unreliable: a call that
+    /// touches no lock can still be preempted past any small bound on a
+    /// loaded machine. Here the holder does not release on a clock — it
+    /// waits for this call to release it after `operation` returned, so a
+    /// call that skipped the lock always observes `false`. A regressed call
+    /// that does take the lock blocks until the holder's safety valve
+    /// fires, observes `true` and fails.
+    static func waitedForRetainedLockHolder(
+        lock: NSLock,
+        operation: () -> Void
+    ) -> Bool {
+        let probe = LockHolderProbe()
+        let acquired = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let safetyTimeout = blockedCallSafetyTimeout
+
+        DispatchQueue.global(qos: .userInteractive).async {
+            lock.lock()
+            acquired.signal()
+            _ = release.wait(timeout: .now() + safetyTimeout)
+            probe.markReleased()
+            lock.unlock()
+        }
+
+        acquired.wait()
+        operation()
+        let waitedForHolder = probe.didRelease
+        release.signal()
+        return waitedForHolder
+    }
+}
+
+/// Records whether the background lock holder reached its release point.
+///
+/// The flag is published under its own lock so the holder thread and the
+/// main thread can touch it without a data race; the terminal lock itself
+/// orders the write before any acquisition made by the operation under
+/// test.
+private final class LockHolderProbe: @unchecked Sendable {
+    private let stateLock = NSLock()
+    private var released = false
+
+    func markReleased() {
+        stateLock.lock()
+        released = true
+        stateLock.unlock()
+    }
+
+    var didRelease: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return released
     }
 }

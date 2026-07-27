@@ -136,28 +136,33 @@ final class CocxyDRemoteSSHBootstrapper {
         port: Int?,
         identityFile: String?
     ) throws -> CocxyDRemoteSSHBootstrapPlan {
-        let trimmed = destination.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
+        let parsedDestination: SSHConnectionDestination
+        do {
+            parsedDestination = try SSHConnectionDestination(destination)
+        } catch {
             throw CocxyDRemoteSSHBootstrapError.invalidDestination
         }
 
-        let (user, host) = try splitDestination(trimmed)
-        let display = user.map { "\($0)@\(host)" } ?? host
         let profile = RemoteConnectionProfile(
-            name: display,
-            host: host,
-            user: user,
+            name: parsedDestination.value,
+            host: parsedDestination.host,
+            user: parsedDestination.user,
             port: port,
             identityFile: identityFile,
             autoReconnect: false
         )
         return CocxyDRemoteSSHBootstrapPlan(
             profile: profile,
-            directSSHCommand: directSSHCommand(destination: display, port: port, identityFile: identityFile)
+            directSSHCommand: directSSHCommand(
+                destination: parsedDestination.value,
+                port: port,
+                identityFile: identityFile
+            )
         )
     }
 
     static func directSSHCommand(destination: String, port: Int?, identityFile: String?) -> String {
+        let normalizedDestination = (try? SSHConnectionDestination(destination).value) ?? destination
         var parts = ["ssh"]
         if let port {
             parts.append(contentsOf: ["-p", "\(port)"])
@@ -165,7 +170,8 @@ final class CocxyDRemoteSSHBootstrapper {
         if let identityFile, !identityFile.isEmpty {
             parts.append(contentsOf: ["-i", identityFile])
         }
-        parts.append(destination.trimmingCharacters(in: .whitespacesAndNewlines))
+        parts.append("--")
+        parts.append(normalizedDestination)
         return parts.map(shellToken).joined(separator: " ")
     }
 
@@ -205,19 +211,6 @@ final class CocxyDRemoteSSHBootstrapper {
         case nil:
             return "connection state unavailable"
         }
-    }
-
-    private static func splitDestination(_ destination: String) throws -> (user: String?, host: String) {
-        guard let at = destination.lastIndex(of: "@") else {
-            guard !destination.isEmpty else { throw CocxyDRemoteSSHBootstrapError.invalidDestination }
-            return (nil, destination)
-        }
-        let user = String(destination[..<at])
-        let host = String(destination[destination.index(after: at)...])
-        guard !user.isEmpty, !host.isEmpty else {
-            throw CocxyDRemoteSSHBootstrapError.invalidDestination
-        }
-        return (user, host)
     }
 
     private static func shellToken(_ value: String) -> String {

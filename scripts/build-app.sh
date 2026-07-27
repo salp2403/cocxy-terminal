@@ -114,10 +114,10 @@ fi
 
 # Determine build configuration.
 if [ "$BUILD_MODE" = "release" ]; then
-    SWIFT_FLAGS="-c release"
+    SWIFT_FLAGS="--disable-automatic-resolution -c release"
     BUILD_DIR="${PROJECT_ROOT}/.build/arm64-apple-macosx/release"
 else
-    SWIFT_FLAGS=""
+    SWIFT_FLAGS="--disable-automatic-resolution"
     BUILD_DIR="${PROJECT_ROOT}/.build/arm64-apple-macosx/debug"
 fi
 APPINTENTS_WORK_DIR="${BUILD_DIR}/AppIntents"
@@ -141,6 +141,7 @@ echo "==> Building ${BUNDLE_NAME} (${BUILD_MODE})..."
 
 # Step 1: Build the Swift package.
 cd "${PROJECT_ROOT}"
+"${PROJECT_ROOT}/scripts/verify-swiftpm-resolution.sh" --lock-only
 mkdir -p "${APPINTENTS_WORK_DIR}"
 TOOLCHAIN_USR="$(cd "$(dirname "$(xcrun -find swiftc)")/.." && pwd)"
 TOOLCHAIN_DIR="$(cd "${TOOLCHAIN_USR}/.." && pwd)"
@@ -245,18 +246,21 @@ mkdir -p "${LAUNCH_SERVICES}"
 # Step 3: Copy binary.
 cp "${BUILD_DIR}/${APP_NAME}" "${MACOS}/${APP_NAME}"
 
-# Step 3b: Copy Sparkle.framework into bundle.
-SPARKLE_FW=$(find "${PROJECT_ROOT}/.build/artifacts" -name "Sparkle.framework" -path "*/macos-*" -type d 2>/dev/null | head -1)
-if [ -z "${SPARKLE_FW}" ]; then
-    SPARKLE_FW=$(find "${PROJECT_ROOT}/.build" -name "Sparkle.framework" -type d 2>/dev/null | head -1)
-fi
-if [ -n "${SPARKLE_FW}" ]; then
-    cp -R "${SPARKLE_FW}" "${FRAMEWORKS}/"
-    echo "    Sparkle.framework: ${FRAMEWORKS}/Sparkle.framework"
-fi
+# Step 3b: Copy only the reviewed Sparkle.framework artifact.
+"${PROJECT_ROOT}/scripts/verify-swiftpm-resolution.sh" --verify-artifacts
+SPARKLE_FW="${PROJECT_ROOT}/.build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+cp -R "${SPARKLE_FW}" "${FRAMEWORKS}/"
+echo "    Sparkle.framework: ${FRAMEWORKS}/Sparkle.framework"
 
 # Step 3c: Set rpath for Sparkle.
-install_name_tool -add_rpath @executable_path/../Frameworks "${MACOS}/${APP_NAME}" 2>/dev/null || true
+SPARKLE_RPATH="@executable_path/../Frameworks"
+if ! otool -l "${MACOS}/${APP_NAME}" | grep -Fq "path ${SPARKLE_RPATH} "; then
+    install_name_tool -add_rpath "${SPARKLE_RPATH}" "${MACOS}/${APP_NAME}"
+fi
+if ! otool -l "${MACOS}/${APP_NAME}" | grep -Fq "path ${SPARKLE_RPATH} "; then
+    echo "ERROR: App binary is missing the Sparkle framework rpath"
+    exit 1
+fi
 
 # Step 4: Generate Info.plist from the shared base template.
 PLIST_ARGS=(
@@ -394,7 +398,18 @@ if [ -d "${PROJECT_ROOT}/Resources/Plugins" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Plugins" "${RESOURCES}/Plugins"
 fi
 
-# Step 6m: Copy bundled search helper. `Resources/rg` is produced by
+# Step 6m: Copy the shell daemon used by the reachable remote workspace
+# management controls. Its source remains canonical under Resources/.
+REMOTE_DAEMON_SCRIPT="${PROJECT_ROOT}/Resources/cocxyd.sh"
+if [ ! -f "${REMOTE_DAEMON_SCRIPT}" ] || [ -L "${REMOTE_DAEMON_SCRIPT}" ] \
+    || [ ! -r "${REMOTE_DAEMON_SCRIPT}" ]; then
+    echo "ERROR: Remote daemon script is not a readable regular file: ${REMOTE_DAEMON_SCRIPT}"
+    exit 1
+fi
+cp "${REMOTE_DAEMON_SCRIPT}" "${RESOURCES}/cocxyd.sh"
+chmod 755 "${RESOURCES}/cocxyd.sh"
+
+# Step 6n: Copy bundled search helper. `Resources/rg` is produced by
 # scripts/download-ripgrep.sh and signed with the rest of the app bundle.
 if [ -f "${PROJECT_ROOT}/Resources/rg" ]; then
     cp "${PROJECT_ROOT}/Resources/rg" "${RESOURCES}/rg"
@@ -406,7 +421,7 @@ if [ -d "${PROJECT_ROOT}/Resources/Ripgrep" ]; then
     cp -R "${PROJECT_ROOT}/Resources/Ripgrep" "${RESOURCES}/Ripgrep"
 fi
 
-# Step 6n: Build and copy cocxyd-remote binaries for verified SSH daemon
+# Step 6o: Build and copy cocxyd-remote binaries for verified SSH daemon
 # auto-deploy. The CocxyCore checkout is expected next to this repo locally;
 # CI can override with COCXYCORE_DIR.
 COCXYCORE_DIR="${COCXYCORE_DIR:-$(cd "${PROJECT_ROOT}/.." && pwd)/cocxycore}"
@@ -427,13 +442,18 @@ do
         echo "ERROR: Missing remote daemon binary: ${REMOTE_DAEMON_SRC}/${remote_binary}"
         exit 1
     fi
+    remote_target="${remote_binary#cocxyd-remote-}"
+    "${PROJECT_ROOT}/scripts/verify-app-bundle.sh" \
+        --check-remote-daemon-binary \
+        "${REMOTE_DAEMON_SRC}/${remote_binary}" \
+        "${remote_target}"
     cp "${REMOTE_DAEMON_SRC}/${remote_binary}" "${RESOURCES}/RemoteDaemon/${remote_binary}"
     chmod 755 "${RESOURCES}/RemoteDaemon/${remote_binary}"
 done
 codesign --force --sign - "${RESOURCES}/RemoteDaemon/cocxyd-remote-macos-arm64" >/dev/null
 echo "    remote daemon: ${RESOURCES}/RemoteDaemon"
 
-# Step 6m: Build and embed the QuickLook extension.
+# Step 6p: Build and embed the QuickLook extension.
 echo "==> Building QuickLook extension..."
 QL_APPEX="$("${PROJECT_ROOT}/scripts/build-quicklook-extension.sh" "${BUILD_MODE}")"
 cp -R "${QL_APPEX}" "${PLUGINS}/"
@@ -470,7 +490,7 @@ fi
 
 # Step 8: Ad-hoc code sign (required for local execution on modern macOS).
 echo "==> Signing app bundle (ad-hoc)..."
-codesign --force --sign - --entitlements "${APP_ENTITLEMENTS}" "${APP_BUNDLE}" 2>/dev/null || true
+codesign --force --sign - --entitlements "${APP_ENTITLEMENTS}" "${APP_BUNDLE}" >/dev/null
 
 # Step 9: Print summary.
 echo ""

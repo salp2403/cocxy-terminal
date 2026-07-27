@@ -22,6 +22,9 @@ final class SurfaceRegistry: @unchecked Sendable {
         lock.withLock {
             surfaces[surface.surfaceID] = surface
         }
+        surface.activate { [weak self] surfaceID in
+            self?.removeClosedSurface(id: surfaceID)
+        }
         return surface
     }
 
@@ -34,16 +37,30 @@ final class SurfaceRegistry: @unchecked Sendable {
     func close(id: String?) -> Bool {
         guard let id else { return false }
         let surface = lock.withLock { surfaces.removeValue(forKey: id) }
-        surface?.close()
-        return surface != nil
+        guard let surface else { return false }
+        return surface.close()
     }
 
-    func closeAll() {
+    @discardableResult
+    func closeAll() -> Bool {
         let all = lock.withLock { () -> [PTYDaemonSurface] in
             let values = Array(surfaces.values)
             surfaces.removeAll()
             return values
         }
-        all.forEach { $0.close() }
+        all.forEach { $0.close(waitForCleanup: false) }
+        var succeeded = true
+        for surface in all {
+            if surface.close(emitEvent: false) == false {
+                succeeded = false
+            }
+        }
+        return succeeded
+    }
+
+    private func removeClosedSurface(id: String) {
+        _ = lock.withLock {
+            surfaces.removeValue(forKey: id)
+        }
     }
 }

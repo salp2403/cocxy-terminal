@@ -36,6 +36,15 @@ protocol CodeReviewGitWorkflowing: Sendable {
 }
 
 struct CodeReviewGitWorkflowService: CodeReviewGitWorkflowing {
+    private let gitRunner: @Sendable (URL, [String]) throws -> String
+
+    init(
+        gitRunner: @escaping @Sendable (URL, [String]) throws -> String = {
+            try SessionDiffTrackerImpl.runGit($0, $1)
+        }
+    ) {
+        self.gitRunner = gitRunner
+    }
 
     func status(workingDirectory: URL) throws -> CodeReviewGitStatus {
         let branch = try run(workingDirectory, ["branch", "--show-current"])
@@ -73,11 +82,16 @@ struct CodeReviewGitWorkflowService: CodeReviewGitWorkflowing {
         guard !branch.isEmpty else {
             throw HunkActionError.commandFailed("Cannot push from detached HEAD.")
         }
-        return try run(workingDirectory, ["push", "-u", "origin", branch])
+        let validatedBranch = try Self.sanitizedBranchName(branch)
+        let fullReference = "refs/heads/\(validatedBranch)"
+        return try run(
+            workingDirectory,
+            ["push", "-u", "origin", "--", "\(fullReference):\(fullReference)"]
+        )
     }
 
     private func run(_ workingDirectory: URL, _ arguments: [String]) throws -> String {
-        try SessionDiffTrackerImpl.runGit(workingDirectory, arguments)
+        try gitRunner(workingDirectory, arguments)
     }
 
     static func parsePorcelainStatus(_ output: String) -> (

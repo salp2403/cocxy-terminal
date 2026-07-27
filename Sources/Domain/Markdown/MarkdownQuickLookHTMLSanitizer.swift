@@ -20,8 +20,11 @@ public enum MarkdownQuickLookHTMLSanitizer {
     /// - Returns: HTML with local images inlined and remote images replaced by
     ///   placeholders that preserve useful context for the reader.
     public static func makeOfflinePreviewHTML(from html: String, baseDirectory: URL) -> String {
-        let localImagesInlined = MarkdownImageInliner.inlineLocalImages(in: html, baseDirectory: baseDirectory)
-        return replaceRemoteImages(in: localImagesInlined)
+        let remoteImagesReplaced = replaceRemoteImages(in: html)
+        return MarkdownImageInliner.makeSafeHTML(
+            in: remoteImagesReplaced,
+            baseDirectory: baseDirectory
+        ).html
     }
 
     private static func replaceRemoteImages(in html: String) -> String {

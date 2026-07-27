@@ -28,8 +28,7 @@ import Foundation
 _ = signal(SIGPIPE, SIG_IGN)
 
 let arguments = Array(CommandLine.arguments.dropFirst())
-let runner = CommandRunner()
-let result = runner.run(arguments: arguments)
+let result = CLIEntryPoint.run(arguments: arguments)
 
 if !result.stdout.isEmpty {
     print(result.stdout)

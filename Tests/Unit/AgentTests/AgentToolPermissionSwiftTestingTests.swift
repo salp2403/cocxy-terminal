@@ -15,7 +15,6 @@ struct AgentToolPermissionSwiftTestingTests {
             "list_directory",
             "search_files",
             "grep",
-            "read_terminal_output",
             "git_status",
             "git_diff",
             "read_lsp_diagnostics",
@@ -25,6 +24,18 @@ struct AgentToolPermissionSwiftTestingTests {
             let invocation = AgentToolInvocation(toolID: toolID, capability: .read)
             #expect(policy.decision(for: invocation) == .allow)
         }
+    }
+
+    @Test("terminal output always requires per-call sensitive data approval")
+    func terminalOutputRequiresSensitiveDataApproval() {
+        let invocation = AgentToolInvocation(toolID: "read_terminal_output", capability: .read)
+
+        #expect(AgentToolPermissionPolicy().decision(for: invocation) == .prompt(
+            .sensitiveDataAccessRequired(toolID: "read_terminal_output")
+        ))
+        #expect(AgentToolPermissionPolicy(autoModeEnabled: true).decision(for: invocation) == .prompt(
+            .sensitiveDataAccessRequired(toolID: "read_terminal_output")
+        ))
     }
 
     @Test("write tools require diff preview even when auto mode is enabled")
@@ -52,6 +63,84 @@ struct AgentToolPermissionSwiftTestingTests {
 
         #expect(defaultPolicy.decision(for: invocation) == .prompt(.commandApprovalRequired(command: invocation.command!)))
         #expect(allowlistedPolicy.decision(for: invocation) == .allow)
+    }
+
+    @Test("exact command rules require the same command text")
+    func exactCommandRulesRequireSameCommandText() {
+        let allowedCommand = "printf allowed"
+        let policy = AgentToolPermissionPolicy(commandAllowRules: [.exact(allowedCommand)])
+
+        #expect(policy.decision(for: AgentToolInvocation(
+            toolID: "run_command",
+            capability: .command,
+            command: allowedCommand
+        )) == .allow)
+
+        let nonExactCommands = [
+            "PRINTF allowed",
+            "printf  allowed",
+            "printf\tallowed",
+            "printf\nallowed",
+            " printf allowed",
+            "printf allowed ",
+            "printf allowed; printf appended",
+        ]
+        for command in nonExactCommands {
+            let invocation = AgentToolInvocation(
+                toolID: "run_command",
+                capability: .command,
+                command: command
+            )
+            #expect(policy.decision(for: invocation) == .prompt(.commandApprovalRequired(command: command)))
+        }
+
+        let composedUnicode = "printf caf\u{00E9}"
+        let decomposedUnicode = "printf cafe\u{0301}"
+        let unicodePolicy = AgentToolPermissionPolicy(commandAllowRules: [.exact(composedUnicode)])
+        #expect(unicodePolicy.decision(for: AgentToolInvocation(
+            toolID: "run_command",
+            capability: .command,
+            command: decomposedUnicode
+        )) == .prompt(.commandApprovalRequired(command: decomposedUnicode)))
+    }
+
+    @Test("prefix command rules always require per-call approval")
+    func prefixCommandRulesAlwaysRequireApproval() {
+        let policy = AgentToolPermissionPolicy(commandAllowRules: [.prefix("printf allowed")])
+        let commands = [
+            "printf allowed",
+            "printf allowed extra",
+            "printf allowed; printf appended",
+            "printf allowed && printf appended",
+            "printf allowed || printf appended",
+            "printf allowed | cat",
+            "printf allowed\nprintf appended",
+            "printf allowed > result.txt",
+            "printf allowed >> result.txt",
+            "printf allowed < input.txt",
+            "printf allowed 2> error.log",
+            "printf allowed $(printf appended)",
+            "printf allowed `printf appended`",
+            "printf allowed & printf appended",
+            "printf allowedness",
+        ]
+
+        for command in commands {
+            let invocation = AgentToolInvocation(
+                toolID: "run_command",
+                capability: .command,
+                command: command
+            )
+            #expect(policy.decision(for: invocation) == .prompt(.commandApprovalRequired(command: command)))
+        }
+
+        let lookalike = "github-helper status"
+        let lookalikePolicy = AgentToolPermissionPolicy(commandAllowRules: [.prefix("git")])
+        #expect(lookalikePolicy.decision(for: AgentToolInvocation(
+            toolID: "run_command",
+            capability: .command,
+            command: lookalike
+        )) == .prompt(.commandApprovalRequired(command: lookalike)))
     }
 
     @Test("dangerous commands are denied before allowlist checks")

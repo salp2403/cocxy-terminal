@@ -5,6 +5,7 @@ import SwiftUI
 
 struct PluginUpdatePicker: View {
     let updates: [PluginUpdateCandidate]
+    let isRefreshing: Bool
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     let onRefresh: () -> Void
 
@@ -13,8 +14,17 @@ struct PluginUpdatePicker: View {
             Button {
                 onRefresh()
             } label: {
-                Label(localized("plugins.checkUpdates", fallback: "Check Updates"), systemImage: "arrow.triangle.2.circlepath")
+                HStack(spacing: 8) {
+                    if isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.triangle.2.circlepath")
+                    }
+                    Text(localized("plugins.checkUpdates", fallback: "Check Updates"))
+                }
             }
+            .disabled(isRefreshing)
 
             ForEach(updates) { update in
                 HStack {

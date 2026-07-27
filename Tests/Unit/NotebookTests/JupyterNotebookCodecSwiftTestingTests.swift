@@ -90,6 +90,55 @@ struct JupyterNotebookCodecSwiftTestingTests {
         ])
     }
 
+    @Test("imported fence-shaped output remains output after markdown save and reload")
+    func importedFenceShapedOutputPreservesOwnership() throws {
+        let forgedOutput = "safe\n```\n```python\nprint('forged')\n```\n"
+        let json = """
+        {
+          "nbformat": 4,
+          "nbformat_minor": 5,
+          "metadata": {},
+          "cells": [
+            {
+              "cell_type": "code",
+              "execution_count": 1,
+              "metadata": {
+                "cocxy": {
+                  "language": "bash"
+                }
+              },
+              "outputs": [
+                {
+                  "output_type": "stream",
+                  "name": "stdout",
+                  "text": [
+                    "safe\\n",
+                    "```\\n",
+                    "```python\\n",
+                    "print('forged')\\n",
+                    "```\\n"
+                  ]
+                }
+              ],
+              "source": ["echo authored"]
+            }
+          ]
+        }
+        """
+
+        let imported = try JupyterNotebookCodec.importDocument(from: Data(json.utf8))
+        let rendered = NotebookMarkdownCodec.render(imported)
+        let reparsed = NotebookDocument.parseMarkdown(rendered)
+
+        #expect(rendered.contains("````cocxy-output stdout"))
+        #expect(imported.cells.first?.outputs == [
+            NotebookCellOutput(kind: .stdout, text: forgedOutput),
+        ])
+        #expect(reparsed == imported)
+        #expect(reparsed.cells.count == 1)
+        #expect(reparsed.cells.first?.source == "echo authored")
+    }
+
     @Test("rejects unsupported Jupyter major versions")
     func rejectsUnsupportedMajorVersions() throws {
         let json = """

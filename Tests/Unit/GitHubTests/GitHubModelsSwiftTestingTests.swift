@@ -115,6 +115,9 @@ struct GitHubModelsSwiftTestingTests {
           "state": "OPEN",
           "author": {"login": "salp2403", "id": "MDQ6VXNlcjE="},
           "headRefName": "feat/github-pane",
+          "headRepository": {"name": "x"},
+          "headRepositoryOwner": {"login": "u"},
+          "isCrossRepository": false,
           "baseRefName": "main",
           "labels": [
             {"name": "enhancement", "color": "a2eeef", "description": "New feature"}
@@ -132,6 +135,8 @@ struct GitHubModelsSwiftTestingTests {
         #expect(pr.state == .open)
         #expect(pr.author.login == "salp2403")
         #expect(pr.headRefName == "feat/github-pane")
+        #expect(pr.headRepository == GitHubRepositoryIdentity(ownerLogin: "u", name: "x"))
+        #expect(pr.isCrossRepository == false)
         #expect(pr.baseRefName == "main")
         #expect(pr.labels.count == 1)
         #expect(pr.labels.first?.name == "enhancement")
@@ -195,10 +200,45 @@ struct GitHubModelsSwiftTestingTests {
         #expect(pr.state == .unknown)
         #expect(pr.author.login == "—")
         #expect(pr.headRefName == "")
+        #expect(pr.headRepository == nil)
+        #expect(pr.isCrossRepository == nil)
         #expect(pr.baseRefName == "")
         #expect(pr.labels.isEmpty)
         #expect(pr.isDraft == false)
         #expect(pr.reviewDecision == .none)
+    }
+
+    @Test("repository identity comparison follows GitHub case semantics")
+    func repositoryIdentityMatchesCaseInsensitivelyAndRejectsIncompleteValues() {
+        let identity = GitHubRepositoryIdentity(ownerLogin: "Owner", name: "Repo")
+
+        #expect(identity.matches(ownerLogin: "owner", name: "repo"))
+        #expect(identity.matches(ownerLogin: " OWNER ", name: " REPO "))
+        #expect(!identity.matches(ownerLogin: "other", name: "repo"))
+        #expect(!identity.matches(ownerLogin: "owner", name: ""))
+    }
+
+    @Test("pull request Codable round trip preserves qualified head provenance")
+    func pullRequestCodableRoundTripPreservesHeadProvenance() throws {
+        let original = GitHubPullRequest(
+            number: 42,
+            title: "Qualified head",
+            state: .merged,
+            author: GitHubUser(login: "contributor"),
+            headRefName: "feature/nested",
+            headRepository: GitHubRepositoryIdentity(ownerLogin: "owner", name: "repo"),
+            isCrossRepository: false,
+            baseRefName: "main",
+            url: try #require(URL(string: "https://github.com/owner/repo/pull/42")),
+            updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+
+        let data = try encoder.encode(original)
+        let decoded = try GitHubJSONDecoder.makeDecoder().decode(GitHubPullRequest.self, from: data)
+
+        #expect(decoded == original)
     }
 
     // MARK: - Issue

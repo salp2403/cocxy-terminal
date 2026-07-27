@@ -57,6 +57,9 @@ struct DBCloudHelperPanelView: View {
             minHeight: 420
         )
         .glassPanelBackground()
+        .onDisappear {
+            viewModel.cancelRunningAction()
+        }
     }
 
     private func header(width: CGFloat) -> some View {
@@ -84,10 +87,14 @@ struct DBCloudHelperPanelView: View {
             ) {
                 viewModel.refresh()
             }
+            .disabled(viewModel.isRunning)
 
             AdaptivePanelToolbarCloseButton(
                 title: localized("dbCloud.close", fallback: "Close DB/Cloud helpers"),
-                action: onClose
+                action: {
+                    viewModel.cancelRunningAction()
+                    onClose()
+                }
             )
         }
         .padding(.horizontal, 14)
@@ -133,6 +140,7 @@ struct DBCloudHelperPanelView: View {
             }
         }
         .padding(14)
+        .disabled(viewModel.isRunning)
     }
 
     @ViewBuilder
@@ -192,6 +200,7 @@ struct DBCloudHelperPanelView: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 actionFields(for: descriptor.id)
+                    .disabled(viewModel.isRunning)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Text(localized("dbCloud.command", fallback: "Command"))
@@ -206,13 +215,28 @@ struct DBCloudHelperPanelView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
 
-                HStack {
+                HStack(spacing: 8) {
                     Button {
-                        perform { try viewModel.runSelectedAction() }
+                        viewModel.runSelectedAction()
                     } label: {
                         Label(localized("dbCloud.run", fallback: "Run"), systemImage: "play.fill")
                     }
                     .keyboardShortcut(.return, modifiers: [.command])
+                    .disabled(viewModel.isRunning)
+
+                    Button {
+                        viewModel.cancelRunningAction()
+                    } label: {
+                        Label(localized("common.cancel", fallback: "Cancel"), systemImage: "stop.fill")
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .disabled(!viewModel.isRunning || viewModel.isCancelling)
+
+                    if viewModel.isRunning {
+                        ProgressView()
+                            .controlSize(.small)
+                            .accessibilityLabel(viewModel.statusText)
+                    }
                     Spacer()
                 }
 
@@ -292,14 +316,18 @@ struct DBCloudHelperPanelView: View {
             .frame(minHeight: 120)
             .background(panelSurface)
             .clipShape(RoundedRectangle(cornerRadius: 8))
-        }
-    }
 
-    private func perform(_ action: () throws -> Void) {
-        do {
-            try action()
-        } catch {
-            viewModel.recordFailure(error)
+            if viewModel.outputWasTruncated {
+                Label(
+                    localized(
+                        "dbCloud.output.truncated",
+                        fallback: "Output truncated to keep the panel responsive."
+                    ),
+                    systemImage: "ellipsis.rectangle"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
         }
     }
 

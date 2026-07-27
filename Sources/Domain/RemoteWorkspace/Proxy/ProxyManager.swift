@@ -1,271 +1,586 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// ProxyManager.swift - SOCKS5 proxy lifecycle management with state machine.
+// ProxyManager.swift - Authenticated proxy session lifecycle.
 
-import Foundation
 import Combine
+import Foundation
 
 // MARK: - Proxy State
 
-/// Represents the operational state of the proxy subsystem.
-///
-/// Transitions follow a strict state machine:
-/// `.off` → `.starting` → `.active` → `.failing` → `.failover` → `.active` or `.off`
+/// Secret-free public state for the single active proxy session.
 enum ProxyState: Equatable, Sendable {
     case off
-    case starting
-    case active(socksPort: Int, httpPort: Int?)
-    case failing(reason: String)
-    case failover
+    case starting(profileID: UUID)
+    case active(profileID: UUID, socksPort: Int, httpPort: Int?)
+    case failing(profileID: UUID?, reason: String)
+    case failover(profileID: UUID)
+
+    var profileID: UUID? {
+        switch self {
+        case .off:
+            return nil
+        case .starting(let profileID),
+             .active(let profileID, _, _),
+             .failover(let profileID):
+            return profileID
+        case .failing(let profileID, _):
+            return profileID
+        }
+    }
 }
 
-// MARK: - Proxy Error
-
-/// Errors that can occur during proxy operations.
-enum ProxyError: Error, Equatable {
+enum ProxyError: Error, Equatable, LocalizedError {
     case socksNotActive
+    case invalidPort
     case httpConnectFailed(String)
     case systemProxyFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .socksNotActive:
+            return "The authenticated SOCKS5 proxy is not active for this profile"
+        case .invalidPort:
+            return "Invalid proxy port"
+        case .httpConnectFailed(let reason), .systemProxyFailed(let reason):
+            return reason
+        }
+    }
 }
 
-// MARK: - Port Forwarding Protocol
+// MARK: - SSH Authority
 
-/// Abstraction for SSH port forwarding operations.
-///
-/// `RemoteConnectionManager` conforms to this protocol, allowing tests
-/// to inject a mock without real SSH connections.
 @MainActor
 protocol PortForwarding: AnyObject {
+    func connectionLeaseID(for profileID: UUID) -> UUID?
+
     func forwardPort(
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
-    ) throws
+    ) async throws
 
     func cancelForward(
         _ forward: RemoteConnectionProfile.PortForward,
         for profileID: UUID
-    ) throws
+    ) async throws
+
+    func forwardPort(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws
+
+    func cancelForward(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws
+
+    func openProxyTransport(
+        to target: ProxyTarget,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) throws -> any ProxyUpstreamTransport
 }
 
-// MARK: - Proxy Managing Protocol
+extension PortForwarding {
+    func forwardPort(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws {
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+        try await forwardPort(forward, for: profileID)
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+    }
 
-/// Defines the public API for proxy lifecycle management.
-///
-/// Implementations handle the SOCKS5 tunnel via SSH dynamic forwarding
-/// and an optional HTTP CONNECT proxy layered on top.
+    func cancelForward(
+        _ forward: RemoteConnectionProfile.PortForward,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) async throws {
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+        try await cancelForward(forward, for: profileID)
+        guard connectionLeaseID(for: profileID) == expectedConnectionLeaseID else {
+            throw SSHMultiplexerError.notConnected
+        }
+    }
+
+    func openProxyTransport(
+        to target: ProxyTarget,
+        for profileID: UUID,
+        expectedConnectionLeaseID: UUID
+    ) throws -> any ProxyUpstreamTransport {
+        _ = target
+        _ = profileID
+        _ = expectedConnectionLeaseID
+        throw ProxyUpstreamTransportError.unavailable
+    }
+}
+
+// MARK: - Public Lifecycle
+
 @MainActor
 protocol ProxyManaging: AnyObject {
     var state: ProxyState { get }
     var statePublisher: AnyPublisher<ProxyState, Never> { get }
     func enableSOCKS(port: Int, profileID: UUID) async throws
     func enableHTTPConnect(port: Int, profileID: UUID) async throws
+    func disableHTTPConnect(profileID: UUID) async
     func disable(profileID: UUID) async
     func healthCheck() async -> Bool
 }
 
-// MARK: - ProxyManagerImpl
+// MARK: - Proxy Manager
 
-/// Concrete implementation of `ProxyManaging`.
-///
-/// Orchestrates the SOCKS5 dynamic forward via `PortForwarding` (SSH `-D` flag)
-/// and tracks the tunnel in `SSHTunnelManager` for UI display.
-///
-/// ## Usage
-///
-/// ```swift
-/// let proxy = ProxyManagerImpl(tunnelManager: tunnelManager, forwarder: connectionManager)
-/// try await proxy.enableSOCKS(port: 1080, profileID: profile.id)
-/// // SOCKS5 proxy now listening on localhost:1080
-/// ```
 @MainActor
 final class ProxyManagerImpl: ProxyManaging, ObservableObject {
+    typealias SOCKS5ProxyFactory = @MainActor (
+        _ port: Int,
+        _ credentials: ProxyCredentials,
+        _ forwarder: any PortForwarding,
+        _ profileID: UUID,
+        _ connectionLeaseID: UUID
+    ) -> any SOCKS5ProxyLifecycle
 
-    // MARK: - Published State
+    typealias HTTPConnectProxyFactory = @MainActor (
+        _ port: Int,
+        _ credentials: ProxyCredentials,
+        _ forwarder: any PortForwarding,
+        _ profileID: UUID,
+        _ connectionLeaseID: UUID
+    ) -> any HTTPConnectProxyLifecycle
 
-    @Published private(set) var state: ProxyState = .off
+    private struct ActiveProxySession {
+        let id: UUID
+        let profileID: UUID
+        let connectionLeaseID: UUID
+        let credentials: ProxyCredentials
+        let socksProxy: any SOCKS5ProxyLifecycle
+    }
 
-    /// Uptime since SOCKS was enabled (in seconds).
+    private struct PendingSOCKSStart {
+        let profileID: UUID
+        let connectionLeaseID: UUID
+        let proxy: any SOCKS5ProxyLifecycle
+    }
+
+    @Published private var publishedState: ProxyState = .off
     @Published private(set) var uptimeSeconds: TimeInterval = 0
-
-    /// Timestamp when SOCKS was activated.
     private(set) var activeSince: Date?
+    private let committedState = CurrentValueSubject<ProxyState, Never>(.off)
+
+    var state: ProxyState { publishedState }
 
     var statePublisher: AnyPublisher<ProxyState, Never> {
-        $state.eraseToAnyPublisher()
+        committedState.eraseToAnyPublisher()
     }
 
-    // MARK: - Dependencies
-
-    private let tunnelManager: SSHTunnelManager
-
-    /// Weak to break retain cycle: RemoteConnectionManager → ProxyManagerImpl → forwarder.
     private weak var forwarder: (any PortForwarding)?
+    private let socks5ProxyFactory: SOCKS5ProxyFactory
+    private let httpConnectProxyFactory: HTTPConnectProxyFactory
 
-    // MARK: - Internal State
+    private var activeSession: ActiveProxySession?
+    private var activeHTTPConnectCredentials: ProxyCredentials?
+    private(set) var socksProxy: (any SOCKS5ProxyLifecycle)?
+    private(set) var httpConnectProxy: (any HTTPConnectProxyLifecycle)?
+    private var pendingSOCKSProxies: [UInt64: PendingSOCKSStart] = [:]
+    private var pendingHTTPConnectProxies: [UInt64: any HTTPConnectProxyLifecycle] = [:]
+    private var socksGeneration: UInt64 = 0
+    private var httpGeneration: UInt64 = 0
+    private var pendingStatePublications: [ProxyState] = []
+    private var isPublishingState = false
 
-    private var activeProfileID: UUID?
-    private var socksPort: Int?
-    private var httpConnectPort: Int?
-    private(set) var httpConnectProxy: HTTPConnectProxy?
-    private var healthMonitor: ProxyHealthMonitor?
+    var hasTrackedSOCKSForward: Bool { activeSession != nil }
+    var activeProfileID: UUID? { activeSession?.profileID }
 
-    // MARK: - Initialization
-
-    /// Creates a proxy manager with injected dependencies.
-    ///
-    /// - Parameters:
-    ///   - tunnelManager: Tracks active tunnels for UI display.
-    ///   - forwarder: Executes SSH port forwarding commands (weak to avoid retain cycle).
-    init(tunnelManager: SSHTunnelManager, forwarder: any PortForwarding) {
-        self.tunnelManager = tunnelManager
+    init(
+        tunnelManager: SSHTunnelManager,
+        forwarder: any PortForwarding,
+        socks5ProxyFactory: @escaping SOCKS5ProxyFactory = {
+            port, credentials, forwarder, profileID, connectionLeaseID in
+            SOCKS5Proxy(
+                listenPort: port,
+                credentials: credentials,
+                forwarder: forwarder,
+                profileID: profileID,
+                connectionLeaseID: connectionLeaseID
+            )
+        },
+        httpConnectProxyFactory: @escaping HTTPConnectProxyFactory = {
+            port, credentials, forwarder, profileID, connectionLeaseID in
+            HTTPConnectProxy(
+                listenPort: port,
+                credentials: credentials,
+                forwarder: forwarder,
+                profileID: profileID,
+                connectionLeaseID: connectionLeaseID
+            )
+        }
+    ) {
+        _ = tunnelManager
         self.forwarder = forwarder
+        self.socks5ProxyFactory = socks5ProxyFactory
+        self.httpConnectProxyFactory = httpConnectProxyFactory
     }
 
-    // MARK: - Enable SOCKS5
+    /// Returns the in-memory capability only to the owning profile's UI.
+    func credentials(for profileID: UUID) -> ProxyCredentials? {
+        guard activeSession?.profileID == profileID else { return nil }
+        return activeSession?.credentials
+    }
 
-    /// Activates a SOCKS5 dynamic forward on the given local port.
-    ///
-    /// Creates an SSH `-D` forward via the `PortForwarding` dependency
-    /// and registers the tunnel for tracking.
-    ///
-    /// - Parameters:
-    ///   - port: Local port for the SOCKS5 listener (e.g., 1080).
-    ///   - profileID: The remote profile whose SSH session carries the forward.
+    /// Returns the independently rotated HTTP capability to its owning UI.
+    func httpConnectCredentials(for profileID: UUID) -> ProxyCredentials? {
+        guard activeSession?.profileID == profileID,
+              httpConnectProxy != nil else { return nil }
+        return activeHTTPConnectCredentials
+    }
+
     func enableSOCKS(port: Int, profileID: UUID) async throws {
-        state = .starting
-        activeProfileID = profileID
-
+        guard (1...65_535).contains(port) else { throw ProxyError.invalidPort }
         guard let forwarder else {
-            state = .failing(reason: "Port forwarder unavailable")
-            throw ProxyError.httpConnectFailed("Port forwarder deallocated")
+            publishState(.failing(profileID: profileID, reason: "SSH authority is unavailable"))
+            throw ProxyUpstreamTransportError.unavailable
         }
+        guard let connectionLeaseID = forwarder.connectionLeaseID(for: profileID) else {
+            publishState(.failing(profileID: profileID, reason: "No active SSH connection"))
+            throw SSHMultiplexerError.notConnected
+        }
+        try Task.checkCancellation()
 
-        let forward = RemoteConnectionProfile.PortForward.dynamic(localPort: port)
+        stopCurrentSession()
+        let generation = invalidatePendingSOCKSStarts()
+        let credentials = ProxyCredentials.generate()
+        let sessionID = UUID()
+        let proxy = socks5ProxyFactory(
+            port,
+            credentials,
+            forwarder,
+            profileID,
+            connectionLeaseID
+        )
+        proxy.failureHandler = { [weak self] reason in
+            self?.handleSOCKSListenerFailure(
+                sessionID: sessionID,
+                generation: generation,
+                profileID: profileID,
+                reason: reason
+            )
+        }
+        pendingSOCKSProxies[generation] = PendingSOCKSStart(
+            profileID: profileID,
+            connectionLeaseID: connectionLeaseID,
+            proxy: proxy
+        )
+        publishState(.starting(profileID: profileID))
 
         do {
-            try forwarder.forwardPort(forward, for: profileID)
+            try await proxy.start()
+            try Task.checkCancellation()
         } catch {
-            state = .failing(reason: errorDescription(error))
+            let wasPending = pendingSOCKSProxies.removeValue(forKey: generation) != nil
+            if wasPending { proxy.stop() }
+            if error is CancellationError {
+                if socksGeneration == generation {
+                    socksGeneration &+= 1
+                    clearPublishedSessionState()
+                }
+                throw error
+            }
+            guard socksGeneration == generation else { throw ProxyError.socksNotActive }
+            publishState(.failing(profileID: profileID, reason: error.localizedDescription))
             throw error
         }
 
-        tunnelManager.addTunnel(forward: forward, for: profileID)
-        socksPort = port
-        activeSince = Date()
-        state = .active(socksPort: port, httpPort: httpConnectPort)
-
-        // Start health monitoring.
-        let probe = TCPHealthProbe()
-        let monitor = ProxyHealthMonitor(probe: probe)
-        monitor.delegate = self
-        monitor.startMonitoring()
-        healthMonitor = monitor
-    }
-
-    // MARK: - Enable HTTP CONNECT
-
-    /// Activates an HTTP CONNECT proxy on the given local port.
-    ///
-    /// Requires SOCKS5 to be active first, since HTTP CONNECT routes
-    /// through SSH local forwards created on demand.
-    ///
-    /// - Parameters:
-    ///   - port: Local port for the HTTP CONNECT listener (e.g., 8888).
-    ///   - profileID: The remote profile whose SSH session carries forwards.
-    func enableHTTPConnect(port: Int, profileID: UUID) async throws {
-        guard let currentSOCKSPort = socksPort else {
+        let wasPending = pendingSOCKSProxies.removeValue(forKey: generation) != nil
+        guard wasPending, socksGeneration == generation else {
+            proxy.stop()
             throw ProxyError.socksNotActive
         }
-        guard let forwarder else {
-            throw ProxyError.httpConnectFailed("Port forwarder unavailable")
+        guard forwarder.connectionLeaseID(for: profileID) == connectionLeaseID,
+              proxy.isReady else {
+            proxy.stop()
+            publishState(.failing(
+                profileID: profileID,
+                reason: "SSH connection changed before proxy activation"
+            ))
+            throw ProxyError.socksNotActive
+        }
+        do {
+            try Task.checkCancellation()
+        } catch {
+            proxy.stop()
+            if socksGeneration == generation {
+                socksGeneration &+= 1
+                clearPublishedSessionState()
+            }
+            throw error
         }
 
-        // Stop existing HTTP CONNECT proxy if running.
-        httpConnectProxy?.stop()
-
-        // Create and start the HTTP CONNECT proxy.
-        let proxy = HTTPConnectProxy(
-            listenPort: port,
-            forwarder: forwarder,
-            profileID: profileID
+        let session = ActiveProxySession(
+            id: sessionID,
+            profileID: profileID,
+            connectionLeaseID: connectionLeaseID,
+            credentials: credentials,
+            socksProxy: proxy
         )
+        activeSession = session
+        socksProxy = proxy
+        activeSince = Date()
+        uptimeSeconds = 0
+        proxy.activate()
+        publishState(.active(profileID: profileID, socksPort: port, httpPort: nil))
+    }
+
+    func enableHTTPConnect(port: Int, profileID: UUID) async throws {
+        guard (1...65_535).contains(port) else { throw ProxyError.invalidPort }
+        guard let session = activeSession,
+              session.profileID == profileID,
+              let forwarder,
+              forwarder.connectionLeaseID(for: profileID) == session.connectionLeaseID else {
+            throw ProxyError.socksNotActive
+        }
+        try Task.checkCancellation()
+
+        stopHTTPConnect()
+        let generation = invalidatePendingHTTPStarts()
+        publishState(.active(
+            profileID: profileID,
+            socksPort: session.socksProxy.port,
+            httpPort: nil
+        ))
+        let credentials = ProxyCredentials.generate()
+        let proxy = httpConnectProxyFactory(
+            port,
+            credentials,
+            forwarder,
+            profileID,
+            session.connectionLeaseID
+        )
+        proxy.failureHandler = { [weak self] reason in
+            self?.handleHTTPListenerFailure(
+                sessionID: session.id,
+                generation: generation,
+                profileID: profileID,
+                reason: reason
+            )
+        }
+        pendingHTTPConnectProxies[generation] = proxy
+
         do {
             try await proxy.start()
+            try Task.checkCancellation()
         } catch {
+            let wasPending = pendingHTTPConnectProxies.removeValue(forKey: generation) != nil
+            if wasPending { proxy.stop() }
+            if error is CancellationError {
+                if httpGeneration == generation {
+                    httpGeneration &+= 1
+                }
+                throw error
+            }
+            guard httpGeneration == generation else { throw ProxyError.socksNotActive }
             throw ProxyError.httpConnectFailed(error.localizedDescription)
         }
 
-        httpConnectProxy = proxy
-        httpConnectPort = port
-        state = .active(socksPort: currentSOCKSPort, httpPort: port)
-    }
-
-    // MARK: - Disable
-
-    /// Shuts down all proxy services and cleans up tunnels.
-    ///
-    /// Cancels the SOCKS5 forward, stops HTTP CONNECT if active,
-    /// and removes all tracked tunnels for the profile.
-    func disable(profileID: UUID) async {
-        // Stop health monitoring.
-        healthMonitor?.stopMonitoring()
-        healthMonitor = nil
-
-        // Stop HTTP CONNECT proxy.
-        httpConnectProxy?.stop()
-        httpConnectProxy = nil
-
-        // Cancel SOCKS5 forward.
-        if let port = socksPort, let forwarder {
-            let forward = RemoteConnectionProfile.PortForward.dynamic(localPort: port)
-            try? forwarder.cancelForward(forward, for: profileID)
+        let wasPending = pendingHTTPConnectProxies.removeValue(forKey: generation) != nil
+        guard wasPending,
+              httpGeneration == generation,
+              let current = activeSession,
+              current.id == session.id,
+              forwarder.connectionLeaseID(for: profileID) == session.connectionLeaseID,
+              proxy.isReady else {
+            proxy.stop()
+            throw ProxyError.socksNotActive
         }
-
-        tunnelManager.removeAllTunnels(for: profileID)
-
-        socksPort = nil
-        httpConnectPort = nil
-        activeProfileID = nil
-        state = .off
-    }
-
-    // MARK: - Health Check
-
-    /// Verifies the proxy tunnel is operational.
-    ///
-    /// Returns `true` if the proxy is in an active state.
-    /// Full TCP probe implementation is added by `ProxyHealthMonitor` (Task 5).
-    func healthCheck() async -> Bool {
-        guard case .active = state else { return false }
-        return true
-    }
-
-    // MARK: - Helpers
-
-    private func errorDescription(_ error: any Error) -> String {
-        if let sshError = error as? SSHMultiplexerError {
-            return "\(sshError)"
-        }
-        return error.localizedDescription
-    }
-}
-
-// MARK: - ProxyHealthDelegate Conformance
-
-extension ProxyManagerImpl: ProxyHealthDelegate {
-
-    func proxyHealthDidChange(to healthState: ProxyHealthState) {
-        switch healthState {
-        case .healthy:
-            if let port = socksPort {
-                state = .active(socksPort: port, httpPort: httpConnectPort)
+        do {
+            try Task.checkCancellation()
+        } catch {
+            proxy.stop()
+            if httpGeneration == generation {
+                httpGeneration &+= 1
             }
-        case .failing:
-            state = .failing(reason: "Health check failed — tunnel may be down")
-        case .degraded(let failures):
-            // Keep active but log the degradation.
-            NSLog("[ProxyManager] Health degraded: \(failures) consecutive failures")
-        case .unknown:
-            break
+            throw error
+        }
+
+        httpConnectProxy = proxy
+        activeHTTPConnectCredentials = credentials
+        proxy.activate()
+        publishState(.active(
+            profileID: profileID,
+            socksPort: session.socksProxy.port,
+            httpPort: port
+        ))
+    }
+
+    func disableHTTPConnect(profileID: UUID) async {
+        guard let session = activeSession, session.profileID == profileID else { return }
+        stopHTTPConnect()
+        publishState(.active(
+            profileID: profileID,
+            socksPort: session.socksProxy.port,
+            httpPort: nil
+        ))
+    }
+
+    func disable(profileID: UUID) async {
+        guard state.profileID == profileID else { return }
+        stopCurrentSession()
+    }
+
+    /// Invalidates credentials and listeners before ControlMaster termination.
+    func prepareForSessionTermination(profileID: UUID, connectionLeaseID: UUID?) {
+        if let session = activeSession,
+           session.profileID == profileID,
+           connectionLeaseID.map({ $0 == session.connectionLeaseID }) ?? true {
+            stopCurrentSession()
+            return
+        }
+        let hasMatchingPendingStart = pendingSOCKSProxies.values.contains { pending in
+            pending.profileID == profileID
+                && (connectionLeaseID.map { $0 == pending.connectionLeaseID } ?? true)
+        }
+        if hasMatchingPendingStart {
+            stopCurrentSession()
+        }
+    }
+
+    func releaseAfterSessionTermination(profileID: UUID, connectionLeaseID: UUID) {
+        guard let session = activeSession,
+              session.profileID == profileID,
+              session.connectionLeaseID == connectionLeaseID else { return }
+        activeSession = nil
+        socksProxy = nil
+        stopHTTPConnect(releasingAfterSessionTermination: true)
+        session.socksProxy.releaseAfterSessionTermination()
+        clearPublishedSessionState()
+    }
+
+    func healthCheck() async -> Bool {
+        guard let session = activeSession,
+              session.socksProxy.isReady,
+              forwarder?.connectionLeaseID(for: session.profileID) == session.connectionLeaseID else {
+            return false
+        }
+        return httpConnectProxy?.isReady ?? true
+    }
+
+    private func handleSOCKSListenerFailure(
+        sessionID: UUID,
+        generation: UInt64,
+        profileID: UUID,
+        reason: String
+    ) {
+        guard socksGeneration == generation,
+              activeSession?.id == sessionID else { return }
+        stopCurrentSession()
+        publishState(.failing(profileID: profileID, reason: reason))
+    }
+
+    private func handleHTTPListenerFailure(
+        sessionID: UUID,
+        generation: UInt64,
+        profileID: UUID,
+        reason: String
+    ) {
+        guard httpGeneration == generation,
+              activeSession?.id == sessionID,
+              httpConnectProxy != nil else { return }
+        stopCurrentSession()
+        publishState(.failing(profileID: profileID, reason: reason))
+    }
+
+    private func stopCurrentSession() {
+        socksGeneration &+= 1
+        httpGeneration &+= 1
+        stopPendingStarts()
+        guard let session = activeSession else {
+            socksProxy = nil
+            stopHTTPConnect()
+            clearPublishedSessionState()
+            return
+        }
+
+        // Drop the capability reference before any listener teardown callback.
+        activeSession = nil
+        socksProxy = nil
+        stopHTTPConnect()
+        session.socksProxy.stop()
+        clearPublishedSessionState()
+    }
+
+    private func stopHTTPConnect(releasingAfterSessionTermination: Bool = false) {
+        httpGeneration &+= 1
+        activeHTTPConnectCredentials = nil
+        let pending = Array(pendingHTTPConnectProxies.values)
+        pendingHTTPConnectProxies.removeAll()
+        for proxy in pending {
+            if releasingAfterSessionTermination {
+                proxy.releaseAfterSessionTermination()
+            } else {
+                proxy.stop()
+            }
+        }
+        if let proxy = httpConnectProxy {
+            if releasingAfterSessionTermination {
+                proxy.releaseAfterSessionTermination()
+            } else {
+                proxy.stop()
+            }
+            httpConnectProxy = nil
+        }
+    }
+
+    @discardableResult
+    private func invalidatePendingSOCKSStarts() -> UInt64 {
+        socksGeneration &+= 1
+        let pending = Array(pendingSOCKSProxies.values)
+        pendingSOCKSProxies.removeAll()
+        for start in pending { start.proxy.stop() }
+        return socksGeneration
+    }
+
+    @discardableResult
+    private func invalidatePendingHTTPStarts() -> UInt64 {
+        httpGeneration &+= 1
+        let pending = Array(pendingHTTPConnectProxies.values)
+        pendingHTTPConnectProxies.removeAll()
+        for proxy in pending { proxy.stop() }
+        return httpGeneration
+    }
+
+    private func stopPendingStarts() {
+        let socks = Array(pendingSOCKSProxies.values)
+        pendingSOCKSProxies.removeAll()
+        for start in socks { start.proxy.stop() }
+        let http = Array(pendingHTTPConnectProxies.values)
+        pendingHTTPConnectProxies.removeAll()
+        for proxy in http { proxy.stop() }
+    }
+
+    private func clearPublishedSessionState() {
+        activeSince = nil
+        uptimeSeconds = 0
+        publishState(.off)
+    }
+
+    /// Serializes reentrant lifecycle changes so every observer receives the
+    /// same committed order, including teardown requested from inside a sink.
+    private func publishState(_ state: ProxyState) {
+        pendingStatePublications.append(state)
+        guard !isPublishingState else { return }
+
+        isPublishingState = true
+        defer { isPublishingState = false }
+        while !pendingStatePublications.isEmpty {
+            let nextState = pendingStatePublications.removeFirst()
+            publishedState = nextState
+            committedState.send(nextState)
         }
     }
 }

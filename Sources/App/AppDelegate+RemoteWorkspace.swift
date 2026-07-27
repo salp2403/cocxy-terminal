@@ -48,17 +48,28 @@ extension AppDelegate {
         connectionManager.proxyManager = proxyManager
 
         // Relay manager — optional, zero overhead when unused.
+        let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
         let relayManager = RelayManagerImpl(
             tunnelManager: tunnelManager,
             forwarder: connectionManager,
-            tokenStore: RelayKeychainStore()
+            tokenStore: RelayKeychainStore(),
+            auditLog: relayAuditLog,
+            profileSessionRevoker: { [weak connectionManager] profileID, leaseID in
+                await connectionManager?.revokeForwardingSession(
+                    profileID: profileID,
+                    expectedLeaseID: leaseID
+                ) ?? false
+            }
         )
         connectionManager.relayManager = relayManager
 
         // Daemon manager — optional, zero overhead when unused.
-        let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager, profileStore: profileStore)
+        let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager)
         let daemonDeployer = DaemonDeployer(executor: deployAdapter)
-        let daemonManager = DaemonManagerImpl(deployer: daemonDeployer)
+        let daemonManager = DaemonManagerImpl(
+            deployer: daemonDeployer,
+            transportProvider: connectionManager
+        )
         connectionManager.daemonManager = daemonManager
         let remoteUploader = CocxyDRemoteUploader(executor: deployAdapter)
         let remoteBootstrapper = CocxyDRemoteSSHBootstrapper(
@@ -77,7 +88,6 @@ extension AppDelegate {
 
         // Remote port scanner — detects dev servers on SSH-connected hosts.
         let portScanner = RemotePortScanner(
-            multiplexer: multiplexer,
             connectionManager: connectionManager
         )
 
@@ -97,24 +107,52 @@ extension AppDelegate {
             controller.remotePortScanner = portScanner
         }
 
+        portScanner.routeRevocationHandler = { [weak self] profileID in
+            for controller in self?.allWindowControllers ?? [] {
+                controller.revokeRemoteBrowserRoute(
+                    profileID: profileID,
+                    reason: "The remote browser connection is no longer active"
+                )
+            }
+        }
+
+        // Browser init-script grants remain bound to a live remote connection.
+        // The route revocation callback above synchronously closes the
+        // window-scoped proxy before scanner ownership moves to another profile.
+        connectionManager.$connections
+            .sink { [weak self] connections in
+                let activeProfileIDs = Set(connections.compactMap { profileID, state in
+                    if case .connected = state {
+                        return profileID
+                    }
+                    return nil
+                })
+                for viewModel in self?.allWindowControllers.flatMap({
+                    $0.allBrowserViewModels()
+                }) ?? [] {
+                    viewModel.updateInitScriptRemoteConnectionAvailability(
+                        activeConnectionProfileIDs: activeProfileIDs
+                    )
+                }
+            }
+            .store(in: &hookCancellables)
+
         // Auto-start/stop port scanning when managed connections change.
         connectionManager.$connections
             .receive(on: DispatchQueue.main)
             .sink { [weak portScanner] connections in
                 guard let scanner = portScanner else { return }
+                let connectedProfileID = RemotePortScanner.preferredScanningProfileID(
+                    currentProfileID: scanner.scanningProfileID,
+                    connections: connections
+                )
 
-                // Find the first connected profile to scan.
-                let connectedProfile = connections.first { _, state in
-                    if case .connected = state { return true }
-                    return false
-                }
-
-                if let (profileID, _) = connectedProfile {
-                    if scanner.scanningProfileID != profileID {
-                        scanner.startScanning(profileID: profileID)
+                if let connectedProfileID {
+                    if scanner.scanningProfileID != connectedProfileID || !scanner.isScanning {
+                        scanner.startScanning(profileID: connectedProfileID)
                     }
                 } else {
-                    if scanner.isScanning {
+                    if scanner.isScanning || scanner.scanningProfileID != nil {
                         scanner.stopScanning()
                     }
                 }
@@ -137,24 +175,89 @@ final class DiskSSHKeyFileSystem: SSHKeyFileSystem {
         let expandedPath = NSString(string: path).expandingTildeInPath
         return FileManager.default.fileExists(atPath: expandedPath)
     }
+
+    func createDirectory(at path: String) throws {
+        let expandedPath = NSString(string: path).expandingTildeInPath
+        try FileManager.default.createDirectory(
+            atPath: expandedPath,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: expandedPath
+        )
+    }
+
+    func removeFile(at path: String) throws {
+        let expandedPath = NSString(string: path).expandingTildeInPath
+        guard FileManager.default.fileExists(atPath: expandedPath) else { return }
+        try FileManager.default.removeItem(atPath: expandedPath)
+    }
 }
 
 // MARK: - System SSH Key Executor
 
 /// Production implementation of `SSHKeyExecuting` using real processes.
 final class SystemSSHKeyExecutor: SSHKeyExecuting {
+    private let askpassExecutableURL: URL?
+
+    init(askpassExecutableURL: URL? = Bundle.main.executableURL) {
+        self.askpassExecutableURL = askpassExecutableURL
+    }
 
     func execute(command: String, arguments: [String]) throws -> ProcessResult {
+        try run(command: command, arguments: arguments, stdinData: nil, environment: nil)
+    }
+
+    func execute(command: String, arguments: [String], stdinData: Data) throws -> ProcessResult {
+        guard let askpassExecutableURL,
+              FileManager.default.isExecutableFile(atPath: askpassExecutableURL.path) else {
+            throw SSHKeyManagerError.generationFailed("Secure SSH passphrase helper is unavailable.")
+        }
+
+        var environment = ProcessInfo.processInfo.environment
+        environment["SSH_ASKPASS"] = askpassExecutableURL.path
+        environment["SSH_ASKPASS_REQUIRE"] = "force"
+        environment["DISPLAY"] = environment["DISPLAY"] ?? "cocxy"
+        environment[SSHAskpassContract.environmentKey] = SSHAskpassContract.environmentValue
+        return try run(
+            command: command,
+            arguments: arguments,
+            stdinData: stdinData,
+            environment: environment
+        )
+    }
+
+    private func run(
+        command: String,
+        arguments: [String],
+        stdinData: Data?,
+        environment: [String: String]?
+    ) throws -> ProcessResult {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: command)
         process.arguments = arguments
+        process.environment = environment
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
+        let stdinPipe = stdinData.map { _ in Pipe() }
+        process.standardInput = stdinPipe
 
         try process.run()
+        if let stdinData, let stdinPipe {
+            do {
+                try stdinPipe.fileHandleForWriting.write(contentsOf: stdinData)
+                try stdinPipe.fileHandleForWriting.close()
+            } catch {
+                process.terminate()
+                process.waitUntilExit()
+                throw error
+            }
+        }
         process.waitUntilExit()
 
         let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
@@ -178,11 +281,14 @@ final class SystemSSHKeyExecutor: SSHKeyExecuting {
 final class DaemonDeployAdapter: DaemonDeployExecuting {
 
     private weak var connectionManager: RemoteConnectionManager?
-    private let profileStore: RemoteProfileStore?
+    private let sftpExecutor: any SFTPExecutor
 
-    init(connectionManager: RemoteConnectionManager, profileStore: RemoteProfileStore?) {
+    init(
+        connectionManager: RemoteConnectionManager,
+        sftpExecutor: any SFTPExecutor = SystemSFTPExecutor()
+    ) {
         self.connectionManager = connectionManager
-        self.profileStore = profileStore
+        self.sftpExecutor = sftpExecutor
     }
 
     func executeRemote(_ command: String, profileID: UUID) async throws -> String {
@@ -193,26 +299,34 @@ final class DaemonDeployAdapter: DaemonDeployExecuting {
     }
 
     func uploadFile(localPath: String, remotePath: String, profileID: UUID) async throws {
-        guard connectionManager != nil else {
+        guard let connectionManager else {
             throw DaemonProtocolError.connectionLost
         }
-        // Upload via SFTPClient using the profile's SSH ControlMaster.
-        guard let profile = profileStore?.loadProfile(id: profileID) else {
-            throw DaemonProtocolError.connectionLost
-        }
-        let executor = SystemSFTPExecutor()
-        let client = SFTPClient(executor: executor)
-        try client.upload(
-            localPath: localPath,
-            remotePath: remotePath,
-            on: profile
+        let client = try connectionManager.makeSFTPClient(
+            profileID: profileID,
+            executor: sftpExecutor
         )
-    }
-}
-
-extension RemoteProfileStore {
-    /// Loads a single profile by ID.
-    func loadProfile(id: UUID) -> RemoteConnectionProfile? {
-        try? loadAll().first { $0.id == id }
+        let worker = Task.detached(priority: .userInitiated) {
+            try client.upload(
+                localPath: localPath,
+                remotePath: remotePath,
+                destinationPolicy: .overwrite
+            )
+        }
+        let outcome = try await withTaskCancellationHandler {
+            try await worker.value
+        } onCancel: {
+            worker.cancel()
+        }
+        switch outcome {
+        case .completed:
+            return
+        case .notCommittedWithIssues(let state):
+            throw DaemonDeployError.remoteUploadNotCommitted(state)
+        case .committedWithIssues(let state):
+            throw DaemonDeployError.remoteUploadCleanupUnconfirmed(state)
+        case .commitIndeterminate(let state):
+            throw DaemonDeployError.remoteUploadCommitIndeterminate(state)
+        }
     }
 }

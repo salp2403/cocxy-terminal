@@ -33,7 +33,10 @@ struct NotebookExecutionSwiftTestingTests {
         )
 
         #expect(summary.executedCellIndices == [1, 2])
-        #expect(summary.failedCellIndex == nil)
+        #expect(
+            summary.failedCellIndex == nil,
+            "stderr: \(summary.results.first?.stderr ?? "<missing result>")"
+        )
         #expect(summary.document.cells[0] == .markdown("# Setup"))
         #expect(summary.document.cells[1].outputs == [
             NotebookCellOutput(kind: .stdout, text: "bash ok\n"),
@@ -120,6 +123,19 @@ struct NotebookExecutionSwiftTestingTests {
         #expect(runner.calls[0].arguments[1].contains("(deny network*)"))
         #expect(runner.calls[0].arguments[1].contains("(deny file-write*)"))
         #expect(runner.calls[0].arguments[1].contains(workspace.resolvingSymlinksInPath().path))
+        let temporaryAssignment = try #require(
+            runner.calls[0].arguments.first { $0.hasPrefix("TMPDIR=") }
+        )
+        let temporaryPath = String(temporaryAssignment.dropFirst("TMPDIR=".count))
+        #expect(runner.calls[0].arguments.contains(
+            "CLANG_MODULE_CACHE_PATH=\(temporaryPath)/clang-module-cache"
+        ))
+        #expect(runner.calls[0].arguments.contains(
+            "SWIFTPM_MODULECACHE_OVERRIDE=\(temporaryPath)/swiftpm-module-cache"
+        ))
+        #expect(runner.calls[0].arguments.contains(
+            "XDG_CACHE_HOME=\(temporaryPath)/cache"
+        ))
         #expect(Array(runner.calls[0].arguments.suffix(3)) == [
             "/bin/bash",
             "-c",
@@ -127,6 +143,52 @@ struct NotebookExecutionSwiftTestingTests {
         ])
         #expect(runner.calls[1].executablePath == "/bin/bash")
         #expect(runner.calls[1].arguments == ["-c", "echo sandboxed"])
+    }
+
+    @Test("workspace sandbox redirects inherited compiler caches into its writable temporary directory")
+    func workspaceSandboxRedirectsInheritedCompilerCaches() throws {
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/sandbox-exec"),
+              FileManager.default.isExecutableFile(atPath: "/usr/bin/swift") else {
+            return
+        }
+
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = root.appendingPathComponent("workspace", isDirectory: true)
+        let poisonedCache = root.appendingPathComponent("outside-cache", isDirectory: true)
+        try FileManager.default.createDirectory(at: workspace, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: poisonedCache, withIntermediateDirectories: true)
+
+        let poisonedPath = poisonedCache.path
+        let runner = EnvironmentInjectingNotebookProcessRunner(environment: [
+            "CLANG_MODULE_CACHE_PATH": "\(poisonedPath)/clang",
+            "SWIFTPM_MODULECACHE_OVERRIDE": "\(poisonedPath)/swiftpm",
+            "TMPDIR": "\(poisonedPath)/tmp",
+            "XDG_CACHE_HOME": "\(poisonedPath)/xdg",
+        ])
+        let executor = NotebookExecutor(processRunner: runner)
+        let document = NotebookDocument(cells: [
+            .code(language: "swift", source: #"print("swift-cache-ok")"#),
+        ])
+
+        let summary = try executor.execute(
+            document,
+            workingDirectory: workspace,
+            timeoutSeconds: 45,
+            sandbox: .workspace
+        )
+
+        #expect(
+            summary.failedCellIndex == nil,
+            "stderr: \(summary.results.first?.stderr ?? "<missing result>")"
+        )
+        #expect(summary.results.count == 1)
+        #expect(summary.results[0].exitCode == 0)
+        #expect(summary.results[0].stdout == "swift-cache-ok\n")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: poisonedPath).isEmpty)
+        #expect(!FileManager.default.fileExists(
+            atPath: workspace.appendingPathComponent(".cocxy-notebook-tmp").path
+        ))
     }
 
     @Test("saves and reloads notebooks through markdown persistence")
@@ -170,6 +232,29 @@ private final class RecordingNotebookProcessRunner: AgentProcessRunning, @unchec
         return results.isEmpty
             ? AgentProcessResult(exitCode: 0, stdout: "", stderr: "")
             : results.removeFirst()
+    }
+}
+
+private struct EnvironmentInjectingNotebookProcessRunner: AgentProcessRunning {
+    let environment: [String: String]
+
+    func run(
+        executableURL: URL,
+        arguments: [String],
+        workingDirectory: URL,
+        timeoutSeconds: TimeInterval?
+    ) throws -> AgentProcessResult {
+        let assignments = environment.sorted { lhs, rhs in
+            lhs.key < rhs.key
+        }.map { key, value in
+            "\(key)=\(value)"
+        }
+        return try NotebookProcessRunner().run(
+            executableURL: URL(fileURLWithPath: "/usr/bin/env"),
+            arguments: assignments + [executableURL.path] + arguments,
+            workingDirectory: workingDirectory,
+            timeoutSeconds: timeoutSeconds
+        )
     }
 }
 

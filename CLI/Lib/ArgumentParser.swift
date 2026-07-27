@@ -9,6 +9,7 @@ import CocxyVault
 
 public struct BrowserImportCLIOptions: Equatable {
     public let source: String
+    public let sourceProfile: String?
     public let profileID: String?
     public let historyPath: String?
     public let cookiesPath: String?
@@ -19,9 +20,11 @@ public struct BrowserImportCLIOptions: Equatable {
     public let maxHistoryDays: Int?
     public let domainWhitelist: [String]
     public let domainBlacklist: [String]
+    public let previewToken: String?
 
     public init(
         source: String,
+        sourceProfile: String? = nil,
         profileID: String? = nil,
         historyPath: String? = nil,
         cookiesPath: String? = nil,
@@ -31,9 +34,11 @@ public struct BrowserImportCLIOptions: Equatable {
         importBookmarks: Bool = true,
         maxHistoryDays: Int? = nil,
         domainWhitelist: [String] = [],
-        domainBlacklist: [String] = []
+        domainBlacklist: [String] = [],
+        previewToken: String? = nil
     ) {
         self.source = source
+        self.sourceProfile = sourceProfile
         self.profileID = profileID
         self.historyPath = historyPath
         self.cookiesPath = cookiesPath
@@ -44,6 +49,7 @@ public struct BrowserImportCLIOptions: Equatable {
         self.maxHistoryDays = maxHistoryDays
         self.domainWhitelist = domainWhitelist
         self.domainBlacklist = domainBlacklist
+        self.previewToken = previewToken?.lowercased()
     }
 
     var socketParams: [String: String] {
@@ -53,6 +59,7 @@ public struct BrowserImportCLIOptions: Equatable {
             "import-cookies": "\(importCookies)",
             "import-bookmarks": "\(importBookmarks)",
         ]
+        if let sourceProfile { params["source-profile"] = sourceProfile }
         if let profileID { params["profile"] = profileID }
         if let historyPath { params["history"] = historyPath }
         if let cookiesPath { params["cookies"] = cookiesPath }
@@ -64,6 +71,7 @@ public struct BrowserImportCLIOptions: Equatable {
         if !domainBlacklist.isEmpty {
             params["domain-blacklist"] = domainBlacklist.joined(separator: ",")
         }
+        if let previewToken { params["preview-token"] = previewToken }
         return params
     }
 }
@@ -373,7 +381,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy tab move <id> <position>`
     case tabMove(id: String, position: String)
 
-    /// `cocxy tab config save <name> [--command <cmd>] [--theme <theme>] [--env KEY=VALUE]`
+    /// `cocxy tab config save <name> [--theme <theme>] [--env KEY=VALUE]`
     case tabConfigSave(
         name: String,
         command: String?,
@@ -390,7 +398,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy tab config path <name>`
     case tabConfigPath(name: String)
 
-    /// `cocxy tab config export <name> --output <path> [--force]`
+    /// `cocxy tab config export <name> --output <file.toml> [--force]`
     case tabConfigExport(name: String, output: String, force: Bool)
 
     // MARK: - Split extended (v2)
@@ -677,6 +685,9 @@ public enum ParsedCommand: Equatable {
     /// `cocxy browser navigate <url>`
     case browserNavigate(url: String)
 
+    /// `cocxy browser split`
+    case browserSplit
+
     /// `cocxy browser back`
     case browserBack
 
@@ -706,6 +717,9 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy browser init scripts add <script>`
     case browserInitScriptAdd(script: String)
+
+    /// `cocxy browser init scripts remove <id>`
+    case browserInitScriptRemove(id: String)
 
     /// `cocxy browser init scripts list`
     case browserInitScriptsList
@@ -897,8 +911,8 @@ public enum ParsedCommand: Equatable {
 
     // MARK: - Web Terminal (v5)
 
-    /// `cocxy web start [--bind <address>] [--port <port>] [--token <token>] [--fps <n>]`
-    case webStart(bindAddress: String?, port: Int?, token: String?, fps: Int?)
+    /// `cocxy web start [--bind <loopback-address>] [--port <port>] [--fps <n>]`
+    case webStart(bindAddress: String?, port: Int?, fps: Int?)
 
     /// `cocxy web stop`
     case webStop
@@ -1026,7 +1040,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy worktree list`
     case worktreeList
 
-    /// `cocxy worktree remove <id> [--force]`
+    /// `cocxy worktree remove <id>`
     case worktreeRemove(id: String, force: Bool)
 
     /// `cocxy worktree focus <id>`
@@ -1035,7 +1049,7 @@ public enum ParsedCommand: Equatable {
     /// `cocxy worktree prune`
     case worktreePrune
 
-    /// `cocxy worktree cleanup-merged [--base-ref <ref>] [--force] [--dry-run]`
+    /// `cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]`
     case worktreeCleanupMerged(baseRef: String?, force: Bool, dryRun: Bool)
 
     /// `cocxy github status` — auth + repository summary JSON.
@@ -1056,7 +1070,8 @@ public enum ParsedCommand: Equatable {
     case githubRefresh
 
     /// `cocxy github pr-merge --squash|--merge|--rebase
-    /// [--pr <n>] [--no-delete-branch] [--subject <s>] [--body <b>]`
+    /// [--pr <n>] [--delete-branch|--no-delete-branch]
+    /// [--subject <s>] [--body <b>]`
     /// — merges a pull request via gh.
     case githubPRMerge(
         method: GitHubMergeMethodCLI,
@@ -1960,7 +1975,6 @@ public enum CLIArgumentParser {
             throw CLIError.missingArgument(command: "tab config save", argument: "name")
         }
 
-        var command: String?
         var theme: String?
         var environment: [String: String] = [:]
         var index = 1
@@ -1968,11 +1982,11 @@ public enum CLIArgumentParser {
         while index < arguments.count {
             switch arguments[index] {
             case "--command":
-                guard index + 1 < arguments.count else {
-                    throw CLIError.missingArgument(command: "tab config save", argument: "command")
-                }
-                command = arguments[index + 1]
-                index += 2
+                throw CLIError.invalidArgument(
+                    command: "tab config save",
+                    argument: "--command",
+                    reason: "Startup commands must be reviewed and launched from Cocxy Terminal."
+                )
             case "--theme":
                 guard index + 1 < arguments.count else {
                     throw CLIError.missingArgument(command: "tab config save", argument: "theme")
@@ -2000,14 +2014,14 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "tab config save",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --command, --theme, or --env KEY=VALUE."
+                    reason: "Unknown flag. Use --theme or --env KEY=VALUE."
                 )
             }
         }
 
         return .tabConfigSave(
             name: name,
-            command: command,
+            command: nil,
             theme: theme,
             environment: environment
         )
@@ -2037,7 +2051,7 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "tab config export",
                     argument: arguments[index],
-                    reason: "Unknown flag. Use --output <path> and optional --force."
+                    reason: "Unknown flag. Use --output <file.toml> and optional --force."
                 )
             }
         }
@@ -2045,7 +2059,32 @@ public enum CLIArgumentParser {
         guard let output, !output.isEmpty else {
             throw CLIError.missingArgument(command: "tab config export", argument: "output")
         }
+        guard isValidTabConfigExportLeafName(output) else {
+            throw CLIError.invalidArgument(
+                command: "tab config export",
+                argument: output,
+                reason: "Output must be a single visible .toml file name."
+            )
+        }
         return .tabConfigExport(name: name, output: output, force: force)
+    }
+
+    private static func isValidTabConfigExportLeafName(_ name: String) -> Bool {
+        guard name == name.trimmingCharacters(in: .whitespacesAndNewlines),
+              !name.isEmpty,
+              name.utf8.count <= 128,
+              name.hasSuffix(".toml"),
+              name.first != ".",
+              !name.contains(".."),
+              !name.contains("/"),
+              !name.contains("\\"),
+              !name.contains("\0") else {
+            return false
+        }
+        let allowed = CharacterSet(
+            charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-"
+        )
+        return name.unicodeScalars.allSatisfy { allowed.contains($0) }
     }
 
     /// Parses `cocxy tab rename <id> <name>`.
@@ -3534,6 +3573,15 @@ public enum CLIArgumentParser {
                 throw CLIError.missingArgument(command: "browser navigate", argument: "url")
             }
             return .browserNavigate(url: url)
+        case "split":
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser split",
+                    argument: arguments.dropFirst().joined(separator: " "),
+                    reason: "Browser split does not take arguments."
+                )
+            }
+            return .browserSplit
         case "back":
             return .browserBack
         case "forward":
@@ -3745,7 +3793,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "browser",
                 argument: subcommand,
-                reason: "Unknown subcommand. Use navigate, back, forward, reload, state, eval, add, init, dialogs, dialog, text, tabs, snapshot, context, click, dblclick, hover, focus, fill, upload, type, press, keydown, keyup, check, uncheck, select, scroll, scroll-into-view, get, is, find, screenshot, console, wait, cookies, network, frames, downloads, storage, or import."
+                reason: "Unknown subcommand. Use navigate, split, back, forward, reload, state, eval, add, init, dialogs, dialog, text, tabs, snapshot, context, click, dblclick, hover, focus, fill, upload, type, press, keydown, keyup, check, uncheck, select, scroll, scroll-into-view, get, is, find, screenshot, console, wait, cookies, network, frames, downloads, storage, or import."
             )
         }
     }
@@ -3851,12 +3899,12 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "browser init",
                 argument: arguments.first ?? "",
-                reason: "Use scripts add <script> or scripts list."
+                reason: "Use scripts add <script>, scripts remove <id>, or scripts list."
             )
         }
         let rest = Array(arguments.dropFirst())
         guard let action = rest.first else {
-            throw CLIError.missingArgument(command: "browser init scripts", argument: "add|list")
+            throw CLIError.missingArgument(command: "browser init scripts", argument: "add|remove|list")
         }
         switch action {
         case "add":
@@ -3865,6 +3913,22 @@ public enum CLIArgumentParser {
                 throw CLIError.missingArgument(command: "browser init scripts add", argument: "script")
             }
             return .browserInitScriptAdd(script: script)
+        case "remove":
+            let removeArguments = Array(rest.dropFirst())
+            guard let id = removeArguments.first else {
+                throw CLIError.missingArgument(
+                    command: "browser init scripts remove",
+                    argument: "id"
+                )
+            }
+            guard removeArguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "browser init scripts remove",
+                    argument: removeArguments.dropFirst().joined(separator: " "),
+                    reason: "Remove requires exactly one script id."
+                )
+            }
+            return .browserInitScriptRemove(id: id)
         case "list":
             guard rest.count == 1 else {
                 throw CLIError.invalidArgument(
@@ -3878,7 +3942,7 @@ public enum CLIArgumentParser {
             throw CLIError.invalidArgument(
                 command: "browser init scripts",
                 argument: action,
-                reason: "Use add <script> or list."
+                reason: "Use add <script>, remove <id>, or list."
             )
         }
     }
@@ -4612,6 +4676,13 @@ public enum CLIArgumentParser {
         }
 
         let options = try parseBrowserImportOptions(arguments: Array(arguments.dropFirst()))
+        if action == "preview", options.previewToken != nil {
+            throw CLIError.invalidArgument(
+                command: "browser import preview",
+                argument: "--preview-token",
+                reason: "--preview-token is only accepted by browser import run."
+            )
+        }
         return action == "preview"
             ? .browserImportPreview(options)
             : .browserImportRun(options)
@@ -4619,6 +4690,7 @@ public enum CLIArgumentParser {
 
     private static func parseBrowserImportOptions(arguments: [String]) throws -> BrowserImportCLIOptions {
         var source: String?
+        var sourceProfile: String?
         var profileID: String?
         var historyPath: String?
         var cookiesPath: String?
@@ -4629,6 +4701,7 @@ public enum CLIArgumentParser {
         var maxHistoryDays: Int?
         var whitelist: [String] = []
         var blacklist: [String] = []
+        var previewToken: String?
 
         var index = 0
         while index < arguments.count {
@@ -4636,6 +4709,8 @@ public enum CLIArgumentParser {
             switch argument {
             case "--source":
                 source = try value(after: argument, in: arguments, at: &index, command: "browser import")
+            case "--source-profile":
+                sourceProfile = try value(after: argument, in: arguments, at: &index, command: "browser import")
             case "--profile":
                 profileID = try value(after: argument, in: arguments, at: &index, command: "browser import")
             case "--history":
@@ -4664,11 +4739,24 @@ public enum CLIArgumentParser {
                 whitelist.append(try value(after: argument, in: arguments, at: &index, command: "browser import"))
             case "--exclude-domain":
                 blacklist.append(try value(after: argument, in: arguments, at: &index, command: "browser import"))
+            case "--preview-token":
+                let token = try value(after: argument, in: arguments, at: &index, command: "browser import")
+                guard token.utf8.count == 64,
+                      token.utf8.allSatisfy({ byte in
+                          (48...57).contains(byte) || (65...70).contains(byte) || (97...102).contains(byte)
+                      }) else {
+                    throw CLIError.invalidArgument(
+                        command: "browser import",
+                        argument: token,
+                        reason: "--preview-token must be a 64-character hexadecimal token from browser import preview."
+                    )
+                }
+                previewToken = token.lowercased()
             default:
                 throw CLIError.invalidArgument(
                     command: "browser import",
                     argument: argument,
-                    reason: "Use --source, --profile, --history, --cookies, --bookmarks, --domain, --exclude-domain, --max-history-days, --no-history, --no-cookies, or --no-bookmarks."
+                    reason: "Use --source, --source-profile, --profile, --history, --cookies, --bookmarks, --domain, --exclude-domain, --max-history-days, --preview-token, --no-history, --no-cookies, or --no-bookmarks."
                 )
             }
             index += 1
@@ -4680,6 +4768,7 @@ public enum CLIArgumentParser {
 
         return BrowserImportCLIOptions(
             source: source,
+            sourceProfile: sourceProfile,
             profileID: profileID,
             historyPath: historyPath,
             cookiesPath: cookiesPath,
@@ -4689,7 +4778,8 @@ public enum CLIArgumentParser {
             importBookmarks: importBookmarks,
             maxHistoryDays: maxHistoryDays,
             domainWhitelist: whitelist,
-            domainBlacklist: blacklist
+            domainBlacklist: blacklist,
+            previewToken: previewToken
         )
     }
 
@@ -4862,7 +4952,6 @@ public enum CLIArgumentParser {
             let rest = Array(arguments.dropFirst())
             var bindAddress: String?
             var port: Int?
-            var token: String?
             var fps: Int?
             var index = 0
             while index < rest.count {
@@ -4876,9 +4965,6 @@ public enum CLIArgumentParser {
                     }
                     port = parsed
                     index += 2
-                case "--token" where index + 1 < rest.count:
-                    token = rest[index + 1]
-                    index += 2
                 case "--fps" where index + 1 < rest.count:
                     guard let parsed = Int(rest[index + 1]) else {
                         throw CLIError.invalidArgument(command: "web start", argument: rest[index + 1], reason: "fps must be an integer")
@@ -4889,7 +4975,7 @@ public enum CLIArgumentParser {
                     throw CLIError.invalidArgument(command: "web start", argument: rest[index], reason: "unknown option")
                 }
             }
-            return .webStart(bindAddress: bindAddress, port: port, token: token, fps: fps)
+            return .webStart(bindAddress: bindAddress, port: port, fps: fps)
 
         case "stop":
             return .webStop
@@ -5723,27 +5809,35 @@ public enum CLIArgumentParser {
                     argument: "id"
                 )
             }
-            var force = false
-            for token in rest.dropFirst() {
-                if token == "--force" || token == "-f" {
-                    force = true
-                } else {
-                    throw CLIError.invalidArgument(
-                        command: "worktree remove",
-                        argument: token,
-                        reason: "Unknown option. Only --force / -f is supported."
-                    )
-                }
+            if let forceFlag = rest.first(where: { $0 == "--force" || $0 == "-f" }) {
+                throw CLIError.invalidArgument(
+                    command: "worktree remove",
+                    argument: forceFlag,
+                    reason: "Forced worktree removal is not authorized over IPC"
+                )
             }
-            return .worktreeRemove(id: id, force: force)
+            guard rest.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "worktree remove",
+                    argument: rest[1],
+                    reason: "Unknown option. This command accepts only a worktree id."
+                )
+            }
+            return .worktreeRemove(id: id, force: false)
 
         case "prune":
             return .worktreePrune
 
         case "cleanup-merged", "cleanup":
             var baseRef: String?
-            var force = false
             var dryRun = false
+            if let forceFlag = rest.first(where: { $0 == "--force" || $0 == "-f" }) {
+                throw CLIError.invalidArgument(
+                    command: "worktree cleanup-merged",
+                    argument: forceFlag,
+                    reason: "Forced worktree cleanup is not authorized over IPC"
+                )
+            }
             var index = 0
             while index < rest.count {
                 let token = rest[index]
@@ -5757,9 +5851,6 @@ public enum CLIArgumentParser {
                     }
                     baseRef = rest[index + 1]
                     index += 2
-                case "--force":
-                    force = true
-                    index += 1
                 case "--dry-run":
                     dryRun = true
                     index += 1
@@ -5767,11 +5858,17 @@ public enum CLIArgumentParser {
                     throw CLIError.invalidArgument(
                         command: "worktree cleanup-merged",
                         argument: token,
-                        reason: "Unknown option. Valid flags: --base-ref, --force, --dry-run."
+                        reason: "Unknown option. Valid flags: --dry-run, --base-ref."
                     )
                 }
             }
-            return .worktreeCleanupMerged(baseRef: baseRef, force: force, dryRun: dryRun)
+            guard dryRun else {
+                throw CLIError.missingArgument(
+                    command: "worktree cleanup-merged",
+                    argument: "--dry-run"
+                )
+            }
+            return .worktreeCleanupMerged(baseRef: baseRef, force: false, dryRun: dryRun)
 
         default:
             throw CLIError.invalidArgument(
@@ -5855,7 +5952,7 @@ public enum CLIArgumentParser {
     private static func parseGitHubPRMergeArgs(rest: [String]) throws -> ParsedCommand {
         var method: GitHubMergeMethodCLI?
         var prNumber: Int?
-        var deleteBranch: Bool = true
+        var deleteBranch = false
         var subject: String?
         var body: String?
         var index = 0

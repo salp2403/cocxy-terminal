@@ -76,6 +76,7 @@ enum ProjectTemplateMarketplaceError: Error, Equatable, Sendable {
     case untrustedSignature(String)
     case invalidSignature(String)
     case gitCloneFailed(Int32)
+    case gitCloneTimedOut(TimeInterval)
 }
 
 struct ProjectTemplateMarketplaceValidator: Sendable {
@@ -113,20 +114,23 @@ struct ProjectTemplateMarketplaceInstaller {
     let requireSignedTemplates: Bool
     private let fileManager: FileManager
     private let loader: ProjectTemplateLoader
+    private let gitProcessRunner: MarketplaceGitProcessRunner
 
     init(
         templatesDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".cocxy/templates", isDirectory: true),
-        trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry(),
+        trustedAuthors: TrustedAuthorRegistry = TrustedAuthorRegistry.loadDefault(),
         requireSignedTemplates: Bool = false,
         fileManager: FileManager = .default,
-        loader: ProjectTemplateLoader = ProjectTemplateLoader()
+        loader: ProjectTemplateLoader = ProjectTemplateLoader(),
+        gitProcessRunner: MarketplaceGitProcessRunner = MarketplaceGitProcessRunner()
     ) {
         self.templatesDirectory = templatesDirectory
         self.trustedAuthors = trustedAuthors
         self.requireSignedTemplates = requireSignedTemplates
         self.fileManager = fileManager
         self.loader = loader
+        self.gitProcessRunner = gitProcessRunner
     }
 
     func install(from sourceURL: URL, replaceExisting: Bool = false) throws -> ProjectTemplateInstallReceipt {
@@ -254,15 +258,17 @@ struct ProjectTemplateMarketplaceInstaller {
             return
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/git")
-        process.arguments = ["clone", "--depth", "1", sourceURL.absoluteString, destination.path]
-        process.standardOutput = Pipe()
-        process.standardError = Pipe()
-        try process.run()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0 else {
-            throw ProjectTemplateMarketplaceError.gitCloneFailed(process.terminationStatus)
+        let result = try gitProcessRunner.clone(
+            sourceURL: sourceURL,
+            destinationURL: destination
+        )
+        if result.timedOut {
+            throw ProjectTemplateMarketplaceError.gitCloneTimedOut(
+                gitProcessRunner.timeoutSeconds
+            )
+        }
+        guard result.exitCode == 0 else {
+            throw ProjectTemplateMarketplaceError.gitCloneFailed(result.exitCode)
         }
     }
 }

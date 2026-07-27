@@ -25,8 +25,30 @@ enum BrowserScreenshotCaptureResult: Equatable, Sendable {
     case failure(String)
 }
 
+struct BrowserAutomationPageIdentity: Equatable, @unchecked Sendable {
+    let viewModelIdentifier: ObjectIdentifier
+    let webViewIdentifier: ObjectIdentifier
+    let tabID: UUID
+    let url: String
+    let navigationGeneration: UInt64
+}
+
+enum BrowserAutomationNavigationOperation: Equatable, Sendable {
+    case load(URL)
+    case goBack
+    case goForward
+    case reload
+}
+
 enum BrowserCookieImportResult: Equatable, Sendable {
     case success
+    case partial(importedCount: Int, totalCount: Int, message: String)
+    case indeterminate(
+        importedCount: Int,
+        totalCount: Int,
+        uncertainCount: Int,
+        message: String
+    )
     case failure(String)
 }
 
@@ -34,16 +56,6 @@ struct BrowserConsoleSnapshotEntry: Equatable, Sendable {
     let level: String
     let message: String
     let timestamp: Date
-}
-
-struct BrowserInitScript: Identifiable, Equatable, Sendable {
-    let id: UUID
-    let source: String
-    let createdAt: Date
-
-    var length: Int {
-        source.count
-    }
 }
 
 enum BrowserDialogKind: String, Equatable, Sendable {
@@ -99,14 +111,34 @@ struct RemoteBrowserNotice: Equatable, Sendable {
 final class BrowserAutomationBridgeStore: @unchecked Sendable {
     typealias ScriptEvaluator = (String, TimeInterval) -> BrowserScriptEvaluationResult
     typealias ScreenshotCapturer = (String?, TimeInterval) -> BrowserScreenshotCaptureResult
+    typealias AuthorizedScriptEvaluator = (
+        BrowserAutomationPageIdentity,
+        String,
+        TimeInterval
+    ) -> BrowserScriptEvaluationResult
+    typealias AuthorizedScreenshotCapturer = (
+        BrowserAutomationPageIdentity,
+        String?,
+        TimeInterval
+    ) -> BrowserScreenshotCaptureResult
+    typealias AuthorizedNavigator = (
+        BrowserAutomationPageIdentity,
+        BrowserAutomationNavigationOperation,
+        TimeInterval
+    ) -> Bool
     typealias CookieImporter = (BrowserImportedCookie, UUID, TimeInterval) -> BrowserCookieImportResult
-    typealias InitScriptInstaller = (String, TimeInterval) -> BrowserScriptEvaluationResult
+    typealias InitScriptSynchronizer = ([BrowserInitScript]) -> BrowserScriptEvaluationResult
+    typealias InitScriptNavigationCanceller = () -> Void
 
     private let lock = NSLock()
     private var evaluator: ScriptEvaluator?
     private var capturer: ScreenshotCapturer?
+    private var authorizedEvaluator: AuthorizedScriptEvaluator?
+    private var authorizedCapturer: AuthorizedScreenshotCapturer?
+    private var authorizedNavigator: AuthorizedNavigator?
     private var cookieImporterValue: CookieImporter?
-    private var initScriptInstallerValue: InitScriptInstaller?
+    private var initScriptSynchronizerValue: InitScriptSynchronizer?
+    private var initScriptNavigationCancellerValue: InitScriptNavigationCanceller?
 
     var scriptEvaluator: ScriptEvaluator? {
         get {
@@ -134,6 +166,45 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         }
     }
 
+    var authorizedScriptEvaluator: AuthorizedScriptEvaluator? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return authorizedEvaluator
+        }
+        set {
+            lock.lock()
+            authorizedEvaluator = newValue
+            lock.unlock()
+        }
+    }
+
+    var authorizedScreenshotCapturer: AuthorizedScreenshotCapturer? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return authorizedCapturer
+        }
+        set {
+            lock.lock()
+            authorizedCapturer = newValue
+            lock.unlock()
+        }
+    }
+
+    var authorizedNavigationPerformer: AuthorizedNavigator? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return authorizedNavigator
+        }
+        set {
+            lock.lock()
+            authorizedNavigator = newValue
+            lock.unlock()
+        }
+    }
+
     var cookieImporter: CookieImporter? {
         get {
             lock.lock()
@@ -147,15 +218,28 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         }
     }
 
-    var initScriptInstaller: InitScriptInstaller? {
+    var initScriptSynchronizer: InitScriptSynchronizer? {
         get {
             lock.lock()
             defer { lock.unlock() }
-            return initScriptInstallerValue
+            return initScriptSynchronizerValue
         }
         set {
             lock.lock()
-            initScriptInstallerValue = newValue
+            initScriptSynchronizerValue = newValue
+            lock.unlock()
+        }
+    }
+
+    var initScriptNavigationCanceller: InitScriptNavigationCanceller? {
+        get {
+            lock.lock()
+            defer { lock.unlock() }
+            return initScriptNavigationCancellerValue
+        }
+        set {
+            lock.lock()
+            initScriptNavigationCancellerValue = newValue
             lock.unlock()
         }
     }
@@ -168,12 +252,39 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         return scriptEvaluator(script, timeout)
     }
 
+    func evaluate(
+        authorizedPage: BrowserAutomationPageIdentity,
+        script: String,
+        timeout: TimeInterval
+    ) -> BrowserScriptEvaluationResult? {
+        guard let authorizedScriptEvaluator else { return nil }
+        return authorizedScriptEvaluator(authorizedPage, script, timeout)
+    }
+
     func captureScreenshot(
         outputPath: String?,
         timeout: TimeInterval
     ) -> BrowserScreenshotCaptureResult? {
         guard let screenshotCapturer else { return nil }
         return screenshotCapturer(outputPath, timeout)
+    }
+
+    func captureScreenshot(
+        authorizedPage: BrowserAutomationPageIdentity,
+        outputPath: String?,
+        timeout: TimeInterval
+    ) -> BrowserScreenshotCaptureResult? {
+        guard let authorizedScreenshotCapturer else { return nil }
+        return authorizedScreenshotCapturer(authorizedPage, outputPath, timeout)
+    }
+
+    func performNavigation(
+        authorizedPage: BrowserAutomationPageIdentity,
+        operation: BrowserAutomationNavigationOperation,
+        timeout: TimeInterval
+    ) -> Bool? {
+        guard let authorizedNavigationPerformer else { return nil }
+        return authorizedNavigationPerformer(authorizedPage, operation, timeout)
     }
 
     func importCookie(
@@ -185,12 +296,13 @@ final class BrowserAutomationBridgeStore: @unchecked Sendable {
         return cookieImporter(cookie, profileID, timeout)
     }
 
-    func installInitScript(
-        _ script: String,
-        timeout: TimeInterval
-    ) -> BrowserScriptEvaluationResult? {
-        guard let initScriptInstaller else { return nil }
-        return initScriptInstaller(script, timeout)
+    func synchronizeInitScripts(_ scripts: [BrowserInitScript]) -> BrowserScriptEvaluationResult? {
+        guard let initScriptSynchronizer else { return nil }
+        return initScriptSynchronizer(scripts)
+    }
+
+    func cancelInitScriptNavigation() {
+        initScriptNavigationCanceller?()
     }
 }
 
@@ -223,7 +335,19 @@ final class BrowserViewModel: ObservableObject {
     @Published var urlString: String = "http://localhost:3000"
 
     /// The URL currently loaded in the web view. Nil when no page is loaded.
-    @Published var currentURL: URL?
+    @Published var currentURL: URL? {
+        didSet {
+            if oldValue != currentURL {
+                markAutomationNavigationBoundary()
+            }
+            guard !initScripts.isEmpty,
+                  oldValue.flatMap(BrowserOrigin.init(url:))
+                    != currentURL.flatMap(BrowserOrigin.init(url:)) else {
+                return
+            }
+            revokeAllInitScripts(stopInFlightNavigation: false)
+        }
+    }
 
     /// Whether the web view is currently loading a page.
     @Published var isLoading: Bool = false
@@ -243,7 +367,15 @@ final class BrowserViewModel: ObservableObject {
     @Published var browserTabs: [BrowserTab] = []
 
     /// The ID of the currently active browser tab.
-    @Published var activeTabID: UUID?
+    @Published var activeTabID: UUID? {
+        didSet {
+            if oldValue != activeTabID {
+                markAutomationNavigationBoundary()
+                revokeAllInitScripts()
+                revokeDOMGrabAuthorization()
+            }
+        }
+    }
 
     // MARK: - Downloads State
 
@@ -251,7 +383,7 @@ final class BrowserViewModel: ObservableObject {
     @Published var downloads: [DownloadItem] = []
 
     /// User-added scripts injected at document start for future page loads.
-    @Published private(set) var initScripts: [BrowserInitScript] = []
+    private(set) var initScripts: [BrowserInitScript] = []
 
     /// JavaScript alert/confirm/prompt dialogs captured from WebKit.
     @Published private(set) var browserDialogs: [BrowserDialogItem] = []
@@ -270,11 +402,24 @@ final class BrowserViewModel: ObservableObject {
     /// Whether click-to-capture mode is active in the current browser page.
     @Published var isDOMGrabActive: Bool = false
 
+    /// Exact one-shot grant installed only in the isolated WebKit world.
+    private(set) var domGrabAuthorizationID: UUID?
+    private var domGrabAuthorizationGeneration: UInt64?
+    private var domGrabNavigationGeneration: UInt64 = 0
+    private var isDOMGrabNavigationInProgress = false
+    private var domGrabExpirationTask: Task<Void, Never>?
+
+    static let domGrabAuthorizationLifetime: TimeInterval = 60
+
     /// Optional remote workspace context for the active browser surface.
     ///
     /// Nil means the browser is local. Non-nil is metadata only; proxy
     /// lifecycle stays owned by RemoteWorkspace services.
     @Published private(set) var activeRemoteBrowserProfile: RemoteBrowserProfile?
+
+    /// In-memory capability used only by the active remote browser WebView.
+    /// Its password is intentionally excluded from scriptable/browser state.
+    @Published private(set) var activeRemoteBrowserProxyCapability: RemoteBrowserProxyCapability?
 
     /// Actionable notice for remote route failures or degraded proxy state.
     @Published private(set) var remoteBrowserNotice: RemoteBrowserNotice?
@@ -290,7 +435,7 @@ final class BrowserViewModel: ObservableObject {
         case goForward
         case reload
         case evaluateJS(String)
-        case setDOMGrabEnabled(Bool)
+        case setDOMGrabAuthorization(UUID?)
     }
 
     /// Publisher that emits navigation actions for the web view coordinator to observe.
@@ -310,9 +455,27 @@ final class BrowserViewModel: ObservableObject {
     /// injected closure. Existing fire-and-forget JavaScript still goes through
     /// `navigationActionSubject` when this bridge is not installed.
     nonisolated let automationBridge = BrowserAutomationBridgeStore()
+    private(set) var automationWebViewIdentifier: ObjectIdentifier?
+    private(set) var automationNavigationGeneration: UInt64 = 0
 
     private var browserDialogCompletions: [UUID: (BrowserDialogResolution) -> Void] = [:]
     private var lastRemoteBrowserRouteRequest: RemoteBrowserRouteRequest?
+    var onRetryRemoteBrowserRoute: ((RemoteBrowserRouteRequest) -> Void)?
+    private var initScriptExpirationTask: Task<Void, Never>?
+    private var initScriptWebViewIdentifier: ObjectIdentifier?
+    private var consumedInitScriptAuthorizationExpirations: [UUID: Date] = [:]
+    private var initScriptRemoteConnectionIsAvailable = true
+    private var initScriptRemoteForwardLeaseIsAvailable = true
+    private(set) var initScriptBrowserViewID: UUID?
+    var isInitScriptBridgeAvailable: Bool {
+        initScriptBrowserViewID != nil && automationBridge.initScriptSynchronizer != nil
+    }
+    var isInitScriptRemoteAuthorityAvailable: Bool {
+        activeRemoteBrowserProfile == nil || (
+            initScriptRemoteConnectionIsAvailable
+                && initScriptRemoteForwardLeaseIsAvailable
+        )
+    }
 
     var scriptEvaluator: BrowserAutomationBridgeStore.ScriptEvaluator? {
         get { automationBridge.scriptEvaluator }
@@ -331,10 +494,42 @@ final class BrowserViewModel: ObservableObject {
         set { automationBridge.cookieImporter = newValue }
     }
 
-    /// Native init-script bridge installed by the active WebKit host.
-    var initScriptInstaller: BrowserAutomationBridgeStore.InitScriptInstaller? {
-        get { automationBridge.initScriptInstaller }
-        set { automationBridge.initScriptInstaller = newValue }
+    func installAutomationWebView(identifier: ObjectIdentifier) {
+        automationWebViewIdentifier = identifier
+        markAutomationNavigationBoundary()
+    }
+
+    func markAutomationNavigationBoundary() {
+        automationNavigationGeneration &+= 1
+    }
+
+    func currentAutomationPageIdentity() -> BrowserAutomationPageIdentity? {
+        guard let automationWebViewIdentifier,
+              let activeTabID,
+              let url = currentURL?.absoluteString ?? URL(string: urlString)?.absoluteString else {
+            return nil
+        }
+        return BrowserAutomationPageIdentity(
+            viewModelIdentifier: ObjectIdentifier(self),
+            webViewIdentifier: automationWebViewIdentifier,
+            tabID: activeTabID,
+            url: url,
+            navigationGeneration: automationNavigationGeneration
+        )
+    }
+
+    func isCurrentAutomationPage(
+        _ identity: BrowserAutomationPageIdentity,
+        webViewIdentifier: ObjectIdentifier,
+        webViewURL: String?
+    ) -> Bool {
+        ObjectIdentifier(self) == identity.viewModelIdentifier
+            && automationWebViewIdentifier == identity.webViewIdentifier
+            && webViewIdentifier == identity.webViewIdentifier
+            && activeTabID == identity.tabID
+            && automationNavigationGeneration == identity.navigationGeneration
+            && (currentURL?.absoluteString ?? URL(string: urlString)?.absoluteString) == identity.url
+            && webViewURL == identity.url
     }
 
     private(set) var consoleSnapshotEntries: [BrowserConsoleSnapshotEntry] = []
@@ -342,7 +537,15 @@ final class BrowserViewModel: ObservableObject {
     /// The active browser profile ID, used to associate visits and WebKit
     /// storage with a profile. Published so active browser hosts can rebuild
     /// their `WKWebView` with the matching `WKWebsiteDataStore`.
-    @Published var activeProfileID: UUID?
+    @Published var activeProfileID: UUID? {
+        didSet {
+            if oldValue != activeProfileID {
+                markAutomationNavigationBoundary()
+                revokeAllInitScripts()
+                revokeDOMGrabAuthorization()
+            }
+        }
+    }
 
     /// Records a page visit to the history store.
     ///
@@ -378,12 +581,17 @@ final class BrowserViewModel: ObservableObject {
     /// races ahead of the new subscriber.
     func activateProfile(_ profileID: UUID?) {
         guard activeProfileID != profileID else { return }
+        if activeRemoteBrowserProxyCapability != nil {
+            clearRemoteBrowserProfile()
+        }
         activeProfileID = profileID
         navigationActionSubject.send(.load(currentURL ?? BrowserTab.defaultURL))
     }
 
     func attachRemoteBrowserProfile(_ remoteProfile: RemoteBrowserProfile) {
-        activeRemoteBrowserProfile = remoteProfile
+        setActiveRemoteBrowserProfile(remoteProfile)
+        initScriptRemoteConnectionIsAvailable = false
+        initScriptRemoteForwardLeaseIsAvailable = remoteProfile.localForwardedPorts.isEmpty
         remoteBrowserNotice = nil
         publishProxyNoticeIfNeeded(for: remoteProfile)
     }
@@ -412,24 +620,200 @@ final class BrowserViewModel: ObservableObject {
             )
             return nil
         }
-        activeRemoteBrowserProfile = remoteProfile
+        setActiveRemoteBrowserProfile(remoteProfile)
+        initScriptRemoteConnectionIsAvailable = false
+        initScriptRemoteForwardLeaseIsAvailable = remoteProfile.localForwardedPorts.isEmpty
         navigate(to: route.localURL.absoluteString)
         remoteBrowserNotice = nil
         publishProxyNoticeIfNeeded(for: remoteProfile)
         return route
     }
 
+    @discardableResult
+    func openRemoteBrokeredRoute(
+        _ remoteProfile: RemoteBrowserProfile,
+        capability: RemoteBrowserProxyCapability,
+        scheme: String = "http",
+        path: String = "/"
+    ) -> RemoteBrowserRoute? {
+        let normalizedScheme = scheme.lowercased()
+        guard ["http", "https"].contains(normalizedScheme),
+              capability.profileID == remoteProfile.connectionProfileID,
+              capability.remotePort > 0,
+              capability.expiresAt > Date() else {
+            return nil
+        }
+
+        var components = URLComponents()
+        components.scheme = normalizedScheme
+        components.host = capability.browserHost
+        components.port = capability.remotePort
+        components.path = path.hasPrefix("/") ? path : "/\(path)"
+        guard let browserURL = components.url else { return nil }
+
+        let request = RemoteBrowserRouteRequest(
+            remotePort: capability.remotePort,
+            scheme: normalizedScheme,
+            path: components.path
+        )
+        lastRemoteBrowserRouteRequest = request
+
+        var routedProfile = remoteProfile
+        routedProfile.localForwardedPorts = [:]
+        routedProfile.socksPort = capability.localProxyPort
+        routedProfile.httpConnectPort = nil
+        routedProfile.proxyHealth = .active
+
+        applyAutomationNavigationURL(browserURL)
+        setActiveRemoteBrowserProfile(routedProfile)
+        initScriptRemoteConnectionIsAvailable = false
+        initScriptRemoteForwardLeaseIsAvailable = true
+        remoteBrowserNotice = nil
+        activeRemoteBrowserProxyCapability = capability
+
+        return RemoteBrowserRoute(
+            profile: routedProfile,
+            remotePort: capability.remotePort,
+            localURL: browserURL
+        )
+    }
+
+    @discardableResult
+    func refreshRemoteBrowserProxyCapability(
+        _ capability: RemoteBrowserProxyCapability
+    ) -> Bool {
+        guard var remoteProfile = activeRemoteBrowserProfile,
+              remoteProfile.connectionProfileID == capability.profileID,
+              lastRemoteBrowserRouteRequest?.remotePort == capability.remotePort,
+              capability.expiresAt > Date() else {
+            return false
+        }
+
+        remoteProfile.socksPort = capability.localProxyPort
+        remoteProfile.httpConnectPort = nil
+        remoteProfile.proxyHealth = .active
+        setActiveRemoteBrowserProfile(remoteProfile)
+        remoteBrowserNotice = nil
+        activeRemoteBrowserProxyCapability = capability
+        return true
+    }
+
+    func markRemoteBrowserProxyFailed(_ detail: String?) {
+        guard var remoteProfile = activeRemoteBrowserProfile,
+              activeRemoteBrowserProxyCapability != nil else { return }
+        remoteProfile.proxyHealth = .failed
+        setActiveRemoteBrowserProfile(remoteProfile)
+        remoteBrowserNotice = RemoteBrowserNotice(
+            kind: .proxyFailed,
+            remoteProfile: remoteProfile,
+            routeRequest: lastRemoteBrowserRouteRequest,
+            failedURLString: currentURL?.absoluteString,
+            detail: detail
+        )
+    }
+
+    func allowsNavigationForActiveRemoteRoute(_ url: URL?) -> Bool {
+        guard let capability = activeRemoteBrowserProxyCapability else { return true }
+        guard capability.expiresAt > Date(), let url else { return false }
+        switch url.scheme?.lowercased() {
+        case "http", "ws":
+            return url.host?.caseInsensitiveCompare(capability.browserHost) == .orderedSame
+                && (url.port ?? 80) == capability.remotePort
+        case "https", "wss":
+            return url.host?.caseInsensitiveCompare(capability.browserHost) == .orderedSame
+                && (url.port ?? 443) == capability.remotePort
+        default:
+            return true
+        }
+    }
+
+    func allowsDevelopmentServerTrust(host: String) -> Bool {
+        guard let capability = activeRemoteBrowserProxyCapability else {
+            return host == "localhost" || host == "127.0.0.1"
+        }
+        return capability.expiresAt > Date()
+            && activeRemoteBrowserProfile?.proxyHealth == .active
+            && host.caseInsensitiveCompare(capability.browserHost) == .orderedSame
+    }
+
     func clearRemoteBrowserProfile() {
-        activeRemoteBrowserProfile = nil
+        if activeRemoteBrowserProxyCapability != nil,
+           let blankURL = URL(string: "about:blank") {
+            // Never reload a brokered route after removing its proxy.
+            applyAutomationNavigationURL(blankURL)
+        }
+        setActiveRemoteBrowserProfile(nil)
+        initScriptRemoteConnectionIsAvailable = true
+        initScriptRemoteForwardLeaseIsAvailable = true
         remoteBrowserNotice = nil
         lastRemoteBrowserRouteRequest = nil
+        activeRemoteBrowserProxyCapability = nil
+    }
+
+    func updateInitScriptRemoteConnectionAvailability(
+        activeConnectionProfileIDs: Set<UUID>
+    ) {
+        guard let remoteProfile = activeRemoteBrowserProfile else {
+            initScriptRemoteConnectionIsAvailable = true
+            return
+        }
+        let isAvailable = activeConnectionProfileIDs.contains(
+            remoteProfile.connectionProfileID
+        )
+        let shouldRevoke = initScriptRemoteConnectionIsAvailable
+            && !isAvailable
+            && !initScripts.isEmpty
+        initScriptRemoteConnectionIsAvailable = isAvailable
+        if shouldRevoke {
+            revokeAllInitScripts()
+        }
+    }
+
+    func updateInitScriptRemoteForwardLeaseAvailability(
+        scanningProfileID: UUID?,
+        forwardedPortMappings: [Int: Int]
+    ) {
+        guard let remoteProfile = activeRemoteBrowserProfile else {
+            initScriptRemoteForwardLeaseIsAvailable = true
+            return
+        }
+        let requiredMappings = remoteProfile.localForwardedPorts
+        let isAvailable = requiredMappings.isEmpty || (
+            scanningProfileID == remoteProfile.connectionProfileID
+                && requiredMappings.allSatisfy { remotePort, localPort in
+                    forwardedPortMappings[remotePort] == localPort
+                }
+        )
+        let shouldRevoke = initScriptRemoteForwardLeaseIsAvailable
+            && !isAvailable
+            && !initScripts.isEmpty
+        initScriptRemoteForwardLeaseIsAvailable = isAvailable
+        if shouldRevoke {
+            revokeAllInitScripts()
+        }
     }
 
     func updateRemoteBrowserProxyState(_ proxyState: ProxyState) {
+        guard activeRemoteBrowserProxyCapability == nil else { return }
         guard var remoteProfile = activeRemoteBrowserProfile else { return }
         remoteProfile.apply(proxyState: proxyState)
-        activeRemoteBrowserProfile = remoteProfile
+        setActiveRemoteBrowserProfile(remoteProfile)
         publishProxyNoticeIfNeeded(for: remoteProfile)
+    }
+
+    private func setActiveRemoteBrowserProfile(_ remoteProfile: RemoteBrowserProfile?) {
+        if !Self.hasSameInitScriptAuthority(activeRemoteBrowserProfile, remoteProfile) {
+            revokeAllInitScripts()
+        }
+        activeRemoteBrowserProfile = remoteProfile
+    }
+
+    private static func hasSameInitScriptAuthority(
+        _ lhs: RemoteBrowserProfile?,
+        _ rhs: RemoteBrowserProfile?
+    ) -> Bool {
+        lhs.map(BrowserInitScriptRemoteRouteAuthority.init)
+            == rhs.map(BrowserInitScriptRemoteRouteAuthority.init)
     }
 
     func recordRemoteBrowserNavigationFailure(error: Error, failedURL: URL?) {
@@ -459,6 +843,13 @@ final class BrowserViewModel: ObservableObject {
         guard let notice = remoteBrowserNotice else { return nil }
         guard let request = notice.routeRequest else {
             reload()
+            return nil
+        }
+
+        if notice.kind == .proxyFailed,
+           activeRemoteBrowserProxyCapability != nil,
+           let onRetryRemoteBrowserRoute {
+            onRetryRemoteBrowserRoute(request)
             return nil
         }
 
@@ -538,35 +929,50 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter rawInput: The URL string to navigate to.
     func navigate(to rawInput: String) {
+        guard let url = preparedNavigationURL(from: rawInput),
+              allowsNavigationForActiveRemoteRoute(url) else { return }
+        applyAutomationNavigationURL(url)
+        navigationActionSubject.send(.load(url))
+    }
+
+    func preparedNavigationURL(from rawInput: String) -> URL? {
+        Self.preparedNavigationURLValue(from: rawInput)
+    }
+
+    nonisolated static func preparedNavigationURLValue(from rawInput: String) -> URL? {
         let trimmed = Self.repairedEditableURLInput(rawInput)
-        guard !trimmed.isEmpty else { return }
+        guard !trimmed.isEmpty else { return nil }
 
         let normalized = normalizeURLString(trimmed)
-        guard let url = URL(string: normalized) else { return }
+        return URL(string: normalized)
+    }
 
-        urlString = normalized
+    func applyAutomationNavigationURL(_ url: URL) {
+        revokeDOMGrabAuthorization()
+        urlString = url.absoluteString
         currentURL = url
 
         // Sync URL to the active tab.
         if let index = browserTabs.firstIndex(where: { $0.id == activeTabID }) {
             browserTabs[index].url = url
         }
-
-        navigationActionSubject.send(.load(url))
     }
 
     /// Navigates the web view backward in history.
     func goBack() {
+        revokeDOMGrabAuthorization()
         navigationActionSubject.send(.goBack)
     }
 
     /// Navigates the web view forward in history.
     func goForward() {
+        revokeDOMGrabAuthorization()
         navigationActionSubject.send(.goForward)
     }
 
     /// Reloads the current page in the web view.
     func reload() {
+        revokeDOMGrabAuthorization()
         navigationActionSubject.send(.reload)
     }
 
@@ -583,6 +989,7 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter url: The initial URL for the new tab. Defaults to `http://localhost:3000`.
     func addBrowserTab(url: URL = BrowserTab.defaultURL) {
+        clearRemoteRouteIfNeeded(for: url)
         let newTab = BrowserTab(url: url)
         browserTabs.append(newTab)
         activeTabID = newTab.id
@@ -603,12 +1010,14 @@ final class BrowserViewModel: ObservableObject {
         guard let closingIndex = browserTabs.firstIndex(where: { $0.id == tabID }) else { return }
 
         let wasActive = tabID == activeTabID
+        removeInitScripts(for: tabID)
         browserTabs.remove(at: closingIndex)
 
         if wasActive {
             // Activate the nearest neighbor (prefer the tab to the left).
             let newIndex = min(closingIndex, browserTabs.count - 1)
             let newActiveTab = browserTabs[newIndex]
+            clearRemoteRouteIfNeeded(for: newActiveTab.url)
             activeTabID = newActiveTab.id
             urlString = newActiveTab.url.absoluteString
             currentURL = newActiveTab.url
@@ -622,11 +1031,19 @@ final class BrowserViewModel: ObservableObject {
     /// - Parameter tabID: The ID of the tab to activate. No-op if not found.
     func selectBrowserTab(_ tabID: UUID) {
         guard let tab = browserTabs.first(where: { $0.id == tabID }) else { return }
+        revokeDOMGrabAuthorization()
+        clearRemoteRouteIfNeeded(for: tab.url)
         activeTabID = tab.id
         urlString = tab.url.absoluteString
         currentURL = tab.url
         pageTitle = tab.title
         navigationActionSubject.send(.load(tab.url))
+    }
+
+    private func clearRemoteRouteIfNeeded(for url: URL) {
+        guard activeRemoteBrowserProxyCapability != nil,
+              !allowsNavigationForActiveRemoteRoute(url) else { return }
+        clearRemoteBrowserProfile()
     }
 
     /// Updates the title of the active tab.
@@ -667,21 +1084,279 @@ final class BrowserViewModel: ObservableObject {
         return scriptEvaluator(script, timeout)
     }
 
+    func makeInitScriptAuthorizationRequest(
+        source: BrowserInitScriptRequestSource,
+        script: String,
+        at date: Date = Date()
+    ) -> BrowserInitScriptAuthorizationRequest? {
+        guard BrowserInitScriptSecurity.isValidSource(script),
+              let context = currentInitScriptContext() else {
+            return nil
+        }
+        return BrowserInitScriptAuthorizationRequest(
+            source: source,
+            script: script,
+            context: context,
+            tabDisplayTitle: currentInitScriptTabDisplayTitle(),
+            remoteDisplayTitle: activeRemoteBrowserProfile.map {
+                "\($0.displayTitle); \($0.routingSummary)"
+            },
+            createdAt: date
+        )
+    }
+
+    func isInitScriptAuthorizationCurrent(
+        _ authorization: BrowserInitScriptAuthorizationRequest,
+        at date: Date = Date()
+    ) -> Bool {
+        guard let context = currentInitScriptContext() else { return false }
+        return authorization.matches(
+            script: authorization.script,
+            context: context,
+            at: date
+        )
+    }
+
+    func attachInitScriptBridge(
+        browserViewID: UUID,
+        webViewIdentifier: ObjectIdentifier,
+        navigationCanceller: @escaping BrowserAutomationBridgeStore.InitScriptNavigationCanceller = {},
+        synchronizer: @escaping BrowserAutomationBridgeStore.InitScriptSynchronizer
+    ) {
+        if initScriptWebViewIdentifier != webViewIdentifier
+            || initScriptBrowserViewID != browserViewID {
+            revokeAllInitScripts()
+        }
+        initScriptBrowserViewID = browserViewID
+        initScriptWebViewIdentifier = webViewIdentifier
+        automationBridge.initScriptNavigationCanceller = navigationCanceller
+        automationBridge.initScriptSynchronizer = synchronizer
+        _ = automationBridge.synchronizeInitScripts([])
+    }
+
+    func detachInitScriptBridge(webViewIdentifier: ObjectIdentifier) {
+        guard initScriptWebViewIdentifier == webViewIdentifier else { return }
+        revokeAllInitScripts()
+        automationBridge.initScriptSynchronizer = nil
+        automationBridge.initScriptNavigationCanceller = nil
+        initScriptBrowserViewID = nil
+        initScriptWebViewIdentifier = nil
+    }
+
     @discardableResult
-    func addInitScript(_ source: String) -> BrowserInitScript {
-        let script = BrowserInitScript(id: UUID(), source: source, createdAt: Date())
-        initScripts.append(script)
+    func addInitScript(
+        authorization: BrowserInitScriptAuthorizationRequest,
+        at date: Date = Date(),
+        lifetime: TimeInterval = BrowserInitScriptAuthorizationRequest.authorizationLifetime
+    ) throws -> BrowserInitScript {
+        pruneExpiredInitScripts(at: date)
+        guard BrowserInitScriptSecurity.isValidSource(authorization.script) else {
+            throw BrowserInitScriptRegistrationError.invalidSource
+        }
+        consumedInitScriptAuthorizationExpirations = consumedInitScriptAuthorizationExpirations.filter {
+            date < $0.value
+        }
+        guard consumedInitScriptAuthorizationExpirations[authorization.id] == nil else {
+            throw BrowserInitScriptRegistrationError.authorizationConsumed
+        }
+        consumedInitScriptAuthorizationExpirations[authorization.id] = authorization.expiresAt
+        guard isInitScriptAuthorizationCurrent(authorization, at: date) else {
+            throw BrowserInitScriptRegistrationError.contextChanged
+        }
+        guard initScripts.count < BrowserInitScriptSecurity.maximumActiveScripts else {
+            throw BrowserInitScriptRegistrationError.capacityReached
+        }
+
+        let script = BrowserInitScript(
+            authorization: authorization,
+            approvedAt: date,
+            lifetime: min(
+                max(0, lifetime),
+                BrowserInitScriptAuthorizationRequest.authorizationLifetime
+            )
+        )
+        let synchronizedScripts = initScripts + [script]
+        guard let synchronization = automationBridge.synchronizeInitScripts(synchronizedScripts) else {
+            clearInitScriptsAfterSynchronizationFailure()
+            throw BrowserInitScriptRegistrationError.bridgeUnavailable
+        }
+        if let error = synchronization.error {
+            clearInitScriptsAfterSynchronizationFailure()
+            throw BrowserInitScriptRegistrationError.synchronizationFailed(error)
+        }
+        initScripts = synchronizedScripts
+        rescheduleInitScriptExpiration()
         return script
     }
 
-    func getInitScriptList() -> [[String: String]] {
+    @discardableResult
+    func removeInitScript(id: UUID) -> Bool {
+        let remainingScripts = initScripts.filter { $0.id != id }
+        guard remainingScripts.count != initScripts.count else { return false }
+        applyInitScriptRevocation(remainingScripts)
+        return true
+    }
+
+    func revokeAllInitScripts(stopInFlightNavigation: Bool = true) {
+        initScriptExpirationTask?.cancel()
+        initScriptExpirationTask = nil
+        if stopInFlightNavigation {
+            automationBridge.cancelInitScriptNavigation()
+        }
+        _ = automationBridge.synchronizeInitScripts([])
+        initScripts.removeAll()
+    }
+
+    func canAddInitScript(at date: Date = Date()) -> Bool {
+        pruneExpiredInitScripts(at: date)
+        return initScripts.count < BrowserInitScriptSecurity.maximumActiveScripts
+    }
+
+    func revokeInitScriptsIfMainNavigationLeavesApprovedOrigin(
+        url: URL?,
+        isMainFrame: Bool
+    ) {
+        guard isMainFrame, !initScripts.isEmpty else { return }
+        let navigationOrigin = url.flatMap(BrowserOrigin.init(url:))
+        guard initScripts.contains(where: { $0.origin != navigationOrigin }) else { return }
+        revokeAllInitScripts(stopInFlightNavigation: false)
+    }
+
+    func authorizedInitScriptSource(
+        id: UUID,
+        origin: BrowserOrigin,
+        isMainFrame: Bool,
+        at date: Date = Date()
+    ) -> String? {
+        authorizedInitScripts(origin: origin, isMainFrame: isMainFrame, at: date)
+            .first(where: { $0.id == id })?
+            .source
+    }
+
+    func authorizedInitScripts(
+        origin: BrowserOrigin,
+        isMainFrame: Bool,
+        at date: Date = Date()
+    ) -> [BrowserInitScript] {
+        pruneExpiredInitScripts(at: date)
+        guard let activeTabID, let initScriptBrowserViewID else { return [] }
+        return initScripts.filter {
+            $0.isAuthorized(
+                browserViewID: initScriptBrowserViewID,
+                tabID: activeTabID,
+                origin: origin,
+                browserProfileID: activeProfileID,
+                remoteBrowserProfileID: activeRemoteBrowserProfile?.id,
+                remoteConnectionProfileID: activeRemoteBrowserProfile?.connectionProfileID,
+                remoteRouteAuthority: activeRemoteBrowserProfile.map(
+                    BrowserInitScriptRemoteRouteAuthority.init
+                ),
+                isMainFrame: isMainFrame,
+                at: date
+            )
+        }
+    }
+
+    func getInitScriptList(at date: Date = Date()) -> [[String: String]] {
+        pruneExpiredInitScripts(at: date)
         let formatter = ISO8601DateFormatter()
         return initScripts.map { script in
             [
                 "id": script.id.uuidString,
                 "length": "\(script.length)",
-                "createdAt": formatter.string(from: script.createdAt)
+                "browserViewID": script.browserViewID.uuidString,
+                "tabID": script.tabID.uuidString,
+                "origin": script.origin.serialized,
+                "browserProfileID": script.browserProfileID?.uuidString ?? "default",
+                "remoteBrowserProfileID": script.remoteBrowserProfileID?.uuidString ?? "local",
+                "remoteConnectionProfileID": script.remoteConnectionProfileID?.uuidString ?? "local",
+                "createdAt": formatter.string(from: script.createdAt),
+                "expiresAt": formatter.string(from: script.expiresAt),
+                "mainFrameOnly": script.mainFrameOnly ? "true" : "false"
             ]
+        }
+    }
+
+    private func currentInitScriptContext() -> BrowserInitScriptContext? {
+        guard isInitScriptRemoteAuthorityAvailable else {
+            return nil
+        }
+        guard let initScriptBrowserViewID,
+              let activeTabID,
+              let activeTab = browserTabs.first(where: { $0.id == activeTabID }),
+              let origin = BrowserOrigin(url: currentURL ?? activeTab.url) else {
+            return nil
+        }
+        return BrowserInitScriptContext(
+            viewModelIdentifier: ObjectIdentifier(self),
+            browserViewID: initScriptBrowserViewID,
+            tabID: activeTabID,
+            origin: origin,
+            browserProfileID: activeProfileID,
+            remoteBrowserProfileID: activeRemoteBrowserProfile?.id,
+            remoteConnectionProfileID: activeRemoteBrowserProfile?.connectionProfileID,
+            remoteRouteAuthority: activeRemoteBrowserProfile.map(
+                BrowserInitScriptRemoteRouteAuthority.init
+            )
+        )
+    }
+
+    private func currentInitScriptTabDisplayTitle() -> String {
+        let title = pageTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !title.isEmpty {
+            return title
+        }
+        let activeTabURL = activeTabID.flatMap { tabID in
+            browserTabs.first(where: { $0.id == tabID })?.url
+        }
+        return BrowserTab.fallbackDisplayTitle(
+            for: currentURL ?? activeTabURL ?? BrowserTab.defaultURL
+        )
+    }
+
+    private func pruneExpiredInitScripts(at date: Date) {
+        let remainingScripts = initScripts.filter { date < $0.expiresAt }
+        guard remainingScripts.count != initScripts.count else { return }
+        applyInitScriptRevocation(remainingScripts)
+    }
+
+    private func removeInitScripts(for tabID: UUID) {
+        let remainingScripts = initScripts.filter { $0.tabID != tabID }
+        guard remainingScripts.count != initScripts.count else { return }
+        applyInitScriptRevocation(remainingScripts)
+    }
+
+    private func applyInitScriptRevocation(_ remainingScripts: [BrowserInitScript]) {
+        automationBridge.cancelInitScriptNavigation()
+        guard automationBridge.synchronizeInitScripts(remainingScripts)?.error == nil else {
+            clearInitScriptsAfterSynchronizationFailure()
+            return
+        }
+        initScripts = remainingScripts
+        rescheduleInitScriptExpiration()
+    }
+
+    private func clearInitScriptsAfterSynchronizationFailure() {
+        automationBridge.cancelInitScriptNavigation()
+        _ = automationBridge.synchronizeInitScripts([])
+        initScripts.removeAll()
+        initScriptExpirationTask?.cancel()
+        initScriptExpirationTask = nil
+    }
+
+    private func rescheduleInitScriptExpiration() {
+        initScriptExpirationTask?.cancel()
+        guard let nextExpiration = initScripts.map(\.expiresAt).min() else {
+            initScriptExpirationTask = nil
+            return
+        }
+
+        let delay = max(0, nextExpiration.timeIntervalSinceNow)
+        initScriptExpirationTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(delay))
+            guard !Task.isCancelled else { return }
+            self?.pruneExpiredInitScripts(at: Date())
+            self?.rescheduleInitScriptExpiration()
         }
     }
 
@@ -802,20 +1477,98 @@ final class BrowserViewModel: ObservableObject {
     }
 
     /// Sets click-to-capture mode and notifies the active WebKit host.
-    func setDOMGrabMode(_ enabled: Bool) {
-        guard isDOMGrabActive != enabled else {
-            navigationActionSubject.send(.setDOMGrabEnabled(enabled))
+    func setDOMGrabMode(
+        _ enabled: Bool,
+        lifetime: TimeInterval = BrowserViewModel.domGrabAuthorizationLifetime
+    ) {
+        if enabled {
+            if let domGrabAuthorizationID {
+                navigationActionSubject.send(.setDOMGrabAuthorization(domGrabAuthorizationID))
+                return
+            }
+            guard !isDOMGrabNavigationInProgress else { return }
+            let authorizationID = UUID()
+            domGrabAuthorizationID = authorizationID
+            domGrabAuthorizationGeneration = domGrabNavigationGeneration
+            isDOMGrabActive = true
+            scheduleDOMGrabExpiration(authorizationID: authorizationID, lifetime: lifetime)
+            navigationActionSubject.send(.setDOMGrabAuthorization(authorizationID))
             return
         }
-        isDOMGrabActive = enabled
-        navigationActionSubject.send(.setDOMGrabEnabled(enabled))
+
+        domGrabExpirationTask?.cancel()
+        domGrabExpirationTask = nil
+        domGrabAuthorizationID = nil
+        domGrabAuthorizationGeneration = nil
+        isDOMGrabActive = false
+        navigationActionSubject.send(.setDOMGrabAuthorization(nil))
+    }
+
+    /// Revokes the one-shot capture capability without emitting redundant
+    /// WebKit work when no capture is armed.
+    func revokeDOMGrabAuthorization() {
+        guard domGrabAuthorizationID != nil || isDOMGrabActive else { return }
+        setDOMGrabMode(false)
+    }
+
+    /// A DOM-grab capability belongs to one main-frame document. Subframe
+    /// navigations do not replace that document and must not disturb the UI.
+    @discardableResult
+    func revokeDOMGrabAuthorizationForNavigation(isMainFrame: Bool) -> UInt64? {
+        guard isMainFrame else { return nil }
+        domGrabNavigationGeneration &+= 1
+        isDOMGrabNavigationInProgress = true
+        revokeDOMGrabAuthorization()
+        return domGrabNavigationGeneration
+    }
+
+    /// Marks the current main-frame navigation as settled. A new user action
+    /// is required after this point; an old grant is never replayed.
+    func completeDOMGrabNavigation(generation: UInt64) {
+        guard generation == domGrabNavigationGeneration else { return }
+        isDOMGrabNavigationInProgress = false
+    }
+
+    /// Keeps native authorization fail-closed when the isolated helper could
+    /// not apply an enable request to the live WebKit document.
+    func handleDOMGrabWebKitUpdate(authorizationID: UUID, applied: Bool) {
+        guard !applied, domGrabAuthorizationID == authorizationID else { return }
+        revokeDOMGrabAuthorization()
     }
 
     /// Receives a typed DOM grab from the WebKit message handler.
-    func handleDOMGrabPayload(_ payload: BrowserDOMGrabPayload) {
+    @discardableResult
+    func handleDOMGrabPayload(
+        _ payload: BrowserDOMGrabPayload,
+        authorizationID: UUID
+    ) -> Bool {
+        guard isDOMGrabActive,
+              domGrabAuthorizationID == authorizationID,
+              domGrabAuthorizationGeneration == domGrabNavigationGeneration,
+              !isDOMGrabNavigationInProgress else { return false }
+
+        // Consume the one-shot native authorization before invoking a
+        // callback. A reentrant or replayed message therefore observes an
+        // inactive mode and cannot trigger a second side effect.
+        setDOMGrabMode(false)
         onDOMGrabPayload?(payload)
-        if isDOMGrabActive {
-            setDOMGrabMode(false)
+        return true
+    }
+
+    private func scheduleDOMGrabExpiration(
+        authorizationID: UUID,
+        lifetime: TimeInterval
+    ) {
+        domGrabExpirationTask?.cancel()
+        domGrabExpirationTask = Task { @MainActor [weak self] in
+            let boundedLifetime = lifetime.isFinite
+                ? min(max(0, lifetime), BrowserViewModel.domGrabAuthorizationLifetime)
+                : BrowserViewModel.domGrabAuthorizationLifetime
+            let duration = Duration.milliseconds(Int64(boundedLifetime * 1_000))
+            try? await Task.sleep(for: duration)
+            guard !Task.isCancelled,
+                  self?.domGrabAuthorizationID == authorizationID else { return }
+            self?.revokeDOMGrabAuthorization()
         }
     }
 
@@ -992,7 +1745,7 @@ final class BrowserViewModel: ObservableObject {
     ///
     /// - Parameter input: The raw URL string from the text field.
     /// - Returns: A normalized URL string with a scheme.
-    private func normalizeURLString(_ input: String) -> String {
+    private nonisolated static func normalizeURLString(_ input: String) -> String {
         let lowered = input.lowercased()
         if lowered.hasPrefix("http://") || lowered.hasPrefix("https://") {
             return input
@@ -1010,7 +1763,7 @@ final class BrowserViewModel: ObservableObject {
     /// AppKit can leave a malformed value such as
     /// `http://localhost:3000/http://cocxy.dev/`. In that case, the most
     /// recently typed explicit URL is the user's intent.
-    static func repairedEditableURLInput(_ input: String) -> String {
+    nonisolated static func repairedEditableURLInput(_ input: String) -> String {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
 

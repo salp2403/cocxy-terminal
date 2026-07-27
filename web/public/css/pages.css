@@ -156,19 +156,17 @@
 
   .hero-product {
     display: block;
-    min-height: clamp(22rem, 52svh, 28rem);
+    min-height: auto;
     align-items: initial;
   }
 
   .hero-inner {
-    padding-block: 4rem var(--space-10);
+    padding-block: var(--space-12) var(--space-8);
   }
 
   .hero-logo,
-  .hero-actions,
   .hero-version,
-  .hero-console,
-  .hero-inner > p:not(.eyebrow):not(.hero-lede) {
+  .hero-console {
     display: none;
   }
 
@@ -179,9 +177,27 @@
   }
 
   .hero-lede {
-    max-width: 18rem;
-    font-size: var(--fs-sm);
+    max-width: 20rem;
+    font-size: var(--fs-base);
     color: var(--color-muted);
+  }
+
+  .hero-inner > p:not(.eyebrow):not(.hero-lede) {
+    max-width: 22rem;
+    margin-block-end: 0;
+    font-size: var(--fs-sm);
+    line-height: 1.55;
+  }
+
+  .hero-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    max-width: 22rem;
+    margin-block: var(--space-5) 0;
+  }
+
+  .hero-actions .button {
+    min-width: 0;
   }
 
   .hero-product ~ .stats-strip {
@@ -191,6 +207,12 @@
 
   .stats-grid .stat:last-child {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 350px) {
+  .hero-actions {
+    grid-template-columns: 1fr;
   }
 }
 

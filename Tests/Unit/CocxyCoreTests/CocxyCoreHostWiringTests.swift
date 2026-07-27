@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import AppKit
+import Darwin
 import Testing
 import CocxyCoreKit
 @testable import CocxyTerminal
@@ -50,6 +51,128 @@ struct CocxyCoreHostWiringTests {
         #expect(viewA !== viewB)
         #expect(viewB !== viewC)
         #expect(viewA !== viewC)
+    }
+
+    @Test("daemon host view forwards scroll wheel as viewport scroll")
+    func daemonHostViewForwardsScrollWheelAsViewportScroll() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        #expect(engine.viewportScrollRequests.count == 1)
+        #expect(engine.viewportScrollRequests.first?.surface == surfaceID)
+        #expect(engine.viewportScrollRequests.first?.deltaRows == 18)
+    }
+
+    @Test("daemon host encodes exact X10 and SGR mouse wheel payloads")
+    func daemonHostEncodesMouseWheelPayloads() {
+        let x10 = PTYDaemonHostView.mouseWheelPayload(
+            button: 64,
+            mouseMode: 1,
+            row: 2,
+            column: 4,
+            count: 1
+        )
+        let sgr = PTYDaemonHostView.mouseWheelPayload(
+            button: 65,
+            mouseMode: 6,
+            row: 2,
+            column: 4,
+            count: 2
+        )
+
+        #expect(x10 == Data([0x1B, 0x5B, 0x4D, 0x60, 0x25, 0x23]))
+        #expect(sgr == Data("\u{1B}[<65;5;3M\u{1B}[<65;5;3M".utf8))
+    }
+
+    @Test("daemon host routes an SGR wheel gesture through surface_write")
+    func daemonHostRoutesSGRWheelGesture() throws {
+        let rawSurfaceID = UUID()
+        let frame = PTYDaemonSurfaceFrame(
+            surfaceID: rawSurfaceID.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            mouseTrackingMode: 6
+        )
+        let connection = RecordingPTYDaemonConnection(responses: [
+            PTYDaemonResponse(
+                id: "hello",
+                ok: true,
+                hello: PTYDaemonHello(
+                    version: "dev",
+                    capabilities: [
+                        PTYDaemonProtocol.jsonLinesCapability,
+                        PTYDaemonProtocol.terminalSurfaceCapability,
+                        PTYDaemonProtocol.terminalEngineCapability,
+                        PTYDaemonProtocol.terminalHostRendererCapability,
+                    ]
+                )
+            ),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "subscribe", ok: true, frame: frame),
+            PTYDaemonResponse(id: "resize", ok: true),
+            PTYDaemonResponse(id: "write", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: TerminalEngineConfig(
+            fontFamily: "Menlo",
+            fontSize: 13,
+            themeName: "Catppuccin Mocha",
+            shell: "/bin/zsh",
+            workingDirectory: URL(fileURLWithPath: "/tmp")
+        ))
+        let viewModel = TerminalViewModel(engine: client)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = try client.createSurface(in: view, workingDirectory: nil, command: nil)
+        view.configureSurfaceIfNeeded(bridge: client, surfaceID: surfaceID)
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 24, location: .zero))
+
+        let write = try #require(connection.requests.last { $0.command == .surfaceWrite })
+        let encoded = try #require(write.payload?["bytesBase64"])
+        #expect(Data(base64Encoded: encoded) == Data(
+            "\u{1B}[<64;1;1M\u{1B}[<64;1;1M\u{1B}[<64;1;1M".utf8
+        ))
+    }
+
+    @Test("in-process engine reaps a shell that exits without further PTY output")
+    func inProcessEngineReapsSilentShellExit() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-inprocess-pty-exit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("exit-now.sh")
+        try "#!/bin/sh\nexit 0\n".write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+
+        let bridge = try makeBridge()
+        let viewModel = TerminalViewModel(engine: bridge)
+        let view = CocxyCoreView(viewModel: viewModel)
+        let surfaceID = try bridge.createSurface(
+            in: view,
+            workingDirectory: root,
+            command: script.path
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        let shellPID = try #require(bridge.processMonitorRegistration(for: surfaceID)?.shellPID)
+
+        let deadline = Date().addingTimeInterval(2)
+        while processIsPresent(shellPID), Date() < deadline {
+            bridge.tick()
+            RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+        }
+
+        #expect(processIsPresent(shellPID) == false)
     }
 
     @Test("terminal surface creation is centralized through TerminalHostViewFactory")
@@ -366,6 +489,27 @@ private final class FactoryMockPTYDaemonConnection: PTYDaemonClientConnection {
     func reconnect() throws {}
 }
 
+@MainActor
+private final class RecordingPTYDaemonConnection: PTYDaemonClientConnection {
+    private var responses: [PTYDaemonResponse]
+    private(set) var requests: [PTYDaemonRequest] = []
+
+    init(responses: [PTYDaemonResponse]) {
+        self.responses = responses
+    }
+
+    func send(_ request: PTYDaemonRequest) throws -> PTYDaemonResponse {
+        requests.append(request)
+        guard responses.isEmpty == false else {
+            return PTYDaemonResponse(id: request.id, ok: false, error: "missing response")
+        }
+        return responses.removeFirst()
+    }
+
+    func receiveEvent(timeout: TimeInterval) throws -> PTYDaemonEvent? { nil }
+    func reconnect() throws {}
+}
+
 private func feed(_ text: String, into terminal: OpaquePointer) {
     let bytes = Array(text.utf8)
     cocxycore_terminal_feed(terminal, bytes, bytes.count)
@@ -377,7 +521,10 @@ private func numberedTerminalLines(_ count: Int) -> String {
         .joined(separator: "\r\n") + "\r\n"
 }
 
-private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
+private func makeScrollEvent(
+    deltaY: CGFloat,
+    location: NSPoint = NSPoint(x: 10, y: 10)
+) -> NSEvent {
     let event = CGEvent(
         scrollWheelEvent2Source: nil,
         units: .pixel,
@@ -386,7 +533,7 @@ private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
         wheel2: 0,
         wheel3: 0
     )!
-    event.location = NSPoint(x: 10, y: 10)
+    event.location = location
     return NSEvent(cgEvent: event)!
 }
 
@@ -408,4 +555,10 @@ private func makeKeyEvent(
         isARepeat: false,
         keyCode: keyCode
     )!
+}
+
+private func processIsPresent(_ pid: Int32) -> Bool {
+    guard pid > 0 else { return false }
+    errno = 0
+    return kill(pid, 0) == 0 || errno == EPERM
 }

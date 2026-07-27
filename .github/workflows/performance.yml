@@ -22,29 +22,28 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
           lfs: true
+          persist-credentials: false
 
-      - name: Checkout cocxycore for cocxyd-remote build
-        uses: actions/checkout@v4
-        with:
-          repository: salp2403/cocxycore
-          path: cocxycore-source
-          ref: main
-          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}
-
-      - name: Install Zig 0.15.2 for cocxyd-remote build
-        uses: goto-bus-stop/setup-zig@v2
+      - name: Install Zig 0.15.2
+        uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
         with:
           version: 0.15.2
 
-      - name: Install xcodegen
-        run: brew install xcodegen
+      - name: Install pinned XcodeGen
+        run: |
+          XCODEGEN_BIN="$(./scripts/install-pinned-xcodegen.sh "$RUNNER_TEMP/xcodegen-2.45.3")"
+          echo "$XCODEGEN_BIN" >> "$GITHUB_PATH"
+
+      - name: Prepare inert CI remote-daemon fixture
+        run: ./scripts/prepare-ci-cocxycore-fixture.sh "$RUNNER_TEMP/cocxycore-ci-fixture"
 
       - name: Build app bundle
         env:
-          COCXYCORE_DIR: ${{ github.workspace }}/cocxycore-source
+          COCXYCORE_DIR: ${{ runner.temp }}/cocxycore-ci-fixture
+          COCXY_CI_REMOTE_DAEMON_FIXTURE: "1"
         run: ./scripts/build-app.sh debug
 
       - name: Measure cold start

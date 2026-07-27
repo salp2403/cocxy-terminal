@@ -3,6 +3,17 @@
 
 import Foundation
 
+enum RelayChannelStatus: Sendable, Equatable {
+    case active
+    case closeFailed(reason: String)
+    case brokerFailed(reason: String)
+
+    var isActive: Bool {
+        if case .active = self { return true }
+        return false
+    }
+}
+
 // MARK: - Relay Channel (Runtime)
 
 /// Runtime model for an active relay channel.
@@ -42,6 +53,9 @@ struct RelayChannel: Identifiable, Sendable {
     /// Number of currently active connections through this channel.
     var connectionCount: Int
 
+    /// Current lifecycle status. Failed channels remain visible for safe retry.
+    var status: RelayChannelStatus
+
     init(
         id: UUID = UUID(),
         profileID: UUID,
@@ -52,7 +66,8 @@ struct RelayChannel: Identifiable, Sendable {
         acl: RelayACL = RelayACL(),
         createdAt: Date = Date(),
         expiresAt: Date? = nil,
-        connectionCount: Int = 0
+        connectionCount: Int = 0,
+        status: RelayChannelStatus = .active
     ) {
         self.id = id
         self.profileID = profileID
@@ -64,6 +79,7 @@ struct RelayChannel: Identifiable, Sendable {
         self.createdAt = createdAt
         self.expiresAt = expiresAt
         self.connectionCount = connectionCount
+        self.status = status
     }
 
     /// Whether this channel has passed its expiration time.

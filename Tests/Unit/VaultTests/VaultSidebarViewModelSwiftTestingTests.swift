@@ -172,7 +172,7 @@ struct VaultSidebarViewModelSwiftTestingTests {
         await viewModel.loadSessions()
         store.sessions.append(added)
         notificationCenter.post(name: VaultSessionStore.sessionsDidChangeNotification, object: nil)
-        try await Task.sleep(nanoseconds: 20_000_000)
+        await waitForSession(added.id, in: viewModel)
 
         #expect(viewModel.sessions.map(\.id).contains(added.id))
     }
@@ -215,6 +215,22 @@ struct VaultSidebarViewModelSwiftTestingTests {
         #expect(card.ageText == "5 min ago")
         #expect(card.accessibilityLabel.contains("Claude"))
         #expect(card.accessibilityHint == "Press Enter to resume. Drag to a terminal to resume there.")
+    }
+
+    /// Polls for the reloaded session instead of sleeping a fixed window: the
+    /// reload is performed by a task the observer spawns, work the scheduler
+    /// still has to place, so a fixed clock measures scheduler latency rather
+    /// than whether the notification reloads at all. The caller's `#expect`
+    /// still fails when the reload never happens.
+    private func waitForSession(
+        _ id: String,
+        in viewModel: VaultSidebarViewModel,
+        timeout: TimeInterval = 5
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !viewModel.sessions.contains(where: { $0.id == id }), Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     private func makeViewModel(

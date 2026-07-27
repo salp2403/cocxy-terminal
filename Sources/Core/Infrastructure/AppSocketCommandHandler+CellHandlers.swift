@@ -5,10 +5,17 @@ import Foundation
 
 extension AppSocketCommandHandler {
     func handleCell(kind: String, request: SocketRequest) -> SocketResponse {
+        let params = request.params ?? [:]
+        if let validationError = CellCLICommandService.requestValidationError(
+            kind: kind,
+            params: params
+        ) {
+            return .failure(id: request.id, error: validationError)
+        }
         guard let provider = cellCLIProvider else {
             return .failure(id: request.id, error: "Cells not available")
         }
-        let result = provider(kind, request.params ?? [:])
+        let result = provider(kind, params)
         guard result.success else {
             return .failure(id: request.id, error: result.data["error"] ?? "Cell command failed")
         }

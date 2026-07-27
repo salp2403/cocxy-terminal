@@ -186,6 +186,9 @@ final class MarkdownContentView: NSView {
 
     /// Loads and displays a markdown file. Preserved API.
     func loadFile(_ url: URL) {
+        if filePath?.standardizedFileURL != url.standardizedFileURL {
+            previewView.resetRemoteImageApprovals(updateContent: false)
+        }
         self.filePath = url
         toolbar.fileName = url.lastPathComponent
 
@@ -371,6 +374,9 @@ final class MarkdownContentView: NSView {
         toolbar.onExportSlides = { [weak self] in
             self?.exportSlides()
         }
+        toolbar.onManageRemoteImages = { [weak self] in
+            self?.manageRemoteImages()
+        }
         toolbar.onCopyMarkdown = { [weak self] in
             self?.copyAsMarkdown()
         }
@@ -467,6 +473,9 @@ final class MarkdownContentView: NSView {
         previewView.onCopyToClipboard = { [weak self] text in
             self?.copyTextToPasteboard(text)
         }
+        previewView.onRemoteImagePolicyChange = { [weak self] in
+            self?.refreshRemoteImageToolbar()
+        }
     }
 
     // MARK: - Mode Switching
@@ -561,9 +570,15 @@ final class MarkdownContentView: NSView {
     private func propagateDocument() {
         sourceView.document = document
         previewView.document = document
+        refreshRemoteImageToolbar()
         sidebar.outlineView.outline = document.outline
         sidebar.fileExplorer.activeFilePath = filePath
         statusBar.wordCount = MarkdownWordCount.count(body: document.body)
+    }
+
+    private func refreshRemoteImageToolbar() {
+        toolbar.hasRemoteImages = !previewView.currentRemoteImageHosts.isEmpty
+        toolbar.hasBlockedRemoteImages = !previewView.unapprovedRemoteImageHosts.isEmpty
     }
 
     private func showEmptyState() {

@@ -70,7 +70,41 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         let hookCommands = firstHook["hooks"] as! [[String: Any]]
         XCTAssertEqual(hookCommands.count, 1)
         XCTAssertEqual(hookCommands[0]["type"] as? String, "command")
-        XCTAssertEqual(hookCommands[0]["command"] as? String, "cocxy hook-handler")
+        XCTAssertEqual(
+            hookCommands[0]["command"] as? String,
+            ClaudeSettingsManager.claudeHookCommand
+        )
+    }
+
+    func testInstallMigratesOwnedUnguardedHookCommands() throws {
+        let legacyCommand = ClaudeSettingsManager.cocxyHookCommand
+        let existingSettings: [String: Any] = [
+            "hooks": [
+                "Stop": [
+                    [
+                        "matcher": "",
+                        "hooks": [
+                            ["type": "command", "command": legacyCommand]
+                        ]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: existingSettings)
+        try data.write(to: URL(fileURLWithPath: settingsFilePath))
+
+        let result = try ClaudeSettingsManager(settingsFilePath: settingsFilePath).installHooks()
+
+        XCTAssertTrue(result.installed)
+        let updatedData = try Data(contentsOf: URL(fileURLWithPath: settingsFilePath))
+        let settings = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: updatedData) as? [String: Any]
+        )
+        let hooks = try XCTUnwrap(settings["hooks"] as? [String: Any])
+        let stopHooks = try XCTUnwrap(hooks["Stop"] as? [[String: Any]])
+        let commands = try XCTUnwrap(stopHooks.first?["hooks"] as? [[String: Any]])
+        XCTAssertEqual(commands.first?["command"] as? String, ClaudeSettingsManager.claudeHookCommand)
+        XCTAssertNotEqual(commands.first?["command"] as? String, legacyCommand)
     }
 
     // MARK: - 2. Install preserves existing user hooks
@@ -358,10 +392,10 @@ final class ClaudeSettingsManagerTests: XCTestCase {
 
         let manager = ClaudeSettingsManager(settingsFilePath: settingsFilePath)
 
-        // CLI install should detect the quoted hooks and NOT add duplicates.
+        // CLI install should migrate the app-owned command without adding duplicates.
         let result = try manager.installHooks()
-        XCTAssertFalse(result.installed)
-        XCTAssertTrue(result.alreadyInstalled)
+        XCTAssertTrue(result.installed)
+        XCTAssertFalse(result.alreadyInstalled)
 
         // Verify only 1 entry per event type (no duplication).
         let readData = try Data(contentsOf: URL(fileURLWithPath: settingsFilePath))
@@ -371,6 +405,8 @@ final class ClaudeSettingsManagerTests: XCTestCase {
         for eventType in ClaudeSettingsManager.hookedEventTypes {
             let eventHooks = hooks[eventType] as! [[String: Any]]
             XCTAssertEqual(eventHooks.count, 1, "Expected exactly 1 hook for \(eventType), got \(eventHooks.count)")
+            let commands = eventHooks[0]["hooks"] as! [[String: Any]]
+            XCTAssertEqual(commands[0]["command"] as? String, ClaudeSettingsManager.claudeHookCommand)
         }
     }
 

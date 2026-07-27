@@ -414,7 +414,7 @@ struct AgentHooksParitySwiftTestingTests {
             let entries = try #require(hooks[event] as? [[String: Any]])
             #expect(entries.count == 1)
             let commands = try #require(entries[0]["hooks"] as? [[String: Any]])
-            #expect(commands.first?["command"] as? String == ClaudeSettingsManager.cocxyHookCommand)
+            #expect(commands.first?["command"] as? String == ClaudeSettingsManager.claudeHookCommand)
             #expect(commands.first?["command"] as? String != staleCommand)
         }
     }
@@ -496,7 +496,7 @@ struct AgentHooksParitySwiftTestingTests {
 
         let sessionStartEntries = try #require(hooks["SessionStart"] as? [[String: Any]])
         let sessionStartCommands = try #require(sessionStartEntries[0]["hooks"] as? [[String: Any]])
-        #expect(sessionStartCommands.first?["command"] as? String == ClaudeSettingsManager.cocxyHookCommand)
+        #expect(sessionStartCommands.first?["command"] as? String == ClaudeSettingsManager.claudeHookCommand)
     }
 
     @Test("Grouped hooks require the expected forced agent marker")

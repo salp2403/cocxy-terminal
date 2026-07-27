@@ -4,6 +4,7 @@
 # Usage:
 #   ./scripts/verify-app-bundle.sh path/to/CocxyTerminal.app
 #   ./scripts/verify-app-bundle.sh  # defaults to build/CocxyTerminal.app
+#   ./scripts/verify-app-bundle.sh --check-remote-daemon-binary path target
 #
 # Returns 0 if all required contents are present, 1 otherwise.
 # Designed for use in CI and local builds.
@@ -12,6 +13,42 @@
 
 set -euo pipefail
 
+remote_daemon_architecture_matches() {
+    local path="$1"
+    local target="$2"
+    local description
+    if [ ! -f "$path" ] || [ -L "$path" ] || [ ! -x "$path" ]; then
+        return 1
+    fi
+    description="$(LC_ALL=C /usr/bin/file -b "$path" 2>/dev/null || true)"
+    case "$target" in
+        macos-arm64)
+            [[ "$description" == "Mach-O 64-bit executable arm64"* ]]
+            ;;
+        linux-x86_64)
+            [[ "$description" == "ELF 64-bit LSB executable, x86-64,"* ]]
+            ;;
+        linux-arm64)
+            [[ "$description" == "ELF 64-bit LSB executable, ARM aarch64,"* ]]
+            ;;
+        *)
+            return 64
+            ;;
+    esac
+}
+
+if [ "${1:-}" = "--check-remote-daemon-binary" ]; then
+    if [ "$#" -ne 3 ]; then
+        echo "Usage: $0 --check-remote-daemon-binary <path> <target>" >&2
+        exit 64
+    fi
+    if remote_daemon_architecture_matches "$2" "$3"; then
+        exit 0
+    fi
+    echo "ERROR: Remote daemon binary does not match target $3: $2" >&2
+    exit 1
+fi
+
 APP_BUNDLE="${1:-build/CocxyTerminal.app}"
 CONTENTS="${APP_BUNDLE}/Contents"
 RESOURCES="${CONTENTS}/Resources"
@@ -19,6 +56,8 @@ LAUNCH_SERVICES="${CONTENTS}/Library/LaunchServices"
 PTY_DAEMON_APP="${LAUNCH_SERVICES}/cocxyd.app"
 PTY_DAEMON_PLIST="${PTY_DAEMON_APP}/Contents/Info.plist"
 PTY_DAEMON_EXECUTABLE="${PTY_DAEMON_APP}/Contents/MacOS/cocxyd"
+SPARKLE_FRAMEWORK="${CONTENTS}/Frameworks/Sparkle.framework"
+SPARKLE_INFO_PLIST="${SPARKLE_FRAMEWORK}/Versions/B/Resources/Info.plist"
 
 ERRORS=0
 
@@ -133,6 +172,31 @@ check_codesign_entitlement_absent() {
     fi
 }
 
+check_remote_daemon_binary() {
+    local path="$1"
+    local target="$2"
+    local label="$3"
+    if remote_daemon_architecture_matches "$path" "$target"; then
+        echo "  OK  $label"
+    else
+        echo "  FAIL  $label  (wrong file type, mode, or CPU architecture)"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
+check_macho_rpath() {
+    local binary_path="$1"
+    local expected_rpath="$2"
+    local label="$3"
+    if [ -f "$binary_path" ] \
+        && otool -l "$binary_path" 2>/dev/null | grep -Fq "path ${expected_rpath} "; then
+        echo "  OK  $label"
+    else
+        echo "  FAIL  $label  (missing ${expected_rpath})"
+        ERRORS=$((ERRORS + 1))
+    fi
+}
+
 echo "==> Verifying app bundle: $APP_BUNDLE"
 echo ""
 
@@ -166,10 +230,23 @@ check_plist_string "$CONTENTS/Info.plist" "UTExportedTypeDeclarations.0.UTTypeId
 check_plist_string "$CONTENTS/Info.plist" "UTExportedTypeDeclarations.0.UTTypeTagSpecification.public\\.filename-extension.0" "cocxynb" "Cocxy notebook extension"
 check_plist_string "$CONTENTS/Info.plist" "CFBundleDocumentTypes.0.LSItemContentTypes.0" "dev.cocxy.notebook" "Cocxy notebook document type"
 
+echo ""
+echo "[Code Signature]"
+if codesign --verify --deep --strict "$APP_BUNDLE"; then
+    echo "  OK  Complete app bundle signature"
+else
+    echo "  FAIL  Complete app bundle signature  (codesign verification failed)"
+    ERRORS=$((ERRORS + 1))
+fi
+
 # 2. Frameworks
 echo ""
 echo "[Frameworks]"
-check_exists "$CONTENTS/Frameworks/Sparkle.framework" "Sparkle.framework"
+check_exists "$SPARKLE_FRAMEWORK" "Sparkle.framework"
+check_exists "$SPARKLE_INFO_PLIST" "Sparkle Info.plist"
+check_plist_string "$SPARKLE_INFO_PLIST" "CFBundleShortVersionString" "2.9.4" "Reviewed Sparkle version"
+check_codesign_valid "$SPARKLE_FRAMEWORK" "Sparkle.framework signature"
+check_macho_rpath "$CONTENTS/MacOS/CocxyTerminal" "@executable_path/../Frameworks" "Sparkle framework rpath"
 
 # 3. Fonts (critical — crash in v0.1.53 was caused by missing fonts
 #    triggering a Bundle.module fatalError)
@@ -257,10 +334,33 @@ check_exists "$RESOURCES/Ripgrep/UNLICENSE" "ripgrep Unlicense"
 
 echo ""
 echo "[Remote Daemon]"
+check_exists "$RESOURCES/cocxyd.sh" "Remote workspace daemon script"
+if [ -f "$RESOURCES/cocxyd.sh" ] && [ ! -L "$RESOURCES/cocxyd.sh" ] \
+    && [ -r "$RESOURCES/cocxyd.sh" ] && [ -x "$RESOURCES/cocxyd.sh" ]; then
+    echo "  OK  Remote workspace daemon script file type and mode"
+    if /bin/sh -n "$RESOURCES/cocxyd.sh"; then
+        echo "  OK  Remote workspace daemon script syntax"
+    else
+        echo "  FAIL  Remote workspace daemon script syntax"
+        ERRORS=$((ERRORS + 1))
+    fi
+elif [ -e "$RESOURCES/cocxyd.sh" ]; then
+    echo "  FAIL  Remote workspace daemon script file type and mode"
+    ERRORS=$((ERRORS + 1))
+fi
 check_exists "$RESOURCES/RemoteDaemon" "Remote daemon resources directory"
-check_exists "$RESOURCES/RemoteDaemon/cocxyd-remote-macos-arm64" "Remote daemon macOS arm64 binary"
-check_exists "$RESOURCES/RemoteDaemon/cocxyd-remote-linux-x86_64" "Remote daemon Linux x86_64 binary"
-check_exists "$RESOURCES/RemoteDaemon/cocxyd-remote-linux-arm64" "Remote daemon Linux arm64 binary"
+check_remote_daemon_binary \
+    "$RESOURCES/RemoteDaemon/cocxyd-remote-macos-arm64" \
+    "macos-arm64" \
+    "Remote daemon macOS arm64 binary"
+check_remote_daemon_binary \
+    "$RESOURCES/RemoteDaemon/cocxyd-remote-linux-x86_64" \
+    "linux-x86_64" \
+    "Remote daemon Linux x86_64 binary"
+check_remote_daemon_binary \
+    "$RESOURCES/RemoteDaemon/cocxyd-remote-linux-arm64" \
+    "linux-arm64" \
+    "Remote daemon Linux arm64 binary"
 check_codesign_valid "$RESOURCES/RemoteDaemon/cocxyd-remote-macos-arm64" "Remote daemon macOS binary signature"
 
 # 7. App icon

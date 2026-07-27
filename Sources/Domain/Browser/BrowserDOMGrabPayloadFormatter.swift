@@ -1,15 +1,13 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // BrowserDOMGrabPayloadFormatter.swift - Pure helper that renders a
-// `BrowserDOMGrabPayload` as the multi-line text injected into the
-// active terminal pane.
+// `BrowserDOMGrabPayload` for explicit review in Rich Input.
 
 import Foundation
 
-/// Renders a captured `BrowserDOMGrabPayload` as the multi-line text
-/// the surface lifecycle pastes into the active terminal pane.
+/// Renders a captured `BrowserDOMGrabPayload` as multi-line review text.
 ///
-/// The format is intentionally line-addressable so a receiving
-/// terminal-aware CLI can pick up the selector / URL / screenshot path
+/// The format is intentionally line-addressable so users and terminal-aware
+/// CLIs can identify the selector, URL, and screenshot path
 /// with simple prefix matches (`Page:`, `URL:`, `Selector:`, `Text:`,
 /// `Screenshot:`). Optional fields are omitted from the output rather
 /// than left blank — a blank line in the middle of the payload would
@@ -26,28 +24,29 @@ enum BrowserDOMGrabPayloadFormatter {
     /// prompt's context window in a single grab.
     static let maxVisibleTextLength: Int = 500
 
-    /// Renders the payload as the multi-line text the terminal pane
-    /// receives. The output always ends with a trailing newline so
-    /// the agent prompter sees the message as a complete line block.
+    /// Renders the payload as multi-line text for the Rich Input composer.
+    /// The output always ends with a trailing newline so an eventual user
+    /// submission reaches the terminal as a complete line block.
     ///
     /// - Parameter payload: Captured grab to format.
-    /// - Returns: Multi-line text ready for `bridge.writeBytes`.
+    /// - Returns: Sanitized multi-line text ready for explicit review.
     static func format(_ payload: BrowserDOMGrabPayload) -> String {
         var lines: [String] = []
         lines.append("--- Browser DOM grab ---")
         lines.append("Page: \(singleLine(payload.pageTitle))")
-        lines.append("URL: \(payload.pageURL.absoluteString)")
+        lines.append("URL: \(singleLine(payload.pageURL.absoluteString))")
         lines.append("Selector: \(singleLine(payload.selector))")
 
-        let trimmed = payload.visibleText.trimmingCharacters(
-            in: .whitespacesAndNewlines
-        )
+        let trimmed = sanitizedText(
+            payload.visibleText,
+            preservingLineBreaks: true
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty {
             lines.append("Text: \(truncated(trimmed))")
         }
 
         if let screenshot = payload.screenshotPath {
-            lines.append("Screenshot: \(screenshot.path)")
+            lines.append("Screenshot: \(singleLine(screenshot.path))")
         }
         lines.append("---")
         return lines.joined(separator: "\n") + "\n"
@@ -59,10 +58,36 @@ enum BrowserDOMGrabPayloadFormatter {
     /// formatter's line-addressable contract holds even when a page
     /// title or selector contains a literal `\n`.
     private static func singleLine(_ value: String) -> String {
-        value
-            .replacingOccurrences(of: "\r\n", with: " ")
-            .replacingOccurrences(of: "\n", with: " ")
-            .replacingOccurrences(of: "\r", with: " ")
+        sanitizedText(value, preservingLineBreaks: false)
+    }
+
+    /// Removes terminal controls and directional formatting before untrusted
+    /// page text reaches a native review surface. Newlines remain only in the
+    /// visible-text field; all other fields stay line-addressable.
+    private static func sanitizedText(
+        _ value: String,
+        preservingLineBreaks: Bool
+    ) -> String {
+        let normalized = value
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        var scalars = String.UnicodeScalarView()
+        scalars.reserveCapacity(normalized.unicodeScalars.count)
+        for scalar in normalized.unicodeScalars {
+            switch scalar.value {
+            case 0x09:
+                scalars.append(" ")
+            case 0x0A, 0x2028, 0x2029:
+                scalars.append(preservingLineBreaks ? "\n" : " ")
+            case 0x00...0x1F, 0x7F...0x9F:
+                continue
+            case 0x061C, 0x200E...0x200F, 0x202A...0x202E, 0x2066...0x2069:
+                continue
+            default:
+                scalars.append(scalar)
+            }
+        }
+        return String(scalars)
     }
 
     /// Truncates the trimmed visible text above the limit and appends

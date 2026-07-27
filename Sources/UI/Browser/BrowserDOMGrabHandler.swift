@@ -5,9 +5,9 @@
 import Foundation
 import WebKit
 
-/// Receives DOM-grab payloads from the in-page JS shipped with the
-/// browser panel and forwards them as typed `BrowserDOMGrabPayload`
-/// values to the surface lifecycle.
+/// Receives DOM-grab payloads from the browser panel's isolated JavaScript
+/// content world and forwards them as typed `BrowserDOMGrabPayload` values
+/// to the one-shot authorization and review flow.
 ///
 /// ## Wiring
 ///
@@ -25,6 +25,7 @@ import WebKit
 ///
 /// ```js
 /// window.webkit.messageHandlers.cocxyDOMGrab.postMessage({
+///     authorizationID: "one-shot-native-grant",
 ///     selector: "button#login",
 ///     url: location.href,
 ///     title: document.title,
@@ -40,11 +41,10 @@ final class BrowserDOMGrabHandler: NSObject, WKScriptMessageHandler {
     /// failure.
     static let messageName: String = "cocxyDOMGrab"
 
-    /// Closure invoked on the main actor whenever a complete payload is
-    /// received from the JS bridge. The surface lifecycle wires this to
-    /// the formatter + bridge.writeBytes path that injects the grab
-    /// into the active terminal pane.
-    var onPayload: ((BrowserDOMGrabPayload) -> Void)?
+    /// Closure invoked on the main actor whenever a complete main-frame
+    /// payload is received. The surface lifecycle wires this to the native
+    /// one-shot authorization gate and explicit Rich Input review.
+    var onPayload: ((UUID, BrowserDOMGrabPayload) -> Void)?
 
     // MARK: - WKScriptMessageHandler
 
@@ -52,12 +52,21 @@ final class BrowserDOMGrabHandler: NSObject, WKScriptMessageHandler {
         _ userContentController: WKUserContentController,
         didReceive message: WKScriptMessage
     ) {
-        guard message.name == Self.messageName,
-              let body = message.body as? [String: Any],
-              let payload = Self.parsePayload(body) else {
-            return
-        }
-        onPayload?(payload)
+        guard message.name == Self.messageName else { return }
+        receive(message.body, isMainFrame: message.frameInfo.isMainFrame)
+    }
+
+    /// Native frame and payload gate kept separate from WebKit object
+    /// construction so subframe rejection is deterministic in unit tests.
+    @discardableResult
+    func receive(_ body: Any, isMainFrame: Bool) -> Bool {
+        guard isMainFrame,
+              let dictionary = body as? [String: Any],
+              let authorizationIDString = dictionary["authorizationID"] as? String,
+              let authorizationID = UUID(uuidString: authorizationIDString),
+              let payload = Self.parsePayload(dictionary) else { return false }
+        onPayload?(authorizationID, payload)
+        return true
     }
 
     // MARK: - Pure parser (testable without WKScriptMessage)

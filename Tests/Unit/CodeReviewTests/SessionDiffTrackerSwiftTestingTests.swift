@@ -21,6 +21,23 @@ private final class CounterBox: @unchecked Sendable {
     }
 }
 
+private final class GitArgumentCallsBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [[String]] = []
+
+    func append(_ arguments: [String]) {
+        lock.lock()
+        storage.append(arguments)
+        lock.unlock()
+    }
+
+    var values: [[String]] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+}
+
 private struct CapturedEditHistorySession: Sendable, Equatable {
     let sessionID: String
     let agentID: String
@@ -216,6 +233,60 @@ struct SessionDiffTrackerSwiftTestingTests {
         #expect(diffs[0].additions == 1)
     }
 
+    @Test("branch diff rejects an option-shaped revision before invoking git")
+    func branchDiffRejectsOptionShapedRevision() async {
+        let calls = CounterBox()
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, _ in
+            calls.increment()
+            return ""
+        })
+        tracker.recordSnapshot(
+            sessionId: "unsafe-ref",
+            ref: "abc123",
+            workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+        )
+
+        do {
+            _ = try await diffResult(
+                from: tracker,
+                sessionId: "unsafe-ref",
+                mode: .vsBranch,
+                reference: "--output=/tmp/probe"
+            )
+            Issue.record("Expected an invalid revision error")
+        } catch {
+            #expect(error is GitRevisionArgumentError)
+        }
+        #expect(calls.value == 0)
+    }
+
+    @Test("branch diff sends a validated revision after end-of-options")
+    func branchDiffUsesOptionBoundary() async throws {
+        let calls = GitArgumentCallsBox()
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, arguments in
+            calls.append(arguments)
+            return ""
+        })
+        tracker.recordSnapshot(
+            sessionId: "safe-ref",
+            ref: "abc123",
+            workingDirectory: URL(fileURLWithPath: "/tmp", isDirectory: true)
+        )
+
+        let diffs = try await diffResult(
+            from: tracker,
+            sessionId: "safe-ref",
+            mode: .vsBranch,
+            reference: "origin/main"
+        )
+
+        #expect(diffs.isEmpty)
+        #expect(calls.values == [
+            ["diff", "--no-color", "--end-of-options", "origin/main", "--", "."],
+            ["status", "--porcelain"],
+        ])
+    }
+
     @Test("computeDiff synthesizes untracked files")
     func computeDiffIncludesUntrackedFile() async throws {
         let repo = try makeGitFixtureRepo()
@@ -234,6 +305,51 @@ struct SessionDiffTrackerSwiftTestingTests {
         #expect(diffs[0].status == .untracked)
         #expect(diffs[0].agentName == "Codex CLI")
         #expect(diffs[0].additions == 1)
+    }
+
+    @Test("computeDiff does not synthesize an untracked file through a swapped directory symlink")
+    func computeDiffRejectsUntrackedSymlinkSwap() async throws {
+        let container = try makeTemporaryDirectory(named: "code-review-untracked-link-swap")
+        defer { try? FileManager.default.removeItem(at: container) }
+        let root = container.appendingPathComponent("workspace", isDirectory: true)
+        let linkedDirectory = root.appendingPathComponent("linked", isDirectory: true)
+        let retainedDirectory = root.appendingPathComponent("linked-retained", isDirectory: true)
+        let outside = container.appendingPathComponent("outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: linkedDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try "inside\n".write(
+            to: linkedDirectory.appendingPathComponent("secret.swift"),
+            atomically: true,
+            encoding: .utf8
+        )
+        let outsideTarget = outside.appendingPathComponent("secret.swift")
+        try "outside secret\n".write(to: outsideTarget, atomically: true, encoding: .utf8)
+
+        let tracker = SessionDiffTrackerImpl(gitRunner: { _, arguments in
+            if arguments.first == "diff" {
+                return ""
+            }
+            if arguments == ["status", "--porcelain"] {
+                try FileManager.default.moveItem(at: linkedDirectory, to: retainedDirectory)
+                try FileManager.default.createSymbolicLink(
+                    atPath: linkedDirectory.path,
+                    withDestinationPath: outside.path
+                )
+                return "?? linked/secret.swift\n"
+            }
+            return ""
+        })
+        tracker.recordSnapshot(sessionId: "link-swap", ref: "abc123", workingDirectory: root)
+
+        let diffs = try await diffResult(
+            from: tracker,
+            sessionId: "link-swap",
+            mode: .sinceSessionStart,
+            reference: nil
+        )
+
+        #expect(diffs.isEmpty)
+        #expect(try String(contentsOf: outsideTarget, encoding: .utf8) == "outside secret\n")
     }
 
     @Test("session end records tracked files into local edit history once")

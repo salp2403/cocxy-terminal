@@ -8,25 +8,54 @@ extension AppDelegate {
 
     nonisolated func handleCellCLIRequest(
         kind: String,
-        params: [String: String]
+        params: [String: String],
+        approvedContext: SocketPrivilegedCommandContext,
+        serviceOverride: CellCLICommandService? = nil,
+        cloudInitBroker: CellCloudInitFileBroker = CellCloudInitFileBroker()
     ) -> (success: Bool, data: [String: String]) {
-        let semaphore = DispatchSemaphore(value: 0)
-        let box = LockedBox<(Bool, [String: String])>((
-            false,
-            ["error": "Cell dispatch did not complete"]
-        ))
+        guard let boundParams = approvedContext.bindingLocalResourcePaths(
+            in: params,
+            keys: kind == "create" ? CellCLICommandService.createLocalResourcePathKeys : [],
+            requiredScope: .computeCell
+        ) else {
+            return (false, ["error": "Approved cell command context is unavailable"])
+        }
+        let dispatch: (result: (Bool, [String: String]), params: [String: String])
+        let service = serviceOverride ?? Self.sharedCellCLIService
+        do {
+            dispatch = try cloudInitBroker.withStagedApprovedCloudInit(
+                kind: kind,
+                params: boundParams,
+                approvedContext: approvedContext
+            ) { approvedParams in
+                let semaphore = DispatchSemaphore(value: 0)
+                let box = LockedBox<(Bool, [String: String])>((
+                    false,
+                    ["error": "Cell dispatch did not complete"]
+                ))
 
-        Task.detached {
-            let result = await Self.sharedCellCLIService.perform(kind: kind, params: params)
-            box.withValue { $0 = result }
-            semaphore.signal()
+                Task.detached {
+                    let result = await service.perform(
+                        kind: kind,
+                        params: approvedParams
+                    )
+                    box.withValue { $0 = result }
+                    semaphore.signal()
+                }
+
+                semaphore.wait()
+                return (box.withValue { $0 }, approvedParams)
+            }
+        } catch {
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return (false, ["error": message])
         }
 
-        semaphore.wait()
-        let result = box.withValue { $0 }
+        let result = dispatch.result
+        let approvedParams = dispatch.params
         guard kind == "attach",
               result.0,
-              params["open-tab"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "false",
+              approvedParams["open-tab"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "false",
               let command = result.1["pty-command"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !command.isEmpty else {
             return result
@@ -38,7 +67,8 @@ extension AppDelegate {
                 attachData: result.1,
                 command: command,
                 title: result.1["pty-title"],
-                cellID: result.1["cell-id"]
+                cellID: result.1["cell-id"],
+                approvedContext: approvedContext
             )
         }
         if let appAttachData {
@@ -55,9 +85,10 @@ extension AppDelegate {
         attachData: [String: String],
         command: String,
         title: String?,
-        cellID: String?
+        cellID: String?,
+        approvedContext: SocketPrivilegedCommandContext?
     ) -> [String: String]? {
-        guard let controller = focusedWindowController() ?? windowController else {
+        guard let controller = privilegedSocketController(for: approvedContext) else {
             return nil
         }
 
@@ -78,11 +109,11 @@ extension AppDelegate {
            let cocxyBridge = controller.cocxyCoreBridge(forSurface: surfaceID),
            let token = trimmedNonEmpty(attachData["lease-token"]) {
             let configuration = WebTerminalConfiguration(
-                bindAddress: WebTerminalConfiguration.default.bindAddress,
+                bindAddress: WebTerminalConfiguration.defaultBindAddress,
                 port: 0,
                 authToken: token,
                 maxConnections: 1,
-                maxFrameRate: WebTerminalConfiguration.default.maxFrameRate,
+                maxFrameRate: WebTerminalConfiguration.defaultMaxFrameRate,
                 stopAfterFirstConnection: true,
                 firstConnectionHandler: { [attachData] in
                     _ = Self.sharedCellCLIService.consumeAttachLease(fields: attachData)

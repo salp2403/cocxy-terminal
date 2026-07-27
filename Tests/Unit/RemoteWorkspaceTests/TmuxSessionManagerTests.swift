@@ -12,9 +12,16 @@ final class ScriptableSSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     var commandResults: [String: ProcessResult] = [:]
     var executedCommands: [String] = []
 
-    func connect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
+    func connect(
+        profile: RemoteConnectionProfile,
+        executor: any ProcessExecutor
+    ) throws -> SSHControlMasterIdentity {
+        SSHControlMasterIdentity(processID: 45_678, controlPath: profile.controlPath)
+    }
     func disconnect(profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool { true }
+    func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool { false }
+    func terminateControlMaster(_ identity: SSHControlMasterIdentity) {}
     func controlPath(for profile: RemoteConnectionProfile) -> String { profile.controlPath }
     func newSession(profile: RemoteConnectionProfile) -> String { "ssh mock" }
     func forwardPort(_ forward: RemoteConnectionProfile.PortForward, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}

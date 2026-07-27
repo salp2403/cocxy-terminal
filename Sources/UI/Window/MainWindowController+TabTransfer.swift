@@ -102,6 +102,10 @@ extension MainWindowController {
             savedTabPanelContentViews.removeValue(forKey: tabID)
         }
 
+        // Browser grants and script registrations are owned by the source
+        // window context. Revoke them before any view leaves that context.
+        revokeBrowserAuthorizations(in: Array(tabPanels.values))
+
         // Remove from view hierarchy without destroying.
         surfaceView?.removeFromSuperview()
 
@@ -214,6 +218,11 @@ extension MainWindowController {
             savedTabSplitViewModels[tabID] = state.splitViewModels
         }
         if !state.panelContentViews.isEmpty {
+            for panelView in state.panelContentViews.values {
+                guard let viewModel = browserViewModel(containedIn: panelView) else { continue }
+                viewModel.historyStore = browserHistoryStore
+                wireDOMGrabCallback(for: viewModel)
+            }
             savedTabPanelContentViews[tabID] = state.panelContentViews
         }
 

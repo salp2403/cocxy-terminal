@@ -522,6 +522,49 @@ final class RichInputIntegrationTests: XCTestCase {
         XCTAssertNil(controller.richInputHostingView)
     }
 
+    func testBrowserDOMGrabOpensExplicitReviewWithoutTerminalWrite() throws {
+        let provider = RichInputConfigProvider(content: """
+        [rich-input]
+        enabled = false
+        """)
+        let service = ConfigService(fileProvider: provider)
+        try service.reload()
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: bridge,
+            configService: service
+        )
+        controller.showWindow(nil)
+        let payload = BrowserDOMGrabPayload(
+            selector: "button#download",
+            pageURL: URL(string: "https://cocxy.dev/download")!,
+            pageTitle: "Download",
+            visibleText: "Install\nNow"
+        )
+
+        let shown = controller.presentBrowserDOMGrabPayloadForReview(payload)
+
+        XCTAssertTrue(shown)
+        XCTAssertEqual(
+            controller.richInputViewModel?.text,
+            BrowserDOMGrabPayloadFormatter.format(payload)
+        )
+        XCTAssertTrue(bridge.sentTexts.isEmpty)
+        XCTAssertNotNil(controller.richInputHostingView)
+    }
+
+    func testBrowserDismissRevokesOutstandingDOMGrabAuthorization() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let viewModel = BrowserViewModel()
+        controller.browserViewModel = viewModel
+        viewModel.setDOMGrabMode(true)
+
+        controller.dismissBrowser()
+
+        XCTAssertFalse(viewModel.isDOMGrabActive)
+        XCTAssertNil(viewModel.domGrabAuthorizationID)
+    }
+
     func testDismissActiveOverlayCancelsRichInputAndPersistsDraft() throws {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)

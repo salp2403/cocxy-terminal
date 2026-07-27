@@ -11,6 +11,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var onFileDrop: (([URL]) -> Bool)?
     var onUserInputSubmitted: (() -> Void)?
     var onFramePresented: (() -> Void)?
+    var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
 
     private weak var bridge: (any TerminalEngine)?
     private var surfaceID: SurfaceID?
@@ -19,6 +20,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var cellSize: CGSize
     private var notificationRingLayer: CAShapeLayer?
     private var eventDrainTimer: Timer?
+
+    private static let scrollSpeedFactor: CGFloat = 0.15
 
     init(viewModel: TerminalViewModel?) {
         self.viewModel = viewModel
@@ -160,6 +163,42 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         }
     }
 
+    override func scrollWheel(with event: NSEvent) {
+        guard let bridge, let surfaceID else {
+            super.scrollWheel(with: event)
+            return
+        }
+        let scaledDelta = event.scrollingDeltaY * Self.scrollSpeedFactor
+        guard scaledDelta != 0 else { return }
+
+        let mouseMode = latestFrame?.mouseTrackingMode ?? 0
+        if mouseMode > 0,
+           shouldScrollLocallyWhileMouseTracking(event) == false,
+           let daemon = bridge as? PTYDaemonClient,
+           let frame = latestFrame {
+            let position = cellPosition(for: event, frame: frame)
+            let button: UInt8 = scaledDelta > 0 ? 64 : 65
+            let count = max(1, Int(abs(scaledDelta)))
+            daemon.sendRawBytes(
+                Self.mouseWheelPayload(
+                    button: button,
+                    mouseMode: mouseMode,
+                    row: position.row,
+                    column: position.column,
+                    count: count
+                ),
+                to: surfaceID
+            )
+            return
+        }
+
+        let steps = max(1, Int(abs(scaledDelta.rounded(.towardZero))))
+        bridge.scrollViewport(
+            surfaceID: surfaceID,
+            deltaRows: scaledDelta > 0 ? steps : -steps
+        )
+    }
+
     override func insertText(_ insertString: Any) {
         let text: String
         if let attributed = insertString as? NSAttributedString {
@@ -256,6 +295,57 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         if flags.contains(.option) { modifiers.insert(.option) }
         if flags.contains(.command) { modifiers.insert(.command) }
         return modifiers
+    }
+
+    private func shouldScrollLocallyWhileMouseTracking(_ event: NSEvent) -> Bool {
+        if prefersLocalScrollInMouseTrackingMode?() == true {
+            return true
+        }
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        return modifiers.contains(.option) || modifiers.contains(.shift)
+    }
+
+    private func cellPosition(
+        for event: NSEvent,
+        frame: PTYDaemonSurfaceFrame
+    ) -> (row: UInt16, column: UInt16) {
+        let location = convert(event.locationInWindow, from: nil)
+        let rawColumn = max(0, Int(location.x / max(1, cellSize.width)))
+        let rawRow = max(0, Int(location.y / max(1, cellSize.height)))
+        return (
+            row: UInt16(min(rawRow, max(0, Int(frame.rows) - 1))),
+            column: UInt16(min(rawColumn, max(0, Int(frame.columns) - 1)))
+        )
+    }
+
+    static func mouseWheelPayload(
+        button: UInt8,
+        mouseMode: UInt8,
+        row: UInt16,
+        column: UInt16,
+        count: Int
+    ) -> Data {
+        let repetitions = max(1, count)
+        let event: Data
+        if mouseMode == 6 {
+            event = Data("\u{1B}[<\(button);\(column + 1);\(row + 1)M".utf8)
+        } else {
+            event = Data([
+                0x1B,
+                0x5B,
+                0x4D,
+                UInt8(clamping: Int(button) + 32),
+                UInt8(clamping: Int(column) + 33),
+                UInt8(clamping: Int(row) + 33),
+            ])
+        }
+
+        var payload = Data()
+        payload.reserveCapacity(event.count * repetitions)
+        for _ in 0..<repetitions {
+            payload.append(event)
+        }
+        return payload
     }
 }
 

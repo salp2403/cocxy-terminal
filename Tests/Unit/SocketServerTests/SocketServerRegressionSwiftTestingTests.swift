@@ -35,6 +35,7 @@
 
 import Foundation
 import Testing
+import CocxyShared
 @testable import CocxyTerminal
 
 // MARK: - Test Infrastructure
@@ -149,9 +150,15 @@ private func disableSigPipe(for fd: Int32) {
 @discardableResult
 private func sendFramedRequest(
     _ request: SocketRequest,
-    on fd: Int32
+    on fd: Int32,
+    socketPath: String
 ) throws -> SocketResponse {
-    let framedRequest = try SocketMessageFraming.frame(request)
+    let token = try SocketAuthenticationCredential.read(
+        from: SocketAuthenticationCredential.path(forSocketPath: socketPath)
+    )
+    let framedRequest = try SocketMessageFraming.frame(
+        request.authenticated(with: token)
+    )
 
     var totalWritten = 0
     let count = framedRequest.count
@@ -206,9 +213,15 @@ private func sendFramedRequest(
 /// writes cannot SIGPIPE the process.
 private func sendFramedRequestWithoutReading(
     _ request: SocketRequest,
-    on fd: Int32
+    on fd: Int32,
+    socketPath: String
 ) throws {
-    let framedRequest = try SocketMessageFraming.frame(request)
+    let token = try SocketAuthenticationCredential.read(
+        from: SocketAuthenticationCredential.path(forSocketPath: socketPath)
+    )
+    let framedRequest = try SocketMessageFraming.frame(
+        request.authenticated(with: token)
+    )
 
     var totalWritten = 0
     let count = framedRequest.count
@@ -275,7 +288,8 @@ struct SocketServerRegressionSwiftTestingTests {
         let handler = SpyCommandHandler()
         let server = SocketServerImpl(
             socketPath: tempPaths.path,
-            commandHandler: handler
+            commandHandler: handler,
+            authenticationStore: TestSocketAuthenticationStore()
         )
         try server.start()
         defer { server.stop() }
@@ -295,7 +309,11 @@ struct SocketServerRegressionSwiftTestingTests {
                         command: "status",
                         params: nil
                     )
-                    let resp = try sendFramedRequest(request, on: fd)
+                    let resp = try sendFramedRequest(
+                        request,
+                        on: fd,
+                        socketPath: path
+                    )
                     continuation.resume(returning: resp)
                 } catch {
                     continuation.resume(throwing: error)
@@ -322,7 +340,8 @@ struct SocketServerRegressionSwiftTestingTests {
         let handler = SpyCommandHandler(responseDelay: 0.10)
         let server = SocketServerImpl(
             socketPath: tempPaths.path,
-            commandHandler: handler
+            commandHandler: handler,
+            authenticationStore: TestSocketAuthenticationStore()
         )
         try server.start()
         defer { server.stop() }
@@ -338,7 +357,11 @@ struct SocketServerRegressionSwiftTestingTests {
                         command: "status",
                         params: nil
                     )
-                    try sendFramedRequestWithoutReading(request, on: fd)
+                    try sendFramedRequestWithoutReading(
+                        request,
+                        on: fd,
+                        socketPath: path
+                    )
                     Darwin.shutdown(fd, SHUT_RDWR)
                     Darwin.close(fd)
                     continuation.resume()
@@ -361,7 +384,11 @@ struct SocketServerRegressionSwiftTestingTests {
                         command: "status",
                         params: nil
                     )
-                    let resp = try sendFramedRequest(request, on: fd)
+                    let resp = try sendFramedRequest(
+                        request,
+                        on: fd,
+                        socketPath: path
+                    )
                     continuation.resume(returning: resp)
                 } catch {
                     continuation.resume(throwing: error)
@@ -390,7 +417,8 @@ struct SocketServerRegressionSwiftTestingTests {
         let handler = SpyCommandHandler(responseDelay: 0.05)
         let server = SocketServerImpl(
             socketPath: tempPaths.path,
-            commandHandler: handler
+            commandHandler: handler,
+            authenticationStore: TestSocketAuthenticationStore()
         )
         try server.start()
         defer { server.stop() }
@@ -416,7 +444,11 @@ struct SocketServerRegressionSwiftTestingTests {
                                     command: "status",
                                     params: nil
                                 )
-                                let resp = try sendFramedRequest(request, on: fd)
+                                let resp = try sendFramedRequest(
+                                    request,
+                                    on: fd,
+                                    socketPath: path
+                                )
                                 if resp.success {
                                     successes.increment()
                                 } else {

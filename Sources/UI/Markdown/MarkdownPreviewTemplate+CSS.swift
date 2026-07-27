@@ -389,6 +389,17 @@ extension MarkdownPreviewTemplate {
             border-radius: 8px;
             cursor: zoom-in;
         }
+        img[data-cocxy-image-blocked] {
+            display: inline-block;
+            min-width: 160px;
+            min-height: 48px;
+            padding: 12px;
+            border: 1px solid var(--surface1);
+            background: var(--mantle);
+            color: var(--subtext0);
+            cursor: default;
+            object-fit: contain;
+        }
         """
     }
 }

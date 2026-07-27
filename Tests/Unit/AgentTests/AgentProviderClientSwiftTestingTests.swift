@@ -201,6 +201,33 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(toolMessage["tool_call_id"] as? String == "call-openai-1")
     }
 
+    @Test("OpenAI requires matching consent before serializing terminal output")
+    func openAIRequiresMatchingConsentForTerminalOutput() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#.utf8)
+        ))
+        let client = OpenAIAgentLLMClient(
+            apiKey: "openai-key",
+            model: "test-openai-model",
+            transport: transport
+        )
+
+        let request = try await consentCheckedTerminalOutputRequest(
+            client: client,
+            transport: transport,
+            provider: .openai,
+            wrongProvider: .anthropic
+        )
+        let body = try jsonObject(request.body)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let toolMessage = try #require(messages.first { $0["role"] as? String == "tool" })
+
+        #expect(toolMessage["tool_call_id"] as? String == "terminal-call-1")
+        #expect((toolMessage["content"] as? String)?.contains("synthetic terminal output") == true)
+        #expect(request.retryPolicy == .singleAttempt)
+    }
+
     @Test("Anthropic client sends messages tools and parses tool_use blocks")
     func anthropicClientSendsToolsAndParsesToolUse() async throws {
         let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
@@ -343,6 +370,35 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(toolUse["name"] as? String == "git_status")
         #expect(toolResultBlock["type"] as? String == "tool_result")
         #expect(toolResultBlock["tool_use_id"] as? String == "toolu_1")
+    }
+
+    @Test("Anthropic requires matching consent before serializing terminal output")
+    func anthropicRequiresMatchingConsentForTerminalOutput() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"content":[{"type":"text","text":"ok"}]}"#.utf8)
+        ))
+        let client = AnthropicAgentLLMClient(
+            apiKey: "anthropic-key",
+            model: "test-anthropic-model",
+            transport: transport
+        )
+
+        let request = try await consentCheckedTerminalOutputRequest(
+            client: client,
+            transport: transport,
+            provider: .anthropic,
+            wrongProvider: .google
+        )
+        let body = try jsonObject(request.body)
+        let messages = try #require(body["messages"] as? [[String: Any]])
+        let toolResult = try #require(messages.first)
+        let blocks = try #require(toolResult["content"] as? [[String: Any]])
+        let block = try #require(blocks.first)
+
+        #expect(block["tool_use_id"] as? String == "terminal-call-1")
+        #expect((block["content"] as? String)?.contains("synthetic terminal output") == true)
+        #expect(request.retryPolicy == .singleAttempt)
     }
 
     @Test("Google client sends generateContent tools and parses function calls")
@@ -506,6 +562,151 @@ struct AgentProviderClientSwiftTestingTests {
         #expect((response["matches"] as? NSNumber)?.intValue == 2)
     }
 
+    @Test("Google requires matching consent before serializing terminal output")
+    func googleRequiresMatchingConsentForTerminalOutput() async throws {
+        let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#.utf8)
+        ))
+        let client = GoogleAgentLLMClient(
+            apiKey: "google-key",
+            model: "test-google-model",
+            transport: transport
+        )
+
+        let request = try await consentCheckedTerminalOutputRequest(
+            client: client,
+            transport: transport,
+            provider: .google,
+            wrongProvider: .openai
+        )
+        let body = try jsonObject(request.body)
+        let contents = try #require(body["contents"] as? [[String: Any]])
+        let toolResult = try #require(contents.first)
+        let parts = try #require(toolResult["parts"] as? [[String: Any]])
+        let functionResponse = try #require(parts.first?["functionResponse"] as? [String: Any])
+        let response = try #require(functionResponse["response"] as? [String: Any])
+
+        #expect(functionResponse["name"] as? String == "read_terminal_output")
+        #expect(response["output"] as? String == "synthetic terminal output")
+        #expect(request.retryPolicy == .singleAttempt)
+    }
+
+    @Test("remote providers accept only the canonical consumed terminal-output tombstone")
+    func remoteProvidersAcceptCanonicalTerminalOutputTombstone() async throws {
+        let approved = terminalOutputMessage(
+            provider: .openai,
+            contextDigest: "synthetic-context-digest"
+        )
+        let omitted = try AgentSensitiveDataPolicy.omittedTerminalOutputMessage(from: approved)
+        let openAITransport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#.utf8)
+        ))
+        let anthropicTransport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"content":[{"type":"text","text":"ok"}]}"#.utf8)
+        ))
+        let googleTransport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}"#.utf8)
+        ))
+
+        _ = try await OpenAIAgentLLMClient(
+            apiKey: "openai-key",
+            model: "test-openai-model",
+            transport: openAITransport
+        ).nextResponse(for: [omitted])
+        _ = try await AnthropicAgentLLMClient(
+            apiKey: "anthropic-key",
+            model: "test-anthropic-model",
+            transport: anthropicTransport
+        ).nextResponse(for: [omitted])
+        _ = try await GoogleAgentLLMClient(
+            apiKey: "google-key",
+            model: "test-google-model",
+            transport: googleTransport
+        ).nextResponse(for: [omitted])
+
+        #expect(await openAITransport.requests.count == 1)
+        #expect(await anthropicTransport.requests.count == 1)
+        #expect(await googleTransport.requests.count == 1)
+        let tampered = AgentMessage(
+            id: omitted.id,
+            role: .tool,
+            content: #"{"output":"[terminal output omitted after approved one-time use]","extra":"data"}"#,
+            toolName: "read_terminal_output",
+            toolCallID: "terminal-call-1"
+        )
+        let rejectingTransport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
+            statusCode: 200,
+            data: Data(#"{"choices":[{"message":{"role":"assistant","content":"ok"}}]}"#.utf8)
+        ))
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await OpenAIAgentLLMClient(
+                apiKey: "openai-key",
+                model: "test-openai-model",
+                transport: rejectingTransport
+            ).nextResponse(for: [tampered])
+        }
+        #expect(await rejectingTransport.requests.isEmpty)
+
+        let nonCanonicalTombstone = AgentMessage(
+            id: omitted.id,
+            role: .tool,
+            content: omitted.content,
+            toolName: omitted.toolName,
+            toolCallID: omitted.toolCallID,
+            imageAttachments: [AgentImageAttachment(
+                id: "unexpected-image",
+                displayName: "unexpected.png",
+                mimeType: "image/png",
+                filePath: "/tmp/unexpected.png",
+                byteCount: 1,
+                pixelWidth: 1,
+                pixelHeight: 1
+            )]
+        )
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await OpenAIAgentLLMClient(
+                apiKey: "openai-key",
+                model: "test-openai-model",
+                transport: rejectingTransport
+            ).nextResponse(for: [nonCanonicalTombstone])
+        }
+        #expect(await rejectingTransport.requests.isEmpty)
+
+        let unsafeResult = AgentToolResult(
+            callID: "terminal-call-1",
+            toolID: "read_terminal_output",
+            status: .success,
+            content: .object([
+                "output": .string(AgentSensitiveDataPolicy.omittedTerminalOutput),
+            ]),
+            error: AgentToolErrorPayload(
+                code: "unexpected",
+                message: "synthetic-sensitive-error"
+            )
+        )
+        let unsafeData = try AgentToolProtocolCodec.encode(unsafeResult)
+        let unsafeContent = try #require(String(data: unsafeData, encoding: .utf8))
+        let unsafeTombstone = AgentMessage(
+            id: omitted.id,
+            role: .tool,
+            content: unsafeContent,
+            toolName: omitted.toolName,
+            toolCallID: omitted.toolCallID
+        )
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await OpenAIAgentLLMClient(
+                apiKey: "openai-key",
+                model: "test-openai-model",
+                transport: rejectingTransport
+            ).nextResponse(for: [unsafeTombstone])
+        }
+        #expect(await rejectingTransport.requests.isEmpty)
+    }
+
     @Test("provider clients surface non-success HTTP responses without leaking API keys")
     func providerClientsSurfaceHTTPFailuresWithoutLeakingKeys() async throws {
         let transport = RecordingAgentHTTPTransport(response: AgentHTTPResponse(
@@ -601,6 +802,54 @@ struct AgentProviderClientSwiftTestingTests {
         #expect(requests.count == 1)
     }
 
+    @Test("retrying transport sends sensitive requests only once")
+    func retryingTransportSendsSensitiveRequestsOnlyOnce() async throws {
+        let base = SequencedAgentHTTPTransport(results: [
+            .success(AgentHTTPResponse(statusCode: 500, data: Data("temporary".utf8))),
+            .success(AgentHTTPResponse(statusCode: 200, data: Data("unexpected".utf8))),
+        ])
+        let transport = RetryingAgentHTTPTransport(
+            base: base,
+            maxAttempts: 3,
+            sleep: { _ in }
+        )
+        let request = AgentHTTPRequest(
+            url: try #require(URL(string: "https://example.com/agent")),
+            headers: [:],
+            body: Data("sensitive terminal output".utf8),
+            retryPolicy: .singleAttempt
+        )
+
+        let response = try await transport.send(request)
+
+        #expect(response.statusCode == 500)
+        #expect(await base.requests.count == 1)
+    }
+
+    @Test("retrying transport does not repeat deterministic response budget failures")
+    func retryingTransportDoesNotRetryResponseBudgetFailures() async throws {
+        let expectedError = AgentHTTPTransportError.responseTooLarge(maximumBytes: 8)
+        let base = SequencedAgentHTTPTransport(results: [
+            .failure(expectedError),
+            .success(AgentHTTPResponse(statusCode: 200, data: Data("unexpected".utf8))),
+        ])
+        let transport = RetryingAgentHTTPTransport(
+            base: base,
+            maxAttempts: 3,
+            sleep: { _ in }
+        )
+        let request = AgentHTTPRequest(
+            url: try #require(URL(string: "https://example.com/agent")),
+            headers: [:],
+            body: Data()
+        )
+
+        await #expect(throws: expectedError) {
+            _ = try await transport.send(request)
+        }
+        #expect(await base.requests.count == 1)
+    }
+
     @Test("factory wraps remote provider transport with retry")
     func factoryWrapsRemoteProviderTransportWithRetry() async throws {
         let secretStore = InMemoryAgentSecretStore()
@@ -630,6 +879,40 @@ struct AgentProviderClientSwiftTestingTests {
 
         #expect(response.content == "ok")
         #expect(requests.count == 2)
+    }
+
+    @Test("factory does not retry an approved terminal-output disclosure")
+    func factoryDoesNotRetryApprovedTerminalOutputDisclosure() async throws {
+        let secretStore = InMemoryAgentSecretStore()
+        let secrets = AgentSecrets(store: secretStore)
+        try secrets.saveAPIKey("user-openai-key", for: .openai)
+        let transport = SequencedAgentHTTPTransport(results: [
+            .success(AgentHTTPResponse(statusCode: 500, data: Data("temporary".utf8))),
+            .success(AgentHTTPResponse(
+                statusCode: 200,
+                data: Data(#"{"choices":[{"message":{"role":"assistant","content":"unexpected"}}]}"#.utf8)
+            )),
+        ])
+        let factory = AgentProviderClientFactory(
+            secrets: secrets,
+            foundationModelsAvailable: false,
+            transport: transport
+        )
+        let client = try factory.makeClient(configuration: AgentModeConfig(
+            enabled: true,
+            preferredProvider: .openai
+        ))
+        let approvedMessage = terminalOutputMessage(
+            provider: .openai,
+            contextDigest: "factory-sensitive-context"
+        )
+
+        await #expect(throws: AgentProviderClientError.httpStatus(500, "temporary")) {
+            _ = try await client.nextResponse(for: [approvedMessage])
+        }
+        let requests = await transport.requests
+        #expect(requests.count == 1)
+        #expect(requests.first?.retryPolicy == .singleAttempt)
     }
 
     #if canImport(FoundationModels)
@@ -815,6 +1098,106 @@ struct AgentProviderClientSwiftTestingTests {
             throw AgentProviderClientTestError.unexpectedRequestCount(requests.count)
         }
         return request
+    }
+
+    private func consentCheckedTerminalOutputRequest<Client: AgentLLMClient>(
+        client: Client,
+        transport: RecordingAgentHTTPTransport,
+        provider: AgentProviderKind,
+        wrongProvider: AgentProviderKind
+    ) async throws -> AgentHTTPRequest {
+        let contextDigest = "synthetic-context-digest-not-for-provider-json"
+        let messageWithoutConsent = terminalOutputMessage(consent: nil)
+        let messageWithMismatchedCall = terminalOutputMessage(
+            consentToolCallID: "different-terminal-call",
+            provider: provider,
+            contextDigest: contextDigest
+        )
+        let messageWithWrongProvider = terminalOutputMessage(
+            provider: wrongProvider,
+            contextDigest: contextDigest
+        )
+        let messageWithEmptyContext = terminalOutputMessage(
+            provider: provider,
+            contextDigest: ""
+        )
+        let approvedMessage = terminalOutputMessage(
+            provider: provider,
+            contextDigest: contextDigest
+        )
+        let messageWithTamperedPayload = AgentMessage(
+            id: approvedMessage.id,
+            role: approvedMessage.role,
+            content: #"{"limit":1,"output":"different terminal output"}"#,
+            toolName: approvedMessage.toolName,
+            toolCallID: approvedMessage.toolCallID,
+            sensitiveDataConsent: approvedMessage.sensitiveDataConsent
+        )
+
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await client.nextResponse(for: [messageWithoutConsent])
+        }
+        #expect(await transport.requests.isEmpty)
+
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await client.nextResponse(for: [messageWithMismatchedCall])
+        }
+        #expect(await transport.requests.isEmpty)
+
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await client.nextResponse(for: [messageWithWrongProvider])
+        }
+        #expect(await transport.requests.isEmpty)
+
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await client.nextResponse(for: [messageWithEmptyContext])
+        }
+        #expect(await transport.requests.isEmpty)
+
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await client.nextResponse(for: [messageWithTamperedPayload])
+        }
+        #expect(await transport.requests.isEmpty)
+
+        await #expect(throws: AgentProviderClientError.sensitiveDataConsentRequired) {
+            _ = try await client.nextResponse(for: [approvedMessage, approvedMessage])
+        }
+        #expect(await transport.requests.isEmpty)
+
+        _ = try await client.nextResponse(for: [approvedMessage])
+        let request = try await onlyRequest(from: transport)
+        let requestJSON = try #require(String(data: request.body, encoding: .utf8))
+        #expect(requestJSON.contains("synthetic terminal output"))
+        #expect(!requestJSON.contains("sensitiveDataConsent"))
+        #expect(!requestJSON.contains(contextDigest))
+        return request
+    }
+
+    private func terminalOutputMessage(
+        consent: AgentSensitiveDataConsent?
+    ) -> AgentMessage {
+        AgentMessage(
+            id: "terminal-result-1",
+            role: .tool,
+            content: #"{"limit":1,"output":"synthetic terminal output"}"#,
+            toolName: "read_terminal_output",
+            toolCallID: "terminal-call-1",
+            sensitiveDataConsent: consent
+        )
+    }
+
+    private func terminalOutputMessage(
+        consentToolCallID: String = "terminal-call-1",
+        provider: AgentProviderKind,
+        contextDigest: String
+    ) -> AgentMessage {
+        let content = #"{"limit":1,"output":"synthetic terminal output"}"#
+        return terminalOutputMessage(consent: AgentSensitiveDataPolicy.consent(
+            toolCallID: consentToolCallID,
+            provider: provider,
+            contextDigest: contextDigest,
+            encodedToolResult: content
+        ))
     }
 
     private func jsonObject(_ data: Data) throws -> [String: Any] {

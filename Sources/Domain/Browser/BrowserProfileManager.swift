@@ -38,6 +38,11 @@ protocol BrowserProfileStore: Sendable {
 
 // MARK: - Browser Profile Manager
 
+struct BrowserProfileImportReservation: Sendable, Equatable {
+    fileprivate let token: UUID
+    let profileID: UUID
+}
+
 /// Manages browser profiles: creation, deletion, switching, and updates.
 ///
 /// Maintains a published list of profiles and the currently active profile.
@@ -60,6 +65,7 @@ final class BrowserProfileManager: ObservableObject {
     // MARK: - Dependencies
 
     private let store: BrowserProfileStore
+    private var activeImportReservations: [UUID: UUID] = [:]
 
     // MARK: - Initialization
 
@@ -145,6 +151,7 @@ final class BrowserProfileManager: ObservableObject {
     ///
     /// - Parameter id: The ID of the profile to delete.
     func deleteProfile(id: UUID) {
+        guard activeImportReservations[id] == nil else { return }
         guard let index = profiles.firstIndex(where: { $0.id == id }) else { return }
         guard !profiles[index].isDefault else { return }
 
@@ -176,6 +183,7 @@ final class BrowserProfileManager: ObservableObject {
     ///
     /// - Parameter profile: The profile with updated values.
     func updateProfile(_ profile: BrowserProfile) {
+        guard activeImportReservations[profile.id] == nil else { return }
         guard let index = profiles.firstIndex(where: { $0.id == profile.id }) else { return }
         profiles[index] = profile
 
@@ -189,16 +197,36 @@ final class BrowserProfileManager: ObservableObject {
     }
 
     func attachRemoteProfile(_ remoteProfile: RemoteBrowserProfile, to profileID: UUID) {
+        guard activeImportReservations[profileID] == nil else { return }
         guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
         profiles[index].remoteProfile = remoteProfile
         persist()
     }
 
     func clearRemoteProfile(for profileID: UUID) {
+        guard activeImportReservations[profileID] == nil else { return }
         guard let index = profiles.firstIndex(where: { $0.id == profileID }) else { return }
         guard profiles[index].remoteProfile != nil else { return }
         profiles[index].remoteProfile = nil
         persist()
+    }
+
+    func beginImport(to profileID: UUID) -> BrowserProfileImportReservation? {
+        guard activeImportReservations[profileID] == nil,
+              let profile = profiles.first(where: { $0.id == profileID }),
+              !profile.isRemoteBacked else { return nil }
+        let reservation = BrowserProfileImportReservation(token: UUID(), profileID: profileID)
+        activeImportReservations[profileID] = reservation.token
+        return reservation
+    }
+
+    func endImport(_ reservation: BrowserProfileImportReservation) {
+        guard activeImportReservations[reservation.profileID] == reservation.token else { return }
+        activeImportReservations.removeValue(forKey: reservation.profileID)
+    }
+
+    func hasActiveImport(for profileID: UUID) -> Bool {
+        activeImportReservations[profileID] != nil
     }
 
     // MARK: - Persistence

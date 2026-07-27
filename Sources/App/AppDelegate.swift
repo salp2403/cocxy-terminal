@@ -118,6 +118,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Exposed for testing purposes.
     private(set) var socketServer: SocketServerImpl?
 
+    /// Serializes visible approval for sensitive local-socket operations.
+    let privilegedSocketCommandAuthorizationCoordinator =
+        SocketPrivilegedCommandAuthorizationCoordinator()
+    var activePrivilegedSocketCommandContext: SocketPrivilegedCommandContext?
+
     /// Timer that periodically checks if the socket file still exists.
     /// If the file disappears (e.g., due to a race condition), the server
     /// is automatically restarted to restore hook connectivity.
@@ -439,6 +444,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         pluginManager = nil
         remotePortScanner?.stopScanning()
         remotePortScanner = nil
+        remoteConnectionManager?.shutdownForApplicationTermination()
         cocxydRemoteSSHBootstrapper = nil
         daemonDeployAdapter = nil
         remoteConnectionManager = nil
@@ -690,6 +696,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
                 ?? TerminalConfig.defaults.clipboardReadAccess,
+            clipboardWriteAccess: configService?.current.terminal.clipboardWriteAccess
+                ?? TerminalConfig.defaults.clipboardWriteAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
             hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
@@ -804,6 +812,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
                 ?? TerminalConfig.defaults.clipboardReadAccess,
+            clipboardWriteAccess: configService?.current.terminal.clipboardWriteAccess
+                ?? TerminalConfig.defaults.clipboardWriteAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
             hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
@@ -940,6 +950,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingX: newConfig.appearance.effectivePaddingX,
             windowPaddingY: newConfig.appearance.effectivePaddingY,
             clipboardReadAccess: newConfig.terminal.clipboardReadAccess,
+            clipboardWriteAccess: newConfig.terminal.clipboardWriteAccess,
             appLanguage: newConfig.appearance.appLanguage,
             hookIntegration: newConfig.hooks,
             ligaturesEnabled: newConfig.appearance.ligatures,
@@ -1060,6 +1071,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             windowPaddingY: paddingY,
             clipboardReadAccess: configService?.current.terminal.clipboardReadAccess
                 ?? TerminalConfig.defaults.clipboardReadAccess,
+            clipboardWriteAccess: configService?.current.terminal.clipboardWriteAccess
+                ?? TerminalConfig.defaults.clipboardWriteAccess,
             appLanguage: configService?.current.appearance.appLanguage
                 ?? AppearanceConfig.defaults.appLanguage,
             hookIntegration: configService?.current.hooks ?? HookIntegrationConfig.defaults,
@@ -1647,6 +1660,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         self.windowController = controller
     }
 
+    /// Installs an already-loaded config service for focused integration tests.
+    func installConfigServiceForTesting(_ service: ConfigService?) {
+        self.configService = service
+    }
+
     /// Exposes main-window construction for tests that verify launch ordering
     /// without bootstrapping the full app delegate.
     func createMainWindowForTesting(deferSurfaceBootstrap: Bool) {
@@ -1853,6 +1871,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Starts the CLI companion socket server and schedules a health check timer.
     private func initializeSocketServer() {
+        try? CellCloudInitFileStager.removeAbandonedDefaultStaging()
         let configService = self.configService
         let delegateRef = WeakReference(self)
         let configServiceRef = WeakReference(configService)
@@ -1875,16 +1894,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
         }
         let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                guard !Thread.isMainThread else { return nil }
+                let semaphore = DispatchSemaphore(value: 0)
+                let result = LockedBox<SocketPrivilegedCommandAuthorizationGrant?>(nil)
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let delegate = delegateRef.value else {
+                            semaphore.signal()
+                            return
+                        }
+                        delegate.privilegedSocketCommandAuthorizationCoordinator.requestAuthorization(
+                            request,
+                            targetProvider: { [weak delegate] in
+                                delegate?.privilegedSocketCommandPresentationTarget(for: request)
+                            },
+                            completion: { grant in
+                                result.withValue { $0 = grant }
+                                semaphore.signal()
+                            }
+                        )
+                    }
+                }
+                let remaining = max(0, request.expiresAt.timeIntervalSinceNow) + 1
+                guard semaphore.wait(timeout: .now() + remaining) == .success else { return nil }
+                return result.withValue { $0 }
+            },
             tabManager: windowController?.tabManager,
             hookEventReceiver: hookEventReceiver,
             browserViewModelProviderOverride: {
-                syncOnMainActor {
-                    delegateRef.value?.activeBrowserViewModelForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    delegateRef.value?.socketBrowserViewModel(for: context)
+                }
+            },
+            browserViewModelsProviderOverride: {
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    delegateRef.value?.privilegedSocketBrowserViewModels(for: context) ?? []
                 }
             },
             browserNavigationViewModelProviderOverride: {
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    delegateRef.value?.privilegedSocketBrowserNavigationViewModel(for: context)
+                }
+            },
+            browserSplitProvider: {
                 syncOnMainActor {
-                    delegateRef.value?.browserViewModelForExternalNavigationCLI()
+                    delegateRef.value?.openBrowserSplitForCLI() ?? false
                 }
             },
             browserImportProvider: { kind, params in
@@ -1892,10 +1950,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     false,
                     ["error": "Cocxy process has shut down"]
                 )
-                guard let delegate = delegateRef.value else {
+                guard let delegate = delegateRef.value,
+                      let authorizationContext = SocketPrivilegedCommandExecutionContext
+                        .currentGrant?.context else {
                     return fallback
                 }
-                return delegate.handleBrowserImportCLIRequest(kind: kind, params: params)
+                return delegate.handleBrowserImportCLIRequest(
+                    kind: kind,
+                    params: params,
+                    authorizationContext: authorizationContext
+                )
+            },
+            browserInitScriptAuthorizationProvider: { request in
+                syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let controller = delegate.allWindowControllers.first(where: { controller in
+                              controller.allBrowserViewModels().contains { viewModel in
+                                  ObjectIdentifier(viewModel) == request.context.viewModelIdentifier
+                              }
+                          }) else {
+                        return false
+                    }
+                    return controller.authorizeBrowserInitScript(request)
+                }
             },
             tabCountProviderOverride: {
                 syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {
@@ -2021,7 +2098,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 syncOnMainActor {
                     delegateRef.value?.exportTabConfigForCLI(
                         named: name,
-                        destination: output,
+                        fileName: output,
                         overwrite: overwrite
                     )
                 }
@@ -2069,7 +2146,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusDetailsProvider: {
                 syncOnMainActorIfAvailable(timeout: coldStartStatusTimeout) {
                     delegateRef.value?.runtimeStatusDetailsForCLI() ?? [:]
-                } ?? ["launch_status": "warming"]
+                } ?? {
+                    // The main actor is still busy, which is exactly when launch
+                    // timings are worth reporting. They come from a lock-guarded
+                    // store, so answer with what was measured instead of an empty
+                    // "warming" reply; the deferred counters stay out because only
+                    // the main actor knows them.
+                    var details = AppLaunchTimingRecorder.timingFields()
+                    details["launch_status"] = "warming"
+                    return details
+                }()
             },
             themeEngineProvider: {
                 if Thread.isMainThread {
@@ -2273,8 +2359,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             // V3: Capture pane — return terminal output buffer lines.
             capturePaneProvider: {
-                syncOnMainActor {
-                    focusedControllerProvider()?.terminalOutputBuffer.lines ?? []
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    delegateRef.value?.privilegedSocketTabOutputLines(for: context) ?? []
                 }
             },
             // V4: Dashboard toggle — show/hide dashboard panel.
@@ -2334,14 +2421,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             // V4: Timeline query — return events for a tab.
             timelineQueryProvider: { tabIDString in
-                syncOnMainActor {
-                    delegateRef.value?.timelineQuery(for: tabIDString)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    let boundTabID = tabIDString ?? context?.tabID?.uuidString
+                    return delegateRef.value?.timelineQuery(for: boundTabID)
                 }
             },
             // V4: Timeline export — return serialized timeline data.
             timelineExportProvider: { tabIDString, format in
-                syncOnMainActor {
-                    delegateRef.value?.exportTimeline(for: tabIDString, format: format)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    let boundTabID = tabIDString ?? context?.tabID?.uuidString
+                    return delegateRef.value?.exportTimeline(for: boundTabID, format: format)
                 }
             },
             // V4: Rich Input - open the composer for a specific tab.
@@ -2421,67 +2512,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             // V4: Search toggle — show/hide search bar.
             searchToggleProvider: {
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 syncOnMainActor {
-                    focusedControllerProvider()?.toggleSearchBar()
+                    guard let delegate = delegateRef.value,
+                          let controller = delegate.privilegedSocketController(for: context),
+                          context?.tabID == nil
+                            || (controller.visibleTabID ?? controller.tabManager.activeTabID)?.rawValue
+                                == context?.tabID else {
+                        return
+                    }
+                    controller.toggleSearchBar()
                 }
             },
             // V4: Search query — return structured scrollback matches.
             searchProvider: { query, regex, caseSensitive, tabIDString in
-                syncOnMainActor {
-                    delegateRef.value?.searchScrollback(
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    let boundTabID = tabIDString ?? context?.tabID?.uuidString
+                    return delegateRef.value?.searchScrollback(
                         query: query,
                         regex: regex,
                         caseSensitive: caseSensitive,
-                        tabIDString: tabIDString
+                        tabIDString: boundTabID
                     )
                 }
             },
             // V4: Send text — write text to the active terminal's PTY.
             sendTextProvider: { text in
-                syncOnMainActor {
-                    guard let wc = focusedControllerProvider(),
-                          let surfaceView = wc.focusedSplitSurfaceView,
-                          let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
-                    wc.terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let target = delegate.privilegedSocketTerminalTarget(for: context) else {
+                        return false
+                    }
+                    target.controller.terminalEngine(for: target.surfaceID)
+                        .sendText(text, to: target.surfaceID)
                     return true
                 }
             },
             // V4: Send key — send a named key to the active terminal.
             sendKeyProvider: { keyName in
-                syncOnMainActor {
-                    guard let wc = focusedControllerProvider(),
-                          let surfaceView = wc.focusedSplitSurfaceView,
-                          let surfaceID = surfaceView.terminalViewModel?.surfaceID else { return false }
-                    let sequence: String?
-                    switch keyName.lowercased() {
-                    case "enter", "return":   sequence = "\r"
-                    case "tab":               sequence = "\t"
-                    case "escape", "esc":     sequence = "\u{1B}"
-                    case "backspace", "bs":   sequence = "\u{7F}"
-                    case "space":             sequence = " "
-                    case "up":                sequence = "\u{1B}[A"
-                    case "down":              sequence = "\u{1B}[B"
-                    case "right":             sequence = "\u{1B}[C"
-                    case "left":              sequence = "\u{1B}[D"
-                    case "delete", "del":     sequence = "\u{1B}[3~"
-                    case "home":              sequence = "\u{1B}[H"
-                    case "end":               sequence = "\u{1B}[F"
-                    case "pageup", "pgup":    sequence = "\u{1B}[5~"
-                    case "pagedown", "pgdn":  sequence = "\u{1B}[6~"
-                    case "insert", "ins":     sequence = "\u{1B}[2~"
-                    case "ctrl-c":            sequence = "\u{03}"
-                    case "ctrl-d":            sequence = "\u{04}"
-                    case "ctrl-z":            sequence = "\u{1A}"
-                    case "ctrl-l":            sequence = "\u{0C}"
-                    case "ctrl-a":            sequence = "\u{01}"
-                    case "ctrl-e":            sequence = "\u{05}"
-                    case "ctrl-k":            sequence = "\u{0B}"
-                    case "ctrl-u":            sequence = "\u{15}"
-                    case "ctrl-w":            sequence = "\u{17}"
-                    default:                  sequence = nil
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    guard let delegate = delegateRef.value,
+                          let target = delegate.privilegedSocketTerminalTarget(for: context) else {
+                        return false
                     }
+                    let sequence = SocketTerminalKeySequence.sequence(for: keyName)
                     guard let seq = sequence else { return false }
-                    wc.terminalEngine(for: surfaceID).sendText(seq, to: surfaceID)
+                    target.controller.terminalEngine(for: target.surfaceID)
+                        .sendText(seq, to: target.surfaceID)
                     return true
                 }
             },
@@ -2495,12 +2575,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             // V4: SSH — open SSH in a new tab.
             sshProvider: { destination, port, identityFile in
-                syncOnMainActor {
-                    guard let wc = focusedControllerProvider() else { return nil }
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> (id: String, title: String)? in
+                    guard let delegate = delegateRef.value,
+                          let context,
+                          let wc = delegate.privilegedSocketController(for: context) else {
+                        return nil
+                    }
+                    let identityParams = identityFile.map { ["identity": $0] } ?? [:]
+                    guard let boundIdentityParams = context.bindingLocalResourcePaths(
+                        in: identityParams,
+                        keys: ["identity"],
+                        requiredScope: .remoteConnection
+                    ) else {
+                        return nil
+                    }
+                    if context.scope == .remoteConnection {
+                        guard let rawTabID = context.tabID,
+                              wc.tabManager.tab(for: TabID(rawValue: rawTabID)) != nil else {
+                            return nil
+                        }
+                    }
+                    let approvedIdentityFile = boundIdentityParams["identity"]
                     let fallbackCommand = CocxyDRemoteSSHBootstrapper.directSSHCommand(
                         destination: destination,
                         port: port,
-                        identityFile: identityFile
+                        identityFile: approvedIdentityFile
                     )
                     let bootstrapper = delegateRef.value?.cocxydRemoteSSHBootstrapper
 
@@ -2516,152 +2616,255 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         let bootstrapResult = await bootstrapper?.bootstrap(
                             destination: destination,
                             port: port,
-                            identityFile: identityFile
+                            identityFile: approvedIdentityFile
                         )
                         let sshCommand = bootstrapResult?.directSSHCommand ?? fallbackCommand
                         guard let wc = wc,
-                              wc.tabManager.activeTabID == targetTabID else { return }
-                        let surfaceID = wc.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
-                        guard let sid = surfaceID else { return }
+                              wc.tabManager.tab(for: targetTabID) != nil,
+                              let sid = wc.surfaceIDs(for: targetTabID).first else { return }
                         wc.terminalEngine(for: sid).sendText("\(sshCommand)\r", to: sid)
                     }
                     return (id: newTab.id.rawValue.uuidString, title: destination)
                 }
             },
             webStartProvider: { bind, port, token, maxConnections, fps in
-                syncOnMainActor {
-                    delegateRef.value?.startWebTerminalForCLI(
-                        bindAddress: bind,
-                        port: port,
-                        token: token,
-                        maxConnections: maxConnections,
-                        maxFPS: fps
-                    )
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.startWebTerminalForCLI(
+                            bindAddress: bind,
+                            port: port,
+                            token: token,
+                            maxConnections: maxConnections,
+                            maxFPS: fps
+                        )
+                    }
                 }
             },
             webStopProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.stopWebTerminalForCLI() ?? false
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor {
+                    guard let delegate = delegateRef.value else { return false }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.stopWebTerminalForCLI()
+                    }
                 }
             },
             webStatusProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.webStatusForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.webStatusForCLI()
+                    }
                 }
             },
             streamListProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.streamListForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.streamListForCLI()
+                    }
                 }
             },
             streamCurrentProvider: { streamID in
-                syncOnMainActor {
-                    delegateRef.value?.setCurrentStreamForCLI(streamID)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.setCurrentStreamForCLI(streamID)
+                    }
                 }
             },
             protocolCapabilitiesProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.requestProtocolCapabilitiesForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.requestProtocolCapabilitiesForCLI()
+                    }
                 }
             },
             protocolViewportProvider: { requestID in
-                syncOnMainActor {
-                    delegateRef.value?.sendProtocolViewportForCLI(requestID: requestID)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.sendProtocolViewportForCLI(requestID: requestID)
+                    }
                 }
             },
             protocolSendProvider: { type, payload in
-                syncOnMainActor {
-                    delegateRef.value?.sendProtocolMessageForCLI(type: type, payload: payload)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.sendProtocolMessageForCLI(type: type, payload: payload)
+                    }
                 }
             },
             coreResetProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.resetTerminalForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.resetTerminalForCLI()
+                    }
                 }
             },
             coreSignalProvider: { signal in
-                syncOnMainActor {
-                    delegateRef.value?.sendSignalForCLI(signal)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.sendSignalForCLI(signal)
+                    }
                 }
             },
             coreProcessProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.processDiagnosticsForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.processDiagnosticsForCLI()
+                    }
                 }
             },
             coreModesProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.modeDiagnosticsForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.modeDiagnosticsForCLI()
+                    }
                 }
             },
             coreSearchProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.searchDiagnosticsForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.searchDiagnosticsForCLI()
+                    }
                 }
             },
             coreLigaturesProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.ligatureDiagnosticsForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.ligatureDiagnosticsForCLI()
+                    }
                 }
             },
             coreProtocolProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.protocolDiagnosticsForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.protocolDiagnosticsForCLI()
+                    }
                 }
             },
             coreSelectionProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.selectionSnapshotForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.selectionSnapshotForCLI()
+                    }
                 }
             },
             coreFontMetricsProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.fontMetricsForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.fontMetricsForCLI()
+                    }
                 }
             },
             corePreeditProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.preeditSnapshotForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.preeditSnapshotForCLI()
+                    }
                 }
             },
             coreSemanticProvider: { limit in
-                syncOnMainActor {
-                    delegateRef.value?.semanticSummaryForCLI(limit: limit)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.semanticSummaryForCLI(limit: limit)
+                    }
                 }
             },
             blockListProvider: { limit in
-                syncOnMainActor {
-                    delegateRef.value?.commandBlocksForCLI(limit: limit)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.commandBlocksForCLI(limit: limit)
+                    }
                 }
             },
             blockOutputsProvider: { limit in
-                syncOnMainActor {
-                    delegateRef.value?.commandBlockOutputsForCLI(limit: limit)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.commandBlockOutputsForCLI(limit: limit)
+                    }
                 }
             },
             blockCopyProvider: { blockID, field in
-                syncOnMainActor {
-                    delegateRef.value?.copyCommandBlockForCLI(blockID: blockID, field: field)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.copyCommandBlockForCLI(blockID: blockID, field: field)
+                    }
                 }
             },
             blockRerunProvider: { blockID in
-                syncOnMainActor {
-                    delegateRef.value?.rerunCommandBlockForCLI(blockID: blockID)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.rerunCommandBlockForCLI(blockID: blockID)
+                    }
                 }
             },
             imageListProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.listImagesForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.listImagesForCLI()
+                    }
                 }
             },
             imageDeleteProvider: { imageID in
-                syncOnMainActor {
-                    delegateRef.value?.deleteImageForCLI(imageID)
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.deleteImageForCLI(imageID)
+                    }
                 }
             },
             imageClearProvider: {
-                syncOnMainActor {
-                    delegateRef.value?.clearImagesForCLI()
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                return syncOnMainActor { () -> [String: String]? in
+                    guard let delegate = delegateRef.value else { return nil }
+                    return delegate.withPrivilegedSocketCommandContext(context) {
+                        delegate.clearImagesForCLI()
+                    }
                 }
             },
             worktreeCLIProvider: { kind, params in
@@ -2698,19 +2901,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 )
             },
             gitAssistantCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 let fallback: (Bool, [String: String]) = (
                     false,
                     ["error": "Cocxy process has shut down"]
                 )
-                guard let delegate = delegateRef.value else {
+                guard let delegate = delegateRef.value,
+                      let context,
+                      context.scope == .repository,
+                      !context.workingDirectory.isEmpty else {
                     return fallback
                 }
                 return delegate.handleGitAssistantCLIRequest(
                     kind: kind,
-                    params: params
+                    params: params,
+                    approvedContext: context
                 )
             },
             agentTeamCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 let fallback: (Bool, [String: String]) = (
                     false,
                     ["error": "Cocxy process has shut down"]
@@ -2718,17 +2927,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let delegate = delegateRef.value else {
                     return fallback
                 }
-                return delegate.handleAgentTeamCLIRequest(kind: kind, params: params)
+                return delegate.handleAgentTeamCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
             },
             cellCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 let fallback: (Bool, [String: String]) = (
                     false,
                     ["error": "Cocxy process has shut down"]
                 )
-                guard let delegate = delegateRef.value else {
+                guard let delegate = delegateRef.value,
+                      let context else {
                     return fallback
                 }
-                return delegate.handleCellCLIRequest(kind: kind, params: params)
+                return delegate.handleCellCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
             }
         )
 

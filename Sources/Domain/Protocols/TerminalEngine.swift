@@ -129,6 +129,16 @@ protocol TerminalEngine: AnyObject {
     ///   - lineNumber: The zero-based line number in the scrollback buffer.
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int)
 
+    /// Scrolls the visible viewport by a signed row delta.
+    ///
+    /// Positive values move upward into older scrollback; negative values move
+    /// back toward the live bottom. Engines that cannot scroll locally may
+    /// ignore the request.
+    /// - Parameters:
+    ///   - surfaceID: The surface to scroll.
+    ///   - deltaRows: Signed number of rows to move.
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int)
+
     /// Notifies the engine that the host surface gained or lost focus.
     ///
     /// Engines can use this to forward focus changes to the PTY/terminal state,
@@ -271,6 +281,8 @@ extension TerminalEngine {
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {}
 
+    func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {}
+
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
         nil
     }
@@ -329,6 +341,8 @@ struct TerminalEngineConfig: Sendable {
     let windowPaddingY: Double
     /// Policy for OSC 52 clipboard reads initiated by terminal programs.
     let clipboardReadAccess: ClipboardReadAccess
+    /// Policy for OSC 52 clipboard writes initiated by terminal programs.
+    let clipboardWriteAccess: ClipboardWriteAccess
     /// App language used for terminal-engine-owned UI prompts.
     let appLanguage: AppLanguage
     /// Hook forwarding environment inherited by new shells.
@@ -362,6 +376,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingX: Double = 8,
         windowPaddingY: Double = 4,
         clipboardReadAccess: ClipboardReadAccess = .prompt,
+        clipboardWriteAccess: ClipboardWriteAccess = .prompt,
         appLanguage: AppLanguage = .system,
         hookIntegration: HookIntegrationConfig = .defaults,
         ligaturesEnabled: Bool = true,
@@ -383,6 +398,7 @@ struct TerminalEngineConfig: Sendable {
         self.windowPaddingX = windowPaddingX
         self.windowPaddingY = windowPaddingY
         self.clipboardReadAccess = clipboardReadAccess
+        self.clipboardWriteAccess = clipboardWriteAccess
         self.appLanguage = appLanguage
         self.hookIntegration = hookIntegration
         self.ligaturesEnabled = ligaturesEnabled
@@ -406,6 +422,7 @@ struct TerminalEngineConfig: Sendable {
         windowPaddingX: Double? = nil,
         windowPaddingY: Double? = nil,
         clipboardReadAccess: ClipboardReadAccess? = nil,
+        clipboardWriteAccess: ClipboardWriteAccess? = nil,
         appLanguage: AppLanguage? = nil,
         hookIntegration: HookIntegrationConfig? = nil,
         ligaturesEnabled: Bool? = nil,
@@ -429,6 +446,7 @@ struct TerminalEngineConfig: Sendable {
             windowPaddingX: windowPaddingX ?? self.windowPaddingX,
             windowPaddingY: windowPaddingY ?? self.windowPaddingY,
             clipboardReadAccess: clipboardReadAccess ?? self.clipboardReadAccess,
+            clipboardWriteAccess: clipboardWriteAccess ?? self.clipboardWriteAccess,
             appLanguage: appLanguage ?? self.appLanguage,
             hookIntegration: hookIntegration ?? self.hookIntegration,
             ligaturesEnabled: ligaturesEnabled ?? self.ligaturesEnabled,

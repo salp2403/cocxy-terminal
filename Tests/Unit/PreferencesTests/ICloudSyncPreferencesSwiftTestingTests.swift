@@ -129,26 +129,40 @@ struct ICloudSyncPreferencesSwiftTestingTests {
     }
 
     @Test("iCloud Sync master password saves and deletes through Preferences")
-    func iCloudSyncMasterPasswordSaveDelete() throws {
+    func iCloudSyncMasterPasswordSaveDelete() async throws {
         let secrets = ICloudSyncSecrets(store: InMemoryICloudSyncSecretStore())
         let (vm, _) = makeViewModel(iCloudSyncSecrets: secrets)
 
         vm.iCloudSyncMasterPasswordDraft = " sync password\n"
-        try vm.saveICloudSyncMasterPasswordDraft()
+        try await vm.saveICloudSyncMasterPasswordDraft()
 
         #expect(vm.iCloudSyncMasterPasswordDraft.isEmpty)
         #expect(vm.iCloudSyncMasterPasswordStatus == "iCloud Sync master password saved.")
         #expect(vm.hasSavedICloudSyncMasterPassword())
         #expect(try secrets.masterPassword() == "sync password")
 
-        try vm.deleteICloudSyncMasterPassword()
+        try await vm.deleteICloudSyncMasterPassword()
 
         #expect(vm.iCloudSyncMasterPasswordStatus == "iCloud Sync master password deleted.")
         #expect(!vm.hasSavedICloudSyncMasterPassword())
     }
 
+    @Test("saved master password availability refreshes asynchronously")
+    func savedMasterPasswordAvailabilityRefreshes() async throws {
+        let store = InMemoryICloudSyncSecretStore()
+        let secrets = ICloudSyncSecrets(store: store)
+        try secrets.saveMasterPassword("sync password")
+        let (vm, _) = makeViewModel(iCloudSyncSecrets: secrets)
+
+        #expect(vm.iCloudSyncHasSavedMasterPassword == false)
+        await vm.refreshICloudSyncMasterPasswordAvailability()
+
+        #expect(vm.iCloudSyncHasSavedMasterPassword)
+        #expect(vm.iCloudSyncOperation == nil)
+    }
+
     @Test("manual export uses saved master password and reports exported artifacts")
-    func manualExportUsesSavedMasterPasswordAndReportsExportedArtifacts() throws {
+    func manualExportUsesSavedMasterPasswordAndReportsExportedArtifacts() async throws {
         let store = InMemoryICloudSyncSecretStore()
         let secrets = ICloudSyncSecrets(store: store)
         try secrets.saveMasterPassword("sync password")
@@ -179,7 +193,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
             iCloudSyncExporter: exporter
         )
 
-        let outcome = try vm.exportICloudSyncArtifactsNow()
+        let outcome = try await vm.exportICloudSyncArtifactsNow()
 
         guard case .exported = outcome else {
             Issue.record("Expected exported outcome")
@@ -189,23 +203,62 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         #expect(exporter.requests[0].config.enabled == true)
         #expect(exporter.requests[0].config.artifactKinds == [.notebooks, .settings])
         #expect(exporter.requests[0].password == "sync password")
+        #expect(exporter.requests[0].ranOnMainThread == false)
         #expect(vm.iCloudSyncExportStatus == "Exported 2 encrypted artifacts.")
     }
 
+    @Test("manual export runs once off the main thread and rejects overlap")
+    func manualExportRejectsOverlappingRun() async throws {
+        let store = InMemoryICloudSyncSecretStore()
+        let secrets = ICloudSyncSecrets(store: store)
+        try secrets.saveMasterPassword("sync password")
+        // The first export is held open by a gate the test opens itself, not by
+        // a wall-clock delay: a fixed delay can expire while a loaded scheduler
+        // is still getting the test to the overlapping call, which would let the
+        // second export legitimately succeed and fail the assertion below with
+        // no regression behind it.
+        let exportGate = DispatchSemaphore(value: 0)
+        let exporter = RecordingICloudSyncExporter(gate: exportGate)
+        let (vm, _) = makeViewModel(
+            iCloudSyncSecrets: secrets,
+            iCloudSyncExporter: exporter
+        )
+        vm.iCloudSyncEnabled = true
+
+        let firstRun = Task { @MainActor in
+            try await vm.exportICloudSyncArtifactsNow()
+        }
+        while vm.iCloudSyncOperation != .exporting {
+            await Task.yield()
+        }
+
+        #expect(vm.iCloudSyncIsBusy)
+        await #expect(throws: ICloudSyncOperationError.operationInProgress) {
+            _ = try await vm.exportICloudSyncArtifactsNow()
+        }
+        exportGate.signal()
+        _ = try await firstRun.value
+
+        #expect(exporter.requests.count == 1)
+        #expect(exporter.requests[0].ranOnMainThread == false)
+        #expect(vm.iCloudSyncOperation == nil)
+        #expect(vm.iCloudSyncIsBusy == false)
+    }
+
     @Test("manual export refuses to run without a saved master password")
-    func manualExportRequiresSavedMasterPassword() throws {
+    func manualExportRequiresSavedMasterPassword() async throws {
         let exporter = RecordingICloudSyncExporter()
         let (vm, _) = makeViewModel(iCloudSyncExporter: exporter)
         vm.iCloudSyncEnabled = true
 
-        #expect(throws: ICloudSyncManualRunError.masterPasswordUnavailable) {
-            _ = try vm.exportICloudSyncArtifactsNow()
+        await #expect(throws: ICloudSyncManualRunError.masterPasswordUnavailable) {
+            _ = try await vm.exportICloudSyncArtifactsNow()
         }
         #expect(exporter.requests.isEmpty)
     }
 
     @Test("manual import uses saved master password and keeps conflicts for UI")
-    func manualImportUsesSavedMasterPasswordAndKeepsConflictsForUI() throws {
+    func manualImportUsesSavedMasterPasswordAndKeepsConflictsForUI() async throws {
         let store = InMemoryICloudSyncSecretStore()
         let secrets = ICloudSyncSecrets(store: store)
         try secrets.saveMasterPassword("sync password")
@@ -244,7 +297,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
             iCloudSyncImporter: importer
         )
 
-        let outcome = try vm.importICloudSyncArtifactsNow()
+        let outcome = try await vm.importICloudSyncArtifactsNow()
 
         guard case .imported = outcome else {
             Issue.record("Expected imported outcome")
@@ -253,12 +306,13 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         #expect(importer.requests.count == 1)
         #expect(importer.requests[0].config.enabled == true)
         #expect(importer.requests[0].password == "sync password")
+        #expect(importer.requests[0].ranOnMainThread == false)
         #expect(vm.iCloudSyncImportStatus == "Imported 1 encrypted artifact; 1 conflict requires manual resolution.")
         #expect(vm.iCloudSyncConflicts == [ICloudSyncImportConflict(local: localEntry, remote: remoteEntry)])
     }
 
     @Test("manual conflict resolution removes resolved conflict from Preferences")
-    func manualConflictResolutionRemovesResolvedConflictFromPreferences() throws {
+    func manualConflictResolutionRemovesResolvedConflictFromPreferences() async throws {
         let store = InMemoryICloudSyncSecretStore()
         let secrets = ICloudSyncSecrets(store: store)
         try secrets.saveMasterPassword("sync password")
@@ -295,13 +349,14 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         )
         vm.iCloudSyncConflicts = [conflict]
 
-        let outcome = try vm.resolveICloudSyncConflict(conflict, resolution: .keepLocal)
+        let outcome = try await vm.resolveICloudSyncConflict(conflict, resolution: .keepLocal)
 
         guard case .resolved = outcome else {
             Issue.record("Expected resolved outcome")
             return
         }
         #expect(resolver.requests.map(\.resolution) == [.keepLocal])
+        #expect(resolver.requests[0].ranOnMainThread == false)
         #expect(vm.iCloudSyncConflicts.isEmpty)
         #expect(vm.iCloudSyncImportStatus == "Resolved conflict for daily.cocxynb.")
     }
@@ -312,13 +367,29 @@ private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked
         let config: ICloudSyncConfig
         let roots: ICloudSyncArtifactRoots
         let password: String
+        let ranOnMainThread: Bool
     }
 
-    private(set) var requests: [Request] = []
-    var outcome: ICloudSyncExportOutcome
+    private let lock = NSLock()
+    private var storedRequests: [Request] = []
+    private let outcome: ICloudSyncExportOutcome
+    /// Optional gate that keeps an export in flight until the test opens it, so
+    /// the "already running" window is causal rather than timed. Exports run off
+    /// the main thread, so blocking here never stalls the main actor.
+    private let gate: DispatchSemaphore?
 
-    init(outcome: ICloudSyncExportOutcome = .disabled) {
+    var requests: [Request] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedRequests
+    }
+
+    init(
+        outcome: ICloudSyncExportOutcome = .disabled,
+        gate: DispatchSemaphore? = nil
+    ) {
         self.outcome = outcome
+        self.gate = gate
     }
 
     func exportLocalArtifacts(
@@ -326,7 +397,16 @@ private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked
         roots: ICloudSyncArtifactRoots,
         password: String
     ) throws -> ICloudSyncExportOutcome {
-        requests.append(Request(config: config, roots: roots, password: password))
+        // Bounded so a test that never opens the gate fails instead of hanging.
+        _ = gate?.wait(timeout: .now() + 10)
+        lock.lock()
+        storedRequests.append(Request(
+            config: config,
+            roots: roots,
+            password: password,
+            ranOnMainThread: Thread.isMainThread
+        ))
+        lock.unlock()
         return outcome
     }
 }
@@ -336,10 +416,18 @@ private final class RecordingICloudSyncImporter: ICloudSyncImporting, @unchecked
         let config: ICloudSyncConfig
         let roots: ICloudSyncArtifactRoots
         let password: String
+        let ranOnMainThread: Bool
     }
 
-    private(set) var requests: [Request] = []
-    var outcome: ICloudSyncImportOutcome
+    private let lock = NSLock()
+    private var storedRequests: [Request] = []
+    private let outcome: ICloudSyncImportOutcome
+
+    var requests: [Request] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedRequests
+    }
 
     init(outcome: ICloudSyncImportOutcome = .disabled) {
         self.outcome = outcome
@@ -350,7 +438,14 @@ private final class RecordingICloudSyncImporter: ICloudSyncImporting, @unchecked
         roots: ICloudSyncArtifactRoots,
         password: String
     ) throws -> ICloudSyncImportOutcome {
-        requests.append(Request(config: config, roots: roots, password: password))
+        lock.lock()
+        storedRequests.append(Request(
+            config: config,
+            roots: roots,
+            password: password,
+            ranOnMainThread: Thread.isMainThread
+        ))
+        lock.unlock()
         return outcome
     }
 }
@@ -363,9 +458,17 @@ private final class RecordingICloudSyncConflictResolver: ICloudSyncConflictResol
         let roots: ICloudSyncArtifactRoots
         let backupRoot: URL
         let password: String
+        let ranOnMainThread: Bool
     }
 
-    private(set) var requests: [Request] = []
+    private let lock = NSLock()
+    private var storedRequests: [Request] = []
+
+    var requests: [Request] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storedRequests
+    }
 
     func resolveConflict(
         config: ICloudSyncConfig,
@@ -375,14 +478,17 @@ private final class RecordingICloudSyncConflictResolver: ICloudSyncConflictResol
         backupRoot: URL,
         password: String
     ) throws -> ICloudSyncConflictResolutionOutcome {
-        requests.append(Request(
+        lock.lock()
+        storedRequests.append(Request(
             config: config,
             conflict: conflict,
             resolution: resolution,
             roots: roots,
             backupRoot: backupRoot,
-            password: password
+            password: password,
+            ranOnMainThread: Thread.isMainThread
         ))
+        lock.unlock()
         return .resolved(ICloudSyncConflictResolutionResult(
             conflict: conflict,
             resolution: resolution,

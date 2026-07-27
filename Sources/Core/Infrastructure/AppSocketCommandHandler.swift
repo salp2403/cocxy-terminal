@@ -162,6 +162,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
     // MARK: - Dependencies
 
+    /// Presents an exact, one-use approval before any privileged local-socket command.
+    /// Missing authorization fails closed; internal non-socket callers must opt in explicitly.
+    private let privilegedCommandAuthorizationProvider: SocketPrivilegedCommandAuthorizationProvider
+
     /// Closure that returns the tab count from the main thread.
     private let tabCountProvider: @Sendable () -> Int
 
@@ -222,11 +226,19 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Closure that provides the browser view model for scriptable browser commands.
     /// Returns nil when no browser panel is open.
     private let browserViewModelProvider: @Sendable () -> BrowserViewModel?
+    /// Returns every live browser model for global init-script list and revocation operations.
+    private let browserViewModelsProvider: @Sendable () -> [BrowserViewModel]
     /// Closure that provides or opens a browser view model for external navigation.
     /// Unlike the read-only provider above, this may create UI for `browser navigate`.
     private let browserNavigationViewModelProvider: @Sendable () -> BrowserViewModel?
+    /// Opens the full browser workspace split used by visual browser automation smokes.
+    private let browserSplitProvider: (@Sendable () -> Bool)?
     /// Routes browser import preview/run requests to the app-owned importer.
     private let browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+    /// Presents a native, exact-context approval before retaining an init script.
+    private let browserInitScriptAuthorizationProvider: (@Sendable (BrowserInitScriptAuthorizationRequest) -> Bool)?
+    /// Identifies whether the request came from the local CLI or Agent Mode.
+    private let browserInitScriptRequestSource: BrowserInitScriptRequestSource
 
     /// Closure that returns the current live configuration snapshot.
     /// Falls back to defaults when ConfigService is unavailable.
@@ -483,6 +495,102 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Clears inline images for the focused surface.
     let imageClearProvider: (@Sendable () -> [String: String]?)?
 
+    private static func approvalGated<R: Sendable>(
+        _ provider: (@Sendable () -> R)?,
+        denied: R
+    ) -> (@Sendable () -> R)? {
+        guard let provider else { return nil }
+        return {
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return denied
+            }
+            return provider()
+        }
+    }
+
+    private static func approvalGated<A: Sendable, R: Sendable>(
+        _ provider: (@Sendable (A) -> R)?,
+        denied: R
+    ) -> (@Sendable (A) -> R)? {
+        guard let provider else { return nil }
+        return { value in
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return denied
+            }
+            return provider(value)
+        }
+    }
+
+    private static func approvalGated<A: Sendable, B: Sendable, R: Sendable>(
+        _ provider: (@Sendable (A, B) -> R)?,
+        denied: R
+    ) -> (@Sendable (A, B) -> R)? {
+        guard let provider else { return nil }
+        return { first, second in
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return denied
+            }
+            return provider(first, second)
+        }
+    }
+
+    private static func approvalGated<
+        A: Sendable,
+        B: Sendable,
+        C: Sendable,
+        R: Sendable
+    >(
+        _ provider: (@Sendable (A, B, C) -> R)?,
+        denied: R
+    ) -> (@Sendable (A, B, C) -> R)? {
+        guard let provider else { return nil }
+        return { first, second, third in
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return denied
+            }
+            return provider(first, second, third)
+        }
+    }
+
+    private static func approvalGated<
+        A: Sendable,
+        B: Sendable,
+        C: Sendable,
+        D: Sendable,
+        R: Sendable
+    >(
+        _ provider: (@Sendable (A, B, C, D) -> R)?,
+        denied: R
+    ) -> (@Sendable (A, B, C, D) -> R)? {
+        guard let provider else { return nil }
+        return { first, second, third, fourth in
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return denied
+            }
+            return provider(first, second, third, fourth)
+        }
+    }
+
+    private static func approvalGated<
+        A: Sendable,
+        B: Sendable,
+        C: Sendable,
+        D: Sendable,
+        E: Sendable,
+        R: Sendable
+    >(
+        _ provider: (@Sendable (A, B, C, D, E) -> R)?,
+        denied: R
+    ) -> (@Sendable (A, B, C, D, E) -> R)? {
+        guard let provider else { return nil }
+        return { first, second, third, fourth, fifth in
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return denied
+            }
+            return provider(first, second, third, fourth, fifth)
+        }
+    }
+
     // MARK: - Initialization
 
     /// Creates an AppSocketCommandHandler with closure-based access to @MainActor services.
@@ -498,12 +606,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     ///   - browserViewModel: The browser view model for scriptable browser commands.
     ///     Nil when no browser panel is available.
     init(
+        privilegedCommandAuthorizationProvider: SocketPrivilegedCommandAuthorizationProvider? = nil,
         tabManager: TabManager?,
         hookEventReceiver: HookEventReceiverImpl?,
         browserViewModel: BrowserViewModel? = nil,
         browserViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        browserViewModelsProviderOverride: (@Sendable () -> [BrowserViewModel])? = nil,
         browserNavigationViewModelProviderOverride: (@Sendable () -> BrowserViewModel?)? = nil,
+        browserSplitProvider: (@Sendable () -> Bool)? = nil,
         browserImportProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        browserInitScriptAuthorizationProvider: (@Sendable (BrowserInitScriptAuthorizationRequest) -> Bool)? = nil,
+        browserInitScriptRequestSource: BrowserInitScriptRequestSource = .localCLI,
         tabCountProviderOverride: (@Sendable () -> Int)? = nil,
         tabInfoProviderOverride: (@Sendable () -> [(id: String, title: String, isActive: Bool)])? = nil,
         tabFocusProviderOverride: (@Sendable (String) -> Bool)? = nil,
@@ -606,6 +719,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
+        self.privilegedCommandAuthorizationProvider =
+            privilegedCommandAuthorizationProvider ?? { _ in nil }
         self.configProvider = configProvider
         self.statusDetailsProvider = statusDetailsProvider
         self.themeEngineProvider = themeEngineProvider
@@ -636,15 +751,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.sessionCaptureProvider = sessionCaptureProvider
         self.sessionRestoreProvider = sessionRestoreProvider
         self.notificationManagerProvider = notificationManagerProvider
-        self.capturePaneProvider = capturePaneProvider
+        self.capturePaneProvider = Self.approvalGated(capturePaneProvider, denied: [])
         self.dashboardToggleProvider = dashboardToggleProvider
         self.dashboardStatusProvider = dashboardStatusProvider
         self.reviewToggleProvider = reviewToggleProvider
         self.reviewRefreshProvider = reviewRefreshProvider
         self.reviewSubmitProvider = reviewSubmitProvider
         self.reviewStatsProvider = reviewStatsProvider
-        self.timelineQueryProvider = timelineQueryProvider
-        self.timelineExportProvider = timelineExportProvider
+        self.timelineQueryProvider = Self.approvalGated(timelineQueryProvider, denied: nil)
+        self.timelineExportProvider = Self.approvalGated(timelineExportProvider, denied: nil)
         self.richInputShowProvider = richInputShowProvider
         self.splitCreateProvider = splitCreateProvider
         self.splitFocusProvider = splitFocusProvider
@@ -652,43 +767,61 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.splitCloseProvider = splitCloseProvider
         self.splitResizeProvider = splitResizeProvider
         self.splitResizeByDirectionProvider = splitResizeByDirectionProvider
-        self.searchToggleProvider = searchToggleProvider
-        self.searchProvider = searchProvider
-        self.sendTextProvider = sendTextProvider
-        self.sendKeyProvider = sendKeyProvider
+        self.searchToggleProvider = Self.approvalGated(searchToggleProvider, denied: ())
+        self.searchProvider = Self.approvalGated(searchProvider, denied: nil)
+        self.sendTextProvider = Self.approvalGated(sendTextProvider, denied: false)
+        self.sendKeyProvider = Self.approvalGated(sendKeyProvider, denied: false)
         self.vaultOpenProvider = vaultOpenProvider
-        self.sshProvider = sshProvider
-        self.webStartProvider = webStartProvider
-        self.webStopProvider = webStopProvider
-        self.webStatusProvider = webStatusProvider
-        self.streamListProvider = streamListProvider
-        self.streamCurrentProvider = streamCurrentProvider
-        self.protocolCapabilitiesProvider = protocolCapabilitiesProvider
-        self.protocolViewportProvider = protocolViewportProvider
-        self.protocolSendProvider = protocolSendProvider
-        self.coreResetProvider = coreResetProvider
-        self.coreSignalProvider = coreSignalProvider
-        self.coreProcessProvider = coreProcessProvider
-        self.coreModesProvider = coreModesProvider
-        self.coreSearchProvider = coreSearchProvider
-        self.coreLigaturesProvider = coreLigaturesProvider
-        self.coreProtocolProvider = coreProtocolProvider
-        self.coreSelectionProvider = coreSelectionProvider
-        self.coreFontMetricsProvider = coreFontMetricsProvider
-        self.corePreeditProvider = corePreeditProvider
-        self.coreSemanticProvider = coreSemanticProvider
-        self.blockListProvider = blockListProvider
-        self.blockOutputsProvider = blockOutputsProvider
-        self.blockCopyProvider = blockCopyProvider
-        self.blockRerunProvider = blockRerunProvider
-        self.imageListProvider = imageListProvider
-        self.imageDeleteProvider = imageDeleteProvider
-        self.imageClearProvider = imageClearProvider
+        self.sshProvider = Self.approvalGated(sshProvider, denied: nil)
+        self.webStartProvider = Self.approvalGated(webStartProvider, denied: nil)
+        self.webStopProvider = Self.approvalGated(webStopProvider, denied: false)
+        self.webStatusProvider = Self.approvalGated(webStatusProvider, denied: nil)
+        self.streamListProvider = Self.approvalGated(streamListProvider, denied: nil)
+        self.streamCurrentProvider = Self.approvalGated(streamCurrentProvider, denied: nil)
+        self.protocolCapabilitiesProvider = Self.approvalGated(protocolCapabilitiesProvider, denied: nil)
+        self.protocolViewportProvider = Self.approvalGated(protocolViewportProvider, denied: nil)
+        self.protocolSendProvider = Self.approvalGated(protocolSendProvider, denied: nil)
+        self.coreResetProvider = Self.approvalGated(coreResetProvider, denied: nil)
+        self.coreSignalProvider = Self.approvalGated(coreSignalProvider, denied: nil)
+        self.coreProcessProvider = Self.approvalGated(coreProcessProvider, denied: nil)
+        self.coreModesProvider = Self.approvalGated(coreModesProvider, denied: nil)
+        self.coreSearchProvider = Self.approvalGated(coreSearchProvider, denied: nil)
+        self.coreLigaturesProvider = Self.approvalGated(coreLigaturesProvider, denied: nil)
+        self.coreProtocolProvider = Self.approvalGated(coreProtocolProvider, denied: nil)
+        self.coreSelectionProvider = Self.approvalGated(coreSelectionProvider, denied: nil)
+        self.coreFontMetricsProvider = Self.approvalGated(coreFontMetricsProvider, denied: nil)
+        self.corePreeditProvider = Self.approvalGated(corePreeditProvider, denied: nil)
+        self.coreSemanticProvider = Self.approvalGated(coreSemanticProvider, denied: nil)
+        self.blockListProvider = Self.approvalGated(blockListProvider, denied: nil)
+        self.blockOutputsProvider = Self.approvalGated(blockOutputsProvider, denied: nil)
+        self.blockCopyProvider = Self.approvalGated(blockCopyProvider, denied: nil)
+        self.blockRerunProvider = Self.approvalGated(blockRerunProvider, denied: nil)
+        self.imageListProvider = Self.approvalGated(imageListProvider, denied: nil)
+        self.imageDeleteProvider = Self.approvalGated(imageDeleteProvider, denied: nil)
+        self.imageClearProvider = Self.approvalGated(imageClearProvider, denied: nil)
         self.worktreeCLIProvider = worktreeCLIProvider
         self.githubCLIProvider = githubCLIProvider
-        self.gitAssistantCLIProvider = gitAssistantCLIProvider
-        self.agentTeamCLIProvider = agentTeamCLIProvider
-        self.cellCLIProvider = cellCLIProvider
+        self.gitAssistantCLIProvider = Self.approvalGated(
+            gitAssistantCLIProvider,
+            denied: (false, ["error": "Authorization denied"])
+        )
+        if let agentTeamCLIProvider {
+            self.agentTeamCLIProvider = { kind, params in
+                if kind == "list" {
+                    return agentTeamCLIProvider(kind, params)
+                }
+                guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                    return (false, ["error": "Authorization denied"])
+                }
+                return agentTeamCLIProvider(kind, params)
+            }
+        } else {
+            self.agentTeamCLIProvider = nil
+        }
+        self.cellCLIProvider = Self.approvalGated(
+            cellCLIProvider,
+            denied: (false, ["error": "Authorization denied"])
+        )
         let tabManagerRef = WeakReference(tabManager)
         let browserViewModelRef = WeakReference(browserViewModel)
 
@@ -710,10 +843,38 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 }
             }
         }
-        self.browserViewModelProvider = resolvedBrowserViewModelProvider
-        self.browserNavigationViewModelProvider = browserNavigationViewModelProviderOverride
-            ?? resolvedBrowserViewModelProvider
-        self.browserImportProvider = browserImportProvider
+        self.browserViewModelProvider = {
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession(
+                allowWithoutSession: true
+            ) else {
+                return nil
+            }
+            return resolvedBrowserViewModelProvider()
+        }
+        let resolvedBrowserViewModelsProvider = browserViewModelsProviderOverride ?? {
+            resolvedBrowserViewModelProvider().map { [$0] } ?? []
+        }
+        self.browserViewModelsProvider = {
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return []
+            }
+            return resolvedBrowserViewModelsProvider()
+        }
+        let resolvedBrowserNavigationViewModelProvider =
+            browserNavigationViewModelProviderOverride ?? resolvedBrowserViewModelProvider
+        self.browserNavigationViewModelProvider = {
+            guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                return nil
+            }
+            return resolvedBrowserNavigationViewModelProvider()
+        }
+        self.browserSplitProvider = browserSplitProvider
+        self.browserImportProvider = Self.approvalGated(
+            browserImportProvider,
+            denied: (false, ["error": "Authorization denied"])
+        )
+        self.browserInitScriptAuthorizationProvider = browserInitScriptAuthorizationProvider
+        self.browserInitScriptRequestSource = browserInitScriptRequestSource
 
         // -- Tab count provider (read-only) --
         if let tabCountProviderOverride {
@@ -915,6 +1076,41 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Unknown command: \(request.command)")
         }
 
+        guard case .privileged = SocketPrivilegedCommandSecurity.policy(for: commandName) else {
+            return dispatchCommand(commandName, request: request)
+        }
+
+        guard let authorizationRequest = SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: request
+        ) else {
+            return .failure(id: request.id, error: "Invalid privileged command parameters.")
+        }
+        let session = SocketPrivilegedCommandExecutionSession(
+            request: authorizationRequest,
+            authorizationProvider: privilegedCommandAuthorizationProvider
+        )
+        let response = SocketPrivilegedCommandExecutionContext.withSession(session) {
+            dispatchCommand(commandName, request: request)
+        }
+        if session.outcome == .denied {
+            return .failure(
+                id: request.id,
+                error: "This local CLI command requires approval in Cocxy Terminal."
+            )
+        }
+        if response.success, session.outcome != .granted {
+            return .failure(
+                id: request.id,
+                error: "Privileged command did not reach its authorization boundary."
+            )
+        }
+        return response
+    }
+
+    private func dispatchCommand(
+        _ commandName: CLICommandName,
+        request: SocketRequest
+    ) -> SocketResponse {
         switch commandName {
         // Status & listing
         case .status:
@@ -969,6 +1165,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         // Browser commands
         case .browserNavigate:
             return handleBrowserNavigate(request)
+        case .browserSplit:
+            return handleBrowserSplit(request)
         case .browserBack:
             return handleBrowserBack(request)
         case .browserForward:
@@ -989,6 +1187,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleBrowserAddStyle(request)
         case .browserInitScriptAdd:
             return handleBrowserInitScriptAdd(request)
+        case .browserInitScriptRemove:
+            return handleBrowserInitScriptRemove(request)
         case .browserInitScriptsList:
             return handleBrowserInitScriptsList(request)
         case .browserDialogs:
@@ -1579,13 +1779,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Saves the focused tab to `~/.cocxy/tabs/<name>.toml`.
     ///
     /// Required params: `name`.
-    /// Optional params: `command`, `theme`, and `env.<KEY>` entries.
+    /// Optional params: `theme` and `env.<KEY>` entries. Socket-origin startup
+    /// commands are rejected because opening a config must not borrow the
+    /// terminal process's broader authority.
     private func handleTabConfigSave(_ request: SocketRequest) -> SocketResponse {
         guard let provider = tabConfigSaveProvider else {
             return .failure(id: request.id, error: "Tab config save not available")
         }
         guard let name = request.params?["name"], !name.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: name")
+        }
+        guard nonEmptyParam(request.params?["command"]) == nil else {
+            return .failure(
+                id: request.id,
+                error: "Startup commands are not allowed in socket tab configs"
+            )
         }
 
         let environment: [String: String]
@@ -1597,7 +1805,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
 
         guard let result = provider(
             name,
-            nonEmptyParam(request.params?["command"]),
+            nil,
             nonEmptyParam(request.params?["theme"]),
             environment
         ) else {
@@ -1666,8 +1874,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let output = request.params?["output"], !output.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: output")
         }
+        let outputLeaf: String
+        do {
+            outputLeaf = try TabConfigStore.validatedSocketExportLeafName(output)
+        } catch {
+            return .failure(
+                id: request.id,
+                error: "Output must be a single visible .toml file name"
+            )
+        }
         let overwrite = request.params?["force"] == "true"
-        guard let result = provider(name, output, overwrite) else {
+        guard let result = provider(name, outputLeaf, overwrite) else {
             return .failure(id: request.id, error: "Unable to export tab config")
         }
         return .ok(id: request.id, data: [
@@ -2041,6 +2258,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.clipboardPasteProtection)"
         case "terminal.clipboard-read-access":
             return config.terminal.clipboardReadAccess.rawValue
+        case "terminal.clipboard-write-access":
+            return config.terminal.clipboardWriteAccess.rawValue
         case "terminal.image-memory-limit-mb":
             return "\(config.terminal.imageMemoryLimitMB)"
         case "terminal.image-file-transfer":
@@ -2204,6 +2423,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "appearance.app-language":
             guard let language = AppLanguage.normalized(rawValue) else { return nil }
             return AppSocketConfigTOMLUpdater.renderedScalarValue(language.rawValue)
+        case "terminal.clipboard-read-access":
+            let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard ClipboardReadAccess(rawValue: normalized) != nil else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(normalized)
+        case "terminal.clipboard-write-access":
+            let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            guard ClipboardWriteAccess(rawValue: normalized) != nil else { return nil }
+            return AppSocketConfigTOMLUpdater.renderedScalarValue(normalized)
         case "ux-polish.always-show-shortcut-hints",
              "ux-polish.shortcut-hint-debug-overlay":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
@@ -2312,6 +2539,13 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private static let maxInlineBrowserScreenshotDataURLBytes =
         Int(SocketMessageFraming.maxPayloadSize) - 8_192
 
+    private enum BrowserPageAuthorization {
+        case internalTrusted
+        case navigationTarget
+        case bound(BrowserAutomationPageIdentity)
+        case denied
+    }
+
     /// Navigates the embedded browser to a URL.
     ///
     /// Required params: `url` (the URL string to navigate to).
@@ -2319,18 +2553,33 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let urlString = request.params?["url"] else {
             return .failure(id: request.id, error: "Missing required param: url")
         }
+        guard let url = BrowserViewModel.preparedNavigationURLValue(from: urlString) else {
+            return .failure(id: request.id, error: "Invalid browser URL")
+        }
         guard let viewModel = browserNavigationViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-
-        let work = {
-            MainActor.assumeIsolated {
-                viewModel.navigate(to: urlString)
-            }
+        guard performBrowserNavigation(
+            viewModel: viewModel,
+            operation: .load(url)
+        ) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "navigated"])
+    }
+
+    /// Opens the full browser split pane used for wide browser automation evidence.
+    private func handleBrowserSplit(_ request: SocketRequest) -> SocketResponse {
+        guard let browserSplitProvider else {
+            return .failure(id: request.id, error: "Browser split is not available")
+        }
+
+        guard browserSplitProvider() else {
+            return .failure(id: request.id, error: "Browser split could not be opened")
+        }
+
+        return .ok(id: request.id, data: ["status": "opened"])
     }
 
     /// Navigates the browser backward in history.
@@ -2339,12 +2588,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        let work = {
-            MainActor.assumeIsolated {
-                viewModel.goBack()
-            }
+        guard performBrowserNavigation(
+            viewModel: viewModel,
+            operation: .goBack
+        ) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "acknowledged"])
     }
@@ -2355,12 +2604,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        let work = {
-            MainActor.assumeIsolated {
-                viewModel.goForward()
-            }
+        guard performBrowserNavigation(
+            viewModel: viewModel,
+            operation: .goForward
+        ) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "acknowledged"])
     }
@@ -2371,12 +2620,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        let work = {
-            MainActor.assumeIsolated {
-                viewModel.reload()
-            }
+        guard performBrowserNavigation(
+            viewModel: viewModel,
+            operation: .reload
+        ) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
-        if Thread.isMainThread { work() } else { DispatchQueue.main.sync { work() } }
 
         return .ok(id: request.id, data: ["status": "acknowledged"])
     }
@@ -2386,29 +2635,28 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-
-        let state: [String: String]
-        if Thread.isMainThread {
-            state = MainActor.assumeIsolated {
-                viewModel.getState()
-            }
-        } else {
-            state = DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    viewModel.getState()
-                }
-            }
+        guard let state = withAuthorizedBrowserPage(viewModel: viewModel, operation: {
+            $0.getState()
+        }) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
 
         return .ok(id: request.id, data: state)
     }
 
     private func handleBrowserStateSave(_ request: SocketRequest) -> SocketResponse {
-        guard let fileURL = browserStateFileURL(from: request) else {
+        guard browserStateFileURL(from: request) != nil else {
             return .failure(id: request.id, error: "Missing or invalid required param: path")
         }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
+        }
+        guard let fileURL = approvedSocketResourceURL(
+            for: "path",
+            in: request,
+            allowedScopes: [.browserPage]
+        ) else {
+            return .failure(id: request.id, error: "Approved browser state path is unavailable")
         }
 
         let result = browserScriptResult(
@@ -2439,11 +2687,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     }
 
     private func handleBrowserStateLoad(_ request: SocketRequest) -> SocketResponse {
-        guard let fileURL = browserStateFileURL(from: request) else {
+        guard browserStateFileURL(from: request) != nil else {
             return .failure(id: request.id, error: "Missing or invalid required param: path")
         }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
+        }
+        guard let fileURL = approvedSocketResourceURL(
+            for: "path",
+            in: request,
+            allowedScopes: [.browserPage]
+        ) else {
+            return .failure(id: request.id, error: "Approved browser state path is unavailable")
         }
 
         let snapshotData: Data
@@ -2575,55 +2830,201 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let script = request.params?["script"], !script.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: script")
         }
-        guard script.count <= Self.maxBrowserEvalLength else {
+        let scriptByteCount = script.utf8.count
+        guard scriptByteCount <= BrowserInitScriptSecurity.maximumSourceByteCount else {
             return .failure(
                 id: request.id,
-                error: "Script length \(script.count) exceeds maximum \(Self.maxBrowserEvalLength) characters"
+                error: "Script size \(scriptByteCount) exceeds maximum \(BrowserInitScriptSecurity.maximumSourceByteCount) UTF-8 bytes"
             )
         }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-
-        let initScript: BrowserInitScript
+        let hasCapacity: Bool
         if Thread.isMainThread {
-            initScript = MainActor.assumeIsolated {
-                viewModel.addInitScript(script)
+            hasCapacity = MainActor.assumeIsolated {
+                viewModel.canAddInitScript()
             }
         } else {
-            initScript = DispatchQueue.main.sync {
+            hasCapacity = DispatchQueue.main.sync {
                 MainActor.assumeIsolated {
-                    viewModel.addInitScript(script)
+                    viewModel.canAddInitScript()
                 }
             }
         }
+        guard hasCapacity else {
+            return .failure(
+                id: request.id,
+                error: "Maximum active browser init scripts reached (\(BrowserInitScriptSecurity.maximumActiveScripts))"
+            )
+        }
 
-        let installResult = viewModel.automationBridge.installInitScript(script, timeout: 3)
-        var data: [String: String] = [
+        let authorizationRequest: BrowserInitScriptAuthorizationRequest?
+        if Thread.isMainThread {
+            authorizationRequest = MainActor.assumeIsolated {
+                viewModel.makeInitScriptAuthorizationRequest(
+                    source: browserInitScriptRequestSource,
+                    script: script
+                )
+            }
+        } else {
+            authorizationRequest = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModel.makeInitScriptAuthorizationRequest(
+                        source: browserInitScriptRequestSource,
+                        script: script
+                    )
+                }
+            }
+        }
+        guard let authorizationRequest else {
+            let readiness: (bridgeAvailable: Bool, remoteAuthorityAvailable: Bool)
+            if Thread.isMainThread {
+                readiness = MainActor.assumeIsolated {
+                    (
+                        viewModel.isInitScriptBridgeAvailable,
+                        viewModel.isInitScriptRemoteAuthorityAvailable
+                    )
+                }
+            } else {
+                readiness = DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        (
+                            viewModel.isInitScriptBridgeAvailable,
+                            viewModel.isInitScriptRemoteAuthorityAvailable
+                        )
+                    }
+                }
+            }
+            let error: String
+            if !readiness.bridgeAvailable {
+                error = "Browser page is not ready for init scripts"
+            } else if !readiness.remoteAuthorityAvailable {
+                error = "Browser remote connection or forward is no longer active"
+            } else {
+                error = "Browser init scripts require an active HTTP or HTTPS page"
+            }
+            return .failure(
+                id: request.id,
+                error: error
+            )
+        }
+        guard let browserInitScriptAuthorizationProvider else {
+            return .failure(id: request.id, error: "Browser init script approval is unavailable")
+        }
+        guard browserInitScriptAuthorizationProvider(authorizationRequest) else {
+            return .failure(id: request.id, error: "Browser init script approval was denied")
+        }
+        guard let currentViewModel = browserViewModelProvider(), currentViewModel === viewModel else {
+            return .failure(id: request.id, error: "Browser context changed during approval")
+        }
+        guard let finalViewModel = browserViewModelProvider(), finalViewModel === currentViewModel else {
+            return .failure(id: request.id, error: "Browser context changed during approval")
+        }
+
+        let registration: Result<BrowserInitScript, BrowserInitScriptRegistrationError>
+        if Thread.isMainThread {
+            registration = MainActor.assumeIsolated {
+                Self.registerInitScript(authorizationRequest, in: finalViewModel)
+            }
+        } else {
+            registration = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    Self.registerInitScript(authorizationRequest, in: finalViewModel)
+                }
+            }
+        }
+        let initScript: BrowserInitScript
+        switch registration {
+        case .success(let registeredScript):
+            initScript = registeredScript
+        case .failure(let error):
+            return .failure(id: request.id, error: Self.initScriptRegistrationMessage(for: error))
+        }
+        guard browserViewModelProvider() === finalViewModel else {
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    _ = finalViewModel.removeInitScript(id: initScript.id)
+                }
+            } else {
+                DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        _ = finalViewModel.removeInitScript(id: initScript.id)
+                    }
+                }
+            }
+            return .failure(id: request.id, error: "Browser context changed during approval")
+        }
+
+        let formatter = ISO8601DateFormatter()
+        let data: [String: String] = [
             "status": "added",
             "id": initScript.id.uuidString,
             "length": "\(initScript.length)",
-            "installed": installResult?.error == nil ? "true" : "false"
+            "installed": "true",
+            "browserViewID": initScript.browserViewID.uuidString,
+            "tabID": initScript.tabID.uuidString,
+            "origin": initScript.origin.serialized,
+            "browserProfileID": initScript.browserProfileID?.uuidString ?? "default",
+            "remoteBrowserProfileID": initScript.remoteBrowserProfileID?.uuidString ?? "local",
+            "remoteConnectionProfileID": initScript.remoteConnectionProfileID?.uuidString ?? "local",
+            "expiresAt": formatter.string(from: initScript.expiresAt),
+            "mainFrameOnly": "true"
         ]
-        if let error = installResult?.error {
-            data["installError"] = error
-        }
         return .ok(id: request.id, data: data)
     }
 
+    private func handleBrowserInitScriptRemove(_ request: SocketRequest) -> SocketResponse {
+        guard let rawID = request.params?["id"], !rawID.isEmpty else {
+            return .failure(id: request.id, error: "Missing required param: id")
+        }
+        guard let scriptID = UUID(uuidString: rawID) else {
+            return .failure(id: request.id, error: "Invalid browser init script id")
+        }
+        let viewModels = browserInitScriptViewModels()
+        guard !viewModels.isEmpty else {
+            return .failure(id: request.id, error: "Browser panel not available")
+        }
+
+        let removed: Bool
+        if Thread.isMainThread {
+            removed = MainActor.assumeIsolated {
+                viewModels.reduce(false) { wasRemoved, viewModel in
+                    viewModel.removeInitScript(id: scriptID) || wasRemoved
+                }
+            }
+        } else {
+            removed = DispatchQueue.main.sync {
+                MainActor.assumeIsolated {
+                    viewModels.reduce(false) { wasRemoved, viewModel in
+                        viewModel.removeInitScript(id: scriptID) || wasRemoved
+                    }
+                }
+            }
+        }
+        guard removed else {
+            return .failure(id: request.id, error: "Browser init script not found")
+        }
+        return .ok(id: request.id, data: [
+            "status": "removed",
+            "id": scriptID.uuidString
+        ])
+    }
+
     private func handleBrowserInitScriptsList(_ request: SocketRequest) -> SocketResponse {
-        guard let viewModel = browserViewModelProvider() else {
+        let viewModels = browserInitScriptViewModels()
+        guard !viewModels.isEmpty else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
         let scripts: [[String: String]]
         if Thread.isMainThread {
             scripts = MainActor.assumeIsolated {
-                viewModel.getInitScriptList()
+                Self.sortedInitScriptMetadata(viewModels.flatMap { $0.getInitScriptList() })
             }
         } else {
             scripts = DispatchQueue.main.sync {
                 MainActor.assumeIsolated {
-                    viewModel.getInitScriptList()
+                    Self.sortedInitScriptMetadata(viewModels.flatMap { $0.getInitScriptList() })
                 }
             }
         }
@@ -2635,26 +3036,80 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         for (index, script) in scripts.prefix(50).enumerated() {
             data["script_\(index)_id"] = script["id"] ?? ""
             data["script_\(index)_length"] = script["length"] ?? "0"
+            data["script_\(index)_browserViewID"] = script["browserViewID"] ?? ""
+            data["script_\(index)_tabID"] = script["tabID"] ?? ""
+            data["script_\(index)_origin"] = script["origin"] ?? ""
+            data["script_\(index)_browserProfileID"] = script["browserProfileID"] ?? "default"
+            data["script_\(index)_remoteBrowserProfileID"] = script["remoteBrowserProfileID"] ?? "local"
+            data["script_\(index)_remoteConnectionProfileID"] = script["remoteConnectionProfileID"] ?? "local"
             data["script_\(index)_createdAt"] = script["createdAt"] ?? ""
+            data["script_\(index)_expiresAt"] = script["expiresAt"] ?? ""
+            data["script_\(index)_mainFrameOnly"] = script["mainFrameOnly"] ?? "true"
         }
         return .ok(id: request.id, data: data)
+    }
+
+    @MainActor
+    private static func registerInitScript(
+        _ authorization: BrowserInitScriptAuthorizationRequest,
+        in viewModel: BrowserViewModel
+    ) -> Result<BrowserInitScript, BrowserInitScriptRegistrationError> {
+        do {
+            return .success(try viewModel.addInitScript(authorization: authorization))
+        } catch let error as BrowserInitScriptRegistrationError {
+            return .failure(error)
+        } catch {
+            return .failure(.synchronizationFailed(error.localizedDescription))
+        }
+    }
+
+    private static func initScriptRegistrationMessage(
+        for error: BrowserInitScriptRegistrationError
+    ) -> String {
+        switch error {
+        case .invalidSource:
+            return "Browser init script source is invalid"
+        case .authorizationConsumed:
+            return "Browser init script approval was already used"
+        case .contextChanged:
+            return "Browser context changed during approval"
+        case .capacityReached:
+            return "Maximum active browser init scripts reached (\(BrowserInitScriptSecurity.maximumActiveScripts))"
+        case .bridgeUnavailable:
+            return "Browser page is not ready for init scripts"
+        case .synchronizationFailed(let message):
+            return message
+        }
+    }
+
+    private func browserInitScriptViewModels() -> [BrowserViewModel] {
+        var seen: Set<ObjectIdentifier> = []
+        return browserViewModelsProvider().filter {
+            seen.insert(ObjectIdentifier($0)).inserted
+        }
+    }
+
+    private static func sortedInitScriptMetadata(
+        _ scripts: [[String: String]]
+    ) -> [[String: String]] {
+        scripts.sorted { lhs, rhs in
+            let lhsCreatedAt = lhs["createdAt"] ?? ""
+            let rhsCreatedAt = rhs["createdAt"] ?? ""
+            if lhsCreatedAt != rhsCreatedAt {
+                return lhsCreatedAt < rhsCreatedAt
+            }
+            return (lhs["id"] ?? "") < (rhs["id"] ?? "")
+        }
     }
 
     private func handleBrowserDialogs(_ request: SocketRequest) -> SocketResponse {
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-        let dialogs: [[String: String]]
-        if Thread.isMainThread {
-            dialogs = MainActor.assumeIsolated {
-                viewModel.getBrowserDialogList()
-            }
-        } else {
-            dialogs = DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    viewModel.getBrowserDialogList()
-                }
-            }
+        guard let dialogs = withAuthorizedBrowserPage(viewModel: viewModel, operation: {
+            $0.getBrowserDialogList()
+        }) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
 
         var data: [String: String] = [
@@ -2685,19 +3140,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
         let id = request.params?["id"]
-        let dialog: BrowserDialogItem?
-        if Thread.isMainThread {
-            dialog = MainActor.assumeIsolated {
-                viewModel.resolveJavaScriptDialog(id: id, resolution: resolution)
+        guard let resolvedDialogs = withAuthorizedBrowserPage(
+            viewModel: viewModel,
+            operation: { viewModel in
+                viewModel.resolveJavaScriptDialog(id: id, resolution: resolution).map { [$0] } ?? []
             }
-        } else {
-            dialog = DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    viewModel.resolveJavaScriptDialog(id: id, resolution: resolution)
-                }
-            }
+        ) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
-        guard let dialog else {
+        guard let dialog = resolvedDialogs.first else {
             return .failure(id: request.id, error: "No matching pending browser dialog")
         }
 
@@ -2746,18 +3197,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-
-        let tabList: [[String: String]]
-        if Thread.isMainThread {
-            tabList = MainActor.assumeIsolated {
-                viewModel.getTabList()
-            }
-        } else {
-            tabList = DispatchQueue.main.sync {
-                MainActor.assumeIsolated {
-                    viewModel.getTabList()
-                }
-            }
+        guard let tabList = withAuthorizedBrowserPage(viewModel: viewModel, operation: {
+            $0.getTabList()
+        }) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
 
         var data: [String: String] = ["count": "\(tabList.count)"]
@@ -2783,7 +3226,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: error)
         }
         var data = BrowserAutomationScriptLibrary.hybridSnapshotData(from: result.value ?? "[]")
-        let consoleEntries = browserConsoleSnapshotEntries(from: viewModel)
+        guard let consoleEntries = browserConsoleSnapshotEntries(from: viewModel) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
+        }
         data["consoleCount"] = "\(consoleEntries.count)"
         data["consoleErrors"] = "\(consoleEntries.filter { $0.level.lowercased() == "error" }.count)"
         for (index, entry) in consoleEntries.filter({ $0.level.lowercased() == "error" }).suffix(5).enumerated() {
@@ -2839,7 +3284,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         var data = BrowserAutomationScriptLibrary.contextPackData(from: result.value ?? "{}")
-        let consoleEntries = Array(browserConsoleSnapshotEntries(from: viewModel).suffix(consoleTail))
+        guard let consoleSnapshot = browserConsoleSnapshotEntries(from: viewModel) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
+        }
+        let consoleEntries = Array(consoleSnapshot.suffix(consoleTail))
         data["console"] = browserConsoleContextJSON(from: consoleEntries)
         data["consoleCount"] = "\(consoleEntries.count)"
         data["consoleErrors"] = "\(consoleEntries.filter { $0.level.lowercased() == "error" }.count)"
@@ -3039,8 +3487,13 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Browser panel not available")
         }
 
-        let expandedPath = NSString(string: rawPath).expandingTildeInPath
-        let fileURL = URL(fileURLWithPath: expandedPath)
+        guard let fileURL = approvedSocketResourceURL(
+            for: "path",
+            in: request,
+            allowedScopes: [.browserPage]
+        ) else {
+            return .failure(id: request.id, error: "Approved upload path is unavailable")
+        }
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory),
               !isDirectory.boolValue else {
@@ -3600,12 +4053,31 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     }
 
     private func handleBrowserScreenshot(_ request: SocketRequest) -> SocketResponse {
+        if let outputPath = request.params?["output"],
+           validatedFileURL(fromCLIPath: outputPath) == nil {
+            return .failure(id: request.id, error: "Missing or invalid optional param: output")
+        }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-        let outputPath = request.params?["output"]
-        let result = viewModel.automationBridge.captureScreenshot(outputPath: outputPath, timeout: 3)
-            ?? .failure("Browser page is not ready for screenshot capture")
+        let outputPath: String?
+        if request.params?["output"] != nil {
+            guard let approvedOutput = approvedSocketResourceURL(
+                for: "output",
+                in: request,
+                allowedScopes: [.browserPage]
+            ) else {
+                return .failure(id: request.id, error: "Approved screenshot path is unavailable")
+            }
+            outputPath = approvedOutput.path
+        } else {
+            outputPath = nil
+        }
+        let result = browserScreenshotResult(
+            viewModel: viewModel,
+            outputPath: outputPath,
+            timeout: 3
+        )
         switch result {
         case .dataURL(let dataURL, let byteCount):
             guard dataURL.utf8.count <= Self.maxInlineBrowserScreenshotDataURLBytes else {
@@ -3634,7 +4106,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-        let entries = browserConsoleSnapshotEntries(from: viewModel)
+        guard let entries = browserConsoleSnapshotEntries(from: viewModel) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
+        }
         var data: [String: String] = ["count": "\(entries.count)"]
         for (index, entry) in entries.enumerated() {
             data["entry_\(index)_level"] = entry.level
@@ -3644,13 +4118,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         return .ok(id: request.id, data: data)
     }
 
-    private func browserConsoleSnapshotEntries(from viewModel: BrowserViewModel) -> [BrowserConsoleSnapshotEntry] {
-        if Thread.isMainThread {
-            return MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
-        }
-        return DispatchQueue.main.sync {
-            MainActor.assumeIsolated { viewModel.consoleSnapshotEntries }
-        }
+    private func browserConsoleSnapshotEntries(
+        from viewModel: BrowserViewModel
+    ) -> [BrowserConsoleSnapshotEntry]? {
+        withAuthorizedBrowserPage(viewModel: viewModel, operation: {
+            $0.consoleSnapshotEntries
+        })
     }
 
     private func handleBrowserWait(_ request: SocketRequest) -> SocketResponse {
@@ -3660,7 +4133,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard selector.count <= 1_024 else {
             return .failure(id: request.id, error: "Selector exceeds maximum 1024 characters")
         }
-        let timeoutMilliseconds = min(max(Int(request.params?["timeout"] ?? "") ?? 5_000, 0), 30_000)
+        let timeoutMilliseconds: Int
+        if let rawTimeout = request.params?["timeout"] {
+            guard let parsedTimeout = Int(rawTimeout), parsedTimeout >= 0 else {
+                return .failure(id: request.id, error: "Invalid timeout. Use non-negative milliseconds.")
+            }
+            timeoutMilliseconds = min(parsedTimeout, 30_000)
+        } else {
+            timeoutMilliseconds = 5_000
+        }
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
@@ -3822,13 +4303,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let viewModel = browserViewModelProvider() else {
             return .failure(id: request.id, error: "Browser panel not available")
         }
-        let downloads: [DownloadItem]
-        if Thread.isMainThread {
-            downloads = MainActor.assumeIsolated { viewModel.downloads }
-        } else {
-            downloads = DispatchQueue.main.sync {
-                MainActor.assumeIsolated { viewModel.downloads }
-            }
+        guard let downloads = withAuthorizedBrowserPage(viewModel: viewModel, operation: {
+            $0.downloads
+        }) else {
+            return .failure(id: request.id, error: "Approved browser page is no longer current")
         }
 
         let formatter = ISO8601DateFormatter()
@@ -3989,16 +4467,90 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     }
 
     private func handleBrowserImport(kind: String, request: SocketRequest) -> SocketResponse {
+        guard kind == "preview" || kind == "run" else {
+            return .failure(id: request.id, error: "Unknown browser import action: \(kind)")
+        }
+        let params = request.params ?? [:]
+        let allowedParameters: Set<String> = [
+            "source",
+            "source-profile",
+            "profile",
+            "history",
+            "cookies",
+            "bookmarks",
+            "import-history",
+            "import-cookies",
+            "import-bookmarks",
+            "max-history-days",
+            "domain-whitelist",
+            "domain-blacklist",
+            "preview-token",
+        ]
+        let unsupportedParameters = Set(params.keys).subtracting(allowedParameters)
+        guard unsupportedParameters.isEmpty else {
+            return .failure(
+                id: request.id,
+                error: "Unsupported browser import param: \(unsupportedParameters.sorted().joined(separator: ", "))"
+            )
+        }
+        guard let rawSource = params["source"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased(),
+              BrowserImportSource(rawValue: rawSource) != nil else {
+            return .failure(id: request.id, error: "Missing or invalid required param: source")
+        }
+        if let sourceProfile = params["source-profile"] {
+            let normalized = sourceProfile.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !normalized.isEmpty,
+                  normalized.utf8.count <= 512,
+                  !normalized.contains("\0") else {
+                return .failure(id: request.id, error: "Invalid browser source profile")
+            }
+        }
+        if let rawProfileID = params["profile"], UUID(uuidString: rawProfileID) == nil {
+            return .failure(id: request.id, error: "Invalid browser profile UUID: \(rawProfileID)")
+        }
+        for key in ["history", "cookies", "bookmarks"] {
+            if let rawPath = params[key], validatedFileURL(fromCLIPath: rawPath) == nil {
+                return .failure(id: request.id, error: "Invalid browser import path: \(key)")
+            }
+        }
+        for key in ["import-history", "import-cookies", "import-bookmarks"] {
+            guard let rawValue = params[key] else { continue }
+            let normalizedValue = rawValue
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            guard normalizedValue == "true" || normalizedValue == "false" else {
+                return .failure(id: request.id, error: "Invalid boolean for param: \(key)")
+            }
+        }
+        if let rawDays = params["max-history-days"],
+           (Int(rawDays).map { $0 >= 0 } != true) {
+            return .failure(id: request.id, error: "Invalid max history days: \(rawDays)")
+        }
+        if let previewToken = params["preview-token"] {
+            guard kind == "run" else {
+                return .failure(id: request.id, error: "preview-token is only valid for browser-import-run")
+            }
+            guard BrowserImportPreviewToken.isValid(previewToken) else {
+                return .failure(id: request.id, error: "Invalid browser import preview token")
+            }
+        }
         guard let provider = browserImportProvider else {
             return .failure(id: request.id, error: "Browser import is not available in this build.")
         }
-        let result = provider(kind, request.params ?? [:])
+        let result = provider(kind, params)
         if result.success {
             return .ok(id: request.id, data: result.data)
         }
+        var diagnostics = result.data
+        let explicitError = diagnostics.removeValue(forKey: "error")
         return .failure(
             id: request.id,
-            error: result.data["error"] ?? "Browser import \(kind) failed"
+            error: explicitError
+                ?? diagnostics["error_0"]
+                ?? "Browser import \(kind) failed",
+            data: diagnostics.isEmpty ? nil : diagnostics
         )
     }
 
@@ -4008,8 +4560,19 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         requiresBridge: Bool,
         timeout: TimeInterval = 3
     ) -> BrowserScriptEvaluationResult {
-        if let result = viewModel.automationBridge.evaluate(script: script, timeout: timeout) {
-            return result
+        switch browserPageAuthorization(for: viewModel) {
+        case .bound(let identity):
+            return viewModel.automationBridge.evaluate(
+                authorizedPage: identity,
+                script: script,
+                timeout: timeout
+            ) ?? .failure("Approved browser page is not ready for synchronous automation")
+        case .navigationTarget, .denied:
+            return .failure("Approved browser page is no longer current")
+        case .internalTrusted:
+            if let result = viewModel.automationBridge.evaluate(script: script, timeout: timeout) {
+                return result
+            }
         }
         guard !requiresBridge else {
             return .failure("Browser page is not ready for synchronous automation")
@@ -4026,6 +4589,119 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             }
         }
         return .success("")
+    }
+
+    private func browserScreenshotResult(
+        viewModel: BrowserViewModel,
+        outputPath: String?,
+        timeout: TimeInterval
+    ) -> BrowserScreenshotCaptureResult {
+        switch browserPageAuthorization(for: viewModel) {
+        case .bound(let identity):
+            return viewModel.automationBridge.captureScreenshot(
+                authorizedPage: identity,
+                outputPath: outputPath,
+                timeout: timeout
+            ) ?? .failure("Approved browser page is not ready for screenshot capture")
+        case .internalTrusted:
+            return viewModel.automationBridge.captureScreenshot(
+                outputPath: outputPath,
+                timeout: timeout
+            ) ?? .failure("Browser page is not ready for screenshot capture")
+        case .navigationTarget, .denied:
+            return .failure("Approved browser page is no longer current")
+        }
+    }
+
+    private func performBrowserNavigation(
+        viewModel: BrowserViewModel,
+        operation: BrowserAutomationNavigationOperation
+    ) -> Bool {
+        switch browserPageAuthorization(for: viewModel) {
+        case .bound(let identity):
+            return viewModel.automationBridge.performNavigation(
+                authorizedPage: identity,
+                operation: operation,
+                timeout: 3
+            ) ?? false
+        case .internalTrusted, .navigationTarget:
+            let work = {
+                MainActor.assumeIsolated {
+                    switch operation {
+                    case .load(let url):
+                        viewModel.applyAutomationNavigationURL(url)
+                        viewModel.navigationActionSubject.send(.load(url))
+                    case .goBack:
+                        viewModel.goBack()
+                    case .goForward:
+                        viewModel.goForward()
+                    case .reload:
+                        viewModel.reload()
+                    }
+                }
+            }
+            if Thread.isMainThread {
+                work()
+            } else {
+                DispatchQueue.main.sync(execute: work)
+            }
+            return true
+        case .denied:
+            return false
+        }
+    }
+
+    private func withAuthorizedBrowserPage<T: Sendable>(
+        viewModel: BrowserViewModel,
+        operation: @escaping @MainActor @Sendable (BrowserViewModel) -> T
+    ) -> T? {
+        let authorization = browserPageAuthorization(for: viewModel)
+        let work: @Sendable () -> T? = {
+            MainActor.assumeIsolated {
+                switch authorization {
+                case .internalTrusted:
+                    return operation(viewModel)
+                case .bound(let identity):
+                    guard viewModel.currentAutomationPageIdentity() == identity else { return nil }
+                    return operation(viewModel)
+                case .navigationTarget, .denied:
+                    return nil
+                }
+            }
+        }
+        if Thread.isMainThread {
+            return work()
+        }
+        return DispatchQueue.main.sync(execute: work)
+    }
+
+    private func browserPageAuthorization(
+        for viewModel: BrowserViewModel
+    ) -> BrowserPageAuthorization {
+        guard let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context else {
+            return .denied
+        }
+        if context.scope == .internalTrusted {
+            return .internalTrusted
+        }
+        if context.scope == .browserNavigation {
+            return .navigationTarget
+        }
+        guard context.scope == .browserPage,
+              context.browserViewModelIdentifier == ObjectIdentifier(viewModel),
+              let webViewIdentifier = context.browserWebViewIdentifier,
+              let tabID = context.browserTabID,
+              let url = context.browserURL,
+              let navigationGeneration = context.browserNavigationGeneration else {
+            return .denied
+        }
+        return .bound(BrowserAutomationPageIdentity(
+            viewModelIdentifier: ObjectIdentifier(viewModel),
+            webViewIdentifier: webViewIdentifier,
+            tabID: tabID,
+            url: url,
+            navigationGeneration: navigationGeneration
+        ))
     }
 
     private func browserActionTimeoutMilliseconds(from request: SocketRequest) -> Int? {
@@ -4104,7 +4780,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return
         }
 
-        let directoryURL = URL(fileURLWithPath: screenshotDir, isDirectory: true).standardizedFileURL
+        guard let directoryURL = approvedSocketResourceURL(
+            for: "screenshotDir",
+            in: request,
+            allowedScopes: [.browserPage]
+        ) else {
+            data["screenshotStatus"] = "failed"
+            data["screenshotError"] = "Approved screenshot directory is unavailable"
+            return
+        }
         do {
             try FileManager.default.createDirectory(
                 at: directoryURL,
@@ -4124,10 +4808,11 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let fileName = "\(timestamp)-\(actionPart)-\(refPart)-\(requestPart).png"
         let outputURL = directoryURL.appendingPathComponent(fileName, isDirectory: false)
 
-        let screenshotResult = viewModel.automationBridge.captureScreenshot(
+        let screenshotResult = browserScreenshotResult(
+            viewModel: viewModel,
             outputPath: outputURL.path,
             timeout: 3
-        ) ?? .failure("Browser page is not ready for screenshot capture")
+        )
         switch screenshotResult {
         case .file(let path, let byteCount):
             if FileManager.default.fileExists(atPath: path) {
@@ -4328,7 +5013,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
                 ]
             )
         } catch {
-            return .failure(id: request.id, error: "Failed to install plugin: \(error)")
+            return .failure(
+                id: request.id,
+                error: "Failed to install plugin: \(error.localizedDescription)"
+            )
         }
     }
 
@@ -4343,7 +5031,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             refreshPluginManager()
             return .ok(id: request.id, data: ["plugin": pluginID, "status": "uninstalled"])
         } catch {
-            return .failure(id: request.id, error: "Failed to uninstall plugin: \(error)")
+            return .failure(
+                id: request.id,
+                error: "Failed to uninstall plugin: \(error.localizedDescription)"
+            )
         }
     }
 
@@ -4493,16 +5184,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         let replace = request.params?["replace"] == "true"
         do {
             let receipt = try skillInstallerProvider().install(from: url, replaceExisting: replace)
+            var data = [
+                "skill": receipt.skillID,
+                "path": receipt.installedURL.path,
+                "status": "installed",
+            ]
+            if let replaced = receipt.replacedSkillIdentity {
+                data["replaced_skill"] = replaced.id
+                data["replaced_source"] = replaced.source.rawValue
+            }
             return .ok(
                 id: request.id,
-                data: [
-                    "skill": receipt.skillID,
-                    "path": receipt.installedURL.path,
-                    "status": "installed",
-                ]
+                data: data
             )
         } catch {
-            return .failure(id: request.id, error: "Failed to install skill: \(error)")
+            return .failure(id: request.id, error: "Failed to install skill: \(error.localizedDescription)")
         }
     }
 
@@ -5367,6 +6063,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
             "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
+            "terminal.clipboard-write-access",
             "terminal.image-memory-limit-mb", "terminal.image-file-transfer",
             "terminal.enable-sixel-images", "terminal.enable-kitty-images",
             "terminal.enable-iterm2-images", "terminal.image-disk-cache-directory",
@@ -5479,9 +6176,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let template = NotebookTemplateCatalog.template(id: templateID) else {
             return .failure(id: request.id, error: "Unknown notebook template: \(templateID)")
         }
-
-        let outputURL = fileURL(fromCLIPath: outputPath)
-        let force = request.params?["force"] == "true"
+        guard validatedFileURL(fromCLIPath: outputPath) != nil else {
+            return .failure(id: request.id, error: "Invalid output path.")
+        }
+        guard let force = booleanParameter("force", in: request, default: false) else {
+            return .failure(id: request.id, error: "Invalid boolean for param: force")
+        }
+        guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+            return .failure(id: request.id, error: "Notebook creation requires approval.")
+        }
+        guard let outputURL = approvedLocalExecutionURL(for: "output", in: request) else {
+            return .failure(id: request.id, error: "Approved output target is unavailable.")
+        }
         if !force, FileManager.default.fileExists(atPath: outputURL.path) {
             return .failure(
                 id: request.id,
@@ -5517,27 +6223,16 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let inputPath = request.params?["input"], !inputPath.isEmpty else {
             return .failure(id: request.id, error: "Missing required param: input")
         }
-
-        let inputURL = fileURL(fromCLIPath: inputPath)
-        guard FileManager.default.fileExists(atPath: inputURL.path) else {
-            return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
+        guard validatedFileURL(fromCLIPath: inputPath) != nil else {
+            return .failure(id: request.id, error: "Invalid input path.")
         }
-
-        let outputURL = request.params?["output"].flatMap { outputPath -> URL? in
-            guard !outputPath.isEmpty else { return nil }
-            return fileURL(fromCLIPath: outputPath)
-        } ?? inputURL
-
-        let workingDirectory = request.params?["cwd"].flatMap { cwd -> URL? in
-            guard !cwd.isEmpty else { return nil }
-            return fileURL(fromCLIPath: cwd)
-        } ?? inputURL.deletingLastPathComponent()
-
-        guard directoryExists(at: workingDirectory) else {
-            return .failure(
-                id: request.id,
-                error: "Working directory does not exist: \(workingDirectory.path)"
-            )
+        if let outputPath = request.params?["output"],
+           (!outputPath.isEmpty && validatedFileURL(fromCLIPath: outputPath) == nil) {
+            return .failure(id: request.id, error: "Invalid output path.")
+        }
+        if let cwd = request.params?["cwd"],
+           (!cwd.isEmpty && validatedFileURL(fromCLIPath: cwd) == nil) {
+            return .failure(id: request.id, error: "Invalid working directory path.")
         }
 
         let timeoutSeconds: TimeInterval?
@@ -5550,7 +6245,14 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             timeoutSeconds = nil
         }
 
-        let stopOnFailure = request.params?["continue-on-failure"] != "true"
+        guard let continueOnFailure = booleanParameter(
+            "continue-on-failure",
+            in: request,
+            default: false
+        ) else {
+            return .failure(id: request.id, error: "Invalid boolean for param: continue-on-failure")
+        }
+        let stopOnFailure = !continueOnFailure
         let sandbox: NotebookSandboxPolicy
         if let rawSandbox = request.params?["sandbox"], !rawSandbox.isEmpty {
             guard let parsedSandbox = NotebookSandboxPolicy(rawValue: rawSandbox) else {
@@ -5562,6 +6264,39 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             sandbox = parsedSandbox
         } else {
             sandbox = .workspace
+        }
+        guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+            return .failure(id: request.id, error: "Notebook execution requires approval.")
+        }
+        guard let inputURL = approvedLocalExecutionURL(for: "input", in: request) else {
+            return .failure(id: request.id, error: "Approved input target is unavailable.")
+        }
+        let outputURL: URL
+        if request.params?["output"]?.isEmpty == false {
+            guard let approvedOutput = approvedLocalExecutionURL(for: "output", in: request) else {
+                return .failure(id: request.id, error: "Approved output target is unavailable.")
+            }
+            outputURL = approvedOutput
+        } else {
+            outputURL = inputURL
+        }
+        let workingDirectory: URL
+        if request.params?["cwd"]?.isEmpty == false {
+            guard let approvedWorkingDirectory = approvedLocalExecutionURL(for: "cwd", in: request) else {
+                return .failure(id: request.id, error: "Approved working directory is unavailable.")
+            }
+            workingDirectory = approvedWorkingDirectory
+        } else {
+            workingDirectory = inputURL.deletingLastPathComponent()
+        }
+        guard FileManager.default.fileExists(atPath: inputURL.path) else {
+            return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
+        }
+        guard directoryExists(at: workingDirectory) else {
+            return .failure(
+                id: request.id,
+                error: "Working directory does not exist: \(workingDirectory.path)"
+            )
         }
 
         do {
@@ -5615,16 +6350,31 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Missing required param: input")
         }
 
-        let inputURL = fileURL(fromCLIPath: inputPath)
+        guard validatedFileURL(fromCLIPath: inputPath) != nil else {
+            return .failure(id: request.id, error: "Invalid input path.")
+        }
+        if let cwd = request.params?["cwd"],
+           (!cwd.isEmpty && validatedFileURL(fromCLIPath: cwd) == nil) {
+            return .failure(id: request.id, error: "Invalid working directory path.")
+        }
+        guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+            return .failure(id: request.id, error: "Workflow execution requires approval.")
+        }
+        guard let inputURL = approvedLocalExecutionURL(for: "input", in: request) else {
+            return .failure(id: request.id, error: "Approved input target is unavailable.")
+        }
+        let workspaceRoot: URL
+        if request.params?["cwd"]?.isEmpty == false {
+            guard let approvedWorkingDirectory = approvedLocalExecutionURL(for: "cwd", in: request) else {
+                return .failure(id: request.id, error: "Approved working directory is unavailable.")
+            }
+            workspaceRoot = approvedWorkingDirectory
+        } else {
+            workspaceRoot = inputURL.deletingLastPathComponent()
+        }
         guard FileManager.default.fileExists(atPath: inputURL.path) else {
             return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
         }
-
-        let workspaceRoot = request.params?["cwd"].flatMap { cwd -> URL? in
-            guard !cwd.isEmpty else { return nil }
-            return fileURL(fromCLIPath: cwd)
-        } ?? inputURL.deletingLastPathComponent()
-
         guard directoryExists(at: workspaceRoot) else {
             return .failure(
                 id: request.id,
@@ -5633,7 +6383,27 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
 
         do {
-            let source = try String(contentsOf: inputURL, encoding: .utf8)
+            guard let sourceData = SocketPrivilegedCommandSecurity.boundedFileData(
+                at: inputURL
+            ) else {
+                return .failure(
+                    id: request.id,
+                    error: "Workflow input is unavailable or exceeds the safe size limit."
+                )
+            }
+            if let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context,
+               context.scope != .internalTrusted {
+                guard let approvedDigest = context.localResourceDigests["input"],
+                      approvedDigest == SocketPrivilegedCommandSecurity.digest(data: sourceData) else {
+                    return .failure(
+                        id: request.id,
+                        error: "Workflow input changed after approval."
+                    )
+                }
+            }
+            guard let source = String(data: sourceData, encoding: .utf8) else {
+                return .failure(id: request.id, error: "Workflow input must be valid UTF-8.")
+            }
             let workflow = try WorkflowTOMLCodec.parse(source)
             let summary = try WorkflowExecutor().execute(workflow, workspaceRoot: workspaceRoot)
             var data = [
@@ -5697,13 +6467,25 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Missing required param: output")
         }
 
-        let inputURL = fileURL(fromCLIPath: inputPath)
-        let outputURL = fileURL(fromCLIPath: outputPath)
+        guard validatedFileURL(fromCLIPath: inputPath) != nil else {
+            return .failure(id: request.id, error: "Invalid input path.")
+        }
+        guard validatedFileURL(fromCLIPath: outputPath) != nil else {
+            return .failure(id: request.id, error: "Invalid output path.")
+        }
+        guard let force = booleanParameter("force", in: request, default: false) else {
+            return .failure(id: request.id, error: "Invalid boolean for param: force")
+        }
+        guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+            return .failure(id: request.id, error: "Notebook conversion requires approval.")
+        }
+        guard let inputURL = approvedLocalExecutionURL(for: "input", in: request),
+              let outputURL = approvedLocalExecutionURL(for: "output", in: request) else {
+            return .failure(id: request.id, error: "Approved notebook paths are unavailable.")
+        }
         guard FileManager.default.fileExists(atPath: inputURL.path) else {
             return .failure(id: request.id, error: "Input file does not exist: \(inputURL.path)")
         }
-
-        let force = request.params?["force"] == "true"
         if !force, FileManager.default.fileExists(atPath: outputURL.path) {
             return .failure(
                 id: request.id,
@@ -5731,7 +6513,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         }
     }
 
-    private func fileURL(fromCLIPath path: String) -> URL {
+    func validatedFileURL(fromCLIPath path: String) -> URL? {
+        guard !path.isEmpty,
+              path.utf8.count <= 4_096,
+              !path.contains("\0") else {
+            return nil
+        }
         let expandedPath: String
         if path == "~" {
             expandedPath = FileManager.default.homeDirectoryForCurrentUser.path
@@ -5743,6 +6530,52 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             expandedPath = path
         }
         return URL(fileURLWithPath: expandedPath).standardizedFileURL
+    }
+
+    private func approvedLocalExecutionURL(
+        for parameter: String,
+        in request: SocketRequest
+    ) -> URL? {
+        approvedSocketResourceURL(
+            for: parameter,
+            in: request,
+            allowedScopes: [.localExecution]
+        )
+    }
+
+    private func approvedSocketResourceURL(
+        for parameter: String,
+        in request: SocketRequest,
+        allowedScopes: [SocketPrivilegedCommandContext.Scope]
+    ) -> URL? {
+        guard let rawPath = request.params?[parameter],
+              validatedFileURL(fromCLIPath: rawPath) != nil,
+              let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context else {
+            return nil
+        }
+        switch context.scope {
+        case .internalTrusted:
+            return validatedFileURL(fromCLIPath: rawPath)
+        default:
+            guard allowedScopes.contains(context.scope),
+                  let approvedPath = context.localResourcePaths[parameter] else {
+                return nil
+            }
+            return URL(fileURLWithPath: approvedPath).standardizedFileURL
+        }
+    }
+
+    private func booleanParameter(
+        _ key: String,
+        in request: SocketRequest,
+        default defaultValue: Bool
+    ) -> Bool? {
+        guard let rawValue = request.params?[key] else { return defaultValue }
+        switch rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true": return true
+        case "false": return false
+        default: return nil
+        }
     }
 
     private func directoryExists(at url: URL) -> Bool {
@@ -5798,7 +6631,21 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// defaults to `false` when absent so a dirty worktree is refused
     /// by default — matching the `on-close = keep` safety stance.
     private func handleWorktreeRemove(_ request: SocketRequest) -> SocketResponse {
-        runWorktreeProvider(kind: "remove", request: request)
+        if let rawForce = request.params?["force"] {
+            guard let force = parseSocketBoolean(rawForce) else {
+                return .failure(
+                    id: request.id,
+                    error: "worktree-remove received an invalid force value."
+                )
+            }
+            guard !force else {
+                return .failure(
+                    id: request.id,
+                    error: "Forced worktree removal is disabled for local-socket requests. Commit, stash, or discard the worktree changes, then retry without --force."
+                )
+            }
+        }
+        return runWorktreeProvider(kind: "remove", request: request)
     }
 
     /// Routes `cocxy worktree-prune`. No params; the provider returns
@@ -5807,12 +6654,40 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         runWorktreeProvider(kind: "prune", request: request)
     }
 
-    /// Routes merged-worktree cleanup through the same provider used by
-    /// the interactive Worktree UI. `dry-run=true` returns counts without
-    /// deleting anything; the default path performs the preflight then
-    /// removes only clean merged worktrees.
+    /// Routes merged-worktree cleanup previews through the provider. Live
+    /// batch deletion remains in the in-app flow where the user reviews a
+    /// context-bound plan and confirms the exact candidates.
     private func handleWorktreeCleanupMerged(_ request: SocketRequest) -> SocketResponse {
-        runWorktreeProvider(kind: "cleanup-merged", request: request)
+        let params = request.params ?? [:]
+        if let rawForce = params["force"] {
+            guard let force = parseSocketBoolean(rawForce) else {
+                return .failure(
+                    id: request.id,
+                    error: "worktree-cleanup-merged received an invalid force value."
+                )
+            }
+            guard !force else {
+                return .failure(
+                    id: request.id,
+                    error: "Forced merged-worktree cleanup is not available over the local socket."
+                )
+            }
+        }
+        guard params["dry-run"].flatMap(parseSocketBoolean) == true else {
+            return .failure(
+                id: request.id,
+                error: "worktree-cleanup-merged is preview-only over the local socket; pass --dry-run."
+            )
+        }
+        return runWorktreeProvider(kind: "cleanup-merged", request: request)
+    }
+
+    private func parseSocketBoolean(_ raw: String) -> Bool? {
+        switch raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "1", "true", "yes", "y": return true
+        case "0", "false", "no", "n": return false
+        default: return nil
+        }
     }
 
     /// Shared dispatch used by every worktree verb. Keeping the four
@@ -5862,13 +6737,43 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// AppDelegate-side bridge owns provider construction and Git diff
     /// collection so the socket handler remains a pure router.
     func handleGitAssistantCLI(kind: String, request: SocketRequest) -> SocketResponse {
+        let params = request.params ?? [:]
+        switch kind {
+        case "commit-message":
+            guard params.isEmpty else {
+                return .failure(id: request.id, error: "Commit-message does not accept parameters.")
+            }
+        case "pr-draft", "release-notes":
+            guard Set(params.keys).isSubset(of: Set(["base", "head"])) else {
+                return .failure(id: request.id, error: "Unexpected Git Assistant parameter.")
+            }
+            for key in ["base", "head"] {
+                guard let value = params[key] else { continue }
+                guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    continue
+                }
+                do {
+                    _ = try GitRevisionArgument(value)
+                } catch {
+                    return .failure(
+                        id: request.id,
+                        error: "Invalid Git reference for \(key)."
+                    )
+                }
+            }
+        default:
+            return .failure(
+                id: request.id,
+                error: "Unknown Git Assistant subcommand: \(kind)"
+            )
+        }
         guard let provider = gitAssistantCLIProvider else {
             return .failure(
                 id: request.id,
                 error: "Git Assistant CLI is not yet wired in this build."
             )
         }
-        let result = provider(kind, request.params ?? [:])
+        let result = provider(kind, params)
         if result.success {
             return .ok(id: request.id, data: result.data)
         }

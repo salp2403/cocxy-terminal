@@ -28,6 +28,7 @@ final class RemoteProfileEditorViewModel: ObservableObject {
     @Published var autoReconnect: Bool = true
     @Published var isTesting: Bool = false
     @Published var testResult: String?
+    @Published private(set) var saveErrorMessage: String?
 
     // MARK: - Edit Mode
 
@@ -38,7 +39,7 @@ final class RemoteProfileEditorViewModel: ObservableObject {
     let existingGroups: [String]
 
     /// Callback invoked with the saved profile.
-    var onSave: ((RemoteConnectionProfile) -> Void)?
+    var onSave: ((RemoteConnectionProfile) throws -> Void)?
 
     // MARK: - Initialization
 
@@ -78,43 +79,92 @@ final class RemoteProfileEditorViewModel: ObservableObject {
     }
 
     var isValid: Bool {
-        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmedPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
+        let portIsValid = trimmedPort.isEmpty
+            || Int(trimmedPort).map { (1...65_535).contains($0) } == true
+        return !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !host.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && portIsValid
+            && invalidPortForwardIDs.isEmpty
+            && invalidEnvironmentVariableIDs.isEmpty
+            && duplicateEnvironmentVariableIDs.isEmpty
+    }
+
+    var invalidPortForwardIDs: Set<UUID> {
+        Set(portForwards.filter { !$0.isValid }.map(\.id))
+    }
+
+    var invalidEnvironmentVariableIDs: Set<UUID> {
+        Set(environmentVariables.compactMap { variable in
+            let key = variable.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = variable.value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return key.isEmpty && !value.isEmpty ? variable.id : nil
+        })
+    }
+
+    var duplicateEnvironmentVariableIDs: Set<UUID> {
+        let keyedVariables = Dictionary(grouping: environmentVariables) { variable in
+            variable.key.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let duplicateGroups = keyedVariables.filter { key, variables in
+            !key.isEmpty && variables.count > 1
+        }
+        return Set(duplicateGroups.values.flatMap { variables in variables.map(\.id) })
     }
 
     // MARK: - Actions
 
-    func save() {
-        guard isValid else { return }
+    @discardableResult
+    func save() -> Bool {
+        guard isValid else { return false }
 
         let trimmedUsername = username.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedIdentity = identityFile.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedGroup = group.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        let envVars: [String: String] = Dictionary(
-            uniqueKeysWithValues: environmentVariables
-                .filter { !$0.key.isEmpty }
-                .map { ($0.key, $0.value) }
-        )
+        var envVars: [String: String] = [:]
+        for variable in environmentVariables {
+            let key = variable.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !key.isEmpty {
+                envVars[key] = variable.value
+            }
+        }
+
+        var savedPortForwards: [RemoteConnectionProfile.PortForward] = []
+        for editableForward in portForwards {
+            guard let forward = editableForward.toPortForward() else { return false }
+            savedPortForwards.append(forward)
+        }
+        let trimmedPort = port.trimmingCharacters(in: .whitespacesAndNewlines)
 
         let profile = RemoteConnectionProfile(
             id: existingProfile?.id ?? UUID(),
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
             host: host.trimmingCharacters(in: .whitespacesAndNewlines),
             user: trimmedUsername.isEmpty ? nil : trimmedUsername,
-            port: Int(port),
+            port: trimmedPort.isEmpty ? nil : Int(trimmedPort),
             identityFile: trimmedIdentity.isEmpty ? nil : trimmedIdentity,
             jumpHosts: jumpHosts.filter { !$0.isEmpty },
-            portForwards: portForwards.compactMap { $0.toPortForward() },
+            portForwards: savedPortForwards,
             group: trimmedGroup.isEmpty ? nil : trimmedGroup,
             envVars: envVars,
             keepAliveInterval: keepAliveInterval,
+            strictHostKeyChecking: existingProfile?.strictHostKeyChecking,
+            knownHostsFile: existingProfile?.knownHostsFile,
+            batchMode: existingProfile?.batchMode,
             autoReconnect: autoReconnect,
             proxyExclusions: existingProfile?.proxyExclusions ?? [],
             relayChannels: existingProfile?.relayChannels ?? []
         )
 
-        onSave?(profile)
+        do {
+            try onSave?(profile)
+            saveErrorMessage = nil
+            return true
+        } catch {
+            saveErrorMessage = error.localizedDescription
+            return false
+        }
     }
 
     // MARK: - Jump Host Management
@@ -181,35 +231,52 @@ struct EditablePortForward: Identifiable {
     var type: ForwardTypeOption = .local
     var localPort: String = ""
     var remotePort: String = ""
+    var localHost: String = "localhost"
+    var remoteHost: String = "localhost"
 
     init() {}
 
     init(from forward: RemoteConnectionProfile.PortForward) {
         switch forward {
-        case let .local(lp, rp, _):
+        case let .local(lp, rp, remoteHost):
             type = .local
             localPort = String(lp)
             remotePort = String(rp)
-        case let .remote(rp, lp, _):
+            self.remoteHost = remoteHost
+        case let .remote(rp, lp, localHost):
             type = .remote
             localPort = String(lp)
             remotePort = String(rp)
+            self.localHost = localHost
         case let .dynamic(lp):
             type = .dynamic
             localPort = String(lp)
         }
     }
 
+    var isValid: Bool { toPortForward() != nil }
+
     func toPortForward() -> RemoteConnectionProfile.PortForward? {
-        guard let lp = Int(localPort), lp > 0 else { return nil }
+        let trimmedLocalPort = localPort.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let lp = Int(trimmedLocalPort), (1...65_535).contains(lp) else { return nil }
 
         switch type {
         case .local:
-            guard let rp = Int(remotePort), rp > 0 else { return nil }
-            return .local(localPort: lp, remotePort: rp)
+            let targetHost = remoteHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedRemotePort = remotePort.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !targetHost.isEmpty,
+                  let rp = Int(trimmedRemotePort),
+                  (1...65_535).contains(rp)
+            else { return nil }
+            return .local(localPort: lp, remotePort: rp, remoteHost: targetHost)
         case .remote:
-            guard let rp = Int(remotePort), rp > 0 else { return nil }
-            return .remote(remotePort: rp, localPort: lp)
+            let targetHost = localHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmedRemotePort = remotePort.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !targetHost.isEmpty,
+                  let rp = Int(trimmedRemotePort),
+                  (1...65_535).contains(rp)
+            else { return nil }
+            return .remote(remotePort: rp, localPort: lp, localHost: targetHost)
         case .dynamic:
             return .dynamic(localPort: lp)
         }
@@ -280,6 +347,10 @@ struct RemoteProfileEditor: View {
                     advancedSection
                 }
                 .padding(16)
+            }
+            if let saveErrorMessage = viewModel.saveErrorMessage {
+                Divider()
+                saveErrorSection(saveErrorMessage)
             }
             Divider()
             footerButtons
@@ -421,43 +492,119 @@ struct RemoteProfileEditor: View {
             onAdd: { viewModel.addPortForward() }
         ) {
             ForEach(viewModel.portForwards.indices, id: \.self) { index in
-                HStack(spacing: 6) {
-                    Picker("", selection: $viewModel.portForwards[index].type) {
-                        Text("L").tag(ForwardTypeOption.local)
-                        Text("R").tag(ForwardTypeOption.remote)
-                        Text("D").tag(ForwardTypeOption.dynamic)
+                if viewModel.portForwards[index].type == .dynamic {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock.shield")
+                            .foregroundColor(Color(nsColor: CocxyColors.yellow))
+                        Text(localized(
+                            "remoteWorkspace.profileEditor.dynamicDisabled",
+                            fallback: "Legacy dynamic forward disabled; use Proxy"
+                        ))
+                        .font(.system(size: 10))
+                        .foregroundColor(Color(nsColor: CocxyColors.subtext0))
+                        Spacer()
+                        removeButton { viewModel.removePortForward(at: index) }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 100)
-                    .labelsHidden()
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            Picker(
+                                localized("remoteWorkspace.portForward.type", fallback: "Type"),
+                                selection: $viewModel.portForwards[index].type
+                            ) {
+                                ForEach(ForwardTypeOption.creatableCases) { option in
+                                    Text(option.localizedLabel(using: localizer)).tag(option)
+                                }
+                            }
+                            .pickerStyle(.segmented)
+                            .frame(width: 170)
+                            .labelsHidden()
+                            .accessibilityLabel(localized("remoteWorkspace.portForward.type", fallback: "Type"))
 
-                    TextField(
-                        localized("remoteWorkspace.forwardType.local", fallback: "Local"),
-                        text: $viewModel.portForwards[index].localPort
-                    )
-                        .textFieldStyle(.roundedBorder)
-                        .font(.system(size: 11, design: .monospaced))
-                        .frame(width: 60)
+                            Spacer()
+                            removeButton { viewModel.removePortForward(at: index) }
+                        }
 
-                    if viewModel.portForwards[index].type != .dynamic {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 8))
-                            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                        portForwardEndpointFields(at: index)
 
-                        TextField(
-                            localized("remoteWorkspace.forwardType.remote", fallback: "Remote"),
-                            text: $viewModel.portForwards[index].remotePort
-                        )
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 11, design: .monospaced))
-                            .frame(width: 60)
+                        if viewModel.invalidPortForwardIDs.contains(viewModel.portForwards[index].id) {
+                            validationMessage(
+                                localized(
+                                    "remoteWorkspace.profileEditor.validation.portForward",
+                                    fallback: "Enter valid ports and a destination host."
+                                )
+                            )
+                        }
                     }
-
-                    Spacer()
-                    removeButton { viewModel.removePortForward(at: index) }
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func portForwardEndpointFields(at index: Int) -> some View {
+        let type = viewModel.portForwards[index].type
+
+        VStack(alignment: .leading, spacing: 6) {
+            if type == .local {
+                portField(
+                    localized("remoteWorkspace.portForward.localPort", fallback: "Local Port"),
+                    text: $viewModel.portForwards[index].localPort
+                )
+
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.right")
+                        .frame(width: 14)
+                        .accessibilityHidden(true)
+
+                    hostField(
+                        localized("remoteWorkspace.profileEditor.portForward.remoteHost", fallback: "Remote host"),
+                        text: $viewModel.portForwards[index].remoteHost
+                    )
+
+                    portField(
+                        localized("remoteWorkspace.portForward.remotePort", fallback: "Remote Port"),
+                        text: $viewModel.portForwards[index].remotePort
+                    )
+                }
+            } else {
+                portField(
+                    localized("remoteWorkspace.portForward.remotePort", fallback: "Remote Port"),
+                    text: $viewModel.portForwards[index].remotePort
+                )
+
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.down.right")
+                        .frame(width: 14)
+                        .accessibilityHidden(true)
+
+                    hostField(
+                        localized("remoteWorkspace.profileEditor.portForward.localHost", fallback: "Local host"),
+                        text: $viewModel.portForwards[index].localHost
+                    )
+
+                    portField(
+                        localized("remoteWorkspace.portForward.localPort", fallback: "Local Port"),
+                        text: $viewModel.portForwards[index].localPort
+                    )
+                }
+            }
+        }
+    }
+
+    private func portField(_ placeholder: String, text: Binding<String>) -> some View {
+        TextField(placeholder, text: text)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, design: .monospaced))
+            .frame(width: 116)
+            .accessibilityLabel(placeholder)
+    }
+
+    private func hostField(_ placeholder: String, text: Binding<String>) -> some View {
+        TextField(placeholder, text: text)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 11, design: .monospaced))
+            .accessibilityLabel(placeholder)
     }
 
     // MARK: - Environment Variables
@@ -469,27 +616,45 @@ struct RemoteProfileEditor: View {
             onAdd: { viewModel.addEnvironmentVariable() }
         ) {
             ForEach(viewModel.environmentVariables.indices, id: \.self) { index in
-                HStack(spacing: 6) {
-                    TextField(
-                        Self.localizedEnvironmentKeyPlaceholder(using: localizer),
-                        text: $viewModel.environmentVariables[index].key
-                    )
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        TextField(
+                            Self.localizedEnvironmentKeyPlaceholder(using: localizer),
+                            text: $viewModel.environmentVariables[index].key
+                        )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11, design: .monospaced))
                         .frame(width: 100)
 
-                    Text("=")
-                        .font(.system(size: 11))
-                        .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+                        Text("=")
+                            .font(.system(size: 11))
+                            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
 
-                    TextField(
-                        Self.localizedEnvironmentValuePlaceholder(using: localizer),
-                        text: $viewModel.environmentVariables[index].value
-                    )
+                        TextField(
+                            Self.localizedEnvironmentValuePlaceholder(using: localizer),
+                            text: $viewModel.environmentVariables[index].value
+                        )
                         .textFieldStyle(.roundedBorder)
                         .font(.system(size: 11, design: .monospaced))
 
-                    removeButton { viewModel.removeEnvironmentVariable(at: index) }
+                        removeButton { viewModel.removeEnvironmentVariable(at: index) }
+                    }
+
+                    if viewModel.duplicateEnvironmentVariableIDs.contains(viewModel.environmentVariables[index].id) {
+                        validationMessage(
+                            localized(
+                                "remoteWorkspace.profileEditor.validation.duplicateEnvironment",
+                                fallback: "Environment variable keys must be unique."
+                            )
+                        )
+                    } else if viewModel.invalidEnvironmentVariableIDs.contains(viewModel.environmentVariables[index].id) {
+                        validationMessage(
+                            localized(
+                                "remoteWorkspace.profileEditor.validation.environmentKey",
+                                fallback: "Enter a key or remove this row."
+                            )
+                        )
+                    }
                 }
             }
         }
@@ -544,8 +709,9 @@ struct RemoteProfileEditor: View {
                 ? localized("common.save", fallback: "Save")
                 : localized("remoteWorkspace.profileEditor.create", fallback: "Create")
             ) {
-                viewModel.save()
-                dismiss()
+                if viewModel.save() {
+                    dismiss()
+                }
             }
             .buttonStyle(.borderedProminent)
             .tint(Color(nsColor: CocxyColors.blue))
@@ -616,6 +782,36 @@ struct RemoteProfileEditor: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(localized("remoteWorkspace.profileEditor.remove.accessibility", fallback: "Remove"))
+    }
+
+    private func saveErrorSection(_ message: String) -> some View {
+        HStack(alignment: .top, spacing: 6) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 10))
+            Text(
+                String(
+                    format: localized(
+                        "remoteWorkspace.profileEditor.saveFailed",
+                        fallback: "Could not save profile: %@"
+                    ),
+                    message
+                )
+            )
+            .font(.system(size: 10))
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .foregroundColor(Color(nsColor: CocxyColors.red))
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+
+    private func validationMessage(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.circle.fill")
+            .font(.system(size: 9))
+            .foregroundColor(Color(nsColor: CocxyColors.red))
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     static func localizedJumpHostPlaceholder(using localizer: AppLocalizer) -> String {

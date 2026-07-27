@@ -164,6 +164,92 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(histories.first?.first?.content.contains("Lead with correctness risks.") == true)
     }
 
+    @Test("selected skill keeps its source when a shadow is added before submission")
+    func selectedSkillKeepsItsSourceBeforeSubmission() async throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let builtIns = root.appendingPathComponent("built-in", isDirectory: true)
+        let user = root.appendingPathComponent("user", isDirectory: true)
+        try writeSkill(
+            id: "review-pr",
+            name: "Bundled Review",
+            summary: "Trusted bundled guidance.",
+            body: "Use only the bundled review body.",
+            in: builtIns
+        )
+        let registry = SkillRegistry(directories: [
+            SkillDirectory(url: builtIns, source: .builtIn),
+            SkillDirectory(url: user, source: .user),
+        ])
+        let runner = RecordingAgentPromptRunner(result: AgentLoopResult(
+            messages: [],
+            stopReason: .completed
+        ))
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: runner,
+            skillRegistry: registry
+        )
+        viewModel.setSkill("review-pr", selected: true)
+
+        try writeSkill(
+            id: "review-pr",
+            name: "User Shadow",
+            summary: "Untrusted replacement.",
+            body: "Use the newly installed shadow body.",
+            in: user
+        )
+        viewModel.promptDraft = "Inspect this change."
+        await viewModel.submitPrompt()
+
+        let history = try #require(await runner.histories.first?.first)
+        #expect(history.content.contains("Use only the bundled review body."))
+        #expect(!history.content.contains("Use the newly installed shadow body."))
+        #expect(history.content.contains("Source: built-in"))
+    }
+
+    @Test("refresh clears selection when effective skill source changes")
+    func refreshClearsSelectionWhenSkillSourceChanges() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let builtIns = root.appendingPathComponent("built-in", isDirectory: true)
+        let user = root.appendingPathComponent("user", isDirectory: true)
+        try writeSkill(
+            id: "review-pr",
+            name: "Bundled Review",
+            summary: "Trusted bundled guidance.",
+            body: "Bundled body.",
+            in: builtIns
+        )
+        let registry = SkillRegistry(directories: [
+            SkillDirectory(url: builtIns, source: .builtIn),
+            SkillDirectory(url: user, source: .user),
+        ])
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: RecordingAgentPromptRunner(result: AgentLoopResult(
+                messages: [],
+                stopReason: .completed
+            )),
+            skillRegistry: registry
+        )
+        viewModel.setSkill("review-pr", selected: true)
+        #expect(viewModel.selectedSkillsCount == 1)
+
+        try writeSkill(
+            id: "review-pr",
+            name: "User Shadow",
+            summary: "Replacement guidance.",
+            body: "User body.",
+            in: user
+        )
+        viewModel.updateSkillRegistry(registry)
+
+        #expect(viewModel.availableSkills.first?.source == .user)
+        #expect(viewModel.selectedSkillsCount == 0)
+        #expect(!viewModel.isSkillSelected("review-pr"))
+    }
+
     @Test("permission stop reason becomes approval state")
     func permissionStopReasonBecomesApprovalState() async throws {
         let request = AgentToolApprovalRequest(
@@ -364,6 +450,43 @@ struct AgentPanelViewModelSwiftTestingTests {
         #expect(await runner.approvedUserInputs == [nil])
     }
 
+    @Test("stale workspace approval is discarded and requires a fresh preview")
+    func staleWorkspaceApprovalIsDiscarded() async throws {
+        let request = AgentToolApprovalRequest(
+            call: AgentToolCall(
+                id: "call-stale",
+                toolID: "run_command",
+                arguments: ["command": .string("swift test")]
+            ),
+            reason: .commandApprovalRequired(command: "swift test"),
+            preview: AgentToolApprovalPreview(
+                kind: .command,
+                title: "Approve command",
+                body: "command: swift test\ncwd: .\ntimeout: 60s"
+            )
+        )
+        let runner = RecordingApprovalAgentPromptRunner(
+            result: AgentLoopResult(messages: [], stopReason: .permissionRequired(request)),
+            approvedResult: AgentLoopResult(messages: [], stopReason: .completed),
+            approvalError: .staleContext
+        )
+        let viewModel = AgentPanelViewModel(
+            configuration: AgentModeConfig(enabled: true),
+            runner: runner
+        )
+
+        viewModel.promptDraft = "Run tests"
+        await viewModel.submitPrompt()
+        await viewModel.approvePendingTool()
+
+        #expect(viewModel.pendingApproval == nil)
+        #expect(viewModel.pendingApprovalResponseDraft.isEmpty)
+        #expect(viewModel.state == .failed(
+            "This approval is no longer valid because its workspace context changed. Review the tool request again."
+        ))
+        #expect(await runner.approvedRequests == [request])
+    }
+
     @Test("answering pending user question resumes runner with typed response")
     func answeringPendingUserQuestionResumesRunnerWithTypedResponse() async throws {
         let request = AgentToolApprovalRequest(
@@ -539,12 +662,18 @@ private actor RecordingAttachmentAgentPromptRunner: AgentAttachmentPromptRunning
 private actor RecordingApprovalAgentPromptRunner: AgentApprovalRunning {
     private let result: AgentLoopResult
     private let approvedResult: AgentLoopResult
+    private let approvalError: AgentToolApprovalError?
     private(set) var approvedRequests: [AgentToolApprovalRequest] = []
     private(set) var approvedUserInputs: [String?] = []
 
-    init(result: AgentLoopResult, approvedResult: AgentLoopResult) {
+    init(
+        result: AgentLoopResult,
+        approvedResult: AgentLoopResult,
+        approvalError: AgentToolApprovalError? = nil
+    ) {
         self.result = result
         self.approvedResult = approvedResult
+        self.approvalError = approvalError
     }
 
     func run(
@@ -563,6 +692,9 @@ private actor RecordingApprovalAgentPromptRunner: AgentApprovalRunning {
     ) async throws -> AgentLoopResult {
         approvedRequests.append(request)
         approvedUserInputs.append(userInput)
+        if let approvalError {
+            throw approvalError
+        }
         return approvedResult
     }
 }

@@ -106,46 +106,32 @@ enum NotebookMarkdownCodec {
             return trimBoundaryNewlines(cell.source)
         case .code:
             let language = cell.language ?? "bash"
-            var parts = ["""
-            ```\(language)
-            \(trimBoundaryNewlines(cell.source))
-            ```
-            """]
+            let source = trimBoundaryNewlines(cell.source)
+            let marker = safeFenceMarker(for: source)
+            var parts = ["\(marker)\(language)\n\(source)\n\(marker)"]
             parts.append(contentsOf: cell.outputs.map(renderOutput))
             return parts.joined(separator: "\n\n")
         }
     }
 
     private static func renderOutput(_ output: NotebookCellOutput) -> String {
+        let marker = safeFenceMarker(for: output.text)
         let finalNewlineFlag = output.text.hasSuffix("\n") ? "" : " no-final-newline"
         let closingSeparator = output.text.hasSuffix("\n") ? "" : "\n"
-        return """
-        ```\(outputFenceInfoPrefix) \(output.kind.rawValue)\(finalNewlineFlag)
-        \(output.text)\(closingSeparator)```
-        """
+        return "\(marker)\(outputFenceInfoPrefix) \(output.kind.rawValue)\(finalNewlineFlag)\n"
+            + "\(output.text)\(closingSeparator)\(marker)"
     }
 
     private static func parseExecutableFenceStart(_ line: String) -> (marker: String, language: String)? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        let marker: String
-        if trimmed.hasPrefix("```") {
-            marker = "```"
-        } else if trimmed.hasPrefix("~~~") {
-            marker = "~~~"
-        } else {
-            return nil
-        }
-
-        let info = trimmed.dropFirst(marker.count)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let rawLanguage = info.split(separator: " ").first.map(String.init),
+        guard let fence = parseFenceStart(line),
+              let rawLanguage = fence.info.split(separator: " ").first.map(String.init),
               let language = NotebookCell.normalizedLanguage(rawLanguage),
               executableLanguages.contains(language)
         else {
             return nil
         }
 
-        return (marker, language)
+        return (fence.marker, language)
     }
 
     private static func parseAttachedOutputs(
@@ -194,19 +180,8 @@ enum NotebookMarkdownCodec {
     private static func parseOutputFenceStart(
         _ line: String
     ) -> (marker: String, kind: NotebookCellOutputKind, preservesFinalNewline: Bool)? {
-        let trimmed = line.trimmingCharacters(in: .whitespaces)
-        let marker: String
-        if trimmed.hasPrefix("```") {
-            marker = "```"
-        } else if trimmed.hasPrefix("~~~") {
-            marker = "~~~"
-        } else {
-            return nil
-        }
-
-        let info = trimmed.dropFirst(marker.count)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        var parts = info.split(separator: " ").map(String.init)
+        guard let fence = parseFenceStart(line) else { return nil }
+        var parts = fence.info.split(separator: " ").map(String.init)
         guard parts.first == outputFenceInfoPrefix else {
             return nil
         }
@@ -219,7 +194,7 @@ enum NotebookMarkdownCodec {
         guard let kind = NotebookCellOutputKind(rawValue: normalizedKind) else {
             return nil
         }
-        return (marker, kind, !parts.contains("no-final-newline"))
+        return (fence.marker, kind, !parts.contains("no-final-newline"))
     }
 
     private static func outputText(
@@ -235,7 +210,40 @@ enum NotebookMarkdownCodec {
 
     private static func isFenceClose(_ line: String, marker: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
-        return trimmed.hasPrefix(marker)
+        guard let markerCharacter = marker.first,
+              !marker.isEmpty,
+              trimmed.first == markerCharacter else {
+            return false
+        }
+        let closingRunLength = trimmed.prefix { $0 == markerCharacter }.count
+        return closingRunLength >= marker.count
+            && trimmed.dropFirst(closingRunLength).isEmpty
+    }
+
+    private static func parseFenceStart(_ line: String) -> (marker: String, info: String)? {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard let markerCharacter = trimmed.first,
+              markerCharacter == "`" || markerCharacter == "~" else {
+            return nil
+        }
+        let markerLength = trimmed.prefix { $0 == markerCharacter }.count
+        guard markerLength >= 3 else { return nil }
+        let marker = String(repeating: markerCharacter, count: markerLength)
+        let info = trimmed.dropFirst(markerLength)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return (marker, info)
+    }
+
+    private static func safeFenceMarker(for content: String) -> String {
+        let maximumConflictingRun = content
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { line in
+                line.trimmingCharacters(in: .whitespaces)
+                    .prefix { $0 == "`" }
+                    .count
+            }
+            .max() ?? 0
+        return String(repeating: "`", count: max(3, maximumConflictingRun + 1))
     }
 
     private static func trimBoundaryNewlines(_ value: String) -> String {

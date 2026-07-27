@@ -5,6 +5,23 @@ import Foundation
 import Combine
 import AppKit
 
+enum ICloudSyncOperation: Sendable, Equatable {
+    case checkingMasterPassword
+    case savingMasterPassword
+    case deletingMasterPassword
+    case exporting
+    case importing
+    case resolvingConflict(ICloudSyncArtifactKey)
+}
+
+enum ICloudSyncOperationError: Error, Sendable, Equatable, LocalizedError {
+    case operationInProgress
+
+    var errorDescription: String? {
+        "Another iCloud Sync operation is already running."
+    }
+}
+
 // MARK: - Preferences View Model
 
 /// View model that holds editable copies of all user-facing configuration
@@ -358,6 +375,18 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Conflicts found during the last manual iCloud Sync import.
     @Published var iCloudSyncConflicts: [ICloudSyncImportConflict]
+
+    /// Cached Keychain availability. Refreshed asynchronously when the
+    /// preferences section appears and after each secret mutation.
+    @Published private(set) var iCloudSyncHasSavedMasterPassword: Bool = false
+
+    /// The single in-flight iCloud operation. A non-nil value gates every
+    /// mutating action so repeated clicks cannot overlap file or Keychain I/O.
+    @Published private(set) var iCloudSyncOperation: ICloudSyncOperation?
+
+    var iCloudSyncIsBusy: Bool {
+        iCloudSyncOperation != nil
+    }
 
     // MARK: - Local Backups
 
@@ -1133,6 +1162,7 @@ final class PreferencesViewModel: ObservableObject {
         self.iCloudSyncExportStatus = nil
         self.iCloudSyncImportStatus = nil
         self.iCloudSyncConflicts = []
+        self.iCloudSyncOperation = nil
 
         // Local Backups
         self.backupEnabled = config.backup.enabled
@@ -1261,17 +1291,48 @@ final class PreferencesViewModel: ObservableObject {
 
     // MARK: - iCloud Sync Secrets
 
-    func saveICloudSyncMasterPasswordDraft() throws {
-        try iCloudSyncSecrets.saveMasterPassword(iCloudSyncMasterPasswordDraft)
+    func refreshICloudSyncMasterPasswordAvailability() async {
+        guard iCloudSyncOperation == nil else { return }
+        let secrets = iCloudSyncSecrets
+        do {
+            iCloudSyncHasSavedMasterPassword = try await performICloudSyncOperation(
+                .checkingMasterPassword
+            ) {
+                try secrets.hasMasterPassword()
+            }
+        } catch is CancellationError {
+            return
+        } catch {
+            iCloudSyncMasterPasswordStatus = String(
+                format: localizedString(
+                    "preferences.iCloud.masterPassword.check.failed",
+                    fallback: "Failed to check the saved master password: %@"
+                ),
+                error.localizedDescription
+            )
+        }
+    }
+
+    func saveICloudSyncMasterPasswordDraft() async throws {
+        let password = iCloudSyncMasterPasswordDraft
+        let secrets = iCloudSyncSecrets
+        try await performICloudSyncOperation(.savingMasterPassword) {
+            try secrets.saveMasterPassword(password)
+        }
         iCloudSyncMasterPasswordDraft = ""
+        iCloudSyncHasSavedMasterPassword = true
         iCloudSyncMasterPasswordStatus = localizedString(
             "preferences.iCloud.masterPassword.saved.status",
             fallback: "iCloud Sync master password saved."
         )
     }
 
-    func deleteICloudSyncMasterPassword() throws {
-        try iCloudSyncSecrets.deleteMasterPassword()
+    func deleteICloudSyncMasterPassword() async throws {
+        let secrets = iCloudSyncSecrets
+        try await performICloudSyncOperation(.deletingMasterPassword) {
+            try secrets.deleteMasterPassword()
+        }
+        iCloudSyncHasSavedMasterPassword = false
         iCloudSyncMasterPasswordStatus = localizedString(
             "preferences.iCloud.masterPassword.deleted.status",
             fallback: "iCloud Sync master password deleted."
@@ -1279,10 +1340,10 @@ final class PreferencesViewModel: ObservableObject {
     }
 
     func hasSavedICloudSyncMasterPassword() -> Bool {
-        (try? iCloudSyncSecrets.hasMasterPassword()) ?? false
+        iCloudSyncHasSavedMasterPassword
     }
 
-    func exportICloudSyncArtifactsNow() throws -> ICloudSyncExportOutcome {
+    func exportICloudSyncArtifactsNow() async throws -> ICloudSyncExportOutcome {
         let config = buildICloudSyncConfigFromViewModel()
         guard config.enabled else {
             iCloudSyncExportStatus = localizedString(
@@ -1291,15 +1352,19 @@ final class PreferencesViewModel: ObservableObject {
             )
             return .disabled
         }
-        guard let password = try iCloudSyncSecrets.masterPassword() else {
-            throw ICloudSyncManualRunError.masterPasswordUnavailable
+        let secrets = iCloudSyncSecrets
+        let exporter = iCloudSyncExporter
+        let roots = iCloudSyncArtifactRoots
+        let outcome = try await performICloudSyncOperation(.exporting) {
+            guard let password = try secrets.masterPassword() else {
+                throw ICloudSyncManualRunError.masterPasswordUnavailable
+            }
+            return try exporter.exportLocalArtifacts(
+                config: config,
+                roots: roots,
+                password: password
+            )
         }
-
-        let outcome = try iCloudSyncExporter.exportLocalArtifacts(
-            config: config,
-            roots: iCloudSyncArtifactRoots,
-            password: password
-        )
         switch outcome {
         case .disabled:
             iCloudSyncExportStatus = localizedString(
@@ -1317,7 +1382,7 @@ final class PreferencesViewModel: ObservableObject {
         return outcome
     }
 
-    func importICloudSyncArtifactsNow() throws -> ICloudSyncImportOutcome {
+    func importICloudSyncArtifactsNow() async throws -> ICloudSyncImportOutcome {
         let config = buildICloudSyncConfigFromViewModel()
         guard config.enabled else {
             iCloudSyncImportStatus = localizedString(
@@ -1327,15 +1392,19 @@ final class PreferencesViewModel: ObservableObject {
             iCloudSyncConflicts = []
             return .disabled
         }
-        guard let password = try iCloudSyncSecrets.masterPassword() else {
-            throw ICloudSyncManualRunError.masterPasswordUnavailable
+        let secrets = iCloudSyncSecrets
+        let importer = iCloudSyncImporter
+        let roots = iCloudSyncArtifactRoots
+        let outcome = try await performICloudSyncOperation(.importing) {
+            guard let password = try secrets.masterPassword() else {
+                throw ICloudSyncManualRunError.masterPasswordUnavailable
+            }
+            return try importer.importRemoteArtifacts(
+                config: config,
+                roots: roots,
+                password: password
+            )
         }
-
-        let outcome = try iCloudSyncImporter.importRemoteArtifacts(
-            config: config,
-            roots: iCloudSyncArtifactRoots,
-            password: password
-        )
         switch outcome {
         case .disabled:
             iCloudSyncImportStatus = localizedString(
@@ -1368,7 +1437,7 @@ final class PreferencesViewModel: ObservableObject {
     func resolveICloudSyncConflict(
         _ conflict: ICloudSyncImportConflict,
         resolution: ICloudSyncConflictResolution
-    ) throws -> ICloudSyncConflictResolutionOutcome {
+    ) async throws -> ICloudSyncConflictResolutionOutcome {
         let config = buildICloudSyncConfigFromViewModel()
         guard config.enabled else {
             iCloudSyncImportStatus = localizedString(
@@ -1377,24 +1446,31 @@ final class PreferencesViewModel: ObservableObject {
             )
             return .disabled
         }
-        let password: String
-        if resolution == .useRemote {
-            guard let savedPassword = try iCloudSyncSecrets.masterPassword() else {
-                throw ICloudSyncManualRunError.masterPasswordUnavailable
+        let secrets = iCloudSyncSecrets
+        let resolver = iCloudSyncConflictResolver
+        let roots = iCloudSyncArtifactRoots
+        let backupRoot = iCloudSyncConflictBackupRoot
+        let outcome = try await performICloudSyncOperation(
+            .resolvingConflict(conflict.remote.key)
+        ) {
+            let password: String
+            if resolution == .useRemote {
+                guard let savedPassword = try secrets.masterPassword() else {
+                    throw ICloudSyncManualRunError.masterPasswordUnavailable
+                }
+                password = savedPassword
+            } else {
+                password = ""
             }
-            password = savedPassword
-        } else {
-            password = ""
+            return try resolver.resolveConflict(
+                config: config,
+                conflict: conflict,
+                resolution: resolution,
+                roots: roots,
+                backupRoot: backupRoot,
+                password: password
+            )
         }
-
-        let outcome = try iCloudSyncConflictResolver.resolveConflict(
-            config: config,
-            conflict: conflict,
-            resolution: resolution,
-            roots: iCloudSyncArtifactRoots,
-            backupRoot: iCloudSyncConflictBackupRoot,
-            password: password
-        )
         switch outcome {
         case .disabled:
             iCloudSyncImportStatus = localizedString(
@@ -1417,6 +1493,29 @@ final class PreferencesViewModel: ObservableObject {
             )
         }
         return outcome
+    }
+
+    private func performICloudSyncOperation<Output: Sendable>(
+        _ operation: ICloudSyncOperation,
+        work: @escaping @Sendable () throws -> Output
+    ) async throws -> Output {
+        guard iCloudSyncOperation == nil else {
+            throw ICloudSyncOperationError.operationInProgress
+        }
+        iCloudSyncOperation = operation
+        defer { iCloudSyncOperation = nil }
+
+        let task = Task.detached(priority: .userInitiated) {
+            try Task.checkCancellation()
+            let output = try work()
+            try Task.checkCancellation()
+            return output
+        }
+        return try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func localizedICloudExportStatus(count: Int) -> String {
@@ -1819,6 +1918,7 @@ final class PreferencesViewModel: ObservableObject {
                 copyOnSelect: savedConfig.terminal.copyOnSelect,
                 clipboardPasteProtection: savedConfig.terminal.clipboardPasteProtection,
                 clipboardReadAccess: savedConfig.terminal.clipboardReadAccess,
+                clipboardWriteAccess: savedConfig.terminal.clipboardWriteAccess,
                 imageMemoryLimitMB: clampedImageMemoryLimitMB,
                 imageFileTransfer: imageFileTransfer,
                 enableSixelImages: enableSixelImages,
@@ -2631,7 +2731,10 @@ final class PreferencesViewModel: ObservableObject {
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
+        # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
+        # to the terminal program; writes replace the system clipboard.
         clipboard-read-access = "\(defaults.terminal.clipboardReadAccess.rawValue)"
+        clipboard-write-access = "\(defaults.terminal.clipboardWriteAccess.rawValue)"
         image-memory-limit-mb = \(clampedImageMemoryLimitMB)
         image-file-transfer = \(imageFileTransfer)
         enable-sixel-images = \(enableSixelImages)

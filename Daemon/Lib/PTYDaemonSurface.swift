@@ -24,6 +24,9 @@ final class PTYDaemonSurface: @unchecked Sendable {
     static let spawnEnvironmentLock = NSLock()
     static let readBufferSize = 16 * 1024
     static let responseBufferSize = 4 * 1024
+    static let maximumRows = 512
+    static let maximumColumns = 2_048
+    static let maximumCells = 131_072
 
     let surfaceID: String
     let shellPID: Int32
@@ -33,13 +36,17 @@ final class PTYDaemonSurface: @unchecked Sendable {
     let pty: OpaquePointer
     let writer: PTYDaemonLineWriter
     let terminalLock = NSLock()
+    let ioQueue: DispatchQueue
     var callbackContext: Unmanaged<PTYDaemonSurfaceCallbackContext>?
     var revision: UInt64 = 0
 
     private let stateLock = NSLock()
+    private let cleanupGroup = DispatchGroup()
     private var readSource: DispatchSourceRead?
+    private var exitMonitorSource: DispatchSourceTimer?
     private var frameSubscribed = false
     private var closed = false
+    private var cleanupSucceeded = true
 
     private init(
         surfaceID: String,
@@ -53,6 +60,11 @@ final class PTYDaemonSurface: @unchecked Sendable {
         self.writer = writer
         self.shellPID = cocxycore_pty_child_pid(pty)
         self.ptyMasterFD = cocxycore_pty_master_fd(pty)
+        self.ioQueue = DispatchQueue(
+            label: "dev.cocxy.pty-daemon.surface.\(surfaceID)",
+            qos: .userInteractive
+        )
+        cleanupGroup.enter()
     }
 
     deinit {
@@ -63,8 +75,9 @@ final class PTYDaemonSurface: @unchecked Sendable {
         payload: [String: String],
         writer: PTYDaemonLineWriter
     ) throws -> PTYDaemonSurface {
-        let rows = payload.uint16("rows") ?? 24
-        let columns = payload.uint16("columns") ?? 80
+        let dimensions = try validatedDimensions(payload: payload)
+        let rows = dimensions.rows
+        let columns = dimensions.columns
         let shell = payload.nonEmpty("command")
             ?? ProcessInfo.processInfo.environment["SHELL"]
             ?? "/bin/zsh"
@@ -102,8 +115,11 @@ final class PTYDaemonSurface: @unchecked Sendable {
             writer: writer
         )
         surface.registerCallbacks()
-        surface.startReadSource()
         return surface
+    }
+
+    func activate(onClosed: @escaping @Sendable (String) -> Void) {
+        startReadSource(onClosed: onClosed)
     }
 
     func attach() -> Bool {
@@ -127,11 +143,35 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     func resize(rows: UInt16, columns: UInt16) -> Bool {
-        terminalLock.withLock {
+        guard Self.dimensionsAreValid(rows: rows, columns: columns) else { return false }
+        return terminalLock.withLock {
             let didResize = cocxycore_terminal_resize(terminal, rows, columns)
             cocxycore_pty_resize(pty, rows, columns)
             return didResize
         }
+    }
+
+    static func validatedDimensions(
+        payload: [String: String],
+        defaultRows: UInt16 = 24,
+        defaultColumns: UInt16 = 80
+    ) throws -> (rows: UInt16, columns: UInt16) {
+        let rows = try payload.uint16("rows", default: defaultRows)
+        let columns = try payload.uint16("columns", default: defaultColumns)
+        guard dimensionsAreValid(rows: rows, columns: columns) else {
+            throw PTYDaemonSurfaceError.invalidPayload(
+                "terminal dimensions exceed the daemon safety limit"
+            )
+        }
+        return (rows, columns)
+    }
+
+    private static func dimensionsAreValid(rows: UInt16, columns: UInt16) -> Bool {
+        rows > 0
+            && columns > 0
+            && Int(rows) <= maximumRows
+            && Int(columns) <= maximumColumns
+            && Int(rows) * Int(columns) <= maximumCells
     }
 
     func subscribeFrame() -> PTYDaemonSurfaceFrame? {
@@ -195,6 +235,16 @@ final class PTYDaemonSurface: @unchecked Sendable {
         }
     }
 
+    func scroll(by deltaRows: Int) -> Bool {
+        guard deltaRows != 0 else { return true }
+        return terminalLock.withLock {
+            cocxycore_terminal_history_scroll_viewport(
+                terminal,
+                Int32(max(Int(Int32.min), min(Int(Int32.max), deltaRows)))
+            )
+        }
+    }
+
     func search(query: String, caseSensitive: Bool, useRegex: Bool, maxResults: Int) -> [PTYDaemonSearchResult] {
         guard query.isEmpty == false else { return [] }
         return terminalLock.withLock {
@@ -206,16 +256,38 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     func processRegistration() -> PTYDaemonProcessRegistration {
-        PTYDaemonProcessRegistration(shellPID: shellPID, ptyMasterFD: ptyMasterFD)
+        // File descriptor numbers are process-local. The daemon can expose
+        // the shell PID, but its PTY master descriptor is meaningless and
+        // potentially dangerous in the app process.
+        PTYDaemonProcessRegistration(shellPID: shellPID, ptyMasterFD: nil)
     }
 
-    func close(emitEvent: Bool = true) {
-        guard markClosedIfNeeded() else { return }
-        readSource?.cancel()
-        readSource = nil
-        if emitEvent {
+    @discardableResult
+    func close(
+        emitEvent: Bool = true,
+        waitForCleanup: Bool = true
+    ) -> Bool {
+        let closeRequest = stateLock.withLock {
+            () -> (Bool, DispatchSourceRead?, DispatchSourceTimer?) in
+            guard closed == false else { return (false, nil, nil) }
+            closed = true
+            let read = readSource
+            let monitor = exitMonitorSource
+            readSource = nil
+            exitMonitorSource = nil
+            return (true, read, monitor)
+        }
+
+        if closeRequest.0 {
+            closeRequest.2?.cancel()
+            closeRequest.1?.cancel()
+        }
+        if closeRequest.0, emitEvent {
             writer.write(PTYDaemonEvent(event: .surfaceClosed, surfaceID: surfaceID))
         }
+        guard waitForCleanup else { return true }
+        guard cleanupGroup.wait(timeout: .now() + 3) == .success else { return false }
+        return stateLock.withLock { cleanupSucceeded }
     }
 
     /// Forwards an OSC notification to the JSONL event stream. Called from
@@ -230,23 +302,50 @@ final class PTYDaemonSurface: @unchecked Sendable {
         )
     }
 
-    private func startReadSource() {
+    private func startReadSource(onClosed: @escaping @Sendable (String) -> Void) {
         guard ptyMasterFD >= 0 else { return }
         let source = DispatchSource.makeReadSource(
             fileDescriptor: ptyMasterFD,
-            queue: DispatchQueue.global(qos: .userInteractive)
+            queue: ioQueue
         )
+        let exitMonitor = DispatchSource.makeTimerSource(queue: ioQueue)
         source.setEventHandler { [weak self] in
             self?.readAvailablePTYBytes()
         }
-        source.setCancelHandler { [terminal, pty, callbackContext] in
+        source.setCancelHandler { [weak self, terminal, pty, callbackContext, shellPID, surfaceID, cleanupGroup] in
             cocxycore_terminal_detach_pty(terminal)
+            let didReap = TerminalProcessBoundary.terminateAndReapPTYChild(shellPID)
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             callbackContext?.release()
+            self?.stateLock.withLock {
+                self?.cleanupSucceeded = didReap
+            }
+            cleanupGroup.leave()
+            onClosed(surfaceID)
         }
-        readSource = source
+        exitMonitor.setEventHandler { [weak self] in
+            self?.pollChildExit()
+        }
+        exitMonitor.schedule(deadline: .now() + 0.05, repeating: 0.05)
+        stateLock.withLock {
+            readSource = source
+            exitMonitorSource = exitMonitor
+        }
         source.resume()
+        exitMonitor.resume()
+    }
+
+    private func pollChildExit() {
+        guard isClosed() == false else { return }
+        var waitResult = cocxycore_pty_wait_result()
+        guard cocxycore_pty_wait_check(pty, &waitResult),
+              cocxycore_pty_is_alive(pty) == false else { return }
+
+        // A final readable notification is not guaranteed after the child
+        // exits. Drain one pending chunk on each timer tick; the first empty
+        // read closes the surface without discarding buffered terminal output.
+        readAvailablePTYBytes()
     }
 
     private func readAvailablePTYBytes() {
@@ -255,7 +354,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
         let bytesRead = cocxycore_pty_read(pty, &buffer, buffer.count)
         guard bytesRead > 0 else {
             if !cocxycore_pty_is_alive(pty) {
-                close()
+                close(waitForCleanup: false)
             }
             return
         }
@@ -292,14 +391,6 @@ final class PTYDaemonSurface: @unchecked Sendable {
 
     private func isClosed() -> Bool {
         stateLock.withLock { closed }
-    }
-
-    private func markClosedIfNeeded() -> Bool {
-        stateLock.withLock {
-            guard closed == false else { return false }
-            closed = true
-            return true
-        }
     }
 
     private func markFrameSubscribed() {

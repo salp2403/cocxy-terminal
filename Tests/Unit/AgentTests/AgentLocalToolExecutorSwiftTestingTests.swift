@@ -36,19 +36,29 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Sources/App.swift")
         try "let value = 1\n".write(to: target, atomically: true, encoding: .utf8)
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: ["call-write"])
-        )
-
-        let result = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
             id: "call-write",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/App.swift"),
                 "content": .string("let value = 2\n"),
             ]
-        ))
+        )
+        let binding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: call)
+                .binding
+        )
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: [call.id],
+                workspaceBindingsByCallID: [call.id: binding]
+            )
+        )
+
+        let result = try await executor.execute(call)
         let content = try contentObject(result)
 
         #expect(result.status == .success)
@@ -63,24 +73,16 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let createdURL = root.appendingPathComponent("Sources/NewFile.swift")
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: [
-                "call-missing",
-                "call-create",
-                "call-sensitive",
-            ])
-        )
-
-        let missing = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let missingCall = AgentToolCall(
             id: "call-missing",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/NewFile.swift"),
                 "content": .string("let created = true\n"),
             ]
-        ))
-        let created = try await executor.execute(AgentToolCall(
+        )
+        let createCall = AgentToolCall(
             id: "call-create",
             toolID: "write_file",
             arguments: [
@@ -88,8 +90,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "content": .string("let created = true\n"),
                 "create": .bool(true),
             ]
-        ))
-        let sensitive = try await executor.execute(AgentToolCall(
+        )
+        let sensitiveCall = AgentToolCall(
             id: "call-sensitive",
             toolID: "write_file",
             arguments: [
@@ -97,7 +99,31 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "content": .string("API_KEY=secret\n"),
                 "create": .bool(true),
             ]
-        ))
+        )
+        let bindings: [String: AgentToolApprovalBinding] = try [missingCall, createCall, sensitiveCall]
+            .reduce(into: [:]) { result, call in
+            let target = call.id == sensitiveCall.id
+                ? root.appendingPathComponent(".env")
+                : createdURL
+            result[call.id] = try testBinding(
+                for: call,
+                workspace: workspace,
+                targetURL: target,
+                targetKind: .writeFile,
+                observedFileContents: Data()
+            )
+        }
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: Set(bindings.keys),
+                workspaceBindingsByCallID: bindings
+            )
+        )
+
+        let missing = try await executor.execute(missingCall)
+        let created = try await executor.execute(createCall)
+        let sensitive = try await executor.execute(sensitiveCall)
 
         #expect(missing.status == .failure)
         #expect(missing.error?.code == "workspace_not_found")
@@ -113,13 +139,10 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let root = try makeWorkspace()
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Sources/App.swift")
-        try "alpha\nbeta\nalpha\n".write(to: target, atomically: true, encoding: .utf8)
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: ["call-ambiguous", "call-apply"])
-        )
-
-        let ambiguous = try await executor.execute(AgentToolCall(
+        let originalContent = "alpha\nbeta\nalpha\n"
+        try originalContent.write(to: target, atomically: true, encoding: .utf8)
+        let workspace = AgentWorkspace(rootURL: root)
+        let ambiguousCall = AgentToolCall(
             id: "call-ambiguous",
             toolID: "apply_diff",
             arguments: [
@@ -127,8 +150,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "oldText": .string("alpha"),
                 "newText": .string("gamma"),
             ]
-        ))
-        let applied = try await executor.execute(AgentToolCall(
+        )
+        let applyCall = AgentToolCall(
             id: "call-apply",
             toolID: "apply_diff",
             arguments: [
@@ -136,7 +159,27 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "oldText": .string("beta"),
                 "newText": .string("delta"),
             ]
-        ))
+        )
+        let bindings: [String: AgentToolApprovalBinding] = try [ambiguousCall, applyCall]
+            .reduce(into: [:]) { result, call in
+            result[call.id] = try testBinding(
+                for: call,
+                workspace: workspace,
+                targetURL: target,
+                targetKind: .applyDiffFile,
+                observedFileContents: Data(originalContent.utf8)
+            )
+        }
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: Set(bindings.keys),
+                workspaceBindingsByCallID: bindings
+            )
+        )
+
+        let ambiguous = try await executor.execute(ambiguousCall)
+        let applied = try await executor.execute(applyCall)
         let content = try contentObject(applied)
 
         #expect(ambiguous.status == .failure)
@@ -153,12 +196,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("Sources/App.swift")
         try "alpha\nbeta\n".write(to: target, atomically: true, encoding: .utf8)
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedWriteCallIDs: ["call-delete", "call-empty"])
-        )
-
-        let delete = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let deleteCall = AgentToolCall(
             id: "call-delete",
             toolID: "apply_diff",
             arguments: [
@@ -166,15 +205,40 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "oldText": .string("beta\n"),
                 "newText": .string(""),
             ]
-        ))
-        let empty = try await executor.execute(AgentToolCall(
+        )
+        let deleteBinding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: deleteCall)
+                .binding
+        )
+        let delete = try await AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: [deleteCall.id],
+                workspaceBindingsByCallID: [deleteCall.id: deleteBinding]
+            )
+        ).execute(deleteCall)
+
+        let emptyCall = AgentToolCall(
             id: "call-empty",
             toolID: "write_file",
             arguments: [
                 "path": .string("Sources/App.swift"),
                 "content": .string(""),
             ]
-        ))
+        )
+        let emptyBinding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: emptyCall)
+                .binding
+        )
+        let empty = try await AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedWriteCallIDs: [emptyCall.id],
+                workspaceBindingsByCallID: [emptyCall.id: emptyBinding]
+            )
+        ).execute(emptyCall)
 
         #expect(delete.status == .success)
         #expect(empty.status == .success)
@@ -188,14 +252,8 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let runner = RecordingLocalAgentProcessRunner(results: [
             AgentProcessResult(exitCode: 0, stdout: "ok\n", stderr: ""),
         ])
-        let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedCommandCallIDs: ["call-run"]),
-            processRunner: runner,
-            shellExecutableURL: URL(fileURLWithPath: "/bin/zsh")
-        )
-
-        let result = try await executor.execute(AgentToolCall(
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
             id: "call-run",
             toolID: "run_command",
             arguments: [
@@ -203,7 +261,23 @@ struct AgentLocalToolExecutorSwiftTestingTests {
                 "cwd": .string("Sources"),
                 "timeoutSeconds": .number(5),
             ]
-        ))
+        )
+        let binding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: call)
+                .binding
+        )
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedCommandCallIDs: [call.id],
+                workspaceBindingsByCallID: [call.id: binding]
+            ),
+            processRunner: runner,
+            shellExecutableURL: URL(fileURLWithPath: "/bin/zsh")
+        )
+
+        let result = try await executor.execute(call)
         let content = try contentObject(result)
 
         #expect(result.status == .success)
@@ -239,10 +313,31 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         let outsideWriteURL = sandboxRoot.appendingPathComponent("outside-write.txt")
         let allowedURL = root.appendingPathComponent("allowed.txt")
         try "outside-secret\n".write(to: outsideReadURL, atomically: true, encoding: .utf8)
-
+        let command = [
+            "cat ../\(outsideReadURL.lastPathComponent)",
+            "printf ok > allowed.txt",
+            "printf denied > ../\(outsideWriteURL.lastPathComponent)",
+        ].joined(separator: "; ")
+        let call = AgentToolCall(
+            id: "call-run",
+            toolID: "run_command",
+            arguments: [
+                "command": .string(command),
+                "timeoutSeconds": .number(5),
+            ]
+        )
+        let workspace = AgentWorkspace(rootURL: root)
+        let binding = try #require(
+            try await AgentLocalToolExecutor(workspace: workspace)
+                .approvalPreview(for: call)
+                .binding
+        )
         let executor = AgentLocalToolExecutor(
-            workspace: AgentWorkspace(rootURL: root),
-            approvals: AgentToolApprovalContext(approvedCommandCallIDs: ["call-run"]),
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedCommandCallIDs: [call.id],
+                workspaceBindingsByCallID: [call.id: binding]
+            ),
             processRunner: AgentSandboxedProcessRunner(
                 base: AgentProcessRunner(),
                 workspaceURL: root
@@ -250,19 +345,7 @@ struct AgentLocalToolExecutorSwiftTestingTests {
             shellExecutableURL: URL(fileURLWithPath: "/bin/sh")
         )
 
-        let command = [
-            "cat ../\(outsideReadURL.lastPathComponent)",
-            "printf ok > allowed.txt",
-            "printf denied > ../\(outsideWriteURL.lastPathComponent)",
-        ].joined(separator: "; ")
-        let result = try await executor.execute(AgentToolCall(
-            id: "call-run",
-            toolID: "run_command",
-            arguments: [
-                "command": .string(command),
-                "timeoutSeconds": .number(5),
-            ]
-        ))
+        let result = try await executor.execute(call)
         let content = try contentObject(result)
 
         #expect(result.status == .success)
@@ -292,6 +375,72 @@ struct AgentLocalToolExecutorSwiftTestingTests {
 
         #expect(result.status == .failure)
         #expect(result.error?.code == "approval_required")
+        #expect(runner.calls.isEmpty)
+    }
+
+    @Test("run_command auto executes only byte-identical exact allow rules")
+    func runCommandExactAllowRuleRequiresSameText() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingLocalAgentProcessRunner(results: [.init(exitCode: 0, stdout: "allowed\n", stderr: "")])
+        let allowedCommand = "printf allowed"
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(commandAllowRules: [.exact(allowedCommand)]),
+            processRunner: runner
+        )
+        let allowed = try await executor.execute(AgentToolCall(
+            id: "call-exact",
+            toolID: "run_command",
+            arguments: ["command": .string(allowedCommand)]
+        ))
+        let differentWhitespace = try await executor.execute(AgentToolCall(
+            id: "call-not-exact",
+            toolID: "run_command",
+            arguments: ["command": .string("printf  allowed")]
+        ))
+        #expect(allowed.status == .success)
+        #expect(differentWhitespace.status == .failure)
+        #expect(differentWhitespace.error?.code == "approval_required")
+        #expect(runner.calls.map(\.arguments) == [["-lc", allowedCommand]])
+    }
+
+    @Test("run_command prefix allow rules never bypass approval")
+    func runCommandPrefixAllowRulesNeverBypassApproval() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runner = RecordingLocalAgentProcessRunner(results: [])
+        let executor = AgentLocalToolExecutor(
+            workspace: AgentWorkspace(rootURL: root),
+            approvals: AgentToolApprovalContext(commandAllowRules: [.prefix("printf allowed")]),
+            processRunner: runner
+        )
+        let commands = [
+            "printf allowed",
+            "printf allowed extra",
+            "printf allowed; printf appended",
+            "printf allowed && printf appended",
+            "printf allowed || printf appended",
+            "printf allowed | cat",
+            "printf allowed\nprintf appended",
+            "printf allowed > result.txt",
+            "printf allowed >> result.txt",
+            "printf allowed < input.txt",
+            "printf allowed 2> error.log",
+            "printf allowed $(printf appended)",
+            "printf allowed `printf appended`",
+            "printf allowed & printf appended",
+            "printf allowedness",
+        ]
+        for (index, command) in commands.enumerated() {
+            let result = try await executor.execute(AgentToolCall(
+                id: "call-prefix-\(index)",
+                toolID: "run_command",
+                arguments: ["command": .string(command)]
+            ))
+            #expect(result.status == .failure)
+            #expect(result.error?.code == "approval_required")
+        }
         #expect(runner.calls.isEmpty)
     }
 
@@ -375,6 +524,208 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         #expect(result.status == .success)
         #expect(content["prompt"]?.stringValue == "Which branch should I use?")
         #expect(content["answer"]?.stringValue == "Use main.")
+    }
+
+    @Test("terminal output approval is bound redacted and consumed once")
+    func terminalOutputApprovalIsBoundRedactedAndConsumedOnce() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
+            id: "call-terminal-output",
+            toolID: "read_terminal_output",
+            arguments: ["limit": .number(70)]
+        )
+        let provider = StaticLocalTerminalOutputProvider(output: """
+        build completed
+        API_KEY=synthetic-secret-value
+        ghp_abcdefghijklmnopqrstuvwxyz123456
+        """)
+        let previewExecutor = AgentLocalToolExecutor(
+            workspace: workspace,
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-consent-test"
+        )
+        let previewContext = try await previewExecutor.approvalPreview(for: call)
+        let binding = try #require(previewContext.sensitiveReadBinding)
+        let changedCall = AgentToolCall(
+            id: call.id,
+            toolID: call.toolID,
+            arguments: ["limit": .number(2)]
+        )
+
+        #expect(previewContext.preview.kind == .sensitiveData)
+        #expect(previewContext.preview.body.contains("Destination: OpenAI"))
+        #expect(previewContext.preview.body.contains("Command blocks: 2 of at most 64"))
+        #expect(previewContext.preview.body.contains("Terminal text has not been read yet."))
+        #expect(!previewContext.preview.body.contains("build completed"))
+        #expect(!previewContext.preview.body.contains("synthetic-secret-value"))
+        #expect(!previewContext.preview.body.contains("ghp_abcdefghijklmnopqrstuvwxyz123456"))
+        #expect(provider.requestedLimits == [70])
+        #expect(provider.capturedSelections.isEmpty)
+        #expect(binding.approvedRead(
+            call: changedCall,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-consent-test"
+        ) == nil)
+        #expect(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .google,
+            approvalScopeID: "terminal-consent-test"
+        ) == nil)
+        #expect(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "different-session"
+        ) == nil)
+        let approvedRead = try #require(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-consent-test"
+        ))
+        #expect(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-consent-test"
+        ) == nil)
+
+        let unapproved = try await previewExecutor.execute(call)
+        #expect(unapproved.status == .failure)
+        #expect(unapproved.error?.code == "approval_required")
+        #expect(provider.capturedSelections.isEmpty)
+
+        let approvedExecutor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedSensitiveReadsByCallID: [call.id: approvedRead]
+            ),
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-consent-test"
+        )
+        let result = try await approvedExecutor.execute(call)
+        let content = try contentObject(result)
+        let redactedOutput = try #require(content["output"]?.stringValue)
+
+        #expect(result.status == .success)
+        #expect(content["limit"]?.numberValue == 64)
+        #expect(content["blocks"]?.numberValue == 2)
+        #expect(redactedOutput.contains("build completed"))
+        #expect(!redactedOutput.contains("synthetic-secret-value"))
+        #expect(!redactedOutput.contains("ghp_abcdefghijklmnopqrstuvwxyz123456"))
+        #expect(redactedOutput.contains("[redacted]"))
+        #expect(redactedOutput.contains("[redacted-token]"))
+        #expect(provider.capturedSelections == [approvedRead.selection])
+
+        let replay = try await approvedExecutor.execute(call)
+        #expect(replay.status == .failure)
+        #expect(replay.error?.code == "approval_required")
+        #expect(provider.requestedLimits == [70])
+        #expect(provider.capturedSelections.count == 1)
+    }
+
+    @Test("terminal output snapshot enforces a UTF-8 byte budget without splitting characters")
+    func terminalOutputSnapshotEnforcesUTF8Budget() {
+        let prefixBudget = AgentTerminalOutputSnapshot.maximumOutputBytes
+            - AgentTerminalOutputSnapshot.truncationMarker.utf8.count
+        let oversized = String(repeating: "a", count: prefixBudget - 1)
+            + "é"
+            + String(repeating: "b", count: 64)
+        let snapshot = AgentTerminalOutputSnapshot(
+            source: .activeTerminal,
+            surfaceID: "surface-budget",
+            blockLimit: 1,
+            blockCount: 1,
+            output: oversized
+        )
+
+        #expect(snapshot.outputByteCount <= AgentTerminalOutputSnapshot.maximumOutputBytes)
+        #expect(snapshot.output.hasSuffix(AgentTerminalOutputSnapshot.truncationMarker))
+        #expect(!snapshot.output.contains("�"))
+    }
+
+    @Test("terminal output capture fails closed when selected block identity changes")
+    func terminalOutputCaptureRejectsChangedBlockIdentity() async throws {
+        let root = try makeWorkspace()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let workspace = AgentWorkspace(rootURL: root)
+        let call = AgentToolCall(
+            id: "call-terminal-retargeted",
+            toolID: "read_terminal_output",
+            arguments: ["limit": .number(2)]
+        )
+        let provider = StaticLocalTerminalOutputProvider(
+            output: "synthetic-secret-output",
+            capturedBlockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 999),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+        let previewExecutor = AgentLocalToolExecutor(
+            workspace: workspace,
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-retarget-test"
+        )
+        let previewContext = try await previewExecutor.approvalPreview(for: call)
+        let binding = try #require(previewContext.sensitiveReadBinding)
+        let approvedRead = try #require(binding.approvedRead(
+            call: call,
+            preview: previewContext.preview,
+            provider: .openai,
+            approvalScopeID: "terminal-retarget-test"
+        ))
+        let executor = AgentLocalToolExecutor(
+            workspace: workspace,
+            approvals: AgentToolApprovalContext(
+                approvedSensitiveReadsByCallID: [call.id: approvedRead]
+            ),
+            terminalOutputProvider: provider,
+            providerKind: .openai,
+            approvalScopeID: "terminal-retarget-test"
+        )
+
+        let result = try await executor.execute(call)
+
+        #expect(result.status == .failure)
+        #expect(result.content == nil)
+        #expect(result.error?.code == "tool_execution_failed")
+        #expect(result.error?.message.contains("synthetic-secret-output") == false)
+        #expect(provider.capturedSelections.count == 1)
+    }
+
+    @Test("terminal output redactor removes common credential shapes and preserves ordinary text")
+    func terminalOutputRedactorRemovesCredentialShapes() {
+        let input = """
+        build completed
+        Authorization: Bearer synthetic-bearer-value
+        password="synthetic password"
+        AKIA1234567890ABCDEF
+        eyJheader.payload.signature
+        https://demo-user:demo-password@example.invalid/path
+        -----BEGIN PRIVATE KEY-----
+        synthetic-private-key-material
+        -----END PRIVATE KEY-----
+        tokenization completed
+        """
+
+        let output = AgentSensitiveOutputRedactor.redacted(input)
+
+        #expect(output.contains("build completed"))
+        #expect(output.contains("tokenization completed"))
+        #expect(!output.contains("synthetic-bearer-value"))
+        #expect(!output.contains("synthetic password"))
+        #expect(!output.contains("AKIA1234567890ABCDEF"))
+        #expect(!output.contains("eyJheader.payload.signature"))
+        #expect(!output.contains("demo-password"))
+        #expect(!output.contains("synthetic-private-key-material"))
+        #expect(output.contains("[redacted-private-key]"))
     }
 
     @Test("computer use tools refuse execution until the call is approved")
@@ -470,6 +821,27 @@ struct AgentLocalToolExecutorSwiftTestingTests {
         }
         return object
     }
+
+    private func testBinding(
+        for call: AgentToolCall,
+        workspace: AgentWorkspace,
+        targetURL: URL,
+        targetKind: AgentToolApprovalTargetKind,
+        observedFileContents: Data? = nil
+    ) throws -> AgentToolApprovalBinding {
+        try AgentToolApprovalBinding(
+            call: call,
+            preview: AgentToolApprovalPreview(
+                kind: targetKind == .commandWorkingDirectory ? .command : .diff,
+                title: "Test approval",
+                body: "Bound test preview"
+            ),
+            workspace: workspace,
+            targetURL: targetURL,
+            targetKind: targetKind,
+            observedFileContents: observedFileContents
+        )
+    }
 }
 
 private enum AgentLocalToolExecutorTestError: Error {
@@ -499,6 +871,47 @@ private final class RecordingLocalAgentProcessRunner: AgentProcessRunning, @unch
         return results.isEmpty
             ? AgentProcessResult(exitCode: 0, stdout: "", stderr: "")
             : results.removeFirst()
+    }
+}
+
+private final class StaticLocalTerminalOutputProvider: AgentTerminalOutputProviding, @unchecked Sendable {
+    private let output: String
+    private let capturedBlockReferences: [TerminalCommandBlockReference]?
+    private(set) var requestedLimits: [Int] = []
+    private(set) var capturedSelections: [AgentTerminalOutputSelection] = []
+
+    init(
+        output: String,
+        capturedBlockReferences: [TerminalCommandBlockReference]? = nil
+    ) {
+        self.output = output
+        self.capturedBlockReferences = capturedBlockReferences
+    }
+
+    func latestCommandBlockSelection(limit: Int) -> AgentTerminalOutputSelection {
+        requestedLimits.append(limit)
+        return AgentTerminalOutputSelection(
+            source: .focusedSplit,
+            surfaceID: "00000000-0000-0000-0000-000000000001",
+            blockLimit: limit,
+            blockReferences: [
+                TerminalCommandBlockReference(id: 1, endTimeNs: 100),
+                TerminalCommandBlockReference(id: 2, endTimeNs: 200),
+            ]
+        )
+    }
+
+    func captureCommandBlockOutputs(selection: AgentTerminalOutputSelection) -> AgentTerminalOutputSnapshot {
+        capturedSelections.append(selection)
+        let blockReferences = capturedBlockReferences ?? selection.blockReferences
+        return AgentTerminalOutputSnapshot(
+            source: selection.source,
+            surfaceID: selection.surfaceID,
+            blockLimit: selection.blockLimit,
+            blockCount: blockReferences.count,
+            blockReferences: blockReferences,
+            output: output
+        )
     }
 }
 

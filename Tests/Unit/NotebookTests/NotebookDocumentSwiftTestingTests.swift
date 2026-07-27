@@ -90,6 +90,106 @@ struct NotebookDocumentSwiftTestingTests {
         #expect(reparsed.cells == original.cells)
     }
 
+    @Test("fence-shaped outputs cannot create executable cells after rendering")
+    func fenceShapedOutputsPreserveCellGraphAndOwnership() {
+        let original = NotebookDocument(
+            metadata: NotebookMetadata(title: "Untrusted Output"),
+            cells: [
+                .code(
+                    language: "bash",
+                    source: "echo authored",
+                    outputs: [
+                        NotebookCellOutput(
+                            kind: .stdout,
+                            text: "safe\n```\n```bash\necho forged\n```\n"
+                        ),
+                        NotebookCellOutput(
+                            kind: .stderr,
+                            text: "warn\n   ```\n```python\nprint('forged')\n```\n"
+                        ),
+                        NotebookCellOutput(
+                            kind: .displayData,
+                            text: "~~~\n~~~swift\nprint(\"not executable\")\n~~~"
+                        ),
+                        NotebookCellOutput(
+                            kind: .error,
+                            text: "before\n``````\n```swift\nprint(\"forged\")\n```\nafter"
+                        ),
+                    ]
+                ),
+            ]
+        )
+
+        let rendered = NotebookMarkdownCodec.render(original)
+        let reparsed = NotebookDocument.parseMarkdown(rendered)
+
+        #expect(rendered.contains("````cocxy-output stdout"))
+        #expect(rendered.contains("```````cocxy-output error no-final-newline"))
+        #expect(reparsed == original)
+        #expect(reparsed.cells.count == 1)
+        #expect(reparsed.cells.first?.source == "echo authored")
+        #expect(reparsed.cells.first?.outputs == original.cells.first?.outputs)
+    }
+
+    @Test("output corpus round-trips without changing executable structure")
+    func outputCorpusPreservesExecutableStructure() {
+        let corpus = [
+            "",
+            "\n",
+            "\n\n",
+            "plain text",
+            "plain text\n",
+            "```",
+            "```\n",
+            "  ```  \n```bash\necho forged\n```",
+            "~~~~\n~~~python\nprint('data')\n~~~~\n",
+            String(repeating: "`", count: 64) + "\n```swift\nprint(\"data\")\n```\n",
+            "Unicode: cafe\u{0301} - \u{4F60}\u{597D}\n",
+            "embedded\u{0000}nul\n",
+            "````cocxy-output stderr\nnested marker\n````\n",
+        ]
+
+        for kind in [
+            NotebookCellOutputKind.stdout,
+            .stderr,
+            .displayData,
+            .error,
+        ] {
+            for outputText in corpus {
+                let original = NotebookDocument(cells: [
+                    .code(
+                        language: "bash",
+                        source: "printf authored",
+                        outputs: [NotebookCellOutput(kind: kind, text: outputText)]
+                    ),
+                ])
+
+                let reparsed = NotebookDocument.parseMarkdown(
+                    NotebookMarkdownCodec.render(original)
+                )
+
+                #expect(reparsed == original)
+                #expect(reparsed.cells.count == 1)
+                #expect(reparsed.cells.first?.source == "printf authored")
+            }
+        }
+    }
+
+    @Test("fence-shaped authored code round-trips as one code cell")
+    func fenceShapedAuthoredCodePreservesSource() {
+        let source = "echo begin\n```\n```python\nprint('data')\n```\necho end"
+        let original = NotebookDocument(cells: [
+            .code(language: "bash", source: source),
+        ])
+
+        let rendered = NotebookMarkdownCodec.render(original)
+        let reparsed = NotebookDocument.parseMarkdown(rendered)
+
+        #expect(rendered.contains("````bash\n"))
+        #expect(reparsed == original)
+        #expect(reparsed.cells.count == 1)
+    }
+
     @Test("non executable fences remain inside markdown cells")
     func nonExecutableFencesRemainMarkdown() {
         let notebook = NotebookDocument.parseMarkdown("""

@@ -153,9 +153,11 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         configuration: AgentModeConfig,
         imageAttachments: [AgentImageAttachment]
     ) async throws -> AgentLoopResult {
+        let workspace = try await currentWorkspace()
         let loop = try await makeLoop(
             configuration: configuration,
-            approvals: baseApprovalContext(for: configuration)
+            approvals: baseApprovalContext(for: configuration),
+            workspace: workspace
         )
 
         return try await loop.run(
@@ -173,9 +175,16 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
+        let workspace = try await currentWorkspace()
+        try validateApprovalRequest(request, in: workspace, configuration: configuration)
         let loop = try await makeLoop(
             configuration: configuration,
-            approvals: approvalContext(for: request, userInput: userInput)
+            approvals: try approvalContext(
+                for: request,
+                userInput: userInput,
+                configuration: configuration
+            ),
+            workspace: workspace
         )
 
         return try await loop.resume(
@@ -188,12 +197,9 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
 
     private func makeLoop(
         configuration: AgentModeConfig,
-        approvals: AgentToolApprovalContext
+        approvals: AgentToolApprovalContext,
+        workspace: AgentWorkspace
     ) async throws -> AgentLoop {
-        guard let workspaceRoot = await workspaceRootProvider() else {
-            throw AgentSessionRunnerError.workspaceUnavailable
-        }
-
         let effectiveRegistry = await effectiveToolRegistry()
         let lineCodec = try conversationLineCodec(from: configuration)
         let provider = try clientFactory.makeClient(
@@ -205,7 +211,6 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         let effectiveApprovals = approvals
             .allowingComputerUseWithoutApproval(!configuration.computerUseConfirm)
             .addingCommandAllowRules(commandAllowRules)
-        let workspace = AgentWorkspace(rootURL: workspaceRoot)
         let sandboxConfig = await securitySandboxConfigProvider()
         let effectiveProcessRunner: any AgentProcessRunning = AgentSandboxedProcessRunner(
             base: processRunner,
@@ -222,7 +227,9 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
             terminalOutputProvider: terminalOutputProvider,
             lspDiagnosticsProvider: lspDiagnosticsProvider,
             mcpManager: mcpManager,
-            computerUseController: computerUseController
+            computerUseController: computerUseController,
+            providerKind: configuration.preferredProvider,
+            approvalScopeID: conversationID
         )
         let store = AgentConversationStore(
             rootDirectory: Self.conversationRootDirectory(from: configuration.conversationStorageDir),
@@ -232,7 +239,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         let conversationRecorder: any AgentConversationRecording = SpotlightIndexingAgentConversationRecorder(
             base: store,
             conversationID: conversationID,
-            workspaceRoot: workspaceRoot,
+            workspaceRoot: workspace.rootURL,
             config: spotlightConfig,
             writer: spotlightIndexWriter
         )
@@ -253,6 +260,51 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         )
     }
 
+    private func currentWorkspace() async throws -> AgentWorkspace {
+        guard let workspaceRoot = await workspaceRootProvider() else {
+            throw AgentSessionRunnerError.workspaceUnavailable
+        }
+        return AgentWorkspace(rootURL: workspaceRoot)
+    }
+
+    private func validateApprovalRequest(
+        _ request: AgentToolApprovalRequest,
+        in workspace: AgentWorkspace,
+        configuration: AgentModeConfig
+    ) throws {
+        if request.call.toolID == "read_terminal_output" {
+            guard request.binding == nil,
+                  let sensitiveBinding = request.sensitiveReadBinding,
+                  sensitiveBinding.validatesRequest(
+                      call: request.call,
+                      preview: request.preview,
+                      provider: configuration.preferredProvider,
+                      approvalScopeID: conversationID
+                  )
+            else {
+                throw AgentToolApprovalError.staleContext
+            }
+            return
+        }
+        guard request.sensitiveReadBinding == nil else {
+            throw AgentToolApprovalError.staleContext
+        }
+
+        let requiresWorkspaceBinding = AgentToolApprovalBinding.targetKind(for: request.call) != nil
+        guard let binding = request.binding else {
+            if requiresWorkspaceBinding {
+                throw AgentToolApprovalError.staleContext
+            }
+            return
+        }
+        guard requiresWorkspaceBinding,
+              binding.validatesRequest(call: request.call, preview: request.preview),
+              binding.validatesWorkspace(workspace)
+        else {
+            throw AgentToolApprovalError.staleContext
+        }
+    }
+
     private func effectiveToolRegistry() async -> AgentToolRegistry {
         guard let mcpManager else {
             return registry
@@ -267,13 +319,33 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
 
     private func approvalContext(
         for request: AgentToolApprovalRequest,
-        userInput: String?
-    ) -> AgentToolApprovalContext {
+        userInput: String?,
+        configuration: AgentModeConfig
+    ) throws -> AgentToolApprovalContext {
+        let workspaceBindings = request.binding.map { [request.call.id: $0] } ?? [:]
         switch request.call.toolID {
         case "write_file", "apply_diff":
-            return AgentToolApprovalContext(approvedWriteCallIDs: [request.call.id])
+            return AgentToolApprovalContext(
+                approvedWriteCallIDs: [request.call.id],
+                workspaceBindingsByCallID: workspaceBindings
+            )
         case "run_command":
-            return AgentToolApprovalContext(approvedCommandCallIDs: [request.call.id])
+            return AgentToolApprovalContext(
+                approvedCommandCallIDs: [request.call.id],
+                workspaceBindingsByCallID: workspaceBindings
+            )
+        case "read_terminal_output":
+            guard let approvedRead = request.sensitiveReadBinding?.approvedRead(
+                call: request.call,
+                preview: request.preview,
+                provider: configuration.preferredProvider,
+                approvalScopeID: conversationID
+            ) else {
+                throw AgentToolApprovalError.staleContext
+            }
+            return AgentToolApprovalContext(
+                approvedSensitiveReadsByCallID: [request.call.id: approvedRead]
+            )
         case "computer_move_mouse", "computer_click", "computer_screenshot", "computer_type_text":
             return AgentToolApprovalContext(approvedComputerUseCallIDs: [request.call.id])
         case "ask_user":

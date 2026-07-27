@@ -55,7 +55,16 @@ extension PTYDaemonSurface {
             _ = FileManager.default.changeCurrentDirectoryPath(previousCwd)
         }
 
-        return shell.withCString { cocxycore_pty_spawn(rows, columns, $0) }
+        guard let pty = shell.withCString({ cocxycore_pty_spawn(rows, columns, $0) }) else {
+            return nil
+        }
+        let masterFD = cocxycore_pty_master_fd(pty)
+        guard masterFD >= 0,
+              TerminalProcessBoundary.setCloseOnExec(masterFD) else {
+            cocxycore_pty_destroy(pty)
+            return nil
+        }
+        return pty
     }
 
     static func getenvString(_ key: String) -> String? {

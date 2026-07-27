@@ -33,6 +33,9 @@ final class MarkdownPreviewView: NSView {
     private var pendingHTML: String?
     private var pendingActions: [() -> Void] = []
     private var localizer: AppLocalizer
+    private var contentRuleGeneration: UInt64 = 0
+    private(set) var approvedRemoteImageHosts: Set<String> = []
+    private(set) var currentRemoteImageHosts: Set<String> = []
 
     /// Current document. Setting this re-renders the preview.
     var document: MarkdownDocument = .empty {
@@ -45,6 +48,7 @@ final class MarkdownPreviewView: NSView {
     var baseDirectory: URL? {
         didSet {
             if oldValue != baseDirectory {
+                resetRemoteImageApprovals(updateContent: false)
                 // Reset template state so updatePreview queues content into
                 // pendingHTML instead of calling evaluateJavaScript on a page
                 // that is mid-navigation. didFinish will flush pendingHTML.
@@ -62,6 +66,11 @@ final class MarkdownPreviewView: NSView {
     var onCheckboxToggle: ((Int, Bool) -> Void)?
     var onClickToSource: ((Int) -> Void)?
     var onCopyToClipboard: ((String) -> Void)?
+    var onRemoteImagePolicyChange: (() -> Void)?
+
+    var unapprovedRemoteImageHosts: Set<String> {
+        currentRemoteImageHosts.subtracting(approvedRemoteImageHosts)
+    }
 
     private(set) var lastSourceLineScrollRequestForTesting: Int?
     private(set) var lastHighlightedSourceLineForTesting: Int?
@@ -81,6 +90,7 @@ final class MarkdownPreviewView: NSView {
         super.init(frame: .zero)
         proxy.handler = self
         setupUI()
+        installRemoteImageContentRule(for: [], grantsApproval: false)
         loadTemplate()
     }
 
@@ -178,6 +188,31 @@ final class MarkdownPreviewView: NSView {
         }
     }
 
+    func approveRemoteImageHosts(
+        _ hosts: Set<String>,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        let targetHosts = approvedRemoteImageHosts.union(hosts.map { $0.lowercased() })
+        guard targetHosts != approvedRemoteImageHosts else {
+            completion?(true)
+            return
+        }
+        installRemoteImageContentRule(
+            for: targetHosts,
+            grantsApproval: true,
+            completion: completion
+        )
+    }
+
+    func resetRemoteImageApprovals(updateContent: Bool = true) {
+        approvedRemoteImageHosts = []
+        installRemoteImageContentRule(for: [], grantsApproval: false)
+        if updateContent {
+            updatePreview()
+        }
+        onRemoteImagePolicyChange?()
+    }
+
     // MARK: - Setup
 
     private func setupUI() {
@@ -265,7 +300,18 @@ final class MarkdownPreviewView: NSView {
     // MARK: - Content Updates
 
     private func updatePreview() {
-        let html = MarkdownHTMLRenderer.renderDocument(document)
+        let rendered = MarkdownHTMLRenderer.renderDocument(document)
+        let processed = MarkdownImageInliner.makeSafeHTML(
+            in: rendered,
+            baseDirectory: baseDirectory,
+            approvedRemoteHosts: approvedRemoteImageHosts
+        )
+        let previousRemoteHosts = currentRemoteImageHosts
+        currentRemoteImageHosts = processed.remoteHosts
+        let html = processed.html
+        if previousRemoteHosts != currentRemoteImageHosts {
+            onRemoteImagePolicyChange?()
+        }
 
         guard isTemplateLoaded else {
             pendingHTML = html
@@ -273,6 +319,68 @@ final class MarkdownPreviewView: NSView {
         }
 
         injectContent(html)
+    }
+
+    private func installRemoteImageContentRule(
+        for approvedHosts: Set<String>,
+        grantsApproval: Bool,
+        completion: ((Bool) -> Void)? = nil
+    ) {
+        contentRuleGeneration &+= 1
+        let generation = contentRuleGeneration
+        let normalizedHosts = Set(approvedHosts.map { $0.lowercased() })
+        var trigger: [String: Any] = [
+            "url-filter": "^https?://",
+            "resource-type": ["image"],
+        ]
+        if !normalizedHosts.isEmpty {
+            trigger["unless-domain"] = normalizedHosts.sorted()
+        }
+        let rules: [[String: Any]] = [[
+            "trigger": trigger,
+            "action": ["type": "block"],
+        ]]
+        guard let data = try? JSONSerialization.data(withJSONObject: rules, options: [.sortedKeys]),
+              let encodedRules = String(data: data, encoding: .utf8)
+        else {
+            completion?(false)
+            return
+        }
+
+        let identifier = "cocxy-markdown-images-\(Self.stableRuleHash(normalizedHosts))"
+        WKContentRuleListStore.default().compileContentRuleList(
+            forIdentifier: identifier,
+            encodedContentRuleList: encodedRules
+        ) { [weak self] ruleList, _ in
+            Task { @MainActor in
+                guard let self, self.contentRuleGeneration == generation else {
+                    completion?(false)
+                    return
+                }
+                guard let ruleList else {
+                    completion?(false)
+                    return
+                }
+                let controller = self.webView.configuration.userContentController
+                controller.removeAllContentRuleLists()
+                controller.add(ruleList)
+                if grantsApproval {
+                    self.approvedRemoteImageHosts = normalizedHosts
+                    self.updatePreview()
+                    self.onRemoteImagePolicyChange?()
+                }
+                completion?(true)
+            }
+        }
+    }
+
+    private static func stableRuleHash(_ hosts: Set<String>) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        for byte in hosts.sorted().joined(separator: "\0").utf8 {
+            hash ^= UInt64(byte)
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
     }
 
     private func injectContent(_ html: String) {

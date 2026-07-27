@@ -90,21 +90,56 @@ enum DBCloudHelperAction: Equatable, Sendable {
 enum DBCloudHelperError: Error, LocalizedError, Equatable {
     case emptyDatabase
     case emptyQuery
+    case queryTooLarge(limitBytes: Int)
+    case invalidPostgreSQLDatabaseTarget
+    case unsupportedPostgreSQLCredentialFormat
     case unsupportedHelper(String)
 
     var errorDescription: String? {
         switch self {
         case .emptyDatabase: return "Enter a database target."
         case .emptyQuery: return "Enter a query."
+        case .queryTooLarge(let limitBytes):
+            let size = ByteCountFormatter.string(
+                fromByteCount: Int64(limitBytes),
+                countStyle: .file
+            )
+            return "The query exceeds the \(size) input limit."
+        case .invalidPostgreSQLDatabaseTarget:
+            return "Enter a valid PostgreSQL URL or service name."
+        case .unsupportedPostgreSQLCredentialFormat:
+            return "Use a PostgreSQL URL or protected service credentials; inline password fields are not supported."
         case .unsupportedHelper(let id): return "\(id) does not have a local visual action yet."
         }
     }
 }
 
+enum DBCloudHelperCredentialMaterial: Equatable, Sendable {
+    case postgreSQLPassfile(Data)
+}
+
 struct DBCloudHelperCommand: Equatable, Sendable {
+    static let maximumStandardInputBytes = 4 * 1_024 * 1_024
+
     let executable: String
     let arguments: [String]
     let redactedArguments: [Int: String]
+    let standardInput: Data?
+    let credentialMaterial: DBCloudHelperCredentialMaterial?
+
+    init(
+        executable: String,
+        arguments: [String],
+        redactedArguments: [Int: String],
+        standardInput: Data? = nil,
+        credentialMaterial: DBCloudHelperCredentialMaterial? = nil
+    ) {
+        self.executable = executable
+        self.arguments = arguments
+        self.redactedArguments = redactedArguments
+        self.standardInput = standardInput
+        self.credentialMaterial = credentialMaterial
+    }
 
     var redactedPreview: String {
         ([shellQuote(executable)] + arguments.enumerated().map { index, argument in
@@ -128,18 +163,23 @@ struct DBCloudHelperCommandBuilder {
         case .postgresQuery(let database, let sql):
             let database = try requireNonEmpty(database, error: .emptyDatabase)
             let sql = try requireNonEmpty(sql, error: .emptyQuery)
+            let input = try standardInput(for: sql)
+            let connection = try PostgreSQLConnectionPreparation.prepare(database)
             return DBCloudHelperCommand(
                 executable: "psql",
-                arguments: ["--dbname", database, "--command", sql],
-                redactedArguments: [1: "<database>", 3: "<query>"]
+                arguments: ["--no-password", "--dbname", connection.databaseArgument, "--file", "-"],
+                redactedArguments: [2: "<database>"],
+                standardInput: input,
+                credentialMaterial: connection.credentialMaterial
             )
         case .sqliteQuery(let databasePath, let sql):
             let databasePath = try requireNonEmpty(databasePath, error: .emptyDatabase)
             let sql = try requireNonEmpty(sql, error: .emptyQuery)
             return DBCloudHelperCommand(
                 executable: "sqlite3",
-                arguments: [databasePath, sql],
-                redactedArguments: [0: "<database>", 1: "<query>"]
+                arguments: [databasePath],
+                redactedArguments: [0: "<database>"],
+                standardInput: try standardInput(for: sql)
             )
         case .s3ListBuckets(let profile, let region):
             var arguments = ["s3api", "list-buckets", "--output", "json"]
@@ -158,12 +198,43 @@ struct DBCloudHelperCommandBuilder {
         guard !trimmed.isEmpty else { throw error }
         return trimmed
     }
+
+    private func standardInput(for query: String) throws -> Data {
+        let data = Data(query.utf8)
+        guard data.count <= DBCloudHelperCommand.maximumStandardInputBytes else {
+            throw DBCloudHelperError.queryTooLarge(limitBytes: DBCloudHelperCommand.maximumStandardInputBytes)
+        }
+        return data
+    }
 }
 
 struct DBCloudHelperRunResult: Equatable, Sendable {
     let exitCode: Int32
     let stdout: String
     let stderr: String
+    let stdoutBytesRead: Int64
+    let stderrBytesRead: Int64
+    let stdoutTruncated: Bool
+    let stderrTruncated: Bool
+
+    init(
+        exitCode: Int32,
+        stdout: String,
+        stderr: String,
+        stdoutBytesRead: Int64? = nil,
+        stderrBytesRead: Int64? = nil,
+        stdoutTruncated: Bool = false,
+        stderrTruncated: Bool = false
+    ) {
+        self.exitCode = exitCode
+        self.stdout = stdout
+        self.stderr = stderr
+        self.stdoutBytesRead = stdoutBytesRead ?? Int64(stdout.utf8.count)
+        self.stderrBytesRead = stderrBytesRead ?? Int64(stderr.utf8.count)
+        self.stdoutTruncated = stdoutTruncated
+        self.stderrTruncated = stderrTruncated
+    }
 
     var succeeded: Bool { exitCode == 0 }
+    var outputWasTruncated: Bool { stdoutTruncated || stderrTruncated }
 }

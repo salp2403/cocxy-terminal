@@ -2,6 +2,7 @@
 // AppDelegate+FirstLaunchSetup.swift - Auto-setup CLI symlink and Claude Code hooks on launch.
 
 import Foundation
+import CocxyShared
 
 // MARK: - First Launch Setup
 
@@ -94,6 +95,10 @@ extension AppDelegate {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    nonisolated static func guardedHookCommand(_ command: String) -> String {
+        HookCommandProcessGuard.wrapTrustedShellCommand(command)
+    }
+
     nonisolated static func isAcceptableInstalledHookCommand(
         _ commandString: String,
         expectedCommand: String
@@ -116,7 +121,8 @@ extension AppDelegate {
     static func reconciledHookEntries(
         _ eventHooks: [[String: Any]],
         desiredEntry: [String: Any],
-        expectedCommand: String
+        expectedCommand: String,
+        rejectedCommands: Set<String> = []
     ) -> (entries: [[String: Any]], modified: Bool) {
         let cocxyIndices = eventHooks.indices.filter {
             hookEntryContainsCocxyCommand(eventHooks[$0])
@@ -129,7 +135,8 @@ extension AppDelegate {
         if let keeperIndex = cocxyIndices.first(where: {
             hookEntryContainsAcceptableCocxyCommand(
                 eventHooks[$0],
-                expectedCommand: expectedCommand
+                expectedCommand: expectedCommand,
+                rejectedCommands: rejectedCommands
             )
         }) {
             guard cocxyIndices.count > 1 else {
@@ -164,7 +171,8 @@ extension AppDelegate {
 
     static func hookEntryContainsAcceptableCocxyCommand(
         _ hookEntry: [String: Any],
-        expectedCommand: String
+        expectedCommand: String,
+        rejectedCommands: Set<String>
     ) -> Bool {
         guard let commands = hookEntry["hooks"] as? [[String: Any]] else {
             return false
@@ -172,6 +180,7 @@ extension AppDelegate {
 
         return commands.contains {
             guard let commandString = $0["command"] as? String else { return false }
+            guard !rejectedCommands.contains(commandString) else { return false }
             return isAcceptableInstalledHookCommand(
                 commandString,
                 expectedCommand: expectedCommand
@@ -262,7 +271,8 @@ extension AppDelegate {
             return
         }
 
-        let hookCommand = "\(Self.shellSingleQuoted(cliPath)) hook-handler"
+        let legacyHookCommand = "\(Self.shellSingleQuoted(cliPath)) hook-handler"
+        let hookCommand = Self.guardedHookCommand(legacyHookCommand)
         let settingsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json").path
 
@@ -296,7 +306,8 @@ extension AppDelegate {
             let reconciliation = Self.reconciledHookEntries(
                 eventHooks,
                 desiredEntry: correctEntry,
-                expectedCommand: hookCommand
+                expectedCommand: hookCommand,
+                rejectedCommands: [legacyHookCommand]
             )
             eventHooks = reconciliation.entries
             modified = modified || reconciliation.modified

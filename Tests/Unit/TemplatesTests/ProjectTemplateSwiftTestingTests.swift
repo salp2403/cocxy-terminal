@@ -216,6 +216,56 @@ struct ProjectTemplateSwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("marker.txt").path))
     }
 
+    @Test("hook runner bounds large output without deadlocking")
+    func hookRunnerBoundsLargeOutput() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = ProjectTemplateHookPlan(
+            workingDirectory: root,
+            pre: ["seq 1 10000"],
+            post: []
+        )
+        let runner = ProjectTemplateHookRunner(
+            sandbox: ProjectTemplateHookSandbox(allowedExecutables: ["seq"]),
+            timeoutSeconds: 2,
+            retainedBytesPerStream: 4 * 1_024
+        )
+
+        let execution = try #require(runner.run(plan).first)
+
+        #expect(execution.exitCode == 0)
+        #expect(execution.stdout.contains("Output truncated at 4096 bytes."))
+    }
+
+    @Test("hook runner terminates a timed-out process tree")
+    func hookRunnerTerminatesTimedOutProcessTree() throws {
+        let root = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let plan = ProjectTemplateHookPlan(
+            workingDirectory: root,
+            pre: ["yes output"],
+            post: []
+        )
+        let runner = ProjectTemplateHookRunner(
+            sandbox: ProjectTemplateHookSandbox(allowedExecutables: ["yes"]),
+            timeoutSeconds: 0.05,
+            retainedBytesPerStream: 4 * 1_024
+        )
+
+        do {
+            _ = try runner.run(plan)
+            Issue.record("Expected the non-terminating hook to time out")
+        } catch ProjectTemplateHookError.commandFailed(
+            command: "yes output",
+            exitCode: 124,
+            let stderr
+        ) {
+            #expect(stderr.contains("Template hook timed out."))
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+    }
+
     @Test("hook sandbox blocks network destructive shell and escape commands")
     func hookSandboxBlocksNetworkDestructiveShellAndEscapeCommands() throws {
         let sandbox = ProjectTemplateHookSandbox()

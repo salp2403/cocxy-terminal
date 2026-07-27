@@ -22,6 +22,7 @@ final class MarkdownToolbarView: NSView {
     private let modeSegmented = NSSegmentedControl()
     private let blameButton = NSButton()
     private let diffButton = NSButton()
+    private let remoteImagesButton = NSButton()
     private let copyButton = NSButton()
     private let exportPDFButton = NSButton()
     private let exportHTMLButton = NSButton()
@@ -60,6 +61,14 @@ final class MarkdownToolbarView: NSView {
         }
     }
 
+    var hasRemoteImages: Bool = false {
+        didSet { updateRemoteImagesButton() }
+    }
+
+    var hasBlockedRemoteImages: Bool = false {
+        didSet { updateRemoteImagesButton() }
+    }
+
     /// Invoked when the mode segmented control changes selection.
     var onModeChanged: ((MarkdownViewMode) -> Void)?
 
@@ -74,6 +83,9 @@ final class MarkdownToolbarView: NSView {
 
     /// Invoked when Diff toggle is clicked.
     var onDiffToggle: (() -> Void)?
+
+    /// Invoked when the per-document remote image policy is requested.
+    var onManageRemoteImages: (() -> Void)?
 
     /// Invoked when Export PDF is clicked.
     var onExportPDF: (() -> Void)?
@@ -168,6 +180,14 @@ final class MarkdownToolbarView: NSView {
             action: #selector(diffClicked)
         )
 
+        configureIconButton(
+            remoteImagesButton,
+            systemName: "network",
+            accessibility: Self.localizedLoadRemoteImages(using: localizer),
+            action: #selector(remoteImagesClicked)
+        )
+        remoteImagesButton.isHidden = true
+
         // Copy menu
         configureIconButton(
             copyButton,
@@ -235,6 +255,7 @@ final class MarkdownToolbarView: NSView {
         [
             blameButton,
             diffButton,
+            remoteImagesButton,
             copyButton,
             exportPDFButton,
             exportHTMLButton,
@@ -251,6 +272,7 @@ final class MarkdownToolbarView: NSView {
         let allToolbarButtons = [
             blameButton,
             diffButton,
+            remoteImagesButton,
             copyButton,
             exportPDFButton,
             exportHTMLButton,
@@ -304,6 +326,7 @@ final class MarkdownToolbarView: NSView {
         modeSegmented.toolTip = Self.localizedModeTooltip(using: localizer)
         applyButtonCopy(blameButton, Self.localizedShowGitBlame(using: localizer))
         applyButtonCopy(diffButton, Self.localizedShowGitDiff(using: localizer))
+        updateRemoteImagesButton()
         applyButtonCopy(copyButton, Self.localizedCopyAs(using: localizer))
         applyButtonCopy(exportPDFButton, Self.localizedExportPDF(using: localizer))
         applyButtonCopy(exportHTMLButton, Self.localizedExportHTML(using: localizer))
@@ -320,12 +343,14 @@ final class MarkdownToolbarView: NSView {
         [
             blameButton,
             diffButton,
+            remoteImagesButton,
             copyButton,
             exportPDFButton,
             exportHTMLButton,
             exportSlidesButton
         ].forEach { $0.isHidden = useCompact }
         overflowButton.isHidden = !useCompact
+        updateRemoteImagesButton()
         rightControlsStack.needsLayout = true
     }
 
@@ -356,6 +381,19 @@ final class MarkdownToolbarView: NSView {
         button.image?.accessibilityDescription = copy
     }
 
+    private func updateRemoteImagesButton() {
+        let copy = hasBlockedRemoteImages
+            ? Self.localizedLoadRemoteImages(using: localizer)
+            : Self.localizedDisableRemoteImages(using: localizer)
+        applyButtonCopy(remoteImagesButton, copy)
+        remoteImagesButton.isEnabled = hasRemoteImages
+        remoteImagesButton.isHidden = !hasRemoteImages || isUsingCompactToolbar
+        remoteImagesButton.state = hasRemoteImages && !hasBlockedRemoteImages ? .on : .off
+        remoteImagesButton.contentTintColor = hasBlockedRemoteImages
+            ? CocxyColors.yellow
+            : CocxyColors.green
+    }
+
     // MARK: - Actions
 
     @objc private func modeChanged(_ sender: NSSegmentedControl) {
@@ -377,6 +415,10 @@ final class MarkdownToolbarView: NSView {
 
     @objc private func diffClicked() {
         onDiffToggle?()
+    }
+
+    @objc private func remoteImagesClicked() {
+        onManageRemoteImages?()
     }
 
     @objc private func copyClicked(_ sender: NSButton) {
@@ -409,6 +451,15 @@ final class MarkdownToolbarView: NSView {
         let menu = NSMenu()
         addMenuItem(menu, title: Self.localizedShowGitBlame(using: localizer), action: #selector(blameClicked))
         addMenuItem(menu, title: Self.localizedShowGitDiff(using: localizer), action: #selector(diffClicked))
+        if hasRemoteImages {
+            addMenuItem(
+                menu,
+                title: hasBlockedRemoteImages
+                    ? Self.localizedLoadRemoteImages(using: localizer)
+                    : Self.localizedDisableRemoteImages(using: localizer),
+                action: #selector(remoteImagesClicked)
+            )
+        }
         menu.addItem(.separator())
 
         let copyItem = NSMenuItem(title: Self.localizedCopyAs(using: localizer), action: nil, keyEquivalent: "")
@@ -481,6 +532,14 @@ final class MarkdownToolbarView: NSView {
 
     static func localizedShowGitDiff(using localizer: AppLocalizer) -> String {
         localizer.string("markdown.toolbar.gitDiff", fallback: "Show Git Diff")
+    }
+
+    static func localizedLoadRemoteImages(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.loadRemoteImages", fallback: "Load Remote Images")
+    }
+
+    static func localizedDisableRemoteImages(using localizer: AppLocalizer) -> String {
+        localizer.string("markdown.toolbar.disableRemoteImages", fallback: "Disable Remote Images")
     }
 
     static func localizedCopyAs(using localizer: AppLocalizer) -> String {

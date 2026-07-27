@@ -928,6 +928,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
     let clipboardPasteProtection: Bool
     /// Policy for OSC 52 clipboard read requests initiated by terminal programs.
     let clipboardReadAccess: ClipboardReadAccess
+    /// Policy for OSC 52 clipboard writes initiated by terminal programs.
+    let clipboardWriteAccess: ClipboardWriteAccess
     /// Maximum inline-image memory budget in MiB.
     let imageMemoryLimitMB: Int
     /// Whether inline image file-transfer mode is enabled.
@@ -953,6 +955,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         copyOnSelect: Bool,
         clipboardPasteProtection: Bool,
         clipboardReadAccess: ClipboardReadAccess,
+        clipboardWriteAccess: ClipboardWriteAccess = .prompt,
         imageMemoryLimitMB: Int = 256,
         imageFileTransfer: Bool = false,
         enableSixelImages: Bool = true,
@@ -969,6 +972,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         self.copyOnSelect = copyOnSelect
         self.clipboardPasteProtection = clipboardPasteProtection
         self.clipboardReadAccess = clipboardReadAccess
+        self.clipboardWriteAccess = clipboardWriteAccess
         self.imageMemoryLimitMB = imageMemoryLimitMB
         self.imageFileTransfer = imageFileTransfer
         self.enableSixelImages = enableSixelImages
@@ -988,6 +992,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
             copyOnSelect: true,
             clipboardPasteProtection: true,
             clipboardReadAccess: .prompt,
+            clipboardWriteAccess: .prompt,
             imageMemoryLimitMB: 256,
             imageFileTransfer: false,
             enableSixelImages: true,
@@ -1007,6 +1012,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         case copyOnSelect
         case clipboardPasteProtection
         case clipboardReadAccess
+        case clipboardWriteAccess
         case imageMemoryLimitMB
         case imageFileTransfer
         case enableSixelImages
@@ -1036,6 +1042,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
                 ?? defaults.clipboardPasteProtection,
             clipboardReadAccess: try container.decodeIfPresent(ClipboardReadAccess.self, forKey: .clipboardReadAccess)
                 ?? defaults.clipboardReadAccess,
+            clipboardWriteAccess: try container.decodeIfPresent(ClipboardWriteAccess.self, forKey: .clipboardWriteAccess)
+                ?? defaults.clipboardWriteAccess,
             imageMemoryLimitMB: try container.decodeIfPresent(Int.self, forKey: .imageMemoryLimitMB)
                 ?? defaults.imageMemoryLimitMB,
             imageFileTransfer: try container.decodeIfPresent(Bool.self, forKey: .imageFileTransfer)
@@ -1069,6 +1077,17 @@ enum ClipboardReadAccess: String, Codable, Sendable, Equatable {
     /// Allow clipboard reads without prompting.
     case allow
     /// Deny clipboard reads and return an empty response.
+    case deny
+}
+
+/// Policy controlling whether terminal programs may replace the system
+/// clipboard via OSC 52 clipboard-set sequences.
+enum ClipboardWriteAccess: String, Codable, Sendable, Equatable {
+    /// Ask the user before replacing clipboard contents.
+    case prompt
+    /// Allow clipboard writes without prompting.
+    case allow
+    /// Deny clipboard writes without touching the pasteboard.
     case deny
 }
 

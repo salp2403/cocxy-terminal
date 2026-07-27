@@ -69,12 +69,13 @@ final class SSHTunnelManager: ObservableObject {
     @discardableResult
     func addTunnel(
         forward: RemoteConnectionProfile.PortForward,
-        for profileID: UUID
+        for profileID: UUID,
+        status: TunnelStatus = .active
     ) -> ActiveTunnel {
         let tunnel = ActiveTunnel(
             profileID: profileID,
             forward: forward,
-            status: .active
+            status: status
         )
 
         var tunnels = activeTunnels[profileID] ?? []

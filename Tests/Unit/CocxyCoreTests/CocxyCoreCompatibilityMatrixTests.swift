@@ -36,7 +36,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["zsh"],
                 scriptBody: "exec zsh -i",
                 expectedSubstrings: ["ZSH_INTERACTIVE_OK"],
-                inputs: [.init(delayNanoseconds: 700_000_000, text: "printf 'ZSH_INTERACTIVE_OK\\n'\nexit\n")]
+                inputs: [.init(text: "printf 'ZSH_INTERACTIVE_OK\\n'\nexit\n")]
             ),
             .init(
                 name: "bash non-interactive command",
@@ -49,7 +49,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["bash"],
                 scriptBody: "exec bash -i",
                 expectedSubstrings: ["BASH_INTERACTIVE_OK"],
-                inputs: [.init(delayNanoseconds: 700_000_000, text: "printf 'BASH_INTERACTIVE_OK\\n'\nexit\n")]
+                inputs: [.init(text: "printf 'BASH_INTERACTIVE_OK\\n'\nexit\n")]
             ),
             .init(
                 name: "zsh pipeline",
@@ -62,7 +62,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["vim"],
                 scriptBody: "exec vim -Nu NONE -n",
                 expectedSubstrings: ["VIM - Vi IMproved"],
-                inputs: [.init(delayNanoseconds: 1_200_000_000, text: ":q!\r")],
+                inputs: [.init(readinessMarker: "VIM - Vi IMproved", text: ":q!\r")],
                 timeoutNanoseconds: 20_000_000_000
             ),
             .init(
@@ -70,7 +70,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["vim"],
                 scriptBody: "exec vim -Nu NONE -n \(shQuote(fixtureFile.path))",
                 expectedSubstrings: [fixtureFile.lastPathComponent],
-                inputs: [.init(delayNanoseconds: 1_200_000_000, text: ":q!\r")],
+                inputs: [.init(readinessMarker: fixtureFile.lastPathComponent, text: ":q!\r")],
                 timeoutNanoseconds: 20_000_000_000
             ),
             .init(
@@ -78,7 +78,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["nano"],
                 scriptBody: "exec nano \(shQuote(fixtureFile.path))",
                 expectedSubstrings: ["PICO 5.09"],
-                inputs: [.init(delayNanoseconds: 1_000_000_000, text: String(UnicodeScalar(24)))],
+                inputs: [.init(readinessMarker: "PICO 5.09", text: String(UnicodeScalar(24)))],
                 timeoutNanoseconds: 20_000_000_000
             ),
             .init(
@@ -135,7 +135,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["less"],
                 scriptBody: "exec less \(shQuote(lessFile.path))",
                 expectedSubstrings: ["localhost"],
-                inputs: [.init(delayNanoseconds: 1_200_000_000, text: "q")],
+                inputs: [.init(readinessMarker: "localhost", text: "q")],
                 timeoutNanoseconds: 20_000_000_000
             ),
             .init(
@@ -143,7 +143,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["man"],
                 scriptBody: "exec man ssh",
                 expectedSubstrings: ["SSH(1)"],
-                inputs: [.init(delayNanoseconds: 1_500_000_000, text: "q")],
+                inputs: [.init(readinessMarker: "SSH(1)", text: "q")],
                 timeoutNanoseconds: 20_000_000_000
             ),
             .init(
@@ -228,7 +228,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["python3"],
                 scriptBody: "exec python3",
                 expectedSubstrings: ["PY_REPL_OK"],
-                inputs: [.init(delayNanoseconds: 800_000_000, text: "print('PY_REPL_OK')\nexit()\n")],
+                inputs: [.init(text: "print('PY_REPL_OK')\nexit()\n")],
                 timeoutNanoseconds: 10_000_000_000
             ),
             .init(
@@ -242,7 +242,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["node"],
                 scriptBody: "exec node",
                 expectedSubstrings: ["NODE_REPL_OK"],
-                inputs: [.init(delayNanoseconds: 900_000_000, text: "console.log('NODE_REPL_OK')\nprocess.exit(0)\n")],
+                inputs: [.init(text: "console.log('NODE_REPL_OK')\nprocess.exit(0)\n")],
                 timeoutNanoseconds: 10_000_000_000
             ),
             .init(
@@ -250,7 +250,7 @@ struct CocxyCoreCompatibilityMatrixTests {
                 requiredCommands: ["irb"],
                 scriptBody: "exec irb",
                 expectedSubstrings: ["IRB_OK"],
-                inputs: [.init(delayNanoseconds: 900_000_000, text: "puts 'IRB_OK'\nexit\n")],
+                inputs: [.init(text: "puts 'IRB_OK'\nexit\n")],
                 timeoutNanoseconds: 10_000_000_000
             ),
             .init(
@@ -335,8 +335,28 @@ private struct CompatibilityHostProbe {
 }
 
 private struct CompatibilityInput {
-    let delayNanoseconds: UInt64
+    /// Output the child must have produced before `text` is injected.
+    ///
+    /// `nil` means "any output at all", which is what shells and REPLs need:
+    /// they print their prompt only once they are reading from the tty.
+    /// Full-screen programs (vim, nano, less, man) name the marker
+    /// explicitly, because a quit key that lands before the first paint
+    /// makes them exit without ever emitting the expected screen.
+    let readinessMarker: String?
+    /// Grace period applied after the marker is observed, so the child can
+    /// finish the write burst it had already started.
+    let settleNanoseconds: UInt64
     let text: String
+
+    init(
+        readinessMarker: String? = nil,
+        settleNanoseconds: UInt64 = 250_000_000,
+        text: String
+    ) {
+        self.readinessMarker = readinessMarker
+        self.settleNanoseconds = settleNanoseconds
+        self.text = text
+    }
 }
 
 private struct GitFixtureRepo {
@@ -399,9 +419,20 @@ private func runScenario(
         sink.data.append(data)
     }
 
+    // Never spend more than half the scenario window waiting for readiness:
+    // if the marker never shows up the keystroke still goes out early enough
+    // for the scenario's own timeout to judge the result.
+    let readinessTimeoutNanoseconds = min(10_000_000_000, timeoutNanoseconds / 2)
+
     let inputTasks = scenario.inputs.map { input in
         Task { @MainActor in
-            try? await Task.sleep(nanoseconds: input.delayNanoseconds)
+            await waitForInputReadiness(
+                marker: input.readinessMarker,
+                sink: sink,
+                timeoutNanoseconds: readinessTimeoutNanoseconds
+            )
+            guard !Task.isCancelled else { return }
+            try? await Task.sleep(nanoseconds: input.settleNanoseconds)
             guard !Task.isCancelled else { return }
             bridge.sendText(input.text, to: surfaceID)
         }
@@ -430,6 +461,44 @@ private func runScenario(
         scenario.expectedSubstrings.allSatisfy { output.localizedCaseInsensitiveContains($0) },
         Comment("Scenario '\(scenario.name)' did not emit the expected output. Tail:\n\(String(output.suffix(2_000)))")
     )
+}
+
+/// Holds an injected keystroke back until the child proves it is running.
+///
+/// A fixed `Task.sleep` before injecting measures how fast the machine
+/// starts vim, nano or a shell — not whether the terminal delivers input.
+/// On a loaded runner the `:q!` used to land before the editor painted its
+/// splash, so the substring the scenario asserts on was never emitted and a
+/// healthy build failed. Polling for output the child itself produced
+/// removes that dependency. If the marker never arrives the input is sent
+/// anyway once the cap expires, so the scenario still fails through
+/// `waitForScenarioOutput` instead of stalling on a keystroke that is never
+/// delivered.
+@MainActor
+private func waitForInputReadiness(
+    marker: String?,
+    sink: TestDataSink,
+    timeoutNanoseconds: UInt64,
+    pollNanoseconds: UInt64 = 20_000_000
+) async {
+    let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+    while DispatchTime.now().uptimeNanoseconds < deadline {
+        if Task.isCancelled {
+            return
+        }
+        if scenarioOutputIsReady(marker: marker, sink: sink) {
+            return
+        }
+        try? await Task.sleep(nanoseconds: pollNanoseconds)
+    }
+}
+
+@MainActor
+private func scenarioOutputIsReady(marker: String?, sink: TestDataSink) -> Bool {
+    guard let marker else {
+        return !sink.data.isEmpty
+    }
+    return String(decoding: sink.data, as: UTF8.self).localizedCaseInsensitiveContains(marker)
 }
 
 @MainActor

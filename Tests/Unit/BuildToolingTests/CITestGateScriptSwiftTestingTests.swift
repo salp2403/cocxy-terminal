@@ -2,6 +2,7 @@
 // CITestGateScriptSwiftTestingTests.swift - Local/CI test gate drift checks.
 
 import Foundation
+import Dispatch
 import CryptoKit
 import Testing
 
@@ -20,6 +21,13 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: root.appendingPathComponent("scripts/run-swift-testing-serial.sh"),
             encoding: .utf8
         )
+        let filteredScriptURL = root.appendingPathComponent(
+            "scripts/run-filtered-swift-testing.sh"
+        )
+        let filteredScript = try String(
+            contentsOf: filteredScriptURL,
+            encoding: .utf8
+        )
         let ci = try String(
             contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
             encoding: .utf8
@@ -32,7 +40,9 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("set -euo pipefail"))
         #expect(FileManager.default.isExecutableFile(atPath: scriptURL.path))
         #expect(script.contains("swift test --disable-swift-testing --skip PerformanceTests --skip CocxyCorePerformanceBenchmarks"))
+        #expect(script.contains("--disable-automatic-resolution"))
         #expect(script.contains("./scripts/run-swift-testing-serial.sh"))
+        #expect(serialScript.contains("--disable-automatic-resolution"))
         #expect(script.contains("web/scripts/build-site.mjs"))
         #expect(script.contains("Node.js 18+ is required to generate public website test fixtures"))
         #expect(serialScript.contains("swift-testing-serial-profraw"))
@@ -40,8 +50,592 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
         #expect(serialScript.contains("CocxyTerminal-SwiftTesting.json"))
         #expect(!serialScript.contains("mapfile"))
+        #expect(FileManager.default.isExecutableFile(atPath: filteredScriptURL.path))
+        #expect(filteredScript.contains("matching_test_count == 0"))
+        #expect(filteredScript.contains("filter discovered zero tests"))
         #expect(ci.contains("./scripts/run-tests.sh"))
         #expect(pullRequestTemplate.contains("`./scripts/run-tests.sh` passes locally"))
+    }
+
+    @Test("bounded process containment uses current mandatory runners and rejects empty filters")
+    func boundedProcessContainmentUsesCurrentRunnerAndNonemptyFilter() throws {
+        let ci = try String(
+            contentsOf: repositoryRoot().appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let jobStart = try #require(ci.range(of: "  bounded-process-containment:"))
+        let nextJob = try #require(
+            ci.range(of: "  trusted-bundle-audit:", range: jobStart.upperBound..<ci.endIndex)
+        )
+        let job = String(ci[jobStart.lowerBound..<nextJob.lowerBound])
+
+        #expect(job.contains("runs-on: ${{ matrix.os }}"))
+        #expect(job.contains("os: [macos-15, macos-26]"))
+        #expect(job.contains("fail-fast: false"))
+        #expect(job.contains("timeout-minutes: 20"))
+        #expect(job.contains("persist-credentials: false"))
+        #expect(!job.contains("macos-14"))
+        #expect(!job.contains("continue-on-error"))
+        #expect(job.contains(
+            "./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests"
+        ))
+        #expect(!job.contains("swift test --filter"))
+        #expect(!job.contains("COCXYCORE_DEPLOY_KEY"))
+        #expect(!job.contains("repository: salp2403/cocxycore"))
+    }
+
+    @Test("filtered Swift Testing gate exits nonzero when discovery finds no match")
+    func filteredGateRejectsEmptyDiscovery() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' 'CocxyTerminalTests.OtherSuite/unrelated()'
+              exit 0
+            fi
+            exit 0
+            """,
+            filter: "MissingSuite"
+        )
+
+        #expect(result.terminationStatus != 0)
+        #expect(result.stderr.contains("filter discovered zero tests"))
+    }
+
+    @Test("filtered Swift Testing gate discovers and executes matching tests")
+    func filteredGateDiscoversAndExecutesMatchingTests() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            printf '%s\n' "$*" >> "$FAKE_SWIFT_CALL_LOG"
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' \
+                'CocxyTerminalTests.OtherSuite/unrelated()' \
+                'CocxyTerminalTests.FilteredSuite/matching()'
+              exit 0
+            fi
+            if [ "$1" = "test" ]; then
+              printf '%s\n' 'synthetic filtered execution passed'
+              exit 0
+            fi
+            exit 97
+            """,
+            filter: "FilteredSuite",
+            additionalArguments: ["--verbose"]
+        )
+
+        let invocations = result.invocationLog.split(separator: "\n").map(String.init)
+        #expect(result.terminationStatus == 0)
+        #expect(result.stdout.contains("Discovered 1 Swift Testing test(s)"))
+        #expect(result.stdout.contains("synthetic filtered execution passed"))
+        #expect(invocations.count == 2)
+        let discoveryInvocation = try #require(invocations.first)
+        let executionInvocation = try #require(invocations.dropFirst().first)
+        #expect(discoveryInvocation.hasPrefix("test list "))
+        #expect(discoveryInvocation.contains("--disable-xctest"))
+        #expect(discoveryInvocation.contains("--verbose"))
+        #expect(executionInvocation.hasPrefix("test "))
+        #expect(!executionInvocation.hasPrefix("test list "))
+        #expect(executionInvocation.contains("--disable-xctest"))
+        #expect(executionInvocation.contains("--verbose --filter FilteredSuite"))
+    }
+
+    @Test("filtered Swift Testing gate propagates discovery failure")
+    func filteredGatePropagatesDiscoveryFailure() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' 'synthetic discovery failure' >&2
+              exit 23
+            fi
+            exit 0
+            """,
+            filter: "AnySuite"
+        )
+
+        #expect(result.terminationStatus == 23)
+        #expect(result.stderr.contains("synthetic discovery failure"))
+    }
+
+    @Test("filtered Swift Testing gate propagates filtered execution failure")
+    func filteredGatePropagatesExecutionFailure() throws {
+        let result = try runFilteredGateWithFakeSwift(
+            """
+            #!/bin/sh
+            if [ "$1" = "test" ] && [ "$2" = "list" ]; then
+              printf '%s\n' 'CocxyTerminalTests.FilteredSuite/matching()'
+              exit 0
+            fi
+            if [ "$1" = "test" ]; then
+              printf '%s\n' 'synthetic filtered execution failure' >&2
+              exit 29
+            fi
+            exit 97
+            """,
+            filter: "FilteredSuite"
+        )
+
+        #expect(result.terminationStatus == 29)
+        #expect(result.stdout.contains("Discovered 1 Swift Testing test(s)"))
+        #expect(result.stderr.contains("synthetic filtered execution failure"))
+    }
+
+    @Test("workflow actions use reviewed immutable commits and checkouts drop credentials")
+    func workflowActionsUseImmutableCommits() throws {
+        let workflowDirectory = repositoryRoot().appendingPathComponent(".github/workflows", isDirectory: true)
+        let workflowURLs = try FileManager.default.contentsOfDirectory(
+            at: workflowDirectory,
+            includingPropertiesForKeys: nil
+        )
+        .filter { $0.pathExtension == "yml" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let allowedPins: [String: Set<String>] = [
+            "actions/checkout": [
+                "34e114876b0b11c390a56381ad16ebd13914f8d5", // v4.3.1
+                "df4cb1c069e1874edd31b4311f1884172cec0e10", // v6.0.3
+            ],
+            "actions/setup-node": [
+                "49933ea5288caeca8642d1e84afbd3f7d6820020", // v4.4.0
+                "48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e", // v6.4.0
+            ],
+            "goto-bus-stop/setup-zig": [
+                "abea47f85e598557f500fa1fd2ab7464fcb39406", // v2.2.1
+            ],
+            "softprops/action-gh-release": [
+                "3bb12739c298aeb8a4eeaf626c5b8d85266b0e65", // v2.6.2
+            ],
+        ]
+        var observedActions = Set<String>()
+
+        for workflowURL in workflowURLs {
+            let workflow = try String(contentsOf: workflowURL, encoding: .utf8)
+            let lines = workflow.components(separatedBy: .newlines)
+            for (index, line) in lines.enumerated() {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                guard trimmed.hasPrefix("uses:") else { continue }
+                let token = String(trimmed.dropFirst("uses:".count))
+                    .trimmingCharacters(in: .whitespaces)
+                    .split(whereSeparator: { $0.isWhitespace })
+                    .first
+                    .map(String.init) ?? ""
+                let separator = try #require(token.lastIndex(of: "@"))
+                let action = String(token[..<separator])
+                let revision = String(token[token.index(after: separator)...])
+
+                #expect(revision.count == 40, "\(workflowURL.lastPathComponent): \(token)")
+                #expect(revision.allSatisfy { $0.isHexDigit && !$0.isUppercase })
+                #expect(allowedPins[action]?.contains(revision) == true, "Unreviewed action pin: \(token)")
+                observedActions.insert(action)
+
+                if action == "actions/checkout" {
+                    var blockEnd = index + 1
+                    while blockEnd < lines.count,
+                          !lines[blockEnd].trimmingCharacters(in: .whitespaces).hasPrefix("- name:") {
+                        blockEnd += 1
+                    }
+                    let block = lines[index..<blockEnd].joined(separator: "\n")
+                    #expect(
+                        block.contains("persist-credentials: false"),
+                        "Checkout must remove credentials before the next step in \(workflowURL.lastPathComponent)"
+                    )
+                }
+            }
+        }
+
+        #expect(observedActions == Set(allowedPins.keys))
+    }
+
+    @Test("pull request workflows never share private CocxyCore authority")
+    func pullRequestWorkflowsDoNotSharePrivateAuthority() throws {
+        let root = repositoryRoot()
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let performance = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/performance.yml"),
+            encoding: .utf8
+        )
+        let trustedJob = try #require(ci.range(of: "  trusted-bundle-audit:"))
+        let unprivilegedJob = String(ci[..<trustedJob.lowerBound])
+        let trustedJobBody = String(ci[trustedJob.lowerBound...])
+
+        #expect(unprivilegedJob.contains("Build & Test (Unprivileged)"))
+        #expect(unprivilegedJob.contains("prepare-ci-cocxycore-fixture.sh"))
+        #expect(unprivilegedJob.contains("COCXY_CI_REMOTE_DAEMON_FIXTURE: \"1\""))
+        #expect(!unprivilegedJob.contains("COCXYCORE_DEPLOY_KEY"))
+        #expect(!unprivilegedJob.contains("repository: salp2403/cocxycore"))
+
+        #expect(trustedJobBody.contains("if: github.event_name == 'push' && github.ref == 'refs/heads/main'"))
+        #expect(trustedJobBody.contains("repository: salp2403/cocxycore"))
+        #expect(trustedJobBody.contains("COCXYCORE_DEPLOY_KEY"))
+
+        #expect(performance.contains("pull_request:"))
+        #expect(performance.contains("prepare-ci-cocxycore-fixture.sh"))
+        #expect(performance.contains("COCXY_CI_REMOTE_DAEMON_FIXTURE: \"1\""))
+        #expect(!performance.contains("COCXYCORE_DEPLOY_KEY"))
+        #expect(!performance.contains("repository: salp2403/cocxycore"))
+        #expect(!performance.contains("cocxycore-source"))
+    }
+
+    @Test("private CocxyCore builds use one pinned source after pinned tooling")
+    func privateCocxyCoreBuildsUsePinnedSourceAfterTooling() throws {
+        let root = repositoryRoot()
+        let pinnedCocxyCore = "5b1a6ecf1c96bb74a2921e92bad1e52664f83673"
+        let workflowNames = ["ci.yml", "release.yml", "nightly.yml", "preview.yml"]
+
+        for workflowName in workflowNames {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+            let privateCheckout = try #require(workflow.range(of: "repository: salp2403/cocxycore"))
+            let zigSetup = try #require(workflow.range(of: "goto-bus-stop/setup-zig@"))
+            let xcodeGenSetup = try #require(workflow.range(of: "- name: Install pinned XcodeGen"))
+            let privateTail = String(workflow[privateCheckout.lowerBound...])
+
+            #expect(zigSetup.lowerBound < privateCheckout.lowerBound, "\(workflowName) installs Zig too late")
+            #expect(xcodeGenSetup.lowerBound < privateCheckout.lowerBound, "\(workflowName) installs XcodeGen too late")
+            #expect(privateTail.contains("ref: \(pinnedCocxyCore)"), "\(workflowName) has mutable CocxyCore provenance")
+            #expect(privateTail.contains("persist-credentials: false"))
+            #expect(!workflow.contains("brew install xcodegen"))
+            #expect(!workflow.contains("ref: main\n          ssh-key: ${{ secrets.COCXYCORE_DEPLOY_KEY }}"))
+        }
+    }
+
+    @Test("release channels authenticate source provenance before secrets")
+    func releaseChannelsAuthenticateSourceProvenance() throws {
+        let root = repositoryRoot()
+        let release = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/release.yml"),
+            encoding: .utf8
+        )
+        let preview = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/preview.yml"),
+            encoding: .utf8
+        )
+        let prepareRelease = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/prepare-release.yml"),
+            encoding: .utf8
+        )
+        let deployWebsite = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+
+        let releaseProvenance = try #require(release.range(of: "- name: Verify release provenance"))
+        let releasePrivateKey = try #require(release.range(of: "COCXYCORE_DEPLOY_KEY"))
+        let releaseCertificate = try #require(release.range(of: "CERTIFICATE_P12"))
+        #expect(releaseProvenance.lowerBound < releasePrivateKey.lowerBound)
+        #expect(releaseProvenance.lowerBound < releaseCertificate.lowerBound)
+        #expect(release.contains("repository_dispatch:"))
+        #expect(release.contains("- stable-release"))
+        #expect(!release.contains("push:\n    tags:"))
+        #expect(release.contains(#"^[0-9]+\.[0-9]+\.[0-9]+$"#))
+        #expect(release.contains("EXPECTED_COMMIT"))
+        #expect(!release.contains("VERSION=\"${{ github.event.client_payload"))
+        #expect(!release.contains("TAG=\"${{ github.event.client_payload"))
+        #expect(!release.contains("EXPECTED_COMMIT=\"${{ github.event.client_payload"))
+        #expect(release.contains("Stable releases require an annotated tag."))
+        #expect(release.contains("git merge-base --is-ancestor \"$TAG_COMMIT\" refs/remotes/origin/main"))
+        #expect(release.contains("git checkout --detach \"$TAG_COMMIT\""))
+        #expect(release.contains("CFBundleShortVersionString"))
+
+        let previewProvenance = try #require(preview.range(of: "- name: Verify preview provenance"))
+        let previewPrivateKey = try #require(preview.range(of: "COCXYCORE_DEPLOY_KEY"))
+        let previewCertificate = try #require(preview.range(of: "CERTIFICATE_P12"))
+        #expect(previewProvenance.lowerBound < previewPrivateKey.lowerBound)
+        #expect(previewProvenance.lowerBound < previewCertificate.lowerBound)
+        #expect(preview.contains("- preview-release"))
+        #expect(preview.contains("if: github.event_name == 'repository_dispatch' && github.ref == 'refs/heads/main'"))
+        #expect(preview.contains(#"^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+$"#))
+        #expect(preview.contains("Manual preview requests must run from main."))
+        #expect(!preview.contains("VERSION=\"${{ github.event.client_payload"))
+        #expect(preview.contains("git merge-base --is-ancestor \"$GITHUB_SHA\" refs/remotes/origin/main"))
+
+        #expect(prepareRelease.contains("if: github.ref == 'refs/heads/main'"))
+        #expect(prepareRelease.contains("- prepare-stable-release"))
+        #expect(prepareRelease.contains("-f event_type=stable-release"))
+        #expect(!prepareRelease.contains("VERSION=\"${{ github.event.client_payload"))
+        #expect(prepareRelease.contains("persist-credentials: false"))
+        #expect(!prepareRelease.contains("token: ${{ secrets.RELEASE_PUSH_TOKEN }}"))
+        #expect(prepareRelease.contains("GIT_ASKPASS=\"$ASKPASS\" GIT_TERMINAL_PROMPT=0 git push"))
+        #expect(deployWebsite.contains("if: github.ref == 'refs/heads/main'"))
+        #expect(deployWebsite.contains("ref: main"))
+    }
+
+    @Test("release workflows clean ephemeral credentials on every exit path")
+    func releaseWorkflowsCleanEphemeralCredentials() throws {
+        let root = repositoryRoot()
+        let channelWorkflowNames = ["release.yml", "nightly.yml", "preview.yml"]
+
+        for workflowName in channelWorkflowNames {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+
+            #expect(
+                !workflow.contains("/tmp/deploy_key"),
+                "\(workflowName) uses a shared deploy-key path"
+            )
+            #expect(
+                !workflow.contains("https://x-access-token:${GH_TOKEN}@"),
+                "\(workflowName) exposes a token in Git argv"
+            )
+            #expect(workflow.contains("mktemp \"$RUNNER_TEMP/cocxy-"))
+            #expect(workflow.contains("trap cleanup_certificate EXIT"))
+            #expect(workflow.contains("trap cleanup_deploy_credentials EXIT"))
+            #expect(workflow.contains("trap cleanup_homebrew_credentials EXIT"))
+            #expect(workflow.contains(
+                "GIT_ASKPASS=\"$HOMEBREW_ASKPASS\" GIT_TERMINAL_PROMPT=0 git clone"
+            ))
+            #expect(workflow.contains(
+                "GIT_ASKPASS=\"$HOMEBREW_ASKPASS\" GIT_TERMINAL_PROMPT=0 git push"
+            ))
+            #expect(workflow.contains("if: always()"))
+            #expect(workflow.contains("security delete-keychain \"$RUNNER_TEMP/app-signing.keychain-db\""))
+
+            let signDMG = try #require(workflow.range(of: "- name: Sign DMG"))
+            let deleteKeychain = try #require(
+                workflow.range(of: "- name: Delete signing keychain")
+            )
+            let notarizeDMG = try #require(workflow.range(of: "- name: Notarize DMG"))
+            #expect(signDMG.lowerBound < deleteKeychain.lowerBound)
+            #expect(deleteKeychain.lowerBound < notarizeDMG.lowerBound)
+        }
+
+        let websiteWorkflow = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/deploy-website.yml"),
+            encoding: .utf8
+        )
+        #expect(!websiteWorkflow.contains("/tmp/deploy_key"))
+        #expect(websiteWorkflow.contains(
+            "DEPLOY_KEY=\"$(mktemp \"$RUNNER_TEMP/cocxy-website-deploy-key.XXXXXX\")\""
+        ))
+        #expect(websiteWorkflow.contains("trap cleanup_deploy_credentials EXIT"))
+    }
+
+    @Test("CI tool installers are immutable and remote-daemon fixtures are inert")
+    func ciToolInstallersAreImmutableAndFixturesAreInert() throws {
+        let root = repositoryRoot()
+        let installerURL = root.appendingPathComponent("scripts/install-pinned-xcodegen.sh")
+        let fixtureScriptURL = root.appendingPathComponent("scripts/prepare-ci-cocxycore-fixture.sh")
+        let bundleVerifierURL = root.appendingPathComponent("scripts/verify-app-bundle.sh")
+        let appBuilderURL = root.appendingPathComponent("scripts/build-app.sh")
+        let installer = try String(contentsOf: installerURL, encoding: .utf8)
+        let fixtureScript = try String(contentsOf: fixtureScriptURL, encoding: .utf8)
+        let bundleVerifier = try String(contentsOf: bundleVerifierURL, encoding: .utf8)
+        let appBuilder = try String(contentsOf: appBuilderURL, encoding: .utf8)
+
+        #expect(FileManager.default.isExecutableFile(atPath: installerURL.path))
+        #expect(FileManager.default.isExecutableFile(atPath: fixtureScriptURL.path))
+        #expect(installer.contains("XCODEGEN_VERSION=\"2.45.3\""))
+        #expect(installer.contains("0c90f4d28ca57335f9fa78cf5bf6dabfe20a232036dabe36de2eef79cb7c0878"))
+        #expect(installer.contains("--proto '=https'"))
+        #expect(installer.contains("shasum -a 256 -c -"))
+        #expect(!installer.contains("brew install"))
+        #expect(fixtureScript.contains("COCXY_CI_REMOTE_DAEMON_FIXTURE"))
+        #expect(fixtureScript.contains("x86_64-linux-musl"))
+        #expect(fixtureScript.contains("aarch64-linux-musl"))
+        #expect(fixtureScript.contains("xcrun clang -arch arm64"))
+        #expect(bundleVerifier.contains("--check-remote-daemon-binary"))
+        #expect(appBuilder.contains("--check-remote-daemon-binary"))
+
+        guard FileManager.default.isExecutableFile(atPath: "/usr/bin/xcrun"),
+              let path = ProcessInfo.processInfo.environment["PATH"],
+              path.split(separator: ":").contains(where: {
+                  FileManager.default.isExecutableFile(atPath: String($0) + "/zig")
+              }) else {
+            return
+        }
+
+        let temporaryRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-ci-core-fixture-\(UUID().uuidString)", isDirectory: true)
+        let fixtureRoot = temporaryRoot.appendingPathComponent("cocxycore", isDirectory: true)
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+
+        let prepare = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [fixtureScriptURL.path, fixtureRoot.path]
+        )
+        #expect(prepare.terminationStatus == 0, "CI fixture preparation failed")
+
+        let buildScript = fixtureRoot.appendingPathComponent("scripts/build.sh")
+        let withoutOptIn = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [buildScript.path, "build"]
+        )
+        #expect(withoutOptIn.terminationStatus == 77)
+
+        let build = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [buildScript.path, "build"],
+            environment: ["COCXY_CI_REMOTE_DAEMON_FIXTURE": "1"]
+        )
+        #expect(build.terminationStatus == 0, "CI fixture compilation failed")
+
+        let binaries = fixtureRoot.appendingPathComponent("zig-out/bin", isDirectory: true)
+        let macOSBinary = binaries.appendingPathComponent("cocxyd-remote-macos-arm64")
+        let linuxX86Binary = binaries.appendingPathComponent("cocxyd-remote-linux-x86_64")
+        let linuxArmBinary = binaries.appendingPathComponent("cocxyd-remote-linux-arm64")
+        let macOSMagic = try Data(contentsOf: macOSBinary).prefix(4)
+        let linuxMagic = try Data(contentsOf: linuxX86Binary).prefix(4)
+        #expect(macOSMagic == Data([0xCF, 0xFA, 0xED, 0xFE]))
+        #expect(linuxMagic == Data([0x7F, 0x45, 0x4C, 0x46]))
+
+        for (binary, target) in [
+            (macOSBinary, "macos-arm64"),
+            (linuxX86Binary, "linux-x86_64"),
+            (linuxArmBinary, "linux-arm64"),
+        ] {
+            let validation = try runProcess(
+                URL(fileURLWithPath: "/bin/bash"),
+                arguments: [
+                    bundleVerifierURL.path,
+                    "--check-remote-daemon-binary",
+                    binary.path,
+                    target,
+                ]
+            )
+            #expect(
+                validation.terminationStatus == 0,
+                "Expected \(binary.lastPathComponent) to match \(target): \(validation.stderr)"
+            )
+        }
+
+        let swappedX86 = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [
+                bundleVerifierURL.path,
+                "--check-remote-daemon-binary",
+                linuxX86Binary.path,
+                "linux-arm64",
+            ]
+        )
+        let swappedArm = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [
+                bundleVerifierURL.path,
+                "--check-remote-daemon-binary",
+                linuxArmBinary.path,
+                "linux-x86_64",
+            ]
+        )
+        #expect(swappedX86.terminationStatus != 0)
+        #expect(swappedArm.terminationStatus != 0)
+    }
+
+    @Test("SwiftPM release inputs are tracked exact and fail closed")
+    func swiftPMReleaseInputsAreTrackedExactAndFailClosed() throws {
+        let root = repositoryRoot()
+        let manifest = try String(
+            contentsOf: root.appendingPathComponent("Package.swift"),
+            encoding: .utf8
+        )
+        let lockURL = root.appendingPathComponent("Package.resolved")
+        let lock = try JSONSerialization.jsonObject(with: Data(contentsOf: lockURL)) as? [String: Any]
+        let pins = lock?["pins"] as? [[String: Any]]
+        let sparkle = pins?.first { $0["identity"] as? String == "sparkle" }
+        let state = sparkle?["state"] as? [String: Any]
+        let gitignore = try String(
+            contentsOf: root.appendingPathComponent(".gitignore"),
+            encoding: .utf8
+        )
+        let verifierURL = root.appendingPathComponent("scripts/verify-swiftpm-resolution.sh")
+        let verifier = try String(contentsOf: verifierURL, encoding: .utf8)
+        let buildScript = try String(
+            contentsOf: root.appendingPathComponent("scripts/build-app.sh"),
+            encoding: .utf8
+        )
+        let bundleVerifier = try String(
+            contentsOf: root.appendingPathComponent("scripts/verify-app-bundle.sh"),
+            encoding: .utf8
+        )
+        let ci = try String(
+            contentsOf: root.appendingPathComponent(".github/workflows/ci.yml"),
+            encoding: .utf8
+        )
+        let automatedScripts = [
+            "scripts/run-tests.sh",
+            "scripts/run-swift-testing-serial.sh",
+            "scripts/run-filtered-swift-testing.sh",
+            "scripts/run-performance-benchmarks.sh",
+            "scripts/run-cocxycore-benchmarks.sh",
+            "scripts/run-security-audit.sh",
+        ]
+        let releaseWorkflows = ["release.yml", "preview.yml", "nightly.yml"]
+
+        #expect(manifest.contains(#".package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.4")"#))
+        #expect(!manifest.contains(#"Sparkle", from:"#))
+        #expect(lock?["version"] as? Int == 3)
+        #expect(pins?.filter { $0["identity"] as? String == "sparkle" }.count == 1)
+        #expect(sparkle?["kind"] as? String == "remoteSourceControl")
+        #expect(sparkle?["location"] as? String == "https://github.com/sparkle-project/Sparkle")
+        #expect(state?["version"] as? String == "2.9.4")
+        #expect(state?["revision"] as? String == "b6496a74a087257ef5e6da1c5b29a447a60f5bd7")
+        #expect(!gitignore.components(separatedBy: .newlines).contains("Package.resolved"))
+
+        #expect(FileManager.default.isExecutableFile(atPath: verifierURL.path))
+        #expect(verifier.contains("cb6fdbdc8884f15d62a616e79face92b08322410fd2d425edc6596ccbf4ba3b0"))
+        #expect(verifier.contains("bfb52400c3da18bb4c251ac4818c2c2e1e31c2e649a45b31c11109b6e57b34ad"))
+        #expect(verifier.contains("ls-files --error-unmatch Package.resolved"))
+        #expect(verifier.contains("lipo \"${SPARKLE_TOOL}\" -verify_arch x86_64 arm64"))
+        // Sparkle must be the sole dependency: reject extra manifest entries and
+        // extra resolved pins so an unreviewed package cannot slip into the build.
+        #expect(verifier.contains("only the reviewed Sparkle pin is allowed"))
+        #expect(verifier.contains("must pin exactly one dependency (Sparkle)"))
+        #expect(buildScript.contains("SWIFT_FLAGS=\"--disable-automatic-resolution -c release\""))
+        #expect(buildScript.contains("SWIFT_FLAGS=\"--disable-automatic-resolution\""))
+        #expect(buildScript.contains("verify-swiftpm-resolution.sh\" --lock-only"))
+        #expect(buildScript.contains("verify-swiftpm-resolution.sh\" --verify-artifacts"))
+        #expect(buildScript.contains(".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"))
+        #expect(!buildScript.contains("find \"${PROJECT_ROOT}/.build\" -name \"Sparkle.framework\""))
+        #expect(buildScript.contains(
+            "codesign --force --sign - --entitlements \"${APP_ENTITLEMENTS}\" \"${APP_BUNDLE}\" >/dev/null"
+        ))
+        #expect(!buildScript.contains("\"${APP_BUNDLE}\" 2>/dev/null || true"))
+        #expect(buildScript.contains("install_name_tool -add_rpath \"${SPARKLE_RPATH}\""))
+        #expect(!buildScript.contains(
+            "install_name_tool -add_rpath @executable_path/../Frameworks \"${MACOS}/${APP_NAME}\" 2>/dev/null || true"
+        ))
+        #expect(bundleVerifier.contains("CFBundleShortVersionString\" \"2.9.4\" \"Reviewed Sparkle version"))
+        #expect(bundleVerifier.contains("check_codesign_valid \"$SPARKLE_FRAMEWORK\" \"Sparkle.framework signature\""))
+        #expect(bundleVerifier.contains(
+            "check_macho_rpath \"$CONTENTS/MacOS/CocxyTerminal\" \"@executable_path/../Frameworks\""
+        ))
+        #expect(bundleVerifier.contains("codesign --verify --deep --strict \"$APP_BUNDLE\""))
+        #expect(ci.contains("swift build --disable-automatic-resolution -c debug"))
+        #expect(ci.contains("swift build --disable-automatic-resolution -c release"))
+
+        for path in automatedScripts {
+            let contents = try String(
+                contentsOf: root.appendingPathComponent(path),
+                encoding: .utf8
+            )
+            #expect(contents.contains("--disable-automatic-resolution"), "Unlocked SwiftPM automation: \(path)")
+        }
+        for workflowName in releaseWorkflows {
+            let workflow = try String(
+                contentsOf: root.appendingPathComponent(".github/workflows/\(workflowName)"),
+                encoding: .utf8
+            )
+            #expect(workflow.contains("verify-swiftpm-resolution.sh --print-sign-update"))
+            #expect(!workflow.contains("find .build -name \"sign_update\""))
+        }
+
+        let lockVerification = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [verifierURL.path, "--lock-only"]
+        )
+        #expect(lockVerification.terminationStatus == 0)
+        let artifactVerification = try runProcess(
+            URL(fileURLWithPath: "/bin/bash"),
+            arguments: [verifierURL.path, "--verify-artifacts"]
+        )
+        #expect(artifactVerification.terminationStatus == 0)
     }
 
     @Test("performance workflow enforces benchmark regression baselines")
@@ -148,22 +742,26 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("GH_BIN="))
         #expect(script.contains("version_greater_than()"))
         #expect(script.contains("CFBundleShortVersionString"))
-        #expect(script.contains("must be greater than current Info.plist version"))
+        #expect(script.contains("must not be older than current Info.plist version"))
         #expect(script.contains("/opt/homebrew/bin/gh /usr/local/bin/gh"))
         #expect(script.contains("cd \"$ROOT_DIR\""))
         #expect(script.contains("git ls-remote --tags origin"))
         #expect(script.contains("already exists on origin"))
         #expect(script.contains("\"$GH_BIN\" auth status"))
-        #expect(script.contains("\"$GH_BIN\" workflow run prepare-release.yml"))
+        #expect(script.contains("\"$GH_BIN\" api --method POST"))
+        #expect(script.contains("event_type=prepare-stable-release"))
         #expect(script.contains(".github/workflows/prepare-release.yml"))
         #expect(script.contains("DRY_RUN=1"))
         #expect(script.contains("No GitHub workflow was triggered."))
         #expect(workflow.contains("git config user.name \"Said Arturo Lopez\""))
         #expect(workflow.contains("git config user.email \"dev@cocxy.dev\""))
+        #expect(workflow.contains("git push origin HEAD:main"))
+        #expect(workflow.contains("Target version ${VERSION} is older than current Info.plist version ${CURRENT}."))
+        #expect(workflow.contains("github.event.client_payload.version"))
         #expect(!workflow.contains("git config user.name \"said lopez\""))
 
         let dryRunRange = try #require(script.range(of: "if [ \"$DRY_RUN\" -eq 1 ]; then"))
-        let dispatchRange = try #require(script.range(of: "\"$GH_BIN\" workflow run prepare-release.yml"))
+        let dispatchRange = try #require(script.range(of: "\"$GH_BIN\" api --method POST"))
         #expect(dryRunRange.lowerBound < dispatchRange.lowerBound)
     }
 
@@ -348,8 +946,10 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(workflow.contains("npm audit signatures"))
         #expect(workflow.contains("npm run smoke:visual"))
         #expect(workflow.contains("npm run audit:quality:full"))
+        #expect(workflow.contains("request-preview:"))
+        #expect(workflow.contains("event_type=preview-release"))
         #expect(workflow.contains("build-preview:"))
-        #expect(workflow.contains("if: github.event_name != 'pull_request'"))
+        #expect(workflow.contains("if: github.event_name == 'repository_dispatch' && github.ref == 'refs/heads/main'"))
         #expect(workflow.contains("contents: write"))
     }
 
@@ -722,7 +1322,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("--app build/CocxyTerminal.app"))
     }
 
-    @Test("local SSH smoke script covers direct jump and forward gates without CI flakiness")
+    @Test("local SSH smoke covers direct jump and bidirectional forwarding without CI flakiness")
     func localSSHSmokeScriptCoversDirectJumpAndForwardGates() throws {
         let root = repositoryRoot()
         let scriptURL = root.appendingPathComponent("scripts/smoke-local-ssh.sh")
@@ -744,9 +1344,13 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(script.contains("/usr/sbin/sshd"))
         #expect(script.contains("ProxyJump cocxy-jump"))
         #expect(script.contains("-N -L"))
+        #expect(script.contains("-R \"127.0.0.1:$REVERSE_PORT"))
         #expect(script.contains("direct-ok"))
         #expect(script.contains("jump-ok"))
         #expect(script.contains("forward-ok"))
+        #expect(script.contains("reverse-forward-ok"))
+        #expect(script.contains("supervisedControlMasterLiveSmoke"))
+        #expect(script.contains("supervised-control-master-ok"))
         #expect(script.contains("No external network, system service changes, or persistent keys are used."))
         #expect(!ci.contains("smoke-local-ssh.sh"))
         #expect(!nightly.contains("smoke-local-ssh.sh"))
@@ -1192,24 +1796,29 @@ struct CITestGateScriptSwiftTestingTests {
                 .map { String($0.dropFirst(prefix.count)) }
         }
 
-        let isComplete = result.stdout.contains("status=complete")
+        let isComplete = result.stdout
+            .split(separator: "\n")
+            .contains("status=complete")
         #expect(result.terminationStatus == (isComplete ? 0 : 1))
         #expect(isComplete || result.stdout.contains("status=not-complete"))
 
-        let isCI = ProcessInfo.processInfo.environment["CI"] == "true"
         let privateCompletionEvidenceMissing = [
             "blocker=source plan missing:",
             "blocker=completion audit missing:",
             "blocker=completion final report missing:",
             "blocker=command instruction doc missing:",
         ].contains { result.stdout.contains($0) }
-        if isCI && privateCompletionEvidenceMissing {
+        if privateCompletionEvidenceMissing {
             #expect(result.terminationStatus == 1)
             #expect(result.stdout.contains("status=not-complete"))
             #expect(result.stdout.contains("check=browser-mcp-tools="))
             #expect(result.stdout.contains("check=agent-workspace-e2e-matrices=9"))
-            #expect(result.stdout.contains("blocker=completion final report missing:"))
-            #expect(result.stdout.contains("blocker=command instruction doc missing:"))
+            #expect(
+                result.stdout.contains("blocker=source plan missing:")
+                    || result.stdout.contains("blocker=completion audit missing:")
+                    || result.stdout.contains("blocker=completion final report missing:")
+                    || result.stdout.contains("blocker=command instruction doc missing:")
+            )
             return
         }
 
@@ -3441,6 +4050,9 @@ struct CITestGateScriptSwiftTestingTests {
             environment: [
                 "PATH": "\(setupBinRoot.path):/usr/bin:/bin",
                 "COCXY_AWS_SETUP_ARTIFACTS": setupArtifacts.path,
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(setupDryRun.terminationStatus == 0)
@@ -3458,6 +4070,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "PATH": "\(setupBinRoot.path):/usr/bin:/bin",
                 "COCXY_AWS_VERIFY_ARTIFACTS": verifyArtifacts.path,
                 "COCXY_AWS_IMAGE": "ami-fixture",
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(verifyDryRun.terminationStatus == 0)
@@ -3599,6 +4214,9 @@ struct CITestGateScriptSwiftTestingTests {
             environment: [
                 "PATH": "\(setupBinRoot.path):/usr/bin:/bin",
                 "COCXY_AWS_IMAGE": "ami-fixture",
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(generatedVerify.terminationStatus == 0)
@@ -3708,6 +4326,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_AWS_SETUP_APPLY": "1",
                 "COCXY_AWS_SETUP_ARTIFACTS": applyArtifacts.path,
                 "COCXY_AWS_IMAGE": "ami-fixture",
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
                 "COCXY_AWS_SIMULATE_PROFILE_PROPAGATION": "1",
                 "COCXY_AWS_SETUP_PROPAGATION_INTERVAL_SECONDS": "1",
                 "COCXY_AWS_SETUP_PROPAGATION_TIMEOUT_SECONDS": "5",
@@ -3776,6 +4397,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_AWS_FAKE_CALLS": deniedApplyCallLog.path,
                 "COCXY_AWS_SETUP_APPLY": "1",
                 "COCXY_AWS_SETUP_ARTIFACTS": deniedApplyArtifacts.path,
+                "COCXY_AWS_SETUP_ROLE": "CocxyCellsSSMRole",
+                "COCXY_AWS_SETUP_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
+                "COCXY_AWS_INSTANCE_PROFILE": "CocxyCellsSSMProfile",
             ]
         )
         #expect(setupApplyDenied.terminationStatus == 1)
@@ -3795,6 +4419,7 @@ struct CITestGateScriptSwiftTestingTests {
             scriptURL,
             arguments: ["gcp"],
             environment: [
+                "COCXY_CELLS_CLOUD_E2E": "",
                 "COCXY_CELLS_CLOUD_ARTIFACTS": fixtureRoot
                     .appendingPathComponent("smoke-gcp")
                     .path,
@@ -3830,6 +4455,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_CELLS_CLOUD_ARTIFACT_ROOT": fixtureRoot
                     .appendingPathComponent("cloud-artifacts")
                     .path,
+                "COCXY_GCP_IMAGE": "",
+                "COCXY_GCP_PROJECT": "",
+                "COCXY_GCP_ZONE": "",
             ]
         )
         #expect(preflightResult.terminationStatus == 0 || preflightResult.terminationStatus == 1)
@@ -4372,6 +5000,9 @@ struct CITestGateScriptSwiftTestingTests {
                 "COCXY_CELLS_CLOUD_PREFLIGHT_ARTIFACTS": fixtureRoot
                     .appendingPathComponent("preflight")
                     .path,
+                "COCXY_GCP_IMAGE": "",
+                "COCXY_GCP_PROJECT": "",
+                "COCXY_GCP_ZONE": "",
             ]
         )
         #expect(result.terminationStatus == 1)
@@ -4724,7 +5355,7 @@ struct CITestGateScriptSwiftTestingTests {
 
         let rewriteStart = try #require(workflow.range(of: "# Update version-specific values"))
         let cleanupStart = try #require(
-            workflow.range(of: "rm /tmp/deploy_key", range: rewriteStart.upperBound..<workflow.endIndex)
+            workflow.range(of: "echo \"Website deployed to cocxy.dev\"", range: rewriteStart.upperBound..<workflow.endIndex)
         )
         let versionRewriteBlock = String(workflow[rewriteStart.lowerBound..<cleanupStart.lowerBound])
         #expect(versionRewriteBlock.contains("set -e;"))
@@ -4781,7 +5412,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(preview.contains(#"app "Cocxy Terminal Preview.app""#))
         #expect(preview.contains("git commit -m \"Update cocxy-preview to ${VERSION}\""))
         #expect(preview.contains("git push"))
-        #expect(preview.contains("rm /tmp/deploy_key"))
+        #expect(preview.contains("trap cleanup_deploy_credentials EXIT"))
 
         #expect(nightly.contains("ERROR: sign_update not found. Cannot generate Sparkle signature."))
         #expect(nightly.contains("ERROR: Failed to generate Sparkle EdDSA signature."))
@@ -4832,11 +5463,16 @@ struct CITestGateScriptSwiftTestingTests {
         )
 
         for homepage in [englishHome, spanishHome] {
-            #expect(homepage.contains(#"<div class="hero-version">"#))
+            #expect(homepage.contains(#"<div class="hero-version""#))
             #expect(homepage.contains(#"<span class="version-badge">v0.0.0</span>"#))
             #expect(homepage.contains(#""@type": "SoftwareApplication""#))
             #expect(homepage.contains(#""softwareVersion": "0.0.0""#))
         }
+        #expect(englishHome.contains(">Zero telemetry</span>"))
+        #expect(spanishHome.contains(">Cero telemetría</span>"))
+        #expect(spanishHome.contains("<b>ESPACIOS</b>"))
+        #expect(spanishHome.contains("> inactivo · 1</span>"))
+        #expect(!spanishHome.contains("<b>WORKSPACES</b>"))
 
         for releasePage in [englishReleases, spanishReleases] {
             #expect(releasePage.contains(#""@type": "BreadcrumbList""#))
@@ -4886,8 +5522,8 @@ struct CITestGateScriptSwiftTestingTests {
         }
     }
 
-    @Test("public marketing copy avoids named third-party agent brands")
-    func publicMarketingCopyAvoidsNamedThirdPartyAgentBrands() throws {
+    @Test("public marketing copy confines named agent brands to compatibility surfaces")
+    func publicMarketingCopyConfinesNamedAgentBrandsToCompatibilitySurfaces() throws {
         let root = repositoryRoot()
         let webRoot = root.appendingPathComponent("web/public", isDirectory: true)
         var files = [
@@ -4900,20 +5536,31 @@ struct CITestGateScriptSwiftTestingTests {
             pattern: #"\b(claude|codex|gemini|aider|kiro|opencode|anthropic|openai|warp)\b"#,
             options: [.caseInsensitive]
         )
+        let comparisonPattern = try NSRegularExpression(
+            pattern: #"\b(cocxy\s+vs\.?|vs\.?\s+cocxy|versus|better than|faster than|beats|mejor que|más rápido que|supera a)\b"#,
+            options: [.caseInsensitive]
+        )
+        let compatibilitySurfaces: Set<String> = [
+            "web/public/index.html",
+            "web/public/es/index.html",
+            "web/public/agents.html",
+            "web/public/es/agents.html",
+            "web/public/features/agents.html",
+            "web/public/es/features/agents.html",
+        ]
 
         for file in files {
             let relativePath = Self.relativePath(file, root: root)
-            if relativePath == "web/public/agents.html" ||
-                relativePath == "web/public/es/agents.html" ||
-                relativePath == "web/public/features/agents.html" ||
-                relativePath == "web/public/es/features/agents.html" {
-                continue
-            }
             let contents = try String(contentsOf: file, encoding: .utf8)
             let range = NSRange(location: 0, length: (contents as NSString).length)
             #expect(
+                comparisonPattern.firstMatch(in: contents, range: range) == nil,
+                "\(relativePath) should describe Cocxy without competitor comparisons"
+            )
+            guard !compatibilitySurfaces.contains(relativePath) else { continue }
+            #expect(
                 pattern.firstMatch(in: contents, range: range) == nil,
-                "\(relativePath) should describe bundled local agent profiles generically"
+                "\(relativePath) should reserve named agent brands for compatibility surfaces"
             )
         }
     }
@@ -5397,7 +6044,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(english.contains("/images/og-image.png"))
         #expect(english.contains("/images/cocxy-preview.png"))
         #expect(english.contains("/videos/cocxy-demo.mp4"))
-        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.png""#))
+        #expect(english.contains(#"<video controls preload="metadata" poster="/images/og-image.avif""#))
         #expect(english.contains("No telemetry pipeline"))
         #expect(english.contains(#""@type": "Article""#))
         #expect(english.contains(#"<link rel="alternate" hreflang="es" href="https://cocxy.dev/es/press.html">"#))
@@ -5448,6 +6095,23 @@ struct CITestGateScriptSwiftTestingTests {
         ] {
             #expect(!script.contains(restrictedTerm))
         }
+    }
+
+    @Test("public visual smoke covers both home locales and supported responsive widths")
+    func publicVisualSmokeCoversBothHomeLocalesAndSupportedResponsiveWidths() throws {
+        let root = repositoryRoot()
+        let script = try String(
+            contentsOf: root.appendingPathComponent("web/scripts/visual-smoke.mjs"),
+            encoding: .utf8
+        )
+
+        #expect(script.contains("{ name: 'desktop', width: 1440, height: 1000 }"))
+        #expect(script.contains("{ name: 'tablet', width: 768, height: 1024 }"))
+        #expect(script.contains("{ name: 'mobile', width: 390, height: 844 }"))
+        #expect(script.contains("{ name: 'narrow', width: 320, height: 700 }"))
+        #expect(script.contains("for (const url of ['/', '/es/'"))
+        #expect(script.contains("url === '/' || url === '/es/'"))
+        #expect(script.contains("metrics.overflowX > 1"))
     }
 
     @Test("public website locale alternates are reciprocal for every public page")
@@ -5779,6 +6443,28 @@ struct CITestGateScriptSwiftTestingTests {
         let stdout: String
         let stderr: String
         let terminationStatus: Int32
+    }
+
+    private struct FilteredGateResult {
+        let process: ProcessResult
+        let invocationLog: String
+
+        var stdout: String { process.stdout }
+        var stderr: String { process.stderr }
+        var terminationStatus: Int32 { process.terminationStatus }
+    }
+
+    private final class PipeDrainer: @unchecked Sendable {
+        private let handle: FileHandle
+        private(set) var data = Data()
+
+        init(handle: FileHandle) {
+            self.handle = handle
+        }
+
+        func drain() {
+            data = handle.readDataToEndOfFile()
+        }
     }
 
     private struct LocalWebsiteReference {
@@ -6410,6 +7096,50 @@ struct CITestGateScriptSwiftTestingTests {
         return root
     }
 
+    private func runFilteredGateWithFakeSwift(
+        _ fakeSwiftSource: String,
+        filter: String,
+        additionalArguments: [String] = []
+    ) throws -> FilteredGateResult {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-filtered-gate-tests-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let fakeSwiftURL = directory.appendingPathComponent("swift")
+        try fakeSwiftSource.write(
+            to: fakeSwiftURL,
+            atomically: true,
+            encoding: .utf8
+        )
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: fakeSwiftURL.path
+        )
+        let callLogURL = directory.appendingPathComponent("swift-invocations.log")
+        try Data().write(to: callLogURL, options: .atomic)
+
+        let process = try runProcess(
+            repositoryRoot().appendingPathComponent(
+                "scripts/run-filtered-swift-testing.sh"
+            ),
+            arguments: [filter] + additionalArguments,
+            environment: [
+                "FAKE_SWIFT_CALL_LOG": callLogURL.path,
+                "SWIFT": fakeSwiftURL.path,
+            ]
+        )
+        return FilteredGateResult(
+            process: process,
+            invocationLog: try String(contentsOf: callLogURL, encoding: .utf8)
+        )
+    }
+
     private func iamPolicyActions(from policy: String) throws -> Set<String> {
         let payload = try JSONSerialization.jsonObject(
             with: Data(policy.utf8),
@@ -6478,13 +7208,22 @@ struct CITestGateScriptSwiftTestingTests {
         process.standardError = stderr
 
         try process.run()
+        let stdoutDrainer = PipeDrainer(handle: stdout.fileHandleForReading)
+        let stderrDrainer = PipeDrainer(handle: stderr.fileHandleForReading)
+        let drainGroup = DispatchGroup()
+        for drainer in [stdoutDrainer, stderrDrainer] {
+            drainGroup.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                drainer.drain()
+                drainGroup.leave()
+            }
+        }
         process.waitUntilExit()
+        drainGroup.wait()
 
-        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
-        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
         return ProcessResult(
-            stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-            stderr: String(data: stderrData, encoding: .utf8) ?? "",
+            stdout: String(data: stdoutDrainer.data, encoding: .utf8) ?? "",
+            stderr: String(data: stderrDrainer.data, encoding: .utf8) ?? "",
             terminationStatus: process.terminationStatus
         )
     }

@@ -1,8 +1,68 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // PluginManager.swift - Lifecycle management for Cocxy plugins.
 
-import Foundation
 import Combine
+import Darwin
+import Foundation
+
+extension Notification.Name {
+    static let cocxyPluginAuthorizationDidReset = Notification.Name(
+        "dev.cocxy.plugin-authorization-did-reset"
+    )
+}
+
+private final class PluginAuthorizationResetObservation: @unchecked Sendable {
+    private let token: NSObjectProtocol
+
+    init(token: NSObjectProtocol) {
+        self.token = token
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(token)
+    }
+}
+
+/// Identifies one installed directory generation without following a replaced
+/// registry entry. Cooperative installs use an atomic root swap, so any
+/// replacement changes this identity before a queued event can launch.
+private struct PluginInstallationIdentity: Equatable, Sendable {
+    let device: Int64
+    let inode: UInt64
+    let generation: UInt32
+    let changedAtSeconds: Int64
+    let changedAtNanoseconds: Int64
+
+    static func capture(at path: String) -> PluginInstallationIdentity? {
+        var metadata = stat()
+        guard Darwin.lstat(path, &metadata) == 0,
+              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR),
+              metadata.st_uid == geteuid()
+        else {
+            return nil
+        }
+        return PluginInstallationIdentity(
+            device: Int64(metadata.st_dev),
+            inode: UInt64(metadata.st_ino),
+            generation: metadata.st_gen,
+            changedAtSeconds: Int64(metadata.st_ctimespec.tv_sec),
+            changedAtNanoseconds: Int64(metadata.st_ctimespec.tv_nsec)
+        )
+    }
+}
+
+private struct PreparedPluginExecution: Sendable {
+    let pluginID: String
+    let scriptPath: String
+    let pluginDirectory: String
+    let environment: [String: String]
+    let capabilities: Set<PluginCapability>
+    let authorization: PluginExecutionAuthorization
+}
+
+private enum PluginRegistryLockAttempt<Value> {
+    case acquired(Value)
+}
 
 // MARK: - Plugin State
 
@@ -30,6 +90,7 @@ enum PluginManagerError: Error, Equatable {
     case alreadyEnabled(String)
     case alreadyDisabled(String)
     case directoryNotFound(String)
+    case registryBusy
 }
 
 // MARK: - Plugin File System Protocol
@@ -105,6 +166,7 @@ final class PluginManager: ObservableObject {
     private let stateFilePath: String
     private let sandbox: any PluginSandboxing
     private let grantedCapabilitiesProvider: @Sendable (String) -> Set<PluginCapability>
+    private var authorizationResetObserver: PluginAuthorizationResetObservation?
 
     // MARK: - Initialization
 
@@ -114,9 +176,16 @@ final class PluginManager: ObservableObject {
         sandbox: any PluginSandboxing = PluginSandbox(),
         grantedCapabilitiesProvider: (@Sendable (String) -> Set<PluginCapability>)? = nil
     ) {
+        let canonicalPluginsDirectory = PluginRegistrySynchronization
+            .canonicalDirectoryURL(
+                URL(fileURLWithPath: pluginsDirectory, isDirectory: true)
+            )
         self.fileSystem = fileSystem
-        self.pluginsDirectory = pluginsDirectory
-        self.stateFilePath = "\(pluginsDirectory)/../plugins.json"
+        self.pluginsDirectory = canonicalPluginsDirectory.path
+        self.stateFilePath = canonicalPluginsDirectory
+            .deletingLastPathComponent()
+            .appendingPathComponent("plugins.json", isDirectory: false)
+            .path
         self.sandbox = sandbox
         self.grantedCapabilitiesProvider = grantedCapabilitiesProvider
             ?? { pluginID in
@@ -124,6 +193,29 @@ final class PluginManager: ObservableObject {
                 let grants = (try? store.grants(for: pluginID)) ?? []
                 return Set(grants.map(\.capability))
             }
+        let observedPluginsDirectory = canonicalPluginsDirectory.path
+        let observer = NotificationCenter.default.addObserver(
+            forName: .cocxyPluginAuthorizationDidReset,
+            object: nil,
+            queue: nil
+        ) { [weak self] notification in
+            guard let pluginID = notification.userInfo?["pluginID"] as? String,
+                  notification.userInfo?["pluginsDirectory"] as? String
+                    == observedPluginsDirectory
+            else {
+                return
+            }
+            if Thread.isMainThread {
+                MainActor.assumeIsolated {
+                    self?.invalidateAuthorization(for: pluginID)
+                }
+            } else {
+                Task { @MainActor [weak self] in
+                    self?.invalidateAuthorization(for: pluginID)
+                }
+            }
+        }
+        self.authorizationResetObserver = PluginAuthorizationResetObservation(token: observer)
     }
 
     nonisolated static func defaultPluginsDirectory(
@@ -153,6 +245,12 @@ final class PluginManager: ObservableObject {
     ///
     /// Merges discovered plugins with persisted enabled/disabled state.
     func scanPlugins() {
+        _ = try? withRegistryReadLock {
+            scanPluginsWithoutLocking()
+        }
+    }
+
+    private func scanPluginsWithoutLocking() {
         guard fileSystem.directoryExists(at: pluginsDirectory) else {
             plugins = []
             return
@@ -167,6 +265,9 @@ final class PluginManager: ObservableObject {
         }
 
         let enabledSet = loadEnabledState()
+        let previousPlugins = plugins.reduce(into: [String: PluginState]()) { result, plugin in
+            result[plugin.id] = plugin
+        }
 
         plugins = subdirectories.compactMap { dirName -> PluginState? in
             let dirPath = "\(pluginsDirectory)/\(dirName)"
@@ -192,7 +293,10 @@ final class PluginManager: ObservableObject {
 
             return PluginState(
                 manifest: manifest,
-                isEnabled: enabledSet.contains(manifest.id)
+                isEnabled: enabledSet.contains(manifest.id),
+                lastTriggeredAt: previousPlugins[manifest.id]?.manifest == manifest
+                    ? previousPlugins[manifest.id]?.lastTriggeredAt
+                    : nil
             )
         }
     }
@@ -201,28 +305,44 @@ final class PluginManager: ObservableObject {
 
     /// Enables a plugin by its ID.
     func enablePlugin(id: String) throws {
-        guard let index = plugins.firstIndex(where: { $0.id == id }) else {
-            throw PluginManagerError.pluginNotFound(id)
-        }
-        guard !plugins[index].isEnabled else {
-            throw PluginManagerError.alreadyEnabled(id)
-        }
+        try withRegistryMutationLock {
+            scanPluginsWithoutLocking()
+            guard let index = plugins.firstIndex(where: { $0.id == id }) else {
+                throw PluginManagerError.pluginNotFound(id)
+            }
+            guard !plugins[index].isEnabled else {
+                throw PluginManagerError.alreadyEnabled(id)
+            }
 
-        plugins[index].isEnabled = true
-        saveEnabledState()
+            plugins[index].isEnabled = true
+            do {
+                try saveEnabledState()
+            } catch {
+                plugins[index].isEnabled = false
+                throw error
+            }
+        }
     }
 
     /// Disables a plugin by its ID.
     func disablePlugin(id: String) throws {
-        guard let index = plugins.firstIndex(where: { $0.id == id }) else {
-            throw PluginManagerError.pluginNotFound(id)
-        }
-        guard plugins[index].isEnabled else {
-            throw PluginManagerError.alreadyDisabled(id)
-        }
+        try withRegistryMutationLock {
+            scanPluginsWithoutLocking()
+            guard let index = plugins.firstIndex(where: { $0.id == id }) else {
+                throw PluginManagerError.pluginNotFound(id)
+            }
+            guard plugins[index].isEnabled else {
+                throw PluginManagerError.alreadyDisabled(id)
+            }
 
-        plugins[index].isEnabled = false
-        saveEnabledState()
+            plugins[index].isEnabled = false
+            do {
+                try saveEnabledState()
+            } catch {
+                plugins[index].isEnabled = true
+                throw error
+            }
+        }
     }
 
     // MARK: - Event Dispatch
@@ -239,22 +359,63 @@ final class PluginManager: ObservableObject {
         _ event: PluginEvent,
         environment: [String: String] = [:]
     ) {
-        let enabledPlugins = plugins.filter { $0.isEnabled && $0.manifest.events.contains(event) }
+        let preparedExecutions: [PreparedPluginExecution] = (try? withRegistryReadLock {
+            scanPluginsWithoutLocking()
+            return plugins.compactMap { plugin -> PreparedPluginExecution? in
+                guard plugin.isEnabled,
+                      plugin.manifest.events.contains(event) else {
+                    return nil
+                }
 
-        for plugin in enabledPlugins {
-            let scriptPath = "\(plugin.manifest.directoryPath)/\(event.scriptName)"
-            guard fileSystem.fileExists(at: scriptPath) else { continue }
+                let scriptPath = "\(plugin.manifest.directoryPath)/\(event.scriptName)"
+                guard fileSystem.fileExists(at: scriptPath) else { return nil }
 
+                let installationIdentity: PluginInstallationIdentity?
+                if fileSystem is DiskPluginFileSystem {
+                    guard let captured = PluginInstallationIdentity.capture(
+                        at: plugin.manifest.directoryPath
+                    ) else {
+                        return nil
+                    }
+                    installationIdentity = captured
+                } else {
+                    installationIdentity = nil
+                }
+
+                let capabilities = effectiveCapabilities(for: plugin.manifest)
+                var authorizedEnvironment: [String: String] = [:]
+                if capabilities.contains(.environmentRead) {
+                    authorizedEnvironment = environment
+                }
+                authorizedEnvironment["COCXY_EVENT"] = event.rawValue
+
+                return PreparedPluginExecution(
+                    pluginID: plugin.id,
+                    scriptPath: scriptPath,
+                    pluginDirectory: plugin.manifest.directoryPath,
+                    environment: authorizedEnvironment,
+                    capabilities: capabilities,
+                    authorization: makeExecutionAuthorization(
+                        for: plugin,
+                        expectedCapabilities: capabilities,
+                        expectedInstallationIdentity: installationIdentity
+                    )
+                )
+            }
+        }) ?? []
+
+        for execution in preparedExecutions {
             sandbox.execute(
-                scriptPath: scriptPath,
-                environment: environment,
-                pluginID: plugin.id,
-                pluginDirectory: plugin.manifest.directoryPath,
-                capabilities: effectiveCapabilities(for: plugin.manifest)
+                scriptPath: execution.scriptPath,
+                environment: execution.environment,
+                pluginID: execution.pluginID,
+                pluginDirectory: execution.pluginDirectory,
+                capabilities: execution.capabilities,
+                authorization: execution.authorization
             )
 
             // Update last triggered timestamp.
-            if let index = plugins.firstIndex(where: { $0.id == plugin.id }) {
+            if let index = plugins.firstIndex(where: { $0.id == execution.pluginID }) {
                 plugins[index].lastTriggeredAt = Date()
             }
         }
@@ -264,18 +425,34 @@ final class PluginManager: ObservableObject {
 
     /// Returns all enabled plugins.
     var enabledPlugins: [PluginState] {
-        plugins.filter(\.isEnabled)
+        (try? withRegistryReadLock {
+            scanPluginsWithoutLocking()
+            return plugins.filter(\.isEnabled)
+        }) ?? []
     }
 
     /// Returns a plugin by its ID.
     func plugin(id: String) -> PluginState? {
-        plugins.first { $0.id == id }
+        try? withRegistryReadLock {
+            scanPluginsWithoutLocking()
+            return plugins.first { $0.id == id }
+        }
     }
 
     // MARK: - State Persistence
 
     /// Loads the set of enabled plugin IDs from disk.
     private func loadEnabledState() -> Set<String> {
+        Self.loadEnabledState(
+            fileSystem: fileSystem,
+            stateFilePath: stateFilePath
+        )
+    }
+
+    private nonisolated static func loadEnabledState(
+        fileSystem: any PluginFileSystem,
+        stateFilePath: String
+    ) -> Set<String> {
         guard let content = try? fileSystem.readFile(at: stateFilePath),
               let data = content.data(using: .utf8),
               let ids = try? JSONDecoder().decode([String].self, from: data)
@@ -284,26 +461,97 @@ final class PluginManager: ObservableObject {
     }
 
     /// Saves the set of enabled plugin IDs to disk.
-    private func saveEnabledState() {
+    private func saveEnabledState() throws {
         let enabledIDs = plugins.filter(\.isEnabled).map(\.id).sorted()
-        guard let data = try? JSONEncoder().encode(enabledIDs),
-              let json = String(data: data, encoding: .utf8)
-        else { return }
-        try? fileSystem.writeFile(at: stateFilePath, contents: json)
+        let data = try JSONEncoder().encode(enabledIDs)
+        let json = String(decoding: data, as: UTF8.self)
+        try fileSystem.writeFile(at: stateFilePath, contents: json)
+    }
+
+    private func invalidateAuthorization(for pluginID: String) {
+        guard let index = plugins.firstIndex(where: { $0.id == pluginID }) else { return }
+        plugins[index].isEnabled = false
+    }
+
+    private func withRegistryMutationLock<T>(_ operation: () throws -> T) throws -> T {
+        let directoryURL = URL(fileURLWithPath: pluginsDirectory, isDirectory: true)
+        let attempt = try PluginRegistrySynchronization.shared.withProcessLockIfAvailable(
+            pluginsDirectory: directoryURL
+        ) {
+            if fileSystem is DiskPluginFileSystem,
+               fileSystem.directoryExists(at: pluginsDirectory) {
+                guard let result = try PluginRegistrySynchronization.shared
+                    .withFileLockIfAvailable(
+                        pluginsDirectory: directoryURL,
+                        operation
+                    ) else {
+                    throw PluginManagerError.registryBusy
+                }
+                return PluginRegistryLockAttempt.acquired(result)
+            }
+            return PluginRegistryLockAttempt.acquired(try operation())
+        }
+        guard case .acquired(let result)? = attempt else {
+            throw PluginManagerError.registryBusy
+        }
+        return result
+    }
+
+    private func withRegistryReadLock<T>(_ operation: () throws -> T) throws -> T {
+        let directoryURL = URL(fileURLWithPath: pluginsDirectory, isDirectory: true)
+        return try PluginRegistrySynchronization.shared.withProcessReadLock(
+            pluginsDirectory: directoryURL
+        ) {
+            guard fileSystem is DiskPluginFileSystem,
+                  fileSystem.directoryExists(at: pluginsDirectory) else {
+                return try operation()
+            }
+            return try PluginRegistrySynchronization.shared.withSharedFileLock(
+                pluginsDirectory: directoryURL,
+                operation
+            )
+        }
     }
 
     private func effectiveCapabilities(for manifest: PluginManifest) -> Set<PluginCapability> {
-        if manifest.usesLegacyCompatibilityCapabilities {
-            return Set(PluginCapability.allCases)
-        }
-
         let granted = grantedCapabilitiesProvider(manifest.id)
         return manifest.capabilities.intersection(granted)
     }
-}
 
-extension PluginManifest {
-    var usesLegacyCompatibilityCapabilities: Bool {
-        manifestFileName == Self.legacyManifestFileName && capabilities.isEmpty
+    private func makeExecutionAuthorization(
+        for plugin: PluginState,
+        expectedCapabilities: Set<PluginCapability>,
+        expectedInstallationIdentity: PluginInstallationIdentity?
+    ) -> PluginExecutionAuthorization {
+        let fileSystem = self.fileSystem
+        let stateFilePath = self.stateFilePath
+        let pluginsDirectory = URL(
+            fileURLWithPath: self.pluginsDirectory,
+            isDirectory: true
+        )
+        let grantedCapabilitiesProvider = self.grantedCapabilitiesProvider
+        let pluginID = plugin.id
+        let pluginDirectory = plugin.manifest.directoryPath
+        let manifestCapabilities = plugin.manifest.capabilities
+
+        return PluginExecutionAuthorization(
+            pluginsDirectory: pluginsDirectory
+        ) {
+            guard Self.loadEnabledState(
+                fileSystem: fileSystem,
+                stateFilePath: stateFilePath
+            ).contains(pluginID) else {
+                return false
+            }
+            if let expectedInstallationIdentity,
+               PluginInstallationIdentity.capture(at: pluginDirectory)
+                != expectedInstallationIdentity {
+                return false
+            }
+            let currentCapabilities = manifestCapabilities.intersection(
+                grantedCapabilitiesProvider(pluginID)
+            )
+            return expectedCapabilities.isSubset(of: currentCapabilities)
+        }
     }
 }

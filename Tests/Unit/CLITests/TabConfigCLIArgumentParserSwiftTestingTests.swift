@@ -6,11 +6,10 @@ import Testing
 @Suite("CLIArgumentParser — tab config")
 struct TabConfigCLIArgumentParserSwiftTestingTests {
 
-    @Test("tab config save parses name plus optional command theme and env overrides")
+    @Test("tab config save parses name plus optional theme and env overrides")
     func saveParsesOptions() throws {
         let parsed = try CLIArgumentParser.parse([
             "tab", "config", "save", "api",
-            "--command", "npm run dev",
             "--theme", "Nord",
             "--env", "API_URL=http://127.0.0.1:8080",
             "--env", "FEATURE_FLAG=true",
@@ -18,7 +17,7 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
 
         #expect(parsed == .tabConfigSave(
             name: "api",
-            command: "npm run dev",
+            command: nil,
             theme: "Nord",
             environment: [
                 "API_URL": "http://127.0.0.1:8080",
@@ -38,19 +37,47 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
         #expect(try CLIArgumentParser.parse(["tab", "config", "path", "api"]) == .tabConfigPath(name: "api"))
     }
 
-    @Test("tab config export parses output path and force flag")
+    @Test("tab config export parses a contained file name and force flag")
     func exportParsesOutputAndForce() throws {
         #expect(
             try CLIArgumentParser.parse([
                 "tab", "config", "export", "api",
-                "--output", "/tmp/shared-api.toml",
+                "--output", "shared-api.toml",
                 "--force",
             ]) == .tabConfigExport(
                 name: "api",
-                output: "/tmp/shared-api.toml",
+                output: "shared-api.toml",
                 force: true
             )
         )
+    }
+
+    @Test("tab config save rejects command-bearing socket configs")
+    func saveRejectsStartupCommand() {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse([
+                "tab", "config", "save", "api",
+                "--command", "npm run dev",
+            ])
+        }
+    }
+
+    @Test("tab config export rejects paths and hidden or ambiguous names", arguments: [
+        "/tmp/shared-api.toml",
+        "../shared-api.toml",
+        "nested/shared-api.toml",
+        "nested\\shared-api.toml",
+        ".hidden.toml",
+        "shared..api.toml",
+        "shared-api.txt",
+    ])
+    func exportRejectsUnsafeFileName(_ output: String) {
+        #expect(throws: CLIError.self) {
+            _ = try CLIArgumentParser.parse([
+                "tab", "config", "export", "api",
+                "--output", output,
+            ])
+        }
     }
 
     @Test("tab config save rejects malformed env pairs")
@@ -67,14 +94,14 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
     func buildRequestUsesEnvKeyPrefixes() {
         let request = CommandRunner().buildRequest(from: .tabConfigSave(
             name: "api",
-            command: "npm run dev",
+            command: nil,
             theme: "Nord",
             environment: ["API_URL": "http://127.0.0.1:8080"]
         ))
 
         #expect(request.command == "tab-config-save")
         #expect(request.params?["name"] == "api")
-        #expect(request.params?["command"] == "npm run dev")
+        #expect(request.params?["command"] == nil)
         #expect(request.params?["theme"] == "Nord")
         #expect(request.params?["env.API_URL"] == "http://127.0.0.1:8080")
     }
@@ -83,13 +110,13 @@ struct TabConfigCLIArgumentParserSwiftTestingTests {
     func buildExportRequest() {
         let request = CommandRunner().buildRequest(from: .tabConfigExport(
             name: "api",
-            output: "/tmp/shared-api.toml",
+            output: "shared-api.toml",
             force: true
         ))
 
         #expect(request.command == "tab-config-export")
         #expect(request.params?["name"] == "api")
-        #expect(request.params?["output"] == "/tmp/shared-api.toml")
+        #expect(request.params?["output"] == "shared-api.toml")
         #expect(request.params?["force"] == "true")
     }
 }

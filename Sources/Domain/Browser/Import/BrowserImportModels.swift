@@ -3,7 +3,7 @@
 
 import Foundation
 
-enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
+enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Hashable {
     case chrome
     case chromeCanary = "chrome-canary"
     case chromium
@@ -132,13 +132,14 @@ enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
                 ),
             ]
         case .orion:
+            let root = support.appendingPathComponent("Orion")
             return [
                 BrowserImportLocation(
                     source: self,
                     profileName: "Default",
-                    historyPath: support.appendingPathComponent("Orion/History.db"),
-                    cookiesPath: homeDirectory.appendingPathComponent("Library/Cookies/Cookies.binarycookies"),
-                    bookmarksPath: support.appendingPathComponent("Orion/Bookmarks.plist")
+                    historyPath: root.appendingPathComponent("History.db"),
+                    cookiesPath: root.appendingPathComponent("Cookies.binarycookies"),
+                    bookmarksPath: root.appendingPathComponent("Bookmarks.plist")
                 ),
             ]
         }
@@ -186,9 +187,290 @@ enum BrowserImportSource: String, CaseIterable, Codable, Sendable, Equatable {
 struct BrowserImportLocation: Codable, Sendable, Equatable {
     let source: BrowserImportSource
     let profileName: String
+    let profileIdentifier: String
     let historyPath: URL
     let cookiesPath: URL?
     let bookmarksPath: URL?
+
+    init(
+        source: BrowserImportSource,
+        profileName: String,
+        profileIdentifier: String? = nil,
+        historyPath: URL,
+        cookiesPath: URL?,
+        bookmarksPath: URL?
+    ) {
+        self.source = source
+        self.profileName = profileName
+        self.profileIdentifier = profileIdentifier ?? profileName
+        self.historyPath = historyPath
+        self.cookiesPath = cookiesPath
+        self.bookmarksPath = bookmarksPath
+    }
+}
+
+enum BrowserImportLocationPathBinding {
+    private static let keyPrefix = "browser-import."
+
+    static func requestedLocations(
+        source: BrowserImportSource,
+        profileName: String? = nil,
+        discoverProfiles: Bool = true,
+        importHistory: Bool = true,
+        importCookies: Bool = true,
+        importBookmarks: Bool = true,
+        historyPath: String?,
+        cookiesPath: String?,
+        bookmarksPath: String?
+    ) -> [BrowserImportLocation] {
+        let discovered = discoverProfiles ? source.discoveredLocations() : []
+        let defaults = discovered.isEmpty ? source.defaultLocations() : discovered
+        let selectedDefaults = selectedLocations(defaults, profileName: profileName)
+        let hasExplicitPath = historyPath != nil || cookiesPath != nil || bookmarksPath != nil
+        guard hasExplicitPath else {
+            return selectedDefaults
+        }
+        guard let base = selectedDefaults.first ?? defaults.first,
+              (!importHistory || historyPath != nil),
+              (!importCookies || cookiesPath != nil),
+              (!importBookmarks || bookmarksPath != nil) else { return [] }
+        let profileIdentifier = explicitProfileIdentifier(
+            source: source,
+            historyPath: historyPath,
+            cookiesPath: cookiesPath,
+            bookmarksPath: bookmarksPath
+        )
+
+        return [BrowserImportLocation(
+            source: source,
+            profileName: profileName ?? base.profileName,
+            profileIdentifier: profileIdentifier,
+            historyPath: historyPath.map(URL.init(fileURLWithPath:)) ?? base.historyPath,
+            cookiesPath: importCookies ? cookiesPath.map(URL.init(fileURLWithPath:)) : nil,
+            bookmarksPath: importBookmarks ? bookmarksPath.map(URL.init(fileURLWithPath:)) : nil
+        )]
+    }
+
+    static func canonicalResourcePaths(
+        for locations: [BrowserImportLocation],
+        importHistory: Bool = true,
+        importCookies: Bool = true,
+        importBookmarks: Bool = true,
+        canonicalize: (URL) -> URL?
+    ) -> [String: String]? {
+        var paths: [String: String] = [:]
+        for (index, location) in locations.enumerated() {
+            if importHistory {
+                guard let historyURL = canonicalize(location.historyPath) else { return nil }
+                paths[key(component: "history", index: index)] = historyURL.path
+                guard appendSQLiteSidecars(
+                    for: historyURL,
+                    component: "history",
+                    index: index,
+                    canonicalize: canonicalize,
+                    paths: &paths
+                ) else { return nil }
+            }
+
+            if importCookies, let cookiesPath = location.cookiesPath {
+                guard let cookiesURL = canonicalize(cookiesPath) else { return nil }
+                paths[key(component: "cookies", index: index)] = cookiesURL.path
+                if usesSQLite(location: location, component: "cookies") {
+                    guard appendSQLiteSidecars(
+                        for: cookiesURL,
+                        component: "cookies",
+                        index: index,
+                        canonicalize: canonicalize,
+                        paths: &paths
+                    ) else { return nil }
+                }
+            }
+            if importBookmarks, let bookmarksPath = location.bookmarksPath {
+                guard let bookmarksURL = canonicalize(bookmarksPath) else { return nil }
+                paths[key(component: "bookmarks", index: index)] = bookmarksURL.path
+                if usesSQLite(location: location, component: "bookmarks") {
+                    guard appendSQLiteSidecars(
+                        for: bookmarksURL,
+                        component: "bookmarks",
+                        index: index,
+                        canonicalize: canonicalize,
+                        paths: &paths
+                    ) else { return nil }
+                }
+            }
+        }
+        return paths
+    }
+
+    static func applyingApprovedResourcePaths(
+        _ resourcePaths: [String: String],
+        to locations: [BrowserImportLocation],
+        importHistory: Bool = true,
+        importCookies: Bool = true,
+        importBookmarks: Bool = true
+    ) -> [BrowserImportLocation]? {
+        var expectedKeys = Set<String>()
+        var approvedLocations: [BrowserImportLocation] = []
+        approvedLocations.reserveCapacity(locations.count)
+
+        for (index, location) in locations.enumerated() {
+            let historyPath: URL
+            if importHistory {
+                let historyKey = key(component: "history", index: index)
+                expectedKeys.insert(historyKey)
+                guard let approvedPath = resourcePaths[historyKey] else { return nil }
+                historyPath = URL(fileURLWithPath: approvedPath).standardizedFileURL
+                guard validateSQLiteSidecars(
+                    for: historyPath,
+                    component: "history",
+                    index: index,
+                    resourcePaths: resourcePaths,
+                    expectedKeys: &expectedKeys
+                ) else { return nil }
+            } else {
+                historyPath = location.historyPath
+            }
+
+            let cookiesPath: URL?
+            if importCookies, location.cookiesPath != nil {
+                let cookiesKey = key(component: "cookies", index: index)
+                expectedKeys.insert(cookiesKey)
+                guard let approvedPath = resourcePaths[cookiesKey] else { return nil }
+                let approvedURL = URL(fileURLWithPath: approvedPath).standardizedFileURL
+                cookiesPath = approvedURL
+                if usesSQLite(location: location, component: "cookies") {
+                    guard validateSQLiteSidecars(
+                        for: approvedURL,
+                        component: "cookies",
+                        index: index,
+                        resourcePaths: resourcePaths,
+                        expectedKeys: &expectedKeys
+                    ) else { return nil }
+                }
+            } else {
+                cookiesPath = location.cookiesPath
+            }
+
+            let bookmarksPath: URL?
+            if importBookmarks, location.bookmarksPath != nil {
+                let bookmarksKey = key(component: "bookmarks", index: index)
+                expectedKeys.insert(bookmarksKey)
+                guard let approvedPath = resourcePaths[bookmarksKey] else { return nil }
+                let approvedURL = URL(fileURLWithPath: approvedPath).standardizedFileURL
+                bookmarksPath = approvedURL
+                if usesSQLite(location: location, component: "bookmarks") {
+                    guard validateSQLiteSidecars(
+                        for: approvedURL,
+                        component: "bookmarks",
+                        index: index,
+                        resourcePaths: resourcePaths,
+                        expectedKeys: &expectedKeys
+                    ) else { return nil }
+                }
+            } else {
+                bookmarksPath = location.bookmarksPath
+            }
+
+            approvedLocations.append(BrowserImportLocation(
+                source: location.source,
+                profileName: location.profileName,
+                profileIdentifier: location.profileIdentifier,
+                historyPath: historyPath,
+                cookiesPath: cookiesPath,
+                bookmarksPath: bookmarksPath
+            ))
+        }
+
+        let suppliedKeys = Set(resourcePaths.keys.filter { $0.hasPrefix(keyPrefix) })
+        guard suppliedKeys == expectedKeys else { return nil }
+        return approvedLocations
+    }
+
+    private static func key(component: String, index: Int) -> String {
+        "\(keyPrefix)\(index).\(component)"
+    }
+
+    private static func appendSQLiteSidecars(
+        for databaseURL: URL,
+        component: String,
+        index: Int,
+        canonicalize: (URL) -> URL?,
+        paths: inout [String: String]
+    ) -> Bool {
+        for suffix in ["-wal", "-journal"] {
+            let expected = URL(fileURLWithPath: databaseURL.path + suffix).standardizedFileURL
+            guard let canonical = canonicalize(expected), canonical.path == expected.path else {
+                return false
+            }
+            paths[key(component: component + suffix, index: index)] = canonical.path
+        }
+        return true
+    }
+
+    private static func validateSQLiteSidecars(
+        for databaseURL: URL,
+        component: String,
+        index: Int,
+        resourcePaths: [String: String],
+        expectedKeys: inout Set<String>
+    ) -> Bool {
+        for suffix in ["-wal", "-journal"] {
+            let sidecarKey = key(component: component + suffix, index: index)
+            expectedKeys.insert(sidecarKey)
+            let expectedPath = URL(fileURLWithPath: databaseURL.path + suffix).standardizedFileURL.path
+            guard resourcePaths[sidecarKey] == expectedPath else { return false }
+        }
+        return true
+    }
+
+    private static func usesSQLite(location: BrowserImportLocation, component: String) -> Bool {
+        switch component {
+        case "cookies":
+            return location.cookiesPath?.lastPathComponent
+                .localizedCaseInsensitiveContains("binarycookies") != true
+        case "bookmarks":
+            switch location.source {
+            case .firefox, .firefoxDeveloperEdition, .firefoxNightly,
+                 .librewolf, .waterfox, .floorp, .zen:
+                return true
+            default:
+                return location.bookmarksPath?.standardizedFileURL
+                    == location.historyPath.standardizedFileURL
+            }
+        default:
+            return true
+        }
+    }
+
+    private static func selectedLocations(
+        _ locations: [BrowserImportLocation],
+        profileName: String?
+    ) -> [BrowserImportLocation] {
+        guard let profileName = profileName?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !profileName.isEmpty else {
+            return Array(locations.prefix(1))
+        }
+        return locations.filter {
+            $0.profileIdentifier.caseInsensitiveCompare(profileName) == .orderedSame
+                || $0.profileName.caseInsensitiveCompare(profileName) == .orderedSame
+        }
+    }
+
+    private static func explicitProfileIdentifier(
+        source: BrowserImportSource,
+        historyPath: String?,
+        cookiesPath: String?,
+        bookmarksPath: String?
+    ) -> String {
+        let rawPath = historyPath ?? bookmarksPath ?? cookiesPath ?? "/"
+        let resource = URL(fileURLWithPath: rawPath).standardizedFileURL
+        var profileRoot = resource.deletingLastPathComponent()
+        if resource.lastPathComponent == "Cookies",
+           profileRoot.lastPathComponent == "Network" {
+            profileRoot.deleteLastPathComponent()
+        }
+        return "explicit:\(source.rawValue):\(profileRoot.path)"
+    }
 }
 
 struct BrowserImportPlan: Codable, Sendable, Equatable {
@@ -200,7 +482,10 @@ struct BrowserImportPlan: Codable, Sendable, Equatable {
     let maxHistoryDays: Int?
     let domainWhitelist: [String]
     let domainBlacklist: [String]
+    let sourceProfile: String?
     let explicitLocations: [BrowserImportLocation]?
+    let readCookieValues: Bool
+    let expectedPreviewToken: String?
 
     init(
         source: BrowserImportSource,
@@ -211,7 +496,10 @@ struct BrowserImportPlan: Codable, Sendable, Equatable {
         maxHistoryDays: Int? = nil,
         domainWhitelist: [String] = [],
         domainBlacklist: [String] = [],
-        explicitLocations: [BrowserImportLocation]? = nil
+        sourceProfile: String? = nil,
+        explicitLocations: [BrowserImportLocation]? = nil,
+        readCookieValues: Bool = false,
+        expectedPreviewToken: String? = nil
     ) {
         self.source = source
         self.profileID = profileID
@@ -221,11 +509,44 @@ struct BrowserImportPlan: Codable, Sendable, Equatable {
         self.maxHistoryDays = maxHistoryDays
         self.domainWhitelist = domainWhitelist.map(Self.normalizedDomain)
         self.domainBlacklist = domainBlacklist.map(Self.normalizedDomain)
+        self.sourceProfile = sourceProfile?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.explicitLocations = explicitLocations
+        self.readCookieValues = readCookieValues
+        self.expectedPreviewToken = expectedPreviewToken?.lowercased()
     }
 
     func locations(homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser) -> [BrowserImportLocation] {
-        explicitLocations ?? source.defaultLocations(homeDirectory: homeDirectory)
+        if let explicitLocations {
+            return explicitLocations
+        }
+        let discovered = source.discoveredLocations(homeDirectory: homeDirectory)
+        let candidates = discovered.isEmpty
+            ? source.defaultLocations(homeDirectory: homeDirectory)
+            : discovered
+        guard let sourceProfile, !sourceProfile.isEmpty else {
+            return Array(candidates.prefix(1))
+        }
+        return candidates.filter {
+            $0.profileIdentifier.caseInsensitiveCompare(sourceProfile) == .orderedSame
+                || $0.profileName.caseInsensitiveCompare(sourceProfile) == .orderedSame
+        }
+    }
+
+    func readingCookieValues() -> BrowserImportPlan {
+        BrowserImportPlan(
+            source: source,
+            profileID: profileID,
+            importCookies: importCookies,
+            importHistory: importHistory,
+            importBookmarks: importBookmarks,
+            maxHistoryDays: maxHistoryDays,
+            domainWhitelist: domainWhitelist,
+            domainBlacklist: domainBlacklist,
+            sourceProfile: sourceProfile,
+            explicitLocations: explicitLocations,
+            readCookieValues: true,
+            expectedPreviewToken: expectedPreviewToken
+        )
     }
 
     func allows(urlString: String) -> Bool {
@@ -268,6 +589,13 @@ struct BrowserImportedHistoryVisit: Sendable, Equatable {
 }
 
 struct BrowserImportedCookie: Sendable, Equatable {
+    enum SameSite: String, Sendable, Equatable {
+        case unspecified
+        case none
+        case lax
+        case strict
+    }
+
     let domain: String
     let name: String
     let path: String
@@ -275,17 +603,106 @@ struct BrowserImportedCookie: Sendable, Equatable {
     let expiresAt: Date?
     let isSecure: Bool
     let isHTTPOnly: Bool
+    let sameSite: SameSite
+    let isPartitioned: Bool
+    let sourceValueFingerprint: String?
+
+    init(
+        domain: String,
+        name: String,
+        path: String,
+        value: String?,
+        expiresAt: Date?,
+        isSecure: Bool,
+        isHTTPOnly: Bool,
+        sameSite: SameSite = .unspecified,
+        isPartitioned: Bool = false,
+        sourceValueFingerprint: String? = nil
+    ) {
+        self.domain = domain
+        self.name = name
+        self.path = path
+        self.value = value
+        self.expiresAt = expiresAt
+        self.isSecure = isSecure
+        self.isHTTPOnly = isHTTPOnly
+        self.sameSite = sameSite
+        self.isPartitioned = isPartitioned
+        self.sourceValueFingerprint = sourceValueFingerprint
+    }
+}
+
+struct BrowserImportedCookieBatchWriteError: LocalizedError, Sendable, Equatable {
+    let importedCount: Int
+    let totalCount: Int
+    let uncertainCount: Int
+    let detail: String
+
+    init(
+        importedCount: Int,
+        totalCount: Int,
+        uncertainCount: Int = 0,
+        detail: String
+    ) {
+        self.importedCount = importedCount
+        self.totalCount = totalCount
+        self.uncertainCount = uncertainCount
+        self.detail = detail
+    }
+
+    var errorDescription: String? {
+        let uncertainty = uncertainCount > 0
+            ? ", with \(uncertainCount) that could not be confirmed by WebKit"
+            : ""
+        return "Imported \(importedCount) of \(totalCount) cookies\(uncertainty): \(detail)"
+    }
 }
 
 struct BrowserImportedBookmark: Sendable, Equatable {
     let title: String
     let url: String
+    let folderPath: [String]
+    let createdAt: Date?
+    let sortOrder: Int
+
+    init(
+        title: String,
+        url: String,
+        folderPath: [String] = [],
+        createdAt: Date? = nil,
+        sortOrder: Int = 0
+    ) {
+        self.title = title
+        self.url = url
+        self.folderPath = folderPath
+        self.createdAt = createdAt
+        self.sortOrder = sortOrder
+    }
+}
+
+enum BrowserImportIssueKind: Sendable, Equatable {
+    case cookieBatchWrite(imported: Int, total: Int, uncertain: Int)
+    case bookmarkRootConflict
+    case cancelled
 }
 
 struct BrowserImportIssue: Sendable, Equatable {
     let source: BrowserImportSource
     let profileName: String
     let message: String
+    let kind: BrowserImportIssueKind?
+
+    init(
+        source: BrowserImportSource,
+        profileName: String,
+        message: String,
+        kind: BrowserImportIssueKind? = nil
+    ) {
+        self.source = source
+        self.profileName = profileName
+        self.message = message
+        self.kind = kind
+    }
 }
 
 struct BrowserImportPreview: Sendable, Equatable {
@@ -293,26 +710,151 @@ struct BrowserImportPreview: Sendable, Equatable {
     var cookies: [BrowserImportedCookie]
     var bookmarks: [BrowserImportedBookmark]
     var errors: [BrowserImportIssue]
+    var skippedCount: Int
 
-    static let empty = BrowserImportPreview(history: [], cookies: [], bookmarks: [], errors: [])
+    init(
+        history: [BrowserImportedHistoryVisit],
+        cookies: [BrowserImportedCookie],
+        bookmarks: [BrowserImportedBookmark],
+        errors: [BrowserImportIssue],
+        skippedCount: Int = 0
+    ) {
+        self.history = history
+        self.cookies = cookies
+        self.bookmarks = bookmarks
+        self.errors = errors
+        self.skippedCount = skippedCount
+    }
+
+    var itemCount: Int {
+        history.count + cookies.count + bookmarks.count
+    }
+
+    static let empty = BrowserImportPreview(
+        history: [],
+        cookies: [],
+        bookmarks: [],
+        errors: [],
+        skippedCount: 0
+    )
 }
 
 struct BrowserImportResult: Sendable, Equatable {
+    let runID: UUID
+    let status: BrowserImportStatus
+    let sourceProfile: String
     let importedHistoryCount: Int
     let importedCookieCount: Int
+    let uncertainCookieCount: Int
     let importedBookmarkCount: Int
     let skippedCount: Int
     let errors: [BrowserImportIssue]
+
+    init(
+        runID: UUID,
+        status: BrowserImportStatus,
+        sourceProfile: String,
+        importedHistoryCount: Int,
+        importedCookieCount: Int,
+        uncertainCookieCount: Int = 0,
+        importedBookmarkCount: Int,
+        skippedCount: Int,
+        errors: [BrowserImportIssue]
+    ) {
+        self.runID = runID
+        self.status = status
+        self.sourceProfile = sourceProfile
+        self.importedHistoryCount = importedHistoryCount
+        self.importedCookieCount = importedCookieCount
+        self.uncertainCookieCount = uncertainCookieCount
+        self.importedBookmarkCount = importedBookmarkCount
+        self.skippedCount = skippedCount
+        self.errors = errors
+    }
+}
+
+enum BrowserImportStatus: String, Codable, Sendable, Equatable {
+    case completed
+    case partial
+    case failed
+    case cancelled
 }
 
 struct BrowserImportAuditEntry: Codable, Sendable, Equatable {
+    let runID: UUID
     let source: BrowserImportSource
-    let profileID: UUID
+    let sourceProfile: String
+    let targetProfileID: UUID
+    let status: BrowserImportStatus
     let importedHistoryCount: Int
     let importedCookieCount: Int
+    let uncertainCookieCount: Int
     let importedBookmarkCount: Int
     let skippedCount: Int
+    let issueCount: Int
     let timestamp: Date
+
+    init(
+        runID: UUID,
+        source: BrowserImportSource,
+        sourceProfile: String,
+        targetProfileID: UUID,
+        status: BrowserImportStatus,
+        importedHistoryCount: Int,
+        importedCookieCount: Int,
+        uncertainCookieCount: Int = 0,
+        importedBookmarkCount: Int,
+        skippedCount: Int,
+        issueCount: Int,
+        timestamp: Date
+    ) {
+        self.runID = runID
+        self.source = source
+        self.sourceProfile = sourceProfile
+        self.targetProfileID = targetProfileID
+        self.status = status
+        self.importedHistoryCount = importedHistoryCount
+        self.importedCookieCount = importedCookieCount
+        self.uncertainCookieCount = uncertainCookieCount
+        self.importedBookmarkCount = importedBookmarkCount
+        self.skippedCount = skippedCount
+        self.issueCount = issueCount
+        self.timestamp = timestamp
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case runID
+        case source
+        case sourceProfile
+        case targetProfileID
+        case status
+        case importedHistoryCount
+        case importedCookieCount
+        case uncertainCookieCount
+        case importedBookmarkCount
+        case skippedCount
+        case issueCount
+        case timestamp
+    }
+
+    init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        runID = try values.decode(UUID.self, forKey: .runID)
+        source = try values.decode(BrowserImportSource.self, forKey: .source)
+        sourceProfile = try values.decode(String.self, forKey: .sourceProfile)
+        targetProfileID = try values.decode(UUID.self, forKey: .targetProfileID)
+        status = try values.decode(BrowserImportStatus.self, forKey: .status)
+        importedHistoryCount = try values.decode(Int.self, forKey: .importedHistoryCount)
+        importedCookieCount = try values.decode(Int.self, forKey: .importedCookieCount)
+        uncertainCookieCount = try values.decodeIfPresent(
+            Int.self,
+            forKey: .uncertainCookieCount
+        ) ?? 0
+        importedBookmarkCount = try values.decode(Int.self, forKey: .importedBookmarkCount)
+        skippedCount = try values.decode(Int.self, forKey: .skippedCount)
+        issueCount = try values.decode(Int.self, forKey: .issueCount)
+        timestamp = try values.decode(Date.self, forKey: .timestamp)
+    }
 }
 
 protocol BrowserSourceImporting: Sendable {
@@ -321,13 +863,55 @@ protocol BrowserSourceImporting: Sendable {
 
 protocol BrowserImportedCookieStoring: Sendable {
     func saveImportedCookie(_ cookie: BrowserImportedCookie, profileID: UUID) throws
+    func saveImportedCookies(_ cookies: [BrowserImportedCookie], profileID: UUID) throws
+}
+
+extension BrowserImportedCookieStoring {
+    func saveImportedCookies(_ cookies: [BrowserImportedCookie], profileID: UUID) throws {
+        for cookie in cookies {
+            try saveImportedCookie(cookie, profileID: profileID)
+        }
+    }
 }
 
 protocol BrowserImportAuditLogging: Sendable {
     func record(_ entry: BrowserImportAuditEntry) throws
 }
 
-enum BrowserImportError: Error, Sendable, Equatable {
+enum BrowserImportError: LocalizedError, Sendable, Equatable {
     case databaseOpenFailed(String)
     case statementFailed(String)
+    case sourceChangedDuringRead(String)
+    case invalidSourceFile(String)
+    case sourceProfileUnavailable(String)
+    case noImportableData(String)
+    case cookieDecryptionFailed(String)
+    case bookmarkRootConflict
+    case sourceChangedAfterPreview
+    case cancelled
+
+    var errorDescription: String? {
+        switch self {
+        case .databaseOpenFailed(let message):
+            return "Browser database could not be opened: \(message)"
+        case .statementFailed(let message):
+            return "Browser database could not be read: \(message)"
+        case .sourceChangedDuringRead:
+            return "Browser source changed while it was being read"
+        case .invalidSourceFile:
+            return "Browser source file is invalid or unavailable"
+        case .sourceProfileUnavailable(let profile):
+            return "Browser source profile is unavailable: \(profile)"
+        case .noImportableData(let message):
+            return message
+        case .cookieDecryptionFailed(let message):
+            return message
+        case .bookmarkRootConflict:
+            return "The imported-bookmark destination conflicts with an existing item"
+        case .sourceChangedAfterPreview:
+            return "Browser data changed after review; refresh the preview before importing"
+        case .cancelled:
+            return "Browser import was cancelled"
+        }
+    }
 }

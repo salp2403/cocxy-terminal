@@ -124,6 +124,10 @@ struct AgentPanelLocalizationSwiftTestingTests {
                 == "El agente solicitó entrada"
         )
         #expect(
+            AgentPanelLocalization.approvalTitle("Share terminal output", using: spanish)
+                == "Compartir salida del terminal"
+        )
+        #expect(
             AgentPanelLocalization.approvalBody(
                 "Allow computer_click to control this Mac locally.",
                 using: spanish
@@ -143,6 +147,29 @@ struct AgentPanelLocalizationSwiftTestingTests {
                 using: spanish
             )
                 == "La vista previa del diff no está disponible para la llamada call-1."
+        )
+        #expect(
+            AgentPanelLocalization.approvalBody(
+                [
+                    "Destination: OpenAI",
+                    "Terminal: Focused split (ABC12345)",
+                    "Command blocks: 2 of at most 64",
+                    "Terminal text has not been read yet. Approval reads only these selected blocks, redacts common secret patterns locally, and shares the bounded result once.",
+                    "Unknown secret formats may remain. Review the selected terminal before approving.",
+                ].joined(separator: "\n"),
+                using: spanish
+            )
+                == [
+                    "Destino: OpenAI",
+                    "Terminal: División enfocada (ABC12345)",
+                    "Bloques de comandos: 2 de un máximo de 64",
+                    "El texto del terminal aún no se ha leído. La aprobación lee solo estos bloques seleccionados, oculta localmente patrones comunes de secretos y comparte una vez el resultado limitado.",
+                    "Los formatos de secretos desconocidos pueden permanecer. Revisa el terminal seleccionado antes de aprobar.",
+                ].joined(separator: "\n")
+        )
+        #expect(
+            AgentPanelLocalization.statusText("Review terminal output before sharing.", using: spanish)
+                == "Revisa la salida del terminal antes de compartirla."
         )
     }
 

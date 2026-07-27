@@ -11,14 +11,14 @@ import Foundation
 ///
 /// This is a standalone copy of the app's `SocketResponse` type.
 /// The CLI must not import the main app module.
-public struct CLISocketResponse: Codable, Equatable {
+public struct CLISocketResponse: Codable, Equatable, Sendable {
     /// Matches the `id` of the originating request.
     public let id: String
 
     /// Whether the command was executed successfully.
     public let success: Bool
 
-    /// Command-specific response data. Nil on error.
+    /// Command-specific response data. Failures may include structured diagnostics.
     public let data: [String: String]?
 
     /// Error message when `success` is `false`. Nil on success.

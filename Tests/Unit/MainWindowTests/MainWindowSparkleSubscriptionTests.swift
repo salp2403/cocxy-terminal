@@ -47,8 +47,30 @@ struct MainWindowSparkleSubscriptionTests {
     /// `.receive(on: DispatchQueue.main)` operator the subscription
     /// uses. Sleep length stays generous because the operator does not
     /// re-emit synchronously even for the current thread.
+    ///
+    /// Only used by the NEGATIVE assertion (a value that must never
+    /// reach the chrome); positive effects poll with `waitForChrome`.
     private func waitForMainHop() async {
         try? await Task.sleep(nanoseconds: 50_000_000)
+    }
+
+    /// Polls the chrome until it reflects `expected`, up to a generous
+    /// ceiling.
+    ///
+    /// The propagation is produced by a block the scheduler must place on
+    /// the main queue (`.receive(on: DispatchQueue.main)`), so a fixed
+    /// clock measures scheduler latency on a loaded runner rather than the
+    /// wiring under test. The `#expect` that follows every call is
+    /// unchanged, so a value that never arrives still fails the test.
+    private func waitForChrome(
+        _ aurora: AuroraChromeController,
+        toEqual expected: CocxyUpdateAvailability?,
+        timeout: TimeInterval = 5.0
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while aurora.availableUpdate != expected, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     // MARK: - Initial wiring
@@ -91,7 +113,7 @@ struct MainWindowSparkleSubscriptionTests {
 
         let stub = makeAvailability(displayVersion: "0.1.92")
         updater.availableUpdate = stub
-        await waitForMainHop()
+        await waitForChrome(aurora, toEqual: stub)
 
         #expect(aurora.availableUpdate == stub)
     }
@@ -104,7 +126,7 @@ struct MainWindowSparkleSubscriptionTests {
 
         let critical = makeAvailability(displayVersion: "0.1.93", isCritical: true)
         updater.availableUpdate = critical
-        await waitForMainHop()
+        await waitForChrome(aurora, toEqual: critical)
 
         #expect(aurora.availableUpdate == critical)
         #expect(aurora.availableUpdate?.isCritical == true)
@@ -119,7 +141,7 @@ struct MainWindowSparkleSubscriptionTests {
         mainController.sparkleUpdater = updater
         let stub = makeAvailability(displayVersion: "0.1.94")
         updater.availableUpdate = stub
-        await waitForMainHop()
+        await waitForChrome(aurora, toEqual: stub)
         #expect(aurora.availableUpdate == stub) // baseline
 
         mainController.sparkleUpdater = nil
@@ -145,7 +167,7 @@ struct MainWindowSparkleSubscriptionTests {
         // Mutating the SECOND updater (the active one) must propagate.
         let livePayload = makeAvailability(displayVersion: "0.1.95")
         secondUpdater.availableUpdate = livePayload
-        await waitForMainHop()
+        await waitForChrome(aurora, toEqual: livePayload)
         #expect(aurora.availableUpdate == livePayload)
     }
 

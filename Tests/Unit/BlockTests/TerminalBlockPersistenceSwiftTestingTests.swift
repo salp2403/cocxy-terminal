@@ -132,6 +132,22 @@ struct TerminalBlockPersistenceSwiftTestingTests {
                 limit: 32
             ) == live
         )
+        #expect(
+            TerminalBlockRestoration.blockReferencesForDisplay(
+                live: [],
+                restored: restored,
+                limit: 32
+            ).map(\.id) == [1]
+        )
+        #expect(
+            TerminalBlockRestoration.blockReferencesForDisplay(
+                live: live.map {
+                    TerminalCommandBlockReference(id: $0.id, endTimeNs: $0.endTimeNs)
+                },
+                restored: restored,
+                limit: 32
+            ).map(\.id) == [2]
+        )
     }
 
     @Test("restoration keeps the most recent blocks when applying limits")
@@ -145,6 +161,13 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         )
 
         #expect(limited.map(\.id) == [3, 4, 5])
+        #expect(
+            TerminalBlockRestoration.blockReferencesForDisplay(
+                live: [],
+                restored: restored,
+                limit: 3
+            ).map(\.id) == [3, 4, 5]
+        )
     }
 
     @Test("restoration deduplicates persisted block IDs without changing chronology")

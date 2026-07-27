@@ -2231,6 +2231,9 @@ extension MainWindowController {
             profileManager: browserProfileManager,
             onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
             onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+            onImportData: { [weak self] profileID in
+                self?.showBrowserImportWizard(profileID: profileID)
+            },
             onDismiss: { [weak self] in self?.dismissBrowser() },
             localizer: appLocalizer()
         )
@@ -2267,6 +2270,8 @@ extension MainWindowController {
     }
 
     func dismissBrowser() {
+        browserViewModel?.revokeDOMGrabAuthorization()
+        browserViewModel?.revokeAllInitScripts()
         guard let hostingView = browserHostingView,
               let overlayContainer = overlayContainerView else {
             browserHostingView?.removeFromSuperview()
@@ -2696,6 +2701,9 @@ extension MainWindowController {
             profileManager: browserProfileManager,
             onToggleHistory: { [weak self] in self?.toggleBrowserHistory() },
             onToggleBookmarks: { [weak self] in self?.toggleBrowserBookmarks() },
+            onImportData: { [weak self] profileID in
+                self?.showBrowserImportWizard(profileID: profileID)
+            },
             onDismiss: { [weak self] in self?.dismissBrowser() },
             localizer: appLocalizer()
         )
@@ -2760,7 +2768,7 @@ extension MainWindowController {
             sftpExecutor: SystemSFTPExecutor(),
             remotePortScanner: remotePortScanner,
             onOpenRemoteBrowser: { [weak self] profile, suggestion in
-                self?.openRemoteBrowser(profile: profile, suggestion: suggestion)
+                await self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
             }
         )
         viewModel.updateLocalizer(appLocalizer())

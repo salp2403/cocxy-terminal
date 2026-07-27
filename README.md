@@ -450,7 +450,7 @@ cocxy review --submit            # Submit pending review comments to the agent
 cocxy capture-pane               # Capture terminal content as text
 cocxy send --stdin               # Read input from stdin for multiline, escape-safe send
 cocxy core-modes                 # Dump terminal diagnostic state (alt-screen, cursor, etc.)
-cocxy web-start --port 8080      # Expose the active terminal over HTTP
+cocxy web start --port 8080      # Start an authenticated loopback web terminal
 ```
 
 Run `cocxy help` for the full reference.

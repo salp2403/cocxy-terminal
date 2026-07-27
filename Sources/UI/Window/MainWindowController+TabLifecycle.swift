@@ -226,12 +226,14 @@ extension MainWindowController {
             activeSplitView = nil
             splitSurfaceViews.removeAll()
             splitViewModels.removeAll()
+            revokeBrowserAuthorizations(in: Array(panelContentViews.values))
             panelContentViews.removeAll()
         } else {
             tabSplitSurfaces = savedTabSplitSurfaceViews.removeValue(forKey: tabID) ?? [:]
             tabSplitVMs = savedTabSplitViewModels.removeValue(forKey: tabID) ?? [:]
             savedTabSplitViews.removeValue(forKey: tabID)
-            savedTabPanelContentViews.removeValue(forKey: tabID)
+            let closingPanels = savedTabPanelContentViews.removeValue(forKey: tabID) ?? [:]
+            revokeBrowserAuthorizations(in: Array(closingPanels.values))
         }
 
         for (surfaceID, _) in tabSplitSurfaces {

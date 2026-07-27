@@ -218,8 +218,21 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(spanish.string("plugins.sources", fallback: "Sources") == "Fuentes")
         #expect(spanish.string("plugins.replaceExisting", fallback: "Replace existing") == "Reemplazar existente")
+        #expect(spanish.string("plugins.installing", fallback: "Installing...") == "Instalando...")
         #expect(spanish.string("plugins.empty.installed", fallback: "No plugins installed.") == "No hay plugins instalados.")
         #expect(spanish.string("plugins.status.noUpdates", fallback: "No updates found.") == "No se encontraron actualizaciones.")
+        #expect(
+            spanish.string(
+                "plugins.status.updateCheckFailed.one",
+                fallback: "Could not check plugin updates. 1 source failed."
+            ) == "No se pudieron buscar actualizaciones. Falló 1 fuente."
+        )
+        #expect(
+            spanish.string(
+                "plugins.status.updateCheckPartial.updates",
+                fallback: "Updates found: %d. Sources not checked: %d."
+            ) == "Actualizaciones encontradas: %d. Fuentes sin revisar: %d."
+        )
         let bundledPlugin = PluginManifest(
             id: "cocxy-github-pane",
             name: "GitHub Pane",
@@ -363,6 +376,7 @@ struct AppLocalizationSwiftTestingTests {
     @MainActor
     func remoteWorkspaceStringsLocalizeSpanish() throws {
         let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
         let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
 
         #expect(spanish.string("remoteWorkspace.title", fallback: "Remote Workspaces") == "Espacios remotos")
@@ -382,6 +396,42 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("remoteWorkspace.relay.processes", fallback: "Procs:") == "Procesos:")
         #expect(spanish.string("remoteWorkspace.keys.field.passphrase", fallback: "Passphrase") == "Frase de contraseña")
         #expect(spanish.string("remoteWorkspace.sftp.emptyDirectory", fallback: "Empty directory") == "Directorio vacío")
+        #expect(spanish.string("remoteWorkspace.sftp.upload.replace.title", fallback: "Replace remote item?") == "¿Reemplazar elemento remoto?")
+        #expect(spanish.string("remoteWorkspace.sftp.upload.destinationChanged", fallback: "The remote file changed after review. Refresh and try again.") == "El archivo remoto cambió después de revisarlo. Actualiza e inténtalo de nuevo.")
+        #expect(spanish.string("remoteWorkspace.sftp.upload.unsafeDestination", fallback: "Only a regular remote file can be replaced.") == "Solo se puede reemplazar un archivo remoto regular.")
+        #expect(spanish.string("remoteWorkspace.sftp.connectionUnavailable", fallback: "Reconnect this profile before using SFTP.") == "Vuelve a conectar este perfil antes de usar SFTP.")
+        let sftpErrorTranslations = [
+            "remoteWorkspace.sftp.download.remoteChanged":
+                "El archivo remoto cambió después de revisarlo. Actualiza antes de descargarlo.",
+            "remoteWorkspace.sftp.download.unsafeRemoteFile":
+                "El archivo remoto revisado ya no permite una descarga segura. Actualiza e inténtalo de nuevo.",
+            "remoteWorkspace.sftp.remove.remoteChanged":
+                "El elemento remoto cambió después de revisarlo. Actualiza antes de eliminarlo.",
+            "remoteWorkspace.sftp.remove.unsafeRemoteItem":
+                "El elemento remoto revisado ya no permite una eliminación segura. Actualiza e inténtalo de nuevo.",
+            "remoteWorkspace.sftp.error.commandFailed":
+                "El comando SFTP falló. Revisa la conexión e inténtalo de nuevo.",
+            "remoteWorkspace.sftp.error.parseFailed":
+                "La respuesta del directorio remoto no se pudo interpretar de forma segura.",
+            "remoteWorkspace.sftp.error.transferFailed":
+                "No se pudo completar la transferencia del archivo.",
+            "remoteWorkspace.sftp.error.invalidDestination":
+                "El destino de la conexión SFTP no es válido.",
+            "remoteWorkspace.sftp.error.invalidPort":
+                "El puerto de la conexión SFTP no es válido.",
+            "remoteWorkspace.sftp.error.invalidPath":
+                "La ruta remota seleccionada no es válida.",
+            "remoteWorkspace.sftp.error.invalidCommand":
+                "No se pudo preparar la operación SFTP de forma segura.",
+            "remoteWorkspace.sftp.error.localPublishFailed":
+                "No se pudo guardar de forma segura el archivo descargado.",
+            "remoteWorkspace.sftp.error.generic":
+                "No se pudo completar la operación SFTP.",
+        ]
+        for (key, translation) in sftpErrorTranslations {
+            #expect(english.string(key, fallback: "__missing_key__") != "__missing_key__")
+            #expect(spanish.string(key, fallback: "__missing_key__") == translation)
+        }
         #expect(RemoteConnectionViewModel.SubPanel.sessions.localizedLabel(using: spanish) == "Sesiones")
         #expect(RemoteConnectionViewModel.SubPanel.tunnels.localizedDetail(using: spanish) == "Redirigir puertos locales y remotos")
         #expect(ForwardTypeOption.dynamic.localizedLabel(using: spanish) == "Dinámico")
@@ -390,6 +440,97 @@ struct AppLocalizationSwiftTestingTests {
         #expect(RemoteProfileEditor.localizedEnvironmentValuePlaceholder(using: spanish) == "valor")
         #expect(SSHKeyManagerView.localizedNewKeyNamePlaceholder(using: spanish) == "mi-llave")
         #expect(DaemonControlView.localizedForwardSpecPlaceholder(using: spanish) == "local:remoto")
+    }
+
+    @Test
+    func authenticatedProxyStringsLocalizeInEnglishAndSpanish() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let expectedEnglish = [
+            "remoteWorkspace.subPanel.proxy.detail": "Authenticated local proxy",
+            "remoteWorkspace.profileEditor.dynamicDisabled": "Legacy dynamic forward retained but disabled; remove it or use Proxy",
+            "remoteWorkspace.profileEditor.saveFailed": "Could not save profile: %@",
+            "remoteWorkspace.proxy.updating": "Updating proxy",
+            "remoteWorkspace.proxy.status.otherProfile": "Proxy session belongs to another profile",
+            "remoteWorkspace.proxy.socksToggle": "Authenticated SOCKS5 proxy",
+            "remoteWorkspace.proxy.socksPort": "SOCKS5 port",
+            "remoteWorkspace.proxy.otherProfileDetail": "Enabling here replaces the proxy session on the other profile.",
+            "remoteWorkspace.proxy.credentials": "Client Credentials",
+            "remoteWorkspace.proxy.username": "Username",
+            "remoteWorkspace.proxy.copyUsername": "Copy proxy username",
+            "remoteWorkspace.proxy.password": "Password",
+            "remoteWorkspace.proxy.socksPassword": "SOCKS Password",
+            "remoteWorkspace.proxy.httpPassword": "HTTP Password",
+            "remoteWorkspace.proxy.hidePassword": "Hide password",
+            "remoteWorkspace.proxy.revealPassword": "Reveal password",
+            "remoteWorkspace.proxy.copyPassword": "Copy proxy password",
+            "remoteWorkspace.proxy.copySOCKSPassword": "Copy SOCKS password",
+            "remoteWorkspace.proxy.copyHTTPPassword": "Copy HTTP password",
+            "remoteWorkspace.proxy.httpToggle": "Authenticated HTTP CONNECT proxy",
+            "remoteWorkspace.proxy.httpPort": "HTTP CONNECT port",
+            "remoteWorkspace.proxy.stats.connections": "Connections",
+            "remoteWorkspace.proxy.systemWide.secureUnavailable": "Unavailable for authenticated proxy sessions",
+        ]
+        let expectedSpanish = [
+            "remoteWorkspace.subPanel.proxy.detail": "Proxy local autenticado",
+            "remoteWorkspace.profileEditor.dynamicDisabled": "Redirección dinámica heredada conservada pero desactivada; elimínala o usa Proxy",
+            "remoteWorkspace.profileEditor.saveFailed": "No se pudo guardar el perfil: %@",
+            "remoteWorkspace.proxy.updating": "Actualizando proxy",
+            "remoteWorkspace.proxy.status.otherProfile": "La sesión de proxy pertenece a otro perfil",
+            "remoteWorkspace.proxy.socksToggle": "Proxy SOCKS5 autenticado",
+            "remoteWorkspace.proxy.socksPort": "Puerto SOCKS5",
+            "remoteWorkspace.proxy.otherProfileDetail": "Activarlo aquí reemplaza la sesión de proxy del otro perfil.",
+            "remoteWorkspace.proxy.credentials": "Credenciales del cliente",
+            "remoteWorkspace.proxy.username": "Usuario",
+            "remoteWorkspace.proxy.copyUsername": "Copiar usuario del proxy",
+            "remoteWorkspace.proxy.password": "Contraseña",
+            "remoteWorkspace.proxy.socksPassword": "Clave SOCKS",
+            "remoteWorkspace.proxy.httpPassword": "Clave HTTP",
+            "remoteWorkspace.proxy.hidePassword": "Ocultar contraseña",
+            "remoteWorkspace.proxy.revealPassword": "Mostrar contraseña",
+            "remoteWorkspace.proxy.copyPassword": "Copiar contraseña del proxy",
+            "remoteWorkspace.proxy.copySOCKSPassword": "Copiar clave SOCKS",
+            "remoteWorkspace.proxy.copyHTTPPassword": "Copiar clave HTTP",
+            "remoteWorkspace.proxy.httpToggle": "Proxy HTTP CONNECT autenticado",
+            "remoteWorkspace.proxy.httpPort": "Puerto HTTP CONNECT",
+            "remoteWorkspace.proxy.stats.connections": "Conexiones",
+            "remoteWorkspace.proxy.systemWide.secureUnavailable": "No disponible para sesiones de proxy autenticadas",
+        ]
+
+        #expect(expectedEnglish.allSatisfy { english[$0.key] == $0.value })
+        #expect(expectedSpanish.allSatisfy { spanish[$0.key] == $0.value })
+        #expect(Set(expectedEnglish.keys) == Set(expectedSpanish.keys))
+    }
+
+    @Test
+    func tunnelOperationFailureLocalizesAndPreservesItsFormatArgument() throws {
+        let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(
+            String(
+                format: english.string(
+                    "remoteWorkspace.portForward.operationFailed",
+                    fallback: "Tunnel operation failed: %@"
+                ),
+                "permission denied"
+            ) == "Tunnel operation failed: permission denied"
+        )
+        #expect(
+            String(
+                format: spanish.string(
+                    "remoteWorkspace.portForward.operationFailed",
+                    fallback: "Tunnel operation failed: %@"
+                ),
+                "permiso denegado"
+            ) == "Falló la operación del túnel: permiso denegado"
+        )
     }
 
     @Test
@@ -861,6 +1002,35 @@ struct AppLocalizationSwiftTestingTests {
 
         #expect(english.subtracting(spanish).isEmpty)
         #expect(spanish.subtracting(english).isEmpty)
+    }
+
+    @Test
+    func relayControlsAndFailureStatesAreLocalizedInEnglishAndSpanish() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let english = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/en.lproj/Localizable.strings")
+        )
+        let spanish = try localizationStrings(
+            at: root.appendingPathComponent("Resources/Localization/es.lproj/Localizable.strings")
+        )
+        let expectedKeys: Set<String> = [
+            "remoteWorkspace.relay.close",
+            "remoteWorkspace.relay.copyClientCommand",
+            "remoteWorkspace.relay.copyClientToken",
+            "remoteWorkspace.relay.connectionLimit",
+            "remoteWorkspace.relay.closeFailed",
+            "remoteWorkspace.relay.brokerFailed",
+            "remoteWorkspace.relay.error.invalidName",
+        ]
+
+        #expect(expectedKeys.isSubset(of: Set(english.keys)))
+        #expect(expectedKeys.isSubset(of: Set(spanish.keys)))
+        #expect(english["remoteWorkspace.relay.connectionLimit"]?.contains("%d") == true)
+        #expect(spanish["remoteWorkspace.relay.connectionLimit"]?.contains("%d") == true)
+        for key in ["remoteWorkspace.relay.closeFailed", "remoteWorkspace.relay.brokerFailed"] {
+            #expect(english[key]?.contains("%@") == true)
+            #expect(spanish[key]?.contains("%@") == true)
+        }
     }
 
     @Test

@@ -653,6 +653,158 @@ struct MCPFoundationSwiftTestingTests {
         #expect(!profile.contains(#"(allow file-write* (literal "\#(inputURL.path)"))"#))
     }
 
+    @Test("stdio launcher profile permits a named file and denies its sibling")
+    func stdioLauncherProfileDeniesUnnamedSibling() throws {
+        let sandboxExecURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        let catURL = URL(fileURLWithPath: "/bin/cat")
+        guard FileManager.default.isExecutableFile(atPath: sandboxExecURL.path),
+              FileManager.default.isExecutableFile(atPath: catURL.path) else {
+            return
+        }
+
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cocxy-mcp-file-boundary-\(UUID().uuidString)", isDirectory: true)
+        let inputURL = root.appendingPathComponent("input.json")
+        let siblingURL = root.appendingPathComponent("sibling-secret.txt")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("named-input".utf8).write(to: inputURL)
+        try Data("synthetic-sibling-secret".utf8).write(to: siblingURL)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let launcher = MCPStdioProcessLauncher(
+            sandboxPolicy: MCPStdioSandboxPolicy(inheritedEnvironment: [
+                "PATH": "/bin:/usr/bin",
+                "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
+            ])
+        )
+        let plan = try launcher.launchPlan(server: MCPServer(
+            id: "file-boundary",
+            transport: .stdio(command: catURL.path, arguments: [inputURL.path])
+        ))
+        let namedRead = try runSandboxedMCPPlan(plan)
+        var siblingArguments = plan.arguments
+        siblingArguments[siblingArguments.index(before: siblingArguments.endIndex)] = siblingURL.path
+        let siblingRead = try runSandboxedMCPPlan(plan, arguments: siblingArguments)
+
+        #expect(namedRead.status == 0)
+        #expect(namedRead.stdout == "named-input")
+        #expect(siblingRead.status != 0)
+        #expect(!siblingRead.stdout.contains("synthetic-sibling-secret"))
+    }
+
+    @Test("stdio launcher grants recursion only to valid directory arguments")
+    func stdioLauncherProfileValidatesDirectoryBeforeRecursiveGrant() throws {
+        let sandboxExecURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        let catURL = URL(fileURLWithPath: "/bin/cat")
+        guard FileManager.default.isExecutableFile(atPath: sandboxExecURL.path),
+              FileManager.default.isExecutableFile(atPath: catURL.path) else {
+            return
+        }
+
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cocxy-mcp-directory-boundary-\(UUID().uuidString)", isDirectory: true)
+        let readableDirectory = root.appendingPathComponent("readable", isDirectory: true)
+        let filesDirectory = root.appendingPathComponent("files", isDirectory: true)
+        try FileManager.default.createDirectory(at: readableDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: filesDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let readableChildURL = readableDirectory.appendingPathComponent("child.txt")
+        let outsideURL = root.appendingPathComponent("outside.txt")
+        let inputURL = filesDirectory.appendingPathComponent("input.json")
+        let invalidTraversalSiblingURL = filesDirectory.appendingPathComponent("sibling.txt")
+        try Data("directory-child".utf8).write(to: readableChildURL)
+        try Data("outside".utf8).write(to: outsideURL)
+        try Data("{}".utf8).write(to: inputURL)
+        try Data("invalid-traversal-sibling".utf8).write(to: invalidTraversalSiblingURL)
+
+        let launcher = MCPStdioProcessLauncher(
+            sandboxPolicy: MCPStdioSandboxPolicy(inheritedEnvironment: [
+                "PATH": "/bin:/usr/bin",
+                "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
+            ])
+        )
+        let directoryPlan = try launcher.launchPlan(server: MCPServer(
+            id: "directory-boundary",
+            transport: .stdio(command: catURL.path, arguments: [readableDirectory.path])
+        ))
+        var childArguments = directoryPlan.arguments
+        childArguments[childArguments.index(before: childArguments.endIndex)] = readableChildURL.path
+        var outsideArguments = directoryPlan.arguments
+        outsideArguments[outsideArguments.index(before: outsideArguments.endIndex)] = outsideURL.path
+        let childRead = try runSandboxedMCPPlan(directoryPlan, arguments: childArguments)
+        let outsideRead = try runSandboxedMCPPlan(directoryPlan, arguments: outsideArguments)
+
+        let invalidTraversalPlan = try launcher.launchPlan(server: MCPServer(
+            id: "invalid-traversal-boundary",
+            transport: .stdio(command: catURL.path, arguments: [inputURL.path + "/.."])
+        ))
+        var invalidTraversalArguments = invalidTraversalPlan.arguments
+        invalidTraversalArguments[invalidTraversalArguments.index(before: invalidTraversalArguments.endIndex)] =
+            invalidTraversalSiblingURL.path
+        let invalidTraversalRead = try runSandboxedMCPPlan(
+            invalidTraversalPlan,
+            arguments: invalidTraversalArguments
+        )
+
+        #expect(childRead.status == 0)
+        #expect(childRead.stdout == "directory-child")
+        #expect(outsideRead.status != 0)
+        #expect(!outsideRead.stdout.contains("outside"))
+        #expect(invalidTraversalRead.status != 0)
+        #expect(!invalidTraversalRead.stdout.contains("invalid-traversal-sibling"))
+    }
+
+    @Test("stdio relaunch does not promote a writable output symlink into a read capability")
+    func stdioLauncherRelaunchRejectsWritableOutputSymlink() throws {
+        let sandboxExecURL = URL(fileURLWithPath: "/usr/bin/sandbox-exec")
+        let pythonURL = URL(fileURLWithPath: "/usr/bin/python3")
+        guard FileManager.default.isExecutableFile(atPath: sandboxExecURL.path),
+              FileManager.default.isExecutableFile(atPath: pythonURL.path) else {
+            return
+        }
+
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cocxy-mcp-symlink-relaunch-\(UUID().uuidString)", isDirectory: true)
+        let targetURL = root.appendingPathComponent("target-secret.txt")
+        let outputURL = root.appendingPathComponent("server-output")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try Data("synthetic-relaunch-secret".utf8).write(to: targetURL)
+
+        let createScript = "import os, sys; os.symlink(\(String(reflecting: targetURL.path)), sys.argv[1])"
+        let server = MCPServer(
+            id: "symlink-relaunch",
+            transport: .stdio(
+                command: pythonURL.path,
+                arguments: ["-c", createScript, outputURL.path]
+            )
+        )
+        let launcher = MCPStdioProcessLauncher(
+            sandboxPolicy: MCPStdioSandboxPolicy(inheritedEnvironment: [
+                "PATH": "/bin:/usr/bin",
+                "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
+            ])
+        )
+
+        let firstPlan = try launcher.launchPlan(server: server)
+        let createResult = try runSandboxedMCPPlan(firstPlan)
+        #expect(createResult.status == 0)
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: outputURL.path) == targetURL.path)
+
+        let secondPlan = try launcher.launchPlan(server: server)
+        let secondProfile = try #require(secondPlan.sandboxProfile)
+        let canonicalTarget = targetURL.resolvingSymlinksInPath().standardizedFileURL.path
+        let readScript = "print(open(\(String(reflecting: targetURL.path))).read(), end='')"
+        var readArguments = secondPlan.arguments
+        let scriptIndex = try #require(readArguments.firstIndex(of: createScript))
+        readArguments[scriptIndex] = readScript
+        let readResult = try runSandboxedMCPPlan(secondPlan, arguments: readArguments)
+
+        #expect(!secondProfile.contains(#"(allow file-read* (literal "\#(canonicalTarget)"))"#))
+        #expect(readResult.status != 0)
+        #expect(!readResult.stdout.contains("synthetic-relaunch-secret"))
+    }
+
     @Test("stdio launcher falls back explicitly when sandbox-exec is unavailable")
     func stdioLauncherFallsBackWhenSandboxExecIsUnavailable() throws {
         let launcher = MCPStdioProcessLauncher(
@@ -1209,6 +1361,32 @@ private func temporaryDirectory(named name: String) -> URL {
         .appendingPathComponent("\(name)-\(UUID().uuidString)", isDirectory: true)
     try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
     return url
+}
+
+private func runSandboxedMCPPlan(
+    _ plan: MCPStdioLaunchPlan,
+    arguments: [String]? = nil
+) throws -> (status: Int32, stdout: String, stderr: String) {
+    let process = Process()
+    let stdoutPipe = Pipe()
+    let stderrPipe = Pipe()
+    process.executableURL = plan.executableURL
+    process.arguments = arguments ?? plan.arguments
+    process.environment = plan.environment
+    process.currentDirectoryURL = plan.currentDirectoryURL
+    process.standardOutput = stdoutPipe
+    process.standardError = stderrPipe
+    try process.run()
+    process.waitUntilExit()
+    let stdout = String(
+        data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+    ) ?? ""
+    let stderr = String(
+        data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
+        encoding: .utf8
+    ) ?? ""
+    return (process.terminationStatus, stdout, stderr)
 }
 
 private func writeMCPServerScript(to url: URL) throws {
