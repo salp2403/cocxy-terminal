@@ -900,17 +900,24 @@ jobs:
           # The 0.0.0 tokens in web/public/*.html are intentional placeholders — they only
           # become the real version when these sed commands rewrite them on the server.
           # Match the regex [0-9]*\.[0-9]*\.[0-9]* so any prior version also gets replaced.
+          #
+          # releases.html is excluded from the version rewrites: it is generated per
+          # release by generate-releases-page.mjs and every card already carries its
+          # own tag, download URL and date. Rewriting it collapsed the whole history
+          # onto the version being shipped — the published page listed fifty cards
+          # all titled v1.18.0 with fifty different dates. Asset cache-busting below
+          # still applies to it, so it stays consistent with the service worker.
           ASSET_VERSION="${VERSION}-${GITHUB_SHA::12}"
           ssh -o StrictHostKeyChecking=no -i "$DEPLOY_KEY" ${DEPLOY_TARGET} \
             "set -e; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|releases/download/v[0-9]*\.[0-9]*\.[0-9]*/CocxyTerminal-|releases/download/v${VERSION}/CocxyTerminal-|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|Download v[0-9]*\.[0-9]*\.[0-9]*|Download v${VERSION}|g; s|Descargar v[0-9]*\.[0-9]*\.[0-9]*|Descargar v${VERSION}|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -not -name 'releases.html' -print0 | xargs -0 sed -i 's|CocxyTerminal-[0-9]*\.[0-9]*\.[0-9]*\.dmg|CocxyTerminal-${VERSION}.dmg|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -not -name 'releases.html' -print0 | xargs -0 sed -i 's|releases/download/v[0-9]*\.[0-9]*\.[0-9]*/CocxyTerminal-|releases/download/v${VERSION}/CocxyTerminal-|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -not -name 'releases.html' -print0 | xargs -0 sed -i 's|>v[0-9]*\.[0-9]*\.[0-9]*<|>v${VERSION}<|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -not -name 'releases.html' -print0 | xargs -0 sed -i 's|Download v[0-9]*\.[0-9]*\.[0-9]*|Download v${VERSION}|g; s|Descargar v[0-9]*\.[0-9]*\.[0-9]*|Descargar v${VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|/js/main.js?v=[0-9A-Za-z._-]*|/js/main.js?v=${ASSET_VERSION}|g; s|/js/theme-switcher.js?v=[0-9A-Za-z._-]*|/js/theme-switcher.js?v=${ASSET_VERSION}|g'; \
              find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g'; \
-             find ${DEPLOY_PATH} -type f -name '*.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'; \
+             find ${DEPLOY_PATH} -type f -name '*.html' -not -name 'releases.html' -print0 | xargs -0 sed -i 's|\"softwareVersion\": \"[0-9]*\.[0-9]*\.[0-9]*\"|\"softwareVersion\": \"${VERSION}\"|g'; \
              sed -i 's|cocxy-web-static-v[0-9A-Za-z._-]*|cocxy-web-static-v${ASSET_VERSION}|g' ${DEPLOY_PATH}service-worker.js; \
              sed -i 's|style.css?v=[0-9A-Za-z._-]*|style.css?v=${ASSET_VERSION}|g; s|main.js?v=[0-9A-Za-z._-]*|main.js?v=${ASSET_VERSION}|g; s|theme-switcher.js?v=[0-9A-Za-z._-]*|theme-switcher.js?v=${ASSET_VERSION}|g; s|cocxy-preview.avif?v=[0-9A-Za-z._-]*|cocxy-preview.avif?v=${ASSET_VERSION}|g; s|cocxy-preview.webp?v=[0-9A-Za-z._-]*|cocxy-preview.webp?v=${ASSET_VERSION}|g; s|cocxy-preview.png?v=[0-9A-Za-z._-]*|cocxy-preview.png?v=${ASSET_VERSION}|g' ${DEPLOY_PATH}service-worker.js; \
              sed -i 's|Version: [0-9]*\.[0-9]*\.[0-9]*|Version: ${VERSION}|g' ${DEPLOY_PATH}llms.txt; \
