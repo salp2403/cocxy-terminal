@@ -38,6 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   executions permanently unreconcilable.
 - Fixed notebooks and workflows intermittently refusing to start when several
   of them ran for the first time at once.
+- Fixed closing a terminal surface stalling, and reporting failure, when the
+  program running in it was still producing output.
 - Fixed the release pipeline stripping the trailing newline from deploy keys.
 
 ### Security

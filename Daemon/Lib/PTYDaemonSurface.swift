@@ -28,6 +28,15 @@ final class PTYDaemonSurface: @unchecked Sendable {
     static let maximumColumns = 2_048
     static let maximumCells = 131_072
 
+    /// Deadline for the asynchronous teardown that `close` waits on.
+    ///
+    /// Derived from the reap budget on purpose: the cancel handler spends at
+    /// most `terminationBudget` signalling and reaping the child, and the
+    /// remaining slack covers the hop onto `ioQueue` plus the CocxyCore
+    /// teardown. Judging that work against an unrelated constant is what let
+    /// a successful close report `ok: false` under load.
+    static let cleanupDeadline: TimeInterval = TerminalProcessBoundary.terminationBudget + 1.5
+
     let surfaceID: String
     let shellPID: Int32
     let ptyMasterFD: Int32
@@ -286,7 +295,9 @@ final class PTYDaemonSurface: @unchecked Sendable {
             writer.write(PTYDaemonEvent(event: .surfaceClosed, surfaceID: surfaceID))
         }
         guard waitForCleanup else { return true }
-        guard cleanupGroup.wait(timeout: .now() + 3) == .success else { return false }
+        guard cleanupGroup.wait(timeout: .now() + Self.cleanupDeadline) == .success else {
+            return false
+        }
         return stateLock.withLock { cleanupSucceeded }
     }
 
@@ -312,9 +323,19 @@ final class PTYDaemonSurface: @unchecked Sendable {
         source.setEventHandler { [weak self] in
             self?.readAvailablePTYBytes()
         }
-        source.setCancelHandler { [weak self, terminal, pty, callbackContext, shellPID, surfaceID, cleanupGroup] in
+        source.setCancelHandler { [weak self, terminal, pty, callbackContext, shellPID, ptyMasterFD, surfaceID, cleanupGroup] in
             cocxycore_terminal_detach_pty(terminal)
-            let didReap = TerminalProcessBoundary.terminateAndReapPTYChild(shellPID)
+            // Cancelling this source removes the only reader of the PTY
+            // master, so a child that is mid-`write` to its terminal blocks on
+            // a full PTY buffer. It still takes SIGHUP and enters the exiting
+            // state, but it cannot finish flushing, so it never becomes
+            // reapable — `ps` reports it as `E` for as long as the daemon
+            // waits. Draining on every poll keeps the child's last writes
+            // moving so it can actually exit, instead of deadlocking against
+            // the very reader this surface just shut down.
+            let didReap = TerminalProcessBoundary.terminateAndReapPTYChild(shellPID) {
+                PTYDaemonSurface.drainPendingOutput(pty, masterFD: ptyMasterFD)
+            }
             cocxycore_pty_destroy(pty)
             cocxycore_terminal_destroy(terminal)
             callbackContext?.release()
@@ -334,6 +355,20 @@ final class PTYDaemonSurface: @unchecked Sendable {
         }
         source.resume()
         exitMonitor.resume()
+    }
+
+    /// Discards whatever the child has already written to the PTY master
+    /// without ever blocking. Used while a closing surface waits for its
+    /// child to exit: the surface's reader is gone by then, and a full PTY
+    /// buffer would otherwise wedge the child mid-`write`.
+    static func drainPendingOutput(_ pty: OpaquePointer, masterFD: Int32) {
+        guard masterFD >= 0 else { return }
+        var descriptor = pollfd(fd: masterFD, events: Int16(POLLIN), revents: 0)
+        var scratch = [UInt8](repeating: 0, count: readBufferSize)
+        while Darwin.poll(&descriptor, 1, 0) > 0, descriptor.revents & Int16(POLLIN) != 0 {
+            guard cocxycore_pty_read(pty, &scratch, scratch.count) > 0 else { return }
+            descriptor.revents = 0
+        }
     }
 
     private func pollChildExit() {
