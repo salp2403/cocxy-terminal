@@ -139,7 +139,12 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         #expect(controller.tabSurfaceMap[deferredTabID] == nil)
 
         controller.scheduleDeferredRestoredTabMetadataHydration(after: 0)
-        await settleMainQueue()
+        // Hydration spawns a git subprocess and reads config from disk before
+        // hopping back to the main actor, so a fixed sleep cannot bound it on a
+        // loaded machine. The assertion below still fails if it never lands.
+        _ = await waitForMainActorCondition {
+            controller.tabManager.tab(for: deferredTabID)?.projectConfig != nil
+        }
 
         #expect(controller.tabManager.tab(for: deferredTabID)?.projectConfig?.fontSize == 21)
         #expect(controller.tabSurfaceMap[deferredTabID] == nil)
@@ -281,13 +286,16 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
         controller.installSessionRestoreShield()
         let shield = try #require(controller.sessionRestoreShieldView)
-        controller.scheduleSessionRestoreShieldRemoval()
+        // The 1.25s hard fallback is not what these tests exercise: pushed out
+        // so the only path that can remove the shield inside the poll window is
+        // the presented-frames one, which is the behaviour under test.
+        controller.scheduleSessionRestoreShieldRemoval(after: 30)
 
         #expect(hostView.onFramePresented != nil)
         hostView.onFramePresented?()
         hostView.onFramePresented?()
 
-        try await Task.sleep(nanoseconds: 430_000_000)
+        try await waitForShieldRemoval(on: controller)
 
         #expect(controller.sessionRestoreShieldView == nil)
         #expect(shield.superview == nil)
@@ -305,12 +313,15 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
         controller.installSessionRestoreShield()
         let shield = try #require(controller.sessionRestoreShieldView)
-        controller.scheduleSessionRestoreShieldRemoval()
+        // The 1.25s hard fallback is not what these tests exercise: pushed out
+        // so the only path that can remove the shield inside the poll window is
+        // the presented-frames one, which is the behaviour under test.
+        controller.scheduleSessionRestoreShieldRemoval(after: 30)
 
         #expect(hostView.immediateRedrawRequestCount == 1)
         #expect(controller.sessionRestoreShieldView === shield)
 
-        try await Task.sleep(nanoseconds: 430_000_000)
+        try await waitForShieldRemoval(on: controller)
 
         #expect(controller.sessionRestoreShieldView == nil)
         #expect(shield.superview == nil)
@@ -350,10 +361,14 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
         controller.installSessionRestoreShield()
         let shield = try #require(controller.sessionRestoreShieldView)
-        controller.scheduleSessionRestoreShieldRemoval()
+        // Same reason as the sibling tests: the hard fallback would remove the
+        // shield on its own inside the poll window and mask a broken frame path.
+        controller.scheduleSessionRestoreShieldRemoval(after: 30)
 
         hostView.onFramePresented?()
 
+        // Deliberately fixed: this asserts the shield is STILL present after
+        // only one of the two required frames, so waiting is the point.
         try await Task.sleep(nanoseconds: 430_000_000)
 
         #expect(controller.sessionRestoreShieldView === shield)
@@ -361,7 +376,7 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
 
         hostView.onFramePresented?()
 
-        try await Task.sleep(nanoseconds: 430_000_000)
+        try await waitForShieldRemoval(on: controller)
 
         #expect(controller.sessionRestoreShieldView == nil)
         #expect(shield.superview == nil)
@@ -581,6 +596,24 @@ struct AppDelegateLazySessionRestoreSwiftTestingTests {
         await Task.yield()
         try? await Task.sleep(nanoseconds: 50_000_000)
         await Task.yield()
+    }
+
+    /// Polls a main-actor condition until it holds or the budget runs out.
+    ///
+    /// Returns whether it was observed, so the caller's assertion still fails
+    /// when the effect never happens — a fixed sleep would instead fail
+    /// whenever a loaded machine simply scheduled the work late.
+    private func waitForMainActorCondition(
+        timeoutNanoseconds: UInt64 = 5_000_000_000,
+        pollNanoseconds: UInt64 = 10_000_000,
+        _ condition: @MainActor () -> Bool
+    ) async -> Bool {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if condition() { return true }
+            try? await Task.sleep(nanoseconds: pollNanoseconds)
+        }
+        return condition()
     }
 
     private func waitForShieldRemoval(

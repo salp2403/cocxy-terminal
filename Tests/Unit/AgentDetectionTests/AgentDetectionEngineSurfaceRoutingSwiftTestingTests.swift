@@ -446,7 +446,17 @@ struct AgentDetectionEngineSurfaceRoutingSwiftTestingTests {
         engine.processTerminalOutput(Data("first output chunk\n".utf8), surfaceID: surface)
         try await Task.sleep(nanoseconds: 80_000_000)
         engine.processTerminalOutput(Data("second output chunk\n".utf8), surfaceID: surface)
-        try await Task.sleep(nanoseconds: 120_000_000)
+
+        // The timing fallback emits from its own scheduled work, so wait for the
+        // transition rather than for a fixed span. The assertions below still
+        // fail if it never arrives or carries the wrong payload.
+        let transitionDeadline = DispatchTime.now().uptimeNanoseconds + 5_000_000_000
+        while DispatchTime.now().uptimeNanoseconds < transitionDeadline {
+            if captured.contains(where: { $0.surfaceID == surface && $0.state == .working }) {
+                break
+            }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
 
         let timingTransition = captured.last {
             $0.surfaceID == surface && $0.state == .working
