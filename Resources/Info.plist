@@ -2,18 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDisplayName</key>
-	<string>Cocxy Terminal</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
-	<key>CFBundleExecutable</key>
-	<string>CocxyTerminal</string>
-	<key>CFBundleIconFile</key>
-	<string>AppIcon</string>
-	<key>CFBundleIconName</key>
-	<string>AppIcon</string>
-	<key>CFBundleIdentifier</key>
-	<string>dev.cocxy.terminal</string>
+	<key>CFBundleDisplayName</key>
+	<string>Cocxy Terminal</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -29,6 +21,14 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>CocxyTerminal</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>dev.cocxy.terminal</string>
 	<key>CFBundleName</key>
 	<string>Cocxy Terminal</string>
 	<key>CFBundlePackageType</key>
@@ -48,14 +48,14 @@
 	</dict>
 	<key>NSAppleScriptEnabled</key>
 	<true/>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>Copyright (c) 2026 Said Arturo Lopez. MIT License.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Cocxy uses the camera only when you explicitly import an image with Continuity Camera.</string>
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright (c) 2026 Said Arturo Lopez. MIT License.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Cocxy uses the microphone only when you start local Voice input.</string>
 	<key>NSPrincipalClass</key>
