@@ -17,7 +17,10 @@ jobs:
   build-and-test:
     name: Build & Test (Unprivileged)
     runs-on: macos-15
-    timeout-minutes: 45
+    # Debug build, release build, 3158 XCTest cases and 585 serialised Swift
+    # Testing suites land at roughly 43 minutes, so a 45 minute cap cancelled
+    # healthy runs whenever a runner was a few minutes slower than usual.
+    timeout-minutes: 70
 
     steps:
       - name: Checkout
