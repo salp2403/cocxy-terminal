@@ -148,6 +148,22 @@ private func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
 }
 
 @MainActor
+private func waitForRelayEffect(
+    within timeout: Duration = .seconds(5),
+    _ condition: @MainActor () -> Bool
+) async -> Bool {
+    // These effects come from tasks the scheduler must place, so a fixed sleep
+    // can expire while the behaviour is perfectly correct. Waiting for the
+    // effect keeps the assertion honest: it still fails if it never happens.
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
+}
+
+@MainActor
 private func connectIdleRelayTestClient(to port: UInt16) async throws -> NWConnection {
     let connection = NWConnection(
         host: .ipv4(.loopback),
@@ -416,12 +432,14 @@ struct RelayAuthBrokerTests {
         let connection = try await connectIdleRelayTestClient(to: port)
         defer { connection.cancel() }
 
-        try await Task.sleep(nanoseconds: 80_000_000)
+        let rejected = await waitForRelayEffect {
+            writer.entries.contains { entry in
+                entry.contains("connectionRejected") && entry.contains("Handshake timed out")
+            }
+        }
 
-        #expect(writer.entries.contains { entry in
-            entry.contains("connectionRejected") && entry.contains("Handshake timed out")
-        })
-        #expect(broker.activeConnections == 0)
+        #expect(rejected)
+        #expect(await waitForRelayEffect { broker.activeConnections == 0 })
     }
 
     @Test("Deactivation denies traffic while retaining the quarantine listener")
@@ -593,8 +611,7 @@ struct RelayAuthBrokerTests {
         defer { newConnection.cancel() }
         #expect(newResponse == Data("after-rotation".utf8))
 
-        try await Task.sleep(nanoseconds: 50_000_000)
-        #expect(broker.activeConnections == 1)
+        #expect(await waitForRelayEffect { broker.activeConnections == 1 })
     }
 
     @Test("Provisioned remote client authenticates and relays real bytes")
