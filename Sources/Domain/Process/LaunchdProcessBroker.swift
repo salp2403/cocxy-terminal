@@ -198,31 +198,47 @@ final class LaunchdLocalExecutionGate: @unchecked Sendable {
             seconds: lockWaitSeconds,
             to: LaunchdMonotonicClock.now()
         )
-        // O_EXLOCK makes first publication and locking one kernel operation. Without
-        // it, a contender can lock the newly visible zero-byte file before its creator.
-        while !stateWasCreated, flock(stateDescriptor.rawValue, LOCK_EX | LOCK_NB) == -1 {
-            let lockError = errno
-            if lockError == EINTR { continue }
-            if lockError == EWOULDBLOCK || lockError == EAGAIN {
-                guard LaunchdMonotonicClock.now() < lockDeadline else {
-                    throw BoundedProcessRunnerError.secureCleanupUnverified(
-                        "timed out waiting for the per-user execution gate"
-                    )
-                }
-                usleep(Self.lockPollMicroseconds)
-                continue
-            }
-            throw BoundedProcessRunnerError.systemCallFailed(
-                operation: "lock local execution gate state",
-                code: lockError
+        // A creator already holds the lock through `O_EXLOCK`; everyone else has
+        // to take it explicitly.
+        if !stateWasCreated {
+            try acquireStateLock(
+                descriptor: stateDescriptor.rawValue,
+                deadline: lockDeadline
             )
         }
         defer { _ = flock(stateDescriptor.rawValue, LOCK_UN) }
-        try verifyStateFile(descriptor: stateDescriptor.rawValue)
+        var stateByteCount = try verifyStateFile(descriptor: stateDescriptor.rawValue)
         try verifyStateFileLink(
             descriptor: stateDescriptor.rawValue,
             rootDescriptor: rootDescriptor.rawValue
         )
+        // `O_EXCL` publishes the name before `O_EXLOCK` grants the lock — measured
+        // on macOS, not theoretical — so a contender can hold the lock over a file
+        // whose creator has not written it yet. That emptiness is transient and the
+        // only cure is to step aside: the creator is parked inside its own `open`
+        // and cannot make progress while we hold the lock. Emptiness that outlives
+        // the deadline is a genuinely truncated state, which `readState` still
+        // rejects, so waiting here never turns a fail-closed gate into an open one.
+        while !stateWasCreated,
+              stateByteCount == 0,
+              LaunchdMonotonicClock.now() < lockDeadline {
+            guard flock(stateDescriptor.rawValue, LOCK_UN) == 0 else {
+                throw BoundedProcessRunnerError.systemCallFailed(
+                    operation: "yield local execution gate state",
+                    code: errno
+                )
+            }
+            usleep(Self.lockPollMicroseconds)
+            try acquireStateLock(
+                descriptor: stateDescriptor.rawValue,
+                deadline: lockDeadline
+            )
+            stateByteCount = try verifyStateFile(descriptor: stateDescriptor.rawValue)
+            try verifyStateFileLink(
+                descriptor: stateDescriptor.rawValue,
+                rootDescriptor: rootDescriptor.rawValue
+            )
+        }
         if stateWasCreated {
             try writeState(
                 nil,
@@ -238,7 +254,29 @@ final class LaunchdLocalExecutionGate: @unchecked Sendable {
         return result
     }
 
-    private func verifyStateFile(descriptor: Int32) throws {
+    private func acquireStateLock(descriptor: Int32, deadline: UInt64) throws {
+        while flock(descriptor, LOCK_EX | LOCK_NB) == -1 {
+            let lockError = errno
+            if lockError == EINTR { continue }
+            if lockError == EWOULDBLOCK || lockError == EAGAIN {
+                guard LaunchdMonotonicClock.now() < deadline else {
+                    throw BoundedProcessRunnerError.secureCleanupUnverified(
+                        "timed out waiting for the per-user execution gate"
+                    )
+                }
+                usleep(Self.lockPollMicroseconds)
+                continue
+            }
+            throw BoundedProcessRunnerError.systemCallFailed(
+                operation: "lock local execution gate state",
+                code: lockError
+            )
+        }
+    }
+
+    /// Returns the state size so callers can tell a gate that is still being
+    /// published apart from an established one without a second `fstat`.
+    private func verifyStateFile(descriptor: Int32) throws -> off_t {
         var status = stat()
         guard fstat(descriptor, &status) == 0,
               status.st_uid == geteuid(),
@@ -251,6 +289,7 @@ final class LaunchdLocalExecutionGate: @unchecked Sendable {
                 "the per-user execution gate state is not authentic"
             )
         }
+        return status.st_size
     }
 
     private func verifyStateFileLink(
@@ -275,7 +314,7 @@ final class LaunchdLocalExecutionGate: @unchecked Sendable {
     }
 
     private func readState(descriptor: Int32) throws -> PersistentState? {
-        try verifyStateFile(descriptor: descriptor)
+        _ = try verifyStateFile(descriptor: descriptor)
         var before = stat()
         guard fstat(descriptor, &before) == 0,
               lseek(descriptor, 0, SEEK_SET) == 0 else {
