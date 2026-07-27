@@ -2792,14 +2792,19 @@ struct NotebookProcessRunnerSwiftTestingTests {
         try #require(kill(broker.pid, SIGSTOP) == 0)
         if let identity { await notebookExpectProcessGone(identity) }
 
-        let stopDeadline = DispatchTime.now().uptimeNanoseconds + 2_000_000_000
+        // Generous budget because each pass shells out to `launchctl print` once
+        // per domain: a query that exhausts its own timeout is classified as
+        // `.unknown`, so a tight loop would report "not stopped" purely from how
+        // slow the machine is. `#expect(supervisorStopped)` below still fails if
+        // the supervisor never stops.
+        let stopDeadline = DispatchTime.now().uptimeNanoseconds + 10_000_000_000
         var supervisorStopped = false
         while DispatchTime.now().uptimeNanoseconds < stopDeadline {
             let states = try LaunchdControlClient.domains.map {
                 try LaunchdControlClient().presence(
                     domain: $0,
                     label: securedLease.label,
-                    timeoutSeconds: 0.5
+                    timeoutSeconds: 2
                 )
             }
             supervisorStopped = states.allSatisfy { presence in

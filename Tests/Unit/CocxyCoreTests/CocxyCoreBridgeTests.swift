@@ -1682,9 +1682,18 @@ func readPreedit(from terminal: OpaquePointer) -> String {
     return String(decoding: buffer.prefix(copied), as: UTF8.self)
 }
 
+/// Polls `condition` until it holds, or records a failure once the cap
+/// expires.
+///
+/// Most callers wait for a real PTY round-trip against a freshly spawned
+/// child: spawn, write, echo, read source, main-queue hop. The default cap
+/// is deliberately generous because it is a cap, not a wait — the loop
+/// returns the instant the condition holds, so a green run pays only the
+/// poll interval, while a loaded 3-vCPU machine is not failed for being
+/// slow. The `Issue.record` below still fires if the effect never arrives.
 func waitUntil(
-    timeoutNanoseconds: UInt64 = 1_500_000_000,
-    pollNanoseconds: UInt64 = 50_000_000,
+    timeoutNanoseconds: UInt64 = 5_000_000_000,
+    pollNanoseconds: UInt64 = 10_000_000,
     condition: @escaping @Sendable @MainActor () -> Bool
 ) async throws {
     let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
@@ -1693,6 +1702,9 @@ func waitUntil(
             return
         }
         try await Task.sleep(nanoseconds: pollNanoseconds)
+    }
+    if await MainActor.run(body: condition) {
+        return
     }
     Issue.record("Timed out waiting for condition")
 }

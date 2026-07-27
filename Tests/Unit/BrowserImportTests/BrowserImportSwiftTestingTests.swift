@@ -1893,8 +1893,18 @@ struct BrowserImportSwiftTestingTests {
             #expect(error.totalCount == 2)
         }
 
-        try? await Task.sleep(nanoseconds: 100_000_000)
         let dataStore = WKWebsiteDataStore(forIdentifier: profileID)
+        // The first batch reaches the network process asynchronously, so poll for
+        // it instead of timing it. The settle window that follows is deliberate
+        // and unchanged: it is the negative half of the assertion, the window in
+        // which a trailing write of "second" would still become visible and fail
+        // the check below.
+        _ = await BrowserImportFixture.waitForCookieNames(
+            in: dataStore,
+            domain: "budget.example",
+            toEqual: ["first"]
+        )
+        try? await Task.sleep(nanoseconds: 100_000_000)
         let cookies = await BrowserImportFixture.cookies(in: dataStore)
             .filter { $0.domain == "budget.example" }
         #expect(cookies.map(\.name) == ["first"])
@@ -2362,6 +2372,29 @@ private enum BrowserImportFixture {
             try? await Task.sleep(nanoseconds: 10_000_000)
         }
         return condition()
+    }
+
+    /// Polls the persisted cookie snapshot until it matches `expected`. The names
+    /// only become visible once WebKit has flushed the write to its network
+    /// process — work the scheduler still has to place — so a fixed clock would
+    /// measure that latency instead of the batch boundary under test. Callers
+    /// keep their own `#expect`, which still fails when the write never lands.
+    @MainActor
+    static func waitForCookieNames(
+        in dataStore: WKWebsiteDataStore,
+        domain: String,
+        toEqual expected: [String],
+        timeout: TimeInterval = 5
+    ) async -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+        while true {
+            let names = await cookies(in: dataStore)
+                .filter { $0.domain == domain }
+                .map(\.name)
+            if names == expected { return true }
+            if Date() >= deadline { return false }
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
     }
 
     @MainActor

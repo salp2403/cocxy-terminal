@@ -219,7 +219,7 @@ struct MarkdownContentViewTests {
         let view = MarkdownContentView(filePath: url)
         view.sourceViewForTesting.replaceEntireSource(with: "# Saved\n\nBody")
 
-        try await Task.sleep(for: .milliseconds(300))
+        await waitForFileContents(of: url, toEqual: "# Saved\n\nBody")
 
         let saved = try String(contentsOf: url, encoding: .utf8)
         #expect(saved == "# Saved\n\nBody")
@@ -425,6 +425,22 @@ struct MarkdownContentViewTests {
     }
 
     // MARK: - Helpers
+
+    /// Polls the file on disk instead of sleeping a fixed window: the autosave
+    /// is a debounced work item the main queue still has to run, so a fixed
+    /// clock measures scheduler latency rather than whether the editor saves at
+    /// all. Awaiting yields the main actor so that queue can drain, and the
+    /// caller's `#expect` still fails when the save never lands.
+    private func waitForFileContents(
+        of url: URL,
+        toEqual expected: String,
+        timeout: TimeInterval = 5
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while (try? String(contentsOf: url, encoding: .utf8)) != expected, Date() < deadline {
+            try? await Task.sleep(nanoseconds: 10_000_000)
+        }
+    }
 
     private func createTempMarkdownFile(content: String) -> URL {
         let tempDir = FileManager.default.temporaryDirectory

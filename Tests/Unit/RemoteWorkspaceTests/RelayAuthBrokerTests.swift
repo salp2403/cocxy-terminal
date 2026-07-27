@@ -386,8 +386,18 @@ struct RelayAuthBrokerTests {
         #expect(competingQuarantine.start(on: port) == nil)
 
         quarantine.stop()
-        try await Task.sleep(nanoseconds: 10_000_000)
-        #expect(competingQuarantine.start(on: port) == port)
+        // `stop()` releases the descriptor from a DispatchSource cancel handler
+        // the scheduler must place on `.main`, so the rebind is retried until it
+        // succeeds instead of guessing a fixed delay. Retrying is safe because
+        // `start` records state only on its success path, leaving a failed
+        // attempt without side effects.
+        var rebound: UInt16?
+        _ = await waitForRelayEffect {
+            rebound = competingQuarantine.start(on: port)
+            return rebound != nil
+        }
+
+        #expect(rebound == port)
     }
 
     @Test("Ordinary service bytes are rejected before the local target")
@@ -410,8 +420,10 @@ struct RelayAuthBrokerTests {
 
         try await sendRelayTestPayload(request, to: port)
 
-        #expect(writer.entries.contains { entry in
-            entry.contains("connectionRejected") && entry.contains(channelID.uuidString)
+        #expect(await waitForRelayEffect {
+            writer.entries.contains { entry in
+                entry.contains("connectionRejected") && entry.contains(channelID.uuidString)
+            }
         })
         #expect(broker.activeConnections == 0)
     }
@@ -526,8 +538,10 @@ struct RelayAuthBrokerTests {
 
         try await sendRelayTestPayload(handshake, to: port)
 
-        #expect(writer.entries.contains { entry in
-            entry.contains("connectionAccepted") && entry.contains(channelID.uuidString)
+        #expect(await waitForRelayEffect {
+            writer.entries.contains { entry in
+                entry.contains("connectionAccepted") && entry.contains(channelID.uuidString)
+            }
         })
     }
 
@@ -672,8 +686,10 @@ struct RelayAuthBrokerTests {
         )
         try await sendRelayTestPayload(handshake, to: port)
 
-        #expect(writer.entries.contains { entry in
-            entry.contains("connectionRejected") && entry.contains("replayDetected")
+        #expect(await waitForRelayEffect {
+            writer.entries.contains { entry in
+                entry.contains("connectionRejected") && entry.contains("replayDetected")
+            }
         })
     }
 

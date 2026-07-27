@@ -127,8 +127,13 @@ struct AgentHTTPTransportSwiftTestingTests {
         "\(scenario.rawValue)-\(UUID().uuidString)"
     }
 
+    /// Polls for `stopLoading` instead of measuring a fixed window: the stop is
+    /// delivered by URLSession's delegate queue, work the scheduler still has to
+    /// place, so a short clock measures scheduler latency rather than whether the
+    /// transport actually cancelled. Returns false — and therefore fails the
+    /// caller's `#expect` — when the cancellation never arrives.
     private func waitForCancellation(of id: String) async -> Bool {
-        for _ in 0..<100 {
+        for _ in 0..<500 {
             if BoundedHTTPTestURLProtocol.recorder.snapshot(id).stopped {
                 return true
             }

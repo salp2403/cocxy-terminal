@@ -221,8 +221,12 @@ struct AuroraNotesSectionSwiftTestingTests {
 
         let refreshTask = controller.refreshNotesSummaries()
 
-        let recordedIDs = try await recorded.firstSet(timeout: 1.0)
+        // Await the refresh first: the provider call happens inside that task, so
+        // reading the recorder afterwards is a plain lookup instead of a race
+        // between the continuation and the recorder's timeout arm. The
+        // expectation below still fails if the provider is fed other keys.
         await refreshTask?.value
+        let recordedIDs = try await recorded.firstSet(timeout: 5.0)
         #expect(recordedIDs == Set(["id-alpha", "id-beta"]))
     }
 

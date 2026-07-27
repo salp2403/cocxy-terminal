@@ -315,9 +315,13 @@ struct DBCloudHelperSwiftTestingTests {
             exec /usr/bin/yes flood
             """
         )
+        // The subject here is cancellation, not the timeout. A one-minute budget
+        // keeps the runner's own deadline from firing first and satisfying the
+        // `catch` with `.timedOut` instead — the timeout path has its own test
+        // (`timeoutTerminatesChild`) and keeps a one-second budget there.
         let runner = LocalDBCloudHelperRunner(
             configuration: DBCloudHelperRunnerConfiguration(
-                timeoutSeconds: 5,
+                timeoutSeconds: 60,
                 terminationGracePeriodSeconds: 0.2,
                 maximumRetainedBytesPerStream: 8 * 1_024
             )

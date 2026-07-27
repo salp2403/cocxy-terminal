@@ -212,7 +212,13 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         let store = InMemoryICloudSyncSecretStore()
         let secrets = ICloudSyncSecrets(store: store)
         try secrets.saveMasterPassword("sync password")
-        let exporter = RecordingICloudSyncExporter(delay: 0.15)
+        // The first export is held open by a gate the test opens itself, not by
+        // a wall-clock delay: a fixed delay can expire while a loaded scheduler
+        // is still getting the test to the overlapping call, which would let the
+        // second export legitimately succeed and fail the assertion below with
+        // no regression behind it.
+        let exportGate = DispatchSemaphore(value: 0)
+        let exporter = RecordingICloudSyncExporter(gate: exportGate)
         let (vm, _) = makeViewModel(
             iCloudSyncSecrets: secrets,
             iCloudSyncExporter: exporter
@@ -230,6 +236,7 @@ struct ICloudSyncPreferencesSwiftTestingTests {
         await #expect(throws: ICloudSyncOperationError.operationInProgress) {
             _ = try await vm.exportICloudSyncArtifactsNow()
         }
+        exportGate.signal()
         _ = try await firstRun.value
 
         #expect(exporter.requests.count == 1)
@@ -366,7 +373,10 @@ private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked
     private let lock = NSLock()
     private var storedRequests: [Request] = []
     private let outcome: ICloudSyncExportOutcome
-    private let delay: TimeInterval
+    /// Optional gate that keeps an export in flight until the test opens it, so
+    /// the "already running" window is causal rather than timed. Exports run off
+    /// the main thread, so blocking here never stalls the main actor.
+    private let gate: DispatchSemaphore?
 
     var requests: [Request] {
         lock.lock()
@@ -376,10 +386,10 @@ private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked
 
     init(
         outcome: ICloudSyncExportOutcome = .disabled,
-        delay: TimeInterval = 0
+        gate: DispatchSemaphore? = nil
     ) {
         self.outcome = outcome
-        self.delay = delay
+        self.gate = gate
     }
 
     func exportLocalArtifacts(
@@ -387,9 +397,8 @@ private final class RecordingICloudSyncExporter: ICloudSyncExporting, @unchecked
         roots: ICloudSyncArtifactRoots,
         password: String
     ) throws -> ICloudSyncExportOutcome {
-        if delay > 0 {
-            Thread.sleep(forTimeInterval: delay)
-        }
+        // Bounded so a test that never opens the gate fails instead of hanging.
+        _ = gate?.wait(timeout: .now() + 10)
         lock.lock()
         storedRequests.append(Request(
             config: config,

@@ -83,6 +83,23 @@ private final class RemoteBrowserSessionProxyRecorder {
     }
 }
 
+/// Waits for an effect that a scheduled task has to deliver instead of sleeping
+/// for a fixed span: the session revokes an expired capability from a `Task` the
+/// scheduler must place, so a fixed clock measures scheduling latency rather than
+/// the behaviour under test. Callers still assert the effect afterwards, so the
+/// assertion keeps failing when the revocation never happens.
+@MainActor
+private func waitForBrowserSessionEffect(
+    within timeout: Duration = .seconds(5),
+    _ condition: @MainActor () -> Bool
+) async {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if condition() { return }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+}
+
 @Suite("Remote browser proxy session", .serialized)
 struct RemoteBrowserProxySessionSwiftTestingTests {
     @Test("Capability is bound to window, profile, port, and an exact target mapping")
@@ -221,7 +238,7 @@ struct RemoteBrowserProxySessionSwiftTestingTests {
         session.invalidationHandler = { invalidation = $0 }
         _ = try await session.start()
 
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await waitForBrowserSessionEffect { session.capability == nil }
 
         #expect(session.capability == nil)
         #expect(invalidation == .expired)

@@ -235,8 +235,14 @@ struct RemoteBrowserWebKitRouteSwiftTestingTests {
             (continuation: CheckedContinuation<Result<Void, any Error>, Never>) in
             delegate.completion = { result in continuation.resume(returning: result) }
             webView.load(URLRequest(url: url))
+            // The wait ends on the navigation callback, so this is only the cap
+            // that keeps a never-completing navigation from hanging the suite. It
+            // has to cover launching the WebKit process pair, the SOCKS5 handshake
+            // against the broker and the HTTP round trip, which a loaded CI runner
+            // can stretch well past a few seconds; the assertion below still fails
+            // when the navigation never completes.
             Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 5_000_000_000)
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
                 delegate.finish(.failure(POSIXError(.ETIMEDOUT)))
             }
         }

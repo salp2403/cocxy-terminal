@@ -324,6 +324,23 @@ private func httpTestConnectionObservedClosure(_ connection: NWConnection) async
     }
 }
 
+/// Waits for an effect that a scheduled task has to deliver instead of sleeping
+/// for a fixed span: the proxy applies its deadlines from a `Task` the scheduler
+/// must place, so a fixed clock measures scheduling latency rather than the
+/// behaviour under test. Callers still assert the effect afterwards, so the
+/// assertion keeps failing when the effect never happens.
+@MainActor
+private func waitForHTTPProxyEffect(
+    within timeout: Duration = .seconds(5),
+    _ condition: @MainActor () -> Bool
+) async {
+    let deadline = ContinuousClock.now.advanced(by: timeout)
+    while ContinuousClock.now < deadline {
+        if condition() { return }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+}
+
 @Suite("Authenticated HTTP CONNECT proxy", .serialized)
 struct HTTPConnectProxyTests {
     private static func availableLoopbackPort() throws -> Int {
@@ -524,7 +541,12 @@ struct HTTPConnectProxyTests {
             forwarder: forwarder,
             profileID: UUID(),
             connectionLeaseID: forwarder.leaseID,
-            authenticationTimeoutNanoseconds: 20_000_000
+            // Far below the 3 s production default, so the deadline under test is
+            // still a bounded one, but wide enough that the accepted-then-expired
+            // transition stays observable: with a 20 ms deadline the connection
+            // could be counted and dropped between two polls, which would fail the
+            // acceptance assertion for a proxy that behaved perfectly.
+            authenticationTimeoutNanoseconds: 300_000_000
         )
         try await proxy.start()
         proxy.activate()
@@ -532,11 +554,9 @@ struct HTTPConnectProxyTests {
         let client = try await connectHTTPTestClient(to: proxy.port)
         defer { client.cancel() }
 
-        for _ in 0..<100 where proxy.activeConnectionCount == 0 {
-            await Task.yield()
-        }
+        await waitForHTTPProxyEffect { proxy.activeConnectionCount == 1 }
         #expect(proxy.activeConnectionCount == 1)
-        try await Task.sleep(nanoseconds: 100_000_000)
+        await waitForHTTPProxyEffect { proxy.activeConnectionCount == 0 }
 
         #expect(proxy.activeConnectionCount == 0)
         #expect(await httpTestConnectionObservedClosure(client))
