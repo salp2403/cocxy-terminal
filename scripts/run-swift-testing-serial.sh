@@ -13,6 +13,13 @@ common_args=(
   --skip CocxyCorePerformanceBenchmarks
 )
 
+# Tests that park a thread on a synchronous bridge starve the cooperative pool
+# when the runner has few cores: the tasks meant to unblock them never get a
+# thread, and the suite stalls instead of failing. Each suite already gets its
+# own process here, so running its tests one at a time costs little and removes
+# that whole failure mode.
+run_args=(--no-parallel)
+
 coverage_enabled=false
 list_extra_args=()
 for arg in "$@"; do
@@ -108,7 +115,7 @@ for suite in "${suites[@]}"; do
   echo "::group::Swift Testing suite ${index}/${#suites[@]}: ${suite}"
   if [[ "$coverage_enabled" == true ]]; then
     find "$coverage_dir" -maxdepth 1 -name "*.profraw" -delete 2>/dev/null || true
-    run_bounded "$suite" swift test "${common_args[@]}" "$@" --filter "$suite"
+    run_bounded "$suite" swift test "${common_args[@]}" "${run_args[@]}" "$@" --filter "$suite"
     safe_suite="$(printf "%s" "$suite" | tr -c "A-Za-z0-9_.-" "_")"
     shopt -s nullglob
     suite_profiles=("$coverage_dir"/*.profraw)
@@ -121,7 +128,7 @@ for suite in "${suites[@]}"; do
       cp "$profile" "$profile_dir/${index}-${safe_suite}-$(basename "$profile")"
     done
   else
-    run_bounded "$suite" swift test --skip-build "${common_args[@]}" "$@" --filter "$suite"
+    run_bounded "$suite" swift test --skip-build "${common_args[@]}" "${run_args[@]}" "$@" --filter "$suite"
   fi
   echo "::endgroup::"
 done

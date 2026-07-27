@@ -378,7 +378,10 @@ private final class SFTPLifecycleMutationExecutor: SFTPExecutor, @unchecked Send
 
 // MARK: - SFTP Client Tests
 
-@Suite("SFTPClient")
+// Serialized: several tests park a task on a synchronous transfer and poll
+// for it to start, so running them concurrently competes for the same
+// cooperative threads those tasks need.
+@Suite("SFTPClient", .serialized)
 struct SFTPClientTests {
 
     private func makeClient(
@@ -2304,7 +2307,7 @@ struct SFTPClientTests {
     }
 }
 
-@Suite("SFTP browser download containment")
+@Suite("SFTP browser download containment", .serialized)
 struct SFTPBrowserDownloadContainmentTests {
     @MainActor
     private func waitUntil(
