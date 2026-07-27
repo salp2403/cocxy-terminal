@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-07-27
+
+### Added
+- Added secure browser data import so bookmarks, history, and cookies move into
+  a workspace profile through a bounded, cancellable transfer.
+- Added authenticated browser forwarding for remote workspaces, opening a
+  detected remote port through a scoped proxy instead of an ambient tunnel.
+- Added `cocxy browser split` so the browser panel can be opened directly beside
+  a terminal from the command line.
+
+### Changed
+- Notebook cells, workflow steps, and project template hooks now run inside a
+  dedicated launchd coalition with an authenticated supervisor handoff, and the
+  coalition is proven against the kernel rather than parsed from command output.
+- Workflow and cell execution is sandboxed by default: network access is denied
+  and the filesystem is scoped to the workspace. Workflows that relied on
+  network access or paths outside the workspace need explicit changes.
+- The terminal keeps its geometry when a full-screen program takes over the
+  screen, mouse reporting matches the mode the program requested, and scrollback
+  responds in both the in-process and daemon engines.
+- `cocxy status` now reports launch timings even while the app is still busy
+  starting, instead of replying with an empty warming state.
+
+### Fixed
+- Fixed shell processes remaining as zombies until their panel closed.
+- Fixed notebook temporary directories being removed while a concurrent run
+  still owned a sibling directory.
+- Fixed remote SFTP browsing rejecting valid listings and leaving finished
+  executions permanently unreconcilable.
+- Fixed the release pipeline stripping the trailing newline from deploy keys.
+
+### Security
+- Privileged socket commands, git mutations, and tab configuration now require
+  an authenticated caller bound to the originating workspace.
+- Agent approvals are bound to the workspace that requested them, keyboard
+  approvals disclose exactly what is granted, terminal output disclosure
+  requires consent, and prefix command rules no longer bypass approval.
+- Plugin replacement requires runtime authorization, the persisted trust
+  registry is validated before use, and skill invocations are bound to the
+  identity of their source.
+- MCP argument filesystem grants are scoped, HTTP and streaming responses are
+  bounded, and SFTP process boundaries are validated before execution.
+- Dependency resolution is pinned: the build now fails if any package other
+  than the single reviewed dependency appears in the manifest or lockfile.
+
 ## [1.18.0] - 2026-05-18
 
 ### Added
