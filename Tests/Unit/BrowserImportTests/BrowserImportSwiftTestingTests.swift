@@ -1934,7 +1934,12 @@ struct BrowserImportSwiftTestingTests {
                 hardTimeout: 0.02,
                 settleAfterTimeout: true
             ) { completion in
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.08) {
+                // The wait loop checks completion before the deadline, so the
+                // callbacks have to land well after the hard timeout or a stalled
+                // worker observes `.completed` first and the case stops testing
+                // settlement at all. The gap is wide on purpose: a loaded runner
+                // has to starve this thread for 480ms to invert the order.
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                     completion()
                     completedCallbacks.withValue { $0 += 1 }
                     completion()
@@ -1945,8 +1950,8 @@ struct BrowserImportSwiftTestingTests {
 
         #expect(result == .timedOut(2))
         #expect(completedCallbacks.withValue { $0 } == 2)
-        #expect(elapsed >= 0.07)
-        #expect(elapsed < 0.5)
+        #expect(elapsed >= 0.4)
+        #expect(elapsed < 3)
     }
 
     @Test("WebKit import settlement stops when callbacks never arrive")
