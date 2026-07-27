@@ -36,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   still owned a sibling directory.
 - Fixed remote SFTP browsing rejecting valid listings and leaving finished
   executions permanently unreconcilable.
+- Fixed notebooks and workflows intermittently refusing to start when several
+  of them ran for the first time at once.
 - Fixed the release pipeline stripping the trailing newline from deploy keys.
 
 ### Security
