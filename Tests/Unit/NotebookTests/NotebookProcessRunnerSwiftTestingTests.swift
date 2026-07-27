@@ -584,9 +584,13 @@ struct NotebookProcessRunnerSwiftTestingTests {
         let root = try notebookProcessTemporaryDirectory()
         try #require(chmod(root.path, S_IRWXU) == 0)
         defer { try? FileManager.default.removeItem(at: root) }
+        // A state file that stays empty is waited out before it is rejected, so
+        // the deadline is shortened here: the case is about failing closed, not
+        // about how long the gate tolerates a half-published peer.
         let gate = LaunchdLocalExecutionGate(
             stateDirectoryURL: root,
-            bootIdentityProvider: { LaunchdBootIdentity(sessionUUID: UUID()) }
+            bootIdentityProvider: { LaunchdBootIdentity(sessionUUID: UUID()) },
+            lockWaitSeconds: 0.05
         )
         try gate.check()
         let stateURL = root.appendingPathComponent(LaunchdLocalExecutionGate.stateFileName)
