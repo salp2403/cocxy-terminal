@@ -41,7 +41,17 @@ struct TextCompositionState: Sendable {
         if markedText.isEmpty {
             return NSRange(location: NSNotFound, length: 0)
         }
-        return NSRange(location: 0, length: markedText.count)
+        return NSRange(location: 0, length: markedText.utf16.count)
+    }
+
+    /// UTF-8 byte offset expected by CocxyCore for the marked-text cursor.
+    /// AppKit reports `selectedRange` in UTF-16 code units, so counting
+    /// characters or display columns is incorrect for CJK and emoji input.
+    var cursorUTF8ByteOffset: Int {
+        Self.utf8ByteOffset(
+            in: markedText,
+            utf16Location: selectedRange.location
+        )
     }
 
     // MARK: - Mutations
@@ -73,5 +83,23 @@ struct TextCompositionState: Sendable {
     /// The actual text insertion is handled separately by `insertText(_:replacementRange:)`.
     mutating func commit() {
         unmarkText()
+    }
+
+    /// Converts a UTF-16 cursor location to the nearest preceding UTF-8
+    /// scalar boundary. AppKit should provide a valid boundary, but clamping
+    /// malformed ranges defensively prevents splitting a surrogate pair.
+    static func utf8ByteOffset(in text: String, utf16Location: Int) -> Int {
+        let target = min(max(0, utf16Location), text.utf16.count)
+        var consumedUTF16 = 0
+        var consumedUTF8 = 0
+
+        for scalar in text.unicodeScalars {
+            let scalarUTF16Count = scalar.value > 0xFFFF ? 2 : 1
+            guard consumedUTF16 + scalarUTF16Count <= target else { break }
+            consumedUTF16 += scalarUTF16Count
+            consumedUTF8 += String(scalar).utf8.count
+        }
+
+        return consumedUTF8
     }
 }

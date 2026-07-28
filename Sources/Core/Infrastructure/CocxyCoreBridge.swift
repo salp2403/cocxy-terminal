@@ -758,6 +758,10 @@ final class CocxyCoreBridge: TerminalEngine {
         guard let state = surfaces.removeValue(forKey: id) else { return }
         reapedPTYChildren.remove(id)
 
+        state.terminalLock.withLock {
+            cocxycore_terminal_preedit_clear(state.terminal)
+        }
+
         state.pendingFallbackWorkingDirectoryProbe?.cancel()
 
         // Clean up semantic adapter state for this surface.
@@ -820,7 +824,7 @@ final class CocxyCoreBridge: TerminalEngine {
         // Drop key-up events before acquiring the lock — they are no-ops
         // for the C terminal and we should not stall the caller behind the
         // background feed loop just to bail out.
-        guard event.isKeyDown else { return false }
+        guard event.isKeyDown, !event.isComposing else { return false }
 
         // Encode + write the key sequence atomically inside the per-surface
         // lock. `cocxycore_terminal_encode_key` and `encode_char` read the
@@ -832,33 +836,49 @@ final class CocxyCoreBridge: TerminalEngine {
         // that the parser is mid-update, which is the suspected trigger for
         // the transparent-on-Claude-launch bug.
         let lockedResult = withTerminalLock(surface) { state -> DeliveryOutcome in
-            var buf = [UInt8](repeating: 0, count: 32)
-            var bytesWritten = 0
-
-            if let chars = event.characters,
-               let scalar = chars.unicodeScalars.first {
-                let codepoint = scalar.value
-                let mods = mapModifiers(event.modifiers)
-
-                // Try special key mapping first (arrows, function keys, etc.)
-                if let key = mapKeyCodeToSpecialKey(event.keyCode) {
-                    bytesWritten = cocxycore_terminal_encode_key(
-                        state.terminal, key, mods, &buf, buf.count
-                    )
-                } else {
-                    bytesWritten = cocxycore_terminal_encode_char(
-                        state.terminal, codepoint, mods, &buf, buf.count
-                    )
-                }
-            } else if let key = mapKeyCodeToSpecialKey(event.keyCode) {
-                // No characters — try special key mapping.
-                let mods = mapModifiers(event.modifiers)
-                bytesWritten = cocxycore_terminal_encode_key(
-                    state.terminal, key, mods, &buf, buf.count
-                )
+            // A non-composing key event is the authoritative boundary between
+            // AppKit text input and terminal input. Clear any orphaned engine
+            // preedit before bytes reach the PTY.
+            if cocxycore_terminal_preedit_active(state.terminal) {
+                cocxycore_terminal_preedit_clear(state.terminal)
             }
 
-            if bytesWritten > 0 {
+            let mods = mapModifiers(event.modifiers)
+            var encodedBytes: [UInt8] = []
+
+            // Hardware-special keys win even when AppKit supplies a private-use
+            // character for the event (for example, an arrow key).
+            if let key = mapKeyCodeToSpecialKey(event.keyCode) {
+                var buffer = [UInt8](repeating: 0, count: 32)
+                let count = cocxycore_terminal_encode_key(
+                    state.terminal, key, mods, &buffer, buffer.count
+                )
+                if count > 0 {
+                    encodedBytes.append(contentsOf: buffer.prefix(count))
+                }
+            } else if let characters = event.characters,
+                      let firstScalar = characters.unicodeScalars.first {
+                let hasCommandModifier = event.modifiers.contains(.command)
+                let hasControlModifier = event.modifiers.contains(.control)
+                let hasMultipleScalars = characters.unicodeScalars.dropFirst().isEmpty == false
+
+                if hasMultipleScalars, !hasCommandModifier, !hasControlModifier {
+                    encodedBytes = Array(characters.utf8)
+                } else {
+                    var buffer = [UInt8](repeating: 0, count: 32)
+                    let count = cocxycore_terminal_encode_char(
+                        state.terminal, firstScalar.value, mods, &buffer, buffer.count
+                    )
+                    if count > 0 {
+                        encodedBytes.append(contentsOf: buffer.prefix(count))
+                        for scalar in characters.unicodeScalars.dropFirst() {
+                            encodedBytes.append(contentsOf: String(scalar).utf8)
+                        }
+                    }
+                }
+            }
+
+            if !encodedBytes.isEmpty {
                 // `writeBytes(_:to: SurfaceState)` calls `writeAttachedPTYBytes`
                 // which mutates the C terminal's response buffer. It must run
                 // inside the same critical section as the encode call so the
@@ -868,10 +888,10 @@ final class CocxyCoreBridge: TerminalEngine {
                 // test surfaced a case where zsh autocorrect left a split
                 // silently unable to write, and this log is the observation
                 // channel we need to reproduce it in a controlled session.
-                let writeOK = writeBytes(Array(buf.prefix(bytesWritten)), to: state)
+                let writeOK = writeBytes(encodedBytes, to: state)
                 if !writeOK {
                     cocxyInputLog.error(
-                        "sendKeyEvent: PTY write dropped \(bytesWritten) encoded bytes for surface \(surface.rawValue.uuidString, privacy: .public); keypress is lost"
+                        "sendKeyEvent: PTY write dropped \(encodedBytes.count) encoded bytes for surface \(surface.rawValue.uuidString, privacy: .public); keypress is lost"
                     )
                 }
                 return DeliveryOutcome(keyHandled: true, writeSucceeded: writeOK)
@@ -951,7 +971,11 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
         // IME composition state mutates the same terminal cell buffer the
         // background feed loop reads, so all preedit mutations run inside
         // the per-surface lock.
@@ -962,9 +986,17 @@ final class CocxyCoreBridge: TerminalEngine {
                 let row = cocxycore_terminal_cursor_row(state.terminal)
                 let col = cocxycore_terminal_cursor_col(state.terminal)
                 let bytes = Array(text.utf8)
-                let displayWidth = Self.terminalDisplayWidth(of: text)
+                let boundedCursorOffset = min(
+                    max(0, cursorByteOffset ?? bytes.count),
+                    bytes.count
+                )
                 cocxycore_terminal_preedit_set(
-                    state.terminal, row, col, bytes, bytes.count, displayWidth
+                    state.terminal,
+                    row,
+                    col,
+                    bytes,
+                    bytes.count,
+                    UInt16(clamping: boundedCursorOffset)
                 )
             }
         }

@@ -32,7 +32,11 @@ private final class QuickTerminalTestEngine: TerminalEngine {
 
     func sendText(_ text: String, to surface: SurfaceID) {}
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {}
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {}
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {}
 

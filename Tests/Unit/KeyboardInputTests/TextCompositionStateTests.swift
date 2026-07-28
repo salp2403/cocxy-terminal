@@ -98,6 +98,31 @@ final class TextCompositionStateTests: XCTestCase {
         XCTAssertEqual(range.length, 5, "Marked range length must match text length")
     }
 
+    func testMarkedRangeUsesUTF16UnitsRequiredByAppKit() {
+        var state = TextCompositionState()
+        state.setMarkedText("😀a", selectedRange: NSRange(location: 2, length: 0))
+
+        XCTAssertEqual(state.markedRange, NSRange(location: 0, length: 3))
+    }
+
+    func testCursorByteOffsetConvertsCJKUTF16LocationToUTF8() {
+        var state = TextCompositionState()
+        state.setMarkedText("かな", selectedRange: NSRange(location: 1, length: 0))
+
+        XCTAssertEqual(state.cursorUTF8ByteOffset, 3)
+    }
+
+    func testCursorByteOffsetDoesNotSplitSurrogatePairs() {
+        XCTAssertEqual(
+            TextCompositionState.utf8ByteOffset(in: "😀a", utf16Location: 1),
+            0
+        )
+        XCTAssertEqual(
+            TextCompositionState.utf8ByteOffset(in: "😀a", utf16Location: 2),
+            4
+        )
+    }
+
     // MARK: - Commit
 
     func testCommitClearsCompositionState() {

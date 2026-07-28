@@ -94,7 +94,10 @@ public final class PTYDaemonServer {
                 return PTYDaemonResponse(id: request.id, ok: surface.handleKey(payload: payload))
             case .surfacePreedit:
                 let surface = try requireSurface(payload)
-                surface.setPreedit(payload["text"] ?? "")
+                surface.setPreedit(
+                    payload["text"] ?? "",
+                    cursorByteOffset: payload.int("cursorByteOffset")
+                )
                 return PTYDaemonResponse(id: request.id, ok: true)
             case .surfaceFocus:
                 let surface = try requireSurface(payload)

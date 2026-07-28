@@ -78,8 +78,14 @@ protocol TerminalEngine: AnyObject {
     ///
     /// - Parameters:
     ///   - text: The composing text to display, or empty to clear.
+    ///   - cursorByteOffset: Optional cursor offset in the UTF-8 preedit bytes.
+    ///     Engines place the cursor at the end when this is `nil`.
     ///   - surface: Target surface.
-    func sendPreeditText(_ text: String, to surface: SurfaceID)
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    )
 
     /// Notifies the engine that a surface has been resized.
     ///
@@ -275,6 +281,10 @@ struct KeyModifiers: OptionSet, Sendable {
 }
 
 extension TerminalEngine {
+    func sendPreeditText(_ text: String, to surface: SurfaceID) {
+        sendPreeditText(text, cursorByteOffset: nil, to: surface)
+    }
+
     func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration? {
         nil
     }

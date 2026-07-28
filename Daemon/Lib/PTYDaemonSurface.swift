@@ -194,6 +194,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
 
     func handleKey(payload: [String: String]) -> Bool {
         guard payload.bool("isKeyDown") ?? true else { return true }
+        guard payload.bool("isComposing") != true else { return false }
 
         if let characters = payload.nonEmpty("characters"),
            payload.uint("modifiers").map({ $0 & 8 == 0 }) ?? true {
@@ -210,7 +211,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
         return writeEncodedKey(key, modifiers: payload.uint("modifiers") ?? 0)
     }
 
-    func setPreedit(_ text: String) {
+    func setPreedit(_ text: String, cursorByteOffset: Int?) {
         terminalLock.withLock {
             if text.isEmpty {
                 cocxycore_terminal_preedit_clear(terminal)
@@ -218,13 +219,17 @@ final class PTYDaemonSurface: @unchecked Sendable {
                 let row = cocxycore_terminal_cursor_row(terminal)
                 let column = cocxycore_terminal_cursor_col(terminal)
                 let bytes = Array(text.utf8)
+                let cursorBytes = UInt16(clamping: min(
+                    max(0, cursorByteOffset ?? bytes.count),
+                    bytes.count
+                ))
                 cocxycore_terminal_preedit_set(
                     terminal,
                     row,
                     column,
                     bytes,
                     bytes.count,
-                    UInt16(bytes.count)
+                    cursorBytes
                 )
             }
         }

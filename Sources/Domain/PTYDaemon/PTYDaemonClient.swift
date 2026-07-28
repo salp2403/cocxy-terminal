@@ -478,6 +478,7 @@ final class PTYDaemonClient: TerminalEngine {
     }
 
     func destroySurface(_ id: SurfaceID) {
+        sendPreeditText("", cursorByteOffset: 0, to: id)
         _ = try? sendSurfaceRequest(id, command: .surfaceClose)
         liveSurfaces.remove(id)
         stalledSurfaces.remove(id)
@@ -488,6 +489,7 @@ final class PTYDaemonClient: TerminalEngine {
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
+        guard event.isKeyDown, event.isComposing == false else { return false }
         let response = try? sendSurfaceRequest(
             surface,
             command: .surfaceKey,
@@ -518,8 +520,16 @@ final class PTYDaemonClient: TerminalEngine {
         )
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
-        _ = try? sendSurfaceRequest(surface, command: .surfacePreedit, payload: ["text": text])
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
+        var payload = ["text": text]
+        if let cursorByteOffset {
+            payload["cursorByteOffset"] = "\(cursorByteOffset)"
+        }
+        _ = try? sendSurfaceRequest(surface, command: .surfacePreedit, payload: payload)
     }
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
