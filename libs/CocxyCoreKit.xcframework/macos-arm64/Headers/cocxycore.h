@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.15.1 (stable API bundle)
+ * Version: 0.15.2 (stable API bundle)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 15
-#define COCXYCORE_VERSION_PATCH 1
-#define COCXYCORE_VERSION_STRING "0.15.1"
+#define COCXYCORE_VERSION_PATCH 2
+#define COCXYCORE_VERSION_STRING "0.15.2"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -880,11 +880,22 @@ bool cocxycore_terminal_get_bracketed_paste_active(const cocxycore_terminal* ter
 void cocxycore_terminal_set_bracketed_paste_force(cocxycore_terminal* term, int force);
 
 /**
- * Get the current mouse tracking mode.
- * 0=none, 1=x10, 2=normal, 3=highlight,
- * 4=button_event, 5=any_event, 6=sgr.
+ * Get the legacy combined mouse mode.
+ * 0=none, 6=active SGR encoding, otherwise the tracking ordinal.
  */
 uint8_t cocxycore_terminal_mode_mouse(const cocxycore_terminal* term);
+
+/**
+ * Get mouse tracking: 0=none, 1=x10, 2=normal, 3=highlight,
+ * 4=button_event, 5=any_event.
+ */
+uint8_t cocxycore_terminal_mode_mouse_tracking(const cocxycore_terminal* term);
+
+/** Get mouse encoding: 0=x10, 1=utf8, 2=urxvt, 3=sgr, 4=sgr_pixels. */
+uint8_t cocxycore_terminal_mode_mouse_encoding(const cocxycore_terminal* term);
+
+/** Clear mouse tracking and restore X10 coordinate encoding. */
+void cocxycore_terminal_reset_mouse_modes(cocxycore_terminal* term);
 
 /** Check if the alternate screen buffer is active. */
 bool cocxycore_terminal_is_alt_screen(const cocxycore_terminal* term);
