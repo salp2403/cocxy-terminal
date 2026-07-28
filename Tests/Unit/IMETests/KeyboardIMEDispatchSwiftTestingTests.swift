@@ -159,6 +159,33 @@ struct KeyboardIMEDispatchSwiftTestingTests {
         #expect(cocxycore_terminal_preedit_active(state.terminal) == false)
     }
 
+    @Test("surface reconfiguration clears preedit on the previous terminal")
+    func surfaceReconfigurationClearsPreviousPreedit() throws {
+        let harness = try makeIMEViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let oldState = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let newSurfaceID = try harness.bridge.createSurface(
+            in: harness.view,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            command: "/bin/cat"
+        )
+        defer { harness.bridge.destroySurface(newSurfaceID) }
+        harness.viewModel.markRunning(surfaceID: newSurfaceID)
+        harness.view.setMarkedText(
+            "かな",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+
+        harness.view.configureSurfaceIfNeeded(
+            bridge: harness.bridge,
+            surfaceID: newSurfaceID
+        )
+
+        #expect(harness.view.hasMarkedText() == false)
+        #expect(cocxycore_terminal_preedit_active(oldState.terminal) == false)
+    }
+
     @Test("a stale engine preedit is cleared before fallback key bytes")
     func staleEnginePreeditIsClearedBeforeFallbackKey() throws {
         let harness = try makeIMEViewHarness()
@@ -275,6 +302,24 @@ struct KeyboardIMEDispatchSwiftTestingTests {
         #expect(snapshot.text == "候")
     }
 
+    @Test("AppKit command selectors do not run before terminal fallback")
+    func appKitCommandsDoNotRunBeforeTerminalFallback() throws {
+        let harness = try makeIMEViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        var deliveryCount = 0
+        harness.bridge.inputDeliveryObserver = { surfaceID, event in
+            guard surfaceID == harness.surfaceID, event == .delivered else { return }
+            deliveryCount += 1
+        }
+        harness.view.keyEventInterpreterOverride = { [weak view = harness.view] _ in
+            view?.doCommand(by: #selector(NSResponder.selectAll(_:)))
+        }
+
+        harness.view.keyDown(with: makeIMEKeyEvent(characters: "x", keyCode: 7))
+
+        #expect(deliveryCount == 1)
+    }
+
     @Test("Return submits once and Shift-Return inserts one newline")
     func returnCallbacksDoNotDuplicateTerminalInput() async throws {
         let rawCat = try makeIMERawCatScript()
@@ -300,6 +345,29 @@ struct KeyboardIMEDispatchSwiftTestingTests {
         #expect(submitCount == 1)
 
         output.data.removeAll()
+        harness.view.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        harness.view.keyEventInterpreterOverride = { [weak view = harness.view] _ in
+            view?.insertText(
+                "你",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+        harness.view.keyDown(with: makeIMEKeyEvent(characters: "\r", keyCode: 36))
+        try await waitUntil { output.data.range(of: Data("你".utf8)) != nil }
+        #expect(output.data == Data("你".utf8))
+        #expect(submitCount == 1)
+
+        output.data.removeAll()
+        harness.view.keyEventInterpreterOverride = { [weak view = harness.view] _ in
+            view?.insertText(
+                "\n",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
         harness.view.keyDown(with: makeIMEKeyEvent(
             characters: "\r",
             modifiers: [.shift],

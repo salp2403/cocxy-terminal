@@ -901,10 +901,17 @@ struct CocxyCoreViewTests {
         harness.view.keyDown(with: makeKeyEvent(characters: "c", modifiers: [.command], keyCode: 0x08))
         #expect(clipboard.writtenText == "alpha")
 
+        harness.view.setMarkedText(
+            "draft",
+            selectedRange: NSRange(location: 5, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
         harness.view.keyDown(with: makeKeyEvent(characters: "v", modifiers: [.command], keyCode: 0x09))
         try await waitUntil {
             String(data: output.data, encoding: .utf8)?.contains("shortcut paste") == true
         }
+        #expect(harness.view.hasMarkedText() == false)
+        #expect(cocxycore_terminal_preedit_active(state.terminal) == false)
 
         harness.view.keyDown(with: makeKeyEvent(characters: "a", modifiers: [.command], keyCode: 0x00))
         harness.view.keyDown(with: makeKeyEvent(characters: "k", modifiers: [.command], keyCode: 0x28))

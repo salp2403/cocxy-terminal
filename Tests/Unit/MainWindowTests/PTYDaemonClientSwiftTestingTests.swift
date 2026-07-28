@@ -400,6 +400,59 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceFrameSubscribe])
     }
 
+    @Test("stale daemon frames never replace a newer revision")
+    func staleDaemonFramesAreDiscarded() throws {
+        let rawSurfaceID = UUID()
+        let foreignSurfaceID = UUID()
+        func frame(revision: UInt64, surfaceID: UUID? = nil) -> PTYDaemonSurfaceFrame {
+            PTYDaemonSurfaceFrame(
+                surfaceID: (surfaceID ?? rawSurfaceID).uuidString,
+                revision: revision,
+                timestamp: Double(revision),
+                columns: 2,
+                rows: 1,
+                cells: [],
+                cursor: PTYDaemonCursor(row: 0, column: 0)
+            )
+        }
+        let connection = MockPTYDaemonClientConnection(
+            responses: [
+                PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+                PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+                PTYDaemonResponse(id: "frame", ok: true, frame: frame(revision: 1)),
+            ],
+            events: [
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 3)
+                ),
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 2)
+                ),
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 4, surfaceID: foreignSurfaceID)
+                ),
+            ]
+        )
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredRevisions = LockedBox<[UInt64]>([])
+        client.setFrameHandler(for: surface) { frame in
+            deliveredRevisions.withValue { $0.append(frame.revision) }
+        }
+
+        #expect(client.subscribeFrames(for: surface)?.revision == 1)
+        client.tick()
+
+        #expect(deliveredRevisions.withValue { $0 } == [3])
+    }
+
     @Test("surface send reconnects and reattaches live surfaces before retry")
     func surfaceSendReconnectsAndReattachesLiveSurfacesBeforeRetry() throws {
         let surfaceID = UUID()

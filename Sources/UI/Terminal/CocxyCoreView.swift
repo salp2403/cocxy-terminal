@@ -177,6 +177,7 @@ final class CocxyCoreView: NSView {
     /// Non-nil only while `interpretKeyEvents` is synchronously dispatching
     /// NSTextInputClient callbacks for the current physical key.
     private var activeKeyTextInterpretation: KeyTextInterpretation?
+    private var isDiscardingInputMethodComposition = false
 
     /// Deterministic seam for measured AppKit callback sequences in tests.
     /// Production leaves this nil and uses `interpretKeyEvents` directly.
@@ -318,7 +319,7 @@ final class CocxyCoreView: NSView {
     /// Configures the view with a bridge and surface. Call after createSurface.
     func configure(bridge: CocxyCoreBridge, surfaceID: SurfaceID, viewModel: TerminalViewModel) {
         if self.surfaceID != surfaceID {
-            clearComposition(forceEngineClear: true)
+            clearComposition(forceEngineClear: true, discardInputContext: true)
         }
         self.bridge = bridge
         self.surfaceID = surfaceID
@@ -650,7 +651,7 @@ final class CocxyCoreView: NSView {
 
     override func resignFirstResponder() -> Bool {
         isFocused = false
-        clearComposition(forceEngineClear: true)
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         if let bridge, let sid = surfaceID {
             bridge.notifyFocus(false, for: sid)
         }
@@ -685,7 +686,7 @@ final class CocxyCoreView: NSView {
             handleCopy()
             return
         case .paste:
-            handlePaste()
+            paste(nil)
             return
         case .selectAll, .clearScreen:
             let keyEvent = Self.translateKeyEvent(
@@ -739,7 +740,7 @@ final class CocxyCoreView: NSView {
         if wasComposing, event.keyCode == 53 {
             // Escape belongs to the active input method: cancel the marked
             // text without leaking an ESC byte into the foreground process.
-            clearComposition(forceEngineClear: true)
+            clearComposition(forceEngineClear: true, discardInputContext: true)
             return
         }
 
@@ -762,7 +763,11 @@ final class CocxyCoreView: NSView {
         if interpretation.text.isEmpty == false {
             clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
             bridge.sendText(interpretation.text, to: sid)
-            updateIDECursorState(afterHandling: event)
+            if Self.containsInputSubmission(interpretation.text),
+               modifiers.contains(.shift) == false {
+                ideCursorController.commandExecuted()
+                onUserInputSubmitted?()
+            }
             return
         }
         if hasMarkedText() {
@@ -837,19 +842,35 @@ final class CocxyCoreView: NSView {
         guard compositionState.hasMarkedText else { return }
         let markedText = compositionState.markedText
         compositionState.commit()
+        discardInputMethodComposition()
         bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
         if markedText.isEmpty == false {
             bridge.sendText(markedText, to: surfaceID)
         }
     }
 
-    private func clearComposition(forceEngineClear: Bool = false) {
+    private func clearComposition(
+        forceEngineClear: Bool = false,
+        discardInputContext: Bool = false
+    ) {
         let hadMarkedText = compositionState.hasMarkedText
         compositionState.unmarkText()
+        if discardInputContext, hadMarkedText {
+            discardInputMethodComposition()
+        }
         guard hadMarkedText || forceEngineClear,
               let bridge,
               let surfaceID else { return }
         bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private func discardInputMethodComposition() {
+        guard isDiscardingInputMethodComposition == false else { return }
+        isDiscardingInputMethodComposition = true
+        defer { isDiscardingInputMethodComposition = false }
+        inputContext?.discardMarkedText()
+        // The context can synchronously re-enter this client while discarding.
+        compositionState.unmarkText()
     }
 
     private func clearResidualPreeditIfNeeded(
@@ -874,7 +895,16 @@ final class CocxyCoreView: NSView {
         return ControlCharacterMapper.controlCharacterText(forLetter: String(scalar))
     }
 
+    private static func containsInputSubmission(_ text: String) -> Bool {
+        text.contains("\r") || text.contains("\n")
+    }
+
     // MARK: - Text Command Handlers (NSResponder)
+
+    override func doCommand(by selector: Selector) {
+        guard activeKeyTextInterpretation == nil else { return }
+        super.doCommand(by: selector)
+    }
 
     private func sendControlSequence(_ seq: String) {
         guard activeKeyTextInterpretation == nil else { return }
@@ -1087,6 +1117,7 @@ final class CocxyCoreView: NSView {
     }
 
     @objc func paste(_ sender: Any?) {
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         handlePaste()
     }
 
@@ -2172,6 +2203,7 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
         if activeKeyTextInterpretation != nil {
             activeKeyTextInterpretation?.didMutateComposition = true
         }
+        guard isDiscardingInputMethodComposition == false else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
         bridge.sendPreeditText("", cursorByteOffset: 0, to: sid)
     }

@@ -28,6 +28,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     private var activeKeyTextInterpretation: KeyTextInterpretation?
+    private var isDiscardingInputMethodComposition = false
     var keyEventInterpreterOverride: ((NSEvent) -> Void)?
 
     private static let scrollSpeedFactor: CGFloat = 0.15
@@ -68,7 +69,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func resignFirstResponder() -> Bool {
-        clearComposition(forceEngineClear: true)
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         if let surfaceID {
             bridge?.notifyFocus(false, for: surfaceID)
         }
@@ -77,7 +78,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {
         guard self.surfaceID != surfaceID else { return }
-        clearComposition(forceEngineClear: true)
+        clearComposition(forceEngineClear: true, discardInputContext: true)
+        latestFrame = nil
         self.bridge = bridge
         self.surfaceID = surfaceID
         if let daemon = bridge as? PTYDaemonClient {
@@ -162,7 +164,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         let wasComposing = hasMarkedText()
 
         if wasComposing, event.keyCode == 53 {
-            clearComposition(forceEngineClear: true)
+            clearComposition(forceEngineClear: true, discardInputContext: true)
             return
         }
 
@@ -180,7 +182,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         let interpretation = interpretTerminalKeyEvent(event)
         if interpretation.text.isEmpty == false {
             bridge.sendText(interpretation.text, to: surfaceID)
-            if event.keyCode == 36 {
+            if Self.containsInputSubmission(interpretation.text),
+               modifiers.contains(.shift) == false {
                 onUserInputSubmitted?()
             }
             return
@@ -228,19 +231,40 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         guard compositionState.hasMarkedText else { return }
         let markedText = compositionState.markedText
         compositionState.commit()
+        discardInputMethodComposition()
         bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
         if markedText.isEmpty == false {
             bridge.sendText(markedText, to: surfaceID)
         }
     }
 
-    private func clearComposition(forceEngineClear: Bool = false) {
+    private func clearComposition(
+        forceEngineClear: Bool = false,
+        discardInputContext: Bool = false
+    ) {
         let hadMarkedText = compositionState.hasMarkedText
         compositionState.unmarkText()
+        if discardInputContext, hadMarkedText {
+            discardInputMethodComposition()
+        }
         guard hadMarkedText || forceEngineClear,
               let bridge,
               let surfaceID else { return }
         bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private func discardInputMethodComposition() {
+        guard isDiscardingInputMethodComposition == false else { return }
+        isDiscardingInputMethodComposition = true
+        defer { isDiscardingInputMethodComposition = false }
+        inputContext?.discardMarkedText()
+        // The context can synchronously re-enter this client while discarding.
+        compositionState.unmarkText()
+    }
+
+    override func doCommand(by selector: Selector) {
+        guard activeKeyTextInterpretation == nil else { return }
+        super.doCommand(by: selector)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -334,6 +358,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     private func apply(_ frame: PTYDaemonSurfaceFrame) {
+        guard let surfaceID,
+              UUID(uuidString: frame.surfaceID) == surfaceID.rawValue else { return }
+        if let latestFrame, frame.revision <= latestFrame.revision {
+            return
+        }
         self.latestFrame = frame
         needsDisplay = true
     }
@@ -375,6 +404,10 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
                 .unicodeScalars
                 .first else { return nil }
         return ControlCharacterMapper.controlCharacterText(forLetter: String(scalar))
+    }
+
+    private static func containsInputSubmission(_ text: String) -> Bool {
+        text.contains("\r") || text.contains("\n")
     }
 
     private func shouldScrollLocallyWhileMouseTracking(_ event: NSEvent) -> Bool {
@@ -491,6 +524,7 @@ extension PTYDaemonHostView: @preconcurrency NSTextInputClient {
         if activeKeyTextInterpretation != nil {
             activeKeyTextInterpretation?.didMutateComposition = true
         }
+        guard isDiscardingInputMethodComposition == false else { return }
         guard let bridge, let surfaceID else { return }
         bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
     }

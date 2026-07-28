@@ -178,6 +178,33 @@ struct CocxyCoreHostWiringTests {
         #expect(engine.preeditTexts.last?.cursorByteOffset == 1)
     }
 
+    @Test("daemon host candidate confirmation does not report a command submission")
+    func daemonHostCandidateConfirmationDoesNotSubmit() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        var submitCount = 0
+        view.onUserInputSubmitted = { submitCount += 1 }
+        view.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "你",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "\r", keyCode: 36))
+
+        #expect(engine.sentTexts.map(\.text) == ["你"])
+        #expect(submitCount == 0)
+        #expect(view.hasMarkedText() == false)
+    }
+
     @Test("daemon host clears old preedit before surface reconfiguration")
     func daemonHostClearsPreeditBeforeReconfiguration() {
         let engine = MockTerminalEngine()
