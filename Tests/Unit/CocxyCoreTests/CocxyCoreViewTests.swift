@@ -164,7 +164,7 @@ struct CocxyCoreViewTests {
         #expect(harness.view.hasMarkedText() == true)
         #expect(harness.view.markedRange().location == 0)
         #expect(harness.view.markedRange().length == "composed".count)
-        #expect(harness.view.selectedRange().location == NSNotFound)
+        #expect(harness.view.selectedRange() == NSRange(location: 2, length: 3))
         #expect(harness.view.characterIndex(for: .zero) == 0)
         #expect(harness.view.attributedSubstring(forProposedRange: NSRange(location: 0, length: 1), actualRange: nil) == nil)
         #expect(harness.view.validAttributesForMarkedText().contains(.underlineStyle))

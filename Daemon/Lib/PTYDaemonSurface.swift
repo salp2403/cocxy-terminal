@@ -196,23 +196,31 @@ final class PTYDaemonSurface: @unchecked Sendable {
         guard payload.bool("isKeyDown") ?? true else { return true }
         guard payload.bool("isComposing") != true else { return false }
 
+        terminalLock.withLock {
+            if cocxycore_terminal_preedit_active(terminal) {
+                cocxycore_terminal_preedit_clear(terminal)
+            }
+        }
+
+        let keyCode = payload.uint16("keyCode") ?? 0
+        let modifiers = payload.uint("modifiers") ?? 0
+        if let key = Self.specialKey(forMacKeyCode: keyCode) {
+            return writeEncodedKey(key, modifiers: modifiers)
+        }
+
         if let characters = payload.nonEmpty("characters"),
            payload.uint("modifiers").map({ $0 & 8 == 0 }) ?? true {
             return write(bytes: Data(characters.utf8))
         }
 
-        let keyCode = payload.uint16("keyCode") ?? 0
-        guard let key = Self.specialKey(forMacKeyCode: keyCode) else {
-            if let codepoint = payload.uint32("unshiftedCodepoint"), codepoint > 0 {
-                return writeEncodedCharacter(codepoint, modifiers: payload.uint("modifiers") ?? 0)
-            }
-            return false
+        if let codepoint = payload.uint32("unshiftedCodepoint"), codepoint > 0 {
+            return writeEncodedCharacter(codepoint, modifiers: modifiers)
         }
-        return writeEncodedKey(key, modifiers: payload.uint("modifiers") ?? 0)
+        return false
     }
 
     func setPreedit(_ text: String, cursorByteOffset: Int?) {
-        terminalLock.withLock {
+        let frame: PTYDaemonSurfaceFrame? = terminalLock.withLock {
             if text.isEmpty {
                 cocxycore_terminal_preedit_clear(terminal)
             } else {
@@ -232,6 +240,12 @@ final class PTYDaemonSurface: @unchecked Sendable {
                     cursorBytes
                 )
             }
+            return shouldEmitFrames() ? makeFrameLocked() : nil
+        }
+        if let frame {
+            writer.write(
+                PTYDaemonEvent(event: .surfaceFrame, surfaceID: surfaceID, frame: frame)
+            )
         }
     }
 

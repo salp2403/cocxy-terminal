@@ -2185,7 +2185,9 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        NSRange(location: NSNotFound, length: 0)
+        compositionState.hasMarkedText
+            ? compositionState.selectedRange
+            : NSRange(location: NSNotFound, length: 0)
     }
 
     func firstRect(forCharacterRange range: NSRange, actualRange: UnsafeMutablePointer<NSRange>?) -> NSRect {
