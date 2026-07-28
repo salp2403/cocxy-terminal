@@ -661,6 +661,72 @@ struct CocxyCoreBridgeTests {
         #expect(handled == true)
     }
 
+    @Test("sendKeyEvent rejects composing events without reporting delivery")
+    func sendKeyEventRejectsComposingEvents() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        var deliveryCount = 0
+        bridge.inputDeliveryObserver = { _, _ in
+            deliveryCount += 1
+        }
+
+        let handled = bridge.sendKeyEvent(
+            KeyEvent(
+                characters: "x",
+                keyCode: 7,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: true
+            ),
+            to: surfaceID
+        )
+
+        #expect(handled == false)
+        #expect(deliveryCount == 0)
+    }
+
+    @Test("sendKeyEvent preserves every scalar and modifier ordering")
+    func sendKeyEventPreservesMultiScalarText() async throws {
+        let rawCat = try makeBridgeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: rawCat.scriptURL.path)
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: rawCat.readyURL.path)
+        }
+
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(
+                characters: "`q",
+                keyCode: 12,
+                modifiers: [],
+                isKeyDown: true
+            ),
+            to: surfaceID
+        ))
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(
+                characters: "cq",
+                keyCode: 8,
+                modifiers: [.control],
+                isKeyDown: true
+            ),
+            to: surfaceID
+        ))
+
+        let expected = Data([0x60, 0x71, 0x03, 0x71])
+        try await waitUntil {
+            received.data.range(of: expected) != nil
+        }
+        #expect(received.data.range(of: expected) != nil)
+    }
+
     @Test("sendText reaches the PTY-backed process")
     func sendTextReachesPty() async throws {
         let bridge = try makeBridge()
@@ -1641,6 +1707,27 @@ private func makeAltScreenTransitionScript() throws -> (rootDirectory: URL, scri
         ofItemAtPath: scriptURL.path
     )
     return (rootDirectory, scriptURL)
+}
+
+private func makeBridgeRawCatScript() throws -> (
+    rootDirectory: URL,
+    scriptURL: URL,
+    readyURL: URL
+) {
+    let rootDirectory = try makeTemporaryDirectory(named: "cocxy-bridge-raw-cat")
+    let scriptURL = rootDirectory.appendingPathComponent("raw-cat.sh")
+    let readyURL = rootDirectory.appendingPathComponent("ready")
+    try """
+    #!/bin/sh
+    stty raw -echo
+    : > '\(readyURL.path)'
+    exec /bin/cat
+    """.write(to: scriptURL, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+        [.posixPermissions: 0o700],
+        ofItemAtPath: scriptURL.path
+    )
+    return (rootDirectory, scriptURL, readyURL)
 }
 
 private func feed(_ text: String, to terminal: OpaquePointer) {

@@ -938,6 +938,28 @@ struct CocxyCoreViewTests {
         #expect(submitCount == 1)
     }
 
+    @Test("responder arrow commands preserve application cursor mode")
+    func responderArrowsUseModeAwareEncoder() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        feed("\u{1B}[?1h", into: state.terminal)
+
+        harness.view.moveUp(nil)
+
+        let applicationCursorUp = Data([0x1B, 0x4F, 0x41])
+        try await waitUntil {
+            output.data.range(of: applicationCursorUp) != nil
+        }
+        #expect(output.data.range(of: applicationCursorUp) != nil)
+    }
+
     @Test("keyDown routes printable, control, option and shift-return input")
     func keyDownRoutesTerminalInputVariants() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
