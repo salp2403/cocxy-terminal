@@ -201,7 +201,6 @@ final class CocxyCoreView: NSView {
 
     // MARK: - Constants
 
-    private static let scrollSpeedFactor: CGFloat = 0.15
     static let defaultPasteChunkMaxUTF8Bytes = 512
     static let agentPasteChunkMaxUTF8Bytes = 128
     private static let pasteChunkMaxUTF8Bytes = defaultPasteChunkMaxUTF8Bytes
@@ -1461,50 +1460,43 @@ final class CocxyCoreView: NSView {
     // MARK: - Scroll
 
     override func scrollWheel(with event: NSEvent) {
-        guard let bridge = bridge, let sid = surfaceID,
-              let state = bridge.surfaceState(for: sid) else {
+        guard let bridge = bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
             super.scrollWheel(with: event)
             return
         }
 
-        let mouseMode = cocxycore_terminal_mode_mouse(state.terminal)
-        if mouseMode > 0 && !shouldScrollLocallyWhileMouseTracking(event) {
-            // Terminal app is tracking mouse — forward scroll as mouse events
-            let delta = event.scrollingDeltaY * Self.scrollSpeedFactor
-            let button: UInt8 = delta > 0 ? 64 : 65 // scroll up / down
-            let count = max(1, Int(abs(delta)))
-            for _ in 0..<count {
-                var buf = [UInt8](repeating: 0, count: 16)
-                let n = encodeMouseButton(
-                    button,
-                    terminal: state.terminal,
-                    mouseMode: mouseMode,
-                    event: event,
-                    buf: &buf
-                )
-                if n > 0 {
-                    _ = bridge.writeBytes(Array(buf.prefix(n)), to: sid)
-                }
-            }
+        guard event.scrollingDeltaY != 0 else { return }
+        let destination = TerminalScrollRouter.destination(
+            localRange: snapshot.historyMaxVisibleStart,
+            prefersLocal: prefersLocalScrollInMouseTrackingMode?() == true,
+            mouseTrackingMode: snapshot.mouseTrackingMode,
+            modifiers: event.modifierFlags
+        )
+
+        switch destination {
+        case .terminalApplication:
+            let position = mousePosition(for: event, snapshot: snapshot)
+            let payload = TerminalMouseWireEncoder.wheelPayload(
+                button: event.scrollingDeltaY > 0 ? 64 : 65,
+                encodingRawValue: snapshot.mouseEncodingMode,
+                row: position.row,
+                column: position.column,
+                pixelX: position.pixelX,
+                pixelY: position.pixelY,
+                count: TerminalScrollWheelMetrics.forwardedEventCount(for: event)
+            )
+            _ = bridge.writeBytes(Array(payload), to: sid)
+            return
+        case .localViewport:
+            let deltaRows = TerminalScrollWheelMetrics.localDeltaRows(for: event)
+            guard deltaRows != 0 else { return }
+            bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
+            refreshCommandBlockOverlay()
+        case .none:
             return
         }
-
-        let scaledDelta = event.scrollingDeltaY * Self.scrollSpeedFactor
-        guard scaledDelta != 0 else { return }
-
-        let steps = max(1, Int(abs(scaledDelta.rounded(.towardZero))))
-        let signedSteps = scaledDelta > 0 ? steps : -steps
-        bridge.scrollViewport(surfaceID: sid, deltaRows: signedSteps)
-        refreshCommandBlockOverlay()
-    }
-
-    private func shouldScrollLocallyWhileMouseTracking(_ event: NSEvent) -> Bool {
-        if prefersLocalScrollInMouseTrackingMode?() == true {
-            return true
-        }
-
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        return modifiers.contains(.option) || modifiers.contains(.shift)
     }
 
     private func followLiveViewportBeforeUserInput(
@@ -1620,34 +1612,26 @@ final class CocxyCoreView: NSView {
         )
     }
 
-    /// Encode a mouse button event for the active terminal mouse mode.
-    private func encodeMouseButton(
-        _ button: UInt8,
-        terminal: OpaquePointer,
-        mouseMode: UInt8,
-        event: NSEvent,
-        buf: inout [UInt8]
-    ) -> Int {
-        let pos = cellPosition(for: event, terminal: terminal)
-        guard mouseMode == 6 else {
-            let bytes: [UInt8] = [
-                0x1B,
-                0x5B,
-                0x4D,
-                UInt8(clamping: Int(button) + 32),
-                UInt8(clamping: Int(pos.col) + 33),
-                UInt8(clamping: Int(pos.row) + 33),
-            ]
-            let count = min(bytes.count, buf.count)
-            buf.replaceSubrange(0..<count, with: bytes[0..<count])
-            return count
-        }
+    private func mousePosition(
+        for event: NSEvent,
+        snapshot: TerminalViewportSnapshot
+    ) -> (row: UInt16, column: UInt16, pixelX: Int, pixelY: Int) {
+        let location = convert(event.locationInWindow, from: nil)
+        let scale = max(CGFloat(currentBackingScale()), 1)
+        let padding = contentPadding
+        let localX = max(0, location.x - padding.x)
+        let localY = max(0, location.y - padding.y)
+        let cellWidth = max(CGFloat(snapshot.cellWidth) / scale, 1)
+        let cellHeight = max(CGFloat(snapshot.cellHeight) / scale, 1)
+        let rawColumn = max(0, Int(localX / cellWidth))
+        let rawRow = max(0, Int(localY / cellHeight))
 
-        let seq = "\u{1B}[<\(button);\(pos.col + 1);\(pos.row + 1)M"
-        let bytes = Array(seq.utf8)
-        let count = min(bytes.count, buf.count)
-        buf.replaceSubrange(0..<count, with: bytes[0..<count])
-        return count
+        return (
+            row: UInt16(min(rawRow, max(0, Int(snapshot.visibleRowCount) - 1))),
+            column: UInt16(min(rawColumn, max(0, Int(snapshot.visibleColumnCount) - 1))),
+            pixelX: Int(localX * scale),
+            pixelY: Int(localY * scale)
+        )
     }
 
     private func smartCopyContextText(

@@ -21,8 +21,6 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var notificationRingLayer: CAShapeLayer?
     private var eventDrainTimer: Timer?
 
-    private static let scrollSpeedFactor: CGFloat = 0.15
-
     init(viewModel: TerminalViewModel?) {
         self.viewModel = viewModel
         self.font = NSFont.monospacedSystemFont(
@@ -164,39 +162,46 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func scrollWheel(with event: NSEvent) {
-        guard let bridge, let surfaceID else {
+        guard let bridge,
+              let surfaceID,
+              let frame = latestFrame else {
             super.scrollWheel(with: event)
             return
         }
-        let scaledDelta = event.scrollingDeltaY * Self.scrollSpeedFactor
-        guard scaledDelta != 0 else { return }
+        guard event.scrollingDeltaY != 0 else { return }
 
-        let mouseMode = latestFrame?.mouseTrackingMode ?? 0
-        if mouseMode > 0,
-           shouldScrollLocallyWhileMouseTracking(event) == false,
-           let daemon = bridge as? PTYDaemonClient,
-           let frame = latestFrame {
-            let position = cellPosition(for: event, frame: frame)
-            let button: UInt8 = scaledDelta > 0 ? 64 : 65
-            let count = max(1, Int(abs(scaledDelta)))
+        let mouseModes = Self.mouseModes(for: frame)
+        let destination = TerminalScrollRouter.destination(
+            localRange: UInt32(clamping: frame.historyMaxVisibleStart),
+            prefersLocal: prefersLocalScrollInMouseTrackingMode?() == true,
+            mouseTrackingMode: mouseModes.tracking,
+            modifiers: event.modifierFlags
+        )
+
+        switch destination {
+        case .terminalApplication:
+            guard let daemon = bridge as? PTYDaemonClient else { return }
+            let position = mousePosition(for: event, frame: frame)
             daemon.sendRawBytes(
-                Self.mouseWheelPayload(
-                    button: button,
-                    mouseMode: mouseMode,
+                TerminalMouseWireEncoder.wheelPayload(
+                    button: event.scrollingDeltaY > 0 ? 64 : 65,
+                    encodingRawValue: mouseModes.encoding,
                     row: position.row,
                     column: position.column,
-                    count: count
+                    pixelX: position.pixelX,
+                    pixelY: position.pixelY,
+                    count: TerminalScrollWheelMetrics.forwardedEventCount(for: event)
                 ),
                 to: surfaceID
             )
             return
+        case .localViewport:
+            let deltaRows = TerminalScrollWheelMetrics.localDeltaRows(for: event)
+            guard deltaRows != 0 else { return }
+            bridge.scrollViewport(surfaceID: surfaceID, deltaRows: deltaRows)
+        case .none:
+            return
         }
-
-        let steps = max(1, Int(abs(scaledDelta.rounded(.towardZero))))
-        bridge.scrollViewport(
-            surfaceID: surfaceID,
-            deltaRows: scaledDelta > 0 ? steps : -steps
-        )
     }
 
     override func insertText(_ insertString: Any) {
@@ -266,7 +271,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         }
     }
 
-    private func apply(_ frame: PTYDaemonSurfaceFrame) {
+    func apply(_ frame: PTYDaemonSurfaceFrame) {
         self.latestFrame = frame
         needsDisplay = true
     }
@@ -297,25 +302,32 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         return modifiers
     }
 
-    private func shouldScrollLocallyWhileMouseTracking(_ event: NSEvent) -> Bool {
-        if prefersLocalScrollInMouseTrackingMode?() == true {
-            return true
-        }
-        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        return modifiers.contains(.option) || modifiers.contains(.shift)
-    }
-
-    private func cellPosition(
+    private func mousePosition(
         for event: NSEvent,
         frame: PTYDaemonSurfaceFrame
-    ) -> (row: UInt16, column: UInt16) {
+    ) -> (row: UInt16, column: UInt16, pixelX: Int, pixelY: Int) {
         let location = convert(event.locationInWindow, from: nil)
         let rawColumn = max(0, Int(location.x / max(1, cellSize.width)))
         let rawRow = max(0, Int(location.y / max(1, cellSize.height)))
+        let scale = window?.backingScaleFactor ?? 1
         return (
             row: UInt16(min(rawRow, max(0, Int(frame.rows) - 1))),
-            column: UInt16(min(rawColumn, max(0, Int(frame.columns) - 1)))
+            column: UInt16(min(rawColumn, max(0, Int(frame.columns) - 1))),
+            pixelX: max(0, Int(location.x * scale)),
+            pixelY: max(0, Int(location.y * scale))
         )
+    }
+
+    private static func mouseModes(for frame: PTYDaemonSurfaceFrame) -> (tracking: UInt8, encoding: UInt8) {
+        if let encoding = frame.mouseEncodingMode {
+            return (frame.mouseTrackingMode ?? 0, encoding)
+        }
+
+        let legacyMode = frame.mouseTrackingMode ?? 0
+        if legacyMode == 6 {
+            return (2, TerminalMouseEncoding.sgr.rawValue)
+        }
+        return (legacyMode, TerminalMouseEncoding.x10.rawValue)
     }
 
     static func mouseWheelPayload(
@@ -325,27 +337,17 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         column: UInt16,
         count: Int
     ) -> Data {
-        let repetitions = max(1, count)
-        let event: Data
-        if mouseMode == 6 {
-            event = Data("\u{1B}[<\(button);\(column + 1);\(row + 1)M".utf8)
-        } else {
-            event = Data([
-                0x1B,
-                0x5B,
-                0x4D,
-                UInt8(clamping: Int(button) + 32),
-                UInt8(clamping: Int(column) + 33),
-                UInt8(clamping: Int(row) + 33),
-            ])
-        }
-
-        var payload = Data()
-        payload.reserveCapacity(event.count * repetitions)
-        for _ in 0..<repetitions {
-            payload.append(event)
-        }
-        return payload
+        TerminalMouseWireEncoder.wheelPayload(
+            button: button,
+            encodingRawValue: mouseMode == 6
+                ? TerminalMouseEncoding.sgr.rawValue
+                : TerminalMouseEncoding.x10.rawValue,
+            row: row,
+            column: column,
+            pixelX: Int(column),
+            pixelY: Int(row),
+            count: count
+        )
     }
 }
 

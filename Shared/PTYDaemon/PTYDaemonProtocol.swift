@@ -183,8 +183,10 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let cells: [PTYDaemonGridCell]
     public let cursor: PTYDaemonCursor
     public let scrollbackTop: Int
+    public let historyMaxVisibleStart: Int
     public let images: [PTYDaemonImageReference]
     public let mouseTrackingMode: UInt8?
+    public let mouseEncodingMode: UInt8?
 
     public init(
         surfaceID: String,
@@ -195,8 +197,10 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         cells: [PTYDaemonGridCell],
         cursor: PTYDaemonCursor,
         scrollbackTop: Int = 0,
+        historyMaxVisibleStart: Int = 0,
         images: [PTYDaemonImageReference] = [],
-        mouseTrackingMode: UInt8? = nil
+        mouseTrackingMode: UInt8? = nil,
+        mouseEncodingMode: UInt8? = nil
     ) {
         self.surfaceID = surfaceID
         self.revision = revision
@@ -206,8 +210,60 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.cells = cells
         self.cursor = cursor
         self.scrollbackTop = scrollbackTop
+        self.historyMaxVisibleStart = historyMaxVisibleStart
         self.images = images
         self.mouseTrackingMode = mouseTrackingMode
+        self.mouseEncodingMode = mouseEncodingMode
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case surfaceID
+        case revision
+        case timestamp
+        case columns
+        case rows
+        case cells
+        case cursor
+        case scrollbackTop
+        case historyMaxVisibleStart
+        case images
+        case mouseTrackingMode
+        case mouseEncodingMode
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        surfaceID = try container.decode(String.self, forKey: .surfaceID)
+        revision = try container.decode(UInt64.self, forKey: .revision)
+        timestamp = try container.decode(Double.self, forKey: .timestamp)
+        columns = try container.decode(UInt16.self, forKey: .columns)
+        rows = try container.decode(UInt16.self, forKey: .rows)
+        cells = try container.decode([PTYDaemonGridCell].self, forKey: .cells)
+        cursor = try container.decode(PTYDaemonCursor.self, forKey: .cursor)
+        scrollbackTop = try container.decodeIfPresent(Int.self, forKey: .scrollbackTop) ?? 0
+        historyMaxVisibleStart = try container.decodeIfPresent(
+            Int.self,
+            forKey: .historyMaxVisibleStart
+        ) ?? 0
+        images = try container.decodeIfPresent([PTYDaemonImageReference].self, forKey: .images) ?? []
+        mouseTrackingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseTrackingMode)
+        mouseEncodingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseEncodingMode)
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(surfaceID, forKey: .surfaceID)
+        try container.encode(revision, forKey: .revision)
+        try container.encode(timestamp, forKey: .timestamp)
+        try container.encode(columns, forKey: .columns)
+        try container.encode(rows, forKey: .rows)
+        try container.encode(cells, forKey: .cells)
+        try container.encode(cursor, forKey: .cursor)
+        try container.encode(scrollbackTop, forKey: .scrollbackTop)
+        try container.encode(historyMaxVisibleStart, forKey: .historyMaxVisibleStart)
+        try container.encode(images, forKey: .images)
+        try container.encodeIfPresent(mouseTrackingMode, forKey: .mouseTrackingMode)
+        try container.encodeIfPresent(mouseEncodingMode, forKey: .mouseEncodingMode)
     }
 }
 

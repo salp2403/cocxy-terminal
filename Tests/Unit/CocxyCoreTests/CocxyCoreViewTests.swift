@@ -1249,6 +1249,87 @@ struct CocxyCoreViewTests {
         #expect(!output.data.containsSubsequence(Data([0x1B, 0x5B, 0x4D, 0x60, 0x21, 0x21])))
     }
 
+    @Test("alt screen tracking forwards wheel input when local history is empty")
+    func altScreenTrackingForwardsWheelWhenHistoryIsEmpty() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1049h\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.isAltScreen == true)
+        #expect(snapshot.historyMaxVisibleStart == 0)
+        #expect(snapshot.mouseTrackingMode > 0)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
+
+        let expected = Data("\u{001B}[<64;1;1M".utf8)
+        try await waitUntil {
+            output.data.containsSubsequence(expected)
+        }
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("shift forwards wheel input when local history is empty")
+    func shiftForwardsWheelWhenHistoryIsEmpty() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        harness.view.prefersLocalScrollInMouseTrackingMode = { true }
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.historyMaxVisibleStart == 0)
+        #expect(snapshot.mouseTrackingMode > 0)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24, modifiers: [.shift]))
+
+        let expected = Data("\u{001B}[<64;1;1M".utf8)
+        try await waitUntil {
+            output.data.containsSubsequence(expected)
+        }
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("scroll wheel is a clean no-op when neither history nor tracking is available")
+    func scrollWheelIsNoOpWithoutDestination() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let before = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(before.historyMaxVisibleStart == 0)
+        #expect(before.mouseTrackingMode == 0)
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let after = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(output.data.isEmpty)
+        #expect(after.visibleStartRow == before.visibleStartRow)
+        #expect(after.historyMaxVisibleStart == before.historyMaxVisibleStart)
+    }
+
     @Test("active agent scroll uses local viewport when terminal mouse mode is enabled")
     func activeAgentScrollUsesLocalViewportInMouseMode() throws {
         let harness = try makeViewHarness()
@@ -1679,7 +1760,10 @@ private func makeMouseEvent(
     )!
 }
 
-private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
+private func makeScrollEvent(
+    deltaY: CGFloat,
+    modifiers: NSEvent.ModifierFlags = []
+) -> NSEvent {
     let event = CGEvent(
         scrollWheelEvent2Source: nil,
         units: .pixel,
@@ -1688,6 +1772,12 @@ private func makeScrollEvent(deltaY: CGFloat) -> NSEvent {
         wheel2: 0,
         wheel3: 0
     )!
+    var flags: CGEventFlags = []
+    if modifiers.contains(.shift) { flags.insert(.maskShift) }
+    if modifiers.contains(.control) { flags.insert(.maskControl) }
+    if modifiers.contains(.option) { flags.insert(.maskAlternate) }
+    if modifiers.contains(.command) { flags.insert(.maskCommand) }
+    event.flags = flags
     event.location = NSPoint(x: 10, y: 10)
     return NSEvent(cgEvent: event)!
 }

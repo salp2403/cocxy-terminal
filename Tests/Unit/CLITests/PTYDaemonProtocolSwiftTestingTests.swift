@@ -102,15 +102,47 @@ struct PTYDaemonProtocolSwiftTestingTests {
             ],
             cursor: PTYDaemonCursor(row: 0, column: 1),
             scrollbackTop: 3,
+            historyMaxVisibleStart: 12,
             images: [
                 PTYDaemonImageReference(id: "img-1", row: 0, column: 1, width: 4, height: 2)
             ],
-            mouseTrackingMode: 6
+            mouseTrackingMode: 2,
+            mouseEncodingMode: 3
         )
         let response = PTYDaemonResponse(id: "frame-1", ok: true, frame: frame)
         let data = try PTYDaemonLineCodec.encode(response)
 
         #expect(try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: data) == response)
+    }
+
+    @Test("surface frames from older daemons default new routing fields")
+    func olderSurfaceFramesDefaultNewRoutingFields() throws {
+        let current = PTYDaemonSurfaceFrame(
+            surfaceID: "11111111-1111-1111-1111-111111111111",
+            revision: 8,
+            timestamp: 1_776_000_001,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 4,
+            historyMaxVisibleStart: 20,
+            mouseTrackingMode: 6,
+            mouseEncodingMode: 3
+        )
+        let encoded = try JSONEncoder().encode(current)
+        var legacyObject = try #require(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        legacyObject.removeValue(forKey: "historyMaxVisibleStart")
+        legacyObject.removeValue(forKey: "mouseEncodingMode")
+        let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
+
+        let decoded = try JSONDecoder().decode(PTYDaemonSurfaceFrame.self, from: legacyData)
+
+        #expect(decoded.historyMaxVisibleStart == 0)
+        #expect(decoded.mouseTrackingMode == 6)
+        #expect(decoded.mouseEncodingMode == nil)
     }
 
     @Test("process registration omits daemon-local file descriptors")

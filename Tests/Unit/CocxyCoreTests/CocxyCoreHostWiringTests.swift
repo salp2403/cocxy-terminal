@@ -61,12 +61,68 @@ struct CocxyCoreHostWiringTests {
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
         let surfaceID = SurfaceID()
         view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 100
+        ))
 
         view.scrollWheel(with: makeScrollEvent(deltaY: 120))
 
         #expect(engine.viewportScrollRequests.count == 1)
         #expect(engine.viewportScrollRequests.first?.surface == surfaceID)
         #expect(engine.viewportScrollRequests.first?.deltaRows == 18)
+    }
+
+    @Test("daemon host preserves local agent scroll when history exists")
+    func daemonHostPreservesLocalAgentScrollWithHistory() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.prefersLocalScrollInMouseTrackingMode = { true }
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 20,
+            mouseTrackingMode: 2,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+        ))
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        #expect(engine.viewportScrollRequests.map(\.deltaRows) == [18])
+    }
+
+    @Test("daemon host cleanly ignores wheel input with no destination")
+    func daemonHostIgnoresWheelWithNoDestination() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0)
+        ))
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 120))
+
+        #expect(engine.viewportScrollRequests.isEmpty)
     }
 
     @Test("daemon host encodes exact X10 and SGR mouse wheel payloads")

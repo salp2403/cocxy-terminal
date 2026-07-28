@@ -243,10 +243,19 @@ struct TerminalFontMetricsSnapshot: Equatable, Sendable, Encodable {
 
 struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
     let visibleStartRow: UInt32
+    let historyMaxVisibleStart: UInt32
     let visibleRowCount: UInt16
+    let visibleColumnCount: UInt16
     let cellWidth: Float
     let cellHeight: Float
     let isAltScreen: Bool
+    let mouseTrackingMode: UInt8
+    let mouseEncodingMode: UInt8
+
+    var viewOffset: UInt32 {
+        guard historyMaxVisibleStart >= visibleStartRow else { return 0 }
+        return historyMaxVisibleStart - visibleStartRow
+    }
 }
 
 struct TerminalSelectionSnapshot: Equatable, Sendable, Encodable {
@@ -1879,10 +1888,14 @@ final class CocxyCoreBridge: TerminalEngine {
 
             return TerminalViewportSnapshot(
                 visibleStartRow: cocxycore_terminal_history_visible_start(state.terminal),
+                historyMaxVisibleStart: cocxycore_terminal_history_max_visible_start(state.terminal),
                 visibleRowCount: cocxycore_terminal_rows(state.terminal),
+                visibleColumnCount: cocxycore_terminal_cols(state.terminal),
                 cellWidth: metrics.cell_width,
                 cellHeight: metrics.cell_height,
-                isAltScreen: cocxycore_terminal_is_alt_screen(state.terminal)
+                isAltScreen: cocxycore_terminal_is_alt_screen(state.terminal),
+                mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(state.terminal),
+                mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(state.terminal)
             )
         } ?? nil
     }
@@ -2601,8 +2614,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Returns the visible-history top row for a surface.
     func historyVisibleStart(for surface: SurfaceID) -> UInt32? {
-        guard let state = surfaces[surface] else { return nil }
-        return cocxycore_terminal_history_visible_start(state.terminal)
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_history_visible_start(state.terminal)
+        }
     }
 
     /// Sets the visible-history top row for best-effort session restore.
