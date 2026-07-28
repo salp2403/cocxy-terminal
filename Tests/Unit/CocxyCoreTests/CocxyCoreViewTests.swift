@@ -1371,6 +1371,74 @@ struct CocxyCoreViewTests {
         #expect(after < before)
     }
 
+    @Test("local viewport keyboard commands reach both history bounds")
+    func localViewportKeyboardCommandsReachHistoryBounds() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+        let bottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(bottom > 0)
+
+        harness.view.performLocalViewportScroll(.top)
+        #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == 0)
+
+        harness.view.performLocalViewportScroll(.bottom)
+        #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == bottom)
+    }
+
+    @Test("Shift+PageUp scrolls locally without writing the shortcut to the PTY")
+    func shiftPageUpScrollsLocallyWithoutPTYBytes() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        let before = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        let target = MenuActionTarget()
+        target.onTerminalScroll = {
+            harness.view.performLocalViewportScroll(.pageUp)
+        }
+        let mainMenu = NSMenu(title: "Main")
+        let viewItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        let scrollItem = NSMenuItem(
+            title: "Scroll Terminal Page Up",
+            action: #selector(MenuActionTarget.scrollTerminalPageUp(_:)),
+            keyEquivalent: ""
+        )
+        scrollItem.target = target
+        MenuKeybindingsBinder.tag(scrollItem, with: KeybindingActionCatalog.terminalScrollPageUp)
+        viewMenu.addItem(scrollItem)
+        viewItem.submenu = viewMenu
+        mainMenu.addItem(viewItem)
+        application.mainMenu = mainMenu
+        defer { application.mainMenu = oldMenu }
+
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        let pageUpCharacter = String(Character(UnicodeScalar(NSPageUpFunctionKey)!))
+
+        harness.view.keyDown(with: makeKeyEvent(
+            characters: pageUpCharacter,
+            modifiers: [.shift],
+            keyCode: 116
+        ))
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(after < before)
+        #expect(target.didInvokeTerminalScroll == true)
+        #expect(output.data.isEmpty)
+    }
+
     @Test("selection highlight remains anchored after local history scroll")
     func selectionHighlightRemainsAnchoredAfterLocalHistoryScroll() throws {
         let harness = try makeViewHarness()
@@ -1620,9 +1688,16 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
 @MainActor
 private final class MenuActionTarget: NSObject {
     private(set) var didInvoke = false
+    private(set) var didInvokeTerminalScroll = false
+    var onTerminalScroll: (() -> Void)?
 
     @objc func toggleCodeReview(_ sender: Any?) {
         didInvoke = true
+    }
+
+    @objc func scrollTerminalPageUp(_ sender: Any?) {
+        didInvokeTerminalScroll = true
+        onTerminalScroll?()
     }
 }
 

@@ -389,6 +389,38 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "down")
     )
 
+    static let terminalScrollPageUp = KeybindingAction(
+        id: "terminal.scrollPageUp",
+        displayName: "Scroll Terminal Page Up",
+        summary: "Move the local terminal viewport one page into history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresShift: true, baseKey: "pageup")
+    )
+
+    static let terminalScrollPageDown = KeybindingAction(
+        id: "terminal.scrollPageDown",
+        displayName: "Scroll Terminal Page Down",
+        summary: "Move the local terminal viewport one page toward live output.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresShift: true, baseKey: "pagedown")
+    )
+
+    static let terminalScrollToTop = KeybindingAction(
+        id: "terminal.scrollToTop",
+        displayName: "Scroll Terminal to Top",
+        summary: "Jump to the oldest available terminal history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "home")
+    )
+
+    static let terminalScrollToBottom = KeybindingAction(
+        id: "terminal.scrollToBottom",
+        displayName: "Scroll Terminal to Bottom",
+        summary: "Return to the terminal's live output.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "end")
+    )
+
     // MARK: - Editor (view actions: find, zoom)
 
     static let editorFind = KeybindingAction(
@@ -541,6 +573,10 @@ enum KeybindingActionCatalog {
         navigateSplitRight,
         navigateSplitUp,
         navigateSplitDown,
+        terminalScrollPageUp,
+        terminalScrollPageDown,
+        terminalScrollToTop,
+        terminalScrollToBottom,
         // Editor
         editorFind,
         voiceInput,

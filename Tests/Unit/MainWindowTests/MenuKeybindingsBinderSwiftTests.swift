@@ -194,6 +194,48 @@ struct MenuKeybindingsBinderSwiftTests {
         #expect(item.keyEquivalentModifierMask == [.command, .option])
     }
 
+    @Test("terminal page shortcuts bind function keys without entering the PTY")
+    func terminalPageShortcutsBindFunctionKeys() {
+        let (menu, item) = makeMenu(tagging: KeybindingActionCatalog.terminalScrollPageUp)
+
+        MenuKeybindingsBinder.apply(.defaults, to: menu)
+
+        let expected = String(Character(UnicodeScalar(NSPageUpFunctionKey)!))
+        #expect(item.keyEquivalent == expected)
+        #expect(item.keyEquivalentModifierMask == [.shift])
+        #expect(MenuKeybindingsBinder.actionId(of: item) == "terminal.scrollPageUp")
+    }
+
+    @Test("production View menu wires every terminal history action")
+    func productionViewMenuWiresTerminalHistoryActions() throws {
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        defer { application.mainMenu = oldMenu }
+        AppDelegate().setupMainMenuForTesting()
+        let viewMenu = try #require(application.mainMenu?.items.first {
+            $0.submenu?.title == "View"
+        }?.submenu)
+
+        let expected: [String: Selector] = [
+            KeybindingActionCatalog.terminalScrollPageUp.id:
+                #selector(MainWindowController.scrollTerminalPageUpAction(_:)),
+            KeybindingActionCatalog.terminalScrollPageDown.id:
+                #selector(MainWindowController.scrollTerminalPageDownAction(_:)),
+            KeybindingActionCatalog.terminalScrollToTop.id:
+                #selector(MainWindowController.scrollTerminalToTopAction(_:)),
+            KeybindingActionCatalog.terminalScrollToBottom.id:
+                #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
+        ]
+
+        for (actionId, selector) in expected {
+            let item = try #require(viewMenu.items.first {
+                MenuKeybindingsBinder.actionId(of: $0) == actionId
+            })
+            #expect(item.action == selector)
+            #expect(!item.keyEquivalent.isEmpty)
+        }
+    }
+
     // MARK: - Nested Menus
 
     @Test("apply walks into submenus")

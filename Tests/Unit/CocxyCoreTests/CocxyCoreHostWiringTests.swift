@@ -125,6 +125,36 @@ struct CocxyCoreHostWiringTests {
         #expect(engine.viewportScrollRequests.isEmpty)
     }
 
+    @Test("daemon host exposes all local viewport keyboard commands")
+    func daemonHostExposesViewportKeyboardCommands() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 100
+        ))
+
+        view.performLocalViewportScroll(.pageUp)
+        view.performLocalViewportScroll(.pageDown)
+        view.performLocalViewportScroll(.top)
+        view.performLocalViewportScroll(.bottom)
+
+        #expect(engine.viewportScrollRequests.map(\.deltaRows) == [
+            24,
+            -24,
+            Int(Int32.max),
+            Int(Int32.min),
+        ])
+    }
+
     @Test("daemon host encodes exact X10 and SGR mouse wheel payloads")
     func daemonHostEncodesMouseWheelPayloads() {
         let x10 = PTYDaemonHostView.mouseWheelPayload(

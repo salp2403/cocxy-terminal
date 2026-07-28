@@ -173,4 +173,12 @@ struct KeybindingActionCatalogTests {
         #expect(KeybindingActionCatalog.voiceInput.defaultShortcut.canonical == "cmd+shift+space")
         #expect(KeybindingActionCatalog.voiceInput.category == .editor)
     }
+
+    @Test func terminalHistoryActionsUseDedicatedNavigationShortcuts() {
+        #expect(KeybindingActionCatalog.terminalScrollPageUp.defaultShortcut.canonical == "shift+pageup")
+        #expect(KeybindingActionCatalog.terminalScrollPageDown.defaultShortcut.canonical == "shift+pagedown")
+        #expect(KeybindingActionCatalog.terminalScrollToTop.defaultShortcut.canonical == "cmd+home")
+        #expect(KeybindingActionCatalog.terminalScrollToBottom.defaultShortcut.canonical == "cmd+end")
+        #expect(KeybindingActionCatalog.all.count == 50)
+    }
 }

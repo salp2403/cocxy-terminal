@@ -655,6 +655,11 @@ final class CocxyCoreView: NSView {
         )
 
         if action == .sendToTerminal,
+           performTerminalViewportKeyEquivalent(with: event) {
+            return
+        }
+
+        if action == .sendToTerminal,
            modifiers.contains(.command),
            performKeyEquivalent(with: event) {
             return
@@ -1499,6 +1504,16 @@ final class CocxyCoreView: NSView {
         }
     }
 
+    private func performTerminalViewportKeyEquivalent(with event: NSEvent) -> Bool {
+        guard let menu = NSApp.mainMenu,
+              MenuKeybindingsBinder.matches(
+                event,
+                actionIds: TerminalViewportScrollCommand.keybindingActionIDs,
+                in: menu
+              ) else { return false }
+        return menu.performKeyEquivalent(with: event)
+    }
+
     private func followLiveViewportBeforeUserInput(
         bridge: CocxyCoreBridge,
         surfaceID: SurfaceID
@@ -1815,6 +1830,31 @@ final class CocxyCoreView: NSView {
 // MARK: - Terminal Hosting View
 
 extension CocxyCoreView: TerminalHostingView {
+    var isTerminalMouseTrackingActive: Bool {
+        guard let bridge, let sid = surfaceID else { return false }
+        return (bridge.terminalViewportSnapshot(for: sid)?.mouseTrackingMode ?? 0) > 0
+    }
+
+    func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else { return }
+        let pageRows = max(1, Int(snapshot.visibleRowCount))
+        let deltaRows: Int
+        switch command {
+        case .pageUp:
+            deltaRows = pageRows
+        case .pageDown:
+            deltaRows = -pageRows
+        case .top:
+            deltaRows = Int(Int32.max)
+        case .bottom:
+            deltaRows = Int(Int32.min)
+        }
+        bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
+        refreshCommandBlockOverlay()
+    }
+
     var terminalViewModel: TerminalViewModel? { viewModel }
 
     /// Re-anchors the CVDisplayLink to the display currently hosting

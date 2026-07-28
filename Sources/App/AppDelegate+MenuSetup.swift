@@ -503,6 +503,40 @@ extension AppDelegate {
 
         viewMenu.addItem(NSMenuItem.separator())
 
+        let scrollPageUpItem = NSMenuItem(
+            title: menuString("menu.view.scrollPageUp", "Scroll Terminal Page Up", localizer),
+            action: #selector(MainWindowController.scrollTerminalPageUpAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollPageUpItem, with: KeybindingActionCatalog.terminalScrollPageUp)
+        viewMenu.addItem(scrollPageUpItem)
+
+        let scrollPageDownItem = NSMenuItem(
+            title: menuString("menu.view.scrollPageDown", "Scroll Terminal Page Down", localizer),
+            action: #selector(MainWindowController.scrollTerminalPageDownAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollPageDownItem, with: KeybindingActionCatalog.terminalScrollPageDown)
+        viewMenu.addItem(scrollPageDownItem)
+
+        let scrollToTopItem = NSMenuItem(
+            title: menuString("menu.view.scrollToTop", "Scroll Terminal to Top", localizer),
+            action: #selector(MainWindowController.scrollTerminalToTopAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollToTopItem, with: KeybindingActionCatalog.terminalScrollToTop)
+        viewMenu.addItem(scrollToTopItem)
+
+        let scrollToBottomItem = NSMenuItem(
+            title: menuString("menu.view.scrollToBottom", "Scroll Terminal to Bottom", localizer),
+            action: #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(scrollToBottomItem, with: KeybindingActionCatalog.terminalScrollToBottom)
+        viewMenu.addItem(scrollToBottomItem)
+
+        viewMenu.addItem(NSMenuItem.separator())
+
         let zoomInItem = NSMenuItem(
             title: menuString("menu.view.zoomIn", "Zoom In", localizer),
             action: #selector(MainWindowController.zoomInAction(_:)),

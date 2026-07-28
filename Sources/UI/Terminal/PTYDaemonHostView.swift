@@ -140,6 +140,9 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func keyDown(with event: NSEvent) {
+        if performTerminalViewportKeyEquivalent(with: event) {
+            return
+        }
         guard let bridge, let surfaceID else {
             super.keyDown(with: event)
             return
@@ -276,6 +279,28 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         needsDisplay = true
     }
 
+    var isTerminalMouseTrackingActive: Bool {
+        guard let latestFrame else { return false }
+        return Self.mouseModes(for: latestFrame).tracking > 0
+    }
+
+    func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {
+        guard let bridge, let surfaceID, let latestFrame else { return }
+        let pageRows = max(1, Int(latestFrame.rows))
+        let deltaRows: Int
+        switch command {
+        case .pageUp:
+            deltaRows = pageRows
+        case .pageDown:
+            deltaRows = -pageRows
+        case .top:
+            deltaRows = Int(Int32.max)
+        case .bottom:
+            deltaRows = Int(Int32.min)
+        }
+        bridge.scrollViewport(surfaceID: surfaceID, deltaRows: deltaRows)
+    }
+
     private func startEventDrainTimerIfNeeded() {
         guard eventDrainTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0 / 60.0, repeats: true) { [weak self] _ in
@@ -291,6 +316,16 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
         let size = ("M" as NSString).size(withAttributes: attributes)
         return CGSize(width: max(1, ceil(size.width)), height: max(1, ceil(font.ascender - font.descender + font.leading)))
+    }
+
+    private func performTerminalViewportKeyEquivalent(with event: NSEvent) -> Bool {
+        guard let menu = NSApp.mainMenu,
+              MenuKeybindingsBinder.matches(
+                event,
+                actionIds: TerminalViewportScrollCommand.keybindingActionIDs,
+                in: menu
+              ) else { return false }
+        return menu.performKeyEquivalent(with: event)
     }
 
     private static func keyModifiers(from flags: NSEvent.ModifierFlags) -> KeyModifiers {

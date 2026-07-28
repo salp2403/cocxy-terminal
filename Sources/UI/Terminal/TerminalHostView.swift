@@ -5,6 +5,20 @@ import AppKit
 
 // MARK: - Terminal Host View
 
+enum TerminalViewportScrollCommand: Sendable {
+    case pageUp
+    case pageDown
+    case top
+    case bottom
+
+    static let keybindingActionIDs: Set<String> = [
+        KeybindingActionCatalog.terminalScrollPageUp.id,
+        KeybindingActionCatalog.terminalScrollPageDown.id,
+        KeybindingActionCatalog.terminalScrollToTop.id,
+        KeybindingActionCatalog.terminalScrollToBottom.id,
+    ]
+}
+
 /// Common contract implemented by terminal host views.
 ///
 /// `CocxyCoreView` renders a terminal surface, participates in tab/split
@@ -27,6 +41,8 @@ protocol TerminalHostingView: AnyObject {
         surfaceID: SurfaceID
     )
     func requestImmediateRedraw()
+    func performLocalViewportScroll(_ command: TerminalViewportScrollCommand)
+    var isTerminalMouseTrackingActive: Bool { get }
 
     /// Re-anchors the host view's CVDisplayLink (or equivalent render
     /// timing source) to the display currently hosting the window.
@@ -39,6 +55,11 @@ protocol TerminalHostingView: AnyObject {
     /// also calls this when the view is attached, so the operation must
     /// be idempotent.
     func refreshDisplayLinkAnchor()
+}
+
+extension TerminalHostingView {
+    func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {}
+    var isTerminalMouseTrackingActive: Bool { false }
 }
 
 typealias TerminalHostView = NSView & TerminalHostingView

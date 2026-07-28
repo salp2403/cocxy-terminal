@@ -2742,6 +2742,22 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     // MARK: - Zoom Actions
 
+    @objc func scrollTerminalPageUpAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.pageUp)
+    }
+
+    @objc func scrollTerminalPageDownAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.pageDown)
+    }
+
+    @objc func scrollTerminalToTopAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.top)
+    }
+
+    @objc func scrollTerminalToBottomAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.performLocalViewportScroll(.bottom)
+    }
+
     /// Increases the terminal font size by one step. Wired to Cmd++ via the View menu.
     @objc func zoomInAction(_ sender: Any?) {
         guard let tabID = visibleTabID,
