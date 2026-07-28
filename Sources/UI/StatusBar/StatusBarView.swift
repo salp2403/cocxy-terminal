@@ -43,6 +43,9 @@ struct StatusBarView: View {
     /// Whether a command is currently running.
     var isCommandRunning: Bool = false
 
+    /// Whether the focused terminal application currently captures mouse input.
+    var isTerminalMouseCaptured: Bool = false
+
     /// Whether to use vibrancy material instead of solid background.
     var useVibrancy: Bool = false
 
@@ -148,6 +151,21 @@ struct StatusBarView: View {
             }
 
             Spacer()
+
+            if isTerminalMouseCaptured {
+                HStack(spacing: 4) {
+                    Image(systemName: "cursorarrow.motionlines")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text(verbatim: "mouse: app")
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                }
+                .foregroundColor(CocxyColors.swiftUI(CocxyColors.yellow))
+                .padding(.trailing, 10)
+                .accessibilityLabel(localizer.string(
+                    "statusBar.mouseCaptured.accessibility",
+                    fallback: "Mouse input captured by terminal application"
+                ))
+            }
 
             // Right: active dev server ports
             if !activePorts.isEmpty {

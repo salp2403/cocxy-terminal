@@ -12,6 +12,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var onUserInputSubmitted: (() -> Void)?
     var onFramePresented: (() -> Void)?
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
+    var onTerminalInteractionStateChanged: (() -> Void)?
 
     private weak var bridge: (any TerminalEngine)?
     private var surfaceID: SurfaceID?
@@ -20,6 +21,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var cellSize: CGSize
     private var notificationRingLayer: CAShapeLayer?
     private var eventDrainTimer: Timer?
+    private(set) var historyPillView: TerminalHistoryPillView?
+    private var lastNotifiedMouseTrackingActive: Bool?
 
     init(viewModel: TerminalViewModel?) {
         self.viewModel = viewModel
@@ -32,6 +35,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         registerForDraggedTypes([.fileURL])
+        installHistoryPill()
     }
 
     deinit {
@@ -147,6 +151,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             super.keyDown(with: event)
             return
         }
+        followLiveViewportBeforeUserInput()
         let keyEvent = KeyEvent(
             characters: event.characters,
             keyCode: UInt16(event.keyCode),
@@ -217,6 +222,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             return
         }
         guard let bridge, let surfaceID else { return }
+        followLiveViewportBeforeUserInput()
         bridge.sendText(text, to: surfaceID)
     }
 
@@ -276,6 +282,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     func apply(_ frame: PTYDaemonSurfaceFrame) {
         self.latestFrame = frame
+        refreshHistoryPill(using: frame)
         needsDisplay = true
     }
 
@@ -299,6 +306,41 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             deltaRows = Int(Int32.min)
         }
         bridge.scrollViewport(surfaceID: surfaceID, deltaRows: deltaRows)
+        if command == .bottom {
+            historyPillView?.update(linesAbove: 0)
+        }
+    }
+
+    private func installHistoryPill() {
+        let pill = TerminalHistoryPillView()
+        pill.onJumpToBottom = { [weak self] in
+            self?.performLocalViewportScroll(.bottom)
+        }
+        addSubview(pill)
+        NSLayoutConstraint.activate([
+            pill.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            pill.centerXAnchor.constraint(equalTo: centerXAnchor),
+            pill.heightAnchor.constraint(equalToConstant: 28),
+            pill.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            pill.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+        ])
+        historyPillView = pill
+    }
+
+    private func refreshHistoryPill(using frame: PTYDaemonSurfaceFrame) {
+        let offset = max(0, frame.historyMaxVisibleStart - frame.scrollbackTop)
+        historyPillView?.update(linesAbove: UInt32(clamping: offset))
+        let isMouseTrackingActive = Self.mouseModes(for: frame).tracking > 0
+        if lastNotifiedMouseTrackingActive != isMouseTrackingActive {
+            lastNotifiedMouseTrackingActive = isMouseTrackingActive
+            onTerminalInteractionStateChanged?()
+        }
+    }
+
+    private func followLiveViewportBeforeUserInput() {
+        guard let latestFrame,
+              latestFrame.historyMaxVisibleStart > latestFrame.scrollbackTop else { return }
+        performLocalViewportScroll(.bottom)
     }
 
     private func startEventDrainTimerIfNeeded() {

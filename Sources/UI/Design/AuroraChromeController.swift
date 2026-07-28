@@ -50,6 +50,9 @@ final class AuroraChromeController: ObservableObject {
     /// Updated once per second by the integration layer.
     @Published var clockLabel: String = ""
 
+    /// Whether the focused terminal application currently captures mouse input.
+    @Published var isTerminalMouseCaptured: Bool = false
+
     /// Palette data mirrored from the production engine.
     @Published var paletteActions: [Design.AuroraPaletteAction] = []
     @Published var paletteStrings: Design.AuroraPaletteStrings = .english
@@ -780,6 +783,7 @@ struct AuroraStatusBarHost: View {
                 set: { controller.timeline = $0 }
             ),
             clockLabel: controller.clockLabel,
+            isTerminalMouseCaptured: controller.isTerminalMouseCaptured,
             onReplay: controller.statusBarReplayAvailable
                 ? { controller.openSessionReplayFromStatusBar() }
                 : nil,

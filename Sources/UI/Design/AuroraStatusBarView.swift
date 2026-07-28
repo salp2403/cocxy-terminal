@@ -84,6 +84,7 @@ extension Design {
         let ports: [AuroraPortBinding]
         @Binding var timeline: AuroraTimelineState
         let clockLabel: String
+        let isTerminalMouseCaptured: Bool
         let onReplay: (() -> Void)?
         let onCopyPort: (AuroraPortBinding) -> Void
         let onOpenPort: (AuroraPortBinding) -> Void
@@ -96,6 +97,7 @@ extension Design {
             ports: [AuroraPortBinding],
             timeline: Binding<AuroraTimelineState>,
             clockLabel: String,
+            isTerminalMouseCaptured: Bool = false,
             onReplay: (() -> Void)? = nil,
             onCopyPort: @escaping (AuroraPortBinding) -> Void = { _ in },
             onOpenPort: @escaping (AuroraPortBinding) -> Void = { _ in },
@@ -105,6 +107,7 @@ extension Design {
             self.ports = ports
             self._timeline = timeline
             self.clockLabel = clockLabel
+            self.isTerminalMouseCaptured = isTerminalMouseCaptured
             self.onReplay = onReplay
             self.onCopyPort = onCopyPort
             self.onOpenPort = onOpenPort
@@ -127,6 +130,20 @@ extension Design {
                     onOpenPort: onOpenPort,
                     localizer: localizer
                 )
+                if isTerminalMouseCaptured {
+                    separator
+                    HStack(spacing: Spacing.xSmall) {
+                        Image(systemName: "cursorarrow.motionlines")
+                            .font(.system(size: 9, weight: .semibold))
+                        Text(verbatim: "mouse: app")
+                            .font(.system(size: 10, design: .monospaced))
+                    }
+                    .foregroundStyle(palette.accent.resolvedColor())
+                    .accessibilityLabel(localizer.string(
+                        "auroraStatus.mouseCaptured.accessibility",
+                        fallback: "Mouse input captured by terminal application"
+                    ))
+                }
                 if let onReplay {
                     separator
                     SessionReplayStatusButtonView(

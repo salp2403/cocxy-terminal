@@ -112,6 +112,8 @@ extension MainWindowController {
             rateLimitAgent = nil
         }
         rateLimitProbeService.setActiveAgent(rateLimitAgent)
+        let isTerminalMouseCaptured = activeTerminalSurfaceView?.isTerminalMouseTrackingActive ?? false
+        auroraChromeController?.isTerminalMouseCaptured = isTerminalMouseCaptured
 
         let isTransparent = (appearance?.backgroundOpacity ?? 1.0) < 1.0
         var statusBar = StatusBarView(
@@ -124,6 +126,7 @@ extension MainWindowController {
             lastCommandDuration: activeTab?.lastCommandDuration,
             lastCommandExitCode: activeTab?.lastCommandExitCode,
             isCommandRunning: activeTab?.isCommandRunning ?? false,
+            isTerminalMouseCaptured: isTerminalMouseCaptured,
             localizer: appLocalizer()
         )
         statusBar.useVibrancy = isTransparent

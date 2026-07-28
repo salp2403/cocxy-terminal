@@ -5,7 +5,7 @@ import AppKit
 
 // MARK: - Terminal Host View
 
-enum TerminalViewportScrollCommand: Sendable {
+enum TerminalViewportScrollCommand: Equatable, Sendable {
     case pageUp
     case pageDown
     case top

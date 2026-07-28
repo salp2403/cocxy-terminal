@@ -198,6 +198,9 @@ extension MainWindowController {
             cocxyView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }
+            cocxyView.onTerminalInteractionStateChanged = { [weak self] in
+                self?.refreshStatusBar()
+            }
             cocxyView.prefersPacedDeleteRepeat = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }
@@ -231,6 +234,9 @@ extension MainWindowController {
         } else if let daemonView = surfaceView as? PTYDaemonHostView {
             daemonView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
+            }
+            daemonView.onTerminalInteractionStateChanged = { [weak self] in
+                self?.refreshStatusBar()
             }
         }
     }

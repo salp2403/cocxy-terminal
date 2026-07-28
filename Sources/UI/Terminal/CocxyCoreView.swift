@@ -74,6 +74,9 @@ final class CocxyCoreView: NSView {
     /// while the foreground process has enabled terminal mouse tracking.
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
 
+    /// Notifies window chrome when terminal mouse capture changes.
+    var onTerminalInteractionStateChanged: (() -> Void)?
+
     /// Returns whether delete-key autorepeat should be paced because the
     /// foreground prompt is an agent UI. This keeps agent prompt editing
     /// controllable even when the TUI has not enabled alt-screen or mouse
@@ -138,6 +141,7 @@ final class CocxyCoreView: NSView {
     // MARK: - Command Block Overlay
 
     private(set) var commandBlockOverlayView: TerminalBlockOverlayView?
+    private(set) var historyPillView: TerminalHistoryPillView?
 
     // MARK: - Command Corrections
 
@@ -198,6 +202,7 @@ final class CocxyCoreView: NSView {
     /// Observes screen changes on the hosting window so terminal metrics can be
     /// recalculated immediately when the view moves between displays.
     private var windowScreenObserver: NSObjectProtocol?
+    private var lastNotifiedMouseTrackingActive: Bool?
 
     // MARK: - Constants
 
@@ -240,6 +245,7 @@ final class CocxyCoreView: NSView {
     func updateLocalizer(_ localizer: AppLocalizer) {
         self.localizer = localizer
         commandBlockOverlayView?.updateLocalizer(localizer)
+        historyPillView?.updateLocalizer(localizer)
         if let pendingCommandCorrection {
             commandCorrectionSuggestionView?.update(
                 correction: pendingCommandCorrection,
@@ -318,6 +324,7 @@ final class CocxyCoreView: NSView {
         }
 
         installCommandBlockOverlayIfNeeded()
+        installHistoryPillIfNeeded()
         refreshBackingConfiguration(forceGridSync: true)
         updateDisplayLinkRunningState()
     }
@@ -421,6 +428,7 @@ final class CocxyCoreView: NSView {
             self.onFramePresented = nil
             onFramePresented()
         }
+        refreshHistoryPill()
     }
 
     // MARK: - Layout & Resize
@@ -1499,6 +1507,7 @@ final class CocxyCoreView: NSView {
             guard deltaRows != 0 else { return }
             bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
             refreshCommandBlockOverlay()
+            refreshHistoryPill()
         case .none:
             return
         }
@@ -1519,6 +1528,7 @@ final class CocxyCoreView: NSView {
         surfaceID: SurfaceID
     ) {
         bridge.scrollToLiveBottom(surfaceID: surfaceID)
+        refreshHistoryPill()
     }
 
     // MARK: - Drag and Drop
@@ -1763,6 +1773,38 @@ final class CocxyCoreView: NSView {
         commandBlockOverlayView = overlay
     }
 
+    private func installHistoryPillIfNeeded() {
+        guard historyPillView == nil else { return }
+        let pill = TerminalHistoryPillView(localizer: localizer)
+        pill.onJumpToBottom = { [weak self] in
+            self?.performLocalViewportScroll(.bottom)
+        }
+        addSubview(pill)
+        NSLayoutConstraint.activate([
+            pill.topAnchor.constraint(equalTo: topAnchor, constant: 10),
+            pill.centerXAnchor.constraint(equalTo: centerXAnchor),
+            pill.heightAnchor.constraint(equalToConstant: 28),
+            pill.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 12),
+            pill.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
+        ])
+        historyPillView = pill
+        refreshHistoryPill()
+    }
+
+    private func refreshHistoryPill() {
+        guard let bridge, let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            historyPillView?.update(linesAbove: 0)
+            return
+        }
+        historyPillView?.update(linesAbove: snapshot.viewOffset)
+        let isMouseTrackingActive = snapshot.mouseTrackingMode > 0
+        if lastNotifiedMouseTrackingActive != isMouseTrackingActive {
+            lastNotifiedMouseTrackingActive = isMouseTrackingActive
+            onTerminalInteractionStateChanged?()
+        }
+    }
+
     func refreshCommandBlockOverlay() {
         guard let overlay = commandBlockOverlayView else { return }
         overlay.frame = bounds
@@ -1853,6 +1895,7 @@ extension CocxyCoreView: TerminalHostingView {
         }
         bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
         refreshCommandBlockOverlay()
+        refreshHistoryPill()
     }
 
     var terminalViewModel: TerminalViewModel? { viewModel }

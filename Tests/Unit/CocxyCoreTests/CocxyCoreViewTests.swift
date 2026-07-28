@@ -1382,9 +1382,13 @@ struct CocxyCoreViewTests {
 
         harness.view.performLocalViewportScroll(.top)
         #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == 0)
+        #expect(harness.view.historyPillView?.linesAbove == bottom)
+        #expect(harness.view.historyPillView?.isHidden == false)
 
         harness.view.performLocalViewportScroll(.bottom)
         #expect(harness.bridge.historyVisibleStart(for: harness.surfaceID) == bottom)
+        #expect(harness.view.historyPillView?.linesAbove == 0)
+        #expect(harness.view.historyPillView?.isHidden == true)
     }
 
     @Test("Shift+PageUp scrolls locally without writing the shortcut to the PTY")

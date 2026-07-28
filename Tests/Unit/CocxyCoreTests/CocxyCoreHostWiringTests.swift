@@ -69,8 +69,15 @@ struct CocxyCoreHostWiringTests {
             rows: 24,
             cells: [],
             cursor: PTYDaemonCursor(row: 0, column: 0),
-            historyMaxVisibleStart: 100
+            scrollbackTop: 40,
+            historyMaxVisibleStart: 100,
+            mouseTrackingMode: 2,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
         ))
+
+        #expect(view.historyPillView?.linesAbove == 60)
+        #expect(view.historyPillView?.isHidden == false)
+        #expect(view.isTerminalMouseTrackingActive == true)
 
         view.scrollWheel(with: makeScrollEvent(deltaY: 120))
 
@@ -153,6 +160,7 @@ struct CocxyCoreHostWiringTests {
             Int(Int32.max),
             Int(Int32.min),
         ])
+        #expect(view.historyPillView?.isHidden == true)
     }
 
     @Test("daemon host encodes exact X10 and SGR mouse wheel payloads")

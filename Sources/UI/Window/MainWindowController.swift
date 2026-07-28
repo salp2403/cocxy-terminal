@@ -1235,6 +1235,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             rateLimitSnapshot: rateLimitProbeService.snapshot,
             activePorts: [],
             sshSession: tabManager.activeTab?.sshSession,
+            isTerminalMouseCaptured: activeTerminalSurfaceView?.isTerminalMouseTrackingActive ?? false,
             localizer: appLocalizer()
         )
         statusBar.useVibrancy = isTransparent
