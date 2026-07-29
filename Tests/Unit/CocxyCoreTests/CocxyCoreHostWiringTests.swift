@@ -53,6 +53,27 @@ struct CocxyCoreHostWiringTests {
         #expect(viewA !== viewC)
     }
 
+    @Test("daemon host receives its initial localizer and supports live updates through the shared contract")
+    func daemonHostReceivesAndUpdatesLocalizer() throws {
+        let bundle = try #require(localizationBundle())
+        let daemonClient = PTYDaemonClient(connection: FactoryMockPTYDaemonConnection())
+        let viewModel = TerminalViewModel(engine: daemonClient)
+        let host = TerminalHostViewFactory.make(
+            viewModel: viewModel,
+            engine: daemonClient,
+            localizer: AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        )
+        let daemonHost = try #require(host as? PTYDaemonHostView)
+
+        daemonHost.historyPillView?.update(linesAbove: 2)
+        #expect(daemonHost.historyPillView?.title.contains("Historial") == true)
+        #expect(daemonHost.historyPillView?.title.contains("2 líneas arriba") == true)
+
+        host.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+        #expect(daemonHost.historyPillView?.title.contains("History") == true)
+        #expect(daemonHost.historyPillView?.title.contains("2 lines up") == true)
+    }
+
     @Test("daemon host view forwards scroll wheel as viewport scroll")
     func daemonHostViewForwardsScrollWheelAsViewportScroll() {
         let engine = MockTerminalEngine()
@@ -601,6 +622,11 @@ private final class RecordingPTYDaemonConnection: PTYDaemonClientConnection {
 
     func receiveEvent(timeout: TimeInterval) throws -> PTYDaemonEvent? { nil }
     func reconnect() throws {}
+}
+
+private func localizationBundle() -> Bundle? {
+    let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+    return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
 }
 
 private func feed(_ text: String, into terminal: OpaquePointer) {

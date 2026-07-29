@@ -11,7 +11,7 @@ enum TerminalHostViewFactory {
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) -> TerminalHostView {
         if engine is PTYDaemonClient {
-            return PTYDaemonHostView(viewModel: viewModel)
+            return PTYDaemonHostView(viewModel: viewModel, localizer: localizer)
         }
         return CocxyCoreView(viewModel: viewModel, localizer: localizer)
     }

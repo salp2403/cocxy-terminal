@@ -505,7 +505,11 @@
 "terminal.blockOverlay.copyOutput" = "Copy block output";
 "terminal.blockOverlay.copySelectedOutputs" = "Copy selected block outputs";
 "terminal.blockOverlay.rerun" = "Rerun command block";
+"terminal.historyPill.one" = "History · %d line up · ↩ jump to bottom";
+"terminal.historyPill.many" = "History · %d lines up · ↩ jump to bottom";
+"terminal.historyPill.help" = "Return to live terminal output";
 "statusBar.accessibility" = "Status bar";
+"statusBar.mouseCaptured.accessibility" = "Mouse input captured by terminal application";
 "statusBar.sshSession" = "SSH session: %@";
 "statusBar.command.running" = "running...";
 "statusBar.command.running.accessibility" = "Command running";
@@ -666,6 +670,14 @@
 "keybindings.action.voice.input.summary" = "Start local voice dictation for the active command surface.";
 "keybindings.action.terminal.richInput.name" = "Rich Input";
 "keybindings.action.terminal.richInput.summary" = "Open the multiline rich input composer for the active terminal.";
+"keybindings.action.terminal.scrollPageUp.name" = "Scroll Terminal Page Up";
+"keybindings.action.terminal.scrollPageUp.summary" = "Move the local terminal viewport one page into history.";
+"keybindings.action.terminal.scrollPageDown.name" = "Scroll Terminal Page Down";
+"keybindings.action.terminal.scrollPageDown.summary" = "Move the local terminal viewport one page toward live output.";
+"keybindings.action.terminal.scrollToTop.name" = "Scroll Terminal to Top";
+"keybindings.action.terminal.scrollToTop.summary" = "Jump to the oldest available terminal history.";
+"keybindings.action.terminal.scrollToBottom.name" = "Scroll Terminal to Bottom";
+"keybindings.action.terminal.scrollToBottom.summary" = "Return to the terminal's live output.";
 "keybindings.action.editor.zoomIn.name" = "Zoom In";
 "keybindings.action.editor.zoomIn.summary" = "Increase font size.";
 "keybindings.action.editor.zoomOut.name" = "Zoom Out";
@@ -1305,6 +1317,7 @@
 "auroraStatus.localBadge.label" = "no telemetry";
 "auroraStatus.localBadge.help" = "No telemetry or tracking. Update checks only contact Cocxy's signed appcast.";
 "auroraStatus.localBadge.accessibility" = "No telemetry or tracking";
+"auroraStatus.mouseCaptured.accessibility" = "Mouse input captured by terminal application";
 "auroraStatus.agents.title" = "agents";
 "auroraStatus.agents.tooltip.empty" = "No active agents detected in the current Aurora workspace snapshot.";
 "auroraStatus.agents.tooltip.active" = "Active agents:\n%@";

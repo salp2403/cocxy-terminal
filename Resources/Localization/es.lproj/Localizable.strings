@@ -505,7 +505,11 @@
 "terminal.blockOverlay.copyOutput" = "Copiar salida del bloque";
 "terminal.blockOverlay.copySelectedOutputs" = "Copiar salidas de bloques seleccionados";
 "terminal.blockOverlay.rerun" = "Reejecutar bloque de comando";
+"terminal.historyPill.one" = "Historial · %d línea arriba · ↩ ir al fondo";
+"terminal.historyPill.many" = "Historial · %d líneas arriba · ↩ ir al fondo";
+"terminal.historyPill.help" = "Volver a la salida activa del terminal";
 "statusBar.accessibility" = "Barra de estado";
+"statusBar.mouseCaptured.accessibility" = "La aplicación del terminal captura la entrada del ratón";
 "statusBar.sshSession" = "Sesión SSH: %@";
 "statusBar.command.running" = "ejecutando...";
 "statusBar.command.running.accessibility" = "Comando ejecutándose";
@@ -666,6 +670,14 @@
 "keybindings.action.voice.input.summary" = "Iniciar dictado local para la superficie de comando activa.";
 "keybindings.action.terminal.richInput.name" = "Entrada enriquecida";
 "keybindings.action.terminal.richInput.summary" = "Abrir el compositor de entrada enriquecida multilínea para la terminal activa.";
+"keybindings.action.terminal.scrollPageUp.name" = "Desplazar la terminal una página arriba";
+"keybindings.action.terminal.scrollPageUp.summary" = "Mover la vista local de la terminal una página hacia el historial.";
+"keybindings.action.terminal.scrollPageDown.name" = "Desplazar la terminal una página abajo";
+"keybindings.action.terminal.scrollPageDown.summary" = "Mover la vista local de la terminal una página hacia la salida activa.";
+"keybindings.action.terminal.scrollToTop.name" = "Ir al inicio del historial de la terminal";
+"keybindings.action.terminal.scrollToTop.summary" = "Saltar al historial de terminal más antiguo disponible.";
+"keybindings.action.terminal.scrollToBottom.name" = "Ir al final de la terminal";
+"keybindings.action.terminal.scrollToBottom.summary" = "Volver a la salida activa de la terminal.";
 "keybindings.action.editor.zoomIn.name" = "Acercar";
 "keybindings.action.editor.zoomIn.summary" = "Aumentar el tamaño de fuente.";
 "keybindings.action.editor.zoomOut.name" = "Alejar";
@@ -1305,6 +1317,7 @@
 "auroraStatus.localBadge.label" = "sin telemetría";
 "auroraStatus.localBadge.help" = "Sin telemetría ni rastreo. Las actualizaciones solo consultan el appcast firmado de Cocxy.";
 "auroraStatus.localBadge.accessibility" = "Sin telemetría ni rastreo";
+"auroraStatus.mouseCaptured.accessibility" = "La aplicación del terminal captura la entrada del ratón";
 "auroraStatus.agents.title" = "agentes";
 "auroraStatus.agents.tooltip.empty" = "No hay agentes activos detectados en la instantánea actual del espacio Aurora.";
 "auroraStatus.agents.tooltip.active" = "Agentes activos:\n%@";

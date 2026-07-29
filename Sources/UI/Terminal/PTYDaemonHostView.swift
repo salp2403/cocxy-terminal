@@ -24,7 +24,10 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private(set) var historyPillView: TerminalHistoryPillView?
     private var lastNotifiedMouseTrackingActive: Bool?
 
-    init(viewModel: TerminalViewModel?) {
+    init(
+        viewModel: TerminalViewModel?,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    ) {
         self.viewModel = viewModel
         self.font = NSFont.monospacedSystemFont(
             ofSize: viewModel?.currentFontSize ?? 14,
@@ -35,7 +38,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         registerForDraggedTypes([.fileURL])
-        installHistoryPill()
+        installHistoryPill(localizer: localizer)
     }
 
     deinit {
@@ -132,6 +135,10 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     func requestImmediateRedraw() {
         needsDisplay = true
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        historyPillView?.updateLocalizer(localizer)
     }
 
     func refreshDisplayLinkAnchor() {}
@@ -311,8 +318,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         }
     }
 
-    private func installHistoryPill() {
-        let pill = TerminalHistoryPillView()
+    private func installHistoryPill(localizer: AppLocalizer) {
+        let pill = TerminalHistoryPillView(localizer: localizer)
         pill.onJumpToBottom = { [weak self] in
             self?.performLocalViewportScroll(.bottom)
         }

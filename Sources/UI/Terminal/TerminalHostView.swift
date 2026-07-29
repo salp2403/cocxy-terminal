@@ -42,6 +42,7 @@ protocol TerminalHostingView: AnyObject {
     )
     func requestImmediateRedraw()
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand)
+    func updateLocalizer(_ localizer: AppLocalizer)
     var isTerminalMouseTrackingActive: Bool { get }
 
     /// Re-anchors the host view's CVDisplayLink (or equivalent render
@@ -59,6 +60,7 @@ protocol TerminalHostingView: AnyObject {
 
 extension TerminalHostingView {
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {}
+    func updateLocalizer(_ localizer: AppLocalizer) {}
     var isTerminalMouseTrackingActive: Bool { false }
 }
 

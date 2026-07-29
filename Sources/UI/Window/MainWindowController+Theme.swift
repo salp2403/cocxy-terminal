@@ -424,7 +424,7 @@ extension MainWindowController {
         func update(_ view: TerminalHostView?) {
             guard let view else { return }
             guard seen.insert(ObjectIdentifier(view)).inserted else { return }
-            (view as? CocxyCoreView)?.updateLocalizer(localizer)
+            view.updateLocalizer(localizer)
         }
 
         update(terminalSurfaceView)
