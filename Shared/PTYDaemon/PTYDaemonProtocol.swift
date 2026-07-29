@@ -10,6 +10,7 @@ public enum PTYDaemonProtocol {
     public static let terminalSurfaceCapability = "terminal-surface-v1"
     public static let terminalEngineCapability = "terminal-engine-v1"
     public static let terminalHostRendererCapability = "terminal-host-renderer-v1"
+    public static let terminalContentDetectionCapability = "terminal-content-detection-v1"
 }
 
 public struct PTYDaemonHello: Codable, Equatable, Sendable {
@@ -42,6 +43,10 @@ public struct PTYDaemonHello: Codable, Equatable, Sendable {
         supportsTerminalSurfaces &&
             capabilities.contains(PTYDaemonProtocol.terminalEngineCapability) &&
             supportsTerminalHostRenderer
+    }
+
+    public var supportsTerminalContentDetection: Bool {
+        capabilities.contains(PTYDaemonProtocol.terminalContentDetectionCapability)
     }
 }
 
@@ -192,6 +197,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let isAltScreen: Bool
     public let alternateScrollMode: Bool
     public let synchronizedOutput: Bool
+    public let detectedContents: [PTYDaemonDetectedContent]
 
     public init(
         surfaceID: String,
@@ -209,7 +215,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         mouseEncodingMode: UInt8? = nil,
         isAltScreen: Bool = false,
         alternateScrollMode: Bool = true,
-        synchronizedOutput: Bool = false
+        synchronizedOutput: Bool = false,
+        detectedContents: [PTYDaemonDetectedContent] = []
     ) {
         self.surfaceID = surfaceID
         self.revision = revision
@@ -227,6 +234,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.isAltScreen = isAltScreen
         self.alternateScrollMode = alternateScrollMode
         self.synchronizedOutput = synchronizedOutput
+        self.detectedContents = detectedContents
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -246,6 +254,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         case isAltScreen
         case alternateScrollMode
         case synchronizedOutput
+        case detectedContents
     }
 
     public init(from decoder: Decoder) throws {
@@ -275,6 +284,10 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .synchronizedOutput
         ) ?? false
+        detectedContents = try container.decodeIfPresent(
+            [PTYDaemonDetectedContent].self,
+            forKey: .detectedContents
+        ) ?? []
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -295,6 +308,53 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         try container.encode(isAltScreen, forKey: .isAltScreen)
         try container.encode(alternateScrollMode, forKey: .alternateScrollMode)
         try container.encode(synchronizedOutput, forKey: .synchronizedOutput)
+        try container.encode(detectedContents, forKey: .detectedContents)
+    }
+}
+
+public struct PTYDaemonDetectedContent: Codable, Equatable, Sendable {
+    public enum Kind: UInt8, Codable, Sendable {
+        case hyperlink = 0
+        case url = 1
+        case filePath = 2
+        case ipAddress = 3
+        case gitHash = 4
+        case email = 5
+    }
+
+    public let kind: Kind
+    public let text: String
+    public let target: String
+    public let startRow: UInt32
+    public let startColumn: UInt16
+    public let endRow: UInt32
+    public let endColumn: UInt16
+    public let line: UInt32?
+    public let column: UInt32?
+    public let isExplicitHyperlink: Bool
+
+    public init(
+        kind: Kind,
+        text: String,
+        target: String,
+        startRow: UInt32,
+        startColumn: UInt16,
+        endRow: UInt32,
+        endColumn: UInt16,
+        line: UInt32? = nil,
+        column: UInt32? = nil,
+        isExplicitHyperlink: Bool = false
+    ) {
+        self.kind = kind
+        self.text = text
+        self.target = target
+        self.startRow = startRow
+        self.startColumn = startColumn
+        self.endRow = endRow
+        self.endColumn = endColumn
+        self.line = line
+        self.column = column
+        self.isExplicitHyperlink = isExplicitHyperlink
     }
 }
 

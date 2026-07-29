@@ -19,10 +19,66 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
             PTYDaemonProtocol.terminalSurfaceCapability,
             PTYDaemonProtocol.terminalEngineCapability,
             PTYDaemonProtocol.terminalHostRendererCapability,
+            PTYDaemonProtocol.terminalContentDetectionCapability,
         ])
         #expect(decoded.hello?.supportsTerminalSurfaces == true)
         #expect(decoded.hello?.supportsTerminalHostRenderer == true)
         #expect(decoded.hello?.supportsTerminalEngineAdapter == true)
+        #expect(decoded.hello?.supportsTerminalContentDetection == true)
+    }
+
+    @Test("daemon frames carry engine-detected paths and URLs")
+    func daemonFramesCarryDetectedContent() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-content-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("emit-content.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            printf 'Sources/App.swift:42:7 https://cocxy.dev\r\n'
+            sleep 2
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-content-detection",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "80",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "https://cocxy.dev",
+            timeout: 5
+        )
+
+        let subscribe = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "subscribe-content-detection",
+                command: .surfaceFrameSubscribe,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let contents = try #require(subscribe.frame).detectedContents
+
+        let path = try #require(contents.first { $0.kind == .filePath })
+        #expect(path.text == "Sources/App.swift:42:7")
+        #expect(path.target == "Sources/App.swift")
+        #expect(path.line == 42)
+        #expect(path.column == 7)
+        #expect(contents.contains { $0.kind == .url && $0.target == "https://cocxy.dev" })
     }
 
     @Test("daemon preedit honors the UTF-8 cursor and emits immediate frames")

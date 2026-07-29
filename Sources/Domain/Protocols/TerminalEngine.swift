@@ -180,6 +180,22 @@ protocol TerminalEngine: AnyObject {
     /// - Returns: Search results, or `nil` if no native search path exists.
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]?
 
+    /// Returns actionable terminal content at one absolute history cell.
+    ///
+    /// Implementations must copy any engine-owned text before returning. The
+    /// query is used by pointer hover and click handling, so daemon-backed
+    /// engines must answer from their latest frame instead of synchronous IPC.
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent?
+
+    /// Returns actionable spans intersecting the surface's visible viewport.
+    /// The result is ordered from top-left to bottom-right and is used for
+    /// keyboard hint presentation.
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent]
+
     /// Returns process-monitor metadata for a surface when the engine can
     /// expose a real PTY-backed shell process.
     ///
@@ -327,6 +343,56 @@ extension TerminalEngine {
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
         nil
+    }
+
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        nil
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        []
+    }
+}
+
+/// Classification shared by local and daemon-backed actionable content.
+enum TerminalDetectedContentKind: UInt8, Codable, Sendable {
+    case hyperlink = 0
+    case url = 1
+    case filePath = 2
+    case ipAddress = 3
+    case gitHash = 4
+    case email = 5
+}
+
+/// One actionable span in absolute combined-history coordinates.
+struct TerminalDetectedContent: Equatable, Sendable {
+    let kind: TerminalDetectedContentKind
+    let text: String
+    let target: String
+    let startRow: UInt32
+    let startColumn: UInt16
+    let endRow: UInt32
+    let endColumn: UInt16
+    let line: Int?
+    let column: Int?
+    let isExplicitHyperlink: Bool
+
+    func contains(absoluteRow row: UInt32, column: UInt16) -> Bool {
+        guard row >= startRow, row <= endRow else { return false }
+        if startRow == endRow {
+            return column >= startColumn && column <= endColumn
+        }
+        if row == startRow {
+            return column >= startColumn
+        }
+        if row == endRow {
+            return column <= endColumn
+        }
+        return true
     }
 }
 

@@ -422,6 +422,7 @@ final class PTYDaemonClient: TerminalEngine {
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
     private var frameHandlers: [SurfaceID: @Sendable (PTYDaemonSurfaceFrame) -> Void] = [:]
     private var latestFrameRevisions: [SurfaceID: UInt64] = [:]
+    private var latestFrames: [SurfaceID: PTYDaemonSurfaceFrame] = [:]
     private var engineConfig: TerminalEngineConfig?
     private var surfaceBackingScales: [SurfaceID: Double] = [:]
     private var lastReportedFocus: [SurfaceID: Bool] = [:]
@@ -489,6 +490,7 @@ final class PTYDaemonClient: TerminalEngine {
         liveSurfaces.insert(surfaceID)
         stalledSurfaces.remove(surfaceID)
         latestFrameRevisions[surfaceID] = nil
+        latestFrames[surfaceID] = nil
         surfaceBackingScales[surfaceID] = backingScale
         lastReportedFocus[surfaceID] = nil
         return surfaceID
@@ -503,6 +505,7 @@ final class PTYDaemonClient: TerminalEngine {
         oscHandlers[id] = nil
         frameHandlers[id] = nil
         latestFrameRevisions[id] = nil
+        latestFrames[id] = nil
         surfaceBackingScales[id] = nil
         lastReportedFocus[id] = nil
     }
@@ -668,6 +671,20 @@ final class PTYDaemonClient: TerminalEngine {
         }
     }
 
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        visibleDetectedContents(for: surface).first {
+            $0.contains(absoluteRow: row, column: column)
+        }
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        latestFrames[surface]?.detectedContents.compactMap(Self.detectedContent(from:)) ?? []
+    }
+
     func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration? {
         let response = try? sendSurfaceRequest(surface, command: .surfaceProcess)
         guard response?.ok == true, let process = response?.process else { return nil }
@@ -733,6 +750,8 @@ final class PTYDaemonClient: TerminalEngine {
             let response = try? connection.send(surfaceRequest(surface, command: .surfaceAttach))
             if response?.ok != true {
                 stalledSurfaces.insert(surface)
+                latestFrameRevisions[surface] = nil
+                latestFrames[surface] = nil
             }
         }
     }
@@ -758,6 +777,7 @@ final class PTYDaemonClient: TerminalEngine {
             stalledSurfaces.insert(surface)
             surfaceBackingScales[surface] = nil
             lastReportedFocus[surface] = nil
+            latestFrames[surface] = nil
         }
     }
 
@@ -773,7 +793,28 @@ final class PTYDaemonClient: TerminalEngine {
             return false
         }
         latestFrameRevisions[surface] = frame.revision
+        latestFrames[surface] = frame
         return true
+    }
+
+    private static func detectedContent(
+        from content: PTYDaemonDetectedContent
+    ) -> TerminalDetectedContent? {
+        guard let kind = TerminalDetectedContentKind(rawValue: content.kind.rawValue) else {
+            return nil
+        }
+        return TerminalDetectedContent(
+            kind: kind,
+            text: content.text,
+            target: content.target,
+            startRow: content.startRow,
+            startColumn: content.startColumn,
+            endRow: content.endRow,
+            endColumn: content.endColumn,
+            line: content.line.map(Int.init),
+            column: content.column.map(Int.init),
+            isExplicitHyperlink: content.isExplicitHyperlink
+        )
     }
 
     private func makeOSCNotification(from osc: PTYDaemonOSCNotification) -> OSCNotification? {

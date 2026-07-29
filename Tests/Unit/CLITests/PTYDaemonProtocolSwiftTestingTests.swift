@@ -111,7 +111,20 @@ struct PTYDaemonProtocolSwiftTestingTests {
             mouseEncodingMode: 3,
             isAltScreen: true,
             alternateScrollMode: false,
-            synchronizedOutput: true
+            synchronizedOutput: true,
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .filePath,
+                    text: "Sources/App.swift:42:7",
+                    target: "Sources/App.swift",
+                    startRow: 3,
+                    startColumn: 2,
+                    endRow: 3,
+                    endColumn: 23,
+                    line: 42,
+                    column: 7
+                )
+            ]
         )
         let response = PTYDaemonResponse(id: "frame-1", ok: true, frame: frame)
         let data = try PTYDaemonLineCodec.encode(response)
@@ -146,6 +159,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         legacyObject.removeValue(forKey: "isAltScreen")
         legacyObject.removeValue(forKey: "alternateScrollMode")
         legacyObject.removeValue(forKey: "synchronizedOutput")
+        legacyObject.removeValue(forKey: "detectedContents")
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
 
         let decoded = try JSONDecoder().decode(PTYDaemonSurfaceFrame.self, from: legacyData)
@@ -157,6 +171,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(decoded.isAltScreen == false)
         #expect(decoded.alternateScrollMode == true)
         #expect(decoded.synchronizedOutput == false)
+        #expect(decoded.detectedContents.isEmpty)
     }
 
     @Test("process registration omits daemon-local file descriptors")

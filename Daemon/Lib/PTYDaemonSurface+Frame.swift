@@ -49,6 +49,11 @@ extension PTYDaemonSurface {
 
         var renderCursor = cocxycore_render_cursor()
         cocxycore_terminal_frame_cursor(terminal, &renderCursor)
+        let detectedContents = detectedContentsLocked(
+            visibleStart: visibleStart,
+            rows: rows,
+            columns: columns
+        )
 
         return PTYDaemonSurfaceFrame(
             surfaceID: surfaceID,
@@ -71,7 +76,77 @@ extension PTYDaemonSurface {
             mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal),
             isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
             alternateScrollMode: cocxycore_terminal_mode_alternate_scroll(terminal),
-            synchronizedOutput: cocxycore_terminal_mode_synchronized_output(terminal)
+            synchronizedOutput: cocxycore_terminal_mode_synchronized_output(terminal),
+            detectedContents: detectedContents
+        )
+    }
+
+    private func detectedContentsLocked(
+        visibleStart: UInt32,
+        rows: UInt16,
+        columns: UInt16
+    ) -> [PTYDaemonDetectedContent] {
+        guard rows > 0, columns > 0 else { return [] }
+        let (maxRow, overflowed) = visibleStart.addingReportingOverflow(UInt32(rows - 1))
+        guard overflowed == false else { return [] }
+        var fromRow = visibleStart
+        var fromColumn: UInt16 = 0
+        var contents: [PTYDaemonDetectedContent] = []
+        contents.reserveCapacity(8)
+
+        for _ in 0..<256 {
+            var detected = cocxycore_detected_content()
+            guard cocxycore_terminal_detect_content_next(
+                terminal,
+                fromRow,
+                fromColumn,
+                maxRow,
+                &detected
+            ), let content = Self.detectedContent(from: detected) else {
+                break
+            }
+            guard detected.end_row >= fromRow,
+                  detected.end_row <= maxRow,
+                  detected.end_col < columns,
+                  detected.end_row > fromRow || detected.end_col >= fromColumn else {
+                break
+            }
+            let nextColumn = Int(detected.end_col) + 1
+            contents.append(content)
+            if nextColumn < Int(columns) {
+                fromRow = detected.end_row
+                fromColumn = UInt16(nextColumn)
+            } else {
+                guard detected.end_row < maxRow else { break }
+                fromRow = detected.end_row + 1
+                fromColumn = 0
+            }
+        }
+        return contents
+    }
+
+    private static func detectedContent(
+        from raw: cocxycore_detected_content
+    ) -> PTYDaemonDetectedContent? {
+        guard let kind = PTYDaemonDetectedContent.Kind(rawValue: raw.kind),
+              let pointer = raw.text,
+              raw.text_len > 0 else {
+            return nil
+        }
+        let bytes = UnsafeBufferPointer(start: pointer, count: raw.text_len)
+            .map { UInt8(bitPattern: $0) }
+        let targetLength = min(raw.target_len, bytes.count)
+        return PTYDaemonDetectedContent(
+            kind: kind,
+            text: String(decoding: bytes, as: UTF8.self),
+            target: String(decoding: bytes.prefix(targetLength), as: UTF8.self),
+            startRow: raw.start_row,
+            startColumn: raw.start_col,
+            endRow: raw.end_row,
+            endColumn: raw.end_col,
+            line: raw.line > 0 ? raw.line : nil,
+            column: raw.column > 0 ? raw.column : nil,
+            isExplicitHyperlink: raw.explicit_hyperlink
         )
     }
 

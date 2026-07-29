@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.17.0 (stable API bundle)
+ * Version: 0.18.0 (stable API bundle)
  */
 
 #ifndef COCXYCORE_H
@@ -23,9 +23,9 @@
 
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
-#define COCXYCORE_VERSION_MINOR 17
+#define COCXYCORE_VERSION_MINOR 18
 #define COCXYCORE_VERSION_PATCH 0
-#define COCXYCORE_VERSION_STRING "0.17.0"
+#define COCXYCORE_VERSION_STRING "0.18.0"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -705,6 +705,64 @@ size_t cocxycore_terminal_iterate_hyperlinks(
     const cocxycore_terminal* term,
     cocxycore_hyperlink_metadata* buffer,
     size_t max_count
+);
+
+/* -- Actionable content -- */
+
+/** Actionable terminal content classification. */
+typedef enum {
+    COCXYCORE_CONTENT_HYPERLINK = 0,
+    COCXYCORE_CONTENT_URL = 1,
+    COCXYCORE_CONTENT_FILE_PATH = 2,
+    COCXYCORE_CONTENT_IP_ADDRESS = 3,
+    COCXYCORE_CONTENT_GIT_HASH = 4,
+    COCXYCORE_CONTENT_EMAIL = 5,
+} cocxycore_content_kind;
+
+/**
+ * Actionable content metadata in absolute combined-history coordinates.
+ *
+ * `text` is owned by CocxyCore and remains valid until the next content query
+ * or mutating terminal call on the same terminal. `target_len` excludes a
+ * parsed `:line[:column]` suffix from file paths and otherwise equals
+ * `text_len`.
+ */
+typedef struct {
+    const char* text;
+    size_t text_len;
+    size_t target_len;
+    uint32_t start_row;
+    uint32_t end_row;
+    uint32_t line;
+    uint32_t column;
+    uint16_t start_col;
+    uint16_t end_col;
+    uint8_t kind;
+    bool explicit_hyperlink;
+    uint8_t _pad[2];
+} cocxycore_detected_content;
+
+/**
+ * Detect actionable content at one absolute history cell.
+ * Explicit OSC 8 hyperlinks take priority over inferred text patterns.
+ */
+bool cocxycore_terminal_detect_content_at(
+    cocxycore_terminal* term,
+    uint32_t row,
+    uint16_t column,
+    cocxycore_detected_content* out
+);
+
+/**
+ * Find the next actionable span in row-major order inside an inclusive row
+ * range. `from_row` and `from_column` are inclusive.
+ */
+bool cocxycore_terminal_detect_content_next(
+    cocxycore_terminal* term,
+    uint32_t from_row,
+    uint16_t from_column,
+    uint32_t max_row,
+    cocxycore_detected_content* out
 );
 
 /* -- Search -- */
@@ -1920,6 +1978,16 @@ void cocxycore_terminal_set_high_contrast_mode(cocxycore_terminal* term, bool en
 
 /** Whether high-contrast color adjustment is enabled. */
 bool cocxycore_terminal_high_contrast_mode(const cocxycore_terminal* term);
+
+/**
+ * Set the minimum contrast ratio used by high-contrast mode.
+ * Finite values are clamped to the WCAG range [1.0, 21.0]. Non-finite
+ * values are ignored. The default ratio is 7.0.
+ */
+void cocxycore_terminal_set_minimum_contrast(cocxycore_terminal* term, double ratio);
+
+/** Get the configured minimum contrast ratio, or 7.0 for a NULL terminal. */
+double cocxycore_terminal_minimum_contrast(const cocxycore_terminal* term);
 
 /**
  * Resolve a cell's colors to RGBA with theme and style effects.

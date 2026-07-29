@@ -2078,6 +2078,72 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? nil
     }
 
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        withTerminalLock(surface) { state -> TerminalDetectedContent? in
+            var detected = cocxycore_detected_content()
+            guard cocxycore_terminal_detect_content_at(
+                state.terminal,
+                row,
+                column,
+                &detected
+            ) else {
+                return nil
+            }
+            return Self.detectedContent(from: detected)
+        } ?? nil
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        withTerminalLock(surface) { state -> [TerminalDetectedContent] in
+            let terminal = state.terminal
+            let rows = cocxycore_terminal_rows(terminal)
+            let columns = cocxycore_terminal_cols(terminal)
+            guard rows > 0, columns > 0 else { return [] }
+
+            let visibleStart = cocxycore_terminal_history_visible_start(terminal)
+            let (maxRow, overflowed) = visibleStart.addingReportingOverflow(UInt32(rows - 1))
+            guard overflowed == false else { return [] }
+            var fromRow = visibleStart
+            var fromColumn: UInt16 = 0
+            var contents: [TerminalDetectedContent] = []
+            contents.reserveCapacity(8)
+
+            for _ in 0..<256 {
+                var detected = cocxycore_detected_content()
+                guard cocxycore_terminal_detect_content_next(
+                    terminal,
+                    fromRow,
+                    fromColumn,
+                    maxRow,
+                    &detected
+                ), let content = Self.detectedContent(from: detected) else {
+                    break
+                }
+                guard detected.end_row >= fromRow,
+                      detected.end_row <= maxRow,
+                      detected.end_col < columns,
+                      detected.end_row > fromRow || detected.end_col >= fromColumn else {
+                    break
+                }
+                let nextColumn = Int(detected.end_col) + 1
+                contents.append(content)
+                if nextColumn < Int(columns) {
+                    fromRow = detected.end_row
+                    fromColumn = UInt16(nextColumn)
+                } else {
+                    guard detected.end_row < maxRow else { break }
+                    fromRow = detected.end_row + 1
+                    fromColumn = 0
+                }
+            }
+            return contents
+        } ?? []
+    }
+
     func terminalCursorClickSnapshot(
         for surface: SurfaceID,
         fromAbsoluteRow requestedFirstRow: UInt32? = nil
@@ -2525,6 +2591,31 @@ final class CocxyCoreBridge: TerminalEngine {
             row: metadata.row,
             column: metadata.column,
             length: metadata.length
+        )
+    }
+
+    private static func detectedContent(
+        from raw: cocxycore_detected_content
+    ) -> TerminalDetectedContent? {
+        guard let kind = TerminalDetectedContentKind(rawValue: raw.kind),
+              let pointer = raw.text,
+              raw.text_len > 0 else {
+            return nil
+        }
+        let bytes = UnsafeBufferPointer(start: pointer, count: raw.text_len)
+            .map { UInt8(bitPattern: $0) }
+        let targetLength = min(raw.target_len, bytes.count)
+        return TerminalDetectedContent(
+            kind: kind,
+            text: String(decoding: bytes, as: UTF8.self),
+            target: String(decoding: bytes.prefix(targetLength), as: UTF8.self),
+            startRow: raw.start_row,
+            startColumn: raw.start_col,
+            endRow: raw.end_row,
+            endColumn: raw.end_col,
+            line: raw.line > 0 ? Int(raw.line) : nil,
+            column: raw.column > 0 ? Int(raw.column) : nil,
+            isExplicitHyperlink: raw.explicit_hyperlink
         )
     }
 

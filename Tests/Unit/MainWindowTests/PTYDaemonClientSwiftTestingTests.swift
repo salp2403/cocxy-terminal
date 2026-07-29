@@ -475,7 +475,19 @@ struct PTYDaemonClientSwiftTestingTests {
                     backgroundRGBA: 0x000000ff
                 )
             ],
-            cursor: PTYDaemonCursor(row: 0, column: 1)
+            cursor: PTYDaemonCursor(row: 0, column: 1),
+            scrollbackTop: 3,
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .url,
+                    text: "https://cocxy.dev",
+                    target: "https://cocxy.dev",
+                    startRow: 3,
+                    startColumn: 0,
+                    endRow: 3,
+                    endColumn: 16
+                )
+            ]
         )
         let eventFrame = PTYDaemonSurfaceFrame(
             surfaceID: surfaceID.uuidString,
@@ -513,9 +525,14 @@ struct PTYDaemonClientSwiftTestingTests {
             deliveredRevision.withValue { $0 = frame.revision }
         }
         let subscribed = client.subscribeFrames(for: surface)
+        let cachedContents = client.visibleDetectedContents(for: surface)
+        let cachedHit = client.detectedContent(atAbsoluteRow: 3, column: 8, for: surface)
         client.tick()
 
         #expect(subscribed?.revision == 1)
+        #expect(cachedContents.map(\.target) == ["https://cocxy.dev"])
+        #expect(cachedHit?.kind == .url)
+        #expect(client.detectedContent(atAbsoluteRow: 4, column: 8, for: surface) == nil)
         #expect(deliveredRevision.withValue { $0 } == 2)
         #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceFrameSubscribe])
     }
@@ -605,10 +622,31 @@ struct PTYDaemonClientSwiftTestingTests {
     @Test("surface send marks the surface stalled when reattach fails")
     func surfaceSendMarksSurfaceStalledWhenReattachFails() throws {
         let surfaceID = UUID()
+        let cachedFrame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .url,
+                    text: "https://cocxy.dev",
+                    target: "https://cocxy.dev",
+                    startRow: 0,
+                    startColumn: 0,
+                    endRow: 0,
+                    endColumn: 16
+                )
+            ]
+        )
         let connection = MockPTYDaemonClientConnection(
             responses: [
                 PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
                 PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+                PTYDaemonResponse(id: "frame", ok: true, frame: cachedFrame),
                 PTYDaemonResponse(id: "attach", ok: false, error: "missing surface"),
             ],
             throwOnCommands: [.surfaceWrite]
@@ -616,12 +654,21 @@ struct PTYDaemonClientSwiftTestingTests {
         let client = PTYDaemonClient(connection: connection)
         try client.initialize(config: testConfig())
         let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        #expect(client.subscribeFrames(for: surface)?.revision == 1)
+        #expect(client.visibleDetectedContents(for: surface).count == 1)
 
         client.sendText("stalls", to: surface)
 
         #expect(connection.reconnectCount == 1)
-        #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceWrite, .surfaceAttach])
+        #expect(connection.requests.map(\.command) == [
+            .hello,
+            .surfaceCreate,
+            .surfaceFrameSubscribe,
+            .surfaceWrite,
+            .surfaceAttach,
+        ])
         #expect(client.isSurfaceStalledForTesting(surface) == true)
+        #expect(client.visibleDetectedContents(for: surface).isEmpty)
     }
 
     @Test("surface closed event removes the live surface and blocks later writes")

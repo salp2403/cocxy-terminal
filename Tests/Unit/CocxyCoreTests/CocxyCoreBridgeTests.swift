@@ -73,6 +73,31 @@ struct CocxyCoreBridgeTests {
         #expect(Array(lines.prefix(3)) == ["alpha", "beta", "gamma"])
     }
 
+    @Test("actionable content maps file locations and visible targets from CocxyCore")
+    func actionableContentMapsFileLocationsAndVisibleTargets() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("Sources/App/Main.swift:42:7 https://cocxy.dev\r\n", to: state.terminal)
+
+        let contents = bridge.visibleDetectedContents(for: surfaceID)
+        let path = try #require(contents.first { $0.kind == .filePath })
+        let hit = bridge.detectedContent(
+            atAbsoluteRow: path.startRow,
+            column: path.startColumn + 2,
+            for: surfaceID
+        )
+
+        #expect(path.text == "Sources/App/Main.swift:42:7")
+        #expect(path.target == "Sources/App/Main.swift")
+        #expect(path.line == 42)
+        #expect(path.column == 7)
+        #expect(hit == path)
+        #expect(contents.contains { $0.kind == .url && $0.target == "https://cocxy.dev" })
+    }
+
     @Test("historyTailLines returns only newest scrollback lines")
     func historyTailLinesReturnsOnlyNewestLines() throws {
         let bridge = try makeBridge()

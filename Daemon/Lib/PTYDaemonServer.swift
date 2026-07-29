@@ -149,6 +149,7 @@ public final class PTYDaemonServer {
                 PTYDaemonProtocol.terminalSurfaceCapability,
                 PTYDaemonProtocol.terminalEngineCapability,
                 PTYDaemonProtocol.terminalHostRendererCapability,
+                PTYDaemonProtocol.terminalContentDetectionCapability,
             ]
         )
     }
