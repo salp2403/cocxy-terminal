@@ -2622,6 +2622,10 @@
 "command.tabs.new.description" = "Open a new terminal tab";
 "command.tabs.close.name" = "Close Tab";
 "command.tabs.close.description" = "Close the current tab";
+"command.tabs.rename.name" = "Rename Session";
+"command.tabs.rename.description" = "Rename the active terminal session";
+"command.workspace.rename.name" = "Rename Workspace";
+"command.workspace.rename.description" = "Rename the active workspace group";
 "command.tabs.configSave.name" = "Save Current Tab as Config";
 "command.tabs.configSave.description" = "Write the active tab setup to a local TOML file";
 "command.tabs.configOpen.name" = "Open Tab from Config";

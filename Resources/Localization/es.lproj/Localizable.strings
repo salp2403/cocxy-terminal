@@ -2622,6 +2622,10 @@
 "command.tabs.new.description" = "Abrir una nueva pestaña de terminal";
 "command.tabs.close.name" = "Cerrar pestaña";
 "command.tabs.close.description" = "Cerrar la pestaña actual";
+"command.tabs.rename.name" = "Renombrar sesión";
+"command.tabs.rename.description" = "Renombrar la sesión de terminal activa";
+"command.workspace.rename.name" = "Renombrar espacio de trabajo";
+"command.workspace.rename.description" = "Renombrar el grupo de trabajo activo";
 "command.tabs.configSave.name" = "Guardar pestaña actual como configuración";
 "command.tabs.configSave.description" = "Escribir la configuración de la pestaña activa en un archivo TOML local";
 "command.tabs.configOpen.name" = "Abrir pestaña desde configuración";

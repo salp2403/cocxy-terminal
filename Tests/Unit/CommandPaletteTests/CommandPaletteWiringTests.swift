@@ -19,6 +19,8 @@ final class CommandPaletteWiringTests: XCTestCase {
             "window.commandPalette",
             "tabs.new",
             "tabs.close",
+            "tabs.rename",
+            "workspace.rename",
             "tabs.configSave",
             "tabs.configOpen",
             "onboarding.show",
@@ -94,6 +96,11 @@ final class CommandPaletteWiringTests: XCTestCase {
             .config,
             "The Preferences command must be grouped with settings/configuration actions, not navigation."
         )
+        XCTAssertEqual(actionsByID["tabs.rename"]?.name, "Rename Session")
+        XCTAssertEqual(actionsByID["workspace.rename"]?.name, "Rename Workspace")
+        let auroraActionIDs = Set(controller.buildAuroraPaletteActions().map(\.id))
+        XCTAssertTrue(auroraActionIDs.contains("tabs.rename"))
+        XCTAssertTrue(auroraActionIDs.contains("workspace.rename"))
         XCTAssertEqual(actionsByID["theme.cycle"]?.name, "Toggle Light/Dark Theme")
         XCTAssertEqual(
             actionsByID["theme.cycle"]?.localized(

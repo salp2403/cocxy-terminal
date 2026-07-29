@@ -983,6 +983,44 @@ extension MainWindowController {
         return controller.sidebarHost?.isHidden == false
     }
 
+    func renameActiveSessionFromPalette() {
+        guard let tabID = tabManager.activeTabID else { return }
+        if isAuroraChromeActive, let controller = auroraChromeController {
+            controller.refreshSources()
+            _ = controller.requestRenameSession(tabID)
+            return
+        }
+        presentAuroraTabRename(for: tabID)
+    }
+
+    func renameActiveWorkspaceFromPalette() {
+        guard let tabID = tabManager.activeTabID,
+              let tab = tabManager.tab(for: tabID) else {
+            return
+        }
+        if isAuroraChromeActive, let controller = auroraChromeController {
+            controller.refreshSources()
+            _ = controller.requestRenameWorkspace(containing: tabID)
+            return
+        }
+
+        let resolver = GitAncestorWorkspaceRootResolver()
+        let workspace = AuroraWorkspacePlanner.descriptor(for: tab, resolver: resolver)
+        let storedValues = auroraWorkspaceTitleStore.snapshot
+        let currentName: String
+        if let storedValue = storedValues[workspace.identity] {
+            currentName = AuroraWorkspacePlanner.normalizedTitle(storedValue)
+                ?? workspace.automaticName
+        } else {
+            currentName = AuroraWorkspacePlanner.normalizedTitle(tab.workspaceCustomTitle)
+                ?? workspace.automaticName
+        }
+        presentAuroraWorkspaceRename(
+            workspaceID: workspace.identity,
+            currentName: currentName
+        )
+    }
+
     /// Shows or hides the Aurora palette overlay. Refreshes the action
     /// catalogue from the live engine before presenting so the user
     /// always sees the current shortcuts (e.g. after a keybindings

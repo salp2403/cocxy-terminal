@@ -306,6 +306,32 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "tabs.rename",
+                name: "Rename Session",
+                description: "Rename the active terminal session",
+                shortcut: nil,
+                category: .tabs,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.renameActiveSessionFromPalette()
+                    }
+                }
+            ),
+            CommandAction(
+                id: "workspace.rename",
+                name: "Rename Workspace",
+                description: "Rename the active workspace group",
+                shortcut: nil,
+                category: .tabs,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.renameActiveWorkspaceFromPalette()
+                    }
+                }
+            ),
+            CommandAction(
                 id: "tabs.configSave",
                 name: "Save Current Tab as Config",
                 description: "Write the active tab setup to a local TOML file",
