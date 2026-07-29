@@ -13,10 +13,11 @@ import CocxyShared
 /// - Preserve all non-hook settings in the file.
 /// - Are idempotent (re-installing is a no-op).
 ///
-/// Each hook entry follows Claude Code's format:
+/// Each hook entry follows Claude Code's format. `FileChanged` is the only
+/// event whose matcher is a watched path rather than an event filter:
 /// ```json
 /// {
-///   "matcher": "",
+///   "matcher": ".",
 ///   "hooks": [{ "type": "command", "command": "<Cocxy shell guard>" }]
 /// }
 /// ```
@@ -159,6 +160,13 @@ public struct ClaudeSettingsManager {
         "FileChanged"
     ]
 
+    /// FileChanged's matcher has dual semantics in Claude Code:
+    /// `.` resolves to the session CWD as its watcher path, while its regex
+    /// form matches every changed basename. Other event matchers stay empty.
+    static func matcher(for eventType: String) -> String {
+        eventType == "FileChanged" ? "." : ""
+    }
+
     /// Default path to Claude Code's settings file.
     public static let defaultSettingsFilePath: String = {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
@@ -201,8 +209,9 @@ public struct ClaudeSettingsManager {
 
         for eventType in Self.hookedEventTypes {
             var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
+            let requiredMatcher = Self.matcher(for: eventType)
             let desiredEntry: [String: Any] = [
-                "matcher": "",
+                "matcher": requiredMatcher,
                 "hooks": [
                     ["type": "command", "command": Self.claudeHookCommand]
                 ]
@@ -212,7 +221,8 @@ public struct ClaudeSettingsManager {
                 eventHooks,
                 desiredEntry: desiredEntry,
                 expectedCommand: Self.claudeHookCommand,
-                rejectedCommands: Self.ownedUnguardedHookCommands
+                rejectedCommands: Self.ownedUnguardedHookCommands,
+                requiredMatcher: eventType == "FileChanged" ? requiredMatcher : nil
             )
             eventHooks = reconciliation.entries
             modified = modified || reconciliation.modified
@@ -425,7 +435,8 @@ public struct ClaudeSettingsManager {
         _ eventHooks: [[String: Any]],
         desiredEntry: [String: Any],
         expectedCommand: String,
-        rejectedCommands: Set<String> = []
+        rejectedCommands: Set<String> = [],
+        requiredMatcher: String? = nil
     ) -> (entries: [[String: Any]], modified: Bool) {
         let cocxyIndices = eventHooks.indices.filter {
             hookEntryContainsCocxyCommand(eventHooks[$0])
@@ -435,12 +446,15 @@ public struct ClaudeSettingsManager {
             return (eventHooks + [desiredEntry], true)
         }
 
-        if let keeperIndex = cocxyIndices.first(where: {
+        if let keeperIndex = cocxyIndices.first(where: { index in
             hookEntryContainsAcceptableCocxyCommand(
-                eventHooks[$0],
+                eventHooks[index],
                 expectedCommand: expectedCommand,
                 rejectedCommands: rejectedCommands
             )
+            && requiredMatcher.map { matcher in
+                eventHooks[index]["matcher"] as? String == matcher
+            } != false
         }) {
             guard cocxyIndices.count > 1 else {
                 return (eventHooks, false)

@@ -122,7 +122,8 @@ extension AppDelegate {
         _ eventHooks: [[String: Any]],
         desiredEntry: [String: Any],
         expectedCommand: String,
-        rejectedCommands: Set<String> = []
+        rejectedCommands: Set<String> = [],
+        requiredMatcher: String? = nil
     ) -> (entries: [[String: Any]], modified: Bool) {
         let cocxyIndices = eventHooks.indices.filter {
             hookEntryContainsCocxyCommand(eventHooks[$0])
@@ -132,12 +133,15 @@ extension AppDelegate {
             return (eventHooks + [desiredEntry], true)
         }
 
-        if let keeperIndex = cocxyIndices.first(where: {
+        if let keeperIndex = cocxyIndices.first(where: { index in
             hookEntryContainsAcceptableCocxyCommand(
-                eventHooks[$0],
+                eventHooks[index],
                 expectedCommand: expectedCommand,
                 rejectedCommands: rejectedCommands
             )
+            && requiredMatcher.map { matcher in
+                eventHooks[index]["matcher"] as? String == matcher
+            } != false
         }) {
             guard cocxyIndices.count > 1 else {
                 return (eventHooks, false)
@@ -297,8 +301,9 @@ extension AppDelegate {
 
         for eventType in eventTypes {
             var eventHooks = (hooks[eventType] as? [[String: Any]]) ?? []
+            let requiredMatcher = Self.claudeHookMatcher(for: eventType)
             let correctEntry: [String: Any] = [
-                "matcher": "",
+                "matcher": requiredMatcher,
                 "hooks": [
                     ["type": "command", "command": hookCommand]
                 ]
@@ -307,7 +312,8 @@ extension AppDelegate {
                 eventHooks,
                 desiredEntry: correctEntry,
                 expectedCommand: hookCommand,
-                rejectedCommands: [legacyHookCommand]
+                rejectedCommands: [legacyHookCommand],
+                requiredMatcher: eventType == "FileChanged" ? requiredMatcher : nil
             )
             eventHooks = reconciliation.entries
             modified = modified || reconciliation.modified
@@ -318,6 +324,13 @@ extension AppDelegate {
 
         settings["hooks"] = hooks
         writeSettings(settings, to: settingsPath)
+    }
+
+    /// FileChanged's matcher has dual semantics in Claude Code:
+    /// `.` resolves to the session CWD as its watcher path, while its regex
+    /// form matches every changed basename. Other event matchers stay empty.
+    nonisolated static func claudeHookMatcher(for eventType: String) -> String {
+        eventType == "FileChanged" ? "." : ""
     }
 
     /// Reads settings.json or returns an empty dictionary if it doesn't exist.

@@ -18,14 +18,15 @@ struct CwdChangedFileChangedDecodingSwiftTests {
 
     // MARK: - CwdChanged
 
-    @Test("CwdChanged decodes all fields including previous_cwd")
+    @Test("CwdChanged decodes canonical old_cwd and new_cwd fields")
     func cwdChangedDecodesWithAllFields() throws {
         let json = #"""
         {
             "hook_event_name": "CwdChanged",
             "session_id": "sess-cwd-001",
-            "cwd": "/Users/dev/project/sub",
-            "previous_cwd": "/Users/dev/project"
+            "cwd": "/Users/dev/project",
+            "old_cwd": "/Users/dev/project",
+            "new_cwd": "/Users/dev/project/sub"
         }
         """#
 
@@ -39,6 +40,28 @@ struct CwdChangedFileChangedDecodingSwiftTests {
             return
         }
         #expect(data.previousCwd == "/Users/dev/project")
+        #expect(data.newCwd == "/Users/dev/project/sub")
+    }
+
+    @Test("CwdChanged retains previous_cwd and cwd as legacy fallbacks")
+    func cwdChangedDecodesLegacyFields() throws {
+        let json = #"""
+        {
+            "hook_event_name": "CwdChanged",
+            "session_id": "sess-cwd-legacy",
+            "cwd": "/Users/dev/project/sub",
+            "previous_cwd": "/Users/dev/project"
+        }
+        """#
+
+        let event = try makeDecoder().decode(HookEvent.self, from: Data(json.utf8))
+        guard case .cwdChanged(let data) = event.data else {
+            Issue.record("Expected .cwdChanged data")
+            return
+        }
+        #expect(event.cwd == "/Users/dev/project/sub")
+        #expect(data.previousCwd == "/Users/dev/project")
+        #expect(data.newCwd == "/Users/dev/project/sub")
     }
 
     @Test("CwdChanged tolerates missing previous_cwd")
@@ -64,7 +87,7 @@ struct CwdChangedFileChangedDecodingSwiftTests {
 
     // MARK: - FileChanged
 
-    @Test("FileChanged decodes all fields including change_type")
+    @Test("FileChanged decodes canonical event field")
     func fileChangedDecodesWithAllFields() throws {
         let json = #"""
         {
@@ -72,7 +95,7 @@ struct CwdChangedFileChangedDecodingSwiftTests {
             "session_id": "sess-file-001",
             "cwd": "/Users/dev/project",
             "file_path": "/Users/dev/project/src/main.swift",
-            "change_type": "edit"
+            "event": "change"
         }
         """#
 
@@ -86,6 +109,26 @@ struct CwdChangedFileChangedDecodingSwiftTests {
             return
         }
         #expect(data.filePath == "/Users/dev/project/src/main.swift")
+        #expect(data.changeType == "change")
+    }
+
+    @Test("FileChanged retains change_type as a legacy fallback")
+    func fileChangedDecodesLegacyChangeType() throws {
+        let json = #"""
+        {
+            "hook_event_name": "FileChanged",
+            "session_id": "sess-file-legacy",
+            "cwd": "/Users/dev/project",
+            "file_path": "/Users/dev/project/src/main.swift",
+            "change_type": "edit"
+        }
+        """#
+
+        let event = try makeDecoder().decode(HookEvent.self, from: Data(json.utf8))
+        guard case .fileChanged(let data) = event.data else {
+            Issue.record("Expected .fileChanged data")
+            return
+        }
         #expect(data.changeType == "edit")
     }
 
@@ -146,6 +189,7 @@ struct CwdChangedFileChangedDecodingSwiftTests {
 
         #expect(decoded.type == .cwdChanged)
         #expect(decoded.sessionId == "sess-rt-001")
+        #expect(decoded.cwd == "/new/dir")
         guard case .cwdChanged(let data) = decoded.data else {
             Issue.record("Expected .cwdChanged data after round-trip")
             return

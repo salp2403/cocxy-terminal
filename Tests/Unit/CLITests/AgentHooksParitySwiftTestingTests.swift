@@ -9,7 +9,9 @@ struct AgentHooksParitySwiftTestingTests {
 
     @Test("AgentSource detects each supported agent from environment or payload")
     func detectsAgentSource() {
+        #expect(AgentSource.detect(environment: ["CLAUDE_CODE_SESSION_ID": "claude-code-1"]) == .claudeCode)
         #expect(AgentSource.detect(environment: ["CLAUDE_SESSION_ID": "claude-1"]) == .claudeCode)
+        #expect(AgentSource.detect(environment: ["CLAUDECODE": "1"]) == .claudeCode)
         #expect(AgentSource.detect(environment: ["CODEX_THREAD_ID": "codex-1"]) == .codex)
         #expect(AgentSource.detect(environment: ["GEMINI_SESSION_ID": "gemini-1"]) == .geminiCLI)
         #expect(AgentSource.detect(environment: ["KIRO_SESSION_ID": "kiro-1"]) == .kiro)
@@ -25,6 +27,32 @@ struct AgentHooksParitySwiftTestingTests {
         #expect(AgentSource.detect(environment: [:], payload: ["hook_event_name": "BeforeTool"]) == .geminiCLI)
         #expect(AgentSource.detect(environment: [:], payload: ["hook_event_name": "agentSpawn"]) == .kiro)
         #expect(AgentSource.detect(environment: [:], payload: [:]) == .unknown)
+    }
+
+    @Test("Claude Code session ID takes precedence over legacy and foreign identifiers")
+    func resolvesCanonicalClaudeSessionIDFirst() {
+        let resolved = AgentSource.resolveSessionID(from: [
+            "CLAUDE_CODE_SESSION_ID": "canonical-claude",
+            "CLAUDE_SESSION_ID": "legacy-claude",
+            "GEMINI_SESSION_ID": "gemini",
+        ])
+
+        #expect(resolved == "canonical-claude")
+    }
+
+    @Test("Claude SessionEnd remains SessionEnd after source detection")
+    func preservesClaudeSessionEnd() throws {
+        let raw = Data(#"{"hook_event_name":"SessionEnd"}"#.utf8)
+        let normalized = try HookEventNormalizer.normalizePayload(
+            raw,
+            environment: ["CLAUDE_CODE_SESSION_ID": "claude-session"]
+        )
+        let payload = try #require(
+            try JSONSerialization.jsonObject(with: normalized) as? [String: Any]
+        )
+
+        #expect(payload["hook_event_name"] as? String == "SessionEnd")
+        #expect(payload["session_id"] as? String == "claude-session")
     }
 
     @Test("HookEventNormalizer canonicalizes Gemini and Kiro payloads")
@@ -389,7 +417,7 @@ struct AgentHooksParitySwiftTestingTests {
             "hooks": ClaudeSettingsManager.hookedEventTypes.reduce(into: [String: Any]()) { dict, event in
                 dict[event] = [
                     [
-                        "matcher": "",
+                        "matcher": ClaudeSettingsManager.matcher(for: event),
                         "hooks": [
                             ["type": "command", "command": staleCommand]
                         ]
@@ -431,7 +459,7 @@ struct AgentHooksParitySwiftTestingTests {
             "hooks": ClaudeSettingsManager.hookedEventTypes.reduce(into: [String: Any]()) { dict, event in
                 dict[event] = [
                     [
-                        "matcher": "",
+                        "matcher": ClaudeSettingsManager.matcher(for: event),
                         "hooks": [
                             ["type": "command", "command": wrapperCommand]
                         ]

@@ -279,7 +279,9 @@ enum AgentSource: String, CaseIterable, Sendable {
             return source
         }
 
-        if environment["CLAUDE_SESSION_ID"] != nil {
+        if environment["CLAUDE_CODE_SESSION_ID"] != nil
+            || environment["CLAUDE_SESSION_ID"] != nil
+            || environment["CLAUDECODE"] == "1" {
             return .claudeCode
         }
         if environment["CODEX_THREAD_ID"] != nil {
@@ -332,6 +334,7 @@ enum AgentSource: String, CaseIterable, Sendable {
 
     static func resolveSessionID(from environment: [String: String]) -> String? {
         let keys = [
+            "CLAUDE_CODE_SESSION_ID",
             "CLAUDE_SESSION_ID",
             "CODEX_THREAD_ID",
             "GEMINI_SESSION_ID",

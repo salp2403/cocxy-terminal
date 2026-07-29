@@ -139,4 +139,28 @@ final class AppDelegateBridgeTests: XCTestCase {
         let commands = result.entries[0]["hooks"] as? [[String: Any]]
         XCTAssertEqual(commands?.first?["command"] as? String, wrapperCommand)
     }
+
+    func testFirstLaunchSetupRepairsEmptyFileChangedMatcher() {
+        let command = AppDelegate.guardedHookCommand("cocxy hook-handler")
+        let existing: [String: Any] = [
+            "matcher": "",
+            "hooks": [["type": "command", "command": command]],
+        ]
+        let desired: [String: Any] = [
+            "matcher": ".",
+            "hooks": [["type": "command", "command": command]],
+        ]
+
+        let result = AppDelegate.reconciledHookEntries(
+            [existing],
+            desiredEntry: desired,
+            expectedCommand: command,
+            requiredMatcher: AppDelegate.claudeHookMatcher(for: "FileChanged")
+        )
+
+        XCTAssertTrue(result.modified)
+        XCTAssertEqual(result.entries.count, 1)
+        XCTAssertEqual(result.entries.first?["matcher"] as? String, ".")
+        XCTAssertEqual(AppDelegate.claudeHookMatcher(for: "CwdChanged"), "")
+    }
 }

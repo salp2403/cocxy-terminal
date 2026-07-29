@@ -22,7 +22,10 @@ extension AppDelegate {
     /// - The matched tab's current CWD differs from the new CWD (race-free
     ///   dedup against OSC 7).
     /// - Tab matching is exact, never a parent-directory fallback.
-    func handleCwdChangedHook(_ event: HookEvent) {
+    @discardableResult
+    func handleCwdChangedHook(
+        _ event: HookEvent
+    ) -> (controller: MainWindowController, tabID: TabID)? {
         if let resolution = resolutionForCwdChanged(event) {
             let controller = allWindowControllers[resolution.controllerIndex]
             controller.tabManager.updateTab(id: resolution.tabID) { mutated in
@@ -31,8 +34,9 @@ extension AppDelegate {
             }
             controller.tabBarViewModel?.syncWithManager()
             controller.refreshStatusBar()
+            return (controller, resolution.tabID)
         } else {
-            return
+            return nil
         }
     }
 

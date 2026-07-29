@@ -57,7 +57,44 @@ struct ClaudeSettingsManagerCwdFileChangedSwiftTests {
         let data = try Data(contentsOf: URL(fileURLWithPath: path))
         let settings = try JSONSerialization.jsonObject(with: data) as! [String: Any]
         let hooks = settings["hooks"] as! [String: Any]
-        #expect(hooks["FileChanged"] != nil)
+        let entries = try #require(hooks["FileChanged"] as? [[String: Any]])
+        let matcher = try #require(entries.first?["matcher"] as? String)
+        #expect(matcher == ".")
+
+        let cwd = URL(fileURLWithPath: "/tmp/cocxy-file-watcher", isDirectory: true)
+        let watchedPath = cwd.appendingPathComponent(matcher, isDirectory: true).standardized.path
+        #expect(watchedPath == cwd.standardized.path)
+    }
+
+    @Test("installHooks rewrites an existing Cocxy FileChanged entry with an empty matcher")
+    func installHooksRepairsEmptyFileChangedMatcher() throws {
+        let (manager, path) = makeManager()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let seed: [String: Any] = [
+            "hooks": [
+                "FileChanged": [[
+                    "matcher": "",
+                    "hooks": [[
+                        "type": "command",
+                        "command": ClaudeSettingsManager.claudeHookCommand,
+                    ]],
+                ]],
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: seed)
+            .write(to: URL(fileURLWithPath: path))
+
+        let result = try manager.installHooks()
+
+        #expect(result.installed)
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let entries = try #require(hooks["FileChanged"] as? [[String: Any]])
+        #expect(entries.count == 1)
+        #expect(entries.first?["matcher"] as? String == ".")
     }
 
     @Test("installHooks is idempotent for CwdChanged")

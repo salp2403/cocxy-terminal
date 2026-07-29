@@ -20,8 +20,9 @@ struct HookHandlerCommandFileChangedSwiftTests {
         {
             "hook_event_name": "CwdChanged",
             "session_id": "sess-cwd-handler-001",
-            "cwd": "/Users/dev/project/sub",
-            "previous_cwd": "/Users/dev/project"
+            "cwd": "/Users/dev/project",
+            "old_cwd": "/Users/dev/project",
+            "new_cwd": "/Users/dev/project/sub"
         }
         """#
 
@@ -34,8 +35,9 @@ struct HookHandlerCommandFileChangedSwiftTests {
         let payload = try requirePayload(from: request)
         #expect(payload["hook_event_name"] as? String == "CwdChanged")
         #expect(payload["session_id"] as? String == "sess-cwd-handler-001")
-        #expect(payload["cwd"] as? String == "/Users/dev/project/sub")
-        #expect(payload["previous_cwd"] as? String == "/Users/dev/project")
+        #expect(payload["cwd"] as? String == "/Users/dev/project")
+        #expect(payload["old_cwd"] as? String == "/Users/dev/project")
+        #expect(payload["new_cwd"] as? String == "/Users/dev/project/sub")
     }
 
     @Test("FileChanged payload yields a hook-event request with all fields preserved")
@@ -46,7 +48,7 @@ struct HookHandlerCommandFileChangedSwiftTests {
             "session_id": "sess-file-handler-001",
             "cwd": "/Users/dev/project",
             "file_path": "/Users/dev/project/src/main.swift",
-            "change_type": "edit"
+            "event": "change"
         }
         """#
 
@@ -58,7 +60,7 @@ struct HookHandlerCommandFileChangedSwiftTests {
         let payload = try requirePayload(from: request)
         #expect(payload["hook_event_name"] as? String == "FileChanged")
         #expect(payload["file_path"] as? String == "/Users/dev/project/src/main.swift")
-        #expect(payload["change_type"] as? String == "edit")
+        #expect(payload["event"] as? String == "change")
     }
 
     @Test("Empty stdin still throws emptyInput, regardless of event name")

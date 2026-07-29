@@ -74,6 +74,9 @@ final class ClaudeSettingsManagerTests: XCTestCase {
             hookCommands[0]["command"] as? String,
             ClaudeSettingsManager.claudeHookCommand
         )
+
+        let fileChangedHooks = hooks["FileChanged"] as! [[String: Any]]
+        XCTAssertEqual(fileChangedHooks.first?["matcher"] as? String, ".")
     }
 
     func testInstallMigratesOwnedUnguardedHookCommands() throws {
