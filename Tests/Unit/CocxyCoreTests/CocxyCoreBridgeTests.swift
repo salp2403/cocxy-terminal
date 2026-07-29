@@ -955,6 +955,27 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.terminalViewportSnapshot(for: SurfaceID()) == nil)
     }
 
+    @Test("cursor click snapshot keeps semantic cursor and cell widths in one read")
+    func cursorClickSnapshotIsAtomic() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}界", to: state.terminal)
+
+        let snapshot = try #require(bridge.terminalCursorClickSnapshot(for: surfaceID))
+        #expect(snapshot.semanticState == 2)
+        #expect(snapshot.cursorAbsoluteRow == snapshot.visibleStartRow + UInt32(snapshot.cursorScreenRow))
+        #expect(snapshot.cursorColumn == 2)
+        #expect(snapshot.cellWidths[0] == 1)
+        #expect(snapshot.cellWidths[1] == 2)
+        #expect(snapshot.isAltScreen == false)
+        #expect(snapshot.mouseTrackingMode == 0)
+        #expect(snapshot.selectionActive == false)
+        #expect(bridge.terminalCursorClickSnapshot(for: SurfaceID()) == nil)
+    }
+
     @Test("preedit snapshot exposes text, cursor, and anchor")
     func preeditSnapshotExposesTextCursorAndAnchor() throws {
         let bridge = try makeBridge()

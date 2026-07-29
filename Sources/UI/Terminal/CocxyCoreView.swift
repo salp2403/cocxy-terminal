@@ -122,11 +122,11 @@ final class CocxyCoreView: NSView {
         fontSizeProvider: { [weak self] in
             self?.viewModel?.currentFontSize ?? 14.0
         },
-        cursorPositionProvider: { [weak self] in
+        terminalStateProvider: { [weak self] in
             guard let self = self,
                   let bridge = self.bridge,
                   let sid = self.surfaceID else { return nil }
-            return bridge.cursorPosition(for: sid)
+            return bridge.terminalCursorClickSnapshot(for: sid)
         },
         arrowKeySender: { [weak self] arrows in
             self?.sendArrowKeys(arrows)
@@ -2248,8 +2248,26 @@ extension CocxyCoreView: TerminalHostingView {
     }
 
     func handleShellPrompt(row: Int, column: Int) {
+        let position = TerminalGridPosition(
+            screenRow: UInt16(clamping: row),
+            absoluteRow: UInt32(clamping: row),
+            column: UInt16(clamping: column)
+        )
+        handleShellPrompt(position: position)
+    }
+
+    func handleShellPrompt(position: TerminalGridPosition) {
         refreshIDECursorMetrics()
-        ideCursorController.shellPromptDetected(row: row, column: column)
+        ideCursorController.shellPromptDetected(at: position)
+    }
+
+    func handleCommandInputStarted(at position: TerminalGridPosition) {
+        refreshIDECursorMetrics()
+        ideCursorController.commandInputStarted(at: position)
+    }
+
+    func handleCommandExecuted() {
+        ideCursorController.commandExecuted()
     }
 
     /// Reads the real cursor row/col from the backing CocxyCore terminal
@@ -2264,10 +2282,14 @@ extension CocxyCoreView: TerminalHostingView {
     /// the v0.1.52 "blinking line near the status bar" bug.
     func handleShellPromptAtCurrentCursor() {
         guard let bridge, let sid = surfaceID,
-              let position = bridge.cursorPosition(for: sid) else {
+              let snapshot = bridge.terminalCursorClickSnapshot(for: sid) else {
             return
         }
-        handleShellPrompt(row: position.row, column: position.col)
+        handleShellPrompt(position: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: snapshot.cursorColumn
+        ))
     }
 
     func updateInteractionMetrics() {

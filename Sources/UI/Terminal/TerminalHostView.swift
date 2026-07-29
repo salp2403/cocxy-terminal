@@ -35,6 +35,9 @@ protocol TerminalHostingView: AnyObject {
     func showNotificationRing(color: NSColor)
     func hideNotificationRing()
     func handleShellPrompt(row: Int, column: Int)
+    func handleShellPrompt(position: TerminalGridPosition)
+    func handleCommandInputStarted(at position: TerminalGridPosition)
+    func handleCommandExecuted()
     func updateInteractionMetrics()
     func configureSurfaceIfNeeded(
         bridge: any TerminalEngine,
@@ -61,6 +64,11 @@ protocol TerminalHostingView: AnyObject {
 }
 
 extension TerminalHostingView {
+    func handleShellPrompt(position: TerminalGridPosition) {
+        handleShellPrompt(row: Int(position.screenRow), column: Int(position.column))
+    }
+    func handleCommandInputStarted(at position: TerminalGridPosition) {}
+    func handleCommandExecuted() {}
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {}
     func updateLocalizer(_ localizer: AppLocalizer) {}
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {}

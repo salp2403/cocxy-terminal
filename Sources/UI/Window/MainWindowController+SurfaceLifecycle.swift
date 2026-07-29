@@ -752,7 +752,7 @@ extension MainWindowController {
                 surfaceID: sourceSurfaceID
             )
 
-        case .shellPrompt:
+        case .shellPrompt(let position):
             guard let tabID = targetTabID else { break }
             tabManager.updateTab(id: tabID) { tab in
                 tab.lastActivityAt = Date()
@@ -782,22 +782,13 @@ extension MainWindowController {
             updateAgentProgressOverlay()
             auroraChromeController?.refreshSources()
 
-            // Notify the IDE cursor controller of the real prompt row/col
-            // from the backing CocxyCore terminal. Only the active tab's
-            // surface is notified because pattern detection on background
-            // tabs would otherwise race with the user's focused surface.
-            //
-            // The previous implementation used `viewHeight / cellHeight - 1`
-            // (i.e. the last visible row) as the prompt row, which is
-            // always wrong and produced the v0.1.52 "stray blinking line
-            // near the status bar" bug. The real cursor row is the only
-            // reliable source.
-            if (sourceTabID == nil || sourceTabID == visibleTabID),
+            // CocxyCore captures this position synchronously while it handles
+            // OSC 133;A. Never re-read the cursor from this main-queue callback:
+            // output may already have advanced it by then.
+            if let position,
                let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:))
                     ?? activeTerminalSurfaceView {
-                if let cocxyView = surfaceView as? CocxyCoreView {
-                    cocxyView.handleShellPromptAtCurrentCursor()
-                }
+                surfaceView.handleShellPrompt(position: position)
             }
 
             feedDetectionEngine(
@@ -870,8 +861,12 @@ extension MainWindowController {
                 surfaceID: sourceSurfaceID
             )
 
-        case .commandStarted:
+        case .commandStarted(let inputPosition):
             guard let tabID = targetTabID else { break }
+            if let inputPosition,
+               let surfaceView = sourceSurfaceID.flatMap(surfaceView(for:)) {
+                surfaceView.handleCommandInputStarted(at: inputPosition)
+            }
             tabManager.updateTab(id: tabID) { tab in
                 tab.markCommandStarted()
                 tab.lastActivityAt = Date()

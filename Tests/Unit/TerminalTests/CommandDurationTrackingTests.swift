@@ -19,7 +19,7 @@ final class CommandDurationTrackingTests: XCTestCase {
     // MARK: - OSCNotification Cases
 
     func testOSCNotificationHasCommandStartedCase() {
-        let notification = OSCNotification.commandStarted
+        let notification = OSCNotification.commandStarted(inputPosition: nil)
         if case .commandStarted = notification {
             // Expected
         } else {

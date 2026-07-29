@@ -705,9 +705,9 @@ final class PTYDaemonClient: TerminalEngine {
         case .notification:
             return .notification(title: osc.title ?? "", body: osc.body ?? "")
         case .shellPrompt:
-            return .shellPrompt
+            return .shellPrompt(position: nil)
         case .commandStarted:
-            return .commandStarted
+            return .commandStarted(inputPosition: nil)
         case .commandFinished:
             return .commandFinished(exitCode: osc.exitCode)
         case .currentDirectory:

@@ -288,6 +288,15 @@ extension TerminalEngine {
     }
 }
 
+/// Cursor coordinates captured synchronously while CocxyCore is processing a
+/// terminal event. `screenRow` is relative to the active screen, while
+/// `absoluteRow` includes the visible history origin at capture time.
+struct TerminalGridPosition: Equatable, Sendable {
+    let screenRow: UInt16
+    let absoluteRow: UInt32
+    let column: UInt16
+}
+
 /// Parsed OSC (Operating System Command) notification from the terminal.
 ///
 /// These are the standard OSC sequences used by shell integration and
@@ -299,10 +308,9 @@ enum OSCNotification: Sendable {
     case notification(title: String, body: String)
     /// Shell prompt was displayed (OSC 133 ;A). Indicates the previous command
     /// has finished and the shell is ready for new input.
-    case shellPrompt
-    /// A command started executing (OSC 133 ;B). The user pressed Enter
-    /// and the shell began running the command.
-    case commandStarted
+    case shellPrompt(position: TerminalGridPosition?)
+    /// Editable command input began (OSC 133 ;B).
+    case commandStarted(inputPosition: TerminalGridPosition?)
     /// A command finished executing (OSC 133 ;D). Contains the exit code
     /// when the shell reports it (nil if not provided).
     case commandFinished(exitCode: Int?)

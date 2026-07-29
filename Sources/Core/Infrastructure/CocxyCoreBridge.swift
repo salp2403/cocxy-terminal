@@ -258,6 +258,25 @@ struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
     }
 }
 
+/// Atomic CocxyCore state used to decide whether a prompt click may synthesize
+/// cursor movement. Cell widths belong to `cursorScreenRow` and use the core's
+/// 0=narrow, 1=wide, 2=continuation encoding.
+struct TerminalCursorClickSnapshot: Equatable, Sendable {
+    let visibleStartRow: UInt32
+    let historyMaxVisibleStart: UInt32
+    let cursorScreenRow: UInt16
+    let cursorColumn: UInt16
+    let semanticState: UInt8
+    let isAltScreen: Bool
+    let mouseTrackingMode: UInt8
+    let selectionActive: Bool
+    let cellWidths: [UInt8]
+
+    var cursorAbsoluteRow: UInt32 {
+        visibleStartRow + UInt32(cursorScreenRow)
+    }
+}
+
 struct TerminalSelectionSnapshot: Equatable, Sendable, Encodable {
     let active: Bool
     let startRow: UInt32?
@@ -513,10 +532,12 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Boxed context passed to C callbacks to recover the bridge + surface ID.
     final class CallbackContext {
         let surfaceID: SurfaceID
+        let terminal: OpaquePointer
         weak var bridge: CocxyCoreBridge?
 
-        init(surfaceID: SurfaceID, bridge: CocxyCoreBridge) {
+        init(surfaceID: SurfaceID, terminal: OpaquePointer, bridge: CocxyCoreBridge) {
             self.surfaceID = surfaceID
+            self.terminal = terminal
             self.bridge = bridge
         }
     }
@@ -706,7 +727,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         // 6. Register C callbacks
         let contextBox = Unmanaged.passRetained(
-            CallbackContext(surfaceID: surfaceID, bridge: self)
+            CallbackContext(surfaceID: surfaceID, terminal: terminal, bridge: self)
         )
         registerCallbacks(terminal: terminal, context: contextBox.toOpaque())
 
@@ -1898,6 +1919,29 @@ final class CocxyCoreBridge: TerminalEngine {
                 mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(state.terminal)
             )
         } ?? nil
+    }
+
+    func terminalCursorClickSnapshot(for surface: SurfaceID) -> TerminalCursorClickSnapshot? {
+        withTerminalLock(surface) { state -> TerminalCursorClickSnapshot in
+            let terminal = state.terminal
+            let cursorRow = cocxycore_terminal_cursor_row(terminal)
+            let columnCount = cocxycore_terminal_cols(terminal)
+            let cellWidths = (0..<Int(columnCount)).map { column in
+                cocxycore_terminal_cell_width(terminal, cursorRow, UInt16(column))
+            }
+
+            return TerminalCursorClickSnapshot(
+                visibleStartRow: cocxycore_terminal_history_visible_start(terminal),
+                historyMaxVisibleStart: cocxycore_terminal_history_max_visible_start(terminal),
+                cursorScreenRow: cursorRow,
+                cursorColumn: cocxycore_terminal_cursor_col(terminal),
+                semanticState: cocxycore_terminal_semantic_state(terminal),
+                isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
+                mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
+                selectionActive: cocxycore_terminal_selection_active(terminal),
+                cellWidths: cellWidths
+            )
+        }
     }
 
     func selectionSnapshot(for surface: SurfaceID) -> TerminalSelectionSnapshot? {
@@ -3475,8 +3519,19 @@ final class CocxyCoreBridge: TerminalEngine {
             guard let ctx = ctx, let event = event else { return }
             let eventCopy = event.pointee
             let box = Unmanaged<CallbackContext>.fromOpaque(ctx).takeUnretainedValue()
+            let screenRow = cocxycore_terminal_cursor_row(box.terminal)
+            let position = TerminalGridPosition(
+                screenRow: screenRow,
+                absoluteRow: cocxycore_terminal_history_visible_start(box.terminal)
+                    + UInt32(screenRow),
+                column: cocxycore_terminal_cursor_col(box.terminal)
+            )
             DispatchQueue.main.async {
-                box.bridge?.handleSemanticEvent(eventCopy, for: box.surfaceID)
+                box.bridge?.handleSemanticEvent(
+                    eventCopy,
+                    gridPosition: position,
+                    for: box.surfaceID
+                )
             }
         }, context)
 
@@ -3748,6 +3803,7 @@ final class CocxyCoreBridge: TerminalEngine {
     /// AND feeds ALL event types to the semantic adapter for agent detection + timeline.
     private func handleSemanticEvent(
         _ event: cocxycore_semantic_event,
+        gridPosition: TerminalGridPosition,
         for surfaceID: SurfaceID
     ) {
         // Shell integration → OSCNotification for existing tab wiring
@@ -3755,9 +3811,9 @@ final class CocxyCoreBridge: TerminalEngine {
         case 0: // PROMPT_SHOWN
             emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
             scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
-            dispatchOSC(.shellPrompt, for: surfaceID)
+            dispatchOSC(.shellPrompt(position: gridPosition), for: surfaceID)
         case 1: // COMMAND_STARTED
-            dispatchOSC(.commandStarted, for: surfaceID)
+            dispatchOSC(.commandStarted(inputPosition: gridPosition), for: surfaceID)
         case 2: // COMMAND_FINISHED
             emitFallbackWorkingDirectoryIfNeeded(for: surfaceID)
             scheduleFallbackWorkingDirectoryProbe(for: surfaceID, delay: 0.12)
