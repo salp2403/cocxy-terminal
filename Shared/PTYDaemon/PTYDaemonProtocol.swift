@@ -186,6 +186,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let scrollbackTop: Int
     public let historyMaxVisibleStart: Int
     public let images: [PTYDaemonImageReference]
+    public let wrappedRows: [UInt16]
     public let mouseTrackingMode: UInt8?
     public let mouseEncodingMode: UInt8?
     public let isAltScreen: Bool
@@ -203,6 +204,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         scrollbackTop: Int = 0,
         historyMaxVisibleStart: Int = 0,
         images: [PTYDaemonImageReference] = [],
+        wrappedRows: [UInt16] = [],
         mouseTrackingMode: UInt8? = nil,
         mouseEncodingMode: UInt8? = nil,
         isAltScreen: Bool = false,
@@ -219,6 +221,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.scrollbackTop = scrollbackTop
         self.historyMaxVisibleStart = historyMaxVisibleStart
         self.images = images
+        self.wrappedRows = wrappedRows
         self.mouseTrackingMode = mouseTrackingMode
         self.mouseEncodingMode = mouseEncodingMode
         self.isAltScreen = isAltScreen
@@ -237,6 +240,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         case scrollbackTop
         case historyMaxVisibleStart
         case images
+        case wrappedRows
         case mouseTrackingMode
         case mouseEncodingMode
         case isAltScreen
@@ -259,6 +263,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
             forKey: .historyMaxVisibleStart
         ) ?? 0
         images = try container.decodeIfPresent([PTYDaemonImageReference].self, forKey: .images) ?? []
+        wrappedRows = try container.decodeIfPresent([UInt16].self, forKey: .wrappedRows) ?? []
         mouseTrackingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseTrackingMode)
         mouseEncodingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseEncodingMode)
         isAltScreen = try container.decodeIfPresent(Bool.self, forKey: .isAltScreen) ?? false
@@ -284,6 +289,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         try container.encode(scrollbackTop, forKey: .scrollbackTop)
         try container.encode(historyMaxVisibleStart, forKey: .historyMaxVisibleStart)
         try container.encode(images, forKey: .images)
+        try container.encode(wrappedRows, forKey: .wrappedRows)
         try container.encodeIfPresent(mouseTrackingMode, forKey: .mouseTrackingMode)
         try container.encodeIfPresent(mouseEncodingMode, forKey: .mouseEncodingMode)
         try container.encode(isAltScreen, forKey: .isAltScreen)

@@ -22,10 +22,15 @@ extension PTYDaemonSurface {
         revision &+= 1
         let rows = cocxycore_terminal_rows(terminal)
         let columns = cocxycore_terminal_cols(terminal)
+        let visibleStart = cocxycore_terminal_history_visible_start(terminal)
         var cells: [PTYDaemonGridCell] = []
         cells.reserveCapacity(Int(rows) * Int(columns))
+        var wrappedRows: [UInt16] = []
 
         for row in 0..<rows {
+            if cocxycore_terminal_row_wrapped(terminal, visibleStart + UInt32(row)) {
+                wrappedRows.append(row)
+            }
             for column in 0..<columns {
                 var renderCell = cocxycore_render_cell()
                 cocxycore_terminal_frame_cell(terminal, row, column, &renderCell)
@@ -58,9 +63,10 @@ extension PTYDaemonSurface {
                 visible: renderCursor.visible,
                 style: Self.cursorStyle(renderCursor.shape)
             ),
-            scrollbackTop: Int(cocxycore_terminal_history_visible_start(terminal)),
+            scrollbackTop: Int(visibleStart),
             historyMaxVisibleStart: Int(cocxycore_terminal_history_max_visible_start(terminal)),
             images: [],
+            wrappedRows: wrappedRows,
             mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
             mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal),
             isAltScreen: cocxycore_terminal_is_alt_screen(terminal),

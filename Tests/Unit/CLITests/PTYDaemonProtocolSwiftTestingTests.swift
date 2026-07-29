@@ -106,6 +106,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
             images: [
                 PTYDaemonImageReference(id: "img-1", row: 0, column: 1, width: 4, height: 2)
             ],
+            wrappedRows: [0],
             mouseTrackingMode: 2,
             mouseEncodingMode: 3,
             isAltScreen: true,
@@ -140,6 +141,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
             JSONSerialization.jsonObject(with: encoded) as? [String: Any]
         )
         legacyObject.removeValue(forKey: "historyMaxVisibleStart")
+        legacyObject.removeValue(forKey: "wrappedRows")
         legacyObject.removeValue(forKey: "mouseEncodingMode")
         legacyObject.removeValue(forKey: "isAltScreen")
         legacyObject.removeValue(forKey: "alternateScrollMode")
@@ -149,6 +151,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         let decoded = try JSONDecoder().decode(PTYDaemonSurfaceFrame.self, from: legacyData)
 
         #expect(decoded.historyMaxVisibleStart == 0)
+        #expect(decoded.wrappedRows.isEmpty)
         #expect(decoded.mouseTrackingMode == 6)
         #expect(decoded.mouseEncodingMode == nil)
         #expect(decoded.isAltScreen == false)
