@@ -43,6 +43,94 @@ struct TerminalScrollRoutingTests {
         #expect(pixels == Data("\u{1B}[<64;121;81M".utf8))
     }
 
+    @Test("mouse tracking modes gate press release and motion exactly")
+    func mouseTrackingModesGateActions() {
+        #expect(TerminalMouseTracking.x10.reports(.press, hasButton: true))
+        #expect(!TerminalMouseTracking.x10.reports(.release, hasButton: true))
+        #expect(!TerminalMouseTracking.x10.reports(.motion, hasButton: true))
+
+        #expect(TerminalMouseTracking.normal.reports(.press, hasButton: true))
+        #expect(TerminalMouseTracking.normal.reports(.release, hasButton: true))
+        #expect(!TerminalMouseTracking.normal.reports(.motion, hasButton: true))
+
+        #expect(TerminalMouseTracking.buttonEvent.reports(.motion, hasButton: true))
+        #expect(!TerminalMouseTracking.buttonEvent.reports(.motion, hasButton: false))
+        #expect(TerminalMouseTracking.anyEvent.reports(.motion, hasButton: false))
+    }
+
+    @Test("shift is a local-selection escape hatch from terminal mouse capture")
+    func shiftEscapesTerminalMouseCapture() {
+        #expect(TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: TerminalMouseTracking.anyEvent.rawValue,
+            modifiers: []
+        ))
+        #expect(!TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: TerminalMouseTracking.anyEvent.rawValue,
+            modifiers: [.shift]
+        ))
+        #expect(!TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: TerminalMouseTracking.none.rawValue,
+            modifiers: []
+        ))
+    }
+
+    @Test("button encoder emits protocol-specific release and motion payloads")
+    func buttonEncoderEmitsReleaseAndMotionPayloads() throws {
+        let sgrPress = try #require(encodeButton(
+            action: .press,
+            button: .left,
+            tracking: .normal,
+            encoding: .sgr,
+            modifiers: [.option, .control]
+        ))
+        let sgrRelease = try #require(encodeButton(
+            action: .release,
+            button: .right,
+            tracking: .normal,
+            encoding: .sgr
+        ))
+        let legacyRelease = try #require(encodeButton(
+            action: .release,
+            button: .left,
+            tracking: .normal,
+            encoding: .x10
+        ))
+        let buttonMotion = try #require(encodeButton(
+            action: .motion,
+            button: .left,
+            tracking: .buttonEvent,
+            encoding: .sgr
+        ))
+        let unbuttonedMotion = try #require(encodeButton(
+            action: .motion,
+            button: nil,
+            tracking: .anyEvent,
+            encoding: .sgr
+        ))
+
+        #expect(sgrPress == Data("\u{1B}[<24;5;3M".utf8))
+        #expect(sgrRelease == Data("\u{1B}[<2;5;3m".utf8))
+        #expect(legacyRelease == Data([0x1B, 0x5B, 0x4D, 0x23, 0x25, 0x23]))
+        #expect(buttonMotion == Data("\u{1B}[<32;5;3M".utf8))
+        #expect(unbuttonedMotion == Data("\u{1B}[<35;5;3M".utf8))
+    }
+
+    @Test("X10 suppresses release and button-event suppresses unbuttoned motion")
+    func trackingSuppressesUnsupportedActions() {
+        #expect(encodeButton(
+            action: .release,
+            button: .left,
+            tracking: .x10,
+            encoding: .sgr
+        ) == nil)
+        #expect(encodeButton(
+            action: .motion,
+            button: nil,
+            tracking: .buttonEvent,
+            encoding: .sgr
+        ) == nil)
+    }
+
     private func encode(
         _ encoding: TerminalMouseEncoding,
         row: UInt16 = 2,
@@ -56,6 +144,26 @@ struct TerminalScrollRoutingTests {
             pixelX: 120,
             pixelY: 80,
             count: 1
+        )
+    }
+
+    private func encodeButton(
+        action: TerminalMouseAction,
+        button: TerminalMouseButton?,
+        tracking: TerminalMouseTracking,
+        encoding: TerminalMouseEncoding,
+        modifiers: NSEvent.ModifierFlags = []
+    ) -> Data? {
+        TerminalMouseWireEncoder.buttonPayload(
+            action: action,
+            button: button,
+            trackingRawValue: tracking.rawValue,
+            encodingRawValue: encoding.rawValue,
+            row: 2,
+            column: 4,
+            pixelX: 120,
+            pixelY: 80,
+            modifiers: modifiers
         )
     }
 
