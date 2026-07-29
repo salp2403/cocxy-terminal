@@ -3005,36 +3005,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NSApp.activate(ignoringOtherApps: true)
             self?.windowController?.toggleDashboard()
         }
+        item.onNavigateToSession = { [weak self] sessionID in
+            NSApp.activate(ignoringOtherApps: true)
+            self?.agentDashboardViewModel?.navigateToSession(sessionID)
+        }
+        item.onRequestAgentSummary = { [weak self] in
+            guard let self else { return .empty }
+            return MenuBarAgentSummary.summarize(
+                self.agentDashboardViewModel?.sessions ?? [],
+                surfaceIDForHookSession: { [weak self] sessionID in
+                    self?.boundSurfaceIDForHookSession(sessionID)
+                }
+            )
+        }
         self.menuBarItem = item
 
-        // Wire dashboard ViewModel to update menu bar when sessions change.
-        agentDashboardViewModel?.sessionsPublisher
-            .receive(on: DispatchQueue.main)
-            .sink { [weak item] sessions in
-                let working = sessions.filter { $0.state == .working }.count
-                let waiting = sessions.filter { $0.state == .waitingForInput }.count
-                let errors = sessions.filter { $0.state == .error }.count
-                // Only show active sessions (working/waiting) in the menu bar.
-                // Error and finished sessions clutter the dropdown and make
-                // "Show Dashboard" hard to reach.
-                let activeSessions = sessions.filter {
-                    $0.state == .working || $0.state == .waitingForInput
+        if let sessionsPublisher = agentDashboardViewModel?.sessionsPublisher {
+            item.bindAgentSessions(
+                sessionsPublisher,
+                surfaceIDForHookSession: { [weak self] sessionID in
+                    self?.boundSurfaceIDForHookSession(sessionID)
                 }
-                let summaries = activeSessions.prefix(5).map { session in
-                    (
-                        name: session.projectName,
-                        state: session.state.rawValue,
-                        activity: session.lastActivity
-                    )
-                }
-                item?.updateAgentCount(
-                    working: working,
-                    waiting: waiting,
-                    errors: errors,
-                    sessions: summaries
-                )
-            }
+            )
             .store(in: &hookCancellables)
+        }
 
         configService?.configChangedPublisher
             .map(\.appearance.appLanguage)

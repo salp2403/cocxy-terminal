@@ -404,6 +404,7 @@
 "menuBar.showCocxy" = "Show Cocxy";
 "menuBar.showDashboard" = "Show Dashboard";
 "menuBar.quitCocxy" = "Quit Cocxy";
+"menuBar.moreAgents" = "+%d more";
 "menu.application.about" = "About Cocxy Terminal";
 "menu.application.settings" = "Settings...";
 "menu.application.checkForUpdates" = "Check for Updates...";
