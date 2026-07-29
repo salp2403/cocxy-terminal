@@ -1722,6 +1722,13 @@ struct HookIntegrationPreferencesSection: View {
                     viewModel.localizedString("preferences.hooks.enable", fallback: "Enable hook forwarding"),
                     isOn: $viewModel.hooksIntegrationEnabled
                 )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.hooks.debugLog",
+                        fallback: "Write local hook diagnostics"
+                    ),
+                    isOn: $viewModel.hooksDebugLogEnabled
+                )
                 Text(
                     viewModel.localizedString(
                         "preferences.hooks.feature.caption",
@@ -1730,6 +1737,16 @@ struct HookIntegrationPreferencesSection: View {
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                Text(
+                    viewModel.localizedString(
+                        "preferences.hooks.debugLog.caption",
+                        fallback: "Applies to new shells and writes sensitive local details to ~/Library/Logs/Cocxy/hook-integration.log."
+                    )
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             }
 

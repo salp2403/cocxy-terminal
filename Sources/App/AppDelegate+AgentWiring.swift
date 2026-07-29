@@ -65,7 +65,17 @@ extension AppDelegate {
             }
         }
 
-        hookEventReceiver = HookEventReceiverImpl()
+        let hookReceiver = HookEventReceiverImpl(
+            debugLoggingEnabled: config.hooks.debugLog
+        )
+        hookEventReceiver = hookReceiver
+        configService?.configChangedPublisher
+            .map(\.hooks.debugLog)
+            .removeDuplicates()
+            .sink { [weak hookReceiver] enabled in
+                hookReceiver?.updateDebugLogging(enabled: enabled)
+            }
+            .store(in: &hookCancellables)
         let sessionDiffTracker = SessionDiffTrackerImpl(editHistoryRecorder: AIEditHistoryGitRecorder())
         self.sessionDiffTracker = sessionDiffTracker
 
@@ -159,6 +169,12 @@ extension AppDelegate {
 
                 // Drop hook events from sessions not running inside Cocxy tabs.
                 if event.cwd != nil, resolved == nil {
+                    // If OSC 7 already moved a previously-bound tab to
+                    // `new_cwd`, the CwdChanged hook is a harmless duplicate,
+                    // not a routing failure that should prompt the user.
+                    if !self.isBoundCwdChangedAlreadyApplied(event) {
+                        receiver.recordDroppedByCwd(event)
+                    }
                     return
                 }
 
@@ -557,6 +573,14 @@ extension AppDelegate {
             controller.showCodeReviewPanel()
         }
 
+        dashboardVM.onReinstallHooks = { [weak self] in
+            self?.reinstallClaudeCodeHooksForDiagnostics() ?? false
+        }
+
+        dashboardVM.onBindDroppedSession = { [weak self] context in
+            self?.bindDroppedHookSessionToFocusedTab(context) ?? false
+        }
+
         // Timeline: subscribes to hook events.
         let timelineStore = AgentTimelineStoreImpl()
         self.agentTimelineStore = timelineStore
@@ -741,6 +765,20 @@ extension AppDelegate {
         }
 
         return nil
+    }
+
+    private func bindDroppedHookSessionToFocusedTab(
+        _ context: DroppedHookEventContext
+    ) -> Bool {
+        guard hookEventReceiver?.lastDroppedByCwd?.sessionId == context.sessionId,
+              let controller = focusedWindowController(),
+              let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID else {
+            return false
+        }
+        let surfaceID = controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        bindHookSession(context.sessionId, to: tabID, surfaceID: surfaceID)
+        hookEventReceiver?.acknowledgeDroppedByCwd(sessionId: context.sessionId)
+        return true
     }
 
     func makeTimelineNavigator() -> TimelineNavigating {

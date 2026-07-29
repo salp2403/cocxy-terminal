@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import CocxyShared
 
 // MARK: - Config Providing Protocol
 
@@ -1797,11 +1798,13 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
     static let builtInAgents = HookIntegrationAgent.allCases
 
     let enabled: Bool
+    let debugLog: Bool
     let agents: [HookIntegrationAgent: HookIntegrationAgentConfig]
 
     static var defaults: HookIntegrationConfig {
         HookIntegrationConfig(
             enabled: true,
+            debugLog: false,
             agents: Dictionary(
                 uniqueKeysWithValues: builtInAgents.map { ($0, HookIntegrationAgentConfig(enabled: true)) }
             )
@@ -1810,14 +1813,17 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
 
     init(
         enabled: Bool = true,
+        debugLog: Bool = false,
         agents: [HookIntegrationAgent: HookIntegrationAgentConfig] = [:]
     ) {
         self.enabled = enabled
+        self.debugLog = debugLog
         self.agents = Self.normalizedAgents(agents)
     }
 
     private enum CodingKeys: String, CodingKey {
         case enabled
+        case debugLog
         case agents
     }
 
@@ -1830,6 +1836,8 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
         self.init(
             enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled)
                 ?? Self.defaults.enabled,
+            debugLog: try container.decodeIfPresent(Bool.self, forKey: .debugLog)
+                ?? Self.defaults.debugLog,
             agents: decodedAgents.map(Self.agentConfigsByIdentifier) ?? Self.defaults.agents
         )
     }
@@ -1837,6 +1845,7 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(enabled, forKey: .enabled)
+        try container.encode(debugLog, forKey: .debugLog)
         let keyedAgents = Dictionary(
             uniqueKeysWithValues: Self.builtInAgents.map { agent in
                 (agent.rawValue, agents[agent] ?? HookIntegrationAgentConfig(enabled: true))
@@ -1855,6 +1864,9 @@ struct HookIntegrationConfig: Codable, Sendable, Equatable {
         ]
         if !enabled {
             environment[Self.globalDisabledEnvironmentKey] = "1"
+        }
+        if debugLog {
+            environment[HookIntegrationDebugLog.enabledEnvironmentKey] = "1"
         }
         for agent in Self.builtInAgents where !isAgentEnabled(agent) {
             environment[agent.disabledEnvironmentKey] = "1"

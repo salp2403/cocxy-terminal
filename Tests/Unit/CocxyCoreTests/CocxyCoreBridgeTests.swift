@@ -1425,6 +1425,7 @@ struct CocxyCoreBridgeTests {
             resourcesPath: root.path,
             hookIntegration: HookIntegrationConfig(
                 enabled: false,
+                debugLog: true,
                 agents: [
                     .codex: HookIntegrationAgentConfig(enabled: false),
                     .opencode: HookIntegrationAgentConfig(enabled: false),
@@ -1434,6 +1435,7 @@ struct CocxyCoreBridgeTests {
 
         #expect(env["COCXY_CLAUDE_HOOKS"] == "1")
         #expect(env["COCXY_HOOKS_DISABLED"] == "1")
+        #expect(env["COCXY_HOOK_DEBUG_LOG"] == "1")
         #expect(env["COCXY_CODEX_HOOKS_DISABLED"] == "1")
         #expect(env["COCXY_OPENCODE_HOOKS_DISABLED"] == "1")
         #expect(env["COCXY_PI_HOOKS_DISABLED"] == nil)
@@ -1578,6 +1580,8 @@ struct CocxyCoreBridgeTests {
     func terminalPTYsStripHostNoColor() throws {
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("NO_COLOR"))
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOKS_DISABLED"))
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOK_DEBUG_LOG"))
+        #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_HOOK_DEBUG_LOG_PATH"))
         #expect(CocxyCoreBridge.terminalEnvironmentKeysToUnset.contains("COCXY_OPENCODE_HOOKS_DISABLED"))
     }
 }

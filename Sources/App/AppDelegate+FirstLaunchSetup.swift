@@ -21,7 +21,7 @@ extension AppDelegate {
         }
 
         installCLISymlink(target: persistentCLIPath)
-        installClaudeCodeHooks(cliPath: persistentCLIPath)
+        _ = installClaudeCodeHooks(cliPath: persistentCLIPath)
     }
 
     // MARK: - CLI Symlink
@@ -270,9 +270,10 @@ extension AppDelegate {
     /// instead of bare `cocxy` so hooks work even when the CLI is not in PATH.
     ///
     /// Preserves existing user hooks. Idempotent: skips if already installed.
-    private func installClaudeCodeHooks(cliPath: String) {
+    @discardableResult
+    private func installClaudeCodeHooks(cliPath: String) -> Bool {
         guard FileManager.default.fileExists(atPath: cliPath) else {
-            return
+            return false
         }
 
         let legacyHookCommand = "\(Self.shellSingleQuoted(cliPath)) hook-handler"
@@ -280,7 +281,9 @@ extension AppDelegate {
         let settingsPath = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/settings.json").path
 
-        var settings = readOrCreateSettings(at: settingsPath)
+        guard var settings = readSettingsForUpdate(at: settingsPath) else {
+            return false
+        }
         var hooks = (settings["hooks"] as? [String: Any]) ?? [:]
 
         // Mirror of `ClaudeSettingsManager.hookedEventTypes`. The GUI app
@@ -320,10 +323,20 @@ extension AppDelegate {
             hooks[eventType] = eventHooks
         }
 
-        guard modified else { return }
+        guard modified else { return true }
 
         settings["hooks"] = hooks
-        writeSettings(settings, to: settingsPath)
+        return writeSettings(settings, to: settingsPath)
+    }
+
+    func reinstallClaudeCodeHooksForDiagnostics() -> Bool {
+        guard let bundleCLIPath = cliPathInBundle(),
+              let persistentCLIPath = Self.persistentCLIPathForFirstLaunchSetup(
+                  bundleCLIPath: bundleCLIPath
+              ) else {
+            return false
+        }
+        return installClaudeCodeHooks(cliPath: persistentCLIPath)
     }
 
     /// FileChanged's matcher has dual semantics in Claude Code:
@@ -333,18 +346,26 @@ extension AppDelegate {
         eventType == "FileChanged" ? "." : ""
     }
 
-    /// Reads settings.json or returns an empty dictionary if it doesn't exist.
-    private func readOrCreateSettings(at path: String) -> [String: Any] {
-        guard FileManager.default.fileExists(atPath: path),
-              let data = try? Data(contentsOf: URL(fileURLWithPath: path)),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+    /// Returns an empty dictionary for a missing file, but refuses to replace
+    /// an existing settings file that cannot be decoded as a JSON object.
+    private func readSettingsForUpdate(at path: String) -> [String: Any]? {
+        guard FileManager.default.fileExists(atPath: path) else {
             return [:]
         }
-        return json
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else {
+            return nil
+        }
+        return Self.decodeClaudeSettingsForUpdate(data)
+    }
+
+    nonisolated static func decodeClaudeSettingsForUpdate(
+        _ data: Data
+    ) -> [String: Any]? {
+        try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
     /// Writes settings back to the file, creating the directory if needed.
-    private func writeSettings(_ settings: [String: Any], to path: String) {
+    private func writeSettings(_ settings: [String: Any], to path: String) -> Bool {
         let directory = (path as NSString).deletingLastPathComponent
         if !FileManager.default.fileExists(atPath: directory) {
             try? FileManager.default.createDirectory(
@@ -356,8 +377,13 @@ extension AppDelegate {
         guard let data = try? JSONSerialization.data(
             withJSONObject: settings,
             options: [.prettyPrinted, .sortedKeys]
-        ) else { return }
+        ) else { return false }
 
-        try? data.write(to: URL(fileURLWithPath: path), options: .atomic)
+        do {
+            try data.write(to: URL(fileURLWithPath: path), options: .atomic)
+            return true
+        } catch {
+            return false
+        }
     }
 }

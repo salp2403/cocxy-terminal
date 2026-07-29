@@ -268,6 +268,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Master switch for external-agent hook forwarding from Cocxy-launched shells.
     @Published var hooksIntegrationEnabled: Bool
 
+    /// Opt-in local hook delivery diagnostics for new terminal shells.
+    @Published var hooksDebugLogEnabled: Bool
+
     /// Per-agent forwarding enablement for hook bridges.
     @Published private var hookAgents: [HookIntegrationAgent: HookIntegrationAgentConfig]
 
@@ -883,6 +886,7 @@ final class PreferencesViewModel: ObservableObject {
         vaultSessionRetentionDays = c.vault.sessionRetentionDays
         vaultAgents = c.vault.agents
         hooksIntegrationEnabled = c.hooks.enabled
+        hooksDebugLogEnabled = c.hooks.debugLog
         hookAgents = c.hooks.agents
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
@@ -1136,6 +1140,7 @@ final class PreferencesViewModel: ObservableObject {
 
         // Hook Integration
         self.hooksIntegrationEnabled = config.hooks.enabled
+        self.hooksDebugLogEnabled = config.hooks.debugLog
         self.hookAgents = config.hooks.agents
 
         // Voice Input
@@ -2005,6 +2010,7 @@ final class PreferencesViewModel: ObservableObject {
         vaultSessionRetentionDays = vault.sessionRetentionDays
         vaultAgents = vault.agents
         hooksIntegrationEnabled = hooks.enabled
+        hooksDebugLogEnabled = hooks.debugLog
         hookAgents = hooks.agents
         activityCostTrackingEnabled = activity.costTrackingEnabled
         activityInputCostMicrosPerMillionTokens = activity.inputCostMicrosPerMillionTokens
@@ -2089,6 +2095,7 @@ final class PreferencesViewModel: ObservableObject {
     private func buildHookIntegrationConfigFromViewModel() -> HookIntegrationConfig {
         HookIntegrationConfig(
             enabled: hooksIntegrationEnabled,
+            debugLog: hooksDebugLogEnabled,
             agents: hookAgents
         )
     }
@@ -2840,6 +2847,7 @@ final class PreferencesViewModel: ObservableObject {
 
         [hooks]
         enabled = \(hooks.enabled)
+        debug-log = \(hooks.debugLog)
 
         \(Self.hookAgentSectionsToml(hooks.agents))
 

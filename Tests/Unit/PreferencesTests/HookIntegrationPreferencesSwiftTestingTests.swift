@@ -30,6 +30,7 @@ struct HookIntegrationPreferencesSwiftTestingTests {
             agentDetection: .defaults,
             hooks: HookIntegrationConfig(
                 enabled: false,
+                debugLog: true,
                 agents: [
                     .codex: HookIntegrationAgentConfig(enabled: false),
                     .opencode: HookIntegrationAgentConfig(enabled: true),
@@ -44,6 +45,7 @@ struct HookIntegrationPreferencesSwiftTestingTests {
         let (vm, _) = makeViewModel(config: config)
 
         #expect(vm.hooksIntegrationEnabled == false)
+        #expect(vm.hooksDebugLogEnabled == true)
         #expect(vm.hookAgentEnabled(.codex) == false)
         #expect(vm.hookAgentEnabled(.opencode) == true)
         #expect(vm.availableHookAgents.count == 12)
@@ -56,11 +58,13 @@ struct HookIntegrationPreferencesSwiftTestingTests {
         #expect(vm.hasUnsavedChanges == false)
 
         vm.hooksIntegrationEnabled = false
+        vm.hooksDebugLogEnabled = true
         vm.setHookAgent(.codex, enabled: false)
         #expect(vm.hasUnsavedChanges == true)
 
         vm.discardChanges()
         #expect(vm.hooksIntegrationEnabled == true)
+        #expect(vm.hooksDebugLogEnabled == false)
         #expect(vm.hookAgentEnabled(.codex) == true)
         #expect(vm.hasUnsavedChanges == false)
     }
@@ -70,6 +74,7 @@ struct HookIntegrationPreferencesSwiftTestingTests {
         let (vm, provider) = makeViewModel()
 
         vm.hooksIntegrationEnabled = false
+        vm.hooksDebugLogEnabled = true
         vm.setHookAgent(.codex, enabled: false)
         vm.setHookAgent(.rovoDev, enabled: false)
         try vm.save()
@@ -79,6 +84,7 @@ struct HookIntegrationPreferencesSwiftTestingTests {
         try service.reload()
 
         #expect(service.current.hooks.enabled == false)
+        #expect(service.current.hooks.debugLog == true)
         #expect(service.current.hooks.isAgentEnabled(.codex) == false)
         #expect(service.current.hooks.isAgentEnabled(.rovoDev) == false)
         #expect(service.current.hooks.isAgentEnabled(.pi) == true)
@@ -91,14 +97,17 @@ struct HookIntegrationPreferencesSwiftTestingTests {
 
         let defaultToml = vm.generateToml()
         #expect(defaultToml.contains("[hooks]"))
+        #expect(defaultToml.contains("debug-log = false"))
         #expect(defaultToml.contains("[hooks.agents.codex]\nenabled = true"))
 
         vm.hooksIntegrationEnabled = false
+        vm.hooksDebugLogEnabled = true
         vm.setHookAgent(.codex, enabled: false)
 
         let toml = vm.generateToml()
         #expect(toml.contains("[hooks]"))
         #expect(toml.contains("enabled = false"))
+        #expect(toml.contains("debug-log = true"))
         #expect(toml.contains("[hooks.agents.codex]\nenabled = false"))
     }
 

@@ -458,6 +458,9 @@ final class ConfigService: ConfigProviding {
         # installed bridges keep working; turn off the global switch or a
         # per-agent switch to inject COCXY_*_HOOKS_DISABLED into new shells.
         enabled = \(defaults.hooks.enabled)
+        # Writes local hook delivery diagnostics to ~/Library/Logs/Cocxy.
+        # Disabled by default because session IDs and paths are sensitive.
+        debug-log = \(defaults.hooks.debugLog)
 
         \(hookAgentsToml)
 
@@ -1315,6 +1318,7 @@ final class ConfigService: ConfigProviding {
 
         return HookIntegrationConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            debugLog: boolValue(table["debug-log"]) ?? defaults.debugLog,
             agents: agents
         )
     }

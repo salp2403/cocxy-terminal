@@ -90,6 +90,25 @@ extension AppDelegate {
             newWorkingDirectory: URL(fileURLWithPath: newCwd, isDirectory: true)
         )
     }
+
+    /// Distinguishes an OSC 7 race from a rejected CwdChanged event without
+    /// routing the event by its untrusted `new_cwd`. A prior session binding is
+    /// required and the bound tab must already equal the canonical destination.
+    func isBoundCwdChangedAlreadyApplied(_ event: HookEvent) -> Bool {
+        guard event.type == .cwdChanged,
+              case .cwdChanged(let data) = event.data,
+              let previousCwd = data.previousCwd, !previousCwd.isEmpty,
+              let newCwd = event.cwd, !newCwd.isEmpty,
+              HookPathNormalizer.normalize(previousCwd) != HookPathNormalizer.normalize(newCwd),
+              let boundTabID = hookSessionTabBindings[event.sessionId],
+              let controller = controllerContainingTab(boundTabID),
+              let tab = controller.tabManager.tab(for: boundTabID) else {
+            return false
+        }
+
+        return HookPathNormalizer.normalize(tab.workingDirectory.path)
+            == HookPathNormalizer.normalize(newCwd)
+    }
 }
 
 // MARK: - Pure resolver shared by production and tests

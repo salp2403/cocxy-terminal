@@ -4,6 +4,11 @@
 import Foundation
 import Combine
 
+enum DashboardHookConnectionIssue: Equatable, Sendable {
+    case noEvents(tabId: UUID, detectedAt: Date)
+    case cwdMismatch(DroppedHookEventContext)
+}
+
 // MARK: - Agent Dashboard ViewModel
 
 /// ViewModel that aggregates agent sessions from hook events and detection signals.
@@ -45,6 +50,12 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// Whether the dashboard panel is visible.
     @Published var isVisible: Bool = false
 
+    /// Actionable hook-delivery issue shown without hiding live session rows.
+    @Published private(set) var hookConnectionIssue: DashboardHookConnectionIssue?
+
+    /// Result of the most recent explicit repair action.
+    @Published private(set) var hookRepairSucceeded: Bool?
+
     // MARK: - Publishers
 
     var sessionsPublisher: AnyPublisher<[AgentSessionInfo], Never> {
@@ -81,6 +92,9 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     /// Opens one touched file in Code Review after routing to its owning tab.
     var onOpenFileImpact: ((_ sessionId: String, _ filePath: String) -> Void)?
+
+    var onReinstallHooks: (() -> Bool)?
+    var onBindDroppedSession: ((DroppedHookEventContext) -> Bool)?
 
     /// Reference to the hook event receiver for accessing session context
     /// (cwd, session_id) when auto-creating sessions from tool use events.
@@ -123,6 +137,10 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// agents in the same tab do not collapse into one dashboard session.
     var patternContextProvider: ((SurfaceID?) -> (tabId: UUID, surfaceID: SurfaceID?, workingDirectory: String?)?)?
 
+    private let hookSilenceInterval: TimeInterval
+    private var hookSilenceTasks: [UUID: Task<Void, Never>] = [:]
+    private var tabsWithObservedHooks = Set<UUID>()
+
     // MARK: - Initialization
 
     /// Creates a dashboard ViewModel and subscribes to event sources.
@@ -132,10 +150,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     ///   - detectionEngine: Optional detection engine for non-hook agents.
     init(
         hookEventReceiver: HookEventReceiving? = nil,
-        detectionEngine: AgentDetectionEngineImpl? = nil
+        detectionEngine: AgentDetectionEngineImpl? = nil,
+        hookSilenceInterval: TimeInterval = 20
     ) {
+        self.hookSilenceInterval = hookSilenceInterval
+        self.hookConnectionIssue = nil
+        self.hookRepairSucceeded = nil
         self.hookEventReceiver = hookEventReceiver as? HookEventReceiverImpl
         subscribeToHookEvents(hookEventReceiver)
+        subscribeToHookDiagnostics(hookEventReceiver as? HookEventReceiverImpl)
         subscribeToDetectionEngine(detectionEngine)
     }
 
@@ -191,6 +214,19 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     func openFileImpact(_ filePath: String, for sessionId: String) {
         guard sessionDataStore[sessionId]?.fileImpacts[filePath] != nil else { return }
         onOpenFileImpact?(sessionId, filePath)
+    }
+
+    func reinstallHooks() {
+        hookRepairSucceeded = onReinstallHooks?() ?? false
+    }
+
+    func bindDroppedSession() {
+        guard case .cwdMismatch(let context) = hookConnectionIssue else { return }
+        let succeeded = onBindDroppedSession?(context) ?? false
+        hookRepairSucceeded = succeeded
+        if succeeded {
+            hookConnectionIssue = nil
+        }
     }
 
     /// Returns whether a concrete subagent is already tracked under a parent session.
@@ -397,6 +433,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         for sessionID in sessionIDs {
             sessionDataStore.removeValue(forKey: sessionID)
         }
+        cancelHookSilenceWatch(for: tabID, clearObservation: true)
         rebuildSessions()
     }
 
@@ -483,6 +520,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     ) {
         let syntheticSessionId = patternSessionID(tabId: tabId, surfaceID: surfaceID)
         let dashboardState = mapStateMachineState(state)
+        let previousState = sessionDataStore[syntheticSessionId]?.state
 
         if sessionDataStore[syntheticSessionId] == nil {
             let projectName = extractProjectName(from: workingDirectory)
@@ -499,6 +537,12 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
             sessionDataStore[syntheticSessionId]?.agentName = agentName
         }
+        updateHookSilenceWatch(
+            agentName: agentName,
+            state: dashboardState,
+            previousState: previousState,
+            tabId: tabId
+        )
     }
 
     private func patternSessionID(tabId: UUID, surfaceID: SurfaceID?) -> String {
@@ -833,20 +877,105 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] event in
                 guard let self else { return }
-                // Only process events from sessions running inside Cocxy tabs.
-                // Events without CWD are dropped when the provider is available,
-                // preventing cross-terminal leakage.
-                if let tabCwds = self.tabCwdProvider?() {
+                // CwdChanged has no dashboard effect and is authorized solely
+                // by AppDelegate's exact old_cwd resolver. Do not independently
+                // treat a pre-existing session binding as acceptance here.
+                guard event.type != .cwdChanged else { return }
+                let resolvedTabId: UUID?
+                resolvedTabId = self.tabIdResolver?(event.sessionId, event.cwd)
+
+                if self.tabCwdProvider != nil, resolvedTabId == nil {
                     guard let cwd = event.cwd else { return }
-                    let cwdStd = URL(fileURLWithPath: cwd).standardized.path
-                    let matches = tabCwds.contains { tabCwd in
-                        URL(fileURLWithPath: tabCwd).standardized.path == cwdStd
-                    }
+                    let cwdStd = HookPathNormalizer.normalize(cwd)
+                    let matches = self.tabCwdProvider?().contains { tabCwd in
+                        HookPathNormalizer.normalize(tabCwd) == cwdStd
+                    } == true
                     guard matches else { return }
+                }
+                if let resolvedTabId {
+                    self.markHookObserved(tabId: resolvedTabId, sessionId: event.sessionId)
                 }
                 self.processHookEvent(event)
             }
             .store(in: &cancellables)
+    }
+
+    private func subscribeToHookDiagnostics(_ receiver: HookEventReceiverImpl?) {
+        receiver?.diagnosticsPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] diagnostics in
+                guard let self else { return }
+                if let context = diagnostics.lastDroppedByCwd {
+                    self.hookRepairSucceeded = nil
+                    self.hookConnectionIssue = .cwdMismatch(context)
+                } else if case .cwdMismatch = self.hookConnectionIssue {
+                    self.hookConnectionIssue = nil
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    private func updateHookSilenceWatch(
+        agentName: String,
+        state: AgentDashboardState,
+        previousState: AgentDashboardState?,
+        tabId: UUID
+    ) {
+        let isClaude = agentName.localizedCaseInsensitiveContains("claude")
+        guard isClaude, state != .idle else {
+            cancelHookSilenceWatch(for: tabId, clearObservation: state == .idle)
+            return
+        }
+
+        if state == .launching, previousState != .launching {
+            tabsWithObservedHooks.remove(tabId)
+        }
+        guard !tabsWithObservedHooks.contains(tabId), hookSilenceTasks[tabId] == nil else {
+            return
+        }
+
+        let detectedAt = Date()
+        let nanoseconds = UInt64(max(0, hookSilenceInterval) * 1_000_000_000)
+        hookSilenceTasks[tabId] = Task { @MainActor [weak self] in
+            if nanoseconds > 0 {
+                try? await Task.sleep(nanoseconds: nanoseconds)
+            }
+            guard !Task.isCancelled, let self,
+                  !self.tabsWithObservedHooks.contains(tabId) else {
+                return
+            }
+            self.hookSilenceTasks.removeValue(forKey: tabId)
+            if case .cwdMismatch = self.hookConnectionIssue {
+                return
+            }
+            self.hookRepairSucceeded = nil
+            self.hookConnectionIssue = .noEvents(tabId: tabId, detectedAt: detectedAt)
+        }
+    }
+
+    private func markHookObserved(tabId: UUID, sessionId: String) {
+        tabsWithObservedHooks.insert(tabId)
+        hookSilenceTasks.removeValue(forKey: tabId)?.cancel()
+        hookRepairSucceeded = nil
+        if case .noEvents(let affectedTabId, _) = hookConnectionIssue,
+           affectedTabId == tabId {
+            hookConnectionIssue = nil
+        }
+        if case .cwdMismatch(let context) = hookConnectionIssue,
+           context.sessionId == sessionId {
+            hookConnectionIssue = nil
+        }
+    }
+
+    private func cancelHookSilenceWatch(for tabId: UUID, clearObservation: Bool) {
+        hookSilenceTasks.removeValue(forKey: tabId)?.cancel()
+        if clearObservation {
+            tabsWithObservedHooks.remove(tabId)
+        }
+        if case .noEvents(let affectedTabId, _) = hookConnectionIssue,
+           affectedTabId == tabId {
+            hookConnectionIssue = nil
+        }
     }
 
     private func subscribeToDetectionEngine(_ engine: AgentDetectionEngineImpl?) {

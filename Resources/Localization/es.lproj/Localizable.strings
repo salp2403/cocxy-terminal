@@ -381,6 +381,14 @@
 "agentDashboard.empty.all.title" = "No hay agentes activos";
 "agentDashboard.empty.current.message" = "Cambia a Todas las ventanas para ver actividad\ndel resto de la app.";
 "agentDashboard.empty.all.message" = "Ejecuta un agente IA en la terminal\npara ver su actividad aquí.";
+"agentDashboard.hooks.noEvents" = "Claude Code está corriendo pero Cocxy no recibe sus eventos.";
+"agentDashboard.hooks.cwdMismatch" = "Cocxy recibió eventos del agente que no coinciden con el directorio de ninguna pestaña abierta.";
+"agentDashboard.hooks.reinstall" = "Reinstalar hooks";
+"agentDashboard.hooks.bind" = "Vincular esta sesión a esta pestaña";
+"agentDashboard.hooks.repair.success" = "La reparación de hooks terminó. Los eventos nuevos volverán a conectar esta sesión.";
+"agentDashboard.hooks.repair.failure" = "No fue posible reparar los hooks desde esta instalación de la aplicación.";
+"agentDashboard.fileImpact.open" = "Revisar %@, %@";
+"agentDashboard.fileImpact.more" = "%d más";
 "agentDashboard.row.activateHint" = "Activar para cambiar a esta pestaña";
 "agentDashboard.priority.focus" = "Foco";
 "agentDashboard.priority.priority" = "Prioridad";
@@ -737,6 +745,8 @@
 "preferences.vault.agents.section" = "Agentes";
 "preferences.hooks.feature.section" = "Función";
 "preferences.hooks.enable" = "Activar reenvío de hooks";
+"preferences.hooks.debugLog" = "Escribir diagnóstico local de hooks";
+"preferences.hooks.debugLog.caption" = "Se aplica a shells nuevas y escribe detalles locales sensibles en ~/Library/Logs/Cocxy/hook-integration.log.";
 "preferences.hooks.feature.caption" = "Controla el entorno heredado por nuevas shells. Los bridges instalados permanecen en disco, pero los agentes desactivados reciben COCXY_*_HOOKS_DISABLED=1 para que sus eventos no se reenvíen a Cocxy.";
 "preferences.hooks.agents.section" = "Agentes";
 "preferences.hooks.install.section" = "Instalación";
