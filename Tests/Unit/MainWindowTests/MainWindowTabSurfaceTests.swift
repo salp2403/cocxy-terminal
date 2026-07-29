@@ -2611,30 +2611,47 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             controller.createTerminalSurface()
         }
 
-        guard let tabID = controller.tabManager.activeTabID,
-              let surfaceID = controller.tabSurfaceMap[tabID] else {
+        guard let sourceTabID = controller.tabManager.activeTabID,
+              let sourceSurfaceID = controller.tabSurfaceMap[sourceTabID] else {
             XCTFail("Expected bootstrap tab and surface")
             return
         }
 
-        let trackingView = TrackingTerminalHostView()
-        controller.tabSurfaceViews[tabID] = trackingView
-        controller.terminalSurfaceView = trackingView
+        controller.newTabAction(nil)
+        guard let activeTabID = controller.tabManager.activeTabID,
+              activeTabID != sourceTabID,
+              controller.tabSurfaceMap[activeTabID] != nil else {
+            XCTFail("Expected a different active tab and surface")
+            return
+        }
+
+        let sourceView = TrackingTerminalHostView()
+        let activeView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[sourceTabID] = sourceView
+        controller.tabSurfaceViews[activeTabID] = activeView
+        controller.terminalSurfaceView = activeView
         let prompt = TerminalGridPosition(screenRow: 4, absoluteRow: 24, column: 2)
         let input = TerminalGridPosition(screenRow: 4, absoluteRow: 24, column: 7)
 
-        bridge.emitOSC(.shellPrompt(position: prompt), for: surfaceID)
-        bridge.emitOSC(.commandStarted(inputPosition: input), for: surfaceID)
-        bridge.emitOutput(Data("\u{1B}]133;C\u{07}".utf8), for: surfaceID)
+        bridge.emitOSC(.shellPrompt(position: prompt), for: sourceSurfaceID)
+        bridge.emitOSC(.commandStarted(inputPosition: input), for: sourceSurfaceID)
+        bridge.emitOutput(Data("\u{1B}]133;C\u{07}".utf8), for: sourceSurfaceID)
 
         for _ in 0..<100 {
-            if trackingView.commandExecutedCallCount > 0 { break }
+            if sourceView.shellPromptPositions == [prompt],
+               sourceView.commandInputPositions == [input],
+               sourceView.commandExecutedCallCount == 1 {
+                break
+            }
             try await Task.sleep(nanoseconds: 10_000_000)
         }
 
-        XCTAssertEqual(trackingView.shellPromptPositions, [prompt])
-        XCTAssertEqual(trackingView.commandInputPositions, [input])
-        XCTAssertEqual(trackingView.commandExecutedCallCount, 1)
+        XCTAssertEqual(sourceView.shellPromptPositions, [prompt])
+        XCTAssertEqual(sourceView.commandInputPositions, [input])
+        XCTAssertEqual(sourceView.commandExecutedCallCount, 1)
+        XCTAssertTrue(activeView.shellPromptPositions.isEmpty)
+        XCTAssertTrue(activeView.commandInputPositions.isEmpty)
+        XCTAssertEqual(activeView.commandExecutedCallCount, 0)
     }
 
     // MARK: - windowDidChangeScreen safety net

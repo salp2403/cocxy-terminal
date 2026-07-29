@@ -199,6 +199,21 @@ final class IDECursorControllerTests: XCTestCase {
         }
     }
 
+    func testArrowKeysAllowPromptAndCommandInputSemanticStates() {
+        for semanticState in [UInt8(1), UInt8(2)] {
+            let controller = makeController(snapshot: Self.makeSnapshot(
+                cursorColumn: 2,
+                semanticState: semanticState
+            ))
+            controller.commandInputStarted(at: position(column: 2))
+
+            XCTAssertEqual(controller.arrowKeysForClick(
+                at: CGPoint(x: 24, y: 0),
+                viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
+            ), [.right])
+        }
+    }
+
     func testArrowKeysCompareAbsoluteRows() {
         let controller = makeController(snapshot: Self.makeSnapshot(
             visibleStartRow: 10,

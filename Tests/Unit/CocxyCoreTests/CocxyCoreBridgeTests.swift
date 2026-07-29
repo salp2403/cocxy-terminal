@@ -976,6 +976,41 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.terminalCursorClickSnapshot(for: SurfaceID()) == nil)
     }
 
+    @Test("semantic OSC positions are captured before later bytes advance the cursor")
+    func semanticOSCPositionsAreCapturedSynchronously() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let capturedPositions = LockedBox<[String: TerminalGridPosition]>([:])
+
+        bridge.setOSCHandler(for: surfaceID) { notification in
+            switch notification {
+            case .shellPrompt(let position):
+                if let position {
+                    capturedPositions.withValue { $0["prompt"] = position }
+                }
+            case .commandStarted(let position):
+                if let position {
+                    capturedPositions.withValue { $0["input"] = position }
+                }
+            default:
+                break
+            }
+        }
+
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}abc", to: state.terminal)
+
+        try await waitUntil {
+            capturedPositions.withValue { $0.count == 2 }
+        }
+        let positions = capturedPositions.withValue { $0 }
+        #expect(positions["prompt"]?.column == 0)
+        #expect(positions["input"]?.column == 0)
+        #expect(positions["prompt"]?.absoluteRow == positions["input"]?.absoluteRow)
+        #expect(cocxycore_terminal_cursor_col(state.terminal) == 3)
+    }
+
     @Test("preedit snapshot exposes text, cursor, and anchor")
     func preeditSnapshotExposesTextCursorAndAnchor() throws {
         let bridge = try makeBridge()

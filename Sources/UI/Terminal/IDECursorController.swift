@@ -75,8 +75,9 @@ final class IDECursorController {
     /// This is the column where the prompt text ends and user input begins.
     private(set) var promptColumn: Int = 0
 
-    /// The last known cursor column (0-based, within the line).
-    /// Updated via cursor position reports or estimated from input.
+    /// The last estimated cursor column (0-based, within the line).
+    /// Kept for diagnostics and view-layer bookkeeping; click deltas always use
+    /// the atomic terminal snapshot instead of this estimate.
     private(set) var cursorColumn: Int = 0
 
     /// Whether the cursor is currently on the prompt line.
@@ -151,9 +152,9 @@ final class IDECursorController {
 
     /// Called when user input changes the cursor position.
     ///
-    /// Tracks the cursor column so the next click-to-position uses an
-    /// accurate baseline. This is called from the view layer after arrow
-    /// keys and printable characters are delivered to the terminal.
+    /// Tracks the view layer's latest cursor estimate after arrow keys and
+    /// printable characters are delivered to the terminal. The estimate is
+    /// never used to authorize or calculate a click-to-position movement.
     func cursorMoved(toColumn column: Int) {
         cursorColumn = column
     }
@@ -171,12 +172,10 @@ final class IDECursorController {
     /// Handles a click at the given location and returns the arrow keys
     /// needed to move the cursor to that position.
     ///
-    /// The cursor column used for the delta is read from the **real**
-    /// terminal state via `cursorPositionProvider` so that prompts with
-    /// invisible escape sequences, colors, emojis or wide characters do
-    /// not cause drift. The internally-tracked `cursorColumn` is kept in
-    /// sync as a fallback for tests that inject the controller with no
-    /// terminal backing.
+    /// The cursor, viewport, semantic state, selection state and row cell
+    /// widths are read together from the **real** terminal through
+    /// `terminalStateProvider`. This prevents drift from invisible escape
+    /// sequences, colors, emojis, wide characters or mixed-frame reads.
     ///
     /// - Parameters:
     ///   - location: The click point in the terminal view's coordinate space.
