@@ -107,6 +107,11 @@ protocol TerminalEngine: AnyObject {
     ///   - surface: Target surface.
     func applyFont(family: String, size: Double, to surface: SurfaceID)
 
+    /// Updates the font defaults used by surfaces created after this call.
+    /// Per-surface overrides must continue to use `applyFont` so a project
+    /// font does not leak into unrelated future tabs.
+    func updateFontDefaults(family: String, size: Double)
+
     /// Performs one tick of the engine's main loop.
     ///
     /// Must be called synchronously on the main thread, typically tied to the
@@ -315,6 +320,8 @@ extension TerminalEngine {
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {}
 
     func applyFont(family: String, size: Double, to surface: SurfaceID) {}
+
+    func updateFontDefaults(family: String, size: Double) {}
 
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {}
 

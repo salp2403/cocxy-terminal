@@ -1028,7 +1028,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
 
         if fontChanged || paddingChanged {
-            refreshTerminalHostMetrics(using: newConfig)
+            refreshTerminalHostMetrics(
+                using: newConfig,
+                fontChanged: fontChanged,
+                paddingChanged: paddingChanged
+            )
         }
     }
 
@@ -1145,12 +1149,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             let viewModel = TerminalViewModel(engine: engine)
             let configuredFontSize = configService?.current.appearance.fontSize
                 ?? AppearanceConfig.defaults.fontSize
+            let configuredFontFamily = configService?.current.appearance.fontFamily
+                ?? AppearanceConfig.defaults.fontFamily
             viewModel.setDefaultFontSize(configuredFontSize)
             let surfaceView = TerminalHostViewFactory.make(
                 viewModel: viewModel,
                 engine: engine,
                 localizer: appLocalizer()
             )
+            surfaceView.applyFont(family: configuredFontFamily, size: configuredFontSize)
 
             wc.tabViewModels[tab.id] = viewModel
             wc.tabSurfaceViews[tab.id] = surfaceView
@@ -1197,28 +1204,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func refreshTerminalHostMetrics(using config: CocxyConfig) {
+    private func refreshTerminalHostMetrics(
+        using config: CocxyConfig,
+        fontChanged: Bool,
+        paddingChanged: Bool
+    ) {
         let allControllers = [windowController].compactMap { $0 } + additionalWindowControllers
         for controller in allControllers {
-            controller.terminalViewModel.setDefaultFontSize(config.appearance.fontSize)
-            for viewModel in controller.tabViewModels.values {
-                viewModel.setDefaultFontSize(config.appearance.fontSize)
+            if fontChanged {
+                controller.applyEffectiveTerminalFonts(
+                    from: config,
+                    defaultEngineAlreadyUpdated: true
+                )
             }
-            for viewModel in controller.splitViewModels.values {
-                viewModel.setDefaultFontSize(config.appearance.fontSize)
-            }
-            for storedViewModels in controller.savedTabSplitViewModels.values {
-                for viewModel in storedViewModels.values {
-                    viewModel.setDefaultFontSize(config.appearance.fontSize)
+
+            if paddingChanged {
+                for surfaceView in controller.tabSurfaceViews.values {
+                    surfaceView.updateInteractionMetrics()
+                    surfaceView.requestImmediateRedraw()
                 }
-            }
-            for surfaceView in controller.tabSurfaceViews.values {
-                surfaceView.updateInteractionMetrics()
-                surfaceView.requestImmediateRedraw()
-            }
-            for surfaceView in controller.splitSurfaceViews.values {
-                surfaceView.updateInteractionMetrics()
-                surfaceView.requestImmediateRedraw()
+                for surfaceView in controller.splitSurfaceViews.values {
+                    surfaceView.updateInteractionMetrics()
+                    surfaceView.requestImmediateRedraw()
+                }
             }
         }
 

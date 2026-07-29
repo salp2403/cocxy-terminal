@@ -1008,10 +1008,15 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     private func buildTerminalSurface() -> TerminalHostView {
+        let appearance = configService?.current.appearance ?? .defaults
         let surfaceView = TerminalHostViewFactory.make(
             viewModel: terminalViewModel,
             engine: bridge,
             localizer: appLocalizer(for: configService?.current)
+        )
+        surfaceView.applyFont(
+            family: appearance.fontFamily,
+            size: appearance.fontSize
         )
         self.terminalSurfaceView = surfaceView
         return surfaceView
@@ -2231,7 +2236,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
     }
 
-    private func applyTerminalFont(
+    func applyTerminalFont(
         family: String,
         size: Double,
         to surfaceID: SurfaceID
@@ -2241,6 +2246,60 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         guard engine.cocxyCoreBridge == nil,
               let surfaceView = surfaceView(for: surfaceID) else { return }
         surfaceView.applyFont(family: family, size: size)
+    }
+
+    /// Reapplies the latest global font configuration to every managed tab,
+    /// preserving per-project overrides and routing each live surface through
+    /// the engine that owns it. The default CocxyCore engine may already have
+    /// received the global update from AppDelegate, so identical default
+    /// surfaces can be skipped while project-scoped and daemon surfaces still
+    /// receive their effective values.
+    func applyEffectiveTerminalFonts(
+        from globalConfig: CocxyConfig,
+        defaultEngineAlreadyUpdated: Bool
+    ) {
+        terminalViewModel.setDefaultFontSize(globalConfig.appearance.fontSize)
+        var enginesWithUpdatedDefaults = Set<ObjectIdentifier>()
+
+        for tab in tabManager.tabs {
+            let effective = tab.projectConfig.map {
+                globalConfig.applying(projectOverrides: $0)
+            } ?? globalConfig
+            let tabEngine = terminalEngine(for: tab.id)
+            let engineIdentifier = ObjectIdentifier(tabEngine)
+            if enginesWithUpdatedDefaults.insert(engineIdentifier).inserted,
+               defaultEngineAlreadyUpdated == false || tabEngine !== bridge {
+                tabEngine.updateFontDefaults(
+                    family: globalConfig.appearance.fontFamily,
+                    size: globalConfig.appearance.fontSize
+                )
+            }
+
+            for viewModel in viewModelsForTab(tab.id) {
+                viewModel.setDefaultFontSize(effective.appearance.fontSize)
+            }
+
+            for surfaceID in surfaceIDs(for: tab.id) {
+                let engine = terminalEngine(for: surfaceID)
+                let matchesGlobalDefault =
+                    effective.appearance.fontFamily == globalConfig.appearance.fontFamily
+                    && effective.appearance.fontSize == globalConfig.appearance.fontSize
+                if defaultEngineAlreadyUpdated,
+                   engine === bridge,
+                   matchesGlobalDefault {
+                    if let surfaceView = surfaceView(for: surfaceID) {
+                        surfaceView.updateInteractionMetrics()
+                        surfaceView.requestImmediateRedraw()
+                    }
+                    continue
+                }
+                applyTerminalFont(
+                    family: effective.appearance.fontFamily,
+                    size: effective.appearance.fontSize,
+                    to: surfaceID
+                )
+            }
+        }
     }
 
     /// Switches the visible terminal surface to the one belonging to the given tab.

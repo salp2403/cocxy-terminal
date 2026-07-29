@@ -120,6 +120,10 @@ final class QuickTerminalController {
             viewModel: terminalViewModel,
             engine: bridge
         )
+        surfaceView.applyFont(
+            family: config.appearance.fontFamily,
+            size: config.appearance.fontSize
+        )
         surfaceView.translatesAutoresizingMaskIntoConstraints = false
 
         newPanel.contentView = surfaceView

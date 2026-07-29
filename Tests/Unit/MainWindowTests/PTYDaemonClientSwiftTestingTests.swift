@@ -181,6 +181,29 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests[4].payload?["focused"] == "false")
     }
 
+    @Test("font default updates configure surfaces created after a hot reload")
+    func fontDefaultUpdatesConfigureFutureSurfaces() throws {
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "first-create", ok: true, surfaceID: UUID().uuidString),
+            PTYDaemonResponse(id: "second-create", ok: true, surfaceID: UUID().uuidString),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig().replacing(ligaturesEnabled: false))
+
+        _ = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        client.updateFontDefaults(family: "Courier", size: 17)
+        _ = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        let createRequests = connection.requests.filter { $0.command == .surfaceCreate }
+        #expect(createRequests.count == 2)
+        #expect(createRequests[0].payload?["fontFamily"] == "Menlo")
+        #expect(createRequests[0].payload?["fontSize"] == "13.0")
+        #expect(createRequests[1].payload?["fontFamily"] == "Courier")
+        #expect(createRequests[1].payload?["fontSize"] == "17.0")
+        #expect(createRequests[1].payload?["ligaturesEnabled"] == "false")
+    }
+
     @Test("sendText, resize and destroy serialize surface requests")
     func sendTextResizeAndDestroySerializeRequests() throws {
         let surfaceID = UUID()

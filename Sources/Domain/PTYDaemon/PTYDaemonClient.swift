@@ -582,6 +582,11 @@ final class PTYDaemonClient: TerminalEngine {
         )
     }
 
+    func updateFontDefaults(family: String, size: Double) {
+        guard let engineConfig else { return }
+        self.engineConfig = engineConfig.replacing(fontFamily: family, fontSize: size)
+    }
+
     func tick() {
         guard initialized else { return }
         for _ in 0..<32 {

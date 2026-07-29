@@ -3030,6 +3030,10 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    func updateFontDefaults(family: String, size: Double) {
+        updateDefaults(fontFamily: family, fontSize: size)
+    }
+
     /// Apply a font change to a specific live surface only.
     ///
     /// Runs the underlying `cocxycore_terminal_set_font` call — which

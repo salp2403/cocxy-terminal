@@ -88,6 +88,62 @@ struct TerminalEngineRoutingSwiftTestingTests {
         #expect(defaultEngine.fontApplications.isEmpty)
     }
 
+    @Test("global font reload updates routed defaults and live surfaces")
+    func globalFontReloadUpdatesRoutedEngine() {
+        let defaultEngine = MockTerminalEngine()
+        let daemonEngine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .daemon ? daemonEngine : nil
+            }
+        )
+        _ = controller.createTab(terminalEnginePreference: .daemon)
+        let baselineApplications = daemonEngine.fontApplications.count
+
+        controller.applyEffectiveTerminalFonts(
+            from: .defaults,
+            defaultEngineAlreadyUpdated: true
+        )
+
+        #expect(defaultEngine.fontDefaultUpdates.isEmpty)
+        #expect(defaultEngine.fontApplications.isEmpty)
+        #expect(daemonEngine.fontDefaultUpdates.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontDefaultUpdates.last?.size == AppearanceConfig.defaults.fontSize)
+        #expect(daemonEngine.fontApplications.count == baselineApplications + 1)
+        #expect(daemonEngine.fontApplications.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontApplications.last?.size == AppearanceConfig.defaults.fontSize)
+    }
+
+    @Test("global font reload preserves project overrides without leaking them into defaults")
+    func globalFontReloadPreservesProjectOverride() {
+        let defaultEngine = MockTerminalEngine()
+        let daemonEngine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .daemon ? daemonEngine : nil
+            }
+        )
+        let tabID = controller.createTab(terminalEnginePreference: .daemon)
+        controller.tabManager.updateTab(id: tabID) { tab in
+            tab.projectConfig = ProjectConfig(fontSize: 21)
+        }
+        let baselineApplications = daemonEngine.fontApplications.count
+
+        controller.applyEffectiveTerminalFonts(
+            from: .defaults,
+            defaultEngineAlreadyUpdated: true
+        )
+
+        #expect(daemonEngine.fontDefaultUpdates.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontDefaultUpdates.last?.size == AppearanceConfig.defaults.fontSize)
+        #expect(daemonEngine.fontApplications.count == baselineApplications + 1)
+        #expect(daemonEngine.fontApplications.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontApplications.last?.size == 21)
+        #expect(controller.tabViewModels[tabID]?.defaultFontSize == 21)
+    }
+
     @Test("system tabs keep using the default bridge")
     func systemTabUsesDefaultBridge() {
         let defaultEngine = MockTerminalEngine()

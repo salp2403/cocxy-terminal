@@ -566,8 +566,7 @@ extension AppDelegate {
 
         let leafDirectories = leafWorkingDirectories(in: restoredTab.splitTreeState)
         let engine = controller.makeTerminalEngine(for: restoredTab.terminalEnginePreference)
-        let configuredFontSize = configService?.current.appearance.fontSize
-            ?? AppearanceConfig.defaults.fontSize
+        let configuredAppearance = configService?.current.appearance ?? .defaults
 
         var viewsByTerminalID: [UUID: NSView] = [:]
         var storedSplitSurfaces: [SurfaceID: TerminalHostView] = [:]
@@ -611,22 +610,30 @@ extension AppDelegate {
                controller.tabViewModels.isEmpty,
                controller.splitViewModels.isEmpty {
                 viewModel = controller.terminalViewModel
-                viewModel.setDefaultFontSize(configuredFontSize)
+                viewModel.setDefaultFontSize(configuredAppearance.fontSize)
                 let freshPrimarySurfaceView = TerminalHostViewFactory.make(
                     viewModel: viewModel,
                     engine: engine,
                     localizer: appLocalizer()
                 )
+                freshPrimarySurfaceView.applyFont(
+                    family: configuredAppearance.fontFamily,
+                    size: configuredAppearance.fontSize
+                )
                 controller.terminalSurfaceView = freshPrimarySurfaceView
                 surfaceView = freshPrimarySurfaceView
             } else {
                 let newViewModel = TerminalViewModel(engine: engine)
-                newViewModel.setDefaultFontSize(configuredFontSize)
+                newViewModel.setDefaultFontSize(configuredAppearance.fontSize)
                 viewModel = newViewModel
                 surfaceView = TerminalHostViewFactory.make(
                     viewModel: newViewModel,
                     engine: engine,
                     localizer: appLocalizer()
+                )
+                surfaceView.applyFont(
+                    family: configuredAppearance.fontFamily,
+                    size: configuredAppearance.fontSize
                 )
             }
 

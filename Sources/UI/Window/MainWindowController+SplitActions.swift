@@ -632,13 +632,18 @@ extension MainWindowController {
         // Create new terminal for the second pane.
         let engine = currentTabID.map { terminalEngine(for: $0) } ?? bridge
         let newViewModel = TerminalViewModel(engine: engine)
-        let configuredFontSize = configService?.current.appearance.fontSize
-            ?? AppearanceConfig.defaults.fontSize
-        newViewModel.setDefaultFontSize(configuredFontSize)
+        let configuredAppearance = currentTabID.map { effectiveConfig(for: $0).appearance }
+            ?? configService?.current.appearance
+            ?? .defaults
+        newViewModel.setDefaultFontSize(configuredAppearance.fontSize)
         let newSurfaceView = TerminalHostViewFactory.make(
             viewModel: newViewModel,
             engine: engine,
             localizer: appLocalizer()
+        )
+        newSurfaceView.applyFont(
+            family: configuredAppearance.fontFamily,
+            size: configuredAppearance.fontSize
         )
 
         let workingDirectory = currentTabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
@@ -672,6 +677,11 @@ extension MainWindowController {
                 initialWorkingDirectory: workingDirectory
             )
             startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: activeTabID)
+            applyTerminalFont(
+                family: configuredAppearance.fontFamily,
+                size: configuredAppearance.fontSize,
+                to: surfaceID
+            )
         }
 
         // Determine the parent of the focused surface view.
