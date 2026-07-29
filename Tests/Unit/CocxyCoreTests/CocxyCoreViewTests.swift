@@ -902,11 +902,14 @@ struct CocxyCoreViewTests {
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         feed("alpha beta\r\n", into: state.terminal)
+        let visibleStartRow = try #require(
+            harness.bridge.terminalViewportSnapshot(for: harness.surfaceID)
+        ).visibleStartRow
         harness.bridge.setSelection(
             for: harness.surfaceID,
-            startRow: 0,
+            startRow: visibleStartRow,
             startCol: 0,
-            endRow: 0,
+            endRow: visibleStartRow,
             endCol: 4
         )
         let clipboard = RecordingClipboardService(readText: "shortcut paste\n")
@@ -1292,7 +1295,9 @@ struct CocxyCoreViewTests {
         let controller = harness.view.ideCursorController
         let target = CGPoint(
             x: controller.leftPadding + controller.cellWidth * 2 + 1,
-            y: controller.topPadding + 1
+            y: controller.topPadding
+                + controller.cellHeight * CGFloat(inputSnapshot.cursorScreenRow)
+                + 1
         )
         output.data.removeAll()
 
@@ -1463,6 +1468,56 @@ struct CocxyCoreViewTests {
 
         harness.view.mouseExited(with: makeMouseEvent(type: .mouseExited, location: location))
         #expect(harness.view.hoveredDetectedContent == nil)
+
+        let application = NSApplication.shared
+        let oldMenu = application.mainMenu
+        let target = MenuActionTarget()
+        target.onDetectedContentHints = {
+            _ = harness.view.showDetectedContentHints()
+        }
+        let mainMenu = NSMenu(title: "Main")
+        let viewItem = NSMenuItem()
+        let viewMenu = NSMenu(title: "View")
+        let hintsItem = NSMenuItem(
+            title: "Show Content Hints",
+            action: #selector(MenuActionTarget.showDetectedContentHints(_:)),
+            keyEquivalent: ""
+        )
+        hintsItem.target = target
+        MenuKeybindingsBinder.tag(
+            hintsItem,
+            with: KeybindingActionCatalog.terminalShowDetectedContentHints
+        )
+        viewMenu.addItem(hintsItem)
+        viewItem.submenu = viewMenu
+        mainMenu.addItem(viewItem)
+        MenuKeybindingsBinder.apply(.defaults, to: mainMenu)
+        application.mainMenu = mainMenu
+        defer { application.mainMenu = oldMenu }
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+
+        activated = nil
+        harness.view.keyDown(with: makeKeyEvent(
+            characters: "l",
+            modifiers: [.command, .shift],
+            keyCode: 37
+        ))
+        #expect(target.didInvokeDetectedContentHints)
+        #expect(harness.view.detectedContentHintSession?.hints.map(\.label) == ["A"])
+        #expect(output.data.isEmpty)
+        harness.view.keyDown(with: makeKeyEvent(characters: "a", keyCode: 0))
+        #expect(activated == content)
+        #expect(harness.view.detectedContentHintSession == nil)
+        #expect(output.data.isEmpty)
+
+        activated = nil
+        #expect(harness.view.showDetectedContentHints() == 1)
+        harness.view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+        #expect(activated == nil)
+        #expect(harness.view.detectedContentHintSession == nil)
     }
 
     @Test("any-event SGR tracking forwards button motion release and unbuttoned movement")
@@ -1809,17 +1864,17 @@ struct CocxyCoreViewTests {
         let harness = try makeViewHarness(command: rawCat.scriptURL.path)
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
-        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{001B}[3J\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
         harness.view.prefersLocalScrollInMouseTrackingMode = { true }
 
         let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
         #expect(snapshot.historyMaxVisibleStart == 0)
         #expect(snapshot.mouseTrackingMode > 0)
-
-        let output = TestDataSink()
-        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
-            output.data.append(data)
-        }
 
         harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24, modifiers: [.shift]))
 
@@ -1836,14 +1891,16 @@ struct CocxyCoreViewTests {
         defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
         let harness = try makeViewHarness(command: rawCat.scriptURL.path)
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        let before = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
-        #expect(before.historyMaxVisibleStart == 0)
-        #expect(before.mouseTrackingMode == 0)
-
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         let output = TestDataSink()
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+        feed("\u{001B}[3J", into: state.terminal)
+        let before = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(before.historyMaxVisibleStart == 0)
+        #expect(before.mouseTrackingMode == 0)
 
         harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24))
         try await Task.sleep(nanoseconds: 100_000_000)
@@ -2319,7 +2376,9 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
 private final class MenuActionTarget: NSObject {
     private(set) var didInvoke = false
     private(set) var didInvokeTerminalScroll = false
+    private(set) var didInvokeDetectedContentHints = false
     var onTerminalScroll: (() -> Void)?
+    var onDetectedContentHints: (() -> Void)?
 
     @objc func toggleCodeReview(_ sender: Any?) {
         didInvoke = true
@@ -2328,6 +2387,11 @@ private final class MenuActionTarget: NSObject {
     @objc func scrollTerminalPageUp(_ sender: Any?) {
         didInvokeTerminalScroll = true
         onTerminalScroll?()
+    }
+
+    @objc func showDetectedContentHints(_ sender: Any?) {
+        didInvokeDetectedContentHints = true
+        onDetectedContentHints?()
     }
 }
 

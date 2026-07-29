@@ -546,6 +546,17 @@ extension AppDelegate {
         )
         viewMenu.addItem(hideCommandBlocksItem)
 
+        let showDetectedContentHintsItem = NSMenuItem(
+            title: menuString("menu.view.showDetectedContentHints", "Show Content Hints", localizer),
+            action: #selector(MainWindowController.showDetectedContentHintsAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(
+            showDetectedContentHintsItem,
+            with: KeybindingActionCatalog.terminalShowDetectedContentHints
+        )
+        viewMenu.addItem(showDetectedContentHintsItem)
+
         viewMenu.addItem(NSMenuItem.separator())
 
         let zoomInItem = NSMenuItem(

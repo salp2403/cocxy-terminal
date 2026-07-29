@@ -47,6 +47,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "navigation.splitDown",
             "search.toggle",
             "terminal.richInput",
+            "terminal.showDetectedContentHints",
             "editor.zoomIn",
             "editor.zoomOut",
             "editor.resetZoom",
@@ -98,6 +99,10 @@ final class CommandPaletteWiringTests: XCTestCase {
         )
         XCTAssertEqual(actionsByID["tabs.rename"]?.name, "Rename Session")
         XCTAssertEqual(actionsByID["workspace.rename"]?.name, "Rename Workspace")
+        XCTAssertEqual(
+            actionsByID["terminal.showDetectedContentHints"]?.shortcut,
+            KeybindingActionCatalog.terminalShowDetectedContentHints.defaultShortcut.prettyLabel
+        )
         let auroraActionIDs = Set(controller.buildAuroraPaletteActions().map(\.id))
         XCTAssertTrue(auroraActionIDs.contains("tabs.rename"))
         XCTAssertTrue(auroraActionIDs.contains("workspace.rename"))
@@ -125,6 +130,34 @@ final class CommandPaletteWiringTests: XCTestCase {
         XCTAssertTrue(
             cellsResults.contains("cells.createSSH"),
             "The runtime command palette must expose an SSH Cells creation action when searching for cells."
+        )
+    }
+
+    func testDetectedContentHintShortcutHotReloadsInTheRuntimePalette() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let engine = controller.createWiredCommandPaletteEngine()
+        let defaults = KeybindingsConfig.defaults
+        let customized = KeybindingsConfig(
+            newTab: defaults.newTab,
+            closeTab: defaults.closeTab,
+            nextTab: defaults.nextTab,
+            prevTab: defaults.prevTab,
+            splitVertical: defaults.splitVertical,
+            splitHorizontal: defaults.splitHorizontal,
+            gotoAttention: defaults.gotoAttention,
+            toggleQuickTerminal: defaults.toggleQuickTerminal,
+            customOverrides: [
+                KeybindingActionCatalog.terminalShowDetectedContentHints.id: "cmd+alt+h",
+            ]
+        )
+
+        engine.rebuildBuiltInShortcuts(using: customized)
+
+        XCTAssertEqual(
+            engine.allActions.first(where: {
+                $0.id == "terminal.showDetectedContentHints"
+            })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+h")?.prettyLabel
         )
     }
 

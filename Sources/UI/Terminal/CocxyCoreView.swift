@@ -246,6 +246,7 @@ final class CocxyCoreView: NSView {
     private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
     private(set) var detectedContentOverlayView: TerminalDetectedContentOverlayView?
     private(set) var hoveredDetectedContent: TerminalDetectedContent?
+    private(set) var detectedContentHintSession: TerminalDetectedContentHintSession?
     private var consumedDetectedContentMouseGesture = false
 
     // MARK: - Constants
@@ -357,6 +358,7 @@ final class CocxyCoreView: NSView {
         if self.bridge !== bridge || self.surfaceID != surfaceID {
             resetCommandBlockOverlayForSurfaceTeardown()
             clearComposition(forceEngineClear: true, discardInputContext: true)
+            dismissDetectedContentHints()
             clearDetectedContentHover()
             consumedDetectedContentMouseGesture = false
             synchronizedOutputGate.reset()
@@ -493,6 +495,7 @@ final class CocxyCoreView: NSView {
         }
         refreshHistoryPill()
         refreshCommandBlockOverlay()
+        refreshDetectedContentHintOverlay()
     }
 
     // MARK: - Layout & Resize
@@ -518,6 +521,7 @@ final class CocxyCoreView: NSView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        dismissDetectedContentHints()
         clearDetectedContentHover()
         notifySizeChanged(newSize)
     }
@@ -723,6 +727,7 @@ final class CocxyCoreView: NSView {
     override func resignFirstResponder() -> Bool {
         isFocused = false
         clearComposition(forceEngineClear: true, discardInputContext: true)
+        dismissDetectedContentHints()
         if let bridge, let sid = surfaceID {
             bridge.notifyFocus(false, for: sid)
         }
@@ -732,6 +737,9 @@ final class CocxyCoreView: NSView {
     // MARK: - Keyboard Input
 
     override func keyDown(with event: NSEvent) {
+        if handleDetectedContentHintKeyEvent(event) {
+            return
+        }
         guard let bridge = bridge, let sid = surfaceID else {
             super.keyDown(with: event)
             return
@@ -745,7 +753,7 @@ final class CocxyCoreView: NSView {
         )
 
         if action == .sendToTerminal,
-           performTerminalViewportKeyEquivalent(with: event) {
+           performTerminalHostKeyEquivalent(with: event) {
             return
         }
 
@@ -1636,6 +1644,7 @@ final class CocxyCoreView: NSView {
     override func mouseDown(with event: NSEvent) {
         onFocusRequested?()
         viewModel?.recordMouseDown(clickCount: event.clickCount)
+        dismissDetectedContentHints()
 
         consumedDetectedContentMouseGesture = false
         if event.clickCount == 1,
@@ -1774,6 +1783,7 @@ final class CocxyCoreView: NSView {
 
     override func rightMouseDown(with event: NSEvent) {
         onFocusRequested?()
+        dismissDetectedContentHints()
         if beginTerminalMouseGesture(button: .right, event: event) {
             return
         }
@@ -1912,6 +1922,7 @@ final class CocxyCoreView: NSView {
     // MARK: - Scroll
 
     override func scrollWheel(with event: NSEvent) {
+        dismissDetectedContentHints()
         clearDetectedContentHover()
         guard let bridge = bridge,
               let sid = surfaceID,
@@ -1973,11 +1984,11 @@ final class CocxyCoreView: NSView {
         }
     }
 
-    private func performTerminalViewportKeyEquivalent(with event: NSEvent) -> Bool {
+    private func performTerminalHostKeyEquivalent(with event: NSEvent) -> Bool {
         guard let menu = NSApp.mainMenu,
               MenuKeybindingsBinder.matches(
                 event,
-                actionIds: TerminalViewportScrollCommand.keybindingActionIDs,
+                actionIds: TerminalHostKeybindingRouting.actionIDs,
                 in: menu
               ) else { return false }
         return menu.performKeyEquivalent(with: event)
@@ -2260,6 +2271,7 @@ final class CocxyCoreView: NSView {
     }
 
     private func updateDetectedContentHover(with event: NSEvent) {
+        guard detectedContentHintSession == nil else { return }
         guard let bridge,
               let surfaceID,
               let snapshot = bridge.terminalViewportSnapshot(for: surfaceID),
@@ -2270,19 +2282,9 @@ final class CocxyCoreView: NSView {
 
         installDetectedContentOverlayIfNeeded()
         hoveredDetectedContent = content
-        let scale = max(currentBackingScale(), 1)
         detectedContentOverlayView?.showUnderline(
             for: content,
-            viewport: TerminalDetectedContentViewport(
-                visibleStartRow: snapshot.visibleStartRow,
-                rowCount: snapshot.visibleRowCount,
-                columnCount: snapshot.visibleColumnCount,
-                cellSize: CGSize(
-                    width: CGFloat(snapshot.cellWidth) / scale,
-                    height: CGFloat(snapshot.cellHeight) / scale
-                ),
-                origin: CGPoint(x: contentPadding.x, y: contentPadding.y)
-            )
+            viewport: detectedContentViewport(for: snapshot)
         )
         updateDetectedContentCursor()
     }
@@ -2293,8 +2295,108 @@ final class CocxyCoreView: NSView {
             return
         }
         hoveredDetectedContent = nil
-        detectedContentOverlayView?.clear()
+        detectedContentOverlayView?.clearHover()
         updateDetectedContentCursor()
+    }
+
+    @discardableResult
+    func showDetectedContentHints() -> Int {
+        guard let bridge,
+              let surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: surfaceID) else {
+            dismissDetectedContentHints()
+            return 0
+        }
+        clearComposition(forceEngineClear: true, discardInputContext: true)
+        clearDetectedContentHover()
+        let viewport = detectedContentViewport(for: snapshot)
+        let contents = bridge.visibleDetectedContents(for: surfaceID).filter {
+            TerminalDetectedContentOverlayView.underlineRects(
+                for: $0,
+                viewport: viewport
+            ).isEmpty == false
+        }
+        guard let session = TerminalDetectedContentHintSession(contents: contents) else {
+            dismissDetectedContentHints()
+            return 0
+        }
+        detectedContentHintSession = session
+        installDetectedContentOverlayIfNeeded()
+        detectedContentOverlayView?.showHints(
+            session.hints,
+            matching: session.typedPrefix,
+            viewport: viewport
+        )
+        return session.hints.count
+    }
+
+    private func dismissDetectedContentHints() {
+        guard detectedContentHintSession != nil
+            || detectedContentOverlayView?.hints.isEmpty == false else {
+            return
+        }
+        detectedContentHintSession = nil
+        detectedContentOverlayView?.clearHints()
+    }
+
+    private func handleDetectedContentHintKeyEvent(_ event: NSEvent) -> Bool {
+        guard var session = detectedContentHintSession else { return false }
+        let blockedModifiers: NSEvent.ModifierFlags = [.command, .control, .option]
+        let characters = event.modifierFlags.intersection(blockedModifiers).isEmpty
+            ? event.charactersIgnoringModifiers
+            : nil
+        switch session.consume(keyCode: event.keyCode, characters: characters) {
+        case .updated:
+            detectedContentHintSession = session
+            refreshDetectedContentHintOverlay()
+        case .cancelled:
+            dismissDetectedContentHints()
+        case .selected(let content):
+            dismissDetectedContentHints()
+            _ = activateDetectedContent(content)
+        }
+        return true
+    }
+
+    private func refreshDetectedContentHintOverlay() {
+        guard let session = detectedContentHintSession,
+              let bridge,
+              let surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: surfaceID) else {
+            return
+        }
+        let viewport = detectedContentViewport(for: snapshot)
+        let visibleContents = bridge.visibleDetectedContents(for: surfaceID).filter {
+            TerminalDetectedContentOverlayView.underlineRects(
+                for: $0,
+                viewport: viewport
+            ).isEmpty == false
+        }
+        guard visibleContents == session.hints.map(\.content) else {
+            dismissDetectedContentHints()
+            return
+        }
+        detectedContentOverlayView?.showHints(
+            session.hints,
+            matching: session.typedPrefix,
+            viewport: viewport
+        )
+    }
+
+    private func detectedContentViewport(
+        for snapshot: TerminalViewportSnapshot
+    ) -> TerminalDetectedContentViewport {
+        let scale = max(currentBackingScale(), 1)
+        return TerminalDetectedContentViewport(
+            visibleStartRow: snapshot.visibleStartRow,
+            rowCount: snapshot.visibleRowCount,
+            columnCount: snapshot.visibleColumnCount,
+            cellSize: CGSize(
+                width: CGFloat(snapshot.cellWidth) / scale,
+                height: CGFloat(snapshot.cellHeight) / scale
+            ),
+            origin: CGPoint(x: contentPadding.x, y: contentPadding.y)
+        )
     }
 
     private func updateDetectedContentCursor() {

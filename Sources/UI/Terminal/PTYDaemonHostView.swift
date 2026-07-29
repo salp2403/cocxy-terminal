@@ -44,6 +44,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var localSelectionClickCount = 0
     private(set) var detectedContentOverlayView: TerminalDetectedContentOverlayView?
     private(set) var hoveredDetectedContent: TerminalDetectedContent?
+    private(set) var detectedContentHintSession: TerminalDetectedContentHintSession?
     private var consumedDetectedContentMouseGesture = false
     private var compositionState = TextCompositionState()
 
@@ -104,6 +105,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     override func resignFirstResponder() -> Bool {
         clearComposition(forceEngineClear: true, discardInputContext: true)
+        dismissDetectedContentHints()
         if let surfaceID {
             bridge?.notifyFocus(false, for: surfaceID)
         }
@@ -119,6 +121,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         pendingSynchronizedFrame = nil
         latestReceivedFrameRevision = nil
         latestFrame = nil
+        dismissDetectedContentHints()
         clearDetectedContentHover()
         consumedDetectedContentMouseGesture = false
         forwardedKeyCodes.removeAll()
@@ -187,6 +190,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     func applyFont(family: String, size: Double) {
+        dismissDetectedContentHints()
         fontFamily = family
         viewModel?.setCurrentFontSize(CGFloat(size))
         syncSizeWithTerminal()
@@ -206,6 +210,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        dismissDetectedContentHints()
         syncSizeWithTerminal()
         notificationRingLayer?.frame = bounds
         notificationRingLayer?.path = CGPath(rect: bounds.insetBy(dx: 1, dy: 1), transform: nil)
@@ -229,7 +234,10 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func keyDown(with event: NSEvent) {
-        if performTerminalViewportKeyEquivalent(with: event) {
+        if handleDetectedContentHintKeyEvent(event) {
+            return
+        }
+        if performTerminalHostKeyEquivalent(with: event) {
             return
         }
         guard let bridge, let surfaceID else {
@@ -433,6 +441,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     override func mouseDown(with event: NSEvent) {
         onFocusRequested?()
         viewModel?.recordMouseDown(clickCount: event.clickCount)
+        dismissDetectedContentHints()
         consumedDetectedContentMouseGesture = false
         if event.clickCount == 1,
            event.modifierFlags.contains(.command),
@@ -489,6 +498,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     override func rightMouseDown(with event: NSEvent) {
         onFocusRequested?()
+        dismissDetectedContentHints()
         if beginTerminalMouseGesture(button: .right, event: event) {
             return
         }
@@ -586,6 +596,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func scrollWheel(with event: NSEvent) {
+        dismissDetectedContentHints()
         clearDetectedContentHover()
         guard let bridge,
               let surfaceID,
@@ -890,11 +901,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
-    private func performTerminalViewportKeyEquivalent(with event: NSEvent) -> Bool {
+    private func performTerminalHostKeyEquivalent(with event: NSEvent) -> Bool {
         guard let menu = NSApp.mainMenu,
               MenuKeybindingsBinder.matches(
                 event,
-                actionIds: TerminalViewportScrollCommand.keybindingActionIDs,
+                actionIds: TerminalHostKeybindingRouting.actionIDs,
                 in: menu
               ) else { return false }
         return menu.performKeyEquivalent(with: event)
@@ -1115,6 +1126,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     private func updateDetectedContentHover(with event: NSEvent) {
+        guard detectedContentHintSession == nil else { return }
         guard let frame = latestFrame,
               let content = detectedContent(at: event),
               let viewport = detectedContentViewport(for: frame) else {
@@ -1127,6 +1139,30 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     private func refreshDetectedContentOverlay(using frame: PTYDaemonSurfaceFrame) {
+        if let session = detectedContentHintSession {
+            guard let bridge,
+                  let surfaceID,
+                  let viewport = detectedContentViewport(for: frame) else {
+                dismissDetectedContentHints()
+                return
+            }
+            let visibleContents = bridge.visibleDetectedContents(for: surfaceID).filter {
+                TerminalDetectedContentOverlayView.underlineRects(
+                    for: $0,
+                    viewport: viewport
+                ).isEmpty == false
+            }
+            guard visibleContents == session.hints.map(\.content) else {
+                dismissDetectedContentHints()
+                return
+            }
+            detectedContentOverlayView?.showHints(
+                session.hints,
+                matching: session.typedPrefix,
+                viewport: viewport
+            )
+            return
+        }
         guard let hoveredDetectedContent else { return }
         guard frame.detectedContents.contains(where: {
             Self.matches($0, content: hoveredDetectedContent)
@@ -1159,8 +1195,68 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             return
         }
         hoveredDetectedContent = nil
-        detectedContentOverlayView?.clear()
+        detectedContentOverlayView?.clearHover()
         updateDetectedContentCursor()
+    }
+
+    @discardableResult
+    func showDetectedContentHints() -> Int {
+        guard let bridge,
+              let surfaceID,
+              let frame = latestFrame,
+              let viewport = detectedContentViewport(for: frame) else {
+            dismissDetectedContentHints()
+            return 0
+        }
+        clearComposition(forceEngineClear: true, discardInputContext: true)
+        clearDetectedContentHover()
+        let contents = bridge.visibleDetectedContents(for: surfaceID).filter {
+            TerminalDetectedContentOverlayView.underlineRects(
+                for: $0,
+                viewport: viewport
+            ).isEmpty == false
+        }
+        guard let session = TerminalDetectedContentHintSession(contents: contents) else {
+            dismissDetectedContentHints()
+            return 0
+        }
+        detectedContentHintSession = session
+        detectedContentOverlayView?.showHints(
+            session.hints,
+            matching: session.typedPrefix,
+            viewport: viewport
+        )
+        return session.hints.count
+    }
+
+    private func dismissDetectedContentHints() {
+        guard detectedContentHintSession != nil
+            || detectedContentOverlayView?.hints.isEmpty == false else {
+            return
+        }
+        detectedContentHintSession = nil
+        detectedContentOverlayView?.clearHints()
+    }
+
+    private func handleDetectedContentHintKeyEvent(_ event: NSEvent) -> Bool {
+        guard var session = detectedContentHintSession else { return false }
+        let blockedModifiers: NSEvent.ModifierFlags = [.command, .control, .option]
+        let characters = event.modifierFlags.intersection(blockedModifiers).isEmpty
+            ? event.charactersIgnoringModifiers
+            : nil
+        switch session.consume(keyCode: event.keyCode, characters: characters) {
+        case .updated:
+            detectedContentHintSession = session
+            if let frame = latestFrame {
+                refreshDetectedContentOverlay(using: frame)
+            }
+        case .cancelled:
+            dismissDetectedContentHints()
+        case .selected(let content):
+            dismissDetectedContentHints()
+            _ = activateDetectedContent(content)
+        }
+        return true
     }
 
     private func updateDetectedContentCursor() {

@@ -429,6 +429,14 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "b")
     )
 
+    static let terminalShowDetectedContentHints = KeybindingAction(
+        id: "terminal.showDetectedContentHints",
+        displayName: "Show Content Hints",
+        summary: "Activate detected terminal content from the keyboard.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "l")
+    )
+
     // MARK: - Editor (view actions: find, zoom)
 
     static let editorFind = KeybindingAction(
@@ -586,6 +594,7 @@ enum KeybindingActionCatalog {
         terminalScrollToTop,
         terminalScrollToBottom,
         terminalHideCommandBlocks,
+        terminalShowDetectedContentHints,
         // Editor
         editorFind,
         voiceInput,

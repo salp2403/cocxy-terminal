@@ -376,6 +376,7 @@ final class CommandPaletteEngineImpl: CommandPaletteSearching, @unchecked Sendab
             ("notes.toggle", KeybindingActionCatalog.windowNotes.id),
             ("timeline.toggle", KeybindingActionCatalog.reviewTimeline.id),
             ("search.toggle", KeybindingActionCatalog.editorFind.id),
+            ("terminal.showDetectedContentHints", KeybindingActionCatalog.terminalShowDetectedContentHints.id),
             ("editor.zoomIn", KeybindingActionCatalog.editorZoomIn.id),
             ("editor.zoomOut", KeybindingActionCatalog.editorZoomOut.id),
             ("editor.resetZoom", KeybindingActionCatalog.editorResetZoom.id),

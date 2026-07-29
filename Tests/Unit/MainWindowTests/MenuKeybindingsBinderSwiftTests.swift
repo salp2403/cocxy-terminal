@@ -227,6 +227,8 @@ struct MenuKeybindingsBinderSwiftTests {
                 #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
             KeybindingActionCatalog.terminalHideCommandBlocks.id:
                 #selector(MainWindowController.hideCommandBlocksAction(_:)),
+            KeybindingActionCatalog.terminalShowDetectedContentHints.id:
+                #selector(MainWindowController.showDetectedContentHintsAction(_:)),
         ]
 
         for (actionId, selector) in expected {
@@ -243,6 +245,13 @@ struct MenuKeybindingsBinderSwiftTests {
         })
         #expect(hideItem.keyEquivalent == "b")
         #expect(hideItem.keyEquivalentModifierMask == [.command, .shift])
+
+        let hintsItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalShowDetectedContentHints.id
+        })
+        #expect(hintsItem.keyEquivalent == "l")
+        #expect(hintsItem.keyEquivalentModifierMask == [.command, .shift])
     }
 
     // MARK: - Nested Menus

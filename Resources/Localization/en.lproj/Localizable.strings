@@ -482,6 +482,7 @@
 "menu.view.navigateSplitUp" = "Navigate Split Up";
 "menu.view.navigateSplitDown" = "Navigate Split Down";
 "menu.view.hideCommandBlocks" = "Hide Command Blocks";
+"menu.view.showDetectedContentHints" = "Show Content Hints";
 "menu.view.zoomIn" = "Zoom In";
 "menu.view.zoomOut" = "Zoom Out";
 "menu.view.resetZoom" = "Reset Zoom";
@@ -691,6 +692,8 @@
 "keybindings.action.terminal.scrollToBottom.summary" = "Return to the terminal's live output.";
 "keybindings.action.terminal.hideCommandBlocks.name" = "Hide Command Blocks";
 "keybindings.action.terminal.hideCommandBlocks.summary" = "Hide command block controls currently visible in the terminal.";
+"keybindings.action.terminal.showDetectedContentHints.name" = "Show Content Hints";
+"keybindings.action.terminal.showDetectedContentHints.summary" = "Activate detected terminal content from the keyboard.";
 "keybindings.action.editor.zoomIn.name" = "Zoom In";
 "keybindings.action.editor.zoomIn.summary" = "Increase font size.";
 "keybindings.action.editor.zoomOut.name" = "Zoom Out";
@@ -2697,6 +2700,8 @@
 "command.search.toggle.description" = "Search the scrollback buffer";
 "command.terminal.richInput.name" = "Rich Input";
 "command.terminal.richInput.description" = "Open the multiline composer for the active terminal";
+"command.terminal.showDetectedContentHints.name" = "Show Content Hints";
+"command.terminal.showDetectedContentHints.description" = "Activate detected terminal content from the keyboard";
 "command.editor.zoomIn.name" = "Zoom In";
 "command.editor.zoomIn.description" = "Increase the terminal font size";
 "command.editor.zoomOut.name" = "Zoom Out";

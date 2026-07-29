@@ -10,12 +10,15 @@ enum TerminalViewportScrollCommand: Equatable, Sendable {
     case pageDown
     case top
     case bottom
+}
 
-    static let keybindingActionIDs: Set<String> = [
+enum TerminalHostKeybindingRouting {
+    static let actionIDs: Set<String> = [
         KeybindingActionCatalog.terminalScrollPageUp.id,
         KeybindingActionCatalog.terminalScrollPageDown.id,
         KeybindingActionCatalog.terminalScrollToTop.id,
         KeybindingActionCatalog.terminalScrollToBottom.id,
+        KeybindingActionCatalog.terminalShowDetectedContentHints.id,
     ]
 }
 
@@ -47,6 +50,7 @@ protocol TerminalHostingView: AnyObject {
     )
     func requestImmediateRedraw()
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand)
+    @discardableResult func showDetectedContentHints() -> Int
     func updateLocalizer(_ localizer: AppLocalizer)
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig)
     @discardableResult func dismissVisibleCommandBlocks() -> Int
@@ -74,6 +78,7 @@ extension TerminalHostingView {
     func updateCursorClickToMoveEnabled(_ enabled: Bool) {}
     func applyFont(family: String, size: Double) {}
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {}
+    @discardableResult func showDetectedContentHints() -> Int { 0 }
     func updateLocalizer(_ localizer: AppLocalizer) {}
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {}
     @discardableResult func dismissVisibleCommandBlocks() -> Int { 0 }

@@ -134,6 +134,7 @@ extension MainWindowController {
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
         "terminal.richInput": KeybindingActionCatalog.richInputComposer.id,
+        "terminal.showDetectedContentHints": KeybindingActionCatalog.terminalShowDetectedContentHints.id,
         "editor.zoomIn": KeybindingActionCatalog.editorZoomIn.id,
         "editor.zoomOut": KeybindingActionCatalog.editorZoomOut.id,
         "editor.resetZoom": KeybindingActionCatalog.editorResetZoom.id,
@@ -518,6 +519,17 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleRichInputComposer() }
+                }
+            ),
+            CommandAction(
+                id: "terminal.showDetectedContentHints",
+                name: "Show Content Hints",
+                description: "Activate detected terminal content from the keyboard",
+                shortcut: paletteShortcutLabel("terminal.showDetectedContentHints", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.showDetectedContentHintsAction(nil) }
                 }
             ),
             CommandAction(

@@ -763,6 +763,23 @@ struct CocxyCoreHostWiringTests {
 
         view.mouseExited(with: makeHostMouseEvent(type: .mouseExited, location: location))
         #expect(view.hoveredDetectedContent == nil)
+
+        activated = nil
+        #expect(view.showDetectedContentHints() == 1)
+        #expect(view.detectedContentHintSession?.hints.map(\.label) == ["A"])
+        view.keyDown(with: makeKeyEvent(characters: "a", keyCode: 0))
+        #expect(activated == content)
+        #expect(view.detectedContentHintSession == nil)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.isEmpty)
+
+        activated = nil
+        #expect(view.showDetectedContentHints() == 1)
+        view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+        #expect(activated == nil)
+        #expect(view.detectedContentHintSession == nil)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.isEmpty)
     }
 
     @Test("daemon host Shift drag selects and copies visible frame text")

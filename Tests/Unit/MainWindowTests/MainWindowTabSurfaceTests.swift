@@ -17,6 +17,7 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     private(set) var updateMetricsCallCount = 0
     private(set) var refreshDisplayLinkAnchorCallCount = 0
     private(set) var dismissCommandBlocksCallCount = 0
+    private(set) var showDetectedContentHintsCallCount = 0
     private(set) var commandBlockConfigurations: [CommandBlocksConfig] = []
     private(set) var cursorClickToMoveValues: [Bool] = []
     private(set) var shellPromptPositions: [TerminalGridPosition] = []
@@ -64,6 +65,12 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     @discardableResult
     func dismissVisibleCommandBlocks() -> Int {
         dismissCommandBlocksCallCount += 1
+        return 1
+    }
+
+    @discardableResult
+    func showDetectedContentHints() -> Int {
+        showDetectedContentHintsCallCount += 1
         return 1
     }
 
@@ -304,6 +311,16 @@ final class TabSurfaceMappingTests: XCTestCase {
         controller.hideCommandBlocksAction(nil)
 
         XCTAssertEqual(surfaceView.dismissCommandBlocksCallCount, 1)
+    }
+
+    func testShowDetectedContentHintsActionRoutesToActiveTerminalSurface() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let surfaceView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = surfaceView
+
+        controller.showDetectedContentHintsAction(nil)
+
+        XCTAssertEqual(surfaceView.showDetectedContentHintsCallCount, 1)
     }
 
     func testCodeReviewSubmitRoutesToOriginatingTabSurface() {
