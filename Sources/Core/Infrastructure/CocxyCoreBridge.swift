@@ -851,10 +851,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
-        // Drop key-up events before acquiring the lock — they are no-ops
-        // for the C terminal and we should not stall the caller behind the
-        // background feed loop just to bail out.
-        guard event.isKeyDown, !event.isComposing else { return false }
+        guard !event.isComposing else { return false }
 
         // Encode + write the key sequence atomically inside the per-surface
         // lock. `cocxycore_terminal_encode_key` and `encode_char` read the
@@ -866,43 +863,88 @@ final class CocxyCoreBridge: TerminalEngine {
         // that the parser is mid-update, which is the suspected trigger for
         // the transparent-on-Claude-launch bug.
         let lockedResult = withTerminalLock(surface) { state -> DeliveryOutcome in
-            // A non-composing key event is the authoritative boundary between
-            // AppKit text input and terminal input. Clear any orphaned engine
-            // preedit before bytes reach the PTY.
-            if cocxycore_terminal_preedit_active(state.terminal) {
+            // Only a key press crosses the AppKit composition boundary. A
+            // progressive key release must never erase a newly started preedit.
+            if event.isKeyDown, cocxycore_terminal_preedit_active(state.terminal) {
                 cocxycore_terminal_preedit_clear(state.terminal)
             }
 
             let mods = mapModifiers(event.modifiers)
+            let eventType: UInt8 = event.isKeyDown
+                ? (event.isRepeat ? 2 : 1)
+                : 3
             var encodedBytes: [UInt8] = []
+            let characterScalars = event.characters?.unicodeScalars.map(\.value) ?? []
 
             // Hardware-special keys win even when AppKit supplies a private-use
             // character for the event (for example, an arrow key).
-            if let key = mapKeyCodeToSpecialKey(event.keyCode) {
-                var buffer = [UInt8](repeating: 0, count: 32)
-                let count = cocxycore_terminal_encode_key(
-                    state.terminal, key, mods, &buffer, buffer.count
-                )
+            if let key = TerminalKeyMapping.specialKey(forMacKeyCode: event.keyCode) {
+                let associatedText = event.isKeyDown && (26...42).contains(key)
+                    ? Array(characterScalars.prefix(8))
+                    : []
+                var buffer = [UInt8](repeating: 0, count: 256)
+                let count = associatedText.withUnsafeBufferPointer { associatedBuffer in
+                    cocxycore_terminal_encode_key_event(
+                        state.terminal,
+                        key,
+                        mods,
+                        eventType,
+                        event.shiftedCodepoint,
+                        event.baseLayoutCodepoint,
+                        associatedBuffer.baseAddress,
+                        associatedBuffer.count,
+                        &buffer,
+                        buffer.count
+                    )
+                }
                 if count > 0 {
                     encodedBytes.append(contentsOf: buffer.prefix(count))
                 }
-            } else if let characters = event.characters,
-                      let firstScalar = characters.unicodeScalars.first {
+            } else if event.unshiftedCodepoint > 0 || characterScalars.isEmpty == false {
                 let hasCommandModifier = event.modifiers.contains(.command)
                 let hasControlModifier = event.modifiers.contains(.control)
-                let hasMultipleScalars = characters.unicodeScalars.dropFirst().isEmpty == false
-
-                if hasMultipleScalars, !hasCommandModifier, !hasControlModifier {
-                    encodedBytes = Array(characters.utf8)
-                } else {
-                    var buffer = [UInt8](repeating: 0, count: 32)
-                    let count = cocxycore_terminal_encode_char(
-                        state.terminal, firstScalar.value, mods, &buffer, buffer.count
+                let primaryCodepoint = event.unshiftedCodepoint > 0
+                    ? event.unshiftedCodepoint
+                    : (characterScalars.first ?? 0)
+                let associatedText = event.isKeyDown
+                    ? Array(characterScalars.prefix(8))
+                    : []
+                var buffer = [UInt8](repeating: 0, count: 256)
+                let count = associatedText.withUnsafeBufferPointer { associatedBuffer in
+                    cocxycore_terminal_encode_char_event(
+                        state.terminal,
+                        primaryCodepoint,
+                        mods,
+                        eventType,
+                        event.shiftedCodepoint,
+                        event.baseLayoutCodepoint,
+                        associatedBuffer.baseAddress,
+                        associatedBuffer.count,
+                        &buffer,
+                        buffer.count
                     )
-                    if count > 0 {
-                        encodedBytes.append(contentsOf: buffer.prefix(count))
-                        for scalar in characters.unicodeScalars.dropFirst() {
-                            encodedBytes.append(contentsOf: String(scalar).utf8)
+                }
+                if count > 0 {
+                    encodedBytes.append(contentsOf: buffer.prefix(count))
+
+                    // Ctrl/Super encoding consumes the primary scalar before
+                    // associated text is considered. Preserve any additional
+                    // scalars exactly as the legacy bridge did. The core API
+                    // intentionally caps associated text at eight codepoints,
+                    // so append overflow rather than silently dropping it.
+                    let remainderStart: Int?
+                    if hasCommandModifier || hasControlModifier {
+                        remainderStart = 1
+                    } else if characterScalars.count > 8 {
+                        remainderStart = 8
+                    } else {
+                        remainderStart = nil
+                    }
+                    if let remainderStart, characterScalars.count > remainderStart {
+                        for scalar in characterScalars.dropFirst(remainderStart) {
+                            if let unicodeScalar = UnicodeScalar(scalar) {
+                                encodedBytes.append(contentsOf: String(unicodeScalar).utf8)
+                            }
                         }
                     }
                 }
@@ -4127,12 +4169,16 @@ final class CocxyCoreBridge: TerminalEngine {
     // MARK: - Private: Key Mapping
 
     /// Map KeyModifiers to CocxyCore modifier bitmask.
-    private func mapModifiers(_ mods: KeyModifiers) -> UInt8 {
-        var result: UInt8 = 0
+    private func mapModifiers(_ mods: KeyModifiers) -> UInt16 {
+        var result: UInt16 = 0
         if mods.contains(.shift)   { result |= 1 }  // COCXYCORE_MOD_SHIFT
         if mods.contains(.option)  { result |= 2 }  // COCXYCORE_MOD_ALT
         if mods.contains(.control) { result |= 4 }  // COCXYCORE_MOD_CTRL
-        if mods.contains(.command) { result |= 8 }  // COCXYCORE_MOD_META
+        if mods.contains(.command) { result |= 8 }  // COCXYCORE_MOD_SUPER
+        if mods.contains(.hyper) { result |= 16 }
+        if mods.contains(.meta) { result |= 32 }
+        if mods.contains(.capsLock) { result |= 64 }
+        if mods.contains(.numLock) { result |= 128 }
         return result
     }
 
@@ -4255,40 +4301,6 @@ final class CocxyCoreBridge: TerminalEngine {
             g: UInt8((value >> 8) & 0xFF),
             b: UInt8(value & 0xFF)
         )
-    }
-
-    /// Map macOS key codes to CocxyCore special key identifiers.
-    /// Returns nil for printable keys (handled via encode_char).
-    private func mapKeyCodeToSpecialKey(_ keyCode: UInt16) -> UInt8? {
-        switch keyCode {
-        case 126: return 0   // Up         → COCXYCORE_KEY_UP
-        case 125: return 1   // Down       → COCXYCORE_KEY_DOWN
-        case 124: return 2   // Right      → COCXYCORE_KEY_RIGHT
-        case 123: return 3   // Left       → COCXYCORE_KEY_LEFT
-        case 115: return 4   // Home       → COCXYCORE_KEY_HOME
-        case 119: return 5   // End        → COCXYCORE_KEY_END
-        case 114: return 6   // Insert     → COCXYCORE_KEY_INSERT
-        case 117: return 7   // Delete     → COCXYCORE_KEY_DELETE
-        case 116: return 8   // Page Up    → COCXYCORE_KEY_PAGE_UP
-        case 121: return 9   // Page Down  → COCXYCORE_KEY_PAGE_DOWN
-        case 122: return 10  // F1         → COCXYCORE_KEY_F1
-        case 120: return 11  // F2         → COCXYCORE_KEY_F2
-        case 99:  return 12  // F3         → COCXYCORE_KEY_F3
-        case 118: return 13  // F4         → COCXYCORE_KEY_F4
-        case 96:  return 14  // F5         → COCXYCORE_KEY_F5
-        case 97:  return 15  // F6         → COCXYCORE_KEY_F6
-        case 98:  return 16  // F7         → COCXYCORE_KEY_F7
-        case 100: return 17  // F8         → COCXYCORE_KEY_F8
-        case 101: return 18  // F9         → COCXYCORE_KEY_F9
-        case 109: return 19  // F10        → COCXYCORE_KEY_F10
-        case 103: return 20  // F11        → COCXYCORE_KEY_F11
-        case 111: return 21  // F12        → COCXYCORE_KEY_F12
-        case 51:  return 22  // Backspace  → COCXYCORE_KEY_BACKSPACE
-        case 48:  return 23  // Tab        → COCXYCORE_KEY_TAB
-        case 36:  return 24  // Enter      → COCXYCORE_KEY_ENTER
-        case 53:  return 25  // Escape     → COCXYCORE_KEY_ESCAPE
-        default:  return nil
-        }
     }
 
     private static func environmentValue(for key: String) -> String? {

@@ -169,6 +169,84 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(try Data(contentsOf: captured) == Data([0x1B, 0x4F, 0x41]))
     }
 
+    @Test("daemon forwards progressive key press and release through the real helper")
+    func daemonForwardsProgressiveKeyPressAndRelease() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-key-events-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-key-events.sh")
+        let expected = Data("\u{1B}[D\u{1B}[1;1:3D".utf8)
+        let negotiationMarker = "KEY_EVENT_MODE_READY"
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[>2u\(negotiationMarker)'
+            printf ready > "\(ready.path)"
+            dd bs=1 count=\(expected.count) of="\(captured.path)" 2>/dev/null
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-progressive-keys",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        #expect(waitForFile(ready, timeout: 2))
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: negotiationMarker,
+            timeout: 5
+        )
+
+        for (requestID, isKeyDown) in [("press-progressive-key", true), ("release-progressive-key", false)] {
+            let response = try helper.sendAndWait(
+                PTYDaemonRequest(
+                    id: requestID,
+                    command: .surfaceKey,
+                    payload: [
+                        "surfaceID": surfaceID,
+                        "characters": "\u{F702}",
+                        "keyCode": "123",
+                        "modifiers": "0",
+                        "isKeyDown": String(isKeyDown),
+                        "isRepeat": "false",
+                        "isComposing": "false",
+                        "unshiftedCodepoint": "63234",
+                        "shiftedCodepoint": "0",
+                        "baseLayoutCodepoint": "0",
+                    ]
+                )
+            )
+            #expect(
+                response.ok == true,
+                "\(requestID) was not encoded: \(response.error ?? "no diagnostic")"
+            )
+        }
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        #expect(try Data(contentsOf: captured) == expected)
+    }
+
     @Test("daemon spawn strips host NO_COLOR before forking the child shell")
     func helperSpawnStripsHostNoColor() throws {
         let helper = try RunningHelperProcess(extraEnvironment: ["NO_COLOR": "1"])

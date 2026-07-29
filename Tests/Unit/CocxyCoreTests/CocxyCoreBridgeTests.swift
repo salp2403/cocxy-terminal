@@ -727,6 +727,41 @@ struct CocxyCoreBridgeTests {
         #expect(received.data.range(of: expected) != nil)
     }
 
+    @Test("sendKeyEvent forwards key release after progressive event negotiation")
+    func sendKeyEventForwardsProgressiveRelease() async throws {
+        let rawCat = try makeBridgeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: rawCat.scriptURL.path)
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: rawCat.readyURL.path)
+        }
+
+        let negotiation = Array("\u{001B}[>2u".utf8)
+        bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_feed(state.terminal, negotiation, negotiation.count)
+        }
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true),
+            to: surfaceID
+        ))
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: false),
+            to: surfaceID
+        ))
+
+        let expected = Data("\u{001B}[D\u{001B}[1;1:3D".utf8)
+        try await waitUntil {
+            received.data.range(of: expected) != nil
+        }
+        #expect(received.data.range(of: expected) != nil)
+    }
+
     @Test("sendText reaches the PTY-backed process")
     func sendTextReachesPty() async throws {
         let bridge = try makeBridge()

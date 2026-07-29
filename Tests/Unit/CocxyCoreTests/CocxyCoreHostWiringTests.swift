@@ -109,6 +109,75 @@ struct CocxyCoreHostWiringTests {
         #expect(engine.preeditTexts.last?.text == "")
     }
 
+    @Test("daemon host forwards normal text and its key release with alternates")
+    func daemonHostForwardsNormalTextAndRelease() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "Q",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+        let modifiers: NSEvent.ModifierFlags = [.shift, .capsLock, .numericPad]
+
+        view.keyDown(with: makeKeyEvent(
+            characters: "Q",
+            charactersIgnoringModifiers: "Q",
+            modifiers: modifiers,
+            keyCode: 12
+        ))
+        view.keyUp(with: makeKeyEvent(
+            type: .keyUp,
+            characters: "Q",
+            charactersIgnoringModifiers: "Q",
+            modifiers: modifiers,
+            keyCode: 12
+        ))
+
+        #expect(engine.sentTexts.isEmpty)
+        #expect(engine.keyEvents.count == 2)
+        let press = try #require(engine.keyEvents.first?.event)
+        let release = try #require(engine.keyEvents.last?.event)
+        #expect(press.isKeyDown == true)
+        #expect(press.characters == "Q")
+        #expect(press.unshiftedCodepoint == 113)
+        #expect(press.shiftedCodepoint == 81)
+        #expect(press.baseLayoutCodepoint == 113)
+        #expect(press.modifiers.contains(.capsLock))
+        #expect(press.modifiers.contains(.numLock))
+        #expect(release.isKeyDown == false)
+        #expect(release.baseLayoutCodepoint == 113)
+    }
+
+    @Test("daemon host forwards physical modifier transitions")
+    func daemonHostForwardsPhysicalModifierTransitions() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.flagsChanged(with: makeKeyEvent(
+            type: .flagsChanged,
+            characters: "",
+            modifiers: [.command],
+            keyCode: 55
+        ))
+        view.flagsChanged(with: makeKeyEvent(
+            type: .flagsChanged,
+            characters: "",
+            modifiers: [],
+            keyCode: 55
+        ))
+
+        #expect(engine.keyEvents.count == 2)
+        #expect(engine.keyEvents[0].event.isKeyDown == true)
+        #expect(engine.keyEvents[0].event.modifiers.contains(.command))
+        #expect(engine.keyEvents[1].event.isKeyDown == false)
+    }
+
     @Test("daemon host converts CJK cursor offsets and clears on focus loss")
     func daemonHostConvertsCJKCursorAndClearsOnFocusLoss() {
         let engine = MockTerminalEngine()
@@ -1044,13 +1113,14 @@ private func makeHostMouseEvent(
 }
 
 private func makeKeyEvent(
+    type: NSEvent.EventType = .keyDown,
     characters: String,
     charactersIgnoringModifiers: String? = nil,
     modifiers: NSEvent.ModifierFlags = [],
     keyCode: UInt16 = 15
 ) -> NSEvent {
     NSEvent.keyEvent(
-        with: .keyDown,
+        with: type,
         location: .zero,
         modifierFlags: modifiers,
         timestamp: ProcessInfo.processInfo.systemUptime,

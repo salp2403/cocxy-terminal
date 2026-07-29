@@ -46,6 +46,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     private var activeKeyTextInterpretation: KeyTextInterpretation?
     private var isDiscardingInputMethodComposition = false
+    private var forwardedKeyCodes = Set<UInt16>()
     var keyEventInterpreterOverride: ((NSEvent) -> Void)?
 
     init(
@@ -105,6 +106,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         pendingSynchronizedFrame = nil
         latestReceivedFrameRevision = nil
         latestFrame = nil
+        forwardedKeyCodes.removeAll()
         terminalMouseCaptureByButton.removeAll()
         clearLocalSelection()
         self.bridge = bridge
@@ -224,14 +226,47 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         ) {
             if wasComposing {
                 commitComposition(bridge: bridge, surfaceID: surfaceID)
+                bridge.sendText(controlText, to: surfaceID)
+                return
             }
-            bridge.sendText(controlText, to: surfaceID)
+            let keyEvent = MacTerminalKeyEventTranslator.event(
+                from: event,
+                characters: event.charactersIgnoringModifiers,
+                isKeyDown: true,
+                isComposing: false
+            )
+            if bridge.sendKeyEvent(keyEvent, to: surfaceID) {
+                forwardedKeyCodes.insert(event.keyCode)
+            } else {
+                bridge.sendText(controlText, to: surfaceID)
+            }
             return
         }
 
         let interpretation = interpretTerminalKeyEvent(event)
         if interpretation.text.isEmpty == false {
-            bridge.sendText(interpretation.text, to: surfaceID)
+            let mustPreserveCommittedText = interpretation.didMutateComposition
+                || (event.keyCode == 36 && modifiers.contains(.shift))
+                || CocxyCoreView.literalTextForOptionGeneratedCharacter(
+                    characters: interpretation.text,
+                    charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                    modifiers: modifiers
+                ) != nil
+            if mustPreserveCommittedText {
+                bridge.sendText(interpretation.text, to: surfaceID)
+            } else {
+                let keyEvent = MacTerminalKeyEventTranslator.event(
+                    from: event,
+                    characters: interpretation.text,
+                    isKeyDown: true,
+                    isComposing: false
+                )
+                if bridge.sendKeyEvent(keyEvent, to: surfaceID) {
+                    forwardedKeyCodes.insert(event.keyCode)
+                } else {
+                    bridge.sendText(interpretation.text, to: surfaceID)
+                }
+            }
             if Self.containsInputSubmission(interpretation.text),
                modifiers.contains(.shift) == false {
                 onUserInputSubmitted?()
@@ -244,20 +279,53 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         if interpretation.didMutateComposition {
             return
         }
-        let keyEvent = KeyEvent(
-            characters: event.characters,
-            keyCode: UInt16(event.keyCode),
-            modifiers: modifiers,
+        let keyEvent = MacTerminalKeyEventTranslator.event(
+            from: event,
             isKeyDown: true,
-            isRepeat: event.isARepeat,
-            isComposing: hasMarkedText(),
-            unshiftedCodepoint: event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0
+            isComposing: hasMarkedText()
         )
         if bridge.sendKeyEvent(keyEvent, to: surfaceID) {
+            forwardedKeyCodes.insert(event.keyCode)
             if event.keyCode == 36 {
                 onUserInputSubmitted?()
             }
         }
+    }
+
+    override func keyUp(with event: NSEvent) {
+        guard let bridge,
+              let surfaceID,
+              forwardedKeyCodes.remove(event.keyCode) != nil else { return }
+        _ = bridge.sendKeyEvent(
+            MacTerminalKeyEventTranslator.event(
+                from: event,
+                isKeyDown: false,
+                isComposing: hasMarkedText()
+            ),
+            to: surfaceID
+        )
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        if event.modifierFlags.contains(.command) {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.iBeam.set()
+        }
+        guard let bridge,
+              let surfaceID,
+              let isKeyDown = MacTerminalKeyEventTranslator.modifierIsActive(
+                  keyCode: event.keyCode,
+                  flags: event.modifierFlags
+              ) else { return }
+        _ = bridge.sendKeyEvent(
+            MacTerminalKeyEventTranslator.event(
+                from: event,
+                isKeyDown: isKeyDown,
+                isComposing: hasMarkedText()
+            ),
+            to: surfaceID
+        )
     }
 
     private func interpretTerminalKeyEvent(_ event: NSEvent) -> KeyTextInterpretation {
@@ -315,6 +383,31 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         guard activeKeyTextInterpretation == nil else { return }
         super.doCommand(by: selector)
     }
+
+    @discardableResult
+    private func sendResponderKey(keyCode: UInt16) -> Bool {
+        guard activeKeyTextInterpretation == nil,
+              let bridge,
+              let surfaceID else { return false }
+        followLiveViewportBeforeUserInput()
+        return bridge.sendKeyEvent(
+            KeyEvent(
+                characters: nil,
+                keyCode: keyCode,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: hasMarkedText()
+            ),
+            to: surfaceID
+        )
+    }
+
+    override func moveUp(_ sender: Any?) { _ = sendResponderKey(keyCode: 126) }
+    override func moveDown(_ sender: Any?) { _ = sendResponderKey(keyCode: 125) }
+    override func moveRight(_ sender: Any?) { _ = sendResponderKey(keyCode: 124) }
+    override func moveLeft(_ sender: Any?) { _ = sendResponderKey(keyCode: 123) }
+    override func moveToBeginningOfLine(_ sender: Any?) { _ = sendResponderKey(keyCode: 115) }
+    override func moveToEndOfLine(_ sender: Any?) { _ = sendResponderKey(keyCode: 119) }
 
     override func mouseDown(with event: NSEvent) {
         onFocusRequested?()
@@ -688,12 +781,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     private static func keyModifiers(from flags: NSEvent.ModifierFlags) -> KeyModifiers {
-        var modifiers: KeyModifiers = []
-        if flags.contains(.shift) { modifiers.insert(.shift) }
-        if flags.contains(.control) { modifiers.insert(.control) }
-        if flags.contains(.option) { modifiers.insert(.option) }
-        if flags.contains(.command) { modifiers.insert(.command) }
-        return modifiers
+        MacTerminalKeyEventTranslator.modifiers(from: flags)
     }
 
     private func beginTerminalMouseGesture(

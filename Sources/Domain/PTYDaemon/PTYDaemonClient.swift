@@ -492,7 +492,7 @@ final class PTYDaemonClient: TerminalEngine {
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
-        guard event.isKeyDown, event.isComposing == false else { return false }
+        guard event.isComposing == false else { return false }
         let response = try? sendSurfaceRequest(
             surface,
             command: .surfaceKey,
@@ -504,6 +504,8 @@ final class PTYDaemonClient: TerminalEngine {
                 "isRepeat": "\(event.isRepeat)",
                 "isComposing": "\(event.isComposing)",
                 "unshiftedCodepoint": "\(event.unshiftedCodepoint)",
+                "shiftedCodepoint": "\(event.shiftedCodepoint)",
+                "baseLayoutCodepoint": "\(event.baseLayoutCodepoint)",
                 "consumedModsRaw": "\(event.consumedModsRaw)",
             ]
         )

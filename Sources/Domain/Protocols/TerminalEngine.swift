@@ -245,6 +245,10 @@ struct KeyEvent: Sendable {
     /// The Unicode codepoint of the key without Shift applied.
     /// Used by the terminal engine for layout-aware key translation.
     let unshiftedCodepoint: UInt32
+    /// The codepoint produced by the shifted form of this key, when known.
+    let shiftedCodepoint: UInt32
+    /// The unshifted US-layout codepoint for Kitty's base-layout alternate.
+    let baseLayoutCodepoint: UInt32
     /// Raw consumed modifiers value used for engine-side modifier tracking.
     /// Set by the view layer after querying the bridge for translation mods.
     let consumedModsRaw: UInt32
@@ -257,6 +261,8 @@ struct KeyEvent: Sendable {
         isRepeat: Bool = false,
         isComposing: Bool = false,
         unshiftedCodepoint: UInt32 = 0,
+        shiftedCodepoint: UInt32 = 0,
+        baseLayoutCodepoint: UInt32 = 0,
         consumedModsRaw: UInt32 = 0
     ) {
         self.characters = characters
@@ -266,6 +272,8 @@ struct KeyEvent: Sendable {
         self.isRepeat = isRepeat
         self.isComposing = isComposing
         self.unshiftedCodepoint = unshiftedCodepoint
+        self.shiftedCodepoint = shiftedCodepoint
+        self.baseLayoutCodepoint = baseLayoutCodepoint
         self.consumedModsRaw = consumedModsRaw
     }
 }
@@ -278,6 +286,10 @@ struct KeyModifiers: OptionSet, Sendable {
     static let control = KeyModifiers(rawValue: 1 << 1)
     static let option  = KeyModifiers(rawValue: 1 << 2)
     static let command = KeyModifiers(rawValue: 1 << 3)
+    static let hyper   = KeyModifiers(rawValue: 1 << 4)
+    static let meta    = KeyModifiers(rawValue: 1 << 5)
+    static let capsLock = KeyModifiers(rawValue: 1 << 6)
+    static let numLock = KeyModifiers(rawValue: 1 << 7)
 }
 
 extension TerminalEngine {

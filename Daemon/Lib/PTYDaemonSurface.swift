@@ -274,30 +274,45 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     func handleKey(payload: [String: String]) -> Bool {
-        guard payload.bool("isKeyDown") ?? true else { return true }
         guard payload.bool("isComposing") != true else { return false }
-
-        terminalLock.withLock {
-            if cocxycore_terminal_preedit_active(terminal) {
-                cocxycore_terminal_preedit_clear(terminal)
-            }
-        }
-
+        let isKeyDown = payload.bool("isKeyDown") ?? true
+        let eventType: UInt8 = isKeyDown
+            ? ((payload.bool("isRepeat") ?? false) ? 2 : 1)
+            : 3
         let keyCode = payload.uint16("keyCode") ?? 0
         let modifiers = payload.uint("modifiers") ?? 0
-        if let key = Self.specialKey(forMacKeyCode: keyCode) {
-            return writeEncodedKey(key, modifiers: modifiers)
+        let characters = payload["characters"] ?? ""
+        let characterScalars = characters.unicodeScalars.map(\.value)
+        let shiftedCodepoint = payload.uint32("shiftedCodepoint") ?? 0
+        let baseLayoutCodepoint = payload.uint32("baseLayoutCodepoint") ?? 0
+        if let key = TerminalKeyMapping.specialKey(forMacKeyCode: keyCode) {
+            let associatedText = isKeyDown && (26...42).contains(key)
+                ? Array(characterScalars.prefix(8))
+                : []
+            return writeEncodedKey(
+                key,
+                modifiers: modifiers,
+                eventType: eventType,
+                shiftedCodepoint: shiftedCodepoint,
+                baseLayoutCodepoint: baseLayoutCodepoint,
+                associatedText: associatedText
+            )
         }
 
-        if let characters = payload.nonEmpty("characters"),
-           payload.uint("modifiers").map({ $0 & 8 == 0 }) ?? true {
-            return write(bytes: Data(characters.utf8))
-        }
-
-        if let codepoint = payload.uint32("unshiftedCodepoint"), codepoint > 0 {
-            return writeEncodedCharacter(codepoint, modifiers: modifiers)
-        }
-        return false
+        let primaryCodepoint = payload.uint32("unshiftedCodepoint")
+            .flatMap { $0 > 0 ? $0 : nil }
+            ?? characterScalars.first
+            ?? 0
+        guard primaryCodepoint > 0 else { return false }
+        return writeEncodedCharacter(
+            primaryCodepoint,
+            characters: characters,
+            modifiers: modifiers,
+            eventType: eventType,
+            shiftedCodepoint: shiftedCodepoint,
+            baseLayoutCodepoint: baseLayoutCodepoint,
+            associatedText: isKeyDown ? Array(characterScalars.prefix(8)) : []
+        )
     }
 
     func setPreedit(_ text: String, cursorByteOffset: Int?) {

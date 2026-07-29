@@ -192,6 +192,52 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests.map(\.command) == [.hello])
     }
 
+    @Test("progressive key press and release serialize complete metadata")
+    func progressiveKeyEventsSerializeCompleteMetadata() throws {
+        let rawSurfaceID = UUID()
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "press", ok: true),
+            PTYDaemonResponse(id: "release", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surfaceID = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let press = KeyEvent(
+            characters: "Q",
+            keyCode: 12,
+            modifiers: [.shift, .command, .capsLock, .numLock],
+            isKeyDown: true,
+            unshiftedCodepoint: 113,
+            shiftedCodepoint: 81,
+            baseLayoutCodepoint: 113
+        )
+
+        #expect(client.sendKeyEvent(press, to: surfaceID))
+        #expect(client.sendKeyEvent(
+            KeyEvent(
+                characters: "Q",
+                keyCode: 12,
+                modifiers: press.modifiers,
+                isKeyDown: false,
+                unshiftedCodepoint: 113,
+                shiftedCodepoint: 81,
+                baseLayoutCodepoint: 113
+            ),
+            to: surfaceID
+        ))
+
+        let requests = connection.requests.filter { $0.command == .surfaceKey }
+        #expect(requests.count == 2)
+        #expect(requests[0].payload?["isKeyDown"] == "true")
+        #expect(requests[1].payload?["isKeyDown"] == "false")
+        #expect(requests[0].payload?["unshiftedCodepoint"] == "113")
+        #expect(requests[0].payload?["shiftedCodepoint"] == "81")
+        #expect(requests[0].payload?["baseLayoutCodepoint"] == "113")
+        #expect(requests[0].payload?["modifiers"] == "201")
+    }
+
     @Test("preedit cursor byte offset is serialized for the daemon")
     func preeditCursorByteOffsetIsSerialized() throws {
         let rawSurfaceID = UUID()

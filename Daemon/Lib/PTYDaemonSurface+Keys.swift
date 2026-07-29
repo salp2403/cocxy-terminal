@@ -8,83 +8,117 @@ import Foundation
 extension PTYDaemonSurface {
     /// Encodes a CocxyCore special key (arrows, function keys, etc.) and
     /// writes the resulting bytes to the attached PTY.
-    func writeEncodedKey(_ key: UInt8, modifiers: UInt) -> Bool {
+    func writeEncodedKey(
+        _ key: UInt8,
+        modifiers: UInt,
+        eventType: UInt8,
+        shiftedCodepoint: UInt32,
+        baseLayoutCodepoint: UInt32,
+        associatedText: [UInt32]
+    ) -> Bool {
         terminalLock.withLock {
-            var buffer = [UInt8](repeating: 0, count: 64)
-            let count = cocxycore_terminal_encode_key(
-                terminal,
-                key,
-                Self.cocxyModifiers(from: modifiers),
-                &buffer,
-                buffer.count
-            )
-            guard count > 0 else { return false }
-            return buffer.withUnsafeBufferPointer { pointer in
-                cocxycore_terminal_write_attached_pty(terminal, pointer.baseAddress, count) > 0
+            clearPreeditForPressLocked(eventType: eventType)
+            var buffer = [UInt8](repeating: 0, count: 256)
+            let count = associatedText.withUnsafeBufferPointer { associatedBuffer in
+                cocxycore_terminal_encode_key_event(
+                    terminal,
+                    key,
+                    Self.cocxyModifiers(from: modifiers),
+                    eventType,
+                    shiftedCodepoint,
+                    baseLayoutCodepoint,
+                    associatedBuffer.baseAddress,
+                    associatedBuffer.count,
+                    &buffer,
+                    buffer.count
+                )
             }
+            guard count > 0 else { return false }
+            return writeEncodedBytesLocked(Array(buffer.prefix(count)))
         }
     }
 
     /// Encodes a Unicode codepoint for the active terminal mode and writes
     /// the resulting bytes to the attached PTY.
-    func writeEncodedCharacter(_ codepoint: UInt32, modifiers: UInt) -> Bool {
+    func writeEncodedCharacter(
+        _ codepoint: UInt32,
+        characters: String,
+        modifiers: UInt,
+        eventType: UInt8,
+        shiftedCodepoint: UInt32,
+        baseLayoutCodepoint: UInt32,
+        associatedText: [UInt32]
+    ) -> Bool {
         terminalLock.withLock {
-            var buffer = [UInt8](repeating: 0, count: 64)
-            let count = cocxycore_terminal_encode_char(
-                terminal,
-                codepoint,
-                Self.cocxyModifiers(from: modifiers),
-                &buffer,
-                buffer.count
-            )
-            guard count > 0 else { return false }
-            return buffer.withUnsafeBufferPointer { pointer in
-                cocxycore_terminal_write_attached_pty(terminal, pointer.baseAddress, count) > 0
+            clearPreeditForPressLocked(eventType: eventType)
+            var buffer = [UInt8](repeating: 0, count: 256)
+            let count = associatedText.withUnsafeBufferPointer { associatedBuffer in
+                cocxycore_terminal_encode_char_event(
+                    terminal,
+                    codepoint,
+                    Self.cocxyModifiers(from: modifiers),
+                    eventType,
+                    shiftedCodepoint,
+                    baseLayoutCodepoint,
+                    associatedBuffer.baseAddress,
+                    associatedBuffer.count,
+                    &buffer,
+                    buffer.count
+                )
             }
+            guard count > 0 else { return false }
+            var encodedBytes = Array(buffer.prefix(count))
+            if eventType != 3 {
+                let scalars = characters.unicodeScalars.map(\.value)
+                let hasControl = modifiers & (1 << 1) != 0
+                let hasSuper = modifiers & (1 << 3) != 0
+                let remainderStart: Int?
+                if hasControl || hasSuper {
+                    remainderStart = 1
+                } else if scalars.count > 8 {
+                    remainderStart = 8
+                } else {
+                    remainderStart = nil
+                }
+                if let remainderStart, scalars.count > remainderStart {
+                    for scalar in scalars.dropFirst(remainderStart) {
+                        if let unicodeScalar = UnicodeScalar(scalar) {
+                            encodedBytes.append(contentsOf: String(unicodeScalar).utf8)
+                        }
+                    }
+                }
+            }
+            return writeEncodedBytesLocked(encodedBytes)
         }
     }
 
     /// Maps Cocxy's modifier bitmask to CocxyCore's encoding.
-    static func cocxyModifiers(from raw: UInt) -> UInt8 {
-        var result: UInt8 = 0
+    static func cocxyModifiers(from raw: UInt) -> UInt16 {
+        var result: UInt16 = 0
         if raw & (1 << 0) != 0 { result |= 1 }
         if raw & (1 << 2) != 0 { result |= 2 }
         if raw & (1 << 1) != 0 { result |= 4 }
         if raw & (1 << 3) != 0 { result |= 8 }
+        if raw & (1 << 4) != 0 { result |= 16 }
+        if raw & (1 << 5) != 0 { result |= 32 }
+        if raw & (1 << 6) != 0 { result |= 64 }
+        if raw & (1 << 7) != 0 { result |= 128 }
         return result
     }
 
-    /// Maps a macOS hardware key code to CocxyCore's special-key id, or
-    /// `nil` when the key code is a regular printable character.
-    static func specialKey(forMacKeyCode code: UInt16) -> UInt8? {
-        switch code {
-        case 126: return 0
-        case 125: return 1
-        case 124: return 2
-        case 123: return 3
-        case 115: return 4
-        case 119: return 5
-        case 114: return 6
-        case 117: return 7
-        case 116: return 8
-        case 121: return 9
-        case 122: return 10
-        case 120: return 11
-        case 99: return 12
-        case 118: return 13
-        case 96: return 14
-        case 97: return 15
-        case 98: return 16
-        case 100: return 17
-        case 101: return 18
-        case 109: return 19
-        case 103: return 20
-        case 111: return 21
-        case 51: return 22
-        case 48: return 23
-        case 36: return 24
-        case 53: return 25
-        default: return nil
+    private func clearPreeditForPressLocked(eventType: UInt8) {
+        guard eventType != 3, cocxycore_terminal_preedit_active(terminal) else { return }
+        cocxycore_terminal_preedit_clear(terminal)
+    }
+
+    private func writeEncodedBytesLocked(_ bytes: [UInt8]) -> Bool {
+        guard bytes.isEmpty == false else { return false }
+        return bytes.withUnsafeBufferPointer { pointer in
+            cocxycore_terminal_write_attached_pty(
+                terminal,
+                pointer.baseAddress,
+                pointer.count
+            ) > 0
         }
     }
 }

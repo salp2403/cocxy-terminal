@@ -212,6 +212,7 @@ final class CocxyCoreView: NSView {
 
     /// Last dispatched repeated delete key event by hardware key code.
     private var repeatedDeleteDispatchTimestamps: [UInt16: TimeInterval] = [:]
+    private var forwardedKeyCodes = Set<UInt16>()
 
     // MARK: - Selection State
 
@@ -343,6 +344,7 @@ final class CocxyCoreView: NSView {
             resetCommandBlockOverlayForSurfaceTeardown()
             clearComposition(forceEngineClear: true, discardInputContext: true)
             synchronizedOutputGate.reset()
+            forwardedKeyCodes.removeAll()
         }
         self.bridge = bridge
         self.surfaceID = surfaceID
@@ -749,7 +751,9 @@ final class CocxyCoreView: NSView {
                 isKeyDown: true,
                 isComposing: hasMarkedText()
             )
-            bridge.sendKeyEvent(keyEvent, to: sid)
+            if bridge.sendKeyEvent(keyEvent, to: sid) {
+                forwardedKeyCodes.insert(event.keyCode)
+            }
             return
         case .sendToTerminal:
             // Candidate navigation and IME deletion must win over terminal
@@ -772,7 +776,17 @@ final class CocxyCoreView: NSView {
     }
 
     override func keyUp(with event: NSEvent) {
-        // CocxyCore's encode_key only handles key-down. Key-up is a no-op.
+        guard let bridge,
+              let sid = surfaceID,
+              forwardedKeyCodes.remove(event.keyCode) != nil else { return }
+        _ = bridge.sendKeyEvent(
+            Self.translateKeyEvent(
+                event,
+                isKeyDown: false,
+                isComposing: hasMarkedText()
+            ),
+            to: sid
+        )
     }
 
     override func flagsChanged(with event: NSEvent) {
@@ -781,6 +795,20 @@ final class CocxyCoreView: NSView {
         } else {
             NSCursor.iBeam.set()
         }
+        guard let bridge,
+              let sid = surfaceID,
+              let isKeyDown = MacTerminalKeyEventTranslator.modifierIsActive(
+                  keyCode: event.keyCode,
+                  flags: event.modifierFlags
+              ) else { return }
+        _ = bridge.sendKeyEvent(
+            Self.translateKeyEvent(
+                event,
+                isKeyDown: isKeyDown,
+                isComposing: hasMarkedText()
+            ),
+            to: sid
+        )
     }
 
     private func handleTerminalInput(
@@ -808,16 +836,59 @@ final class CocxyCoreView: NSView {
             // byte instead of allowing AppKit to consume Ctrl+C/Ctrl+D/etc.
             if wasComposing {
                 commitComposition(bridge: bridge, surfaceID: sid)
+                clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+                bridge.sendText(controlText, to: sid)
+                return
             }
             clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
-            bridge.sendText(controlText, to: sid)
+            let keyEvent = Self.translateKeyEvent(
+                event,
+                characters: event.charactersIgnoringModifiers,
+                isKeyDown: true,
+                isComposing: false
+            )
+            if bridge.sendKeyEvent(keyEvent, to: sid) {
+                forwardedKeyCodes.insert(event.keyCode)
+            } else {
+                bridge.sendText(controlText, to: sid)
+            }
             return
         }
 
         let interpretation = interpretTerminalKeyEvent(event)
         if interpretation.text.isEmpty == false {
             clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
-            bridge.sendText(interpretation.text, to: sid)
+            if interpretation.didMutateComposition == false,
+               let state = bridge.surfaceState(for: sid),
+               let bytes = MultilineEnterEncoder.bytes(
+                   keyCode: event.keyCode,
+                   modifiers: modifiers,
+                   kittyKeyboardActive: cocxycore_terminal_mode_kitty_keyboard(state.terminal) > 0
+               ) {
+                _ = bridge.writeBytes(bytes, to: sid)
+                return
+            }
+            let mustPreserveCommittedText = interpretation.didMutateComposition
+                || Self.literalTextForOptionGeneratedCharacter(
+                    characters: interpretation.text,
+                    charactersIgnoringModifiers: event.charactersIgnoringModifiers,
+                    modifiers: modifiers
+                ) != nil
+            if mustPreserveCommittedText {
+                bridge.sendText(interpretation.text, to: sid)
+            } else {
+                let keyEvent = Self.translateKeyEvent(
+                    event,
+                    characters: interpretation.text,
+                    isKeyDown: true,
+                    isComposing: false
+                )
+                if bridge.sendKeyEvent(keyEvent, to: sid) {
+                    forwardedKeyCodes.insert(event.keyCode)
+                } else {
+                    bridge.sendText(interpretation.text, to: sid)
+                }
+            }
             if Self.containsInputSubmission(interpretation.text),
                modifiers.contains(.shift) == false {
                 ideCursorController.commandExecuted()
@@ -862,17 +933,15 @@ final class CocxyCoreView: NSView {
         }
 
         // Use CocxyCore's mode-aware encoder for all other keys.
-        let keyEvent = KeyEvent(
-            characters: event.characters,
-            keyCode: event.keyCode,
-            modifiers: modifiers,
+        let keyEvent = Self.translateKeyEvent(
+            event,
             isKeyDown: true,
-            isRepeat: event.isARepeat,
             isComposing: hasMarkedText()
         )
 
         let handled = bridge.sendKeyEvent(keyEvent, to: sid)
         if handled {
+            forwardedKeyCodes.insert(event.keyCode)
             updateIDECursorState(afterHandling: event)
         }
     }
@@ -2090,25 +2159,19 @@ final class CocxyCoreView: NSView {
     // MARK: - Static Helpers
 
     static func translateModifierFlags(_ flags: NSEvent.ModifierFlags) -> KeyModifiers {
-        var modifiers = KeyModifiers()
-        if flags.contains(.shift)   { modifiers.insert(.shift) }
-        if flags.contains(.control) { modifiers.insert(.control) }
-        if flags.contains(.option)  { modifiers.insert(.option) }
-        if flags.contains(.command) { modifiers.insert(.command) }
-        return modifiers
+        MacTerminalKeyEventTranslator.modifiers(from: flags)
     }
 
     static func translateKeyEvent(
         _ event: NSEvent,
+        characters: String? = nil,
         isKeyDown: Bool,
         isComposing: Bool = false
     ) -> KeyEvent {
-        KeyEvent(
-            characters: event.characters,
-            keyCode: event.keyCode,
-            modifiers: translateModifierFlags(event.modifierFlags),
+        MacTerminalKeyEventTranslator.event(
+            from: event,
+            characters: characters,
             isKeyDown: isKeyDown,
-            isRepeat: event.isARepeat,
             isComposing: isComposing
         )
     }

@@ -195,16 +195,14 @@ struct CocxyCoreBridgeLockingTests {
         #expect(handled == true)
     }
 
-    @Test("sendKeyEvent ignores key-up events without acquiring the lock")
-    func sendKeyEventIgnoresKeyUpEvents() throws {
+    @Test("sendKeyEvent serializes progressive key-up events through the terminal lock")
+    func sendKeyEventSerializesKeyUpEvents() throws {
         let bridge = try Self.makeBridge()
         let (surfaceID, _) = try Self.createSurface(using: bridge)
         defer { bridge.destroySurface(surfaceID) }
 
-        // Hold the lock on a background queue and keep holding it across the
-        // call. A key-up event must NOT wait for the lock — the early
-        // `guard event.isKeyDown` exits before any lock acquisition, so the
-        // holder is still inside its critical section when the call returns.
+        // Key-up encoding reads the negotiated progressive keyboard flags, so
+        // it must observe those flags under the same lock as PTY feed.
         let state = try #require(bridge.surfaceState(for: surfaceID))
 
         let arrowLeftUp = KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: false)
@@ -215,8 +213,8 @@ struct CocxyCoreBridgeLockingTests {
 
         #expect(handled == false)
         #expect(
-            waitedForHolder == false,
-            "key-up waited for the terminal lock; the early `guard event.isKeyDown` must return first"
+            waitedForHolder,
+            "key-up returned before the terminal mode lock was released"
         )
     }
 
