@@ -1178,6 +1178,145 @@ struct CocxyCoreViewTests {
         #expect(harness.view.commandBlockOverlayView != nil)
     }
 
+    @Test("any-event SGR tracking forwards button motion release and unbuttoned movement")
+    func anyEventSGRTrackingForwardsCompleteMouseGesture() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(harness, output: output)
+        feed("\u{001B}[?1000h\u{001B}[?1002h\u{001B}[?1003h\u{001B}[?1006h", into: state.terminal)
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.mouseTrackingMode == TerminalMouseTracking.anyEvent.rawValue)
+        #expect(snapshot.mouseEncodingMode == TerminalMouseEncoding.sgr.rawValue)
+
+        var focusRequests = 0
+        harness.view.onFocusRequested = { focusRequests += 1 }
+        harness.view.updateTrackingAreas()
+        #expect(harness.view.trackingAreas.contains { $0.options.contains(.mouseMoved) })
+
+        let press = Data("\u{001B}[<0;1;1M".utf8)
+        let drag = Data("\u{001B}[<32;1;1M".utf8)
+        let release = Data("\u{001B}[<0;1;1m".utf8)
+        let move = Data("\u{001B}[<35;1;1M".utf8)
+        let topLeftInWindow = NSPoint(x: 0, y: harness.view.bounds.maxY)
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(press) }
+        output.data.removeAll()
+
+        harness.view.mouseDragged(with: makeMouseEvent(type: .leftMouseDragged, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(drag) }
+        output.data.removeAll()
+
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(release) }
+        output.data.removeAll()
+
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        try await waitUntil { output.data.containsSubsequence(move) }
+
+        #expect(focusRequests == 1)
+        #expect(output.data.containsSubsequence(move))
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
+    }
+
+    @Test("X10 captures release without emitting a release payload")
+    func x10ReleaseDoesNotFallThroughToSelection() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(harness, output: output)
+        feed("\u{001B}[?9h", into: state.terminal)
+        let topLeftInWindow = NSPoint(x: 0, y: harness.view.bounds.maxY)
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: topLeftInWindow))
+        let press = Data([0x1B, 0x5B, 0x4D, 0x20, 0x21, 0x21])
+        try await waitUntil { output.data.containsSubsequence(press) }
+        output.data.removeAll()
+
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(output.data.isEmpty)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
+    }
+
+    @Test("Shift drag selects locally while terminal mouse capture is active")
+    func shiftDragEscapesTerminalMouseCapture() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.viewModel.autoCopyOnSelect = false
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(harness, output: output)
+        feed("selectable text", into: state.terminal)
+        feed("\u{001B}[?1003h\u{001B}[?1006h", into: state.terminal)
+
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: NSPoint(x: 12, y: 12),
+            modifiers: [.shift]
+        ))
+        harness.view.mouseDragged(with: makeMouseEvent(
+            type: .leftMouseDragged,
+            location: NSPoint(x: 96, y: 12),
+            modifiers: [.shift]
+        ))
+        harness.view.mouseUp(with: makeMouseEvent(
+            type: .leftMouseUp,
+            location: NSPoint(x: 96, y: 12),
+            modifiers: [.shift]
+        ))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(output.data.isEmpty)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == true)
+    }
+
+    @Test("prompt click repositions only after mouse release")
+    func promptClickRepositionsOnRelease() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.view.handleShellPromptAtCurrentCursor()
+        let controller = harness.view.ideCursorController
+        let initialColumn = controller.cursorColumn
+        let targetColumn = initialColumn + 3
+        let targetInView = CGPoint(
+            x: controller.leftPadding + controller.cellWidth * CGFloat(targetColumn) + 1,
+            y: controller.topPadding
+                + controller.cellHeight * CGFloat(controller.promptRow)
+                + 1
+        )
+        let targetInWindow = CGPoint(
+            x: targetInView.x,
+            y: harness.view.bounds.maxY - targetInView.y
+        )
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: targetInWindow))
+        #expect(controller.cursorColumn == initialColumn)
+
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: targetInWindow))
+        #expect(controller.cursorColumn == targetColumn)
+    }
+
     @Test("scroll wheel forwards events when terminal mouse mode is enabled")
     func scrollWheelForwardsEventsWhenMouseModeIsEnabled() throws {
         let harness = try makeViewHarness()
@@ -1782,6 +1921,20 @@ private func makeViewHarness(command: String = "/bin/cat") throws -> ViewHarness
     )
 }
 
+@MainActor
+private func awaitRawPTYReady(
+    _ harness: ViewHarness,
+    output: TestDataSink
+) async throws {
+    let marker = "mouse-pty-ready-\(UUID().uuidString)"
+    harness.bridge.sendText(marker + "\n", to: harness.surfaceID)
+    let markerData = Data(marker.utf8)
+    try await waitUntil {
+        output.data.containsSubsequence(markerData)
+    }
+    output.data.removeAll()
+}
+
 private func makeRawCatScript() throws -> (rootDirectory: URL, scriptURL: URL) {
     let rootDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("cocxy-raw-cat-\(UUID().uuidString)", isDirectory: true)
@@ -1824,12 +1977,13 @@ private func makeKeyEvent(
 private func makeMouseEvent(
     type: NSEvent.EventType,
     location: NSPoint,
+    modifiers: NSEvent.ModifierFlags = [],
     clickCount: Int = 1
 ) -> NSEvent {
     NSEvent.mouseEvent(
         with: type,
         location: location,
-        modifierFlags: [],
+        modifierFlags: modifiers,
         timestamp: 0,
         windowNumber: 0,
         context: nil,

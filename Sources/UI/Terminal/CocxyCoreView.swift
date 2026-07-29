@@ -203,6 +203,8 @@ final class CocxyCoreView: NSView {
     /// recalculated immediately when the view moves between displays.
     private var windowScreenObserver: NSObjectProtocol?
     private var lastNotifiedMouseTrackingActive: Bool?
+    private var mouseMotionTrackingArea: NSTrackingArea?
+    private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
 
     // MARK: - Constants
 
@@ -459,6 +461,21 @@ final class CocxyCoreView: NSView {
     override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         refreshBackingConfiguration(forceGridSync: true)
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let mouseMotionTrackingArea {
+            removeTrackingArea(mouseMotionTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        mouseMotionTrackingArea = trackingArea
     }
 
     override func viewWillMove(toWindow newWindow: NSWindow?) {
@@ -1342,17 +1359,17 @@ final class CocxyCoreView: NSView {
 
     override func mouseDown(with event: NSEvent) {
         onFocusRequested?()
+        viewModel?.recordMouseDown(clickCount: event.clickCount)
+
+        if beginTerminalMouseGesture(button: .left, event: event) {
+            selectionAnchor = nil
+            isDragging = false
+            return
+        }
 
         guard let bridge = bridge, let sid = surfaceID,
               let state = bridge.surfaceState(for: sid) else {
             super.mouseDown(with: event)
-            return
-        }
-
-        let location = convert(event.locationInWindow, from: nil)
-        viewModel?.recordMouseDown(clickCount: event.clickCount)
-
-        if event.clickCount == 1, ideCursorController.handleClickToPosition(at: location) {
             return
         }
 
@@ -1369,6 +1386,10 @@ final class CocxyCoreView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if continueTerminalMouseGesture(button: .left, event: event) {
+            return
+        }
+
         guard let bridge = bridge, let sid = surfaceID,
               let state = bridge.surfaceState(for: sid),
               let anchor = selectionAnchor else { return }
@@ -1395,9 +1416,16 @@ final class CocxyCoreView: NSView {
     override func mouseUp(with event: NSEvent) {
         viewModel?.recordMouseUp()
 
+        if endTerminalMouseGesture(button: .left, event: event) {
+            isDragging = false
+            selectionAnchor = nil
+            return
+        }
+
         guard let bridge = bridge, let sid = surfaceID,
               let state = bridge.surfaceState(for: sid) else { return }
 
+        let completedDrag = isDragging
         if isDragging && cocxycore_terminal_selection_active(state.terminal) {
             if viewModel?.autoCopyOnSelect == true {
                 if let text = bridge.readSelection(for: sid), !text.isEmpty {
@@ -1406,14 +1434,32 @@ final class CocxyCoreView: NSView {
             }
         }
 
+        if !completedDrag,
+           event.clickCount == 1,
+           !event.modifierFlags.contains(.shift),
+           let snapshot = bridge.terminalViewportSnapshot(for: sid),
+           snapshot.mouseTrackingMode == 0,
+           !snapshot.isAltScreen {
+            let location = convert(event.locationInWindow, from: nil)
+            _ = ideCursorController.handleClickToPosition(at: location)
+        }
+
         isDragging = false
         selectionAnchor = nil
     }
 
     override func rightMouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        if beginTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+
         guard let bridge = bridge,
               let sid = surfaceID,
-              let state = bridge.surfaceState(for: sid) else { return }
+              let state = bridge.surfaceState(for: sid) else {
+            super.rightMouseDown(with: event)
+            return
+        }
 
         let nearText = smartCopyContextText(
             for: event,
@@ -1468,6 +1514,62 @@ final class CocxyCoreView: NSView {
             localizer: localizer
         )
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        if continueTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseDragged(with: event)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        if endTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseUp(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        if beginTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseDown(with: event)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseDragged(with: event)
+            return
+        }
+        if continueTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseDragged(with: event)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseUp(with: event)
+            return
+        }
+        if endTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseUp(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard terminalReportsCurrentUnbuttonedMotion(event) else {
+            super.mouseMoved(with: event)
+            return
+        }
+        reportTerminalMouse(action: .motion, button: nil, event: event)
     }
 
     // MARK: - Scroll
@@ -1657,6 +1759,91 @@ final class CocxyCoreView: NSView {
             pixelX: Int(localX * scale),
             pixelY: Int(localY * scale)
         )
+    }
+
+    private func beginTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalCapturesCurrentMouseEvent(event)
+        terminalMouseCaptureByButton[button] = captures
+        guard captures else { return false }
+        reportTerminalMouse(action: .press, button: button, event: event)
+        return true
+    }
+
+    private func continueTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalMouseCaptureByButton[button]
+            ?? terminalCapturesCurrentMouseEvent(event)
+        guard captures else { return false }
+        reportTerminalMouse(action: .motion, button: button, event: event)
+        return true
+    }
+
+    private func endTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalMouseCaptureByButton.removeValue(forKey: button)
+            ?? terminalCapturesCurrentMouseEvent(event)
+        guard captures else { return false }
+        reportTerminalMouse(action: .release, button: button, event: event)
+        return true
+    }
+
+    private func terminalCapturesCurrentMouseEvent(_ event: NSEvent) -> Bool {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            return false
+        }
+        return TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: snapshot.mouseTrackingMode,
+            modifiers: event.modifierFlags
+        )
+    }
+
+    private func terminalReportsCurrentUnbuttonedMotion(_ event: NSEvent) -> Bool {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid),
+              TerminalMouseCapturePolicy.terminalCaptures(
+                  trackingRawValue: snapshot.mouseTrackingMode,
+                  modifiers: event.modifierFlags
+              ) else {
+            return false
+        }
+        return TerminalMouseTracking
+            .normalized(rawValue: snapshot.mouseTrackingMode)
+            .reports(.motion, hasButton: false)
+    }
+
+    private func reportTerminalMouse(
+        action: TerminalMouseAction,
+        button: TerminalMouseButton?,
+        event: NSEvent
+    ) {
+        guard let bridge,
+              let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            return
+        }
+        let position = mousePosition(for: event, snapshot: snapshot)
+        guard let payload = TerminalMouseWireEncoder.buttonPayload(
+            action: action,
+            button: button,
+            trackingRawValue: snapshot.mouseTrackingMode,
+            encodingRawValue: snapshot.mouseEncodingMode,
+            row: position.row,
+            column: position.column,
+            pixelX: position.pixelX,
+            pixelY: position.pixelY,
+            modifiers: event.modifierFlags
+        ) else { return }
+        _ = bridge.writeBytes(Array(payload), to: sid)
     }
 
     private func smartCopyContextText(
