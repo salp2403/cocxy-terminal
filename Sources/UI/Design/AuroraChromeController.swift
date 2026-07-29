@@ -38,6 +38,11 @@ final class AuroraChromeController: ObservableObject {
     /// highlight the active row.
     @Published var activeSessionID: String?
 
+    /// One-shot request used by palette actions to focus an inline rename
+    /// field in the sidebar. The UUID lets repeated requests for the same
+    /// target remain observable.
+    @Published var sidebarRenameRequest: Design.AuroraSidebarRenameRequest?
+
     /// Port bindings surfaced on the Aurora status bar. Mirrored from the
     /// live `PortScannerImpl` whenever the integration layer wires one in.
     @Published var ports: [Design.AuroraPortBinding] = []
@@ -128,8 +133,8 @@ final class AuroraChromeController: ObservableObject {
     /// are routed through explicit callbacks instead of reusing AppKit's
     /// `NSMenuItem` target-action handlers.
     var onTogglePinSession: ((TabID) -> Void)?
-    var onRenameSession: ((TabID) -> Void)?
-    var onRenameWorkspace: ((String, String) -> Void)?
+    var onRenameSession: ((TabID, String?) -> Void)?
+    var onRenameWorkspace: ((String, String?) -> Void)?
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
@@ -646,6 +651,36 @@ final class AuroraChromeController: ObservableObject {
         }?.id
     }
 
+    @discardableResult
+    func requestRenameSession(_ tabID: TabID) -> Bool {
+        let sessionID = tabID.rawValue.uuidString
+        guard let session = workspaces.lazy
+            .flatMap(\.sessions)
+            .first(where: { $0.id == sessionID }) else {
+            return false
+        }
+        sidebarRenameRequest = Design.AuroraSidebarRenameRequest(
+            target: .session(sessionID),
+            currentName: session.name
+        )
+        return true
+    }
+
+    @discardableResult
+    func requestRenameWorkspace(containing tabID: TabID) -> Bool {
+        let sessionID = tabID.rawValue.uuidString
+        guard let workspace = workspaces.first(where: { workspace in
+            workspace.sessions.contains { $0.id == sessionID }
+        }) else {
+            return false
+        }
+        sidebarRenameRequest = Design.AuroraSidebarRenameRequest(
+            target: .workspace(workspace.id),
+            currentName: workspace.name
+        )
+        return true
+    }
+
     /// Reorders the underlying tabs so the source Aurora session lands
     /// immediately before the target session. Used by the vertical
     /// sidebar's drag-and-drop path and kept on the controller so SwiftUI
@@ -715,14 +750,15 @@ struct AuroraSidebarHost: View {
                     controller.onTogglePinSession?(tabID)
                 }
             },
-            onRequestRenameSession: { sessionID in
+            onRenameSession: { sessionID, title in
                 if let tabID = controller.tabID(forSessionID: sessionID) {
-                    controller.onRenameSession?(tabID)
+                    controller.onRenameSession?(tabID, title)
                 }
             },
-            onRequestRenameWorkspace: { workspaceID, currentName in
-                controller.onRenameWorkspace?(workspaceID, currentName)
+            onRenameWorkspace: { workspaceID, title in
+                controller.onRenameWorkspace?(workspaceID, title)
             },
+            renameRequest: controller.sidebarRenameRequest,
             onCloseOtherSessions: { sessionID in
                 if let tabID = controller.tabID(forSessionID: sessionID) {
                     controller.onCloseOtherSessions?(tabID)

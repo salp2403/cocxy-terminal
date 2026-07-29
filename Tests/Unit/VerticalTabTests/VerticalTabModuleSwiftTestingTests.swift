@@ -58,9 +58,35 @@ struct VerticalTabModuleSwiftTestingTests {
         #expect(compact.showsPrimaryMetadata == false)
         #expect(compact.showsPaneMatrix == false)
         #expect(compact.showsCloseButton == false)
+        #expect(compact.showsRenameButton == true)
         #expect(summary.showsPrimaryMetadata == true)
         #expect(summary.showsPaneMatrix == true)
         #expect(summary.verticalPadding > compact.verticalPadding)
+    }
+
+    @Test("inline rename trims commits, resets blank names, and cancels without mutation")
+    func inlineRenameStateTransitionsAreDeterministic() {
+        var state = Design.AuroraInlineRenameState()
+        let session = Design.AuroraRenameTarget.session("session-1")
+
+        state.begin(target: session, currentName: "Current")
+        state.draft = "  Renamed  "
+        #expect(
+            state.commit(target: session)
+                == Design.AuroraRenameCommit(target: session, title: "Renamed")
+        )
+
+        state.begin(target: session, currentName: "Renamed")
+        state.draft = "   "
+        #expect(
+            state.commit(target: session)
+                == Design.AuroraRenameCommit(target: session, title: nil)
+        )
+
+        state.begin(target: session, currentName: "Automatic")
+        state.cancel(target: session)
+        #expect(state.target == nil)
+        #expect(state.draft.isEmpty)
     }
 
     @Test("summary mode uses the selected primary info with state fallback")

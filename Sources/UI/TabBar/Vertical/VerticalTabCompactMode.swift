@@ -28,6 +28,10 @@ extension Design {
             mode.showsCloseButton
         }
 
+        var showsRenameButton: Bool {
+            true
+        }
+
         var verticalPadding: Double {
             mode.verticalPadding
         }

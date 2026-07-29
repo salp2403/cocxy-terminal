@@ -254,11 +254,11 @@ extension MainWindowController {
             self.tabManager.togglePin(id: tabID)
             self.refreshAuroraChromeAfterTabMutation()
         }
-        controller.onRenameSession = { [weak self] tabID in
-            self?.presentAuroraTabRename(for: tabID)
+        controller.onRenameSession = { [weak self] tabID, newTitle in
+            self?.applyAuroraSessionRename(tabID: tabID, newTitle: newTitle)
         }
-        controller.onRenameWorkspace = { [weak self] workspaceID, currentName in
-            self?.presentAuroraWorkspaceRename(workspaceID: workspaceID, currentName: currentName)
+        controller.onRenameWorkspace = { [weak self] workspaceID, newTitle in
+            self?.applyAuroraWorkspaceRename(workspaceID: workspaceID, newTitle: newTitle)
         }
         controller.onCloseOtherSessions = { [weak self] tabID in
             guard let self else { return }
@@ -871,12 +871,16 @@ extension MainWindowController {
             icon: "terminal.fill",
             localizer: localizer,
             onComplete: { [weak self] newTitle in
-                guard let self else { return }
-                let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                self.tabManager.renameTab(id: tabID, newTitle: trimmed.isEmpty ? nil : trimmed)
-                self.refreshAuroraChromeAfterTabMutation()
+                self?.applyAuroraSessionRename(tabID: tabID, newTitle: newTitle)
             }
         )
+    }
+
+    func applyAuroraSessionRename(tabID: TabID, newTitle: String?) {
+        guard tabManager.tab(for: tabID) != nil else { return }
+        let normalized = AuroraWorkspacePlanner.normalizedTitle(newTitle)
+        tabManager.renameTab(id: tabID, newTitle: normalized)
+        refreshAuroraChromeAfterTabMutation()
     }
 
     private func presentAuroraWorkspaceRename(workspaceID: String, currentName: String) {
@@ -900,7 +904,7 @@ extension MainWindowController {
         )
     }
 
-    private func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
+    func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
         let resolver = GitAncestorWorkspaceRootResolver()
         let matchingIDs = AuroraWorkspacePlanner.matchingTabIDs(
             workspaceID: workspaceID,

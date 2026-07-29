@@ -53,14 +53,17 @@ extension Design {
         @State private var sessionFrames: [String: CGRect] = [:]
         @State private var workspaceDisclosure = AuroraWorkspaceDisclosureOverrides()
         @State private var notesExpansion: [String: Bool] = [:]
+        @State private var renameState = AuroraInlineRenameState()
+        @FocusState private var focusedWorkspaceRenameID: String?
 
         let onTogglePalette: () -> Void
         let onCreateTab: () -> Void
         let onActivateSession: (String) -> Void
         var onCloseSession: ((String) -> Void)? = nil
         var onTogglePinSession: ((String) -> Void)? = nil
-        var onRequestRenameSession: ((String) -> Void)? = nil
-        var onRequestRenameWorkspace: ((String, String) -> Void)? = nil
+        var onRenameSession: ((String, String?) -> Void)? = nil
+        var onRenameWorkspace: ((String, String?) -> Void)? = nil
+        var renameRequest: AuroraSidebarRenameRequest? = nil
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
         var onMoveSessionDown: ((String) -> Void)? = nil
@@ -147,6 +150,14 @@ extension Design {
             }
             .onChange(of: workspaces.map(\.id)) { _, workspaceIDs in
                 workspaceDisclosure.prune(validWorkspaceIDs: workspaceIDs)
+                cancelRenameIfTargetDisappeared()
+            }
+            .onChange(of: workspaces.flatMap { $0.sessions.map(\.id) }) { _, _ in
+                cancelRenameIfTargetDisappeared()
+            }
+            .onChange(of: renameRequest) { _, request in
+                guard let request else { return }
+                beginRename(target: request.target, currentName: request.currentName)
             }
         }
 
@@ -398,9 +409,18 @@ extension Design {
                                 onTogglePin: onTogglePinSession.map { handler in
                                     { handler(session.id) }
                                 },
-                                onRename: onRequestRenameSession.map { handler in
-                                    { handler(session.id) }
+                                isRenaming: renameState.target == .session(session.id),
+                                renameText: renameBinding(for: .session(session.id)),
+                                onRequestRename: onRenameSession.map { _ in
+                                    {
+                                        beginRename(
+                                            target: .session(session.id),
+                                            currentName: session.name
+                                        )
+                                    }
                                 },
+                                onCommitRename: { commitRename(target: .session(session.id)) },
+                                onCancelRename: { cancelRename(target: .session(session.id)) },
                                 onCloseOthers: onCloseOtherSessions.map { handler in
                                     { handler(session.id) }
                                 },
@@ -473,40 +493,36 @@ extension Design {
         }
 
         private func workspaceRow(_ workspace: AuroraWorkspace, isCollapsed: Bool) -> some View {
-            HStack(spacing: Spacing.xxSmall) {
-                Button(action: { toggleCollapsed(workspace) }) {
-                    HStack(spacing: Spacing.xSmall) {
-                        Text("▾")
-                            .font(.system(size: 10, design: .monospaced))
-                            .foregroundStyle(palette.textLow.resolvedColor())
-                            .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                            .animation(.easeInOut(duration: 0.18), value: isCollapsed)
-                        Text(workspace.name)
-                            .font(.system(size: 12.5, weight: .medium))
-                            .foregroundStyle(palette.textHigh.resolvedColor())
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                        Spacer()
-                        if let branch = workspace.branch {
-                            Text(branch)
-                                .font(.system(size: 10.5, design: .monospaced))
-                                .foregroundStyle(palette.textLow.resolvedColor())
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
+            let renameTarget = AuroraRenameTarget.workspace(workspace.id)
+            let isRenaming = renameState.target == renameTarget
+            return HStack(spacing: Spacing.xxSmall) {
+                if isRenaming {
+                    workspaceLeadingContent(
+                        workspace,
+                        isCollapsed: isCollapsed,
+                        isRenaming: true
+                    )
+                } else {
+                    Button(action: { toggleCollapsed(workspace) }) {
+                        workspaceLeadingContent(
+                            workspace,
+                            isCollapsed: isCollapsed,
+                            isRenaming: false
+                        )
                     }
-                    .padding(.horizontal, Spacing.xSmall)
-                    .padding(.vertical, Spacing.xxSmall)
-                    .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
 
-                if let onRequestRenameWorkspace {
-                    Button(action: { onRequestRenameWorkspace(workspace.id, workspace.name) }) {
+                if onRenameWorkspace != nil {
+                    Button(
+                        action: {
+                            beginRename(target: renameTarget, currentName: workspace.name)
+                        }
+                    ) {
                         Image(systemName: "pencil")
-                            .font(.system(size: 10, weight: .semibold))
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(palette.textLow.resolvedColor())
-                            .frame(width: 18, height: 18)
+                            .frame(width: 24, height: 24)
                             .background(
                                 Circle()
                                     .fill(palette.glassHighlight.resolvedColor())
@@ -522,15 +538,129 @@ extension Design {
             .onHover { hovering in
                 hoveredWorkspaceID = hovering ? workspace.id : nil
             }
-            .onTapGesture(count: 2) {
-                onRequestRenameWorkspace?(workspace.id, workspace.name)
-            }
             .contextMenu {
-                if let onRequestRenameWorkspace {
+                if onRenameWorkspace != nil {
                     Button(Self.localizedRenameWorkspace(using: localizer)) {
-                        onRequestRenameWorkspace(workspace.id, workspace.name)
+                        beginRename(target: renameTarget, currentName: workspace.name)
                     }
                 }
+            }
+        }
+
+        private func workspaceLeadingContent(
+            _ workspace: AuroraWorkspace,
+            isCollapsed: Bool,
+            isRenaming: Bool
+        ) -> some View {
+            HStack(spacing: Spacing.xSmall) {
+                Text("▾")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(palette.textLow.resolvedColor())
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                    .animation(.easeInOut(duration: 0.18), value: isCollapsed)
+                if isRenaming {
+                    TextField("", text: renameBinding(for: .workspace(workspace.id)))
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .focused($focusedWorkspaceRenameID, equals: workspace.id)
+                        .onSubmit {
+                            commitRename(target: .workspace(workspace.id))
+                        }
+                        .onExitCommand {
+                            cancelRename(target: .workspace(workspace.id))
+                        }
+                        .accessibilityLabel(
+                            Self.localizedRenameWorkspaceAccessibility(
+                                workspace.name,
+                                using: localizer
+                            )
+                        )
+                } else {
+                    Text(workspace.name)
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+                Spacer(minLength: Spacing.xxSmall)
+                if let branch = workspace.branch {
+                    Text(branch)
+                        .font(.system(size: 10.5, design: .monospaced))
+                        .foregroundStyle(palette.textLow.resolvedColor())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, Spacing.xSmall)
+            .padding(.vertical, Spacing.xxSmall)
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .onChange(of: focusedWorkspaceRenameID) { previous, current in
+                guard previous == workspace.id,
+                      current != workspace.id,
+                      renameState.target == .workspace(workspace.id) else {
+                    return
+                }
+                commitRename(target: .workspace(workspace.id))
+            }
+        }
+
+        private func beginRename(target: AuroraRenameTarget, currentName: String) {
+            renameState.begin(target: target, currentName: currentName)
+            if case let .workspace(workspaceID) = target {
+                DispatchQueue.main.async {
+                    focusedWorkspaceRenameID = workspaceID
+                }
+            } else if case let .session(sessionID) = target {
+                query = ""
+                if let workspace = workspaces.first(where: { workspace in
+                    workspace.sessions.contains { $0.id == sessionID }
+                }) {
+                    workspaceDisclosure.setCollapsed(false, for: workspace)
+                }
+            }
+        }
+
+        private func commitRename(target: AuroraRenameTarget) {
+            guard let commit = renameState.commit(target: target) else { return }
+            focusedWorkspaceRenameID = nil
+            switch commit.target {
+            case let .session(sessionID):
+                onRenameSession?(sessionID, commit.title)
+            case let .workspace(workspaceID):
+                onRenameWorkspace?(workspaceID, commit.title)
+            }
+        }
+
+        private func cancelRename(target: AuroraRenameTarget) {
+            renameState.cancel(target: target)
+            focusedWorkspaceRenameID = nil
+        }
+
+        private func renameBinding(for target: AuroraRenameTarget) -> Binding<String> {
+            Binding(
+                get: { renameState.target == target ? renameState.draft : "" },
+                set: { value in
+                    guard renameState.target == target else { return }
+                    renameState.draft = value
+                }
+            )
+        }
+
+        private func cancelRenameIfTargetDisappeared() {
+            guard let target = renameState.target else { return }
+            let stillExists: Bool
+            switch target {
+            case let .workspace(workspaceID):
+                stillExists = workspaces.contains { $0.id == workspaceID }
+            case let .session(sessionID):
+                stillExists = workspaces.contains { workspace in
+                    workspace.sessions.contains { $0.id == sessionID }
+                }
+            }
+            if !stillExists {
+                cancelRename(target: target)
             }
         }
 
@@ -598,7 +728,11 @@ extension Design {
         let onActivate: () -> Void
         var onClose: (() -> Void)? = nil
         var onTogglePin: (() -> Void)? = nil
-        var onRename: (() -> Void)? = nil
+        var isRenaming = false
+        var renameText: Binding<String> = .constant("")
+        var onRequestRename: (() -> Void)? = nil
+        var onCommitRename: (() -> Void)? = nil
+        var onCancelRename: (() -> Void)? = nil
         var onCloseOthers: (() -> Void)? = nil
         var onMoveUp: (() -> Void)? = nil
         var onMoveDown: (() -> Void)? = nil
@@ -610,6 +744,7 @@ extension Design {
         @Environment(\.designThemePalette) private var palette
         @State private var isHovered = false
         @State private var isDropTargeted = false
+        @FocusState private var isRenameFieldFocused: Bool
 
         var body: some View {
             let layout = VerticalTabCompactMode(mode: displayMode)
@@ -618,81 +753,56 @@ extension Design {
                 primaryInfo: primaryInfo,
                 localizer: localizer
             )
-            VStack(alignment: .leading, spacing: CGFloat(layout.rowSpacing)) {
-                HStack(spacing: Spacing.xSmall) {
-                    AgentChipView(agent: session.agent, state: session.state, size: 22, localizer: localizer)
-                    Text(session.name)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(palette.textHigh.resolvedColor())
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    if session.isPinned {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(palette.textLow.resolvedColor())
-                            .accessibilityLabel(TabItemView.localizedPinned(using: localizer))
+            HStack(alignment: .top, spacing: Spacing.xSmall) {
+                if isRenaming {
+                    leadingContent(layout: layout, summary: summary)
+                } else {
+                    Button(action: onActivate) {
+                        leadingContent(layout: layout, summary: summary)
+                            .contentShape(Rectangle())
                     }
-                    if session.hasWorktree {
-                        Image(systemName: "arrow.triangle.branch")
-                            .font(.system(size: 9.5, weight: .semibold))
-                            .foregroundStyle(palette.accent.resolvedColor())
-                            .help(Self.localizedWorktreeHelp(using: localizer))
-                            .accessibilityLabel(TabItemView.localizedWorktree(using: localizer))
-                    }
-                    Spacer()
-                    if layout.showsPaneMatrix {
-                        MiniMatrixView(panes: session.matrixPanes, localizer: localizer)
-                    }
-                    if !session.movablePanes.isEmpty {
-                        PaneTransferHandleView(panes: session.movablePanes, localizer: localizer)
-                    }
-                    if let onRename, layout.showsCloseButton {
-                        Button(action: onRename) {
-                            Image(systemName: "pencil")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(palette.textLow.resolvedColor())
-                                .frame(width: 18, height: 18)
-                                .background(
-                                    Circle()
-                                        .fill(palette.glassHighlight.resolvedColor())
-                                )
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(Self.localizedRenameTab(using: localizer))
-                        .accessibilityLabel(Self.localizedRenameTabAccessibility(session.name, using: localizer))
-                        .opacity(isActive || isHovered ? 0.95 : 0.82)
-                    }
-                    if let onClose, !session.isPinned, layout.showsCloseButton {
-                        Button(action: onClose) {
-                            Image(systemName: "xmark")
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(palette.textLow.resolvedColor())
-                                .frame(width: 18, height: 18)
-                                .background(
-                                    Circle()
-                                        .fill(palette.glassHighlight.resolvedColor())
-                                )
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(.plain)
-                        .help(Self.localizedCloseTabHelp(using: localizer))
-                        .accessibilityLabel(Self.localizedCloseTabAccessibility(session.name, using: localizer))
-                        .opacity(isActive || isHovered ? 0.95 : 0.55)
-                    }
+                    .buttonStyle(.plain)
                 }
-                if layout.showsPrimaryMetadata {
-                    HStack(spacing: Spacing.xxSmall) {
-                        Circle()
-                            .fill(summary.state.token.resolvedColor())
-                            .frame(width: 7, height: 7)
-                        Text(summary.metadataLine)
-                            .font(.system(size: 10.5, design: .monospaced))
+
+                if layout.showsPaneMatrix {
+                    MiniMatrixView(panes: session.matrixPanes, localizer: localizer)
+                }
+                if !session.movablePanes.isEmpty {
+                    PaneTransferHandleView(panes: session.movablePanes, localizer: localizer)
+                }
+                if let onRequestRename, layout.showsRenameButton {
+                    Button(action: onRequestRename) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundStyle(palette.textLow.resolvedColor())
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                            .frame(width: 24, height: 24)
+                            .background(
+                                Circle()
+                                    .fill(palette.glassHighlight.resolvedColor())
+                            )
+                            .contentShape(Circle())
                     }
-                    .padding(.leading, 30)
+                    .buttonStyle(.plain)
+                    .help(Self.localizedRenameTab(using: localizer))
+                    .accessibilityLabel(Self.localizedRenameTabAccessibility(session.name, using: localizer))
+                    .opacity(isActive || isHovered ? 0.95 : 0.82)
+                }
+                if let onClose, !session.isPinned, layout.showsCloseButton {
+                    Button(action: onClose) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .frame(width: 24, height: 24)
+                            .background(
+                                Circle()
+                                    .fill(palette.glassHighlight.resolvedColor())
+                            )
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(Self.localizedCloseTabHelp(using: localizer))
+                    .accessibilityLabel(Self.localizedCloseTabAccessibility(session.name, using: localizer))
+                    .opacity(isActive || isHovered ? 0.95 : 0.55)
                 }
             }
             .padding(.horizontal, Spacing.small)
@@ -709,16 +819,95 @@ extension Design {
             .onDrop(of: [UTType.text], isTargeted: $isDropTargeted) { providers in
                 handleSessionDrop(providers)
             }
-            .onTapGesture(count: 2) {
-                onRename?()
-            }
-            .onTapGesture(perform: onActivate)
             .onHover { hovering in
                 isHovered = hovering
                 onHoverChange(hovering)
             }
             .contextMenu { contextMenuContent }
             .padding(.leading, 12)
+            .onAppear {
+                focusRenameFieldIfNeeded()
+            }
+            .onChange(of: isRenaming) { _, renaming in
+                if renaming {
+                    focusRenameFieldIfNeeded()
+                } else {
+                    isRenameFieldFocused = false
+                }
+            }
+            .onChange(of: isRenameFieldFocused) { wasFocused, isFocused in
+                if wasFocused, !isFocused, isRenaming {
+                    onCommitRename?()
+                }
+            }
+        }
+
+        private func focusRenameFieldIfNeeded() {
+            guard isRenaming else { return }
+            DispatchQueue.main.async {
+                isRenameFieldFocused = true
+            }
+        }
+
+        private func leadingContent(
+            layout: VerticalTabCompactMode,
+            summary: VerticalTabSummaryMode
+        ) -> some View {
+            VStack(alignment: .leading, spacing: CGFloat(layout.rowSpacing)) {
+                HStack(spacing: Spacing.xSmall) {
+                    AgentChipView(agent: session.agent, state: session.state, size: 22, localizer: localizer)
+                    if isRenaming {
+                        TextField("", text: renameText)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(palette.textHigh.resolvedColor())
+                            .focused($isRenameFieldFocused)
+                            .onSubmit { onCommitRename?() }
+                            .onExitCommand { onCancelRename?() }
+                            .accessibilityLabel(
+                                Self.localizedRenameTabAccessibility(
+                                    session.name,
+                                    using: localizer
+                                )
+                            )
+                    } else {
+                        Text(session.name)
+                            .font(.system(size: 12.5, weight: .medium))
+                            .foregroundStyle(palette.textHigh.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                    if session.isPinned {
+                        Image(systemName: "pin.fill")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .accessibilityLabel(TabItemView.localizedPinned(using: localizer))
+                    }
+                    if session.hasWorktree {
+                        Image(systemName: "arrow.triangle.branch")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundStyle(palette.accent.resolvedColor())
+                            .help(Self.localizedWorktreeHelp(using: localizer))
+                            .accessibilityLabel(TabItemView.localizedWorktree(using: localizer))
+                    }
+                    Spacer(minLength: Spacing.xxSmall)
+                }
+                if layout.showsPrimaryMetadata {
+                    HStack(spacing: Spacing.xxSmall) {
+                        Circle()
+                            .fill(summary.state.token.resolvedColor())
+                            .frame(width: 7, height: 7)
+                        Text(summary.metadataLine)
+                            .font(.system(size: 10.5, design: .monospaced))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                    .padding(.leading, 30)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
         }
 
         @ViewBuilder
@@ -782,8 +971,8 @@ extension Design {
             if let onTogglePin {
                 Button(session.isPinned ? Self.localizedUnpinTab(using: localizer) : Self.localizedPinTab(using: localizer), action: onTogglePin)
             }
-            if let onRename {
-                Button(Self.localizedRenameTab(using: localizer), action: onRename)
+            if let onRequestRename {
+                Button(Self.localizedRenameTab(using: localizer), action: onRequestRename)
             }
             if let onClose {
                 Button(Self.localizedCloseTab(using: localizer), action: onClose)

@@ -313,6 +313,59 @@ extension Design {
         let rowFrame: CGRect
     }
 
+    enum AuroraRenameTarget: Equatable, Hashable, Sendable {
+        case session(String)
+        case workspace(String)
+    }
+
+    struct AuroraSidebarRenameRequest: Equatable, Sendable {
+        let id: UUID
+        let target: AuroraRenameTarget
+        let currentName: String
+
+        init(
+            id: UUID = UUID(),
+            target: AuroraRenameTarget,
+            currentName: String
+        ) {
+            self.id = id
+            self.target = target
+            self.currentName = currentName
+        }
+    }
+
+    struct AuroraRenameCommit: Equatable, Sendable {
+        let target: AuroraRenameTarget
+        let title: String?
+    }
+
+    struct AuroraInlineRenameState: Equatable, Sendable {
+        private(set) var target: AuroraRenameTarget?
+        var draft = ""
+
+        mutating func begin(target: AuroraRenameTarget, currentName: String) {
+            self.target = target
+            draft = currentName
+        }
+
+        mutating func commit(target expectedTarget: AuroraRenameTarget) -> AuroraRenameCommit? {
+            guard target == expectedTarget else { return nil }
+            let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+            target = nil
+            draft = ""
+            return AuroraRenameCommit(
+                target: expectedTarget,
+                title: trimmed.isEmpty ? nil : trimmed
+            )
+        }
+
+        mutating func cancel(target expectedTarget: AuroraRenameTarget) {
+            guard target == expectedTarget else { return }
+            target = nil
+            draft = ""
+        }
+    }
+
     /// A workspace is the top-level node in the sidebar tree. It
     /// usually maps to a working directory that contains one or more
     /// related sessions (for example `~/code/cocxy` with an API
@@ -434,6 +487,10 @@ extension Design {
 
         mutating func toggle(_ workspace: AuroraWorkspace) {
             collapsedByWorkspaceID[workspace.id] = !isCollapsed(workspace)
+        }
+
+        mutating func setCollapsed(_ collapsed: Bool, for workspace: AuroraWorkspace) {
+            collapsedByWorkspaceID[workspace.id] = collapsed
         }
 
         mutating func prune(validWorkspaceIDs: [String]) {
