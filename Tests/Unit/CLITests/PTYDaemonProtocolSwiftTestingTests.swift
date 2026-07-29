@@ -107,7 +107,8 @@ struct PTYDaemonProtocolSwiftTestingTests {
                 PTYDaemonImageReference(id: "img-1", row: 0, column: 1, width: 4, height: 2)
             ],
             mouseTrackingMode: 2,
-            mouseEncodingMode: 3
+            mouseEncodingMode: 3,
+            synchronizedOutput: true
         )
         let response = PTYDaemonResponse(id: "frame-1", ok: true, frame: frame)
         let data = try PTYDaemonLineCodec.encode(response)
@@ -136,6 +137,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         )
         legacyObject.removeValue(forKey: "historyMaxVisibleStart")
         legacyObject.removeValue(forKey: "mouseEncodingMode")
+        legacyObject.removeValue(forKey: "synchronizedOutput")
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
 
         let decoded = try JSONDecoder().decode(PTYDaemonSurfaceFrame.self, from: legacyData)
@@ -143,6 +145,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(decoded.historyMaxVisibleStart == 0)
         #expect(decoded.mouseTrackingMode == 6)
         #expect(decoded.mouseEncodingMode == nil)
+        #expect(decoded.synchronizedOutput == false)
     }
 
     @Test("process registration omits daemon-local file descriptors")
@@ -189,5 +192,32 @@ struct PTYDaemonProtocolSwiftTestingTests {
         let data = try PTYDaemonLineCodec.encode(request)
 
         #expect(try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: data) == request)
+    }
+
+    @Test("modern surface commands remain JSONL round-trippable")
+    func modernSurfaceCommandsRoundTrip() throws {
+        let request = PTYDaemonRequest(
+            id: "font-1",
+            command: .surfaceFont,
+            payload: ["family": "Menlo", "size": "14", "dpiScale": "2"]
+        )
+
+        let data = try PTYDaemonLineCodec.encode(request)
+
+        #expect(try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: data) == request)
+    }
+
+    @Test("shared macOS key mapping covers progressive keyboard identities")
+    func sharedMacKeyMappingCoversProgressiveKeyboardIdentities() {
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 126) == 0)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 82) == 26)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 105) == 43)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 55) == 76)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 74) == 108)
+        #expect(TerminalKeyMapping.specialKey(forMacKeyCode: 10) == nil)
+        #expect(TerminalKeyMapping.baseLayoutCodepoint(forMacKeyCode: 12) == 113)
+        #expect(TerminalKeyMapping.shiftedBaseLayoutCodepoint(forMacKeyCode: 12) == 81)
+        #expect(TerminalKeyMapping.baseLayoutCodepoint(forMacKeyCode: 50) == 96)
+        #expect(TerminalKeyMapping.shiftedBaseLayoutCodepoint(forMacKeyCode: 50) == 126)
     }
 }

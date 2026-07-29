@@ -103,6 +103,12 @@ final class PTYDaemonSurface: @unchecked Sendable {
             throw PTYDaemonSurfaceError.creationFailed("terminal allocation failed")
         }
 
+        let fontConfiguration = try validatedFontConfiguration(payload: payload)
+        guard applyFontConfiguration(fontConfiguration, to: terminal) else {
+            cocxycore_terminal_destroy(terminal)
+            throw PTYDaemonSurfaceError.creationFailed("terminal font configuration failed")
+        }
+
         guard let pty = spawnPTY(rows: rows, columns: columns, shell: shell, workingDirectory: workingDirectory) else {
             cocxycore_terminal_destroy(terminal)
             throw PTYDaemonSurfaceError.creationFailed("PTY spawn failed")
@@ -156,7 +162,17 @@ final class PTYDaemonSurface: @unchecked Sendable {
         return terminalLock.withLock {
             let didResize = cocxycore_terminal_resize(terminal, rows, columns)
             cocxycore_pty_resize(pty, rows, columns)
+            drainTerminalResponses()
             return didResize
+        }
+    }
+
+    func applyFont(payload: [String: String]) throws -> Bool {
+        let configuration = try Self.validatedFontConfiguration(payload: payload)
+        return terminalLock.withLock {
+            let didApply = Self.applyFontConfiguration(configuration, to: terminal)
+            drainTerminalResponses()
+            return didApply
         }
     }
 
@@ -181,6 +197,71 @@ final class PTYDaemonSurface: @unchecked Sendable {
             && Int(rows) <= maximumRows
             && Int(columns) <= maximumColumns
             && Int(rows) * Int(columns) <= maximumCells
+    }
+
+    private struct FontConfiguration {
+        let family: String
+        let size: Float
+        let dpiScale: Float
+        let ligatures: Bool
+    }
+
+    private static func validatedFontConfiguration(
+        payload: [String: String]
+    ) throws -> FontConfiguration {
+        let family = payload.nonEmpty("fontFamily") ?? payload.nonEmpty("family") ?? "Menlo"
+        guard family.utf8.count <= 256 else {
+            throw PTYDaemonSurfaceError.invalidPayload("font family exceeds 256 UTF-8 bytes")
+        }
+
+        let size = try finiteFloat(
+            payload.nonEmpty("fontSize") ?? payload.nonEmpty("size"),
+            default: 14,
+            range: 4...256,
+            field: "font size"
+        )
+        let dpiScale = try finiteFloat(
+            payload.nonEmpty("dpiScale"),
+            default: 1,
+            range: 0.5...4,
+            field: "font dpiScale"
+        )
+        return FontConfiguration(
+            family: family,
+            size: size,
+            dpiScale: dpiScale,
+            ligatures: payload.bool("ligaturesEnabled") ?? true
+        )
+    }
+
+    private static func finiteFloat(
+        _ rawValue: String?,
+        default defaultValue: Float,
+        range: ClosedRange<Float>,
+        field: String
+    ) throws -> Float {
+        guard let rawValue else { return defaultValue }
+        guard let value = Float(rawValue), value.isFinite, range.contains(value) else {
+            throw PTYDaemonSurfaceError.invalidPayload(
+                "\(field) must be finite and within \(range.lowerBound)...\(range.upperBound)"
+            )
+        }
+        return value
+    }
+
+    private static func applyFontConfiguration(
+        _ configuration: FontConfiguration,
+        to terminal: OpaquePointer
+    ) -> Bool {
+        configuration.family.withCString { family in
+            cocxycore_terminal_set_font(
+                terminal,
+                family,
+                configuration.size,
+                configuration.dpiScale,
+                configuration.ligatures
+            )
+        }
     }
 
     func subscribeFrame() -> PTYDaemonSurfaceFrame? {
@@ -252,6 +333,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
     func notifyFocus(_ focused: Bool) {
         terminalLock.withLock {
             cocxycore_terminal_notify_focus(terminal, focused)
+            drainTerminalResponses()
         }
     }
 

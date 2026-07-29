@@ -62,7 +62,8 @@ extension PTYDaemonSurface {
             historyMaxVisibleStart: Int(cocxycore_terminal_history_max_visible_start(terminal)),
             images: [],
             mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
-            mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal)
+            mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal),
+            synchronizedOutput: cocxycore_terminal_mode_synchronized_output(terminal)
         )
     }
 

@@ -59,6 +59,7 @@ public struct PTYDaemonRequest: Codable, Equatable, Sendable {
         case surfaceKey = "surface_key"
         case surfacePreedit = "surface_preedit"
         case surfaceFocus = "surface_focus"
+        case surfaceFont = "surface_font"
         case surfaceSearch = "surface_search"
         case surfaceScroll = "surface_scroll"
         case surfaceProcess = "surface_process"
@@ -187,6 +188,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let images: [PTYDaemonImageReference]
     public let mouseTrackingMode: UInt8?
     public let mouseEncodingMode: UInt8?
+    public let synchronizedOutput: Bool
 
     public init(
         surfaceID: String,
@@ -200,7 +202,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         historyMaxVisibleStart: Int = 0,
         images: [PTYDaemonImageReference] = [],
         mouseTrackingMode: UInt8? = nil,
-        mouseEncodingMode: UInt8? = nil
+        mouseEncodingMode: UInt8? = nil,
+        synchronizedOutput: Bool = false
     ) {
         self.surfaceID = surfaceID
         self.revision = revision
@@ -214,6 +217,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.images = images
         self.mouseTrackingMode = mouseTrackingMode
         self.mouseEncodingMode = mouseEncodingMode
+        self.synchronizedOutput = synchronizedOutput
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -229,6 +233,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         case images
         case mouseTrackingMode
         case mouseEncodingMode
+        case synchronizedOutput
     }
 
     public init(from decoder: Decoder) throws {
@@ -248,6 +253,10 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         images = try container.decodeIfPresent([PTYDaemonImageReference].self, forKey: .images) ?? []
         mouseTrackingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseTrackingMode)
         mouseEncodingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseEncodingMode)
+        synchronizedOutput = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .synchronizedOutput
+        ) ?? false
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -264,6 +273,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         try container.encode(images, forKey: .images)
         try container.encodeIfPresent(mouseTrackingMode, forKey: .mouseTrackingMode)
         try container.encodeIfPresent(mouseEncodingMode, forKey: .mouseEncodingMode)
+        try container.encode(synchronizedOutput, forKey: .synchronizedOutput)
     }
 }
 

@@ -103,6 +103,9 @@ public final class PTYDaemonServer {
                 let surface = try requireSurface(payload)
                 surface.notifyFocus(payload.bool("focused") ?? false)
                 return PTYDaemonResponse(id: request.id, ok: true)
+            case .surfaceFont:
+                let surface = try requireSurface(payload)
+                return PTYDaemonResponse(id: request.id, ok: try surface.applyFont(payload: payload))
             case .surfaceSearch:
                 let surface = try requireSurface(payload)
                 let results = surface.search(
