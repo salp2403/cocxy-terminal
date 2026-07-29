@@ -132,6 +132,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var hookEventReceiver: HookEventReceiverImpl?
 
+    /// Native file monitor scoped to hook sessions that passed exact tab/CWD
+    /// authorization. Protocol-backed so lifecycle routing is testable.
+    var agentWorkspaceFileMonitor: AgentWorkspaceFileMonitoring?
+
     /// Tracks git snapshots and touched files per agent hook session for the code review panel.
     var sessionDiffTracker: SessionDiffTrackerImpl?
 
@@ -471,6 +475,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         socketHealthTimer = nil
         socketServer?.stop()
         socketServer = nil
+
+        agentWorkspaceFileMonitor?.stopAll()
+        agentWorkspaceFileMonitor = nil
 
         // Tear down the quick terminal before the bridge is deallocated.
         quickTerminalController?.tearDown()
@@ -1336,6 +1343,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func unbindHookSession(_ sessionID: String) {
+        agentWorkspaceFileMonitor?.stop(sessionId: sessionID)
         hookSessionTabBindings.removeValue(forKey: sessionID)
         hookSessionSurfaceBindings.removeValue(forKey: sessionID)
     }

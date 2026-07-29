@@ -103,6 +103,7 @@ let package = Package(
                 .linkedFramework("IOSurface"),
                 .linkedFramework("UniformTypeIdentifiers"),
                 .linkedFramework("Carbon"),
+                .linkedFramework("CoreServices"),
                 .linkedFramework("NaturalLanguage"),
                 .linkedFramework("CoreSpotlight"),
             ]

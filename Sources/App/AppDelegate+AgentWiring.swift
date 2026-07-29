@@ -29,6 +29,8 @@ extension AppDelegate {
     ///
     /// Window-dependent wiring is deferred to `wireAgentDetectionToWindow()`.
     func initializeAgentDetectionEngine() {
+        agentWorkspaceFileMonitor?.stopAll()
+        agentWorkspaceFileMonitor = nil
         let config = configService?.current ?? .defaults
         guard config.agentDetection.enabled else { return }
 
@@ -69,11 +71,27 @@ extension AppDelegate {
             debugLoggingEnabled: config.hooks.debugLog
         )
         hookEventReceiver = hookReceiver
+        let workspaceFileMonitor = AgentWorkspaceFileMonitorImpl(
+            debugLoggingEnabled: config.hooks.debugLog
+        ) { [weak hookReceiver] change in
+            hookReceiver?.receive(HookEvent(
+                type: .fileChanged,
+                sessionId: change.sessionId,
+                timestamp: change.timestamp,
+                data: .fileChanged(FileChangedData(
+                    filePath: change.filePath,
+                    changeType: change.operation.rawValue
+                )),
+                cwd: change.rootPath
+            ))
+        }
+        agentWorkspaceFileMonitor = workspaceFileMonitor
         configService?.configChangedPublisher
             .map(\.hooks.debugLog)
             .removeDuplicates()
-            .sink { [weak hookReceiver] enabled in
+            .sink { [weak hookReceiver, weak workspaceFileMonitor] enabled in
                 hookReceiver?.updateDebugLogging(enabled: enabled)
+                workspaceFileMonitor?.updateDebugLogging(enabled: enabled)
             }
             .store(in: &hookCancellables)
         let sessionDiffTracker = SessionDiffTrackerImpl(editHistoryRecorder: AIEditHistoryGitRecorder())
@@ -172,7 +190,9 @@ extension AppDelegate {
                     // If OSC 7 already moved a previously-bound tab to
                     // `new_cwd`, the CwdChanged hook is a harmless duplicate,
                     // not a routing failure that should prompt the user.
-                    if !self.isBoundCwdChangedAlreadyApplied(event) {
+                    if self.isBoundCwdChangedAlreadyApplied(event) {
+                        self.updateAgentWorkspaceFileMonitoring(forAccepted: event)
+                    } else {
                         receiver.recordDroppedByCwd(event)
                     }
                     return
@@ -194,6 +214,7 @@ extension AppDelegate {
                         surfaceID: resolvedSurfaceID
                     )
                 }
+                self.updateAgentWorkspaceFileMonitoring(forAccepted: event)
 
                 // Route tool activity into the per-surface store and bump
                 // the tab's last-activity timestamp for sidebar sorting.
@@ -238,6 +259,19 @@ extension AppDelegate {
                 }
             }
             .store(in: &hookCancellables)
+    }
+
+    /// Starts native workspace observation only after the caller has accepted
+    /// the hook event against a Cocxy tab. FileChanged events are produced by
+    /// this monitor and must not recursively restart it.
+    func updateAgentWorkspaceFileMonitoring(forAccepted event: HookEvent) {
+        guard event.type != .fileChanged,
+              event.type != .sessionEnd,
+              let cwd = event.cwd,
+              !cwd.isEmpty else {
+            return
+        }
+        agentWorkspaceFileMonitor?.start(sessionId: event.sessionId, rootPath: cwd)
     }
 
     // MARK: - Agent Detection -> Tab State
@@ -777,6 +811,10 @@ extension AppDelegate {
         }
         let surfaceID = controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
         bindHookSession(context.sessionId, to: tabID, surfaceID: surfaceID)
+        agentWorkspaceFileMonitor?.start(
+            sessionId: context.sessionId,
+            rootPath: context.cwd
+        )
         hookEventReceiver?.acknowledgeDroppedByCwd(sessionId: context.sessionId)
         return true
     }

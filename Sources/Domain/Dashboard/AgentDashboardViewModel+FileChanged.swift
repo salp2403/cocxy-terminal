@@ -3,11 +3,12 @@
 // Phase 3: canonical attribution of FileChanged lifecycle events to the
 // owning session and (when uniquely identifiable) to its active subagent.
 //
-// FileChanged is the authoritative filesystem signal for Claude Code 2.1.83+.
+// FileChanged is the canonical filesystem signal regardless of whether it
+// comes from the bounded Claude hook or Cocxy's native workspace monitor.
 // Pre-Phase-3 the dashboard inferred file impacts from `tool_input.file_path`
 // inside PostToolUse events. That inference is retained for backward
 // compatibility but FileChanged now augments it with events emitted by the
-// CLI directly, including changes made by tools that do not surface a
+// integration layer, including changes made by tools that do not surface a
 // file_path in their PostToolUse payload.
 
 import Foundation
