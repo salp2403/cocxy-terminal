@@ -1440,24 +1440,22 @@ final class CocxyCoreView: NSView {
             return
         }
 
-        guard let bridge = bridge, let sid = surfaceID,
-              let state = bridge.surfaceState(for: sid) else { return }
+        guard let bridge = bridge, let sid = surfaceID else { return }
 
         let completedDrag = isDragging
-        if isDragging && cocxycore_terminal_selection_active(state.terminal) {
+        let selection = bridge.selectionSnapshot(for: sid)
+        if completedDrag, selection?.active == true {
             if viewModel?.autoCopyOnSelect == true {
-                if let text = bridge.readSelection(for: sid), !text.isEmpty {
+                if let text = selection?.text, !text.isEmpty {
                     clipboardService.write(text)
                 }
             }
         }
 
         if !completedDrag,
+           selection?.active != true,
            event.clickCount == 1,
-           !event.modifierFlags.contains(.shift),
-           let snapshot = bridge.terminalViewportSnapshot(for: sid),
-           snapshot.mouseTrackingMode == 0,
-           !snapshot.isAltScreen {
+           !event.modifierFlags.contains(.shift) {
             let location = convert(event.locationInWindow, from: nil)
             _ = ideCursorController.handleClickToPosition(at: location)
         }
@@ -2268,6 +2266,10 @@ extension CocxyCoreView: TerminalHostingView {
 
     func handleCommandExecuted() {
         ideCursorController.commandExecuted()
+    }
+
+    func updateCursorClickToMoveEnabled(_ enabled: Bool) {
+        ideCursorController.isEnabled = enabled
     }
 
     /// Reads the real cursor row/col from the backing CocxyCore terminal

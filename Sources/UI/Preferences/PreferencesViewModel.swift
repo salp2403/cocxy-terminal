@@ -458,6 +458,8 @@ final class PreferencesViewModel: ObservableObject {
 
     /// Whether the cursor blinks, from the saved config.
     var cursorBlink: Bool { savedConfig.terminal.cursorBlink }
+    /// Whether shell input clicks move the terminal cursor.
+    @Published var cursorClickToMove: Bool
     /// Whether inline image file transfer is enabled.
     @Published var imageFileTransfer: Bool
     /// Whether sixel images are enabled.
@@ -675,6 +677,7 @@ final class PreferencesViewModel: ObservableObject {
             || uxPolishHasUnsavedChanges(comparedTo: c.uxPolish)
             || commandCorrectionsHasUnsavedChanges(comparedTo: c.commandCorrections)
             || commandBlocksHasUnsavedChanges(comparedTo: c.commandBlocks)
+            || cursorClickToMove != c.terminal.cursorClickToMove
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -853,6 +856,7 @@ final class PreferencesViewModel: ObservableObject {
         commandCorrectionsMaxSuggestionsShown = c.commandCorrections.maxSuggestionsShown
         commandBlocksEnabled = c.commandBlocks.enabled
         commandBlocksShowOnlyOnHover = c.commandBlocks.showOnlyOnHover
+        cursorClickToMove = c.terminal.cursorClickToMove
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -1197,6 +1201,7 @@ final class PreferencesViewModel: ObservableObject {
         self.badgeOnTab = config.notifications.badgeOnTab
         self.flashTab = config.notifications.flashTab
         self.showDockBadge = config.notifications.showDockBadge
+        self.cursorClickToMove = config.terminal.cursorClickToMove
         self.imageFileTransfer = config.terminal.imageFileTransfer
         self.enableSixelImages = config.terminal.enableSixelImages
         self.enableKittyImages = config.terminal.enableKittyImages
@@ -1930,6 +1935,7 @@ final class PreferencesViewModel: ObservableObject {
                 cursorOpacity: savedConfig.terminal.cursorOpacity,
                 mouseHideWhileTyping: savedConfig.terminal.mouseHideWhileTyping,
                 copyOnSelect: savedConfig.terminal.copyOnSelect,
+                cursorClickToMove: cursorClickToMove,
                 clipboardPasteProtection: savedConfig.terminal.clipboardPasteProtection,
                 clipboardReadAccess: savedConfig.terminal.clipboardReadAccess,
                 clipboardWriteAccess: savedConfig.terminal.clipboardWriteAccess,
@@ -2757,6 +2763,7 @@ final class PreferencesViewModel: ObservableObject {
         cursor-opacity = \(Self.tomlNumber(defaults.terminal.cursorOpacity))
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
+        cursor-click-to-move = \(cursorClickToMove)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
         # to the terminal program; writes replace the system clipboard.

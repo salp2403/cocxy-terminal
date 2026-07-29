@@ -349,6 +349,7 @@ final class ConfigService: ConfigProviding {
         cursor-opacity = \(defaults.terminal.cursorOpacity)
         mouse-hide-while-typing = \(defaults.terminal.mouseHideWhileTyping)
         copy-on-select = \(defaults.terminal.copyOnSelect)
+        cursor-click-to-move = \(defaults.terminal.cursorClickToMove)
         clipboard-paste-protection = \(defaults.terminal.clipboardPasteProtection)
         # OSC 52 policies: prompt, allow, or deny. Reads send clipboard data
         # to the terminal program; writes replace the system clipboard.
@@ -1083,6 +1084,8 @@ final class ConfigService: ConfigProviding {
             ),
             mouseHideWhileTyping: boolValue(table["mouse-hide-while-typing"]) ?? defaults.mouseHideWhileTyping,
             copyOnSelect: boolValue(table["copy-on-select"]) ?? defaults.copyOnSelect,
+            cursorClickToMove: boolValue(table["cursor-click-to-move"])
+                ?? defaults.cursorClickToMove,
             clipboardPasteProtection: boolValue(table["clipboard-paste-protection"]) ?? defaults.clipboardPasteProtection,
             clipboardReadAccess: stringValue(table["clipboard-read-access"])
                 .flatMap { ClipboardReadAccess(rawValue: $0) }

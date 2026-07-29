@@ -884,6 +884,8 @@
 "preferences.terminal.cursorBlink" = "Cursor blink";
 "preferences.terminal.cursorBlink.on" = "On";
 "preferences.terminal.cursorBlink.off" = "Off";
+"preferences.terminal.interaction.section" = "Interaction";
+"preferences.terminal.cursorClickToMove" = "Move cursor by clicking shell input";
 "preferences.terminal.commandCorrections.section" = "Command Corrections";
 "preferences.terminal.commandCorrections.enabled" = "Suggest fixes after failed commands";
 "preferences.terminal.commandCorrections.autoShow" = "Show suggestions automatically";

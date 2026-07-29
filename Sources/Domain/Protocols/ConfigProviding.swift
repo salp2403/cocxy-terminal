@@ -932,6 +932,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
     let mouseHideWhileTyping: Bool
     /// Whether to auto-copy selected text to the clipboard.
     let copyOnSelect: Bool
+    /// Whether clicking editable shell input synthesizes cursor movement.
+    let cursorClickToMove: Bool
     /// Whether to show a confirmation dialog when pasting text with newlines.
     let clipboardPasteProtection: Bool
     /// Policy for OSC 52 clipboard read requests initiated by terminal programs.
@@ -961,6 +963,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         cursorOpacity: Double,
         mouseHideWhileTyping: Bool,
         copyOnSelect: Bool,
+        cursorClickToMove: Bool = true,
         clipboardPasteProtection: Bool,
         clipboardReadAccess: ClipboardReadAccess,
         clipboardWriteAccess: ClipboardWriteAccess = .prompt,
@@ -978,6 +981,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         self.cursorOpacity = cursorOpacity
         self.mouseHideWhileTyping = mouseHideWhileTyping
         self.copyOnSelect = copyOnSelect
+        self.cursorClickToMove = cursorClickToMove
         self.clipboardPasteProtection = clipboardPasteProtection
         self.clipboardReadAccess = clipboardReadAccess
         self.clipboardWriteAccess = clipboardWriteAccess
@@ -998,6 +1002,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
             cursorOpacity: 0.8,
             mouseHideWhileTyping: true,
             copyOnSelect: true,
+            cursorClickToMove: true,
             clipboardPasteProtection: true,
             clipboardReadAccess: .prompt,
             clipboardWriteAccess: .prompt,
@@ -1018,6 +1023,7 @@ struct TerminalConfig: Codable, Sendable, Equatable {
         case cursorOpacity
         case mouseHideWhileTyping
         case copyOnSelect
+        case cursorClickToMove
         case clipboardPasteProtection
         case clipboardReadAccess
         case clipboardWriteAccess
@@ -1046,6 +1052,8 @@ struct TerminalConfig: Codable, Sendable, Equatable {
                 ?? defaults.mouseHideWhileTyping,
             copyOnSelect: try container.decodeIfPresent(Bool.self, forKey: .copyOnSelect)
                 ?? defaults.copyOnSelect,
+            cursorClickToMove: try container.decodeIfPresent(Bool.self, forKey: .cursorClickToMove)
+                ?? defaults.cursorClickToMove,
             clipboardPasteProtection: try container.decodeIfPresent(Bool.self, forKey: .clipboardPasteProtection)
                 ?? defaults.clipboardPasteProtection,
             clipboardReadAccess: try container.decodeIfPresent(ClipboardReadAccess.self, forKey: .clipboardReadAccess)

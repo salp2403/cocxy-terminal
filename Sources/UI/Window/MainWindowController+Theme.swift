@@ -90,6 +90,7 @@ extension MainWindowController {
         updateStatusBarLocalizer(localizer)
         updateTerminalHostLocalizers(localizer)
         updateTerminalCommandBlockConfiguration(config.commandBlocks)
+        updateTerminalCursorClickToMove(config.terminal.cursorClickToMove)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         syncVaultSidebarRootView()
         updateRemoteWorkspacePanelLocalizer(localizer)
@@ -428,6 +429,12 @@ extension MainWindowController {
     private func updateTerminalCommandBlockConfiguration(_ configuration: CommandBlocksConfig) {
         forEachTerminalHostView { view in
             view.updateCommandBlockOverlayConfiguration(configuration)
+        }
+    }
+
+    private func updateTerminalCursorClickToMove(_ enabled: Bool) {
+        forEachTerminalHostView { view in
+            view.updateCursorClickToMoveEnabled(enabled)
         }
     }
 

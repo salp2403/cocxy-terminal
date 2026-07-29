@@ -128,6 +128,10 @@ extension MainWindowController {
         if let initialWorkingDirectory {
             surfaceWorkingDirectories[surfaceID] = initialWorkingDirectory
         }
+        surfaceView.updateCursorClickToMoveEnabled(
+            configService?.current.terminal.cursorClickToMove
+                ?? TerminalConfig.defaults.cursorClickToMove
+        )
 
         let capturedTabID = tabID
         let capturedSurfaceID = surfaceID
@@ -159,10 +163,17 @@ extension MainWindowController {
 
         let engine = injectedAgentDetectionEngine
         let commandTracker = commandTracker(for: tabID)
+        let cursorLifecycleDetector = BlockOSCDetector { [weak self] event in
+            guard case .commandExecuted = event else { return }
+            Task { @MainActor [weak self] in
+                self?.surfaceView(for: capturedSurfaceID)?.handleCommandExecuted()
+            }
+        }
         let imageDetector = imageDetector(for: surfaceID, tabID: tabID)
         let outputDispatcher = outputDispatcher(
             for: surfaceID,
             commandTracker: commandTracker,
+            cursorLifecycleDetector: cursorLifecycleDetector,
             imageDetector: imageDetector,
             engine: engine
         )
@@ -368,6 +379,7 @@ extension MainWindowController {
     private func outputDispatcher(
         for surfaceID: SurfaceID,
         commandTracker: CommandDurationTracker,
+        cursorLifecycleDetector: BlockOSCDetector,
         imageDetector: InlineImageOSCDetector,
         engine: AgentDetectionEngineImpl?
     ) -> SurfaceOutputBackgroundDispatcher {
@@ -375,14 +387,16 @@ extension MainWindowController {
             return existing
         }
 
-        // Capture the detectors weakly so the dispatcher does not extend
-        // their lifetimes past `clearSurfaceTracking`. If a chunk reaches
-        // the queue after the surface was torn down both closures collapse
-        // to no-ops and the data is dropped, exactly as it would be if
-        // the bridge had detached the output handler in the same moment.
+        // Shared detectors stay weak because their owner dictionaries define
+        // their lifetime. The cursor lifecycle detector is surface-local, so
+        // this dispatcher owns it until `clearSurfaceTracking` drops the
+        // dispatcher and its queued processors together.
         var processors: [SurfaceOutputBackgroundDispatcher.Processor] = [
             { [weak commandTracker] data in
                 commandTracker?.processBytes(data)
+            },
+            { [cursorLifecycleDetector] data in
+                cursorLifecycleDetector.processBytes(data)
             },
             { [weak imageDetector] data in
                 imageDetector?.processBytes(data)

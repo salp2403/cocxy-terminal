@@ -18,6 +18,10 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     private(set) var refreshDisplayLinkAnchorCallCount = 0
     private(set) var dismissCommandBlocksCallCount = 0
     private(set) var commandBlockConfigurations: [CommandBlocksConfig] = []
+    private(set) var cursorClickToMoveValues: [Bool] = []
+    private(set) var shellPromptPositions: [TerminalGridPosition] = []
+    private(set) var commandInputPositions: [TerminalGridPosition] = []
+    private(set) var commandExecutedCallCount = 0
 
     func syncSizeWithTerminal() {
         syncSizeCallCount += 1
@@ -26,6 +30,15 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     func showNotificationRing(color: NSColor) {}
     func hideNotificationRing() {}
     func handleShellPrompt(row: Int, column: Int) {}
+    func handleShellPrompt(position: TerminalGridPosition) {
+        shellPromptPositions.append(position)
+    }
+    func handleCommandInputStarted(at position: TerminalGridPosition) {
+        commandInputPositions.append(position)
+    }
+    func handleCommandExecuted() {
+        commandExecutedCallCount += 1
+    }
 
     func updateInteractionMetrics() {
         updateMetricsCallCount += 1
@@ -42,6 +55,10 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
 
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {
         commandBlockConfigurations.append(configuration)
+    }
+
+    func updateCursorClickToMoveEnabled(_ enabled: Bool) {
+        cursorClickToMoveValues.append(enabled)
     }
 
     @discardableResult
@@ -2210,6 +2227,35 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertEqual(savedView.commandBlockConfigurations, [expected])
     }
 
+    func testConfigChangePropagatesCursorClickSettingToEveryManagedSurfaceOnce() throws {
+        let provider = InMemoryConfigFileProvider(content: """
+        [terminal]
+        cursor-click-to-move = false
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+
+        let sharedView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = sharedView
+        controller.tabSurfaceViews[TabID()] = sharedView
+
+        let splitView = TrackingTerminalHostView()
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        let savedView = TrackingTerminalHostView()
+        controller.savedTabSplitSurfaceViews[TabID()] = [SurfaceID(): savedView]
+
+        controller.applyConfig(configService.current)
+
+        XCTAssertEqual(sharedView.cursorClickToMoveValues, [false])
+        XCTAssertEqual(splitView.cursorClickToMoveValues, [false])
+        XCTAssertEqual(savedView.cursorClickToMoveValues, [false])
+    }
+
     func testAppendedWorkspacePanelsKeepTerminalLeafReachableAndClosable() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
@@ -2555,6 +2601,40 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             originalFirstTitle,
             "Background tab title updates must not leak into the bootstrap tab's view model"
         )
+    }
+
+    func testOSCInputLifecycleTargetsTheOriginatingSurface() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        guard let tabID = controller.tabManager.activeTabID,
+              let surfaceID = controller.tabSurfaceMap[tabID] else {
+            XCTFail("Expected bootstrap tab and surface")
+            return
+        }
+
+        let trackingView = TrackingTerminalHostView()
+        controller.tabSurfaceViews[tabID] = trackingView
+        controller.terminalSurfaceView = trackingView
+        let prompt = TerminalGridPosition(screenRow: 4, absoluteRow: 24, column: 2)
+        let input = TerminalGridPosition(screenRow: 4, absoluteRow: 24, column: 7)
+
+        bridge.emitOSC(.shellPrompt(position: prompt), for: surfaceID)
+        bridge.emitOSC(.commandStarted(inputPosition: input), for: surfaceID)
+        bridge.emitOutput(Data("\u{1B}]133;C\u{07}".utf8), for: surfaceID)
+
+        for _ in 0..<100 {
+            if trackingView.commandExecutedCallCount > 0 { break }
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+
+        XCTAssertEqual(trackingView.shellPromptPositions, [prompt])
+        XCTAssertEqual(trackingView.commandInputPositions, [input])
+        XCTAssertEqual(trackingView.commandExecutedCallCount, 1)
     }
 
     // MARK: - windowDidChangeScreen safety net

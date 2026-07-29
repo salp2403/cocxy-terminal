@@ -72,12 +72,19 @@ struct CocxyCoreViewTests {
         #expect(harness.view.isFocused == false)
     }
 
-    @Test("handleShellPrompt updates IDE cursor state")
+    @Test("shell prompt and command input update distinct IDE cursor state")
     func handleShellPromptUpdatesIDECursorState() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
 
-        harness.view.handleShellPrompt(row: 3, column: 5)
+        let promptPosition = TerminalGridPosition(screenRow: 3, absoluteRow: 3, column: 1)
+        let inputPosition = TerminalGridPosition(screenRow: 3, absoluteRow: 3, column: 5)
+        harness.view.handleShellPrompt(position: promptPosition)
+
+        #expect(harness.view.ideCursorController.promptPosition == promptPosition)
+        #expect(harness.view.ideCursorController.isOnPromptLine == false)
+
+        harness.view.handleCommandInputStarted(at: inputPosition)
 
         #expect(harness.view.ideCursorController.promptRow == 3)
         #expect(harness.view.ideCursorController.promptColumn == 5)
@@ -89,7 +96,11 @@ struct CocxyCoreViewTests {
     func moveRightAdvancesIDECursor() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
 
         harness.view.moveRight(nil)
 
@@ -100,7 +111,11 @@ struct CocxyCoreViewTests {
     func moveLeftClampsAtPromptColumn() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
 
         harness.view.moveLeft(nil)
 
@@ -111,7 +126,11 @@ struct CocxyCoreViewTests {
     func insertNewlineClearsPromptTracking() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
         var submitCount = 0
         harness.view.onUserInputSubmitted = {
             submitCount += 1
@@ -1114,7 +1133,11 @@ struct CocxyCoreViewTests {
         harness.view.onUserInputSubmitted = {
             submitCount += 1
         }
-        harness.view.handleShellPrompt(row: 0, column: 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: 0,
+            absoluteRow: 0,
+            column: 2
+        ))
 
         harness.view.keyDown(with: makeKeyEvent(characters: "", keyCode: 0x7C))
         #expect(harness.view.ideCursorController.cursorColumn == 3)
@@ -1128,12 +1151,23 @@ struct CocxyCoreViewTests {
         #expect(submitCount == 1)
     }
 
-    @Test("shell prompt at current cursor enables click-to-position arrow synthesis")
-    func shellPromptAtCurrentCursorEnablesClickToPositionArrowSynthesis() throws {
+    @Test("captured command input position enables click-to-position arrow synthesis")
+    func capturedCommandInputPositionEnablesClickToPositionArrowSynthesis() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
 
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}", into: state.terminal)
         harness.view.handleShellPromptAtCurrentCursor()
+        #expect(harness.view.ideCursorController.promptPosition != nil)
+        #expect(harness.view.ideCursorController.isOnPromptLine == false)
+
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: snapshot.cursorColumn
+        ))
         let controller = harness.view.ideCursorController
         let target = CGPoint(
             x: controller.leftPadding + controller.cellWidth * 3,
@@ -1141,7 +1175,6 @@ struct CocxyCoreViewTests {
         )
 
         #expect(controller.handleClickToPosition(at: target) == true)
-        #expect(controller.cursorColumn == 3)
     }
 
     @Test("shell prompt at current cursor ignores missing surfaces")
@@ -1291,14 +1324,27 @@ struct CocxyCoreViewTests {
         #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == true)
     }
 
-    @Test("prompt click repositions only after mouse release")
-    func promptClickRepositionsOnRelease() throws {
-        let harness = try makeViewHarness()
+    @Test("prompt click emits arrows only after mouse release")
+    func promptClickRepositionsOnRelease() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        harness.view.handleShellPromptAtCurrentCursor()
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(harness, output: output)
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: snapshot.cursorColumn
+        ))
         let controller = harness.view.ideCursorController
-        let initialColumn = controller.cursorColumn
-        let targetColumn = initialColumn + 3
+        let targetColumn = Int(snapshot.cursorColumn) + 3
         let targetInView = CGPoint(
             x: controller.leftPadding + controller.cellWidth * CGFloat(targetColumn) + 1,
             y: controller.topPadding
@@ -1311,10 +1357,57 @@ struct CocxyCoreViewTests {
         )
 
         harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: targetInWindow))
-        #expect(controller.cursorColumn == initialColumn)
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(output.data.isEmpty)
 
         harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: targetInWindow))
-        #expect(controller.cursorColumn == targetColumn)
+        let expected = Data("\u{1B}[C\u{1B}[C\u{1B}[C".utf8)
+        try await waitUntil { output.data.containsSubsequence(expected) }
+        #expect(output.data.containsSubsequence(expected))
+    }
+
+    @Test("active selection at release aborts prompt cursor movement")
+    func activeSelectionAtReleaseAbortsPromptCursorMovement() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(harness, output: output)
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}abc", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: 0
+        ))
+        let controller = harness.view.ideCursorController
+        let targetInView = CGPoint(
+            x: controller.leftPadding + controller.cellWidth + 1,
+            y: controller.topPadding + 1
+        )
+        let targetInWindow = CGPoint(
+            x: targetInView.x,
+            y: harness.view.bounds.maxY - targetInView.y
+        )
+
+        harness.view.mouseDown(with: makeMouseEvent(type: .leftMouseDown, location: targetInWindow))
+        harness.bridge.setSelection(
+            for: harness.surfaceID,
+            startRow: snapshot.cursorAbsoluteRow,
+            startCol: 0,
+            endRow: snapshot.cursorAbsoluteRow,
+            endCol: 1
+        )
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: targetInWindow))
+        try await Task.sleep(nanoseconds: 50_000_000)
+
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == true)
+        #expect(output.data.isEmpty)
     }
 
     @Test("scroll wheel forwards events when terminal mouse mode is enabled")

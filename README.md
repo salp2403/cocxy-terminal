@@ -412,6 +412,7 @@ scrollback-lines = 10000
 cursor-style = "block"
 cursor-blink = true
 copy-on-select = true
+cursor-click-to-move = true
 clipboard-paste-protection = true
 
 [appearance]

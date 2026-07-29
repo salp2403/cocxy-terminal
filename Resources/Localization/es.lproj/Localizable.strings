@@ -884,6 +884,8 @@
 "preferences.terminal.cursorBlink" = "Parpadeo del cursor";
 "preferences.terminal.cursorBlink.on" = "Activado";
 "preferences.terminal.cursorBlink.off" = "Desactivado";
+"preferences.terminal.interaction.section" = "Interacción";
+"preferences.terminal.cursorClickToMove" = "Mover el cursor al hacer clic en la entrada del shell";
 "preferences.terminal.commandCorrections.section" = "Correcciones de comandos";
 "preferences.terminal.commandCorrections.enabled" = "Sugerir correcciones después de comandos fallidos";
 "preferences.terminal.commandCorrections.autoShow" = "Mostrar sugerencias automáticamente";

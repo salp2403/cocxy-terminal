@@ -2989,6 +2989,16 @@ struct TerminalPreferencesSection: View {
                 }
             }
 
+            Section(viewModel.localizedString("preferences.terminal.interaction.section", fallback: "Interaction")) {
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.terminal.cursorClickToMove",
+                        fallback: "Move cursor by clicking shell input"
+                    ),
+                    isOn: $viewModel.cursorClickToMove
+                )
+            }
+
             Section(viewModel.localizedString("preferences.terminal.commandBlocks.section", fallback: "Command Blocks")) {
                 Toggle(
                     viewModel.localizedString("preferences.terminal.commandBlocks.enabled", fallback: "Show command blocks"),
