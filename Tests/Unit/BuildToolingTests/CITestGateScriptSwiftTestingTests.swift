@@ -4,6 +4,7 @@
 import Foundation
 import Dispatch
 import CryptoKit
+import Darwin
 import Testing
 
 @Suite("CI test gate script")
@@ -49,12 +50,80 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(serialScript.contains("xcrun llvm-profdata merge -sparse"))
         #expect(serialScript.contains("xcrun llvm-cov export -format=text"))
         #expect(serialScript.contains("CocxyTerminal-SwiftTesting.json"))
+        #expect(serialScript.contains("set -m"))
+        #expect(serialScript.contains(#"kill -0 -- "-$pid""#))
+        #expect(serialScript.contains(#"kill -TERM -- "-$pid""#))
+        #expect(serialScript.contains(#"kill -KILL -- "-$pid""#))
         #expect(!serialScript.contains("mapfile"))
         #expect(FileManager.default.isExecutableFile(atPath: filteredScriptURL.path))
         #expect(filteredScript.contains("matching_test_count == 0"))
         #expect(filteredScript.contains("filter discovered zero tests"))
         #expect(ci.contains("./scripts/run-tests.sh"))
         #expect(pullRequestTemplate.contains("`./scripts/run-tests.sh` passes locally"))
+    }
+
+    @Test("serial Swift Testing timeout terminates the complete process group")
+    func serialSwiftTestingTimeoutTerminatesCompleteProcessGroup() throws {
+        let fixtureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-serial-timeout-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: fixtureRoot,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        let childPIDURL = fixtureRoot.appendingPathComponent("child.pid")
+        var childPID: pid_t?
+        defer {
+            if let childPID, Darwin.kill(childPID, 0) == 0 {
+                _ = Darwin.kill(childPID, SIGKILL)
+            }
+            try? FileManager.default.removeItem(at: fixtureRoot)
+        }
+
+        let fakeSwiftURL = fixtureRoot.appendingPathComponent("swift")
+        try """
+        #!/bin/bash
+        set -euo pipefail
+        if [[ "${1:-}" == "test" && "${2:-}" == "list" ]]; then
+          echo "CocxyTerminalTests.FakeTimeoutSuite/testTimeout()"
+          exit 0
+        fi
+        sleep 300 &
+        child=$!
+        printf '%s\n' "$child" > "$FAKE_SWIFT_CHILD_PID_FILE"
+        wait "$child"
+        """.write(to: fakeSwiftURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: fakeSwiftURL.path
+        )
+
+        let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let result = try runProcess(
+            repositoryRoot().appendingPathComponent("scripts/run-swift-testing-serial.sh"),
+            arguments: [],
+            environment: [
+                "FAKE_SWIFT_CHILD_PID_FILE": childPIDURL.path,
+                "PATH": "\(fixtureRoot.path):\(existingPath)",
+                "SWIFT_TESTING_SERIAL_LIMIT": "1",
+                "SWIFT_TESTING_SUITE_TIMEOUT_SECONDS": "1",
+            ]
+        )
+
+        #expect(result.terminationStatus == 124)
+        #expect(result.stderr.contains("FakeTimeoutSuite"))
+        let rawPID = try String(contentsOf: childPIDURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let parsedPID = pid_t(rawPID, radix: 10) else {
+            Issue.record("Fake Swift helper did not publish a valid child PID")
+            return
+        }
+        childPID = parsedPID
+        errno = 0
+        #expect(Darwin.kill(try #require(childPID), 0) == -1)
+        #expect(errno == ESRCH)
     }
 
     @Test("bounded process containment uses current mandatory runners and rejects empty filters")

@@ -72,19 +72,23 @@ fi
 run_bounded() {
   local suite="$1"
   shift
+  # Job control gives each suite its own process group so a timeout also
+  # terminates Swift Testing helpers spawned underneath `swift test`.
+  set -m
   "$@" &
   local pid=$!
+  set +m
   local waited=0
-  while kill -0 "$pid" 2>/dev/null; do
+  while kill -0 -- "-$pid" 2>/dev/null; do
     if (( waited >= suite_timeout_seconds )); then
       echo "error: Swift Testing suite '${suite}' exceeded ${suite_timeout_seconds}s and was terminated." >&2
-      kill -TERM "$pid" 2>/dev/null || true
+      kill -TERM -- "-$pid" 2>/dev/null || true
       local drained=0
-      while kill -0 "$pid" 2>/dev/null && (( drained < 10 )); do
+      while kill -0 -- "-$pid" 2>/dev/null && (( drained < 10 )); do
         sleep 1
         drained=$((drained + 1))
       done
-      kill -KILL "$pid" 2>/dev/null || true
+      kill -KILL -- "-$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
       return 124
     fi
