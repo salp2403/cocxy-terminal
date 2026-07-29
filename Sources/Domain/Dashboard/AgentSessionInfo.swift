@@ -158,18 +158,26 @@ struct FileImpact: Equatable, Sendable {
     let path: String
     let fileName: String
     var operations: Set<FileOperation>
+    var lastChangedAt: Date
 
     enum FileOperation: String, Sendable, Hashable {
         case read
         case write
         case edit
         case bash
+        case create
+        case delete
     }
 
-    init(path: String, operations: Set<FileOperation> = []) {
+    init(
+        path: String,
+        operations: Set<FileOperation> = [],
+        lastChangedAt: Date = .distantPast
+    ) {
         self.path = path
         self.fileName = URL(fileURLWithPath: path).lastPathComponent
         self.operations = operations
+        self.lastChangedAt = lastChangedAt
     }
 }
 

@@ -21,6 +21,7 @@ struct DashboardSessionRow: View {
     let session: AgentSessionInfo
     let onNavigate: () -> Void
     var onSetPriority: ((AgentPriority) -> Void)?
+    var onOpenFileImpact: ((String) -> Void)?
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isPulsing = false
@@ -28,41 +29,114 @@ struct DashboardSessionRow: View {
     // MARK: - Body
 
     var body: some View {
-        Button(action: onNavigate) {
-            HStack(alignment: .top, spacing: 10) {
-                stateIndicator
-                VStack(alignment: .leading, spacing: 3) {
-                    headerLine
-                    if let activity = session.lastActivity, !activity.isEmpty {
-                        activityLine(activity)
+        VStack(alignment: .leading, spacing: 6) {
+            Button(action: onNavigate) {
+                HStack(alignment: .top, spacing: 10) {
+                    stateIndicator
+                    VStack(alignment: .leading, spacing: 3) {
+                        headerLine
+                        if let activity = session.lastActivity, !activity.isEmpty {
+                            activityLine(activity)
+                        }
+                        sessionStatsLine
+                        if !session.fileConflicts.isEmpty {
+                            conflictWarning
+                        }
+                        if !session.subagents.isEmpty {
+                            subagentSection
+                        }
                     }
-                    sessionStatsLine
-                    if !session.fileConflicts.isEmpty {
-                        conflictWarning
-                    }
-                    if !session.subagents.isEmpty {
-                        subagentSection
-                    }
+                    Spacer(minLength: 4)
+                    timeLabel
                 }
-                Spacer(minLength: 4)
-                timeLabel
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel(accessibilityDescription)
+            .accessibilityHint(
+                localized(
+                    "agentDashboard.row.activateHint",
+                    fallback: "Activate to switch to this tab"
+                )
+            )
+
+            fileImpactSection
         }
-        .buttonStyle(.plain)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
         .onAppear {
             isPulsing = session.state == .working
         }
         .onChange(of: session.state) {
             isPulsing = session.state == .working
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-        .accessibilityHint(localized("agentDashboard.row.activateHint", fallback: "Activate to switch to this tab"))
+        .accessibilityElement(children: .contain)
         .contextMenu {
             priorityMenu
+        }
+    }
+
+    @ViewBuilder
+    private var fileImpactSection: some View {
+        if !session.filesTouched.isEmpty {
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(session.filesTouched.prefix(4), id: \.path) { impact in
+                    Button {
+                        onOpenFileImpact?(impact.path)
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "doc.text")
+                                .font(.system(size: 8, weight: .medium))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.blue))
+                            Text(impact.fileName)
+                                .font(.system(size: 9, design: .monospaced))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.subtext0))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer(minLength: 4)
+                            Text(operationSummary(impact.operations))
+                                .font(.system(size: 8, weight: .semibold, design: .monospaced))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 7, weight: .semibold))
+                                .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                        }
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(
+                        String(
+                            format: localized(
+                                "agentDashboard.fileImpact.open",
+                                fallback: "Review %@, %@"
+                            ),
+                            impact.fileName,
+                            operationSummary(impact.operations)
+                        )
+                    )
+                }
+
+                if session.filesTouched.count > 4 {
+                    HStack(spacing: 4) {
+                        Spacer()
+                        Text(
+                            String(
+                                format: localized(
+                                    "agentDashboard.fileImpact.more",
+                                    fallback: "%d more"
+                                ),
+                                session.filesTouched.count - 4
+                            )
+                        )
+                        .font(.system(size: 8, design: .monospaced))
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 7, weight: .semibold))
+                    }
+                    .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                }
+            }
+            .padding(.leading, 18)
         }
     }
 
@@ -404,6 +478,10 @@ struct DashboardSessionRow: View {
         if lower.hasPrefix("agent") { return "person.2" }
         if lower.contains("error") { return "exclamationmark.triangle" }
         return "wrench"
+    }
+
+    private func operationSummary(_ operations: Set<FileImpact.FileOperation>) -> String {
+        operations.map(\.rawValue).sorted().joined(separator: ",")
     }
 
     private var accessibilityDescription: String {

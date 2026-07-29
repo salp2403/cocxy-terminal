@@ -539,6 +539,24 @@ extension AppDelegate {
             bus.broadcast(.focusSession(sessionID: entry.sessionID))
         }
 
+        dashboardVM.onOpenFileImpact = { [weak self, weak dashboardVM] sessionID, filePath in
+            guard let self, let dashboardVM,
+                  let tabUUID = dashboardVM.tabIdForSession(sessionID),
+                  let controller = self.controllerContainingTab(TabID(rawValue: tabUUID)) else {
+                return
+            }
+
+            let tabID = TabID(rawValue: tabUUID)
+            _ = controller.focusTab(id: tabID)
+            NSApp.activate(ignoringOtherApps: true)
+            controller.showWindow(nil)
+            controller.window?.makeKeyAndOrderFront(nil)
+
+            let codeReviewViewModel = controller.resolveCodeReviewViewModel()
+            codeReviewViewModel.selectFile(filePath)
+            controller.showCodeReviewPanel()
+        }
+
         // Timeline: subscribes to hook events.
         let timelineStore = AgentTimelineStoreImpl()
         self.agentTimelineStore = timelineStore

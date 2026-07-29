@@ -105,8 +105,8 @@ struct AgentDashboardFileChangedSwiftTests {
         #expect(session?.filesTouched.isEmpty == true)
     }
 
-    @Test("change_type 'delete' currently maps to FileOperation.write")
-    func deleteChangeTypeMapsToWrite() {
+    @Test("canonical unlink event maps to FileOperation.delete")
+    func unlinkEventMapsToDelete() {
         let viewModel = AgentDashboardViewModel()
         seedSession(viewModel, sessionId: "sess-5", cwd: "/tmp/proj")
 
@@ -114,12 +114,60 @@ struct AgentDashboardFileChangedSwiftTests {
             sessionId: "sess-5",
             cwd: "/tmp/proj",
             filePath: "/tmp/proj/gone.swift",
-            changeType: "delete"
+            changeType: "unlink"
         ))
 
         let session = viewModel.sessions.first { $0.id == "sess-5" }
         let impact = session?.filesTouched.first { $0.path == "/tmp/proj/gone.swift" }
-        #expect(impact?.operations.contains(.write) == true)
+        #expect(impact?.operations.contains(.delete) == true)
+    }
+
+    @Test("FileChanged impacts are ordered by real event recency")
+    func fileChangedImpactsAreOrderedByRecency() {
+        let viewModel = AgentDashboardViewModel()
+        seedSession(viewModel, sessionId: "sess-recency", cwd: "/tmp/proj")
+        let older = Date(timeIntervalSince1970: 100)
+        let newer = Date(timeIntervalSince1970: 200)
+
+        viewModel.processHookEvent(fileChangedEvent(
+            sessionId: "sess-recency",
+            cwd: "/tmp/proj",
+            filePath: "/tmp/proj/older.swift",
+            changeType: "change",
+            timestamp: older
+        ))
+        viewModel.processHookEvent(fileChangedEvent(
+            sessionId: "sess-recency",
+            cwd: "/tmp/proj",
+            filePath: "/tmp/proj/newer.swift",
+            changeType: "add",
+            timestamp: newer
+        ))
+
+        let impacts = viewModel.sessions.first { $0.id == "sess-recency" }?.filesTouched
+        #expect(impacts?.map(\.fileName) == ["newer.swift", "older.swift"])
+        #expect(impacts?.first?.lastChangedAt == newer)
+        #expect(impacts?.first?.operations == [.create])
+    }
+
+    @Test("opening a tracked impact forwards the exact session and path")
+    func openingTrackedImpactForwardsExactContext() {
+        let viewModel = AgentDashboardViewModel()
+        seedSession(viewModel, sessionId: "sess-open", cwd: "/tmp/proj")
+        let path = "/tmp/proj/Sources/App.swift"
+        viewModel.processHookEvent(fileChangedEvent(
+            sessionId: "sess-open",
+            cwd: "/tmp/proj",
+            filePath: path,
+            changeType: "change"
+        ))
+        var opened: (String, String)?
+        viewModel.onOpenFileImpact = { opened = ($0, $1) }
+
+        viewModel.openFileImpact(path, for: "sess-open")
+
+        #expect(opened?.0 == "sess-open")
+        #expect(opened?.1 == path)
     }
 
     // MARK: - Helpers
@@ -163,12 +211,13 @@ struct AgentDashboardFileChangedSwiftTests {
         sessionId: String,
         cwd: String,
         filePath: String,
-        changeType: String?
+        changeType: String?,
+        timestamp: Date = Date()
     ) -> HookEvent {
         HookEvent(
             type: .fileChanged,
             sessionId: sessionId,
-            timestamp: Date(),
+            timestamp: timestamp,
             data: .fileChanged(FileChangedData(
                 filePath: filePath,
                 changeType: changeType

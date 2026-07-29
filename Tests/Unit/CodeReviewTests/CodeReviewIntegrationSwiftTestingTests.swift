@@ -51,6 +51,30 @@ struct CodeReviewIntegrationSwiftTestingTests {
         #expect(viewModel.selectedFilePath == "foo.swift")
     }
 
+    @Test("absolute Dashboard selection survives refresh and resolves to exact diff path")
+    func dashboardSelectionSurvivesRefresh() async throws {
+        let tracker = SessionDiffTrackerImpl()
+        let cwd = URL(fileURLWithPath: "/tmp/cocxy-review", isDirectory: true)
+        let viewModel = CodeReviewPanelViewModel(
+            tracker: tracker,
+            hookEventReceiver: nil,
+            directDiffLoader: { _, _, _ in
+                [FileDiff(filePath: "Sources/App.swift", status: .modified, hunks: [])]
+            }
+        )
+        viewModel.activeTabCwdProvider = { cwd }
+        viewModel.refreshDelay = 0
+
+        viewModel.selectFile("/tmp/cocxy-review/Sources/App.swift")
+        viewModel.refreshDiffs()
+        try await waitForReviewCondition {
+            viewModel.selectedFilePath == "Sources/App.swift"
+        }
+
+        #expect(viewModel.selectedFilePath == "Sources/App.swift")
+        #expect(viewModel.selectedFileDiff?.filePath == "Sources/App.swift")
+    }
+
     @Test("submitComments formats and clears pending comments")
     func submitComments() {
         let tracker = SessionDiffTrackerImpl()

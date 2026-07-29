@@ -166,6 +166,9 @@ struct DashboardPanelView: View {
                                 onSetPriority: { priority in
                                     viewModel.setPriority(priority, for: session.id)
                                 },
+                                onOpenFileImpact: { filePath in
+                                    viewModel.openFileImpact(filePath, for: session.id)
+                                },
                                 localizer: localizer
                             )
                             Divider()

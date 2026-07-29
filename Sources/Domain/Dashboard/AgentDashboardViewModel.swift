@@ -79,6 +79,9 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// with the tab UUID to broadcast a focusSession event.
     var onCrossWindowNavigate: ((UUID) -> Void)?
 
+    /// Opens one touched file in Code Review after routing to its owning tab.
+    var onOpenFileImpact: ((_ sessionId: String, _ filePath: String) -> Void)?
+
     /// Reference to the hook event receiver for accessing session context
     /// (cwd, session_id) when auto-creating sessions from tool use events.
     private weak var hookEventReceiver: HookEventReceiverImpl?
@@ -183,6 +186,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         // the tab. Broadcast via the callback so the owning window
         // can activate and switch to the tab.
         onCrossWindowNavigate?(data.tabId)
+    }
+
+    func openFileImpact(_ filePath: String, for sessionId: String) {
+        guard sessionDataStore[sessionId]?.fileImpacts[filePath] != nil else { return }
+        onOpenFileImpact?(sessionId, filePath)
     }
 
     /// Returns whether a concrete subagent is already tracked under a parent session.
@@ -583,7 +591,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[event.sessionId]?.totalToolCalls += 1
 
             // Track file impact.
-            trackFileImpact(sessionId: event.sessionId, toolData: toolData)
+            trackFileImpact(
+                sessionId: event.sessionId,
+                toolData: toolData,
+                timestamp: event.timestamp
+            )
 
             // Attribute tool use to single active subagent when unambiguous.
             let filePath = toolData.toolInput?["file_path"] ?? toolData.toolInput?["path"]
@@ -613,7 +625,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[event.sessionId]?.totalErrors += 1
 
             // Track file impact even on failure.
-            trackFileImpact(sessionId: event.sessionId, toolData: toolData)
+            trackFileImpact(
+                sessionId: event.sessionId,
+                toolData: toolData,
+                timestamp: event.timestamp
+            )
 
             // Attribute error to single active subagent when unambiguous.
             attributeErrorToSubagent(
@@ -770,7 +786,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     }
 
     /// Tracks which files a tool call touches and what operations are performed.
-    private func trackFileImpact(sessionId: String, toolData: ToolUseData) {
+    private func trackFileImpact(
+        sessionId: String,
+        toolData: ToolUseData,
+        timestamp: Date
+    ) {
         guard let filePath = toolData.toolInput?["file_path"] ?? toolData.toolInput?["path"] else {
             return
         }
@@ -782,7 +802,26 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         case "bash":  operation = .bash
         default:      operation = .read
         }
-        sessionDataStore[sessionId]?.fileImpacts[filePath, default: []].insert(operation)
+        recordFileImpact(
+            sessionId: sessionId,
+            filePath: filePath,
+            operation: operation,
+            timestamp: timestamp
+        )
+    }
+
+    func recordFileImpact(
+        sessionId: String,
+        filePath: String,
+        operation: FileImpact.FileOperation,
+        timestamp: Date
+    ) {
+        guard sessionDataStore[sessionId] != nil else { return }
+        var impact = sessionDataStore[sessionId]?.fileImpacts[filePath]
+            ?? FileImpact(path: filePath, lastChangedAt: timestamp)
+        impact.operations.insert(operation)
+        impact.lastChangedAt = max(impact.lastChangedAt, timestamp)
+        sessionDataStore[sessionId]?.fileImpacts[filePath] = impact
     }
 
     // MARK: - Private: Subscriptions
@@ -1006,16 +1045,19 @@ struct MutableSessionData {
     var subagents: [SubagentInfo] = []
     var priority: AgentPriority = .standard
     /// Files touched during this session. Key is full path, value is set of operations.
-    var fileImpacts: [String: Set<FileImpact.FileOperation>] = [:]
+    var fileImpacts: [String: FileImpact] = [:]
     /// Total tool calls across the session (including subagent-attributed ones).
     var totalToolCalls: Int = 0
     /// Total errors across the session.
     var totalErrors: Int = 0
 
     func toAgentSessionInfo(windowID: WindowID?, windowLabel: String?) -> AgentSessionInfo {
-        // Build file impact list sorted by path.
-        let impacts = fileImpacts.map { FileImpact(path: $0.key, operations: $0.value) }
-            .sorted { $0.fileName < $1.fileName }
+        let impacts = fileImpacts.values.sorted { lhs, rhs in
+            if lhs.lastChangedAt != rhs.lastChangedAt {
+                return lhs.lastChangedAt > rhs.lastChangedAt
+            }
+            return lhs.path.localizedStandardCompare(rhs.path) == .orderedAscending
+        }
 
         // Detect file conflicts: files touched by multiple subagents.
         let conflicts = detectFileConflicts()

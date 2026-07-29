@@ -56,26 +56,31 @@ extension AgentDashboardViewModel {
 
         // Always record on the session as the canonical impact map. The set
         // semantics deduplicate repeated paths automatically.
-        sessionDataStore[event.sessionId]?
-            .fileImpacts[data.filePath, default: []]
-            .insert(operation)
+        recordFileImpact(
+            sessionId: event.sessionId,
+            filePath: data.filePath,
+            operation: operation,
+            timestamp: event.timestamp
+        )
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
 
         rebuildSessions()
     }
 
-    /// Maps the optional `change_type` field to `FileImpact.FileOperation`.
+    /// Maps the canonical `event` field and legacy `change_type` values.
     ///
-    /// Claude Code currently emits `write`, `edit` and `delete`. We map
-    /// `delete` to `.write` (treated as a mutating change) until a dedicated
-    /// `.delete` case is added to `FileImpact.FileOperation`. Unknown or
-    /// missing values default to `.write` — recording at least that the
-    /// file was touched.
+    /// Claude Code emits `change`, `add`, and `unlink`. Legacy producers used
+    /// `write`, `edit`, and `delete`. Unknown or missing values default to
+    /// `.write`, preserving the fact that the file was touched.
     static func mapChangeType(_ raw: String?) -> FileImpact.FileOperation {
         switch raw?.lowercased() {
-        case "edit":
+        case "change", "edit":
             return .edit
-        case "write", "delete", nil, "":
+        case "add", "create":
+            return .create
+        case "unlink", "delete":
+            return .delete
+        case "write", nil, "":
             return .write
         default:
             return .write
