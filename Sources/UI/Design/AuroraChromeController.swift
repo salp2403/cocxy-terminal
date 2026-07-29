@@ -880,6 +880,7 @@ final class AuroraHostingView<Content: View>: NSHostingView<Content> {
     override var acceptsFirstResponder: Bool { true }
     override var canBecomeKeyView: Bool { true }
 
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override func becomeFirstResponder() -> Bool { true }
 }
 
