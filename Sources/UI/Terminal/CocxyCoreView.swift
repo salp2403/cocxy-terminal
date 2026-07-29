@@ -24,11 +24,10 @@ import CocxyCoreKit
 /// ## Event routing
 ///
 /// Keyboard events follow the terminal host-view classification pipeline:
-/// 1. `KeyInputAction.classify()` → .copy, .paste, .selectAll, .clearScreen, .sendToTerminal
-/// 2. Special keys (arrows, backspace, enter, etc.) → `cocxycore_terminal_encode_key()`
-/// 3. Regular characters → `cocxycore_terminal_encode_char()`
-/// 4. Ctrl+letter → compute control character directly
-/// 5. Unhandled → fall through to `interpretKeyEvents()` (NSTextInputClient)
+/// 1. `KeyInputAction.classify()` routes app commands away from terminal input.
+/// 2. `interpretKeyEvents()` lets AppKit resolve text and IME composition.
+/// 3. Committed text is delivered once as complete UTF-8.
+/// 4. Keys without text fall through to CocxyCore's mode-aware encoder.
 ///
 /// Mouse events drive CocxyCore's selection model:
 /// - mouseDown sets the selection anchor
@@ -187,6 +186,20 @@ final class CocxyCoreView: NSView {
     /// IME composition state.
     private var compositionState = TextCompositionState()
 
+    private struct KeyTextInterpretation {
+        var text = ""
+        var didMutateComposition = false
+    }
+
+    /// Non-nil only while `interpretKeyEvents` is synchronously dispatching
+    /// NSTextInputClient callbacks for the current physical key.
+    private var activeKeyTextInterpretation: KeyTextInterpretation?
+    private var isDiscardingInputMethodComposition = false
+
+    /// Deterministic seam for measured AppKit callback sequences in tests.
+    /// Production leaves this nil and uses `interpretKeyEvents` directly.
+    var keyEventInterpreterOverride: ((NSEvent) -> Void)?
+
     /// Whether the view currently has keyboard focus.
     private(set) var isFocused: Bool = false
 
@@ -272,6 +285,7 @@ final class CocxyCoreView: NSView {
 
     deinit {
         MainActor.assumeIsolated {
+            clearComposition(forceEngineClear: true)
             pasteDeliveryTask?.cancel()
             removeWindowObservers()
             stopDisplayLink()
@@ -326,6 +340,7 @@ final class CocxyCoreView: NSView {
     func configure(bridge: CocxyCoreBridge, surfaceID: SurfaceID, viewModel: TerminalViewModel) {
         if self.bridge !== bridge || self.surfaceID != surfaceID {
             resetCommandBlockOverlayForSurfaceTeardown()
+            clearComposition(forceEngineClear: true, discardInputContext: true)
         }
         self.bridge = bridge
         self.surfaceID = surfaceID
@@ -676,6 +691,7 @@ final class CocxyCoreView: NSView {
 
     override func resignFirstResponder() -> Bool {
         isFocused = false
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         if let bridge, let sid = surfaceID {
             bridge.notifyFocus(false, for: sid)
         }
@@ -715,23 +731,31 @@ final class CocxyCoreView: NSView {
             handleCopy()
             return
         case .paste:
-            handlePaste()
+            paste(nil)
             return
         case .selectAll, .clearScreen:
-            let keyEvent = Self.translateKeyEvent(event, isKeyDown: true)
+            let keyEvent = Self.translateKeyEvent(
+                event,
+                isKeyDown: true,
+                isComposing: hasMarkedText()
+            )
             bridge.sendKeyEvent(keyEvent, to: sid)
             return
         case .sendToTerminal:
-            if handlePendingCommandCorrectionShortcut(
-                event,
-                bridge: bridge,
-                surfaceID: sid,
-                modifiers: modifiers
-            ) {
-                return
-            }
-            if shouldThrottleTerminalDeleteRepeat(event, bridge: bridge, surfaceID: sid) {
-                return
+            // Candidate navigation and IME deletion must win over terminal
+            // correction UI and repeat pacing while composition is active.
+            if hasMarkedText() == false {
+                if handlePendingCommandCorrectionShortcut(
+                    event,
+                    bridge: bridge,
+                    surfaceID: sid,
+                    modifiers: modifiers
+                ) {
+                    return
+                }
+                if shouldThrottleTerminalDeleteRepeat(event, bridge: bridge, surfaceID: sid) {
+                    return
+                }
             }
             handleTerminalInput(event, bridge: bridge, surfaceID: sid, modifiers: modifiers)
         }
@@ -756,6 +780,51 @@ final class CocxyCoreView: NSView {
         modifiers: KeyModifiers
     ) {
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+
+        let wasComposing = hasMarkedText()
+        if wasComposing, event.keyCode == 53 {
+            // Escape belongs to the active input method: cancel the marked
+            // text without leaking an ESC byte into the foreground process.
+            clearComposition(forceEngineClear: true, discardInputContext: true)
+            return
+        }
+
+        if let controlText = Self.controlCharacterText(
+            for: event,
+            modifiers: modifiers
+        ) {
+            // Terminal control chords must remain reliable during IME use.
+            // Commit the visible marked text first, then deliver the control
+            // byte instead of allowing AppKit to consume Ctrl+C/Ctrl+D/etc.
+            if wasComposing {
+                commitComposition(bridge: bridge, surfaceID: sid)
+            }
+            clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+            bridge.sendText(controlText, to: sid)
+            return
+        }
+
+        let interpretation = interpretTerminalKeyEvent(event)
+        if interpretation.text.isEmpty == false {
+            clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+            bridge.sendText(interpretation.text, to: sid)
+            if Self.containsInputSubmission(interpretation.text),
+               modifiers.contains(.shift) == false {
+                ideCursorController.commandExecuted()
+                onUserInputSubmitted?()
+            }
+            return
+        }
+        if hasMarkedText() {
+            return
+        }
+        if interpretation.didMutateComposition {
+            // The input method consumed the key by cancelling or reducing
+            // marked text to empty. Do not also send the physical key.
+            return
+        }
+
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
 
         if let literalText = Self.literalTextForOptionGeneratedCharacter(
             characters: event.characters,
@@ -782,43 +851,116 @@ final class CocxyCoreView: NSView {
             return
         }
 
-        // Ctrl+letter → compute ASCII control character directly.
-        if modifiers.contains(.control),
-           !modifiers.contains(.command),
-           let chars = event.charactersIgnoringModifiers?.lowercased(),
-           let scalar = chars.unicodeScalars.first,
-           scalar.value >= 0x61, scalar.value <= 0x7A {
-            let controlCode = UInt8(scalar.value - 0x60)
-            _ = bridge.writeBytes([controlCode], to: sid)
-            return
-        }
-
         // Use CocxyCore's mode-aware encoder for all other keys.
         let keyEvent = KeyEvent(
             characters: event.characters,
             keyCode: event.keyCode,
             modifiers: modifiers,
             isKeyDown: true,
-            isRepeat: event.isARepeat
+            isRepeat: event.isARepeat,
+            isComposing: hasMarkedText()
         )
 
         let handled = bridge.sendKeyEvent(keyEvent, to: sid)
-        if !handled {
-            interpretKeyEvents([event])
-        } else {
+        if handled {
             updateIDECursorState(afterHandling: event)
         }
     }
 
+    private func interpretTerminalKeyEvent(_ event: NSEvent) -> KeyTextInterpretation {
+        activeKeyTextInterpretation = KeyTextInterpretation()
+        defer { activeKeyTextInterpretation = nil }
+
+        if let keyEventInterpreterOverride {
+            keyEventInterpreterOverride(event)
+        } else {
+            interpretKeyEvents([event])
+        }
+
+        return activeKeyTextInterpretation ?? KeyTextInterpretation()
+    }
+
+    private func commitComposition(
+        bridge: CocxyCoreBridge,
+        surfaceID: SurfaceID
+    ) {
+        guard compositionState.hasMarkedText else { return }
+        let markedText = compositionState.markedText
+        compositionState.commit()
+        discardInputMethodComposition()
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+        if markedText.isEmpty == false {
+            bridge.sendText(markedText, to: surfaceID)
+        }
+    }
+
+    private func clearComposition(
+        forceEngineClear: Bool = false,
+        discardInputContext: Bool = false
+    ) {
+        let hadMarkedText = compositionState.hasMarkedText
+        compositionState.unmarkText()
+        if discardInputContext, hadMarkedText {
+            discardInputMethodComposition()
+        }
+        guard hadMarkedText || forceEngineClear,
+              let bridge,
+              let surfaceID else { return }
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private func discardInputMethodComposition() {
+        guard isDiscardingInputMethodComposition == false else { return }
+        isDiscardingInputMethodComposition = true
+        defer { isDiscardingInputMethodComposition = false }
+        inputContext?.discardMarkedText()
+        // The context can synchronously re-enter this client while discarding.
+        compositionState.unmarkText()
+    }
+
+    private func clearResidualPreeditIfNeeded(
+        bridge: CocxyCoreBridge,
+        surfaceID: SurfaceID
+    ) {
+        guard compositionState.hasMarkedText == false,
+              bridge.preeditSnapshot(for: surfaceID)?.active == true else { return }
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private static func controlCharacterText(
+        for event: NSEvent,
+        modifiers: KeyModifiers
+    ) -> String? {
+        guard modifiers.contains(.control),
+              modifiers.contains(.command) == false,
+              let scalar = event.charactersIgnoringModifiers?
+                .lowercased()
+                .unicodeScalars
+                .first else { return nil }
+        return ControlCharacterMapper.controlCharacterText(forLetter: String(scalar))
+    }
+
+    private static func containsInputSubmission(_ text: String) -> Bool {
+        text.contains("\r") || text.contains("\n")
+    }
+
     // MARK: - Text Command Handlers (NSResponder)
 
+    override func doCommand(by selector: Selector) {
+        guard activeKeyTextInterpretation == nil else { return }
+        super.doCommand(by: selector)
+    }
+
     private func sendControlSequence(_ seq: String) {
+        guard activeKeyTextInterpretation == nil else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
         bridge.sendText(seq, to: sid)
     }
 
     private func sendDeleteControlSequence(_ seq: String, keyCode: UInt16) {
+        guard activeKeyTextInterpretation == nil else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
         if shouldThrottleResponderDeleteRepeat(
             keyCode: keyCode,
@@ -828,7 +970,27 @@ final class CocxyCoreView: NSView {
             return
         }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
         bridge.sendText(seq, to: sid)
+    }
+
+    @discardableResult
+    private func sendResponderKey(keyCode: UInt16) -> Bool {
+        guard activeKeyTextInterpretation == nil,
+              let bridge,
+              let sid = surfaceID else { return false }
+        followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
+        return bridge.sendKeyEvent(
+            KeyEvent(
+                characters: nil,
+                keyCode: keyCode,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: hasMarkedText()
+            ),
+            to: sid
+        )
     }
 
     private func sendArrowKeys(_ arrows: [ArrowDirection]) {
@@ -890,15 +1052,16 @@ final class CocxyCoreView: NSView {
     override func deleteForward(_ sender: Any?) {
         sendDeleteControlSequence("\u{1B}[3~", keyCode: 117)
     }
-    override func moveUp(_ sender: Any?) { sendControlSequence("\u{1B}[A") }
-    override func moveDown(_ sender: Any?) { sendControlSequence("\u{1B}[B") }
+    override func moveUp(_ sender: Any?) { _ = sendResponderKey(keyCode: 126) }
+    override func moveDown(_ sender: Any?) { _ = sendResponderKey(keyCode: 125) }
     override func moveRight(_ sender: Any?) {
+        guard sendResponderKey(keyCode: 124) else { return }
         if ideCursorController.isOnPromptLine {
             ideCursorController.cursorMoved(toColumn: ideCursorController.cursorColumn + 1)
         }
-        sendControlSequence("\u{1B}[C")
     }
     override func moveLeft(_ sender: Any?) {
+        guard sendResponderKey(keyCode: 123) else { return }
         if ideCursorController.isOnPromptLine {
             let newColumn = max(
                 ideCursorController.promptColumn,
@@ -906,12 +1069,12 @@ final class CocxyCoreView: NSView {
             )
             ideCursorController.cursorMoved(toColumn: newColumn)
         }
-        sendControlSequence("\u{1B}[D")
     }
-    override func moveToBeginningOfLine(_ sender: Any?) { sendControlSequence("\u{1B}[H") }
-    override func moveToEndOfLine(_ sender: Any?) { sendControlSequence("\u{1B}[F") }
+    override func moveToBeginningOfLine(_ sender: Any?) { _ = sendResponderKey(keyCode: 115) }
+    override func moveToEndOfLine(_ sender: Any?) { _ = sendResponderKey(keyCode: 119) }
     override func insertTab(_ sender: Any?) { sendControlSequence("\t") }
     override func insertNewline(_ sender: Any?) {
+        guard activeKeyTextInterpretation == nil else { return }
         ideCursorController.commandExecuted()
         onUserInputSubmitted?()
         sendControlSequence("\r")
@@ -999,6 +1162,7 @@ final class CocxyCoreView: NSView {
     }
 
     @objc func paste(_ sender: Any?) {
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         handlePaste()
     }
 
@@ -1924,13 +2088,18 @@ final class CocxyCoreView: NSView {
         return modifiers
     }
 
-    static func translateKeyEvent(_ event: NSEvent, isKeyDown: Bool) -> KeyEvent {
+    static func translateKeyEvent(
+        _ event: NSEvent,
+        isKeyDown: Bool,
+        isComposing: Bool = false
+    ) -> KeyEvent {
         KeyEvent(
             characters: event.characters,
             keyCode: event.keyCode,
             modifiers: translateModifierFlags(event.modifierFlags),
             isKeyDown: isKeyDown,
-            isRepeat: event.isARepeat
+            isRepeat: event.isARepeat,
+            isComposing: isComposing
         )
     }
 
@@ -2358,11 +2527,20 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
         let wasComposing = compositionState.hasMarkedText
         compositionState.commit()
 
+        if wasComposing, let bridge, let sid = surfaceID {
+            bridge.sendPreeditText("", cursorByteOffset: 0, to: sid)
+        }
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.text.append(contentsOf: text)
+            if wasComposing {
+                activeKeyTextInterpretation?.didMutateComposition = true
+            }
+            return
+        }
+
         guard let bridge = bridge, let sid = surfaceID else { return }
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-        if wasComposing {
-            bridge.sendPreeditText("", to: sid)
-        }
+        clearResidualPreeditIfNeeded(bridge: bridge, surfaceID: sid)
         bridge.sendText(text, to: sid)
     }
 
@@ -2373,15 +2551,26 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
         else { return }
 
         compositionState.setMarkedText(text, selectedRange: selectedRange)
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.didMutateComposition = true
+        }
 
         guard let bridge = bridge, let sid = surfaceID else { return }
-        bridge.sendPreeditText(text, to: sid)
+        bridge.sendPreeditText(
+            text,
+            cursorByteOffset: compositionState.cursorUTF8ByteOffset,
+            to: sid
+        )
     }
 
     func unmarkText() {
         compositionState.unmarkText()
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.didMutateComposition = true
+        }
+        guard isDiscardingInputMethodComposition == false else { return }
         guard let bridge = bridge, let sid = surfaceID else { return }
-        bridge.sendPreeditText("", to: sid)
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: sid)
     }
 
     func hasMarkedText() -> Bool {
@@ -2393,7 +2582,9 @@ extension CocxyCoreView: @preconcurrency NSTextInputClient {
     }
 
     func selectedRange() -> NSRange {
-        NSRange(location: NSNotFound, length: 0)
+        compositionState.hasMarkedText
+            ? compositionState.selectedRange
+            : NSRange(location: NSNotFound, length: 0)
     }
 
     func firstRect(forCharacterRange range: NSRange, actualRange: UnsafeMutablePointer<NSRange>?) -> NSRect {

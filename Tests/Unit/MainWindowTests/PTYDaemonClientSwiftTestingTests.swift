@@ -138,6 +138,7 @@ struct PTYDaemonClientSwiftTestingTests {
             PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
             PTYDaemonResponse(id: "write", ok: true),
             PTYDaemonResponse(id: "resize", ok: true),
+            PTYDaemonResponse(id: "preedit-clear", ok: true),
             PTYDaemonResponse(id: "close", ok: true),
         ])
         let client = PTYDaemonClient(connection: connection)
@@ -152,11 +153,63 @@ struct PTYDaemonClientSwiftTestingTests {
         client.destroySurface(surface)
 
         let commands = connection.requests.map(\.command)
-        #expect(commands == [.hello, .surfaceCreate, .surfaceWrite, .surfaceResize, .surfaceClose])
+        #expect(commands == [
+            .hello,
+            .surfaceCreate,
+            .surfaceWrite,
+            .surfaceResize,
+            .surfacePreedit,
+            .surfaceClose,
+        ])
         #expect(connection.requests[2].payload?["bytesBase64"] == Data("echo ok\n".utf8).base64EncodedString())
         #expect(connection.requests[3].payload?["columns"] == "120")
         #expect(connection.requests[3].payload?["pixelHeight"] == "900")
-        #expect(connection.requests[4].payload?["surfaceID"] == surfaceID.uuidString)
+        #expect(connection.requests[4].payload?["text"] == "")
+        #expect(connection.requests[4].payload?["cursorByteOffset"] == "0")
+        #expect(connection.requests[5].payload?["surfaceID"] == surfaceID.uuidString)
+    }
+
+    @Test("composing key events never cross the daemon transport")
+    func composingKeyEventsDoNotSendRequests() throws {
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+
+        let handled = client.sendKeyEvent(
+            KeyEvent(
+                characters: "x",
+                keyCode: 7,
+                modifiers: [],
+                isKeyDown: true,
+                isComposing: true
+            ),
+            to: SurfaceID()
+        )
+
+        #expect(handled == false)
+        #expect(connection.requests.map(\.command) == [.hello])
+    }
+
+    @Test("preedit cursor byte offset is serialized for the daemon")
+    func preeditCursorByteOffsetIsSerialized() throws {
+        let rawSurfaceID = UUID()
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "preedit", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surfaceID = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        client.sendPreeditText("かな", cursorByteOffset: 3, to: surfaceID)
+
+        let request = try #require(connection.requests.last)
+        #expect(request.command == .surfacePreedit)
+        #expect(request.payload?["text"] == "かな")
+        #expect(request.payload?["cursorByteOffset"] == "3")
     }
 
     @Test("scrollViewport serializes relative daemon scroll requests")
@@ -345,6 +398,59 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(subscribed?.revision == 1)
         #expect(deliveredRevision.withValue { $0 } == 2)
         #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate, .surfaceFrameSubscribe])
+    }
+
+    @Test("stale daemon frames never replace a newer revision")
+    func staleDaemonFramesAreDiscarded() throws {
+        let rawSurfaceID = UUID()
+        let foreignSurfaceID = UUID()
+        func frame(revision: UInt64, surfaceID: UUID? = nil) -> PTYDaemonSurfaceFrame {
+            PTYDaemonSurfaceFrame(
+                surfaceID: (surfaceID ?? rawSurfaceID).uuidString,
+                revision: revision,
+                timestamp: Double(revision),
+                columns: 2,
+                rows: 1,
+                cells: [],
+                cursor: PTYDaemonCursor(row: 0, column: 0)
+            )
+        }
+        let connection = MockPTYDaemonClientConnection(
+            responses: [
+                PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+                PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+                PTYDaemonResponse(id: "frame", ok: true, frame: frame(revision: 1)),
+            ],
+            events: [
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 3)
+                ),
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 2)
+                ),
+                PTYDaemonEvent(
+                    event: .surfaceFrame,
+                    surfaceID: rawSurfaceID.uuidString,
+                    frame: frame(revision: 4, surfaceID: foreignSurfaceID)
+                ),
+            ]
+        )
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredRevisions = LockedBox<[UInt64]>([])
+        client.setFrameHandler(for: surface) { frame in
+            deliveredRevisions.withValue { $0.append(frame.revision) }
+        }
+
+        #expect(client.subscribeFrames(for: surface)?.revision == 1)
+        client.tick()
+
+        #expect(deliveredRevisions.withValue { $0 } == [3])
     }
 
     @Test("surface send reconnects and reattaches live surfaces before retry")

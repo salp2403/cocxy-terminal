@@ -183,7 +183,7 @@ struct CocxyCoreViewTests {
         #expect(harness.view.hasMarkedText() == true)
         #expect(harness.view.markedRange().location == 0)
         #expect(harness.view.markedRange().length == "composed".count)
-        #expect(harness.view.selectedRange().location == NSNotFound)
+        #expect(harness.view.selectedRange() == NSRange(location: 2, length: 3))
         #expect(harness.view.characterIndex(for: .zero) == 0)
         #expect(harness.view.attributedSubstring(forProposedRange: NSRange(location: 0, length: 1), actualRange: nil) == nil)
         #expect(harness.view.validAttributesForMarkedText().contains(.underlineStyle))
@@ -920,10 +920,17 @@ struct CocxyCoreViewTests {
         harness.view.keyDown(with: makeKeyEvent(characters: "c", modifiers: [.command], keyCode: 0x08))
         #expect(clipboard.writtenText == "alpha")
 
+        harness.view.setMarkedText(
+            "draft",
+            selectedRange: NSRange(location: 5, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
         harness.view.keyDown(with: makeKeyEvent(characters: "v", modifiers: [.command], keyCode: 0x09))
         try await waitUntil {
             String(data: output.data, encoding: .utf8)?.contains("shortcut paste") == true
         }
+        #expect(harness.view.hasMarkedText() == false)
+        #expect(cocxycore_terminal_preedit_active(state.terminal) == false)
 
         harness.view.keyDown(with: makeKeyEvent(characters: "a", modifiers: [.command], keyCode: 0x00))
         harness.view.keyDown(with: makeKeyEvent(characters: "k", modifiers: [.command], keyCode: 0x28))
@@ -955,6 +962,28 @@ struct CocxyCoreViewTests {
         harness.view.insertNewline(nil)
 
         #expect(submitCount == 1)
+    }
+
+    @Test("responder arrow commands preserve application cursor mode")
+    func responderArrowsUseModeAwareEncoder() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        feed("\u{1B}[?1h", into: state.terminal)
+
+        harness.view.moveUp(nil)
+
+        let applicationCursorUp = Data([0x1B, 0x4F, 0x41])
+        try await waitUntil {
+            output.data.range(of: applicationCursorUp) != nil
+        }
+        #expect(output.data.range(of: applicationCursorUp) != nil)
     }
 
     @Test("keyDown routes printable, control, option and shift-return input")

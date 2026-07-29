@@ -2053,7 +2053,18 @@ struct PluginMarketplaceSwiftTestingTests {
         }
         #expect(FileManager.default.fileExists(atPath: finishedURL.path))
 
-        try manager.disablePlugin(id: "lease-plugin")
+        let leaseReleaseDeadline = Date().addingTimeInterval(2)
+        while true {
+            do {
+                try manager.disablePlugin(id: "lease-plugin")
+                break
+            } catch PluginManagerError.registryBusy {
+                guard Date() < leaseReleaseDeadline else {
+                    throw PluginManagerError.registryBusy
+                }
+                try await Task.sleep(nanoseconds: 10_000_000)
+            }
+        }
         #expect(manager.enabledPlugins.isEmpty)
     }
 

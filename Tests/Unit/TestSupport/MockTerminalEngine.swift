@@ -24,7 +24,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var destroyedSurfaces: [SurfaceID] = []
     private(set) var keyEvents: [(surface: SurfaceID, event: KeyEvent)] = []
     private(set) var sentTexts: [(surface: SurfaceID, text: String)] = []
-    private(set) var preeditTexts: [(surface: SurfaceID, text: String)] = []
+    private(set) var preeditTexts: [(surface: SurfaceID, text: String, cursorByteOffset: Int?)] = []
     private(set) var resizedSurfaces: [(surface: SurfaceID, size: TerminalSize)] = []
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
     private(set) var viewportScrollRequests: [(surface: SurfaceID, deltaRows: Int)] = []
@@ -80,8 +80,12 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         sentTexts.append((surface, text))
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
-        preeditTexts.append((surface, text))
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
+        preeditTexts.append((surface, text, cursorByteOffset))
     }
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {

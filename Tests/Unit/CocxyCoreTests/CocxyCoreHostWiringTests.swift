@@ -74,6 +74,186 @@ struct CocxyCoreHostWiringTests {
         #expect(daemonHost.historyPillView?.title.contains("2 lines up") == true)
     }
 
+    @Test("daemon host routes dead-key callbacks through NSTextInputClient")
+    func daemonHostRoutesDeadKeyCallbacksThroughTextInputClient() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.keyEventInterpreterOverride = { [weak view] event in
+            if event.characters?.isEmpty == true {
+                view?.setMarkedText(
+                    "`",
+                    selectedRange: NSRange(location: 1, length: 0),
+                    replacementRange: NSRange(location: NSNotFound, length: 0)
+                )
+            } else {
+                view?.insertText(
+                    "à",
+                    replacementRange: NSRange(location: NSNotFound, length: 0)
+                )
+            }
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "", keyCode: 33))
+        #expect(view.hasMarkedText() == true)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.preeditTexts.last?.text == "`")
+        #expect(engine.preeditTexts.last?.cursorByteOffset == 1)
+
+        view.keyDown(with: makeKeyEvent(characters: "à", keyCode: 0))
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.map(\.text) == ["à"])
+        #expect(engine.preeditTexts.last?.text == "")
+    }
+
+    @Test("daemon host converts CJK cursor offsets and clears on focus loss")
+    func daemonHostConvertsCJKCursorAndClearsOnFocusLoss() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.setMarkedText(
+            "かな",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        #expect(engine.preeditTexts.last?.cursorByteOffset == 3)
+
+        #expect(view.resignFirstResponder() == true)
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.preeditTexts.last?.text == "")
+        #expect(engine.focusNotifications.last?.focused == false)
+    }
+
+    @Test("daemon host gives Escape and Ctrl-letter explicit IME semantics")
+    func daemonHostHandlesEscapeAndControlDuringComposition() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        var interpretationCount = 0
+        view.keyEventInterpreterOverride = { _ in interpretationCount += 1 }
+
+        view.setMarkedText(
+            "`",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.sentTexts.isEmpty)
+        #expect(engine.keyEvents.isEmpty)
+
+        view.setMarkedText(
+            "x",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyDown(with: makeKeyEvent(
+            characters: "\u{3}",
+            charactersIgnoringModifiers: "c",
+            modifiers: [.control],
+            keyCode: 8
+        ))
+
+        #expect(Array(engine.sentTexts.map(\.text).suffix(2)) == ["x", "\u{3}"])
+        #expect(engine.keyEvents.isEmpty)
+        #expect(interpretationCount == 0)
+    }
+
+    @Test("daemon host commits text while retaining a replacement preedit")
+    func daemonHostCommitsTextWhileRetainingReplacementPreedit() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "你",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+            view?.setMarkedText(
+                "h",
+                selectedRange: NSRange(location: 1, length: 0),
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "h", keyCode: 4))
+
+        #expect(engine.sentTexts.map(\.text) == ["你"])
+        #expect(engine.keyEvents.isEmpty)
+        #expect(view.hasMarkedText() == true)
+        #expect(view.markedRange() == NSRange(location: 0, length: 1))
+        #expect(view.selectedRange() == NSRange(location: 1, length: 0))
+        #expect(Array(engine.preeditTexts.map(\.text).suffix(2)) == ["", "h"])
+        #expect(engine.preeditTexts.last?.cursorByteOffset == 1)
+    }
+
+    @Test("daemon host candidate confirmation does not report a command submission")
+    func daemonHostCandidateConfirmationDoesNotSubmit() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        var submitCount = 0
+        view.onUserInputSubmitted = { submitCount += 1 }
+        view.setMarkedText(
+            "ni",
+            selectedRange: NSRange(location: 2, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        view.keyEventInterpreterOverride = { [weak view] _ in
+            view?.insertText(
+                "你",
+                replacementRange: NSRange(location: NSNotFound, length: 0)
+            )
+        }
+
+        view.keyDown(with: makeKeyEvent(characters: "\r", keyCode: 36))
+
+        #expect(engine.sentTexts.map(\.text) == ["你"])
+        #expect(submitCount == 0)
+        #expect(view.hasMarkedText() == false)
+    }
+
+    @Test("daemon host clears old preedit before surface reconfiguration")
+    func daemonHostClearsPreeditBeforeReconfiguration() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let oldSurfaceID = SurfaceID()
+        let newSurfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: oldSurfaceID)
+        view.setMarkedText(
+            "かな",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: newSurfaceID)
+
+        #expect(view.hasMarkedText() == false)
+        #expect(engine.preeditTexts.last?.surface == oldSurfaceID)
+        #expect(engine.preeditTexts.last?.text == "")
+
+        view.setMarkedText(
+            "x",
+            selectedRange: NSRange(location: 1, length: 0),
+            replacementRange: NSRange(location: NSNotFound, length: 0)
+        )
+        #expect(engine.preeditTexts.last?.surface == newSurfaceID)
+        #expect(engine.preeditTexts.last?.text == "x")
+    }
+
     @Test("daemon host view forwards scroll wheel as viewport scroll")
     func daemonHostViewForwardsScrollWheelAsViewportScroll() {
         let engine = MockTerminalEngine()

@@ -418,6 +418,7 @@ final class PTYDaemonClient: TerminalEngine {
     private var outputHandlers: [SurfaceID: @Sendable (Data) -> Void] = [:]
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
     private var frameHandlers: [SurfaceID: @Sendable (PTYDaemonSurfaceFrame) -> Void] = [:]
+    private var latestFrameRevisions: [SurfaceID: UInt64] = [:]
 
     init(connection: PTYDaemonClientConnection) {
         self.connection = connection
@@ -474,20 +475,24 @@ final class PTYDaemonClient: TerminalEngine {
         let surfaceID = SurfaceID(rawValue: uuid)
         liveSurfaces.insert(surfaceID)
         stalledSurfaces.remove(surfaceID)
+        latestFrameRevisions[surfaceID] = nil
         return surfaceID
     }
 
     func destroySurface(_ id: SurfaceID) {
+        sendPreeditText("", cursorByteOffset: 0, to: id)
         _ = try? sendSurfaceRequest(id, command: .surfaceClose)
         liveSurfaces.remove(id)
         stalledSurfaces.remove(id)
         outputHandlers[id] = nil
         oscHandlers[id] = nil
         frameHandlers[id] = nil
+        latestFrameRevisions[id] = nil
     }
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
+        guard event.isKeyDown, event.isComposing == false else { return false }
         let response = try? sendSurfaceRequest(
             surface,
             command: .surfaceKey,
@@ -518,8 +523,16 @@ final class PTYDaemonClient: TerminalEngine {
         )
     }
 
-    func sendPreeditText(_ text: String, to surface: SurfaceID) {
-        _ = try? sendSurfaceRequest(surface, command: .surfacePreedit, payload: ["text": text])
+    func sendPreeditText(
+        _ text: String,
+        cursorByteOffset: Int?,
+        to surface: SurfaceID
+    ) {
+        var payload = ["text": text]
+        if let cursorByteOffset {
+            payload["cursorByteOffset"] = "\(cursorByteOffset)"
+        }
+        _ = try? sendSurfaceRequest(surface, command: .surfacePreedit, payload: payload)
     }
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
@@ -566,7 +579,10 @@ final class PTYDaemonClient: TerminalEngine {
 
     func subscribeFrames(for surface: SurfaceID) -> PTYDaemonSurfaceFrame? {
         let response = try? sendSurfaceRequest(surface, command: .surfaceFrameSubscribe)
-        return response?.ok == true ? response?.frame : nil
+        guard response?.ok == true,
+              let frame = response?.frame,
+              acceptFrame(frame, for: surface) else { return nil }
+        return frame
     }
 
     func scrollToSearchResult(surfaceID: SurfaceID, lineNumber: Int) {
@@ -662,7 +678,7 @@ final class PTYDaemonClient: TerminalEngine {
             return
         }
         if let frame = response.frame {
-            frameHandlers[surfaceID]?(frame)
+            deliverFrame(frame, for: surfaceID)
         }
     }
 
@@ -691,11 +707,26 @@ final class PTYDaemonClient: TerminalEngine {
             oscHandlers[surface]?(notification)
         case .surfaceFrame:
             guard let frame = event.frame else { return }
-            frameHandlers[surface]?(frame)
+            deliverFrame(frame, for: surface)
         case .surfaceClosed:
             liveSurfaces.remove(surface)
             stalledSurfaces.insert(surface)
         }
+    }
+
+    private func deliverFrame(_ frame: PTYDaemonSurfaceFrame, for surface: SurfaceID) {
+        guard acceptFrame(frame, for: surface) else { return }
+        frameHandlers[surface]?(frame)
+    }
+
+    private func acceptFrame(_ frame: PTYDaemonSurfaceFrame, for surface: SurfaceID) -> Bool {
+        guard UUID(uuidString: frame.surfaceID) == surface.rawValue else { return false }
+        if let latestRevision = latestFrameRevisions[surface],
+           frame.revision <= latestRevision {
+            return false
+        }
+        latestFrameRevisions[surface] = frame.revision
+        return true
     }
 
     private func makeOSCNotification(from osc: PTYDaemonOSCNotification) -> OSCNotification? {

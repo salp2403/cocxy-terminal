@@ -25,6 +25,150 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(decoded.hello?.supportsTerminalEngineAdapter == true)
     }
 
+    @Test("daemon preedit honors the UTF-8 cursor and emits immediate frames")
+    func daemonPreeditHonorsCursorAndEmitsImmediateFrames() throws {
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-preedit-cursor",
+                command: .surfaceCreate,
+                payload: [
+                    "command": "/bin/cat",
+                    "workingDirectory": "/tmp",
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        let subscribe = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "subscribe-preedit-cursor",
+                command: .surfaceFrameSubscribe,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        let initialRevision = try #require(subscribe.frame).revision
+
+        let preedit = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "set-preedit-cursor",
+                command: .surfacePreedit,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "text": "かな",
+                    "cursorByteOffset": "3",
+                ]
+            )
+        )
+        #expect(preedit.ok == true)
+
+        let preeditFrameEvent = try helper.waitForEvent(timeout: 2) { event in
+            event.surfaceID == surfaceID
+                && event.event == .surfaceFrame
+                && (event.frame?.revision ?? 0) > initialRevision
+                && event.frame?.cursor.column == 2
+        }
+        let preeditRevision = try #require(preeditFrameEvent.frame).revision
+
+        let clear = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "clear-preedit-cursor",
+                command: .surfacePreedit,
+                payload: ["surfaceID": surfaceID, "text": ""]
+            )
+        )
+        #expect(clear.ok == true)
+
+        let clearFrameEvent = try helper.waitForEvent(timeout: 2) { event in
+            event.surfaceID == surfaceID
+                && event.event == .surfaceFrame
+                && (event.frame?.revision ?? 0) > preeditRevision
+                && event.frame?.cursor.column == 0
+        }
+        #expect(clearFrameEvent.frame != nil)
+
+        let close = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "close-preedit-cursor",
+                command: .surfaceClose,
+                payload: ["surfaceID": surfaceID]
+            )
+        )
+        #expect(close.ok == true)
+    }
+
+    @Test("daemon physical arrows preserve application cursor mode with AppKit characters")
+    func daemonPhysicalArrowPreservesApplicationCursorMode() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-decckm-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-arrow.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[?1h'
+            printf ready > "\(ready.path)"
+            dd bs=1 count=3 of="\(captured.path)" 2>/dev/null
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-decckm-arrow",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "\u{1B}[?1h",
+            timeout: 5
+        )
+        #expect(waitForFile(ready, timeout: 2))
+
+        let key = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "send-decckm-arrow",
+                command: .surfaceKey,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "characters": "\u{F700}",
+                    "keyCode": "126",
+                    "modifiers": "0",
+                    "isKeyDown": "true",
+                    "isComposing": "false",
+                    "unshiftedCodepoint": "63232",
+                ]
+            )
+        )
+        #expect(key.ok == true)
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        #expect(try Data(contentsOf: captured) == Data([0x1B, 0x4F, 0x41]))
+    }
+
     @Test("daemon spawn strips host NO_COLOR before forking the child shell")
     func helperSpawnStripsHostNoColor() throws {
         let helper = try RunningHelperProcess(extraEnvironment: ["NO_COLOR": "1"])

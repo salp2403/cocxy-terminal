@@ -30,6 +30,16 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var localSelectionAnchor: PTYDaemonGridPosition?
     private var localSelection: PTYDaemonGridSelection?
     private var isDraggingLocalSelection = false
+    private var compositionState = TextCompositionState()
+
+    private struct KeyTextInterpretation {
+        var text = ""
+        var didMutateComposition = false
+    }
+
+    private var activeKeyTextInterpretation: KeyTextInterpretation?
+    private var isDiscardingInputMethodComposition = false
+    var keyEventInterpreterOverride: ((NSEvent) -> Void)?
 
     init(
         viewModel: TerminalViewModel?,
@@ -50,6 +60,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     deinit {
         MainActor.assumeIsolated {
+            clearComposition(forceEngineClear: true)
             eventDrainTimer?.invalidate()
         }
     }
@@ -70,6 +81,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func resignFirstResponder() -> Bool {
+        clearComposition(forceEngineClear: true, discardInputContext: true)
         if let surfaceID {
             bridge?.notifyFocus(false, for: surfaceID)
         }
@@ -78,6 +90,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {
         guard self.surfaceID != surfaceID else { return }
+        clearComposition(forceEngineClear: true, discardInputContext: true)
+        latestFrame = nil
         terminalMouseCaptureByButton.removeAll()
         clearLocalSelection()
         self.bridge = bridge
@@ -183,21 +197,110 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             return
         }
         followLiveViewportBeforeUserInput()
+        let modifiers = Self.keyModifiers(from: event.modifierFlags)
+        let wasComposing = hasMarkedText()
+
+        if wasComposing, event.keyCode == 53 {
+            clearComposition(forceEngineClear: true, discardInputContext: true)
+            return
+        }
+
+        if let controlText = Self.controlCharacterText(
+            for: event,
+            modifiers: modifiers
+        ) {
+            if wasComposing {
+                commitComposition(bridge: bridge, surfaceID: surfaceID)
+            }
+            bridge.sendText(controlText, to: surfaceID)
+            return
+        }
+
+        let interpretation = interpretTerminalKeyEvent(event)
+        if interpretation.text.isEmpty == false {
+            bridge.sendText(interpretation.text, to: surfaceID)
+            if Self.containsInputSubmission(interpretation.text),
+               modifiers.contains(.shift) == false {
+                onUserInputSubmitted?()
+            }
+            return
+        }
+        if hasMarkedText() {
+            return
+        }
+        if interpretation.didMutateComposition {
+            return
+        }
         let keyEvent = KeyEvent(
             characters: event.characters,
             keyCode: UInt16(event.keyCode),
-            modifiers: Self.keyModifiers(from: event.modifierFlags),
+            modifiers: modifiers,
             isKeyDown: true,
             isRepeat: event.isARepeat,
+            isComposing: hasMarkedText(),
             unshiftedCodepoint: event.charactersIgnoringModifiers?.unicodeScalars.first?.value ?? 0
         )
         if bridge.sendKeyEvent(keyEvent, to: surfaceID) {
             if event.keyCode == 36 {
                 onUserInputSubmitted?()
             }
-        } else {
-            super.keyDown(with: event)
         }
+    }
+
+    private func interpretTerminalKeyEvent(_ event: NSEvent) -> KeyTextInterpretation {
+        activeKeyTextInterpretation = KeyTextInterpretation()
+        defer { activeKeyTextInterpretation = nil }
+
+        if let keyEventInterpreterOverride {
+            keyEventInterpreterOverride(event)
+        } else {
+            interpretKeyEvents([event])
+        }
+
+        return activeKeyTextInterpretation ?? KeyTextInterpretation()
+    }
+
+    private func commitComposition(
+        bridge: any TerminalEngine,
+        surfaceID: SurfaceID
+    ) {
+        guard compositionState.hasMarkedText else { return }
+        let markedText = compositionState.markedText
+        compositionState.commit()
+        discardInputMethodComposition()
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+        if markedText.isEmpty == false {
+            bridge.sendText(markedText, to: surfaceID)
+        }
+    }
+
+    private func clearComposition(
+        forceEngineClear: Bool = false,
+        discardInputContext: Bool = false
+    ) {
+        let hadMarkedText = compositionState.hasMarkedText
+        compositionState.unmarkText()
+        if discardInputContext, hadMarkedText {
+            discardInputMethodComposition()
+        }
+        guard hadMarkedText || forceEngineClear,
+              let bridge,
+              let surfaceID else { return }
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    private func discardInputMethodComposition() {
+        guard isDiscardingInputMethodComposition == false else { return }
+        isDiscardingInputMethodComposition = true
+        defer { isDiscardingInputMethodComposition = false }
+        inputContext?.discardMarkedText()
+        // The context can synchronously re-enter this client while discarding.
+        compositionState.unmarkText()
+    }
+
+    override func doCommand(by selector: Selector) {
+        guard activeKeyTextInterpretation == nil else { return }
+        super.doCommand(by: selector)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -345,20 +448,6 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         }
     }
 
-    override func insertText(_ insertString: Any) {
-        let text: String
-        if let attributed = insertString as? NSAttributedString {
-            text = attributed.string
-        } else if let string = insertString as? String {
-            text = string
-        } else {
-            return
-        }
-        guard let bridge, let surfaceID else { return }
-        followLiveViewportBeforeUserInput()
-        bridge.sendText(text, to: surfaceID)
-    }
-
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         context.setFillColor(NSColor.black.cgColor)
@@ -428,6 +517,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     func apply(_ frame: PTYDaemonSurfaceFrame) {
+        guard let surfaceID,
+              UUID(uuidString: frame.surfaceID) == surfaceID.rawValue else { return }
+        if let latestFrame, frame.revision <= latestFrame.revision {
+            return
+        }
         if let latestFrame,
            latestFrame.surfaceID != frame.surfaceID ||
             latestFrame.columns != frame.columns ||
@@ -610,6 +704,23 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         daemon.sendRawBytes(payload, to: surfaceID)
     }
 
+    private static func controlCharacterText(
+        for event: NSEvent,
+        modifiers: KeyModifiers
+    ) -> String? {
+        guard modifiers.contains(.control),
+              modifiers.contains(.command) == false,
+              let scalar = event.charactersIgnoringModifiers?
+                .lowercased()
+                .unicodeScalars
+                .first else { return nil }
+        return ControlCharacterMapper.controlCharacterText(forLetter: String(scalar))
+    }
+
+    private static func containsInputSubmission(_ text: String) -> Bool {
+        text.contains("\r") || text.contains("\n")
+    }
+
     private func beginLocalSelection(with event: NSEvent) -> Bool {
         guard let frame = latestFrame else { return false }
         let position = mousePosition(for: event, frame: frame)
@@ -762,6 +873,122 @@ private struct PTYDaemonGridSelection: Equatable {
             lines.append(line)
         }
         return lines.joined(separator: "\n")
+    }
+}
+
+// MARK: - NSTextInputClient Conformance
+
+extension PTYDaemonHostView: @preconcurrency NSTextInputClient {
+    func insertText(_ string: Any, replacementRange: NSRange) {
+        let text: String
+        if let attributed = string as? NSAttributedString {
+            text = attributed.string
+        } else if let plain = string as? String {
+            text = plain
+        } else {
+            return
+        }
+        guard text.isEmpty == false else { return }
+
+        let wasComposing = compositionState.hasMarkedText
+        compositionState.commit()
+        if wasComposing, let bridge, let surfaceID {
+            bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+        }
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.text.append(contentsOf: text)
+            if wasComposing {
+                activeKeyTextInterpretation?.didMutateComposition = true
+            }
+            return
+        }
+
+        guard let bridge, let surfaceID else { return }
+        bridge.sendText(text, to: surfaceID)
+    }
+
+    func setMarkedText(
+        _ string: Any,
+        selectedRange: NSRange,
+        replacementRange: NSRange
+    ) {
+        let text: String
+        if let attributed = string as? NSAttributedString {
+            text = attributed.string
+        } else if let plain = string as? String {
+            text = plain
+        } else {
+            return
+        }
+
+        compositionState.setMarkedText(text, selectedRange: selectedRange)
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.didMutateComposition = true
+        }
+        guard let bridge, let surfaceID else { return }
+        bridge.sendPreeditText(
+            text,
+            cursorByteOffset: compositionState.cursorUTF8ByteOffset,
+            to: surfaceID
+        )
+    }
+
+    func unmarkText() {
+        compositionState.unmarkText()
+        if activeKeyTextInterpretation != nil {
+            activeKeyTextInterpretation?.didMutateComposition = true
+        }
+        guard isDiscardingInputMethodComposition == false else { return }
+        guard let bridge, let surfaceID else { return }
+        bridge.sendPreeditText("", cursorByteOffset: 0, to: surfaceID)
+    }
+
+    func hasMarkedText() -> Bool {
+        compositionState.hasMarkedText
+    }
+
+    func markedRange() -> NSRange {
+        compositionState.markedRange
+    }
+
+    func selectedRange() -> NSRange {
+        compositionState.hasMarkedText
+            ? compositionState.selectedRange
+            : NSRange(location: NSNotFound, length: 0)
+    }
+
+    func firstRect(
+        forCharacterRange range: NSRange,
+        actualRange: UnsafeMutablePointer<NSRange>?
+    ) -> NSRect {
+        guard let frame = latestFrame else {
+            return window?.convertToScreen(
+                NSRect(origin: .zero, size: CGSize(width: 1, height: cellSize.height))
+            ) ?? .zero
+        }
+        let viewRect = NSRect(
+            x: CGFloat(frame.cursor.column) * cellSize.width,
+            y: CGFloat(frame.cursor.row) * cellSize.height,
+            width: cellSize.width,
+            height: cellSize.height
+        )
+        let windowRect = convert(viewRect, to: nil)
+        return window?.convertToScreen(windowRect) ?? viewRect
+    }
+
+    func characterIndex(for point: NSPoint) -> Int {
+        0
+    }
+
+    func attributedSubstring(
+        forProposedRange range: NSRange,
+        actualRange: UnsafeMutablePointer<NSRange>?
+    ) -> NSAttributedString? {
+        nil
+    }
+
+    func validAttributesForMarkedText() -> [NSAttributedString.Key] {
+        [.underlineStyle, .foregroundColor]
     }
 }
 
