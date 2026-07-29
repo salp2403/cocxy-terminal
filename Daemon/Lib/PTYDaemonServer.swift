@@ -131,6 +131,23 @@ public final class PTYDaemonServer {
                     ok: ok,
                     frame: ok ? surface.makeFrame() : nil
                 )
+            case .surfaceSemanticNavigation:
+                let surface = try requireSurface(payload)
+                guard let rawAction = payload.nonEmpty("action"),
+                      let action = TerminalSemanticNavigationAction(rawValue: rawAction) else {
+                    throw PTYDaemonSurfaceError.invalidPayload(
+                        "surface_semantic_navigation requires a valid action"
+                    )
+                }
+                guard let navigation = surface.performSemanticNavigation(action) else {
+                    return PTYDaemonResponse(id: request.id, ok: false)
+                }
+                return PTYDaemonResponse(
+                    id: request.id,
+                    ok: true,
+                    frame: navigation.frame,
+                    semanticNavigation: navigation.result
+                )
             case .surfaceProcess:
                 let surface = try requireSurface(payload)
                 return PTYDaemonResponse(id: request.id, ok: true, process: surface.processRegistration())
@@ -150,6 +167,7 @@ public final class PTYDaemonServer {
                 PTYDaemonProtocol.terminalEngineCapability,
                 PTYDaemonProtocol.terminalHostRendererCapability,
                 PTYDaemonProtocol.terminalContentDetectionCapability,
+                PTYDaemonProtocol.terminalSemanticNavigationCapability,
             ]
         )
     }

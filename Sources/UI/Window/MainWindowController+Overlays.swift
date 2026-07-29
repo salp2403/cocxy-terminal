@@ -134,6 +134,9 @@ extension MainWindowController {
         "timeline.toggle": KeybindingActionCatalog.reviewTimeline.id,
         "search.toggle": KeybindingActionCatalog.editorFind.id,
         "terminal.richInput": KeybindingActionCatalog.richInputComposer.id,
+        "terminal.previousPrompt": KeybindingActionCatalog.terminalPreviousPrompt.id,
+        "terminal.nextPrompt": KeybindingActionCatalog.terminalNextPrompt.id,
+        "terminal.selectCommandOutput": KeybindingActionCatalog.terminalSelectCommandOutput.id,
         "terminal.showDetectedContentHints": KeybindingActionCatalog.terminalShowDetectedContentHints.id,
         "editor.zoomIn": KeybindingActionCatalog.editorZoomIn.id,
         "editor.zoomOut": KeybindingActionCatalog.editorZoomOut.id,
@@ -519,6 +522,39 @@ extension MainWindowController {
                 handler: { [weak self] in
                     self?.dismissCommandPalette()
                     Task { @MainActor in self?.toggleRichInputComposer() }
+                }
+            ),
+            CommandAction(
+                id: "terminal.previousPrompt",
+                name: "Previous Prompt",
+                description: "Jump to the previous shell prompt in terminal history",
+                shortcut: paletteShortcutLabel("terminal.previousPrompt", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.previousTerminalPromptAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "terminal.nextPrompt",
+                name: "Next Prompt",
+                description: "Jump to the next shell prompt in terminal history",
+                shortcut: paletteShortcutLabel("terminal.nextPrompt", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.nextTerminalPromptAction(nil) }
+                }
+            ),
+            CommandAction(
+                id: "terminal.selectCommandOutput",
+                name: "Select Command Output",
+                description: "Select the output associated with the current shell prompt",
+                shortcut: paletteShortcutLabel("terminal.selectCommandOutput", fallback: nil),
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in self?.selectTerminalCommandOutputAction(nil) }
                 }
             ),
             CommandAction(

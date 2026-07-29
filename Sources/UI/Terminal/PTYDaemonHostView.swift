@@ -39,6 +39,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
     private var localSelectionAnchor: PTYDaemonGridPosition?
     private var localSelection: PTYDaemonGridSelection?
+    private var semanticSelection: TerminalSemanticSelection?
     private var isDraggingLocalSelection = false
     private var localSelectionMode: PTYDaemonGridSelection.Mode = .linear
     private var localSelectionClickCount = 0
@@ -507,7 +508,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             return
         }
         let lineText = smartCopyLineText(for: event, frame: frame)
-        let selectedText = localSelection?.text(in: frame)?.trimmingCharacters(in: .newlines)
+        let selectedText = selectionText(in: frame)?.trimmingCharacters(in: .newlines)
         let copyText = selectedText.flatMap { $0.isEmpty ? nil : $0 } ?? lineText
         let menu = SmartCopyMenuBuilder.buildMenu(
             detectedContent: detectedContent(at: event),
@@ -531,6 +532,13 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             localizer: localizer
         )
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    @objc func copy(_ sender: Any?) {
+        guard let frame = latestFrame,
+              let text = selectionText(in: frame),
+              text.isEmpty == false else { return }
+        clipboardService.write(text)
     }
 
     override func rightMouseDragged(with event: NSEvent) {
@@ -678,7 +686,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
                 width: cellSize.width,
                 height: cellSize.height
             )
-            let isSelected = localSelection?.contains(
+            let isSelected = isSemanticallySelected(
+                row: cell.row,
+                column: cell.column,
+                in: frame
+            ) || localSelection?.contains(
                 row: cell.row,
                 column: cell.column,
                 columnCount: frame.columns
@@ -800,8 +812,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var renderedFontPointSizeForTesting: CGFloat { font.pointSize }
     var renderedCellSizeForTesting: CGSize { cellSize }
     var localSelectionTextForTesting: String? {
-        guard let latestFrame else { return nil }
-        return localSelection?.text(in: latestFrame)
+        guard let latestFrame else { return semanticSelection?.text }
+        return selectionText(in: latestFrame)
     }
 
     func flushPendingSynchronizedFrameForTesting() {
@@ -833,6 +845,31 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         if command == .bottom {
             historyPillView?.update(linesAbove: 0)
         }
+    }
+
+    @discardableResult
+    func performSemanticNavigation(_ action: TerminalSemanticNavigationAction) -> Bool {
+        dismissDetectedContentHints()
+        guard let bridge, let surfaceID,
+              let result = bridge.performSemanticNavigation(action, for: surfaceID) else {
+            return false
+        }
+        localSelectionAnchor = nil
+        localSelection = nil
+        semanticSelection = result.selection
+        isDraggingLocalSelection = false
+        localSelectionMode = .linear
+        localSelectionClickCount = 0
+        if let latestFrame {
+            let maximumVisibleStart = UInt32(clamping: latestFrame.historyMaxVisibleStart)
+            historyPillView?.update(
+                linesAbove: maximumVisibleStart > result.viewportStartRow
+                    ? maximumVisibleStart - result.viewportStartRow
+                    : 0
+            )
+        }
+        needsDisplay = true
+        return true
     }
 
     private func installHistoryPill(localizer: AppLocalizer) {
@@ -1012,6 +1049,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     private func beginLocalSelection(with event: NSEvent) -> Bool {
         guard let frame = latestFrame else { return false }
+        semanticSelection = nil
         let position = mousePosition(for: event, frame: frame)
         let gridPosition = PTYDaemonGridPosition(
             row: position.row,
@@ -1075,10 +1113,29 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private func clearLocalSelection() {
         localSelectionAnchor = nil
         localSelection = nil
+        semanticSelection = nil
         isDraggingLocalSelection = false
         localSelectionMode = .linear
         localSelectionClickCount = 0
         needsDisplay = true
+    }
+
+    private func selectionText(in frame: PTYDaemonSurfaceFrame) -> String? {
+        semanticSelection?.text ?? localSelection?.text(in: frame)
+    }
+
+    private func isSemanticallySelected(
+        row: UInt16,
+        column: UInt16,
+        in frame: PTYDaemonSurfaceFrame
+    ) -> Bool {
+        guard let semanticSelection,
+              let visibleStart = UInt32(exactly: frame.scrollbackTop) else {
+            return false
+        }
+        let (absoluteRow, overflowed) = visibleStart.addingReportingOverflow(UInt32(row))
+        guard overflowed == false else { return false }
+        return semanticSelection.contains(absoluteRow: absoluteRow, column: column)
     }
 
     private func smartCopyLineText(

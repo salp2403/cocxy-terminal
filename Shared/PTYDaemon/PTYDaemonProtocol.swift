@@ -11,6 +11,7 @@ public enum PTYDaemonProtocol {
     public static let terminalEngineCapability = "terminal-engine-v1"
     public static let terminalHostRendererCapability = "terminal-host-renderer-v1"
     public static let terminalContentDetectionCapability = "terminal-content-detection-v1"
+    public static let terminalSemanticNavigationCapability = "terminal-semantic-navigation-v1"
 }
 
 public struct PTYDaemonHello: Codable, Equatable, Sendable {
@@ -48,6 +49,10 @@ public struct PTYDaemonHello: Codable, Equatable, Sendable {
     public var supportsTerminalContentDetection: Bool {
         capabilities.contains(PTYDaemonProtocol.terminalContentDetectionCapability)
     }
+
+    public var supportsTerminalSemanticNavigation: Bool {
+        capabilities.contains(PTYDaemonProtocol.terminalSemanticNavigationCapability)
+    }
 }
 
 public struct PTYDaemonRequest: Codable, Equatable, Sendable {
@@ -67,6 +72,7 @@ public struct PTYDaemonRequest: Codable, Equatable, Sendable {
         case surfaceFont = "surface_font"
         case surfaceSearch = "surface_search"
         case surfaceScroll = "surface_scroll"
+        case surfaceSemanticNavigation = "surface_semantic_navigation"
         case surfaceProcess = "surface_process"
     }
 
@@ -88,6 +94,7 @@ public struct PTYDaemonResponse: Codable, Equatable, Sendable {
     public let surfaceID: String?
     public let frame: PTYDaemonSurfaceFrame?
     public let searchResults: [PTYDaemonSearchResult]?
+    public let semanticNavigation: TerminalSemanticNavigationResult?
     public let process: PTYDaemonProcessRegistration?
     public let error: String?
 
@@ -98,6 +105,7 @@ public struct PTYDaemonResponse: Codable, Equatable, Sendable {
         surfaceID: String? = nil,
         frame: PTYDaemonSurfaceFrame? = nil,
         searchResults: [PTYDaemonSearchResult]? = nil,
+        semanticNavigation: TerminalSemanticNavigationResult? = nil,
         process: PTYDaemonProcessRegistration? = nil,
         error: String? = nil
     ) {
@@ -107,6 +115,7 @@ public struct PTYDaemonResponse: Codable, Equatable, Sendable {
         self.surfaceID = surfaceID
         self.frame = frame
         self.searchResults = searchResults
+        self.semanticNavigation = semanticNavigation
         self.process = process
         self.error = error
     }

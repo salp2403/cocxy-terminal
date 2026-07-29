@@ -421,6 +421,30 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "end")
     )
 
+    static let terminalPreviousPrompt = KeybindingAction(
+        id: "terminal.previousPrompt",
+        displayName: "Previous Prompt",
+        summary: "Jump to the previous shell prompt in terminal history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "up")
+    )
+
+    static let terminalNextPrompt = KeybindingAction(
+        id: "terminal.nextPrompt",
+        displayName: "Next Prompt",
+        summary: "Jump to the next shell prompt in terminal history.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "down")
+    )
+
+    static let terminalSelectCommandOutput = KeybindingAction(
+        id: "terminal.selectCommandOutput",
+        displayName: "Select Command Output",
+        summary: "Select the command output associated with the current prompt.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "a")
+    )
+
     static let terminalHideCommandBlocks = KeybindingAction(
         id: "terminal.hideCommandBlocks",
         displayName: "Hide Command Blocks",
@@ -593,6 +617,9 @@ enum KeybindingActionCatalog {
         terminalScrollPageDown,
         terminalScrollToTop,
         terminalScrollToBottom,
+        terminalPreviousPrompt,
+        terminalNextPrompt,
+        terminalSelectCommandOutput,
         terminalHideCommandBlocks,
         terminalShowDetectedContentHints,
         // Editor

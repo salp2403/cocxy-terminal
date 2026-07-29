@@ -4,6 +4,7 @@
 import AppKit
 import CocxyCommandCorrections
 import CocxyCoreKit
+import CocxyShared
 
 // MARK: - CocxyCore View
 
@@ -2700,6 +2701,19 @@ extension CocxyCoreView: TerminalHostingView {
         bridge.scrollViewport(surfaceID: sid, deltaRows: deltaRows)
         refreshCommandBlockOverlay()
         refreshHistoryPill()
+    }
+
+    @discardableResult
+    func performSemanticNavigation(_ action: TerminalSemanticNavigationAction) -> Bool {
+        dismissDetectedContentHints()
+        guard let bridge, let sid = surfaceID,
+              bridge.performSemanticNavigation(action, for: sid) != nil else {
+            return false
+        }
+        refreshCommandBlockOverlay()
+        refreshHistoryPill()
+        setNeedsTerminalDisplay()
+        return true
     }
 
     var terminalViewModel: TerminalViewModel? { viewModel }

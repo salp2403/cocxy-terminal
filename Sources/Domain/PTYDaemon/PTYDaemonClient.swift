@@ -426,6 +426,7 @@ final class PTYDaemonClient: TerminalEngine {
     private var engineConfig: TerminalEngineConfig?
     private var surfaceBackingScales: [SurfaceID: Double] = [:]
     private var lastReportedFocus: [SurfaceID: Bool] = [:]
+    private var supportsSemanticNavigation = false
 
     init(connection: PTYDaemonClientConnection) {
         self.connection = connection
@@ -449,6 +450,7 @@ final class PTYDaemonClient: TerminalEngine {
             )
         }
         engineConfig = config
+        supportsSemanticNavigation = hello.supportsTerminalSemanticNavigation
         initialized = true
     }
 
@@ -683,6 +685,26 @@ final class PTYDaemonClient: TerminalEngine {
 
     func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
         latestFrames[surface]?.detectedContents.compactMap(Self.detectedContent(from:)) ?? []
+    }
+
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        guard supportsSemanticNavigation,
+              let response = try? sendSurfaceRequest(
+                surface,
+                command: .surfaceSemanticNavigation,
+                payload: ["action": action.rawValue]
+              ),
+              response.ok,
+              let result = response.semanticNavigation else {
+            return nil
+        }
+        if let frame = response.frame {
+            deliverFrame(frame, for: surface)
+        }
+        return result
     }
 
     func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration? {

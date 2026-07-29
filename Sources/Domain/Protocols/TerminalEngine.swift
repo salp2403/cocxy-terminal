@@ -2,6 +2,7 @@
 // TerminalEngine.swift - Contract for the terminal rendering engine bridge.
 
 import Foundation
+import CocxyShared
 
 // MARK: - Terminal Engine Protocol
 
@@ -196,6 +197,16 @@ protocol TerminalEngine: AnyObject {
     /// keyboard hint presentation.
     func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent]
 
+    /// Performs a semantic grid action using shell-integration block metadata.
+    ///
+    /// Prompt navigation updates the local viewport without emitting PTY input.
+    /// Output selection returns an absolute retained-history range and its full
+    /// copied text so renderer-backed hosts can preserve off-screen selection.
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult?
+
     /// Returns process-monitor metadata for a surface when the engine can
     /// expose a real PTY-backed shell process.
     ///
@@ -355,6 +366,13 @@ extension TerminalEngine {
 
     func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
         []
+    }
+
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        nil
     }
 }
 

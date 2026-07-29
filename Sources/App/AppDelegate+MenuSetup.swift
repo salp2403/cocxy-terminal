@@ -535,6 +535,33 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(scrollToBottomItem, with: KeybindingActionCatalog.terminalScrollToBottom)
         viewMenu.addItem(scrollToBottomItem)
 
+        let previousPromptItem = NSMenuItem(
+            title: menuString("menu.view.previousPrompt", "Previous Prompt", localizer),
+            action: #selector(MainWindowController.previousTerminalPromptAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(previousPromptItem, with: KeybindingActionCatalog.terminalPreviousPrompt)
+        viewMenu.addItem(previousPromptItem)
+
+        let nextPromptItem = NSMenuItem(
+            title: menuString("menu.view.nextPrompt", "Next Prompt", localizer),
+            action: #selector(MainWindowController.nextTerminalPromptAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(nextPromptItem, with: KeybindingActionCatalog.terminalNextPrompt)
+        viewMenu.addItem(nextPromptItem)
+
+        let selectCommandOutputItem = NSMenuItem(
+            title: menuString("menu.view.selectCommandOutput", "Select Command Output", localizer),
+            action: #selector(MainWindowController.selectTerminalCommandOutputAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(
+            selectCommandOutputItem,
+            with: KeybindingActionCatalog.terminalSelectCommandOutput
+        )
+        viewMenu.addItem(selectCommandOutputItem)
+
         let hideCommandBlocksItem = NSMenuItem(
             title: menuString("menu.view.hideCommandBlocks", "Hide Command Blocks", localizer),
             action: #selector(MainWindowController.hideCommandBlocksAction(_:)),

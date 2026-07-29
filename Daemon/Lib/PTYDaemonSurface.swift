@@ -370,6 +370,17 @@ final class PTYDaemonSurface: @unchecked Sendable {
         }
     }
 
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction
+    ) -> (result: TerminalSemanticNavigationResult, frame: PTYDaemonSurfaceFrame?)? {
+        terminalLock.withLock {
+            guard let result = Self.performSemanticNavigation(action, terminal: terminal) else {
+                return nil
+            }
+            return (result, makeFrameLocked())
+        }
+    }
+
     func search(query: String, caseSensitive: Bool, useRegex: Bool, maxResults: Int) -> [PTYDaemonSearchResult] {
         guard query.isEmpty == false else { return [] }
         return terminalLock.withLock {
@@ -385,6 +396,162 @@ final class PTYDaemonSurface: @unchecked Sendable {
         // the shell PID, but its PTY master descriptor is meaningless and
         // potentially dangerous in the app process.
         PTYDaemonProcessRegistration(shellPID: shellPID, ptyMasterFD: nil)
+    }
+
+    private static func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        terminal: OpaquePointer
+    ) -> TerminalSemanticNavigationResult? {
+        let visibleStart = cocxycore_terminal_history_visible_start(terminal)
+        let maximumVisibleStart = cocxycore_terminal_history_max_visible_start(terminal)
+        let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+        let promptRegions = semanticPromptRegions(
+            terminal: terminal,
+            blockCount: blockCount
+        )
+
+        switch action {
+        case .previousPrompt, .nextPrompt:
+            guard let target = TerminalSemanticNavigationResolver.promptRegion(
+                for: action,
+                visibleStartRow: visibleStart,
+                regions: promptRegions,
+                maximumSearchSteps: Int(blockCount),
+                findOlder: { offset in
+                    cocxycore_terminal_semantic_find_next(
+                        terminal,
+                        UInt8(COCXYCORE_BLOCK_PROMPT.rawValue),
+                        offset
+                    )
+                },
+                findNewer: { offset in
+                    cocxycore_terminal_semantic_find_prev(
+                        terminal,
+                        UInt8(COCXYCORE_BLOCK_PROMPT.rawValue),
+                        offset
+                    )
+                }
+            ) else { return nil }
+            let viewportStart = min(target.startRow, maximumVisibleStart)
+            guard cocxycore_terminal_history_set_visible_start(terminal, viewportStart) else {
+                return nil
+            }
+            cocxycore_terminal_selection_clear(terminal)
+            return TerminalSemanticNavigationResult(
+                action: action,
+                viewportStartRow: viewportStart
+            )
+
+        case .selectCommandOutput:
+            let outputRegions = commandOutputRegions(terminal: terminal)
+            guard let target = TerminalSemanticNavigationResolver.commandOutputRegion(
+                visibleStartRow: visibleStart,
+                regions: promptRegions + outputRegions
+            ), let blockID = target.blockID else { return nil }
+            let columns = cocxycore_terminal_cols(terminal)
+            guard columns > 0 else { return nil }
+            let viewportStart = min(target.startRow, maximumVisibleStart)
+            guard cocxycore_terminal_history_set_visible_start(terminal, viewportStart) else {
+                return nil
+            }
+            let endColumn = columns - 1
+            cocxycore_terminal_selection_set(
+                terminal,
+                target.startRow,
+                0,
+                target.endRow,
+                endColumn
+            )
+            return TerminalSemanticNavigationResult(
+                action: action,
+                viewportStartRow: viewportStart,
+                selection: TerminalSemanticSelection(
+                    blockID: blockID,
+                    startRow: target.startRow,
+                    startColumn: 0,
+                    endRow: target.endRow,
+                    endColumn: endColumn,
+                    text: blockOutput(from: terminal, blockID: blockID)
+                )
+            )
+        }
+    }
+
+    private static func semanticPromptRegions(
+        terminal: OpaquePointer,
+        blockCount: UInt32
+    ) -> [TerminalSemanticRegion] {
+        guard blockCount > 0 else { return [] }
+        var regions: [TerminalSemanticRegion] = []
+        regions.reserveCapacity(Int(blockCount))
+
+        for offset in 0..<blockCount {
+            var block = cocxycore_semantic_block()
+            guard cocxycore_terminal_semantic_get_block(terminal, offset, &block),
+                  block.block_type == UInt8(COCXYCORE_BLOCK_PROMPT.rawValue) else {
+                continue
+            }
+            var startRow: UInt32 = 0
+            var endRow: UInt32 = 0
+            guard cocxycore_block_visible_row(terminal, block.start_row, &startRow),
+                  cocxycore_block_visible_row(terminal, block.end_row, &endRow) else {
+                continue
+            }
+            regions.append(TerminalSemanticRegion(
+                offset: offset,
+                kind: .prompt,
+                startRow: startRow,
+                endRow: endRow
+            ))
+        }
+        return regions
+    }
+
+    private static func commandOutputRegions(
+        terminal: OpaquePointer
+    ) -> [TerminalSemanticRegion] {
+        guard let iterator = cocxycore_block_iterator_create(terminal) else { return [] }
+        defer { cocxycore_block_iterator_destroy(iterator) }
+        var regions: [TerminalSemanticRegion] = []
+
+        while cocxycore_block_iterator_next(iterator) {
+            let blockID = cocxycore_block_iterator_current_id(iterator)
+            var metadata = cocxycore_block_metadata()
+            guard blockID != 0,
+                  cocxycore_block_get_metadata(terminal, blockID, &metadata),
+                  let kind = TerminalSemanticBlockKind(rawValue: metadata.block_type),
+                  kind == .commandOutput || kind == .errorOutput else {
+                continue
+            }
+            var startRow: UInt32 = 0
+            var endRow: UInt32 = 0
+            guard cocxycore_block_visible_row(terminal, metadata.start_row, &startRow),
+                  cocxycore_block_visible_row(terminal, metadata.end_row, &endRow) else {
+                continue
+            }
+            regions.append(TerminalSemanticRegion(
+                blockID: blockID,
+                kind: kind,
+                startRow: startRow,
+                endRow: endRow
+            ))
+        }
+        return regions
+    }
+
+    private static func blockOutput(from terminal: OpaquePointer, blockID: UInt64) -> String {
+        let required = cocxycore_block_get_output(terminal, blockID, nil, 0, true)
+        guard required > 0 else { return "" }
+        var buffer = [CChar](repeating: 0, count: required)
+        let copied = cocxycore_block_get_output(
+            terminal,
+            blockID,
+            &buffer,
+            buffer.count,
+            true
+        )
+        guard copied > 0 else { return "" }
+        return String(decoding: buffer.prefix(copied).map { UInt8(bitPattern: $0) }, as: UTF8.self)
     }
 
     @discardableResult

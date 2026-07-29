@@ -2880,6 +2880,21 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         activeTerminalSurfaceView?.performLocalViewportScroll(.bottom)
     }
 
+    @objc func previousTerminalPromptAction(_ sender: Any?) {
+        guard activeTerminalSurfaceView?.performSemanticNavigation(.previousPrompt) == true else { return }
+        focusActiveTerminalSurface()
+    }
+
+    @objc func nextTerminalPromptAction(_ sender: Any?) {
+        guard activeTerminalSurfaceView?.performSemanticNavigation(.nextPrompt) == true else { return }
+        focusActiveTerminalSurface()
+    }
+
+    @objc func selectTerminalCommandOutputAction(_ sender: Any?) {
+        guard activeTerminalSurfaceView?.performSemanticNavigation(.selectCommandOutput) == true else { return }
+        focusActiveTerminalSurface()
+    }
+
     @objc func hideCommandBlocksAction(_ sender: Any?) {
         activeTerminalSurfaceView?.dismissVisibleCommandBlocks()
     }

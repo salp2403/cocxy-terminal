@@ -2,6 +2,7 @@
 // TerminalHostView.swift - Shared host-view contract for terminal engines.
 
 import AppKit
+import CocxyShared
 
 // MARK: - Terminal Host View
 
@@ -18,6 +19,9 @@ enum TerminalHostKeybindingRouting {
         KeybindingActionCatalog.terminalScrollPageDown.id,
         KeybindingActionCatalog.terminalScrollToTop.id,
         KeybindingActionCatalog.terminalScrollToBottom.id,
+        KeybindingActionCatalog.terminalPreviousPrompt.id,
+        KeybindingActionCatalog.terminalNextPrompt.id,
+        KeybindingActionCatalog.terminalSelectCommandOutput.id,
         KeybindingActionCatalog.terminalShowDetectedContentHints.id,
     ]
 }
@@ -50,6 +54,9 @@ protocol TerminalHostingView: AnyObject {
     )
     func requestImmediateRedraw()
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand)
+    @discardableResult func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction
+    ) -> Bool
     @discardableResult func showDetectedContentHints() -> Int
     func updateLocalizer(_ localizer: AppLocalizer)
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig)
@@ -78,6 +85,9 @@ extension TerminalHostingView {
     func updateCursorClickToMoveEnabled(_ enabled: Bool) {}
     func applyFont(family: String, size: Double) {}
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {}
+    @discardableResult func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction
+    ) -> Bool { false }
     @discardableResult func showDetectedContentHints() -> Int { 0 }
     func updateLocalizer(_ localizer: AppLocalizer) {}
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {}
