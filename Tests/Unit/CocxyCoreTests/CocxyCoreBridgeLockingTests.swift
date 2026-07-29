@@ -326,6 +326,55 @@ struct CocxyCoreBridgeLockingTests {
         )
     }
 
+    @Test("host mutations drain every in-band terminal response before releasing the lock")
+    func hostMutationsDrainTerminalResponses() throws {
+        let bridge = try Self.makeBridge()
+        let (surfaceID, _) = try Self.createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        let enabledResizeReporting = bridge.withTerminalLock(surfaceID) { state in
+            let mode = Array("\u{001B}[?2048h".utf8)
+            cocxycore_terminal_feed(state.terminal, mode, mode.count)
+            guard cocxycore_terminal_has_response(state.terminal) else { return false }
+
+            var response = [UInt8](repeating: 0, count: 4 * 1024)
+            while cocxycore_terminal_has_response(state.terminal) {
+                guard cocxycore_terminal_read_response(
+                    state.terminal,
+                    &response,
+                    response.count
+                ) > 0 else { return false }
+            }
+            return true
+        } ?? false
+        #expect(enabledResizeReporting)
+
+        bridge.resize(
+            surfaceID,
+            to: TerminalSize(columns: 100, rows: 30, pixelWidth: 800, pixelHeight: 480)
+        )
+        let resizeResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(resizeResponseWasDrained)
+
+        bridge.applyFont(family: "Menlo", size: 16, to: surfaceID)
+        let fontResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(fontResponseWasDrained)
+
+        _ = bridge.withTerminalLock(surfaceID) { state in
+            let mode = Array("\u{001B}[?1004h".utf8)
+            cocxycore_terminal_feed(state.terminal, mode, mode.count)
+        }
+        bridge.notifyFocus(true, for: surfaceID)
+        let focusResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(focusResponseWasDrained)
+    }
+
     // MARK: - Additional mutator serialization
 
     @Test("image settings, protocol writers and scroll mutators acquire the terminal lock")

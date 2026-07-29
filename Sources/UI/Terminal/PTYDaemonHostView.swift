@@ -26,6 +26,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var synchronizedOutputClock: () -> TimeInterval = {
         ProcessInfo.processInfo.systemUptime
     }
+    private var fontFamily: String
     private var font: NSFont
     private var cellSize: CGSize
     private var notificationRingLayer: CAShapeLayer?
@@ -54,11 +55,14 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
     ) {
         self.viewModel = viewModel
-        self.font = NSFont.monospacedSystemFont(
-            ofSize: viewModel?.currentFontSize ?? 14,
-            weight: .regular
+        let initialFamily = AppearanceConfig.defaults.fontFamily
+        let initialFont = Self.resolveFont(
+            family: initialFamily,
+            size: viewModel?.currentFontSize ?? 14
         )
-        self.cellSize = Self.measureCellSize(font: font)
+        self.fontFamily = initialFamily
+        self.font = initialFont
+        self.cellSize = Self.measureCellSize(font: initialFont)
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
@@ -127,9 +131,9 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     func syncSizeWithTerminal() {
-        font = NSFont.monospacedSystemFont(
-            ofSize: viewModel?.currentFontSize ?? 14,
-            weight: .regular
+        font = Self.resolveFont(
+            family: fontFamily,
+            size: viewModel?.currentFontSize ?? 14
         )
         cellSize = Self.measureCellSize(font: font)
         guard let bridge, let surfaceID else { return }
@@ -169,6 +173,13 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     func updateInteractionMetrics() {
         syncSizeWithTerminal()
+    }
+
+    func applyFont(family: String, size: Double) {
+        fontFamily = family
+        viewModel?.setCurrentFontSize(CGFloat(size))
+        syncSizeWithTerminal()
+        requestImmediateRedraw()
     }
 
     func requestImmediateRedraw() {
@@ -689,6 +700,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     var latestFrameRevisionForTesting: UInt64? { latestFrame?.revision }
     var hasPendingSynchronizedFrameForTesting: Bool { pendingSynchronizedFrame != nil }
+    var renderedFontFamilyForTesting: String? { font.familyName }
+    var renderedFontPointSizeForTesting: CGFloat { font.pointSize }
 
     func flushPendingSynchronizedFrameForTesting() {
         synchronizedOutputFlushWorkItem?.cancel()
@@ -768,6 +781,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         let attributes: [NSAttributedString.Key: Any] = [.font: font]
         let size = ("M" as NSString).size(withAttributes: attributes)
         return CGSize(width: max(1, ceil(size.width)), height: max(1, ceil(font.ascender - font.descender + font.leading)))
+    }
+
+    private static func resolveFont(family: String, size: CGFloat) -> NSFont {
+        NSFont(name: family, size: size)
+            ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
 
     private func performTerminalViewportKeyEquivalent(with event: NSEvent) -> Bool {

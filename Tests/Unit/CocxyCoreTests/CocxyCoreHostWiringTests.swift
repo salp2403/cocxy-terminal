@@ -74,6 +74,24 @@ struct CocxyCoreHostWiringTests {
         #expect(daemonHost.historyPillView?.title.contains("2 lines up") == true)
     }
 
+    @Test("daemon host applies the configured font family and size to its local renderer")
+    func daemonHostAppliesConfiguredFontToLocalRenderer() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        let surfaceID = SurfaceID()
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        let resizeCount = engine.resizedSurfaces.count
+
+        view.applyFont(family: "Menlo", size: 18)
+
+        #expect(view.renderedFontFamilyForTesting == "Menlo")
+        #expect(view.renderedFontPointSizeForTesting == 18)
+        #expect(viewModel.currentFontSize == 18)
+        #expect(engine.resizedSurfaces.count == resizeCount + 1)
+    }
+
     @Test("daemon host routes dead-key callbacks through NSTextInputClient")
     func daemonHostRoutesDeadKeyCallbacksThroughTextInputClient() {
         let engine = MockTerminalEngine()

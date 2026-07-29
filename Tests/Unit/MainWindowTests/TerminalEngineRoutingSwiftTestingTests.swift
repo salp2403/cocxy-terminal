@@ -67,6 +67,27 @@ struct TerminalEngineRoutingSwiftTestingTests {
         #expect(defaultEngine.sentTexts.isEmpty)
     }
 
+    @Test("tab font updates route through the selected terminal engine")
+    func tabFontUpdatesUseSelectedEngine() {
+        let defaultEngine = MockTerminalEngine()
+        let daemonEngine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .daemon ? daemonEngine : nil
+            }
+        )
+        let tabID = controller.createTab(terminalEnginePreference: .daemon)
+        let baselineCount = daemonEngine.fontApplications.count
+
+        controller.applyFontToTab(tabID, size: 19)
+
+        #expect(daemonEngine.fontApplications.count == baselineCount + 1)
+        #expect(daemonEngine.fontApplications.last?.family == AppearanceConfig.defaults.fontFamily)
+        #expect(daemonEngine.fontApplications.last?.size == 19)
+        #expect(defaultEngine.fontApplications.isEmpty)
+    }
+
     @Test("system tabs keep using the default bridge")
     func systemTabUsesDefaultBridge() {
         let defaultEngine = MockTerminalEngine()

@@ -2131,6 +2131,23 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         terminalEngine(for: surfaceID).notifyFocus(focused, for: surfaceID)
     }
 
+    /// Reports an explicit terminal focus handoff when a key window changes
+    /// tabs or split panes. Engine-level deduplication keeps responder-chain
+    /// callbacks and this lifecycle safety net from emitting duplicate bytes.
+    func synchronizeSurfaceFocusTransition(
+        from previousSurfaceID: SurfaceID?,
+        to focusedSurfaceID: SurfaceID?
+    ) {
+        guard window?.isKeyWindow == true,
+              previousSurfaceID != focusedSurfaceID else { return }
+        if let previousSurfaceID, previousSurfaceID != focusedSurfaceID {
+            terminalEngine(for: previousSurfaceID).notifyFocus(false, for: previousSurfaceID)
+        }
+        if let focusedSurfaceID {
+            terminalEngine(for: focusedSurfaceID).notifyFocus(true, for: focusedSurfaceID)
+        }
+    }
+
     /// Returns every terminal view model associated with a tab, including split panes.
     func viewModelsForTab(_ tabID: TabID) -> [TerminalViewModel] {
         var result: [TerminalViewModel] = []
@@ -2206,17 +2223,24 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         for surfaceID in surfaceIDs(for: tabID) {
-            if let cocxyBridge = terminalEngine(for: surfaceID).cocxyCoreBridge {
-                cocxyBridge.applyFont(
-                    family: effective.appearance.fontFamily,
-                    size: fontSize,
-                    to: [surfaceID]
-                )
-            } else if let surfaceView = surfaceView(for: surfaceID) {
-                surfaceView.updateInteractionMetrics()
-                surfaceView.requestImmediateRedraw()
-            }
+            applyTerminalFont(
+                family: effective.appearance.fontFamily,
+                size: fontSize,
+                to: surfaceID
+            )
         }
+    }
+
+    private func applyTerminalFont(
+        family: String,
+        size: Double,
+        to surfaceID: SurfaceID
+    ) {
+        let engine = terminalEngine(for: surfaceID)
+        engine.applyFont(family: family, size: size, to: surfaceID)
+        guard engine.cocxyCoreBridge == nil,
+              let surfaceView = surfaceView(for: surfaceID) else { return }
+        surfaceView.applyFont(family: family, size: size)
     }
 
     /// Switches the visible terminal surface to the one belonging to the given tab.
@@ -2250,6 +2274,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func handleTabSwitch(to tabID: TabID) {
         guard let container = terminalContainerView else { return }
+        let previouslyFocusedSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
         materializeDeferredRestoredTabIfNeeded(tabID)
         resolveDeferredRestoredTabMetadataIfNeeded(tabID)
 
@@ -2313,6 +2338,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             container.addSubview(targetSurfaceView, positioned: .below, relativeTo: nil)
         } else {
             activeSplitView = nil
+            synchronizeSurfaceFocusTransition(from: previouslyFocusedSurfaceID, to: nil)
             refreshStatusBar()
             refreshTabStrip()
             return
@@ -2335,17 +2361,36 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // cell sizes we computed here before. Calling resize twice caused a brief
         // flicker when the approximate and actual sizes diverged.
 
+        let newlyFocusedSurfaceID: SurfaceID?
         if let focusedPane = focusedPaneView() {
-            window?.makeFirstResponder(focusedPane)
-            if let responderSurface = focusedPane as? TerminalHostView {
-                responderSurface.hideNotificationRing()
+            let acceptedFocus = window?.makeFirstResponder(focusedPane) == true
+                || window?.firstResponder === focusedPane
+            if acceptedFocus {
+                if let responderSurface = focusedPane as? TerminalHostView {
+                    responderSurface.hideNotificationRing()
+                    newlyFocusedSurfaceID = responderSurface.terminalViewModel?.surfaceID
+                } else {
+                    targetSurfaceView?.hideNotificationRing()
+                    newlyFocusedSurfaceID = targetSurfaceView?.terminalViewModel?.surfaceID
+                }
             } else {
-                targetSurfaceView?.hideNotificationRing()
+                newlyFocusedSurfaceID = previouslyFocusedSurfaceID
             }
         } else if let targetSurfaceView {
-            window?.makeFirstResponder(targetSurfaceView)
-            targetSurfaceView.hideNotificationRing()
+            if window?.makeFirstResponder(targetSurfaceView) == true
+                || window?.firstResponder === targetSurfaceView {
+                targetSurfaceView.hideNotificationRing()
+                newlyFocusedSurfaceID = targetSurfaceView.terminalViewModel?.surfaceID
+            } else {
+                newlyFocusedSurfaceID = previouslyFocusedSurfaceID
+            }
+        } else {
+            newlyFocusedSurfaceID = nil
         }
+        synchronizeSurfaceFocusTransition(
+            from: previouslyFocusedSurfaceID,
+            to: newlyFocusedSurfaceID
+        )
         refreshVisibleTerminalInteractionState()
 
         // Propagate read state to the session registry so other windows
@@ -2493,11 +2538,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             viewModel.setDefaultFontSize(effective.appearance.fontSize)
         }
 
-        if let cocxyBridge = bridge.cocxyCoreBridge {
-            cocxyBridge.applyFont(
+        for surfaceID in surfaceIDs(for: tabID) {
+            applyTerminalFont(
                 family: effective.appearance.fontFamily,
                 size: effective.appearance.fontSize,
-                to: surfaceIDs(for: tabID)
+                to: surfaceID
             )
         }
 

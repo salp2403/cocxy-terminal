@@ -247,6 +247,121 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(try Data(contentsOf: captured) == expected)
     }
 
+    @Test("daemon drains focus and in-band resize reports after host mutations")
+    func daemonDrainsHostMutationResponsesToPTY() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-host-responses-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-host-responses.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[?1004h\\033[?2048h'
+            /usr/bin/perl -e '
+            use strict;
+            use warnings;
+            $SIG{ALRM} = sub { die "timed out waiting for terminal response" };
+            alarm 5;
+            my $byte = "";
+            while (sysread(STDIN, $byte, 1) == 1) {
+                last if $byte eq "t";
+            }
+            open(my $ready_handle, ">", $ARGV[0]) or die $!;
+            print {$ready_handle} "ready";
+            close($ready_handle);
+            my $responses = "";
+            my $resize_reports = 0;
+            while (sysread(STDIN, $byte, 1) == 1) {
+                $responses .= $byte;
+                $resize_reports += 1 if $byte eq "t";
+                last if $responses =~ /^\\e\\[I/ && $resize_reports >= 2;
+            }
+            alarm 0;
+            open(my $output_handle, ">", $ARGV[1]) or die $!;
+            print {$output_handle} $responses;
+            close($output_handle);
+            ' "\(ready.path)" "\(captured.path)"
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-host-responses",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                    "fontFamily": "Menlo",
+                    "fontSize": "13",
+                    "dpiScale": "1",
+                    "ligaturesEnabled": "true",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        #expect(waitForFile(ready, timeout: 5))
+
+        let focus = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "focus-host-response",
+                command: .surfaceFocus,
+                payload: ["surfaceID": surfaceID, "focused": "true"]
+            )
+        )
+        let resize = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "resize-host-response",
+                command: .surfaceResize,
+                payload: ["surfaceID": surfaceID, "rows": "12", "columns": "72"]
+            )
+        )
+        let font = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "font-host-response",
+                command: .surfaceFont,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "fontFamily": "Menlo",
+                    "fontSize": "17",
+                    "dpiScale": "1",
+                    "ligaturesEnabled": "false",
+                ]
+            )
+        )
+        #expect(focus.ok == true)
+        #expect(resize.ok == true)
+        #expect(font.ok == true)
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        let responseText = String(decoding: try Data(contentsOf: captured), as: UTF8.self)
+        #expect(responseText.hasPrefix("\u{001B}[I"))
+        let resizeReports = responseText.dropFirst(3).split(separator: "t")
+        #expect(resizeReports.count == 2)
+        for report in resizeReports {
+            #expect(report.hasPrefix("\u{001B}[48;12;72;"))
+            let parameters = report.dropFirst(2).split(separator: ";")
+            #expect(parameters.count == 5)
+            #expect(parameters[0] == "48")
+            #expect(parameters[1] == "12")
+            #expect(parameters[2] == "72")
+            #expect((Int(parameters[3]) ?? 0) > 0)
+            #expect((Int(parameters[4]) ?? 0) > 0)
+        }
+    }
+
     @Test("daemon spawn strips host NO_COLOR before forking the child shell")
     func helperSpawnStripsHostNoColor() throws {
         let helper = try RunningHelperProcess(extraEnvironment: ["NO_COLOR": "1"])

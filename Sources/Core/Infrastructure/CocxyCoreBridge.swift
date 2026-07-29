@@ -609,7 +609,7 @@ final class CocxyCoreBridge: TerminalEngine {
     private static let readBufferSize = 262144
 
     /// DSR/DECRQSS response buffer size.
-    private static let responseBufferSize = 256
+    private static let responseBufferSize = 4 * 1024
 
     /// Scrollback capacity (rows stored in ring buffer).
     private static let scrollbackCapacity: UInt32 = 10000
@@ -846,6 +846,30 @@ final class CocxyCoreBridge: TerminalEngine {
         return bytes.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return 0 }
             return Int(cocxycore_pty_write(pty, baseAddress, buffer.count))
+        }
+    }
+
+    /// Drains every response queued by CocxyCore while the caller owns the
+    /// surface terminal lock. Parser feed, resize, font, and focus operations
+    /// can all enqueue protocol replies, so leaving this logic in the PTY read
+    /// loop alone can strand responses until unrelated output arrives.
+    private func drainTerminalResponsesLocked(
+        terminal: OpaquePointer,
+        pty: OpaquePointer
+    ) {
+        var responseBuffer = [UInt8](repeating: 0, count: Self.responseBufferSize)
+        while cocxycore_terminal_has_response(terminal) {
+            let count = cocxycore_terminal_read_response(
+                terminal,
+                &responseBuffer,
+                responseBuffer.count
+            )
+            guard count > 0 else { break }
+            _ = writeAttachedPTYBytes(
+                Array(responseBuffer.prefix(count)),
+                terminal: terminal,
+                pty: pty
+            )
         }
     }
 
@@ -1167,6 +1191,7 @@ final class CocxyCoreBridge: TerminalEngine {
         let observesProtocolV2 = withTerminalLock(surface) { state -> Bool in
             cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
             cocxycore_pty_resize(state.pty, size.rows, size.columns)
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -1304,6 +1329,10 @@ final class CocxyCoreBridge: TerminalEngine {
         // observe a half-applied focus transition.
         withTerminalLock(surface) { lockedState in
             cocxycore_terminal_notify_focus(lockedState.terminal, focused)
+            drainTerminalResponsesLocked(
+                terminal: lockedState.terminal,
+                pty: lockedState.pty
+            )
         }
 
         // Persist the new focus state in the Swift-side surface map and
@@ -3024,6 +3053,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 ligaturesEnabled: ligaturesEnabled,
                 to: state.terminal
             )
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3486,20 +3516,9 @@ final class CocxyCoreBridge: TerminalEngine {
             // Feed bytes through terminal pipeline (parser → executor → screen)
             cocxycore_terminal_feed(terminal, buf, bytesRead)
 
-            // Write back any DSR/DECRQSS responses to the PTY
-            var responseBuf = [UInt8](repeating: 0, count: Self.responseBufferSize)
-            while cocxycore_terminal_has_response(terminal) {
-                let rn = cocxycore_terminal_read_response(
-                    terminal, &responseBuf, responseBuf.count
-                )
-                if rn > 0 {
-                    _ = self?.writeAttachedPTYBytes(
-                        Array(responseBuf.prefix(rn)),
-                        terminal: terminal,
-                        pty: pty
-                    )
-                }
-            }
+            // Write back every parser-generated response before releasing the
+            // terminal lock so FIFO ordering is preserved against host events.
+            self?.drainTerminalResponsesLocked(terminal: terminal, pty: pty)
 
             // Poll process tracker (non-blocking kqueue check)
             cocxycore_terminal_poll_processes(terminal)

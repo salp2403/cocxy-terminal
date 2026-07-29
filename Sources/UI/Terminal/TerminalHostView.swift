@@ -40,6 +40,7 @@ protocol TerminalHostingView: AnyObject {
     func handleCommandExecuted()
     func updateCursorClickToMoveEnabled(_ enabled: Bool)
     func updateInteractionMetrics()
+    func applyFont(family: String, size: Double)
     func configureSurfaceIfNeeded(
         bridge: any TerminalEngine,
         surfaceID: SurfaceID
@@ -71,6 +72,7 @@ extension TerminalHostingView {
     func handleCommandInputStarted(at position: TerminalGridPosition) {}
     func handleCommandExecuted() {}
     func updateCursorClickToMoveEnabled(_ enabled: Bool) {}
+    func applyFont(family: String, size: Double) {}
     func performLocalViewportScroll(_ command: TerminalViewportScrollCommand) {}
     func updateLocalizer(_ localizer: AppLocalizer) {}
     func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {}

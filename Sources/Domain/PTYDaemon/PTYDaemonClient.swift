@@ -3,6 +3,9 @@
 
 import Foundation
 import CocxyShared
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @MainActor
 protocol PTYDaemonClientConnection: AnyObject {
@@ -419,6 +422,9 @@ final class PTYDaemonClient: TerminalEngine {
     private var oscHandlers: [SurfaceID: @Sendable (OSCNotification) -> Void] = [:]
     private var frameHandlers: [SurfaceID: @Sendable (PTYDaemonSurfaceFrame) -> Void] = [:]
     private var latestFrameRevisions: [SurfaceID: UInt64] = [:]
+    private var engineConfig: TerminalEngineConfig?
+    private var surfaceBackingScales: [SurfaceID: Double] = [:]
+    private var lastReportedFocus: [SurfaceID: Bool] = [:]
 
     init(connection: PTYDaemonClientConnection) {
         self.connection = connection
@@ -441,6 +447,7 @@ final class PTYDaemonClient: TerminalEngine {
                 reason: "PTY daemon lacks the complete terminal engine and host renderer capability set"
             )
         }
+        engineConfig = config
         initialized = true
     }
 
@@ -449,9 +456,11 @@ final class PTYDaemonClient: TerminalEngine {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
-        guard initialized else {
+        guard initialized, let engineConfig else {
             throw TerminalEngineError.surfaceCreationFailed(reason: "PTY daemon client is not initialized")
         }
+
+        let backingScale = Self.backingScale(for: view)
 
         let response = try connection.send(
             PTYDaemonRequest(
@@ -460,6 +469,10 @@ final class PTYDaemonClient: TerminalEngine {
                 payload: [
                     "workingDirectory": workingDirectory?.path ?? "",
                     "command": command ?? "",
+                    "fontFamily": engineConfig.fontFamily,
+                    "fontSize": "\(engineConfig.fontSize)",
+                    "dpiScale": "\(backingScale)",
+                    "ligaturesEnabled": "\(engineConfig.ligaturesEnabled)",
                 ]
             )
         )
@@ -476,6 +489,8 @@ final class PTYDaemonClient: TerminalEngine {
         liveSurfaces.insert(surfaceID)
         stalledSurfaces.remove(surfaceID)
         latestFrameRevisions[surfaceID] = nil
+        surfaceBackingScales[surfaceID] = backingScale
+        lastReportedFocus[surfaceID] = nil
         return surfaceID
     }
 
@@ -488,6 +503,8 @@ final class PTYDaemonClient: TerminalEngine {
         oscHandlers[id] = nil
         frameHandlers[id] = nil
         latestFrameRevisions[id] = nil
+        surfaceBackingScales[id] = nil
+        lastReportedFocus[id] = nil
     }
 
     @discardableResult
@@ -550,6 +567,21 @@ final class PTYDaemonClient: TerminalEngine {
         )
     }
 
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {
+        guard liveSurfaces.contains(surface), let engineConfig else { return }
+        let scale = surfaceBackingScales[surface] ?? 2.0
+        _ = try? sendSurfaceRequest(
+            surface,
+            command: .surfaceFont,
+            payload: [
+                "fontFamily": family,
+                "fontSize": "\(size)",
+                "dpiScale": "\(scale)",
+                "ligaturesEnabled": "\(engineConfig.ligaturesEnabled)",
+            ]
+        )
+    }
+
     func tick() {
         guard initialized else { return }
         for _ in 0..<32 {
@@ -597,7 +629,13 @@ final class PTYDaemonClient: TerminalEngine {
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {
-        _ = try? sendSurfaceRequest(surface, command: .surfaceFocus, payload: ["focused": "\(focused)"])
+        guard liveSurfaces.contains(surface), lastReportedFocus[surface] != focused else { return }
+        guard let response = try? sendSurfaceRequest(
+            surface,
+            command: .surfaceFocus,
+            payload: ["focused": "\(focused)"]
+        ), response.ok else { return }
+        lastReportedFocus[surface] = focused
     }
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
@@ -713,6 +751,8 @@ final class PTYDaemonClient: TerminalEngine {
         case .surfaceClosed:
             liveSurfaces.remove(surface)
             stalledSurfaces.insert(surface)
+            surfaceBackingScales[surface] = nil
+            lastReportedFocus[surface] = nil
         }
     }
 
@@ -765,5 +805,17 @@ final class PTYDaemonClient: TerminalEngine {
         var payload = payload
         payload["surfaceID"] = surface.rawValue.uuidString
         return PTYDaemonRequest(id: UUID().uuidString, command: command, payload: payload)
+    }
+
+    private static func backingScale(for view: NativeTerminalView) -> Double {
+        #if canImport(AppKit)
+        let rawScale = view.window?.backingScaleFactor
+            ?? NSScreen.main?.backingScaleFactor
+            ?? 2.0
+        let scale = Double(rawScale)
+        return scale.isFinite && scale > 0 ? scale : 2.0
+        #else
+        return 1.0
+        #endif
     }
 }

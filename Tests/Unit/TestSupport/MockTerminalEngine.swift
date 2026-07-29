@@ -26,6 +26,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var sentTexts: [(surface: SurfaceID, text: String)] = []
     private(set) var preeditTexts: [(surface: SurfaceID, text: String, cursorByteOffset: Int?)] = []
     private(set) var resizedSurfaces: [(surface: SurfaceID, size: TerminalSize)] = []
+    private(set) var fontApplications: [(surface: SurfaceID, family: String, size: Double)] = []
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
     private(set) var viewportScrollRequests: [(surface: SurfaceID, deltaRows: Int)] = []
     private(set) var focusNotifications: [(surface: SurfaceID, focused: Bool)] = []
@@ -90,6 +91,10 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
 
     func resize(_ surface: SurfaceID, to size: TerminalSize) {
         resizedSurfaces.append((surface, size))
+    }
+
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {
+        fontApplications.append((surface, family, size))
     }
 
     func tick() {

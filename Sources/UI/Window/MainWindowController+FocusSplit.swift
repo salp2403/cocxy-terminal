@@ -92,7 +92,14 @@ extension MainWindowController {
         else {
             return
         }
-        window.makeFirstResponder(hostView)
+        let previouslyFocusedSurfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+        guard window.makeFirstResponder(hostView) || window.firstResponder === hostView else {
+            return
+        }
+        synchronizeSurfaceFocusTransition(
+            from: previouslyFocusedSurfaceID,
+            to: surfaceID
+        )
 
         // Keep the domain-level split focus in sync with AppKit so
         // later queries via `paneSnapshot()` pick the right leaf.

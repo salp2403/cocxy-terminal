@@ -128,6 +128,57 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(connection.requests.last?.command == .surfaceCreate)
         #expect(connection.requests.last?.payload?["workingDirectory"] == "/tmp/project")
         #expect(connection.requests.last?.payload?["command"] == "/bin/zsh")
+        #expect(connection.requests.last?.payload?["fontFamily"] == "Menlo")
+        #expect(connection.requests.last?.payload?["fontSize"] == "13.0")
+        #expect(connection.requests.last?.payload?["ligaturesEnabled"] == "true")
+        let dpiScale = Double(connection.requests.last?.payload?["dpiScale"] ?? "")
+        #expect(dpiScale?.isFinite == true)
+        #expect((dpiScale ?? 0) > 0)
+    }
+
+    @Test("font updates preserve surface scale and focus requests are deduplicated")
+    func fontAndFocusRequestsPreserveSurfaceState() throws {
+        let rawSurfaceID = UUID()
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "font", ok: true),
+            PTYDaemonResponse(id: "focus-in", ok: true),
+            PTYDaemonResponse(id: "focus-out", ok: true),
+            PTYDaemonResponse(id: "preedit-clear", ok: true),
+            PTYDaemonResponse(id: "close", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig().replacing(ligaturesEnabled: false))
+        let surfaceID = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        client.applyFont(family: "JetBrainsMono Nerd Font Mono", size: 18, to: surfaceID)
+        client.notifyFocus(true, for: surfaceID)
+        client.notifyFocus(true, for: surfaceID)
+        client.notifyFocus(false, for: surfaceID)
+        client.notifyFocus(false, for: surfaceID)
+        client.destroySurface(surfaceID)
+        client.notifyFocus(true, for: surfaceID)
+        client.applyFont(family: "Menlo", size: 12, to: surfaceID)
+
+        #expect(connection.requests.map(\.command) == [
+            .hello,
+            .surfaceCreate,
+            .surfaceFont,
+            .surfaceFocus,
+            .surfaceFocus,
+            .surfacePreedit,
+            .surfaceClose,
+        ])
+        let createPayload = try #require(connection.requests[1].payload)
+        let fontPayload = try #require(connection.requests[2].payload)
+        #expect(createPayload["ligaturesEnabled"] == "false")
+        #expect(fontPayload["fontFamily"] == "JetBrainsMono Nerd Font Mono")
+        #expect(fontPayload["fontSize"] == "18.0")
+        #expect(fontPayload["dpiScale"] == createPayload["dpiScale"])
+        #expect(fontPayload["ligaturesEnabled"] == "false")
+        #expect(connection.requests[3].payload?["focused"] == "true")
+        #expect(connection.requests[4].payload?["focused"] == "false")
     }
 
     @Test("sendText, resize and destroy serialize surface requests")

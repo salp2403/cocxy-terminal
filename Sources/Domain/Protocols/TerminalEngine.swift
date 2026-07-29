@@ -96,6 +96,17 @@ protocol TerminalEngine: AnyObject {
     ///   - size: The new size in columns, rows and pixels.
     func resize(_ surface: SurfaceID, to size: TerminalSize)
 
+    /// Applies a font configuration to one live terminal surface.
+    ///
+    /// Engines use their surface's backing scale and current ligature policy
+    /// when rebuilding renderer metrics. Implementations that do not own a
+    /// renderer may ignore the request.
+    /// - Parameters:
+    ///   - family: Font family name.
+    ///   - size: Font size in points.
+    ///   - surface: Target surface.
+    func applyFont(family: String, size: Double, to surface: SurfaceID)
+
     /// Performs one tick of the engine's main loop.
     ///
     /// Must be called synchronously on the main thread, typically tied to the
@@ -302,6 +313,8 @@ extension TerminalEngine {
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {}
+
+    func applyFont(family: String, size: Double, to surface: SurfaceID) {}
 
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {}
 
