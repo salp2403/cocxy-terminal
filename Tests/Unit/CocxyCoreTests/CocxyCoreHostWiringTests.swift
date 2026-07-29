@@ -70,14 +70,12 @@ struct CocxyCoreHostWiringTests {
             cells: [],
             cursor: PTYDaemonCursor(row: 0, column: 0),
             scrollbackTop: 40,
-            historyMaxVisibleStart: 100,
-            mouseTrackingMode: 2,
-            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+            historyMaxVisibleStart: 100
         ))
 
         #expect(view.historyPillView?.linesAbove == 60)
         #expect(view.historyPillView?.isHidden == false)
-        #expect(view.isTerminalMouseTrackingActive == true)
+        #expect(view.isTerminalMouseTrackingActive == false)
 
         view.scrollWheel(with: makeScrollEvent(deltaY: 120))
 
@@ -230,6 +228,7 @@ struct CocxyCoreHostWiringTests {
         let surfaceID = try client.createSurface(in: view, workingDirectory: nil, command: nil)
         view.configureSurfaceIfNeeded(bridge: client, surfaceID: surfaceID)
 
+        #expect(view.isTerminalMouseTrackingActive == true)
         view.scrollWheel(with: makeScrollEvent(deltaY: 24, location: .zero))
 
         let write = try #require(connection.requests.last { $0.command == .surfaceWrite })
