@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.15.3 (stable API bundle)
+ * Version: 0.16.0 (stable API bundle)
  */
 
 #ifndef COCXYCORE_H
@@ -23,9 +23,9 @@
 
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
-#define COCXYCORE_VERSION_MINOR 15
-#define COCXYCORE_VERSION_PATCH 3
-#define COCXYCORE_VERSION_STRING "0.15.3"
+#define COCXYCORE_VERSION_MINOR 16
+#define COCXYCORE_VERSION_PATCH 0
+#define COCXYCORE_VERSION_STRING "0.16.0"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -874,6 +874,9 @@ bool cocxycore_terminal_mode_app_cursor(const cocxycore_terminal* term);
 /** Check if bracketed paste mode is active. */
 bool cocxycore_terminal_mode_bracketed_paste(const cocxycore_terminal* term);
 
+/** Check if synchronized output mode (DEC 2026) is active. */
+bool cocxycore_terminal_mode_synchronized_output(const cocxycore_terminal* term);
+
 /** Check if bracketed paste is effectively active after force overrides. */
 bool cocxycore_terminal_get_bracketed_paste_active(const cocxycore_terminal* term);
 
@@ -1063,13 +1066,91 @@ typedef enum {
     COCXYCORE_KEY_KP_DIVIDE,
     COCXYCORE_KEY_KP_DECIMAL,
     COCXYCORE_KEY_KP_SEPARATOR,
+    COCXYCORE_KEY_F13,
+    COCXYCORE_KEY_F14,
+    COCXYCORE_KEY_F15,
+    COCXYCORE_KEY_F16,
+    COCXYCORE_KEY_F17,
+    COCXYCORE_KEY_F18,
+    COCXYCORE_KEY_F19,
+    COCXYCORE_KEY_F20,
+    COCXYCORE_KEY_F21,
+    COCXYCORE_KEY_F22,
+    COCXYCORE_KEY_F23,
+    COCXYCORE_KEY_F24,
+    COCXYCORE_KEY_F25,
+    COCXYCORE_KEY_F26,
+    COCXYCORE_KEY_F27,
+    COCXYCORE_KEY_F28,
+    COCXYCORE_KEY_F29,
+    COCXYCORE_KEY_F30,
+    COCXYCORE_KEY_F31,
+    COCXYCORE_KEY_F32,
+    COCXYCORE_KEY_F33,
+    COCXYCORE_KEY_F34,
+    COCXYCORE_KEY_F35,
+    COCXYCORE_KEY_CAPS_LOCK,
+    COCXYCORE_KEY_SCROLL_LOCK,
+    COCXYCORE_KEY_NUM_LOCK,
+    COCXYCORE_KEY_PRINT_SCREEN,
+    COCXYCORE_KEY_PAUSE,
+    COCXYCORE_KEY_MENU,
+    COCXYCORE_KEY_KP_EQUAL,
+    COCXYCORE_KEY_LEFT_SHIFT,
+    COCXYCORE_KEY_LEFT_CONTROL,
+    COCXYCORE_KEY_LEFT_ALT,
+    COCXYCORE_KEY_LEFT_SUPER,
+    COCXYCORE_KEY_LEFT_HYPER,
+    COCXYCORE_KEY_LEFT_META,
+    COCXYCORE_KEY_RIGHT_SHIFT,
+    COCXYCORE_KEY_RIGHT_CONTROL,
+    COCXYCORE_KEY_RIGHT_ALT,
+    COCXYCORE_KEY_RIGHT_SUPER,
+    COCXYCORE_KEY_RIGHT_HYPER,
+    COCXYCORE_KEY_RIGHT_META,
+    COCXYCORE_KEY_KP_LEFT,
+    COCXYCORE_KEY_KP_RIGHT,
+    COCXYCORE_KEY_KP_UP,
+    COCXYCORE_KEY_KP_DOWN,
+    COCXYCORE_KEY_KP_PAGE_UP,
+    COCXYCORE_KEY_KP_PAGE_DOWN,
+    COCXYCORE_KEY_KP_HOME,
+    COCXYCORE_KEY_KP_END,
+    COCXYCORE_KEY_KP_INSERT,
+    COCXYCORE_KEY_KP_DELETE,
+    COCXYCORE_KEY_KP_BEGIN,
+    COCXYCORE_KEY_MEDIA_PLAY,
+    COCXYCORE_KEY_MEDIA_PAUSE,
+    COCXYCORE_KEY_MEDIA_PLAY_PAUSE,
+    COCXYCORE_KEY_MEDIA_REVERSE,
+    COCXYCORE_KEY_MEDIA_STOP,
+    COCXYCORE_KEY_MEDIA_FAST_FORWARD,
+    COCXYCORE_KEY_MEDIA_REWIND,
+    COCXYCORE_KEY_MEDIA_TRACK_NEXT,
+    COCXYCORE_KEY_MEDIA_TRACK_PREVIOUS,
+    COCXYCORE_KEY_MEDIA_RECORD,
+    COCXYCORE_KEY_LOWER_VOLUME,
+    COCXYCORE_KEY_RAISE_VOLUME,
+    COCXYCORE_KEY_MUTE_VOLUME,
+    COCXYCORE_KEY_ISO_LEVEL3_SHIFT,
+    COCXYCORE_KEY_ISO_LEVEL5_SHIFT,
 } cocxycore_key;
 
 /** Modifier bitmask constants for encode_key/encode_char. */
-#define COCXYCORE_MOD_SHIFT 1
-#define COCXYCORE_MOD_ALT   2
-#define COCXYCORE_MOD_CTRL  4
-#define COCXYCORE_MOD_META  8
+#define COCXYCORE_MOD_SHIFT     1
+#define COCXYCORE_MOD_ALT       2
+#define COCXYCORE_MOD_CTRL      4
+#define COCXYCORE_MOD_SUPER     8
+#define COCXYCORE_MOD_HYPER    16
+#define COCXYCORE_MOD_META     32
+#define COCXYCORE_MOD_CAPS     64
+#define COCXYCORE_MOD_NUM     128
+
+typedef enum {
+    COCXYCORE_KEY_EVENT_PRESS = 1,
+    COCXYCORE_KEY_EVENT_REPEAT = 2,
+    COCXYCORE_KEY_EVENT_RELEASE = 3,
+} cocxycore_key_event_type;
 
 /**
  * Encode a special key press using the terminal's current mode state.
@@ -1086,6 +1167,24 @@ size_t cocxycore_terminal_encode_key(
     const cocxycore_terminal* term,
     uint8_t key,
     uint8_t mods,
+    uint8_t* buf,
+    size_t buf_len
+);
+
+/**
+ * Encode a special key event with progressive keyboard protocol metadata.
+ * Alternate codepoints use 0 when unavailable. Associated text is UTF-32
+ * and is bounded to eight codepoints per event.
+ */
+size_t cocxycore_terminal_encode_key_event(
+    const cocxycore_terminal* term,
+    uint8_t key,
+    uint16_t mods,
+    uint8_t event_type,
+    uint32_t shifted_codepoint,
+    uint32_t base_layout_codepoint,
+    const uint32_t* associated_text,
+    size_t associated_text_count,
     uint8_t* buf,
     size_t buf_len
 );
@@ -1109,9 +1208,24 @@ size_t cocxycore_terminal_encode_char(
     size_t buf_len
 );
 
+/** Encode a Unicode character event with progressive protocol metadata. */
+size_t cocxycore_terminal_encode_char_event(
+    const cocxycore_terminal* term,
+    uint32_t codepoint,
+    uint16_t mods,
+    uint8_t event_type,
+    uint32_t shifted_codepoint,
+    uint32_t base_layout_codepoint,
+    const uint32_t* associated_text,
+    size_t associated_text_count,
+    uint8_t* buf,
+    size_t buf_len
+);
+
 /**
  * Get the current kitty keyboard enhancement flags.
- * 0 = legacy mode, bit 0 = disambiguate escape codes.
+ * Bits: 1=disambiguate, 2=event types, 4=alternate keys,
+ * 8=report all keys, 16=associated text.
  */
 uint8_t cocxycore_terminal_mode_kitty_keyboard(const cocxycore_terminal* term);
 
@@ -2364,7 +2478,8 @@ bool cocxycore_terminal_inject_semantic_event(
 /* -- Focus notification -- */
 
 /**
- * Notify the terminal of a focus change. Dispatches to hook subscribers.
+ * Notify the terminal of a focus change. Queues CSI I/O when DEC mode 1004
+ * is active and dispatches to hook subscribers.
  *
  * @param term    Terminal instance.
  * @param focused True if the terminal gained focus.
