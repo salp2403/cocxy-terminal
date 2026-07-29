@@ -2735,9 +2735,13 @@ struct NotebookProcessRunnerSwiftTestingTests {
         let source = """
         import os, signal
         signal.alarm(30)
-        with open(\(notebookPythonLiteral(pidFile.path)), "w") as handle:
+        pid_path = \(notebookPythonLiteral(pidFile.path))
+        temporary_pid_path = pid_path + ".tmp"
+        with open(temporary_pid_path, "w") as handle:
             handle.write(str(os.getpid()))
             handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_pid_path, pid_path)
         chunk = b"x" * 65536
         while True:
             os.write(2, chunk)
@@ -3079,9 +3083,13 @@ struct NotebookProcessRunnerSwiftTestingTests {
         let secondSource = """
         import os, signal, time
         signal.alarm(30)
-        with open(\(notebookPythonLiteral(secondPID.path)), "w") as handle:
+        pid_path = \(notebookPythonLiteral(secondPID.path))
+        temporary_pid_path = pid_path + ".tmp"
+        with open(temporary_pid_path, "w") as handle:
             handle.write(str(os.getpid()))
             handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary_pid_path, pid_path)
         while not os.path.exists(\(notebookPythonLiteral(secondRelease.path))):
             time.sleep(0.005)
         print("second-ok")
@@ -3306,9 +3314,13 @@ private func notebookSignalResistantPythonChild(pidFile: URL) -> String {
     signal.alarm(60)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
     signal.signal(signal.SIGTERM, signal.SIG_IGN)
-    with open(\(notebookPythonLiteral(pidFile.path)), "w") as handle:
+    pid_path = \(notebookPythonLiteral(pidFile.path))
+    temporary_pid_path = pid_path + ".tmp"
+    with open(temporary_pid_path, "w") as handle:
         handle.write(str(os.getpid()))
         handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary_pid_path, pid_path)
     while True:
         time.sleep(60)
     """
