@@ -1615,6 +1615,17 @@ bool cocxycore_block_get_metadata(
 );
 
 /**
+ * Convert a semantic row from block metadata into retained history space.
+ * Returns false when the row was evicted, semantic tracking is unavailable,
+ * the alternate screen is active, or an argument is invalid.
+ */
+bool cocxycore_block_visible_row(
+    const cocxycore_terminal* term,
+    uint32_t semantic_row,
+    uint32_t* out_history_row
+);
+
+/**
  * Serialize a block as compact JSON. Returns required bytes, or 0 if missing.
  * If buffer is NULL, buffer_size is ignored and the required size is returned.
  */

@@ -1434,6 +1434,47 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.commandBlock(for: surfaceID, blockID: block.id + 1) == nil)
     }
 
+    @Test("commandBlocks omits evicted rows and maps retained rows into history")
+    func commandBlocksOmitEvictedRowsAndMapRetainedRowsIntoHistory() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "\u{1B}]133;B\u{7}" +
+            "echo evicted\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "evicted\r\n" +
+            "\u{1B}]133;D;0\u{7}",
+            to: state.terminal
+        )
+        let evictedID = try #require(bridge.commandBlocks(for: surfaceID, limit: 10).first?.id)
+
+        feed(String(repeating: "filler\r\n", count: 10_050), to: state.terminal)
+        feed(
+            "\u{1B}]133;A\u{7}" +
+            "\u{1B}]133;B\u{7}" +
+            "echo retained\r\n" +
+            "\u{1B}]133;C\u{7}" +
+            "retained\r\n" +
+            "\u{1B}]133;D;0\u{7}",
+            to: state.terminal
+        )
+
+        let blocks = bridge.commandBlocks(for: surfaceID, limit: 10)
+        let retained = try #require(blocks.first)
+        let maximumHistoryRow = cocxycore_terminal_scrollback_len(state.terminal)
+            + UInt32(cocxycore_terminal_rows(state.terminal) - 1)
+
+        #expect(blocks.count == 1)
+        #expect(retained.command == "echo retained")
+        #expect(retained.startRow <= retained.endRow)
+        #expect(retained.endRow <= maximumHistoryRow)
+        #expect(bridge.commandBlock(for: surfaceID, blockID: evictedID) == nil)
+    }
+
     @Test("commandBlocks groups multiline commands into one block")
     func commandBlocksGroupsMultilineCommandsIntoOneBlock() throws {
         let bridge = try makeBridge()

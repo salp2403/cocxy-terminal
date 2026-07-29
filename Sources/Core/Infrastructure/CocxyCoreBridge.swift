@@ -2477,6 +2477,13 @@ final class CocxyCoreBridge: TerminalEngine {
         let blockType = metadata.block_type
         guard isCommandBlockType(blockType) else { return nil }
 
+        var startRow: UInt32 = 0
+        var endRow: UInt32 = 0
+        guard cocxycore_block_visible_row(terminal, metadata.start_row, &startRow),
+              cocxycore_block_visible_row(terminal, metadata.end_row, &endRow) else {
+            return nil
+        }
+
         return TerminalCommandBlock(
             id: metadata.id,
             command: string(from: metadata.command, length: metadata.command_len),
@@ -2486,8 +2493,8 @@ final class CocxyCoreBridge: TerminalEngine {
             startTimeNs: metadata.start_time_ns,
             endTimeNs: metadata.end_time_ns,
             durationNs: metadata.duration_ns,
-            startRow: metadata.start_row,
-            endRow: metadata.end_row,
+            startRow: startRow,
+            endRow: endRow,
             streamID: metadata.stream_id,
             blockType: blockType
         )
