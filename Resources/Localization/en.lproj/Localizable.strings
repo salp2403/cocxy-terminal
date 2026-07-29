@@ -472,6 +472,7 @@
 "menu.view.navigateSplitRight" = "Navigate Split Right";
 "menu.view.navigateSplitUp" = "Navigate Split Up";
 "menu.view.navigateSplitDown" = "Navigate Split Down";
+"menu.view.hideCommandBlocks" = "Hide Command Blocks";
 "menu.view.zoomIn" = "Zoom In";
 "menu.view.zoomOut" = "Zoom Out";
 "menu.view.resetZoom" = "Reset Zoom";
@@ -679,6 +680,8 @@
 "keybindings.action.terminal.scrollToTop.summary" = "Jump to the oldest available terminal history.";
 "keybindings.action.terminal.scrollToBottom.name" = "Scroll Terminal to Bottom";
 "keybindings.action.terminal.scrollToBottom.summary" = "Return to the terminal's live output.";
+"keybindings.action.terminal.hideCommandBlocks.name" = "Hide Command Blocks";
+"keybindings.action.terminal.hideCommandBlocks.summary" = "Hide command block controls currently visible in the terminal.";
 "keybindings.action.editor.zoomIn.name" = "Zoom In";
 "keybindings.action.editor.zoomIn.summary" = "Increase font size.";
 "keybindings.action.editor.zoomOut.name" = "Zoom Out";

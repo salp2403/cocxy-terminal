@@ -206,8 +206,8 @@ struct MenuKeybindingsBinderSwiftTests {
         #expect(MenuKeybindingsBinder.actionId(of: item) == "terminal.scrollPageUp")
     }
 
-    @Test("production View menu wires every terminal history action")
-    func productionViewMenuWiresTerminalHistoryActions() throws {
+    @Test("production View menu wires terminal viewport and command block actions")
+    func productionViewMenuWiresTerminalActions() throws {
         let application = NSApplication.shared
         let oldMenu = application.mainMenu
         defer { application.mainMenu = oldMenu }
@@ -225,6 +225,8 @@ struct MenuKeybindingsBinderSwiftTests {
                 #selector(MainWindowController.scrollTerminalToTopAction(_:)),
             KeybindingActionCatalog.terminalScrollToBottom.id:
                 #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
+            KeybindingActionCatalog.terminalHideCommandBlocks.id:
+                #selector(MainWindowController.hideCommandBlocksAction(_:)),
         ]
 
         for (actionId, selector) in expected {
@@ -234,6 +236,13 @@ struct MenuKeybindingsBinderSwiftTests {
             #expect(item.action == selector)
             #expect(!item.keyEquivalent.isEmpty)
         }
+
+        let hideItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalHideCommandBlocks.id
+        })
+        #expect(hideItem.keyEquivalent == "b")
+        #expect(hideItem.keyEquivalentModifierMask == [.command, .shift])
     }
 
     // MARK: - Nested Menus

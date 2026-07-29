@@ -2769,6 +2769,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         activeTerminalSurfaceView?.performLocalViewportScroll(.bottom)
     }
 
+    @objc func hideCommandBlocksAction(_ sender: Any?) {
+        activeTerminalSurfaceView?.dismissVisibleCommandBlocks()
+    }
+
     /// Increases the terminal font size by one step. Wired to Cmd++ via the View menu.
     @objc func zoomInAction(_ sender: Any?) {
         guard let tabID = visibleTabID,

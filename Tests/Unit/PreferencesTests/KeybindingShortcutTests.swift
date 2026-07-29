@@ -179,6 +179,16 @@ struct KeybindingActionCatalogTests {
         #expect(KeybindingActionCatalog.terminalScrollPageDown.defaultShortcut.canonical == "shift+pagedown")
         #expect(KeybindingActionCatalog.terminalScrollToTop.defaultShortcut.canonical == "cmd+home")
         #expect(KeybindingActionCatalog.terminalScrollToBottom.defaultShortcut.canonical == "cmd+end")
-        #expect(KeybindingActionCatalog.all.count == 50)
+        #expect(KeybindingActionCatalog.all.count == 51)
+    }
+
+    @Test func commandBlockAndBrowserActionsUseDistinctShortcuts() {
+        #expect(
+            KeybindingActionCatalog.terminalHideCommandBlocks.defaultShortcut.canonical
+                == "cmd+shift+b"
+        )
+        #expect(KeybindingActionCatalog.markdownBrowser.defaultShortcut.canonical == "cmd+alt+b")
+        let defaults = KeybindingActionCatalog.all.map(\.defaultShortcut.canonical)
+        #expect(Set(defaults).count == defaults.count)
     }
 }

@@ -421,6 +421,14 @@ enum KeybindingActionCatalog {
         defaultShortcut: KeybindingShortcut(requiresCommand: true, baseKey: "end")
     )
 
+    static let terminalHideCommandBlocks = KeybindingAction(
+        id: "terminal.hideCommandBlocks",
+        displayName: "Hide Command Blocks",
+        summary: "Hide command block controls currently visible in the terminal.",
+        category: .navigation,
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "b")
+    )
+
     // MARK: - Editor (view actions: find, zoom)
 
     static let editorFind = KeybindingAction(
@@ -525,7 +533,7 @@ enum KeybindingActionCatalog {
         displayName: "Toggle Browser",
         summary: "Show or hide the inline browser panel.",
         category: .markdown,
-        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresShift: true, baseKey: "b")
+        defaultShortcut: KeybindingShortcut(requiresCommand: true, requiresOption: true, baseKey: "b")
     )
 
     // MARK: - Remote
@@ -577,6 +585,7 @@ enum KeybindingActionCatalog {
         terminalScrollPageDown,
         terminalScrollToTop,
         terminalScrollToBottom,
+        terminalHideCommandBlocks,
         // Editor
         editorFind,
         voiceInput,

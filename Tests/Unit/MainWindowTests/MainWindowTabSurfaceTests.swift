@@ -16,6 +16,8 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     private(set) var redrawCallCount = 0
     private(set) var updateMetricsCallCount = 0
     private(set) var refreshDisplayLinkAnchorCallCount = 0
+    private(set) var dismissCommandBlocksCallCount = 0
+    private(set) var commandBlockConfigurations: [CommandBlocksConfig] = []
 
     func syncSizeWithTerminal() {
         syncSizeCallCount += 1
@@ -36,6 +38,16 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
 
     func requestImmediateRedraw() {
         redrawCallCount += 1
+    }
+
+    func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {
+        commandBlockConfigurations.append(configuration)
+    }
+
+    @discardableResult
+    func dismissVisibleCommandBlocks() -> Int {
+        dismissCommandBlocksCallCount += 1
+        return 1
     }
 
     func refreshDisplayLinkAnchor() {
@@ -265,6 +277,16 @@ final class TabSurfaceMappingTests: XCTestCase {
             controller.terminalSurfaceView === secondSurfaceView,
             "After creating a new tab, the active surface must be the new tab's surface"
         )
+    }
+
+    func testHideCommandBlocksActionRoutesToActiveTerminalSurface() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let surfaceView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = surfaceView
+
+        controller.hideCommandBlocksAction(nil)
+
+        XCTAssertEqual(surfaceView.dismissCommandBlocksCallCount, 1)
     }
 
     func testCodeReviewSubmitRoutesToOriginatingTabSurface() {
@@ -2133,6 +2155,37 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertTrue(localizedTabs.contains("Reproducción"))
         XCTAssertFalse(localizedTabs.contains("Browser"))
         XCTAssertFalse(localizedTabs.contains("Replay"))
+    }
+
+    func testConfigChangePropagatesCommandBlockSettingsToEveryManagedSurfaceOnce() throws {
+        let provider = InMemoryConfigFileProvider(content: """
+        [command-blocks]
+        enabled = false
+        show-only-on-hover = false
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+
+        let sharedView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = sharedView
+        controller.tabSurfaceViews[TabID()] = sharedView
+
+        let splitView = TrackingTerminalHostView()
+        controller.splitSurfaceViews[SurfaceID()] = splitView
+
+        let savedView = TrackingTerminalHostView()
+        controller.savedTabSplitSurfaceViews[TabID()] = [SurfaceID(): savedView]
+
+        controller.applyConfig(configService.current)
+
+        let expected = CommandBlocksConfig(enabled: false, showOnlyOnHover: false)
+        XCTAssertEqual(sharedView.commandBlockConfigurations, [expected])
+        XCTAssertEqual(splitView.commandBlockConfigurations, [expected])
+        XCTAssertEqual(savedView.commandBlockConfigurations, [expected])
     }
 
     func testAppendedWorkspacePanelsKeepTerminalLeafReachableAndClosable() {

@@ -535,6 +535,17 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(scrollToBottomItem, with: KeybindingActionCatalog.terminalScrollToBottom)
         viewMenu.addItem(scrollToBottomItem)
 
+        let hideCommandBlocksItem = NSMenuItem(
+            title: menuString("menu.view.hideCommandBlocks", "Hide Command Blocks", localizer),
+            action: #selector(MainWindowController.hideCommandBlocksAction(_:)),
+            keyEquivalent: ""
+        )
+        MenuKeybindingsBinder.tag(
+            hideCommandBlocksItem,
+            with: KeybindingActionCatalog.terminalHideCommandBlocks
+        )
+        viewMenu.addItem(hideCommandBlocksItem)
+
         viewMenu.addItem(NSMenuItem.separator())
 
         let zoomInItem = NSMenuItem(
