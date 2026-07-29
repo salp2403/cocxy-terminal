@@ -19,6 +19,13 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private weak var bridge: (any TerminalEngine)?
     private var surfaceID: SurfaceID?
     private var latestFrame: PTYDaemonSurfaceFrame?
+    private var latestReceivedFrameRevision: UInt64?
+    private var pendingSynchronizedFrame: PTYDaemonSurfaceFrame?
+    private var synchronizedOutputGate = SynchronizedOutputPresentationGate()
+    private var synchronizedOutputFlushWorkItem: DispatchWorkItem?
+    var synchronizedOutputClock: () -> TimeInterval = {
+        ProcessInfo.processInfo.systemUptime
+    }
     private var font: NSFont
     private var cellSize: CGSize
     private var notificationRingLayer: CAShapeLayer?
@@ -62,6 +69,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         MainActor.assumeIsolated {
             clearComposition(forceEngineClear: true)
             eventDrainTimer?.invalidate()
+            synchronizedOutputFlushWorkItem?.cancel()
         }
     }
 
@@ -91,6 +99,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {
         guard self.surfaceID != surfaceID else { return }
         clearComposition(forceEngineClear: true, discardInputContext: true)
+        synchronizedOutputFlushWorkItem?.cancel()
+        synchronizedOutputFlushWorkItem = nil
+        synchronizedOutputGate.reset()
+        pendingSynchronizedFrame = nil
+        latestReceivedFrameRevision = nil
         latestFrame = nil
         terminalMouseCaptureByButton.removeAll()
         clearLocalSelection()
@@ -519,9 +532,28 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     func apply(_ frame: PTYDaemonSurfaceFrame) {
         guard let surfaceID,
               UUID(uuidString: frame.surfaceID) == surfaceID.rawValue else { return }
-        if let latestFrame, frame.revision <= latestFrame.revision {
+        if let latestReceivedFrameRevision,
+           frame.revision <= latestReceivedFrameRevision {
             return
         }
+        latestReceivedFrameRevision = frame.revision
+
+        if let delay = synchronizedOutputGate.presentationDelay(
+            isActive: frame.synchronizedOutput,
+            now: synchronizedOutputClock()
+        ) {
+            pendingSynchronizedFrame = frame
+            scheduleSynchronizedOutputFlush(after: delay)
+            return
+        }
+
+        synchronizedOutputFlushWorkItem?.cancel()
+        synchronizedOutputFlushWorkItem = nil
+        pendingSynchronizedFrame = nil
+        present(frame)
+    }
+
+    private func present(_ frame: PTYDaemonSurfaceFrame) {
         if let latestFrame,
            latestFrame.surfaceID != frame.surfaceID ||
             latestFrame.columns != frame.columns ||
@@ -531,6 +563,44 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         self.latestFrame = frame
         refreshHistoryPill(using: frame)
         needsDisplay = true
+    }
+
+    private func scheduleSynchronizedOutputFlush(after delay: TimeInterval) {
+        synchronizedOutputFlushWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor in
+                self?.flushPendingSynchronizedFrame()
+            }
+        }
+        synchronizedOutputFlushWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay), execute: workItem)
+    }
+
+    private func flushPendingSynchronizedFrame() {
+        guard let frame = pendingSynchronizedFrame else {
+            synchronizedOutputFlushWorkItem = nil
+            return
+        }
+        if let delay = synchronizedOutputGate.presentationDelay(
+            isActive: true,
+            now: synchronizedOutputClock()
+        ) {
+            scheduleSynchronizedOutputFlush(after: delay)
+            return
+        }
+
+        pendingSynchronizedFrame = nil
+        synchronizedOutputFlushWorkItem = nil
+        present(frame)
+    }
+
+    var latestFrameRevisionForTesting: UInt64? { latestFrame?.revision }
+    var hasPendingSynchronizedFrameForTesting: Bool { pendingSynchronizedFrame != nil }
+
+    func flushPendingSynchronizedFrameForTesting() {
+        synchronizedOutputFlushWorkItem?.cancel()
+        synchronizedOutputFlushWorkItem = nil
+        flushPendingSynchronizedFrame()
     }
 
     var isTerminalMouseTrackingActive: Bool {

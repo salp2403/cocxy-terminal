@@ -254,6 +254,69 @@ struct CocxyCoreHostWiringTests {
         #expect(engine.preeditTexts.last?.text == "x")
     }
 
+    @Test("daemon host holds synchronized frames until the bounded timeout")
+    func daemonHostHoldsSynchronizedFramesUntilTimeout() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        var now: TimeInterval = 100
+        view.synchronizedOutputClock = { now }
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            synchronizedOutput: true
+        ))
+
+        #expect(view.hasPendingSynchronizedFrameForTesting == true)
+        #expect(view.latestFrameRevisionForTesting == nil)
+
+        now = 100.151
+        view.flushPendingSynchronizedFrameForTesting()
+
+        #expect(view.hasPendingSynchronizedFrameForTesting == false)
+        #expect(view.latestFrameRevisionForTesting == 1)
+    }
+
+    @Test("daemon host presents the closing synchronized frame immediately")
+    func daemonHostPresentsClosingSynchronizedFrameImmediately() {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.synchronizedOutputClock = { 200 }
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            synchronizedOutput: true
+        ))
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 2,
+            timestamp: 2,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            synchronizedOutput: false
+        ))
+
+        #expect(view.hasPendingSynchronizedFrameForTesting == false)
+        #expect(view.latestFrameRevisionForTesting == 2)
+    }
+
     @Test("daemon host view forwards scroll wheel as viewport scroll")
     func daemonHostViewForwardsScrollWheelAsViewportScroll() {
         let engine = MockTerminalEngine()

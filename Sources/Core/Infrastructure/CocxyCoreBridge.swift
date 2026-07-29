@@ -1059,6 +1059,12 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
+    func isSynchronizedOutputActive(for surface: SurfaceID) -> Bool? {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_mode_synchronized_output(state.terminal)
+        }
+    }
+
     // MARK: - Terminal Lock Helper
 
     /// Runs `body` while holding the per-surface terminal lock.

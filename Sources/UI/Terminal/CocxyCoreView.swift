@@ -180,6 +180,7 @@ final class CocxyCoreView: NSView {
     internal var needsRender: Bool = false
     private let renderScheduleLock = NSLock()
     internal private(set) var renderScheduled: Bool = false
+    private var synchronizedOutputGate = SynchronizedOutputPresentationGate()
 
     // MARK: - Input State
 
@@ -341,6 +342,7 @@ final class CocxyCoreView: NSView {
         if self.bridge !== bridge || self.surfaceID != surfaceID {
             resetCommandBlockOverlayForSurfaceTeardown()
             clearComposition(forceEngineClear: true, discardInputContext: true)
+            synchronizedOutputGate.reset()
         }
         self.bridge = bridge
         self.surfaceID = surfaceID
@@ -438,6 +440,14 @@ final class CocxyCoreView: NSView {
             // Prerequisites missing. Clearing the flag here is safe because
             // whatever creates these prerequisites will re-arm it.
             needsRender = false
+            return
+        }
+
+        if synchronizedOutputGate.presentationDelay(
+            isActive: bridge.isSynchronizedOutputActive(for: sid) ?? false,
+            now: ProcessInfo.processInfo.systemUptime
+        ) != nil {
+            needsRender = true
             return
         }
 
