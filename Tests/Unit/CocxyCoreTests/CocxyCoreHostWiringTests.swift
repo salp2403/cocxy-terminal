@@ -165,7 +165,7 @@ struct CocxyCoreHostWiringTests {
         #expect(press.shiftedCodepoint == 81)
         #expect(press.baseLayoutCodepoint == 113)
         #expect(press.modifiers.contains(.capsLock))
-        #expect(press.modifiers.contains(.numLock))
+        #expect(press.modifiers.contains(.numLock) == false)
         #expect(release.isKeyDown == false)
         #expect(release.baseLayoutCodepoint == 113)
     }

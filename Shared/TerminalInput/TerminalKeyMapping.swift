@@ -76,6 +76,12 @@ public enum TerminalKeyMapping {
         }
     }
 
+    /// Whether a CocxyCore special key can carry printable associated text.
+    /// Keypad Equal is outside the otherwise contiguous keypad ABI range.
+    public static func carriesAssociatedText(_ key: UInt8) -> Bool {
+        (26...42).contains(key) || key == 72
+    }
+
     /// Returns the unshifted US-layout codepoint for Kitty's base-layout field.
     public static func baseLayoutCodepoint(forMacKeyCode code: UInt16) -> UInt32 {
         switch code {

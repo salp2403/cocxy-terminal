@@ -12,7 +12,8 @@ enum MacTerminalKeyEventTranslator {
         if flags.contains(.option) { modifiers.insert(.option) }
         if flags.contains(.command) { modifiers.insert(.command) }
         if flags.contains(.capsLock) { modifiers.insert(.capsLock) }
-        if flags.contains(.numericPad) { modifiers.insert(.numLock) }
+        // AppKit's numericPad bit identifies the physical key group; it is
+        // not the Num Lock state. Keypad identity is carried by keyCode.
         return modifiers
     }
 

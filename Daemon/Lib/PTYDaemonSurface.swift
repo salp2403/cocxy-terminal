@@ -286,7 +286,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
         let shiftedCodepoint = payload.uint32("shiftedCodepoint") ?? 0
         let baseLayoutCodepoint = payload.uint32("baseLayoutCodepoint") ?? 0
         if let key = TerminalKeyMapping.specialKey(forMacKeyCode: keyCode) {
-            let associatedText = isKeyDown && (26...42).contains(key)
+            let associatedText = isKeyDown && TerminalKeyMapping.carriesAssociatedText(key)
                 ? Array(characterScalars.prefix(8))
                 : []
             return writeEncodedKey(

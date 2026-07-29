@@ -247,6 +247,98 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(try Data(contentsOf: captured) == expected)
     }
 
+    @Test("daemon preserves keypad-equal associated text in report-all mode")
+    func daemonPreservesKeypadEqualAssociatedText() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-keypad-equal-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let ready = root.appendingPathComponent("ready")
+        let captured = root.appendingPathComponent("captured.bin")
+        let script = root.appendingPathComponent("capture-keypad-equal.sh")
+        let expected = Data("\u{1B}[57415;1;61u".utf8)
+        let negotiationMarker = "KEYPAD_EQUAL_MODE_READY"
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            stty raw -echo
+            printf '\\033[>24u\(negotiationMarker)'
+            printf ready > "\(ready.path)"
+            /usr/bin/perl -e '
+            use strict;
+            use warnings;
+            $SIG{ALRM} = sub { exit 0 };
+            alarm 2;
+            binmode STDIN;
+            open my $output, ">:raw", "\(captured.path)" or die $!;
+            my $remaining = \(expected.count);
+            while ($remaining > 0) {
+                my $count = sysread(STDIN, my $bytes, $remaining);
+                last unless defined $count && $count > 0;
+                print {$output} $bytes;
+                $remaining -= $count;
+            }
+            close $output;
+            '
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-keypad-equal",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "8",
+                    "columns": "40",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+
+        #expect(waitForFile(ready, timeout: 2))
+        _ = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: negotiationMarker,
+            timeout: 5
+        )
+
+        let key = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "keypad-equal",
+                command: .surfaceKey,
+                payload: [
+                    "surfaceID": surfaceID,
+                    "characters": "=",
+                    "keyCode": "81",
+                    "modifiers": "0",
+                    "isKeyDown": "true",
+                    "isRepeat": "false",
+                    "isComposing": "false",
+                    "unshiftedCodepoint": "61",
+                    "shiftedCodepoint": "0",
+                    "baseLayoutCodepoint": "0",
+                ]
+            )
+        )
+        #expect(key.ok == true)
+
+        _ = try helper.waitForEvent(
+            surfaceID: surfaceID,
+            kind: .surfaceClosed,
+            timeout: 5
+        )
+        let actual = try Data(contentsOf: captured)
+        #expect(
+            actual == expected,
+            "captured bytes \(Array(actual)); expected \(Array(expected))"
+        )
+    }
+
     @Test("daemon drains focus and in-band resize reports after host mutations")
     func daemonDrainsHostMutationResponsesToPTY() throws {
         let root = FileManager.default.temporaryDirectory

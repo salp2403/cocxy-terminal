@@ -903,7 +903,7 @@ final class CocxyCoreBridge: TerminalEngine {
             // Hardware-special keys win even when AppKit supplies a private-use
             // character for the event (for example, an arrow key).
             if let key = TerminalKeyMapping.specialKey(forMacKeyCode: event.keyCode) {
-                let associatedText = event.isKeyDown && (26...42).contains(key)
+                let associatedText = event.isKeyDown && TerminalKeyMapping.carriesAssociatedText(key)
                     ? Array(characterScalars.prefix(8))
                     : []
                 var buffer = [UInt8](repeating: 0, count: 256)
