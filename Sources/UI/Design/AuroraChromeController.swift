@@ -137,6 +137,11 @@ final class AuroraChromeController: ObservableObject {
     var onSidebarDisplayModeChange: ((AuroraSidebarDisplayMode) -> Void)?
     var onSidebarPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)?
 
+    /// Supplies the latest aliases keyed by full workspace identity.
+    /// A closure keeps refreshes aligned with local persistence without
+    /// making the presentation controller own storage policy.
+    var workspaceTitlesProvider: (() -> [String: String])?
+
     /// Invoked when the user presses the palette hotkey inside an
     /// Aurora view (sidebar header button, palette-trigger keyboard
     /// shortcut). Delegates to `toggleCommandPalette()` on the host.
@@ -464,6 +469,7 @@ final class AuroraChromeController: ObservableObject {
             surfaceIDsByTab: surfaceMap,
             store: store,
             stateSnapshot: stateSnapshot,
+            workspaceTitlesByIdentity: workspaceTitlesProvider?(),
             worktreeBadgeVisibleProvider: worktreeBadgeVisibleProvider
         )
         let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID

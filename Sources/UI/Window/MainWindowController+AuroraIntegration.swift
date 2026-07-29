@@ -213,6 +213,16 @@ extension MainWindowController {
             tabManager: tabManager,
             store: agentStore
         )
+        let workspaceResolver = GitAncestorWorkspaceRootResolver()
+        auroraWorkspaceTitleStore.mergeMissing(
+            AuroraWorkspacePlanner.legacyTitlesByIdentity(
+                from: tabManager.tabs,
+                resolver: workspaceResolver
+            )
+        )
+        controller.workspaceTitlesProvider = { [weak self] in
+            self?.auroraWorkspaceTitleStore.snapshot ?? [:]
+        }
         if let variant = (NSApp.delegate as? AppDelegate)?.themeEngine?.activeTheme.metadata.variant {
             controller.themeIdentity = Self.auroraThemeIdentity(for: variant)
         }
@@ -892,18 +902,14 @@ extension MainWindowController {
 
     private func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
         let resolver = GitAncestorWorkspaceRootResolver()
-        let matchingIDs = tabManager.tabs.compactMap { tab -> TabID? in
-            AuroraSourceBuilder.workspaceGroup(for: tab, resolver: resolver) == workspaceID
-                ? tab.id
-                : nil
-        }
+        let matchingIDs = AuroraWorkspacePlanner.matchingTabIDs(
+            workspaceID: workspaceID,
+            in: tabManager.tabs,
+            resolver: resolver
+        )
         guard !matchingIDs.isEmpty else { return }
 
-        for tabID in matchingIDs {
-            tabManager.updateTab(id: tabID) { tab in
-                tab.workspaceCustomTitle = newTitle
-            }
-        }
+        auroraWorkspaceTitleStore.setTitle(newTitle, for: workspaceID)
         refreshAuroraChromeAfterTabMutation()
     }
 

@@ -58,17 +58,16 @@ extension Design {
     /// Snapshot of a single tab used as the adapter's input.
     ///
     /// `workspaceGroup` is the identifier the adapter groups tabs by.
-    /// The integration layer typically populates it with the git root
-    /// or the first path component under `~`, mirroring how Aurora's
-    /// sidebar groups sessions in the reference design. When the caller
-    /// cannot resolve a group (SSH session, detached tab), passing the
-    /// tab's own identifier keeps that tab in its own one-session
-    /// workspace instead of dropping it.
+    /// The integration layer populates it with the full standardized git
+    /// root path, falling back to the tab's full working-directory path.
+    /// `workspaceDefaultName` carries the short folder label separately,
+    /// so equal basenames never collapse unrelated projects.
     struct AuroraSourceTab: Hashable, Sendable {
         let id: String
         let name: String
         let workspaceGroup: String
         let workspaceTitle: String?
+        let workspaceDefaultName: String?
         let branch: String?
         let isPinned: Bool
         let surfaces: [AuroraSourceSurface]
@@ -94,6 +93,7 @@ extension Design {
             name: String,
             workspaceGroup: String,
             workspaceTitle: String? = nil,
+            workspaceDefaultName: String? = nil,
             branch: String? = nil,
             isPinned: Bool = false,
             surfaces: [AuroraSourceSurface],
@@ -107,6 +107,7 @@ extension Design {
             self.name = name
             self.workspaceGroup = workspaceGroup
             self.workspaceTitle = workspaceTitle
+            self.workspaceDefaultName = workspaceDefaultName
             self.branch = branch
             self.isPinned = isPinned
             self.surfaces = surfaces
@@ -165,7 +166,9 @@ extension Design {
                 let notesWorkspaceID = notesWorkspaceID(forTabs: tabs)
                 let workspaceName = tabs.lazy
                     .compactMap { cleaned($0.workspaceTitle) }
-                    .first ?? group
+                    .first
+                    ?? tabs.lazy.compactMap { cleaned($0.workspaceDefaultName) }.first
+                    ?? group
                 return AuroraWorkspace(
                     id: group,
                     name: workspaceName,

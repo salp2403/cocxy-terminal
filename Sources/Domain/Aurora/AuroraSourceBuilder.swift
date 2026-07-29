@@ -100,11 +100,9 @@ struct GitAncestorWorkspaceRootResolver: AuroraWorkspaceRootResolver {
 /// 3. Each tab carries the surfaces that `surfaceIDsByTab[tab.id]` lists,
 ///    in the caller's order. Missing keys translate to zero surfaces so
 ///    the adapter's "synthetic shell pane" safety net kicks in.
-/// 4. `workspaceGroup` is the workspace-root's last path component when
-///    the resolver finds one; otherwise the tab's own working-directory
-///    last component; otherwise the tab ID's UUID string as last-resort
-///    fallback so two tabs without any resolvable path still stay in
-///    separate workspaces.
+/// 4. `workspaceGroup` is a non-colliding identity derived from the full,
+///    standardized workspace-root path. The automatic visible name remains
+///    the root's last path component.
 /// 5. `branch` is copied verbatim from `tab.gitBranch`.
 /// 6. Surface name is `detectedAgent.name` when an agent is attached,
 ///    else `"pane N"` using 1-based indexing for user friendliness.
@@ -133,6 +131,8 @@ enum AuroraSourceBuilder {
     ///     state inside that callback.
     ///   - workspaceRootResolver: Injectable resolver (defaults to
     ///     ancestor-walk looking for `.git`). Tests pass a stub.
+    ///   - workspaceTitlesByIdentity: Optional persisted title map. An
+    ///     empty value is an explicit reset to the automatic folder name.
     /// - Returns: One `AuroraSourceTab` per input tab, in order.
     static func buildSources(
         tabs: [Tab],
@@ -140,6 +140,7 @@ enum AuroraSourceBuilder {
         store: AgentStatePerSurfaceStore,
         stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil,
         workspaceRootResolver: AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
+        workspaceTitlesByIdentity: [String: String]? = nil,
         worktreeBadgeVisibleProvider: (Tab) -> Bool = { _ in true }
     ) -> [Design.AuroraSourceTab] {
         tabs.map { tab in
@@ -159,18 +160,27 @@ enum AuroraSourceBuilder {
             // Apply the config gate at source-build time so the adapter
             // can stay pure and the view layer does not read config.
             let hasWorktree = tab.worktreeID != nil && worktreeBadgeVisibleProvider(tab)
+            let workspace = AuroraWorkspacePlanner.descriptor(
+                for: tab,
+                resolver: workspaceRootResolver
+            )
+            let workspaceTitle: String?
+            if let storedValue = workspaceTitlesByIdentity?[workspace.identity] {
+                workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(storedValue)
+            } else {
+                workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(tab.workspaceCustomTitle)
+            }
             // Workspace root path used by the Aurora notes section so
             // the sidebar can compute the same `NoteWorkspaceID` the
             // Notes store uses on disk. Falls back to the tab's own
             // working directory when no git ancestor exists, matching
             // `DefaultNoteWorkspaceResolver`'s contract.
-            let workspaceRootPath = (workspaceRootResolver.workspaceRoot(for: tab.workingDirectory)
-                ?? tab.workingDirectory).standardizedFileURL.path
             return Design.AuroraSourceTab(
                 id: tab.id.rawValue.uuidString,
                 name: tab.displayTitle,
-                workspaceGroup: workspaceGroup(for: tab, resolver: workspaceRootResolver),
-                workspaceTitle: tab.workspaceCustomTitle,
+                workspaceGroup: workspace.identity,
+                workspaceTitle: workspaceTitle,
+                workspaceDefaultName: workspace.automaticName,
                 branch: tab.gitBranch,
                 isPinned: tab.isPinned,
                 surfaces: surfaces,
@@ -178,7 +188,7 @@ enum AuroraSourceBuilder {
                 foregroundProcessName: tab.processName,
                 lastCommandSummary: commandSummary(for: tab),
                 hasWorktree: hasWorktree,
-                workspaceRootPath: workspaceRootPath
+                workspaceRootPath: workspace.rootPath
             )
         }
     }
@@ -215,28 +225,13 @@ enum AuroraSourceBuilder {
         return .shell
     }
 
-    /// Resolves the `workspaceGroup` string tabs with the same project
-    /// share. Priority chain:
-    /// 1. Workspace root (last path component) if the resolver finds one.
-    /// 2. Tab's own `workingDirectory.lastPathComponent`.
-    /// 3. `"home"` for the user's home directory where `lastPathComponent`
-    ///    may be empty on some filesystems.
-    /// 4. Tab ID UUID string as last resort so two tabs without any
-    ///    resolvable path still end up in separate workspaces.
+    /// Resolves the stable, full-path identity tabs in the same project
+    /// share. Kept as a compatibility helper for integration callers.
     static func workspaceGroup(
         for tab: Tab,
         resolver: AuroraWorkspaceRootResolver
     ) -> String {
-        if let root = resolver.workspaceRoot(for: tab.workingDirectory) {
-            let name = root.lastPathComponent
-            if !name.isEmpty { return name }
-        }
-        let folder = tab.workingDirectory.lastPathComponent
-        if !folder.isEmpty { return folder }
-        if tab.workingDirectory.path == FileManager.default.homeDirectoryForCurrentUser.path {
-            return "home"
-        }
-        return tab.id.rawValue.uuidString
+        AuroraWorkspacePlanner.descriptor(for: tab, resolver: resolver).identity
     }
 
     /// Friendly per-pane label shown in the Aurora sidebar row.

@@ -40,6 +40,7 @@ struct AuroraWorkspaceAdapterTests {
         name: String = "tab",
         workspaceGroup: String = "cocxy",
         workspaceTitle: String? = nil,
+        workspaceDefaultName: String? = nil,
         branch: String? = nil,
         isPinned: Bool = false,
         surfaces: [Design.AuroraSourceSurface] = [],
@@ -52,6 +53,7 @@ struct AuroraWorkspaceAdapterTests {
             name: name,
             workspaceGroup: workspaceGroup,
             workspaceTitle: workspaceTitle,
+            workspaceDefaultName: workspaceDefaultName,
             branch: branch,
             isPinned: isPinned,
             surfaces: surfaces,
@@ -119,6 +121,27 @@ struct AuroraWorkspaceAdapterTests {
         #expect(result.map(\.id) == ["alpha", "beta"])
         #expect(result[0].sessions.map(\.id) == ["a", "c"])
         #expect(result[1].sessions.map(\.id) == ["b"])
+    }
+
+    @Test("Full-path identities prevent same-folder-name workspace collisions")
+    func fullPathIdentitiesPreventBasenameCollisions() {
+        let sources = [
+            tab(
+                id: "a",
+                workspaceGroup: "/Users/user/a/html",
+                workspaceDefaultName: "html"
+            ),
+            tab(
+                id: "b",
+                workspaceGroup: "/Users/user/b/html",
+                workspaceDefaultName: "html"
+            ),
+        ]
+
+        let result = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+
+        #expect(result.map(\.id) == ["/Users/user/a/html", "/Users/user/b/html"])
+        #expect(result.map(\.name) == ["html", "html"])
     }
 
     // MARK: - Branch propagation

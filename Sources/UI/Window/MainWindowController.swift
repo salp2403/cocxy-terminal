@@ -562,6 +562,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// for the install / visibility helpers.
     var auroraChromeController: AuroraChromeController?
 
+    /// Workspace aliases are keyed by full project identity rather than
+    /// copied onto every tab in the group.
+    var auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
+
     /// Watchdog that guards against surfaces that enter `.launched`
     /// and never transition further because the agent terminated
     /// without emitting a `SessionEnd` hook. Owned by the controller
