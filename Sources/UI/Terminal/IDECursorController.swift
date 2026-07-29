@@ -33,12 +33,6 @@ import AppKit
 /// - Terminal font must be monospaced (all columns have equal width).
 /// - Only works on the current command line (not scrollback).
 ///
-/// ## Limitations
-///
-/// - Multi-line commands: only handles the current visible line.
-/// - Per-cell semantic input metadata and wrapped-row movement arrive with the
-///   core mouse model; this controller intentionally rejects other rows.
-///
 /// - SeeAlso: `TextSelectionManager` for the broader selection system.
 /// - SeeAlso: `CocxyCoreView` for event integration.
 @MainActor
@@ -56,7 +50,7 @@ final class IDECursorController {
     /// calculate a click. Reading these fields under one terminal lock avoids
     /// mixing a cursor from one frame with semantic or viewport state from
     /// another.
-    private let terminalStateProvider: () -> TerminalCursorClickSnapshot?
+    private let terminalStateProvider: (UInt32) -> TerminalCursorClickSnapshot?
 
     /// Sends the requested arrow-key movement to the active terminal engine.
     private let arrowKeySender: ([ArrowDirection]) -> Void
@@ -103,7 +97,7 @@ final class IDECursorController {
     init(
         hostView: NSView,
         fontSizeProvider: @escaping () -> CGFloat,
-        terminalStateProvider: @escaping () -> TerminalCursorClickSnapshot?,
+        terminalStateProvider: @escaping (UInt32) -> TerminalCursorClickSnapshot?,
         arrowKeySender: @escaping ([ArrowDirection]) -> Void
     ) {
         self.hostView = hostView
@@ -186,7 +180,7 @@ final class IDECursorController {
     func arrowKeysForClick(at location: CGPoint, viewBounds: NSRect) -> [ArrowDirection]? {
         guard isEnabled,
               let inputStartPosition,
-              let terminalState = terminalStateProvider(),
+              let terminalState = terminalStateProvider(inputStartPosition.absoluteRow),
               Self.clickableSemanticStates.contains(terminalState.semanticState),
               !terminalState.isAltScreen,
               terminalState.mouseTrackingMode == 0,
@@ -198,41 +192,97 @@ final class IDECursorController {
         // Convert click location to grid coordinates.
         guard viewBounds.contains(location) else { return nil }
         let targetScreenRow = rowForY(location.y)
-        let targetAbsoluteRow = terminalState.visibleStartRow + UInt32(targetScreenRow)
+        guard let targetScreenRowValue = UInt32(exactly: targetScreenRow) else { return nil }
+        let (targetAbsoluteRow, targetOverflowed) = terminalState.visibleStartRow
+            .addingReportingOverflow(targetScreenRowValue)
+        guard !targetOverflowed else { return nil }
         let cursorAbsoluteRow = terminalState.cursorAbsoluteRow
+        let inputStartAbsoluteRow = inputStartPosition.absoluteRow
 
-        // The OSC 133;B row is the semantic equivalent available before the
-        // core exposes per-cell input metadata. It proves that the live cursor
-        // is still on the command-input row and after the first editable cell.
         let inputStartColumn = Int(inputStartPosition.column)
         let cursorColumn = Int(terminalState.cursorColumn)
-        guard targetAbsoluteRow == cursorAbsoluteRow,
-              cursorAbsoluteRow == inputStartPosition.absoluteRow,
-              cursorColumn >= inputStartColumn,
-              cursorColumn <= terminalState.cellWidths.count,
-              !Self.isContinuationCell(at: cursorColumn, in: terminalState.cellWidths) else {
+        guard inputStartAbsoluteRow <= targetAbsoluteRow,
+              targetAbsoluteRow <= cursorAbsoluteRow,
+              inputStartAbsoluteRow <= cursorAbsoluteRow else {
             return nil
         }
 
-        var targetColumn = min(columnForX(location.x), terminalState.cellWidths.count)
-        targetColumn = max(targetColumn, inputStartColumn)
+        switch terminalState.shellClickMode {
+        case 1:
+            guard inputStartAbsoluteRow == cursorAbsoluteRow,
+                  targetAbsoluteRow == cursorAbsoluteRow else { return nil }
+        case 2:
+            break
+        default:
+            return nil
+        }
+
+        let expectedRowCount = UInt64(cursorAbsoluteRow) - UInt64(inputStartAbsoluteRow) + 1
+        guard expectedRowCount == terminalState.rows.count else { return nil }
+
+        var rowInputColumns: [[Int]] = []
+        var rowInputOffsets: [Int] = []
+        var inputCellCount = 0
+        rowInputColumns.reserveCapacity(terminalState.rows.count)
+        rowInputOffsets.reserveCapacity(terminalState.rows.count)
+
+        for (index, row) in terminalState.rows.enumerated() {
+            let expectedAbsoluteRow = inputStartAbsoluteRow + UInt32(index)
+            guard row.absoluteRow == expectedAbsoluteRow,
+                  row.cellWidths.count == row.cellSemantics.count else { return nil }
+            if index < terminalState.rows.count - 1, !row.wrapped {
+                return nil
+            }
+
+            let minimumColumn = index == 0 ? inputStartColumn : 0
+            guard minimumColumn <= row.cellWidths.count else { return nil }
+            let columns = Self.inputColumns(in: row, minimum: minimumColumn)
+            if index < terminalState.rows.count - 1, columns.isEmpty {
+                return nil
+            }
+            rowInputOffsets.append(inputCellCount)
+            rowInputColumns.append(columns)
+            inputCellCount += columns.count
+        }
+
+        guard let cursorRow = terminalState.rows.last,
+              cursorColumn <= cursorRow.cellWidths.count,
+              !(cursorAbsoluteRow == inputStartAbsoluteRow && cursorColumn < inputStartColumn),
+              !Self.isContinuationCell(at: cursorColumn, in: cursorRow.cellWidths) else {
+            return nil
+        }
+
+        let cursorRowIndex = terminalState.rows.count - 1
+        let cursorLogicalOffset = rowInputOffsets[cursorRowIndex]
+            + rowInputColumns[cursorRowIndex].count { $0 < cursorColumn }
+
+        let targetRowIndex = Int(targetAbsoluteRow - inputStartAbsoluteRow)
+        let targetRow = terminalState.rows[targetRowIndex]
+        let targetMinimumColumn = targetRowIndex == 0 ? inputStartColumn : 0
+        var targetColumn = min(columnForX(location.x), targetRow.cellWidths.count)
+        targetColumn = max(targetColumn, targetMinimumColumn)
         targetColumn = Self.leadingColumn(
             for: targetColumn,
-            cellWidths: terminalState.cellWidths,
-            minimum: inputStartColumn
+            cellWidths: targetRow.cellWidths,
+            minimum: targetMinimumColumn
         )
 
-        guard targetColumn != cursorColumn else { return [] }
+        let targetColumns = rowInputColumns[targetRowIndex]
+        let targetLogicalOffset: Int
+        if targetColumns.isEmpty {
+            guard targetRowIndex == 0 else { return nil }
+            targetLogicalOffset = 0
+        } else {
+            targetLogicalOffset = rowInputOffsets[targetRowIndex]
+                + targetColumns.count { $0 < targetColumn }
+        }
 
-        let lowerBound = min(targetColumn, cursorColumn)
-        let upperBound = max(targetColumn, cursorColumn)
-        let movementCount = terminalState.cellWidths[lowerBound..<upperBound]
-            .reduce(into: 0) { count, width in
-                if width != 2 { count += 1 }
-            }
+        guard targetLogicalOffset != cursorLogicalOffset else { return [] }
+
+        let movementCount = abs(targetLogicalOffset - cursorLogicalOffset)
         guard movementCount > 0 else { return [] }
 
-        let direction: ArrowDirection = targetColumn > cursorColumn ? .right : .left
+        let direction: ArrowDirection = targetLogicalOffset > cursorLogicalOffset ? .right : .left
         return Array(repeating: direction, count: movementCount)
     }
 
@@ -266,6 +316,19 @@ final class IDECursorController {
     }
 
     private static let clickableSemanticStates: Set<UInt8> = [1, 2]
+    private static let inputSemantic: UInt8 = 2
+
+    private static func inputColumns(
+        in row: TerminalCursorClickRow,
+        minimum: Int
+    ) -> [Int] {
+        row.cellSemantics.indices.compactMap { column in
+            guard column >= minimum,
+                  row.cellSemantics[column] == inputSemantic,
+                  row.cellWidths[column] != 2 else { return nil }
+            return column
+        }
+    }
 
     private static func isContinuationCell(at column: Int, in cellWidths: [UInt8]) -> Bool {
         column < cellWidths.count && cellWidths[column] == 2

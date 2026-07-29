@@ -1074,7 +1074,33 @@ struct CocxyCoreBridgeTests {
         #expect(snapshot.isAltScreen == false)
         #expect(snapshot.mouseTrackingMode == 0)
         #expect(snapshot.selectionActive == false)
+        #expect(snapshot.shellClickMode == 0)
         #expect(bridge.terminalCursorClickSnapshot(for: SurfaceID()) == nil)
+    }
+
+    @Test("cursor click snapshot carries wrapped semantic input rows")
+    func cursorClickSnapshotCarriesWrappedSemanticRows() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        #expect(cocxycore_terminal_resize(state.terminal, 24, 4))
+        let inputStartRow = cocxycore_terminal_history_max_visible_start(state.terminal)
+            + UInt32(cocxycore_terminal_cursor_row(state.terminal))
+
+        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}abcdef", to: state.terminal)
+
+        let snapshot = try #require(bridge.terminalCursorClickSnapshot(
+            for: surfaceID,
+            fromAbsoluteRow: inputStartRow
+        ))
+        #expect(snapshot.shellClickMode == 2)
+        #expect(snapshot.cursorColumn == 2)
+        #expect(snapshot.rows.count == 2)
+        #expect(snapshot.rows[0].wrapped)
+        #expect(snapshot.rows[0].cellSemantics == [2, 2, 2, 2])
+        #expect(snapshot.rows[1].cellSemantics.prefix(2) == [2, 2])
+        #expect(snapshot.rows[1].cellSemantics.dropFirst(2).allSatisfy { $0 == 0 })
     }
 
     @Test("semantic OSC positions are captured before later bytes advance the cursor")

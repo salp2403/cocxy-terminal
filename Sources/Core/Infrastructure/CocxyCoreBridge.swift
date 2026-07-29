@@ -259,9 +259,19 @@ struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
     }
 }
 
+/// One physical row in the editable command range captured for cursor-click
+/// movement. Widths use the core's 0=narrow, 1=wide, 2=continuation encoding;
+/// semantics use 2 for command-input cells.
+struct TerminalCursorClickRow: Equatable, Sendable {
+    let absoluteRow: UInt32
+    let wrapped: Bool
+    let cellWidths: [UInt8]
+    let cellSemantics: [UInt8]
+}
+
 /// Atomic CocxyCore state used to decide whether a prompt click may synthesize
-/// cursor movement. Cell widths belong to `cursorScreenRow` and use the core's
-/// 0=narrow, 1=wide, 2=continuation encoding.
+/// cursor movement. `rows` spans the captured OSC 133;B position through the
+/// live cursor so multiline movement cannot mix metadata from different frames.
 struct TerminalCursorClickSnapshot: Equatable, Sendable {
     let visibleStartRow: UInt32
     let historyMaxVisibleStart: UInt32
@@ -271,10 +281,15 @@ struct TerminalCursorClickSnapshot: Equatable, Sendable {
     let isAltScreen: Bool
     let mouseTrackingMode: UInt8
     let selectionActive: Bool
-    let cellWidths: [UInt8]
+    let shellClickMode: UInt8
+    let rows: [TerminalCursorClickRow]
 
     var cursorAbsoluteRow: UInt32 {
-        visibleStartRow + UInt32(cursorScreenRow)
+        historyMaxVisibleStart + UInt32(cursorScreenRow)
+    }
+
+    var cellWidths: [UInt8] {
+        rows.first { $0.absoluteRow == cursorAbsoluteRow }?.cellWidths ?? []
     }
 }
 
@@ -2032,27 +2047,60 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? nil
     }
 
-    func terminalCursorClickSnapshot(for surface: SurfaceID) -> TerminalCursorClickSnapshot? {
-        withTerminalLock(surface) { state -> TerminalCursorClickSnapshot in
+    func terminalCursorClickSnapshot(
+        for surface: SurfaceID,
+        fromAbsoluteRow requestedFirstRow: UInt32? = nil
+    ) -> TerminalCursorClickSnapshot? {
+        withTerminalLock(surface) { state -> TerminalCursorClickSnapshot? in
             let terminal = state.terminal
             let cursorRow = cocxycore_terminal_cursor_row(terminal)
+            let visibleStartRow = cocxycore_terminal_history_visible_start(terminal)
+            let historyMaxVisibleStart = cocxycore_terminal_history_max_visible_start(terminal)
+            let (cursorAbsoluteRow, overflowed) = historyMaxVisibleStart.addingReportingOverflow(
+                UInt32(cursorRow)
+            )
+            guard !overflowed else { return nil }
+
+            let firstRow = requestedFirstRow ?? cursorAbsoluteRow
+            guard firstRow <= cursorAbsoluteRow else { return nil }
+            let rowCount = UInt64(cursorAbsoluteRow) - UInt64(firstRow) + 1
+            guard rowCount <= 4_096 else { return nil }
+
             let columnCount = cocxycore_terminal_cols(terminal)
-            let cellWidths = (0..<Int(columnCount)).map { column in
-                cocxycore_terminal_cell_width(terminal, cursorRow, UInt16(column))
+            let rows = (firstRow...cursorAbsoluteRow).map { absoluteRow in
+                TerminalCursorClickRow(
+                    absoluteRow: absoluteRow,
+                    wrapped: cocxycore_terminal_row_wrapped(terminal, absoluteRow),
+                    cellWidths: (0..<Int(columnCount)).map { column in
+                        cocxycore_terminal_history_cell_width(
+                            terminal,
+                            absoluteRow,
+                            UInt16(column)
+                        )
+                    },
+                    cellSemantics: (0..<Int(columnCount)).map { column in
+                        cocxycore_terminal_cell_semantic(
+                            terminal,
+                            absoluteRow,
+                            UInt16(column)
+                        )
+                    }
+                )
             }
 
             return TerminalCursorClickSnapshot(
-                visibleStartRow: cocxycore_terminal_history_visible_start(terminal),
-                historyMaxVisibleStart: cocxycore_terminal_history_max_visible_start(terminal),
+                visibleStartRow: visibleStartRow,
+                historyMaxVisibleStart: historyMaxVisibleStart,
                 cursorScreenRow: cursorRow,
                 cursorColumn: cocxycore_terminal_cursor_col(terminal),
                 semanticState: cocxycore_terminal_semantic_state(terminal),
                 isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
                 mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
                 selectionActive: cocxycore_terminal_selection_active(terminal),
-                cellWidths: cellWidths
+                shellClickMode: cocxycore_terminal_shell_click_mode(terminal),
+                rows: rows
             )
-        }
+        } ?? nil
     }
 
     func selectionSnapshot(for surface: SurfaceID) -> TerminalSelectionSnapshot? {

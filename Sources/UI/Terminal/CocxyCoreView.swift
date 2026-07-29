@@ -121,11 +121,14 @@ final class CocxyCoreView: NSView {
         fontSizeProvider: { [weak self] in
             self?.viewModel?.currentFontSize ?? 14.0
         },
-        terminalStateProvider: { [weak self] in
+        terminalStateProvider: { [weak self] inputStartAbsoluteRow in
             guard let self = self,
                   let bridge = self.bridge,
                   let sid = self.surfaceID else { return nil }
-            return bridge.terminalCursorClickSnapshot(for: sid)
+            return bridge.terminalCursorClickSnapshot(
+                for: sid,
+                fromAbsoluteRow: inputStartAbsoluteRow
+            )
         },
         arrowKeySender: { [weak self] arrows in
             self?.sendArrowKeys(arrows)

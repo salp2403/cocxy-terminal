@@ -31,7 +31,17 @@ struct IDECursorProviderDriftTests {
 
         let provider = ProviderBox()
         provider.snapshot = initialCursor.map { cursor in
-            TerminalCursorClickSnapshot(
+            let cellWidths = Array(repeating: UInt8(0), count: 100)
+            let cellSemantics = Array(repeating: UInt8(2), count: 100)
+            let rows = (UInt32(0)...UInt32(cursor.row)).map { absoluteRow in
+                TerminalCursorClickRow(
+                    absoluteRow: absoluteRow,
+                    wrapped: absoluteRow < UInt32(cursor.row),
+                    cellWidths: cellWidths,
+                    cellSemantics: cellSemantics
+                )
+            }
+            return TerminalCursorClickSnapshot(
                 visibleStartRow: 0,
                 historyMaxVisibleStart: 0,
                 cursorScreenRow: cursor.row,
@@ -40,7 +50,8 @@ struct IDECursorProviderDriftTests {
                 isAltScreen: false,
                 mouseTrackingMode: 0,
                 selectionActive: false,
-                cellWidths: Array(repeating: 0, count: 100)
+                shellClickMode: 2,
+                rows: rows
             )
         }
 
@@ -49,7 +60,7 @@ struct IDECursorProviderDriftTests {
         let controller = IDECursorController(
             hostView: view,
             fontSizeProvider: { 14.0 },
-            terminalStateProvider: { [provider] in provider.snapshot },
+            terminalStateProvider: { [provider] _ in provider.snapshot },
             arrowKeySender: { arrows in captured.arrows.append(contentsOf: arrows) }
         )
         controller.setCellDimensions(width: 8.0, height: 16.0)
@@ -123,13 +134,8 @@ struct IDECursorProviderDriftTests {
 
     // MARK: - Provider row gates click-to-position
 
-    @Test("click on a row that differs from the live cursor row is ignored")
-    func clickOffLiveRowIsIgnored() {
-        // The internal tracker thinks the prompt is on row 0, but the real
-        // cursor has wrapped down to row 2 because the user typed enough
-        // characters to overflow the column count. A click on row 0 must
-        // NOT be handled as click-to-position — it lands on output text,
-        // not the editable prompt.
+    @Test("click on a soft-wrapped input row uses the live multiline offset")
+    func clickOnWrappedInputRowUsesLiveOffset() {
         let (controller, provider, captured) = makeController(initialCursor: (row: 2, col: 5))
         controller.commandInputStarted(at: TerminalGridPosition(
             screenRow: 0,
@@ -143,8 +149,8 @@ struct IDECursorProviderDriftTests {
             viewBounds: NSRect(x: 0, y: 0, width: 800, height: 600)
         )
 
-        #expect(arrows == nil,
-                "Click must use the live cursor row; a click off that row is not click-to-position")
+        #expect(arrows?.count == 193)
+        #expect(arrows?.first == .left)
         #expect(captured.arrows.isEmpty)
     }
 
