@@ -6,6 +6,7 @@
 
 import Foundation
 import Testing
+import CocxyShared
 @testable import CocxyCLILib
 
 @Suite("ClaudeSettingsManager — CwdChanged and FileChanged hook registration")
@@ -59,11 +60,18 @@ struct ClaudeSettingsManagerCwdFileChangedSwiftTests {
         let hooks = settings["hooks"] as! [String: Any]
         let entries = try #require(hooks["FileChanged"] as? [[String: Any]])
         let matcher = try #require(entries.first?["matcher"] as? String)
-        #expect(matcher == ".")
+        #expect(matcher == ClaudeFileChangedMatcher.value)
+        #expect(!matcher.isEmpty)
+        #expect(!ClaudeFileChangedMatcher.watchedRootFiles.contains("."))
 
         let cwd = URL(fileURLWithPath: "/tmp/cocxy-file-watcher", isDirectory: true)
-        let watchedPath = cwd.appendingPathComponent(matcher, isDirectory: true).standardized.path
-        #expect(watchedPath == cwd.standardized.path)
+        let watchedPaths = ClaudeFileChangedMatcher.watchedRootFiles.map {
+            cwd.appendingPathComponent($0).standardizedFileURL
+        }
+        #expect(watchedPaths.allSatisfy {
+            $0.deletingLastPathComponent().path == cwd.standardizedFileURL.path
+        })
+        #expect(watchedPaths.allSatisfy { $0.path != cwd.standardizedFileURL.path })
     }
 
     @Test("installHooks rewrites an existing Cocxy FileChanged entry with an empty matcher")
@@ -94,7 +102,38 @@ struct ClaudeSettingsManagerCwdFileChangedSwiftTests {
         let hooks = try #require(settings["hooks"] as? [String: Any])
         let entries = try #require(hooks["FileChanged"] as? [[String: Any]])
         #expect(entries.count == 1)
-        #expect(entries.first?["matcher"] as? String == ".")
+        #expect(entries.first?["matcher"] as? String == ClaudeFileChangedMatcher.value)
+    }
+
+    @Test("installHooks replaces the unsafe recursive FileChanged matcher")
+    func installHooksRepairsRecursiveFileChangedMatcher() throws {
+        let (manager, path) = makeManager()
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        let seed: [String: Any] = [
+            "hooks": [
+                "FileChanged": [[
+                    "matcher": ".",
+                    "hooks": [[
+                        "type": "command",
+                        "command": ClaudeSettingsManager.claudeHookCommand,
+                    ]],
+                ]],
+            ],
+        ]
+        try JSONSerialization.data(withJSONObject: seed)
+            .write(to: URL(fileURLWithPath: path))
+
+        let result = try manager.installHooks()
+
+        #expect(result.installed)
+        let data = try Data(contentsOf: URL(fileURLWithPath: path))
+        let settings = try #require(
+            try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let hooks = try #require(settings["hooks"] as? [String: Any])
+        let entries = try #require(hooks["FileChanged"] as? [[String: Any]])
+        #expect(entries.count == 1)
+        #expect(entries.first?["matcher"] as? String == ClaudeFileChangedMatcher.value)
     }
 
     @Test("installHooks is idempotent for CwdChanged")

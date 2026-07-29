@@ -14,10 +14,10 @@ import CocxyShared
 /// - Are idempotent (re-installing is a no-op).
 ///
 /// Each hook entry follows Claude Code's format. `FileChanged` is the only
-/// event whose matcher is a watched path rather than an event filter:
+/// event whose matcher is a list of watched paths rather than an event filter:
 /// ```json
 /// {
-///   "matcher": ".",
+///   "matcher": "package.json|Package.swift|Cargo.toml|...",
 ///   "hooks": [{ "type": "command", "command": "<Cocxy shell guard>" }]
 /// }
 /// ```
@@ -160,11 +160,11 @@ public struct ClaudeSettingsManager {
         "FileChanged"
     ]
 
-    /// FileChanged's matcher has dual semantics in Claude Code:
-    /// `.` resolves to the session CWD as its watcher path, while its regex
-    /// form matches every changed basename. Other event matchers stay empty.
+    /// FileChanged splits this matcher into literal watched paths and also
+    /// uses it to filter changed basenames. Keep the list root-level and
+    /// bounded; recursive source coverage comes from Cocxy's native monitor.
     static func matcher(for eventType: String) -> String {
-        eventType == "FileChanged" ? "." : ""
+        eventType == "FileChanged" ? ClaudeFileChangedMatcher.value : ""
     }
 
     /// Default path to Claude Code's settings file.

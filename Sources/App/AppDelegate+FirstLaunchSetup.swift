@@ -339,11 +339,11 @@ extension AppDelegate {
         return installClaudeCodeHooks(cliPath: persistentCLIPath)
     }
 
-    /// FileChanged's matcher has dual semantics in Claude Code:
-    /// `.` resolves to the session CWD as its watcher path, while its regex
-    /// form matches every changed basename. Other event matchers stay empty.
+    /// FileChanged splits this matcher into literal watched paths and also
+    /// uses it to filter changed basenames. Keep the list root-level and
+    /// bounded; recursive source coverage comes from Cocxy's native monitor.
     nonisolated static func claudeHookMatcher(for eventType: String) -> String {
-        eventType == "FileChanged" ? "." : ""
+        eventType == "FileChanged" ? ClaudeFileChangedMatcher.value : ""
     }
 
     /// Returns an empty dictionary for a missing file, but refuses to replace
