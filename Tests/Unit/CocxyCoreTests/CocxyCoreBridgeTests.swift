@@ -1194,7 +1194,7 @@ struct CocxyCoreBridgeTests {
         let state = try #require(bridge.surfaceState(for: surfaceID))
 
         // Enter command-running state so an agent launch pattern can promote
-        // the semantic state to agent_active inside CocxyCore.
+        // the semantic state without splitting the surrounding shell command.
         feed("\u{1B}]133;A\u{07}", to: state.terminal)
         feed("\u{1B}]133;B\u{07}", to: state.terminal)
         feed("\u{1B}]133;C\u{07}", to: state.terminal)
@@ -1202,7 +1202,7 @@ struct CocxyCoreBridgeTests {
 
         let diagnostics = try #require(bridge.semanticDiagnostics(for: surfaceID))
         #expect(diagnostics.state == 4)
-        #expect(diagnostics.currentBlockType == 5)
+        #expect(diagnostics.currentBlockType == UInt8(COCXYCORE_BLOCK_COMMAND_OUTPUT.rawValue))
     }
 
     @Test("applyFont updates the live terminal font metrics")
