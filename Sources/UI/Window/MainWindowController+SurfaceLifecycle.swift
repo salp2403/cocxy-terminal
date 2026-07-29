@@ -26,6 +26,17 @@ private enum AgentScrollFallback {
     }
 }
 
+struct SurfaceAgentSemanticVerdictCacheEntry: Equatable {
+    static let lifetime: TimeInterval = 0.25
+
+    let verdict: Bool
+    let expiresAt: Date
+
+    func isValid(at date: Date) -> Bool {
+        date < expiresAt
+    }
+}
+
 // MARK: - Surface Lifecycle
 
 /// Extension that manages the lifecycle of terminal surfaces:
@@ -112,6 +123,8 @@ extension MainWindowController {
         in surfaceView: TerminalHostView,
         initialWorkingDirectory: URL?
     ) {
+        invalidateSurfaceAgentSemanticVerdict(for: surfaceID)
+
         if let initialWorkingDirectory {
             surfaceWorkingDirectories[surfaceID] = initialWorkingDirectory
         }
@@ -243,17 +256,36 @@ extension MainWindowController {
 
     func surfaceLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
         let surfaceState = injectedPerSurfaceStore?.state(for: surfaceID)
+        if surfaceState?.isActive == true || surfaceState?.hasAgent == true {
+            return true
+        }
+        if foregroundProcessLooksLikeActiveAgent(surfaceID) {
+            return true
+        }
+
+        let now = surfaceAgentSemanticVerdictNow()
+        if let cached = surfaceAgentSemanticVerdictCache[surfaceID],
+           cached.isValid(at: now) {
+            return cached.verdict
+        }
+
         let bridge = cocxyCoreBridge(forSurface: surfaceID)
         let semantic = bridge?.semanticDiagnostics(for: surfaceID)
-        return surfaceState?.isActive == true
-            || surfaceState?.hasAgent == true
-            || semantic?.state == CocxyCoreSemanticState.agentActive
-            || foregroundProcessLooksLikeActiveAgent(surfaceID)
+        let verdict = semantic?.state == CocxyCoreSemanticState.agentActive
             || semanticCommandInputLooksLikeActiveAgent(
                 bridge: bridge,
                 surfaceID: surfaceID,
                 semantic: semantic
             )
+        surfaceAgentSemanticVerdictCache[surfaceID] = SurfaceAgentSemanticVerdictCacheEntry(
+            verdict: verdict,
+            expiresAt: now.addingTimeInterval(SurfaceAgentSemanticVerdictCacheEntry.lifetime)
+        )
+        return verdict
+    }
+
+    func invalidateSurfaceAgentSemanticVerdict(for surfaceID: SurfaceID) {
+        surfaceAgentSemanticVerdictCache.removeValue(forKey: surfaceID)
     }
 
     private func foregroundProcessLooksLikeActiveAgent(_ surfaceID: SurfaceID) -> Bool {
@@ -396,6 +428,7 @@ extension MainWindowController {
         surfaceImageDetectors.removeValue(forKey: surfaceID)
         surfaceOutputDispatchers.removeValue(forKey: surfaceID)
         surfaceWorkingDirectories.removeValue(forKey: surfaceID)
+        invalidateSurfaceAgentSemanticVerdict(for: surfaceID)
     }
 
     // MARK: - Surface Destruction
@@ -518,6 +551,7 @@ extension MainWindowController {
         deferredRestoredTabLoader = nil
         surfaceImageDetectors.removeAll()
         surfaceOutputDispatchers.removeAll()
+        surfaceAgentSemanticVerdictCache.removeAll()
         revokeBrowserAuthorizations(in: Array(panelContentViews.values))
         panelContentViews.removeAll()
 

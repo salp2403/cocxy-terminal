@@ -514,6 +514,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// `renderFrame` for main-thread cycles.
     var surfaceOutputDispatchers: [SurfaceID: SurfaceOutputBackgroundDispatcher] = [:]
 
+    /// Short-lived cache for semantic agent detection, whose bridge reads take
+    /// the terminal lock. Cheap store/process signals bypass this cache.
+    var surfaceAgentSemanticVerdictCache: [SurfaceID: SurfaceAgentSemanticVerdictCacheEntry] = [:]
+
+    /// Injectable wall clock used to keep cache-expiration tests deterministic.
+    var surfaceAgentSemanticVerdictNow: () -> Date = { Date() }
+
     /// The container view that wraps the terminal area and overlays.
     var terminalContainerView: NSView?
 
@@ -1665,6 +1672,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Handles a foreground process change for a tab.
     private func handleProcessChange(_ event: ProcessChangeEvent) {
+        for surfaceID in surfaceIDs(for: event.tabID) {
+            invalidateSurfaceAgentSemanticVerdict(for: surfaceID)
+        }
         tabManager.updateTab(id: event.tabID) { tab in
             tab.processName = event.processName
             tab.sshSession = event.sshSession
