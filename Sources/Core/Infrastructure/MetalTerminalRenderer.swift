@@ -12,11 +12,14 @@ import CocxyCoreKit
 /// CocxyCore computes all cell positions, resolved RGBA colors, glyph UV
 /// coordinates, and cursor geometry on the CPU. This renderer's job is purely
 /// GPU upload + draw: it uploads the cell instance data to vertex buffers,
-/// the glyph atlas bitmap to a Metal texture, and draws three passes:
+/// the glyph atlas bitmap to a Metal texture, and draws ordered passes:
 ///
 /// 1. **Background pass** — colored rectangles for each cell's background.
-/// 2. **Glyph pass** — textured quads sampling the glyph atlas with fg color.
-/// 3. **Cursor pass** — single colored rectangle for the cursor.
+/// 2. **Background image pass** — inline images below terminal text.
+/// 3. **Glyph pass** — textured quads sampling the glyph atlas with fg color.
+/// 4. **Decoration pass** — underline, strikethrough, and overline geometry.
+/// 5. **Foreground image pass** — inline images above terminal text.
+/// 6. **Cursor pass** — single colored rectangle for the cursor.
 ///
 /// ## Threading
 ///
@@ -32,6 +35,7 @@ final class MetalTerminalRenderer {
     private let commandQueue: MTLCommandQueue
     private let bgPipeline: MTLRenderPipelineState
     private let glyphPipeline: MTLRenderPipelineState
+    private let decorationPipeline: MTLRenderPipelineState
     private let imagePipeline: MTLRenderPipelineState
     private let cursorPipeline: MTLRenderPipelineState
 
@@ -96,8 +100,10 @@ final class MetalTerminalRenderer {
         var v1: Float
         var fgR: UInt8; var fgG: UInt8; var fgB: UInt8; var fgA: UInt8
         var bgR: UInt8; var bgG: UInt8; var bgB: UInt8; var bgA: UInt8
+        var underlineR: UInt8; var underlineG: UInt8; var underlineB: UInt8; var underlineA: UInt8
         var flags: UInt8
-        var _pad1: UInt8 = 0; var _pad2: UInt8 = 0; var _pad3: UInt8 = 0
+        var underlineStyle: UInt8
+        var _pad1: UInt8 = 0; var _pad2: UInt8 = 0
     }
 
     /// Cursor instance data.
@@ -177,6 +183,18 @@ final class MetalTerminalRenderer {
         glyphDesc.colorAttachments[0].sourceAlphaBlendFactor = .one
         glyphDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
         self.glyphPipeline = try dev.makeRenderPipelineState(descriptor: glyphDesc)
+
+        // Decoration pipeline (exact underline style/color plus strike/overline)
+        let decorationDesc = MTLRenderPipelineDescriptor()
+        decorationDesc.vertexFunction = library.makeFunction(name: "decoration_vertex")
+        decorationDesc.fragmentFunction = library.makeFunction(name: "decoration_fragment")
+        decorationDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
+        decorationDesc.colorAttachments[0].isBlendingEnabled = true
+        decorationDesc.colorAttachments[0].sourceRGBBlendFactor = .sourceAlpha
+        decorationDesc.colorAttachments[0].destinationRGBBlendFactor = .oneMinusSourceAlpha
+        decorationDesc.colorAttachments[0].sourceAlphaBlendFactor = .one
+        decorationDesc.colorAttachments[0].destinationAlphaBlendFactor = .oneMinusSourceAlpha
+        self.decorationPipeline = try dev.makeRenderPipelineState(descriptor: decorationDesc)
 
         let imageDesc = MTLRenderPipelineDescriptor()
         imageDesc.vertexFunction = library.makeFunction(name: "image_vertex")
@@ -354,6 +372,15 @@ final class MetalTerminalRenderer {
             )
         }
 
+        // Decorations are drawn over glyphs but below foreground images.
+        encoder.setRenderPipelineState(decorationPipeline)
+        encoder.setVertexBuffer(cellBuffer, offset: 0, index: 0)
+        encoder.setVertexBuffer(uniformBuffer, offset: 0, index: 1)
+        encoder.drawPrimitives(
+            type: .triangle, vertexStart: 0, vertexCount: 6,
+            instanceCount: instanceCount
+        )
+
         if imageQuadCount > backgroundImageCount,
            imageAtlasTexture != nil,
            let imageQuadBuffer {
@@ -447,6 +474,23 @@ final class MetalTerminalRenderer {
             for col in 0..<cols {
                 cocxycore_terminal_gpu_cell(terminal, row, col, &cell)
 
+                var underlineR = cell.fg.r
+                var underlineG = cell.fg.g
+                var underlineB = cell.fg.b
+                var underlineA = cell.fg.a
+                var underlineStyle: UInt8 = (cell.flags & 0x01) == 0 ? 0 : 1
+
+                if (cell.flags & 0x01) != 0 {
+                    var decoration = cocxycore_cell_decoration()
+                    if cocxycore_terminal_gpu_cell_decoration(terminal, row, col, &decoration) {
+                        underlineR = decoration.underline_color.r
+                        underlineG = decoration.underline_color.g
+                        underlineB = decoration.underline_color.b
+                        underlineA = decoration.underline_color.a
+                        underlineStyle = decoration.underline_style
+                    }
+                }
+
                 ptr[idx] = CellInstance(
                     x: cell.x, y: cell.y,
                     width: cell.width, height: cell.height,
@@ -455,7 +499,10 @@ final class MetalTerminalRenderer {
                     u0: cell.u0, v0: cell.v0, u1: cell.u1, v1: cell.v1,
                     fgR: cell.fg.r, fgG: cell.fg.g, fgB: cell.fg.b, fgA: cell.fg.a,
                     bgR: cell.bg.r, bgG: cell.bg.g, bgB: cell.bg.b, bgA: cell.bg.a,
-                    flags: cell.flags
+                    underlineR: underlineR, underlineG: underlineG,
+                    underlineB: underlineB, underlineA: underlineA,
+                    flags: cell.flags,
+                    underlineStyle: underlineStyle
                 )
                 idx += 1
             }
@@ -643,9 +690,11 @@ final class MetalTerminalRenderer {
 
     /// Metal Shading Language source compiled at runtime.
     ///
-    /// Three shader pairs (vertex + fragment):
+    /// Shader pairs (vertex + fragment):
     /// - bg: Solid colored rectangles for cell backgrounds.
     /// - glyph: Textured quads sampling the glyph atlas with foreground color.
+    /// - decoration: Exact underline shapes plus strikethrough and overline.
+    /// - image: Inline image quads below or above text.
     /// - cursor: Single colored rectangle for the cursor.
     ///
     /// All vertex shaders convert pixel coordinates to clip space using:
@@ -669,8 +718,10 @@ final class MetalTerminalRenderer {
         float u0, v0, u1, v1;
         uchar4 fg;
         uchar4 bg;
+        uchar4 underlineColor;
         uint8_t flags;
-        uint8_t _pad1, _pad2, _pad3;
+        uint8_t underlineStyle;
+        uint8_t _pad1, _pad2;
     };
 
     struct ImageQuadInstance {
@@ -773,6 +824,104 @@ final class MetalTerminalRenderer {
         return float4(in.fgColor.rgb, in.fgColor.a * alpha);
     }
 
+    // ── Decoration pass ───────────────────────────────────────────────
+
+    struct DecorationOut {
+        float4 position [[position]];
+        float2 local;
+        float2 cellSize;
+        float4 fgColor;
+        float4 underlineColor;
+        float flags;
+        float underlineStyle;
+    };
+
+    vertex DecorationOut decoration_vertex(
+        uint vid [[vertex_id]],
+        uint iid [[instance_id]],
+        const device CellInstance* cells [[buffer(0)]],
+        constant Uniforms& u [[buffer(1)]]
+    ) {
+        CellInstance c = cells[iid];
+        float2 corner = quadOffsets[vid];
+        float2 local = corner * float2(c.width, c.height);
+        float2 pos = float2(c.x + u.paddingX, c.y + u.paddingY) + local;
+
+        DecorationOut out;
+        out.position = pixelToClip(pos, float2(u.viewportWidth, u.viewportHeight));
+        out.local = local;
+        out.cellSize = float2(c.width, c.height);
+        out.fgColor = float4(c.fg) / 255.0;
+        out.underlineColor = float4(c.underlineColor) / 255.0;
+        out.flags = float(c.flags);
+        out.underlineStyle = float(c.underlineStyle);
+        return out;
+    }
+
+    float decorationLineMask(float y, float center, float halfWidth, float aa) {
+        return 1.0 - smoothstep(halfWidth, halfWidth + aa, abs(y - center));
+    }
+
+    fragment float4 decoration_fragment(DecorationOut in [[stage_in]]) {
+        uint flags = uint(in.flags + 0.5);
+        uint underlineStyle = uint(in.underlineStyle + 0.5);
+        float aa = max(fwidth(in.local.y), 0.65);
+        float thickness = max(1.0, in.cellSize.y / 16.0);
+        float underline = 0.0;
+        float textDecoration = 0.0;
+        float baseline = in.cellSize.y - max(2.0, thickness);
+
+        if ((flags & 0x01u) != 0u) {
+            if (underlineStyle == 2u) {
+                underline = max(
+                    decorationLineMask(in.local.y, baseline, thickness * 0.5, aa),
+                    decorationLineMask(in.local.y, baseline - thickness * 2.5, thickness * 0.5, aa)
+                );
+            } else if (underlineStyle == 3u) {
+                float wave = baseline + sin(in.local.x * 2.0943951) * max(1.0, thickness);
+                underline = decorationLineMask(in.local.y, wave, thickness * 0.5, aa);
+            } else if (underlineStyle == 4u) {
+                float period = max(4.0, thickness * 4.0);
+                float dx = abs(fmod(in.local.x + period * 0.5, period) - period * 0.5);
+                float distanceToDot = length(float2(dx, in.local.y - baseline));
+                underline = 1.0 - smoothstep(thickness, thickness + aa, distanceToDot);
+            } else if (underlineStyle == 5u) {
+                float period = max(7.0, thickness * 7.0);
+                float dash = 1.0 - smoothstep(
+                    period * 0.58,
+                    period * 0.68,
+                    fmod(in.local.x, period)
+                );
+                underline = decorationLineMask(
+                    in.local.y,
+                    baseline,
+                    thickness * 0.5,
+                    aa
+                ) * dash;
+            } else {
+                underline = decorationLineMask(in.local.y, baseline, thickness * 0.5, aa);
+            }
+        }
+
+        if ((flags & 0x02u) != 0u) {
+            textDecoration = max(
+                textDecoration,
+                decorationLineMask(in.local.y, in.cellSize.y * 0.55, thickness * 0.5, aa)
+            );
+        }
+        if ((flags & 0x80u) != 0u) {
+            textDecoration = max(
+                textDecoration,
+                decorationLineMask(in.local.y, max(1.0, thickness), thickness * 0.5, aa)
+            );
+        }
+
+        float alpha = max(underline, textDecoration);
+        if (alpha < 0.004) discard_fragment();
+        float4 color = underline >= textDecoration ? in.underlineColor : in.fgColor;
+        return float4(color.rgb, color.a * alpha);
+    }
+
     // ── Image pass ────────────────────────────────────────────────────
 
     struct ImageOut {
@@ -848,6 +997,15 @@ enum MetalRendererError: Error {
 // MARK: - Internal Test Support
 
 extension MetalTerminalRenderer {
+    struct DebugCellDecoration {
+        let flags: UInt8
+        let underlineStyle: UInt8
+        let underlineR: UInt8
+        let underlineG: UInt8
+        let underlineB: UInt8
+        let underlineA: UInt8
+    }
+
     struct DebugState {
         let rows: UInt16
         let cols: UInt16
@@ -881,6 +1039,20 @@ extension MetalTerminalRenderer {
             hasAtlasTexture: atlasTexture != nil,
             hasImageAtlasTexture: imageAtlasTexture != nil,
             atlasGeneration: lastAtlasGeneration
+        )
+    }
+
+    func debugCellDecoration(row: UInt16, col: UInt16) -> DebugCellDecoration? {
+        guard row < rows, col < cols, let cellBuffer else { return nil }
+        let index = Int(row) * Int(cols) + Int(col)
+        let cell = cellBuffer.contents().assumingMemoryBound(to: CellInstance.self)[index]
+        return DebugCellDecoration(
+            flags: cell.flags,
+            underlineStyle: cell.underlineStyle,
+            underlineR: cell.underlineR,
+            underlineG: cell.underlineG,
+            underlineB: cell.underlineB,
+            underlineA: cell.underlineA
         )
     }
 }

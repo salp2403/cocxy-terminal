@@ -11,7 +11,7 @@
  * Most consumers should use the Terminal API — it handles parser,
  * screen buffer, executor, and wiring automatically.
  *
- * Version: 0.15.2 (stable API bundle)
+ * Version: 0.15.3 (stable API bundle)
  */
 
 #ifndef COCXYCORE_H
@@ -24,8 +24,8 @@
 /* Version constants. */
 #define COCXYCORE_VERSION_MAJOR 0
 #define COCXYCORE_VERSION_MINOR 15
-#define COCXYCORE_VERSION_PATCH 2
-#define COCXYCORE_VERSION_STRING "0.15.2"
+#define COCXYCORE_VERSION_PATCH 3
+#define COCXYCORE_VERSION_STRING "0.15.3"
 
 /* Platform detection. */
 #if defined(__APPLE__)
@@ -856,8 +856,9 @@ void cocxycore_terminal_preedit_anchor(
 bool cocxycore_terminal_has_response(const cocxycore_terminal* term);
 
 /**
- * Read the pending response into the provided buffer.
- * Returns the number of bytes written. Consumes the response.
+ * Read the oldest pending response into the provided buffer.
+ * Returns the number of bytes written and consumes that response. Callers
+ * must drain iteratively while cocxycore_terminal_has_response() is true.
  */
 size_t cocxycore_terminal_read_response(
     cocxycore_terminal* term,
@@ -1610,7 +1611,7 @@ typedef struct {
 /**
  * Render cell — resolved colors and codepoint for one grid position.
  * flags: bit0=underline, bit1=strikethrough, bit2=italic, bit3=bold,
- *        bit4=wide, bit5=continuation
+ *        bit4=wide, bit5=continuation, bit7=overline
  */
 typedef struct {
     cocxycore_rgba fg;
@@ -1938,6 +1939,14 @@ typedef struct {
     uint8_t _pad[3];
 } cocxycore_metal_cell;
 
+/** Exact decoration metadata for a rendered GPU cell. */
+typedef struct {
+    cocxycore_rgba underline_color;
+    uint8_t underline_style; /* 0=none, 1=single, 2=double, 3=curly, 4=dotted, 5=dashed */
+    bool overline;
+    uint8_t _pad[2];
+} cocxycore_cell_decoration;
+
 /** Metal-ready cursor instance data. */
 typedef struct {
     float x, y, width, height;
@@ -1986,6 +1995,14 @@ void cocxycore_terminal_metal_cell(
     cocxycore_metal_cell* out
 );
 
+/** Get exact decoration metadata for a Metal-ready cell. */
+bool cocxycore_terminal_metal_cell_decoration(
+    const cocxycore_terminal* term,
+    uint16_t row,
+    uint16_t col,
+    cocxycore_cell_decoration* out
+);
+
 /** Get Metal-ready cursor data from the last built frame. */
 void cocxycore_terminal_metal_cursor(
     const cocxycore_terminal* term,
@@ -2022,6 +2039,14 @@ bool cocxycore_terminal_build_gpu_frame(
     cocxycore_terminal* term,
     uint32_t atlas_width,
     uint32_t atlas_height
+);
+
+/** Get exact decoration metadata for a platform-agnostic GPU cell. */
+bool cocxycore_terminal_gpu_cell_decoration(
+    const cocxycore_terminal* term,
+    uint16_t row,
+    uint16_t col,
+    cocxycore_cell_decoration* out
 );
 
 /** Get platform-agnostic per-cell GPU data from the last built GPU frame. */

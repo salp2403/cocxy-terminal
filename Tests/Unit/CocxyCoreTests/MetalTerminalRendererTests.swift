@@ -130,6 +130,25 @@ struct MetalTerminalRendererTests {
         #expect(renderer.debugState.hasCursorBuffer == true)
     }
 
+    @Test("prepareFrameResources preserves exact modern decoration metadata")
+    func prepareFrameResourcesPreservesModernDecorations() throws {
+        let renderer = try MetalTerminalRenderer()
+        let terminal = try makeConfiguredTerminal(text: "\u{1B}[4:3;53;58;2;10;20;30mX")
+        defer { cocxycore_terminal_destroy(terminal) }
+
+        #expect(MemoryLayout<MetalTerminalRenderer.CellInstance>.stride == 64)
+        #expect(renderer.prepareFrameResources(terminal: terminal) == true)
+
+        let decoration = try #require(renderer.debugCellDecoration(row: 0, col: 0))
+        #expect((decoration.flags & 0x01) != 0)
+        #expect((decoration.flags & 0x80) != 0)
+        #expect(decoration.underlineStyle == 3)
+        #expect(decoration.underlineR == 10)
+        #expect(decoration.underlineG == 20)
+        #expect(decoration.underlineB == 30)
+        #expect(decoration.underlineA == 255)
+    }
+
     @Test("prepareFrameResources uploads inline image quads and atlas data")
     func prepareFrameResourcesUploadsInlineImages() throws {
         let renderer = try MetalTerminalRenderer()
