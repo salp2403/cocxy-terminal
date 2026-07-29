@@ -14,6 +14,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
     var onTerminalInteractionStateChanged: (() -> Void)?
     var onFocusRequested: (() -> Void)?
+    var onActivateDetectedContent: ((TerminalDetectedContent) -> Bool)?
     var clipboardService: ClipboardServiceProtocol = SystemClipboardService()
 
     private weak var bridge: (any TerminalEngine)?
@@ -29,6 +30,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var fontFamily: String
     private var font: NSFont
     private var cellSize: CGSize
+    private var localizer: AppLocalizer
     private var notificationRingLayer: CAShapeLayer?
     private var eventDrainTimer: Timer?
     private(set) var historyPillView: TerminalHistoryPillView?
@@ -40,6 +42,9 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var isDraggingLocalSelection = false
     private var localSelectionMode: PTYDaemonGridSelection.Mode = .linear
     private var localSelectionClickCount = 0
+    private(set) var detectedContentOverlayView: TerminalDetectedContentOverlayView?
+    private(set) var hoveredDetectedContent: TerminalDetectedContent?
+    private var consumedDetectedContentMouseGesture = false
     private var compositionState = TextCompositionState()
 
     private struct KeyTextInterpretation {
@@ -65,11 +70,13 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         self.fontFamily = initialFamily
         self.font = initialFont
         self.cellSize = Self.measureCellSize(font: initialFont)
+        self.localizer = localizer
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.black.cgColor
         registerForDraggedTypes([.fileURL])
         installHistoryPill(localizer: localizer)
+        installDetectedContentOverlay()
     }
 
     deinit {
@@ -112,6 +119,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         pendingSynchronizedFrame = nil
         latestReceivedFrameRevision = nil
         latestFrame = nil
+        clearDetectedContentHover()
+        consumedDetectedContentMouseGesture = false
         forwardedKeyCodes.removeAll()
         terminalMouseCaptureByButton.removeAll()
         clearLocalSelection()
@@ -189,6 +198,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
         historyPillView?.updateLocalizer(localizer)
     }
 
@@ -199,6 +209,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         syncSizeWithTerminal()
         notificationRingLayer?.frame = bounds
         notificationRingLayer?.path = CGPath(rect: bounds.insetBy(dx: 1, dy: 1), transform: nil)
+        detectedContentOverlayView?.frame = bounds
+        clearDetectedContentHover()
     }
 
     override func updateTrackingAreas() {
@@ -208,7 +220,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         }
         let trackingArea = NSTrackingArea(
             rect: .zero,
-            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -320,11 +332,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) {
-            NSCursor.pointingHand.set()
-        } else {
-            NSCursor.iBeam.set()
-        }
+        updateDetectedContentCursor()
         guard let bridge,
               let surfaceID,
               let isKeyDown = MacTerminalKeyEventTranslator.modifierIsActive(
@@ -425,6 +433,14 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     override func mouseDown(with event: NSEvent) {
         onFocusRequested?()
         viewModel?.recordMouseDown(clickCount: event.clickCount)
+        consumedDetectedContentMouseGesture = false
+        if event.clickCount == 1,
+           event.modifierFlags.contains(.command),
+           let content = detectedContent(at: event),
+           activateDetectedContent(content) {
+            consumedDetectedContentMouseGesture = true
+            return
+        }
         if beginTerminalMouseGesture(button: .left, event: event) {
             localSelectionAnchor = nil
             isDraggingLocalSelection = false
@@ -439,6 +455,9 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if consumedDetectedContentMouseGesture {
+            return
+        }
         if continueTerminalMouseGesture(button: .left, event: event) {
             return
         }
@@ -450,6 +469,10 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     override func mouseUp(with event: NSEvent) {
         viewModel?.recordMouseUp()
+        if consumedDetectedContentMouseGesture {
+            consumedDetectedContentMouseGesture = false
+            return
+        }
         if endTerminalMouseGesture(button: .left, event: event) {
             localSelectionAnchor = nil
             isDraggingLocalSelection = false
@@ -469,7 +492,35 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         if beginTerminalMouseGesture(button: .right, event: event) {
             return
         }
-        super.rightMouseDown(with: event)
+        guard let bridge, let surfaceID, let frame = latestFrame else {
+            super.rightMouseDown(with: event)
+            return
+        }
+        let lineText = smartCopyLineText(for: event, frame: frame)
+        let selectedText = localSelection?.text(in: frame)?.trimmingCharacters(in: .newlines)
+        let copyText = selectedText.flatMap { $0.isEmpty ? nil : $0 } ?? lineText
+        let menu = SmartCopyMenuBuilder.buildMenu(
+            detectedContent: detectedContent(at: event),
+            copyText: copyText,
+            lineText: lineText,
+            clipboardService: clipboardService,
+            paste: { [weak self, weak bridge] in
+                guard let self, let bridge else { return }
+                switch self.clipboardService.readTerminalPastePayload() {
+                case .text(let text):
+                    bridge.sendText(CocxyCoreView.normalizedTerminalPasteText(text), to: surfaceID)
+                case .fileURLs(let urls):
+                    bridge.sendText(FileDropPathFormatter.format(urls), to: surfaceID)
+                case nil:
+                    break
+                }
+            },
+            activate: { [weak self] content in
+                self?.activateDetectedContent(content) ?? false
+            },
+            localizer: localizer
+        )
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
     override func rightMouseDragged(with event: NSEvent) {
@@ -521,6 +572,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        updateDetectedContentHover(with: event)
         guard terminalReportsCurrentUnbuttonedMotion(event) else {
             super.mouseMoved(with: event)
             return
@@ -528,7 +580,13 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         reportTerminalMouse(action: .motion, button: nil, event: event)
     }
 
+    override func mouseExited(with event: NSEvent) {
+        clearDetectedContentHover()
+        super.mouseExited(with: event)
+    }
+
     override func scrollWheel(with event: NSEvent) {
+        clearDetectedContentHover()
         guard let bridge,
               let surfaceID,
               let frame = latestFrame else {
@@ -691,6 +749,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             clearLocalSelection()
         }
         self.latestFrame = frame
+        refreshDetectedContentOverlay(using: frame)
         refreshHistoryPill(using: frame)
         needsDisplay = true
     }
@@ -779,6 +838,18 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             pill.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -12),
         ])
         historyPillView = pill
+    }
+
+    private func installDetectedContentOverlay() {
+        guard detectedContentOverlayView == nil else { return }
+        let overlay = TerminalDetectedContentOverlayView(frame: bounds)
+        overlay.autoresizingMask = [.width, .height]
+        if let historyPillView {
+            addSubview(overlay, positioned: .below, relativeTo: historyPillView)
+        } else {
+            addSubview(overlay)
+        }
+        detectedContentOverlayView = overlay
     }
 
     private func refreshHistoryPill(using frame: PTYDaemonSurfaceFrame) {
@@ -997,6 +1068,119 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         localSelectionMode = .linear
         localSelectionClickCount = 0
         needsDisplay = true
+    }
+
+    private func smartCopyLineText(
+        for event: NSEvent,
+        frame: PTYDaemonSurfaceFrame
+    ) -> String {
+        guard frame.columns > 0, frame.rows > 0 else { return "" }
+        let position = mousePosition(for: event, frame: frame)
+        return PTYDaemonGridSelection(
+            anchor: PTYDaemonGridPosition(row: position.row, column: 0),
+            head: PTYDaemonGridPosition(
+                row: position.row,
+                column: frame.columns - 1
+            )
+        ).text(in: frame) ?? ""
+    }
+
+    private func detectedContent(at event: NSEvent) -> TerminalDetectedContent? {
+        guard let bridge,
+              let surfaceID,
+              let frame = latestFrame,
+              let visibleStart = UInt32(exactly: frame.scrollbackTop) else {
+            return nil
+        }
+        let position = mousePosition(for: event, frame: frame)
+        let (absoluteRow, overflowed) = visibleStart.addingReportingOverflow(UInt32(position.row))
+        guard overflowed == false else { return nil }
+        return bridge.detectedContent(
+            atAbsoluteRow: absoluteRow,
+            column: position.column,
+            for: surfaceID
+        )
+    }
+
+    @discardableResult
+    private func activateDetectedContent(_ content: TerminalDetectedContent) -> Bool {
+        switch content.kind {
+        case .ipAddress, .gitHash, .email:
+            guard content.target.isEmpty == false else { return false }
+            clipboardService.write(content.target)
+            return true
+        case .hyperlink, .url, .filePath:
+            return onActivateDetectedContent?(content) ?? false
+        }
+    }
+
+    private func updateDetectedContentHover(with event: NSEvent) {
+        guard let frame = latestFrame,
+              let content = detectedContent(at: event),
+              let viewport = detectedContentViewport(for: frame) else {
+            clearDetectedContentHover()
+            return
+        }
+        hoveredDetectedContent = content
+        detectedContentOverlayView?.showUnderline(for: content, viewport: viewport)
+        updateDetectedContentCursor()
+    }
+
+    private func refreshDetectedContentOverlay(using frame: PTYDaemonSurfaceFrame) {
+        guard let hoveredDetectedContent else { return }
+        guard frame.detectedContents.contains(where: {
+            Self.matches($0, content: hoveredDetectedContent)
+        }), let viewport = detectedContentViewport(for: frame) else {
+            clearDetectedContentHover()
+            return
+        }
+        detectedContentOverlayView?.showUnderline(
+            for: hoveredDetectedContent,
+            viewport: viewport
+        )
+    }
+
+    private func detectedContentViewport(
+        for frame: PTYDaemonSurfaceFrame
+    ) -> TerminalDetectedContentViewport? {
+        guard let visibleStart = UInt32(exactly: frame.scrollbackTop) else { return nil }
+        return TerminalDetectedContentViewport(
+            visibleStartRow: visibleStart,
+            rowCount: frame.rows,
+            columnCount: frame.columns,
+            cellSize: cellSize,
+            origin: .zero
+        )
+    }
+
+    private func clearDetectedContentHover() {
+        guard hoveredDetectedContent != nil
+            || detectedContentOverlayView?.hoveredContent != nil else {
+            return
+        }
+        hoveredDetectedContent = nil
+        detectedContentOverlayView?.clear()
+        updateDetectedContentCursor()
+    }
+
+    private func updateDetectedContentCursor() {
+        if hoveredDetectedContent != nil {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.iBeam.set()
+        }
+    }
+
+    private static func matches(
+        _ daemonContent: PTYDaemonDetectedContent,
+        content: TerminalDetectedContent
+    ) -> Bool {
+        daemonContent.kind.rawValue == content.kind.rawValue
+            && daemonContent.target == content.target
+            && daemonContent.startRow == content.startRow
+            && daemonContent.startColumn == content.startColumn
+            && daemonContent.endRow == content.endRow
+            && daemonContent.endColumn == content.endColumn
     }
 
     private func mousePosition(

@@ -97,8 +97,8 @@ struct TerminalScrollRoutingTests {
         #expect(TerminalMouseButton(appKitButtonNumber: 3) == nil)
     }
 
-    @Test("shift is a local-selection escape hatch from terminal mouse capture")
-    func shiftEscapesTerminalMouseCapture() {
+    @Test("Shift and Command bypass terminal mouse capture for local interactions")
+    func localModifiersEscapeTerminalMouseCapture() {
         #expect(TerminalMouseCapturePolicy.terminalCaptures(
             trackingRawValue: TerminalMouseTracking.anyEvent.rawValue,
             modifiers: []
@@ -106,6 +106,10 @@ struct TerminalScrollRoutingTests {
         #expect(!TerminalMouseCapturePolicy.terminalCaptures(
             trackingRawValue: TerminalMouseTracking.anyEvent.rawValue,
             modifiers: [.shift]
+        ))
+        #expect(!TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: TerminalMouseTracking.anyEvent.rawValue,
+            modifiers: [.command]
         ))
         #expect(!TerminalMouseCapturePolicy.terminalCaptures(
             trackingRawValue: TerminalMouseTracking.none.rawValue,

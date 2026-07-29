@@ -69,6 +69,10 @@ final class CocxyCoreView: NSView {
     /// AppKit first-responder changes.
     var onFocusRequested: (() -> Void)?
 
+    /// Activates an engine-detected URL or file target for this surface.
+    /// Copy-only targets stay inside the view's injected clipboard service.
+    var onActivateDetectedContent: ((TerminalDetectedContent) -> Bool)?
+
     /// Returns whether scroll gestures should move Cocxy's viewport even
     /// while the foreground process has enabled terminal mouse tracking.
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
@@ -240,6 +244,9 @@ final class CocxyCoreView: NSView {
     private var lastNotifiedMouseTrackingActive: Bool?
     private var mouseMotionTrackingArea: NSTrackingArea?
     private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
+    private(set) var detectedContentOverlayView: TerminalDetectedContentOverlayView?
+    private(set) var hoveredDetectedContent: TerminalDetectedContent?
+    private var consumedDetectedContentMouseGesture = false
 
     // MARK: - Constants
 
@@ -350,6 +357,8 @@ final class CocxyCoreView: NSView {
         if self.bridge !== bridge || self.surfaceID != surfaceID {
             resetCommandBlockOverlayForSurfaceTeardown()
             clearComposition(forceEngineClear: true, discardInputContext: true)
+            clearDetectedContentHover()
+            consumedDetectedContentMouseGesture = false
             synchronizedOutputGate.reset()
             forwardedKeyCodes.removeAll()
         }
@@ -369,6 +378,7 @@ final class CocxyCoreView: NSView {
 
         installCommandBlockOverlayIfNeeded()
         installHistoryPillIfNeeded()
+        installDetectedContentOverlayIfNeeded()
         refreshBackingConfiguration(forceGridSync: true)
         updateDisplayLinkRunningState()
     }
@@ -501,12 +511,14 @@ final class CocxyCoreView: NSView {
         refreshIDECursorMetrics()
         updateNotificationRingFrame()
         commandBlockOverlayView?.frame = bounds
+        detectedContentOverlayView?.frame = bounds
         layoutCommandCorrectionSuggestion()
         refreshCommandBlockOverlay()
     }
 
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
+        clearDetectedContentHover()
         notifySizeChanged(newSize)
     }
 
@@ -522,7 +534,7 @@ final class CocxyCoreView: NSView {
         }
         let trackingArea = NSTrackingArea(
             rect: .zero,
-            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect],
             owner: self,
             userInfo: nil
         )
@@ -797,11 +809,7 @@ final class CocxyCoreView: NSView {
     }
 
     override func flagsChanged(with event: NSEvent) {
-        if event.modifierFlags.contains(.command) {
-            NSCursor.pointingHand.set()
-        } else {
-            NSCursor.iBeam.set()
-        }
+        updateDetectedContentCursor()
         guard let bridge,
               let sid = surfaceID,
               let isKeyDown = MacTerminalKeyEventTranslator.modifierIsActive(
@@ -1629,6 +1637,15 @@ final class CocxyCoreView: NSView {
         onFocusRequested?()
         viewModel?.recordMouseDown(clickCount: event.clickCount)
 
+        consumedDetectedContentMouseGesture = false
+        if event.clickCount == 1,
+           event.modifierFlags.contains(.command),
+           let content = detectedContent(at: event),
+           activateDetectedContent(content) {
+            consumedDetectedContentMouseGesture = true
+            return
+        }
+
         if beginTerminalMouseGesture(button: .left, event: event) {
             selectionAnchor = nil
             isDragging = false
@@ -1669,6 +1686,9 @@ final class CocxyCoreView: NSView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if consumedDetectedContentMouseGesture {
+            return
+        }
         if continueTerminalMouseGesture(button: .left, event: event) {
             return
         }
@@ -1708,6 +1728,11 @@ final class CocxyCoreView: NSView {
 
     override func mouseUp(with event: NSEvent) {
         viewModel?.recordMouseUp()
+
+        if consumedDetectedContentMouseGesture {
+            consumedDetectedContentMouseGesture = false
+            return
+        }
 
         if endTerminalMouseGesture(button: .left, event: event) {
             isDragging = false
@@ -1760,15 +1785,19 @@ final class CocxyCoreView: NSView {
             return
         }
 
-        let nearText = smartCopyContextText(
+        let lineText = smartCopyLineText(
             for: event,
             bridge: bridge,
             surfaceID: sid,
             terminal: state.terminal
         )
+        let selectedText = bridge.readSelection(for: sid)?.trimmingCharacters(in: .newlines)
+        let copyText = selectedText.flatMap { $0.isEmpty ? nil : $0 } ?? lineText
 
         let menu = SmartCopyMenuBuilder.buildMenu(
-            nearText: nearText,
+            detectedContent: detectedContent(at: event),
+            copyText: copyText,
+            lineText: lineText,
             clipboardService: clipboardService,
             paste: { [weak bridge] in
                 guard let bridge else { return }
@@ -1809,6 +1838,9 @@ final class CocxyCoreView: NSView {
                 case nil:
                     break
                 }
+            },
+            activate: { [weak self] content in
+                self?.activateDetectedContent(content) ?? false
             },
             localizer: localizer
         )
@@ -1864,6 +1896,7 @@ final class CocxyCoreView: NSView {
     }
 
     override func mouseMoved(with event: NSEvent) {
+        updateDetectedContentHover(with: event)
         guard terminalReportsCurrentUnbuttonedMotion(event) else {
             super.mouseMoved(with: event)
             return
@@ -1871,9 +1904,15 @@ final class CocxyCoreView: NSView {
         reportTerminalMouse(action: .motion, button: nil, event: event)
     }
 
+    override func mouseExited(with event: NSEvent) {
+        clearDetectedContentHover()
+        super.mouseExited(with: event)
+    }
+
     // MARK: - Scroll
 
     override func scrollWheel(with event: NSEvent) {
+        clearDetectedContentHover()
         guard let bridge = bridge,
               let sid = surfaceID,
               let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
@@ -2166,17 +2205,12 @@ final class CocxyCoreView: NSView {
         _ = bridge.writeBytes(Array(payload), to: sid)
     }
 
-    private func smartCopyContextText(
+    private func smartCopyLineText(
         for event: NSEvent,
         bridge: CocxyCoreBridge,
         surfaceID: SurfaceID,
         terminal: OpaquePointer
     ) -> String {
-        if let selectedText = bridge.readSelection(for: surfaceID),
-           !selectedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return selectedText
-        }
-
         let pos = cellPosition(for: event, terminal: terminal)
         if let visibleLine = bridge.visibleLineText(for: surfaceID, visibleRow: pos.row),
            !visibleLine.isEmpty {
@@ -2187,7 +2221,88 @@ final class CocxyCoreView: NSView {
             return fallbackLine
         }
 
-        return clipboardService.read() ?? ""
+        return ""
+    }
+
+    private func detectedContent(
+        at event: NSEvent,
+        snapshot providedSnapshot: TerminalViewportSnapshot? = nil
+    ) -> TerminalDetectedContent? {
+        guard let bridge, let surfaceID else { return nil }
+        let snapshot = providedSnapshot ?? bridge.terminalViewportSnapshot(for: surfaceID)
+        guard let snapshot,
+              snapshot.visibleRowCount > 0,
+              snapshot.visibleColumnCount > 0 else {
+            return nil
+        }
+        let position = mousePosition(for: event, snapshot: snapshot)
+        let (absoluteRow, overflowed) = snapshot.visibleStartRow.addingReportingOverflow(
+            UInt32(position.row)
+        )
+        guard overflowed == false else { return nil }
+        return bridge.detectedContent(
+            atAbsoluteRow: absoluteRow,
+            column: position.column,
+            for: surfaceID
+        )
+    }
+
+    @discardableResult
+    private func activateDetectedContent(_ content: TerminalDetectedContent) -> Bool {
+        switch content.kind {
+        case .ipAddress, .gitHash, .email:
+            guard content.target.isEmpty == false else { return false }
+            clipboardService.write(content.target)
+            return true
+        case .hyperlink, .url, .filePath:
+            return onActivateDetectedContent?(content) ?? false
+        }
+    }
+
+    private func updateDetectedContentHover(with event: NSEvent) {
+        guard let bridge,
+              let surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: surfaceID),
+              let content = detectedContent(at: event, snapshot: snapshot) else {
+            clearDetectedContentHover()
+            return
+        }
+
+        installDetectedContentOverlayIfNeeded()
+        hoveredDetectedContent = content
+        let scale = max(currentBackingScale(), 1)
+        detectedContentOverlayView?.showUnderline(
+            for: content,
+            viewport: TerminalDetectedContentViewport(
+                visibleStartRow: snapshot.visibleStartRow,
+                rowCount: snapshot.visibleRowCount,
+                columnCount: snapshot.visibleColumnCount,
+                cellSize: CGSize(
+                    width: CGFloat(snapshot.cellWidth) / scale,
+                    height: CGFloat(snapshot.cellHeight) / scale
+                ),
+                origin: CGPoint(x: contentPadding.x, y: contentPadding.y)
+            )
+        )
+        updateDetectedContentCursor()
+    }
+
+    private func clearDetectedContentHover() {
+        guard hoveredDetectedContent != nil
+            || detectedContentOverlayView?.hoveredContent != nil else {
+            return
+        }
+        hoveredDetectedContent = nil
+        detectedContentOverlayView?.clear()
+        updateDetectedContentCursor()
+    }
+
+    private func updateDetectedContentCursor() {
+        if hoveredDetectedContent != nil {
+            NSCursor.pointingHand.set()
+        } else {
+            NSCursor.iBeam.set()
+        }
     }
 
     private func refreshIDECursorMetrics() {
@@ -2254,6 +2369,18 @@ final class CocxyCoreView: NSView {
     }
 
     // MARK: - Command Block Overlay
+
+    private func installDetectedContentOverlayIfNeeded() {
+        guard detectedContentOverlayView == nil else { return }
+        let overlay = TerminalDetectedContentOverlayView(frame: bounds)
+        overlay.autoresizingMask = [.width, .height]
+        if let commandBlockOverlayView {
+            addSubview(overlay, positioned: .below, relativeTo: commandBlockOverlayView)
+        } else {
+            addSubview(overlay)
+        }
+        detectedContentOverlayView = overlay
+    }
 
     private func installCommandBlockOverlayIfNeeded() {
         guard commandBlockOverlayView == nil else { return }

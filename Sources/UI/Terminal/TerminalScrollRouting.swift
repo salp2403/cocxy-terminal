@@ -78,7 +78,9 @@ enum TerminalMouseCapturePolicy {
         modifiers: NSEvent.ModifierFlags
     ) -> Bool {
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
-        return trackingRawValue > 0 && !flags.contains(.shift)
+        return trackingRawValue > 0
+            && !flags.contains(.shift)
+            && !flags.contains(.command)
     }
 }
 

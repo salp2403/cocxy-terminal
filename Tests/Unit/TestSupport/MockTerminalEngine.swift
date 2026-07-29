@@ -40,6 +40,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     var createSurfaceError: Error?
     var sendKeyEventReturnValue: Bool = true
     var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
+    var detectedContents: [SurfaceID: [TerminalDetectedContent]] = [:]
     var sessionReplayShouldStart = true
     var sessionReplayShouldReplay = true
 
@@ -135,6 +136,20 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
         nativeSearchRequests.append((surfaceID, options))
         return nativeSearchResults[surfaceID] ?? nil
+    }
+
+    func detectedContent(
+        atAbsoluteRow row: UInt32,
+        column: UInt16,
+        for surface: SurfaceID
+    ) -> TerminalDetectedContent? {
+        visibleDetectedContents(for: surface).first {
+            $0.contains(absoluteRow: row, column: column)
+        }
+    }
+
+    func visibleDetectedContents(for surface: SurfaceID) -> [TerminalDetectedContent] {
+        detectedContents[surface] ?? []
     }
 
     func beginSessionRecording(

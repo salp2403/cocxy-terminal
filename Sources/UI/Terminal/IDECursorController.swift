@@ -33,7 +33,6 @@ import AppKit
 /// - Terminal font must be monospaced (all columns have equal width).
 /// - Only works on the current command line (not scrollback).
 ///
-/// - SeeAlso: `TextSelectionManager` for the broader selection system.
 /// - SeeAlso: `CocxyCoreView` for event integration.
 @MainActor
 final class IDECursorController {

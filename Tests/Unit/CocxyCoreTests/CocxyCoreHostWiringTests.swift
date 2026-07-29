@@ -692,6 +692,79 @@ struct CocxyCoreHostWiringTests {
         ])
     }
 
+    @Test("daemon host underlines and activates engine-detected content")
+    func daemonHostActivatesDetectedContent() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        let content = TerminalDetectedContent(
+            kind: .url,
+            text: "https://cocxy.dev",
+            target: "https://cocxy.dev",
+            startRow: 3,
+            startColumn: 0,
+            endRow: 3,
+            endColumn: 16,
+            line: nil,
+            column: nil,
+            isExplicitHyperlink: false
+        )
+        engine.detectedContents[surfaceID] = [content]
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 3,
+            mouseTrackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue,
+            detectedContents: [
+                PTYDaemonDetectedContent(
+                    kind: .url,
+                    text: content.text,
+                    target: content.target,
+                    startRow: content.startRow,
+                    startColumn: content.startColumn,
+                    endRow: content.endRow,
+                    endColumn: content.endColumn
+                )
+            ]
+        ))
+        var activated: TerminalDetectedContent?
+        view.onActivateDetectedContent = {
+            activated = $0
+            return true
+        }
+        view.updateTrackingAreas()
+        #expect(view.trackingAreas.contains { $0.options.contains(.mouseEnteredAndExited) })
+
+        let location = NSPoint(x: 8, y: view.bounds.maxY)
+        view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: location))
+        #expect(view.hoveredDetectedContent == content)
+        #expect(view.detectedContentOverlayView?.hoveredContent == content)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            modifiers: [.command]
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            modifiers: [.command]
+        ))
+        #expect(activated == content)
+        #expect(view.localSelectionTextForTesting == nil)
+
+        view.mouseExited(with: makeHostMouseEvent(type: .mouseExited, location: location))
+        #expect(view.hoveredDetectedContent == nil)
+    }
+
     @Test("daemon host Shift drag selects and copies visible frame text")
     func daemonHostShiftDragSelectsVisibleText() throws {
         let engine = MockTerminalEngine()
@@ -1244,7 +1317,21 @@ private func makeHostMouseEvent(
     modifiers: NSEvent.ModifierFlags = [],
     clickCount: Int = 1
 ) -> NSEvent {
-    NSEvent.mouseEvent(
+    if type == .mouseEntered || type == .mouseExited {
+        return NSEvent.enterExitEvent(
+            with: type,
+            location: location,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+    }
+
+    return NSEvent.mouseEvent(
         with: type,
         location: location,
         modifierFlags: modifiers,

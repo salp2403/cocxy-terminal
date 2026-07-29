@@ -1374,6 +1374,8 @@ struct CocxyCoreViewTests {
         )
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         feed("abcdef", into: state.terminal)
+        let visibleStart = cocxycore_terminal_history_visible_start(state.terminal)
+        #expect(cocxycore_terminal_row_wrapped(state.terminal, visibleStart))
 
         let location = try selectionMouseLocation(row: 0, column: 1, harness: harness)
         harness.view.mouseDown(with: makeMouseEvent(
@@ -1385,9 +1387,9 @@ struct CocxyCoreViewTests {
         let selection = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
         #expect(harness.viewModel.lastClickCount == 3)
         #expect(selection.active)
-        #expect(selection.startRow == 0)
-        #expect(selection.endRow == 1)
-        #expect(selection.text == "abcd\nef")
+        #expect(selection.startRow == visibleStart)
+        #expect(selection.endRow == visibleStart + 1)
+        #expect(selection.text == "abcdef")
     }
 
     @Test("Option drag selects a rectangular column band")
@@ -1401,6 +1403,7 @@ struct CocxyCoreViewTests {
         )
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         feed("abcdef\r\nghijkl\r\nmnopqr", into: state.terminal)
+        let visibleStart = cocxycore_terminal_history_visible_start(state.terminal)
 
         let start = try selectionMouseLocation(row: 0, column: 1, harness: harness)
         let end = try selectionMouseLocation(row: 2, column: 3, harness: harness)
@@ -1416,11 +1419,50 @@ struct CocxyCoreViewTests {
         harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: end))
 
         let selection = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
-        #expect(selection.startRow == 0)
+        #expect(selection.startRow == visibleStart)
         #expect(selection.startCol == 1)
-        #expect(selection.endRow == 2)
+        #expect(selection.endRow == visibleStart + 2)
         #expect(selection.endCol == 3)
         #expect(selection.text == "bcd\nhij\nnop")
+    }
+
+    @Test("local host underlines and activates engine-detected content")
+    func localHostActivatesDetectedContent() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("https://cocxy.dev\r\n", into: state.terminal)
+        let content = try #require(
+            harness.bridge.visibleDetectedContents(for: harness.surfaceID).first
+        )
+        var activated: TerminalDetectedContent?
+        harness.view.onActivateDetectedContent = {
+            activated = $0
+            return true
+        }
+        harness.view.updateTrackingAreas()
+        #expect(harness.view.trackingAreas.contains { $0.options.contains(.mouseEnteredAndExited) })
+
+        let location = try selectionMouseLocation(row: 0, column: 2, harness: harness)
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: location))
+        #expect(harness.view.hoveredDetectedContent == content)
+        #expect(harness.view.detectedContentOverlayView?.hoveredContent == content)
+
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            modifiers: [.command]
+        ))
+        harness.view.mouseUp(with: makeMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            modifiers: [.command]
+        ))
+        #expect(activated == content)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
+
+        harness.view.mouseExited(with: makeMouseEvent(type: .mouseExited, location: location))
+        #expect(harness.view.hoveredDetectedContent == nil)
     }
 
     @Test("any-event SGR tracking forwards button motion release and unbuttoned movement")
@@ -2428,7 +2470,21 @@ private func makeMouseEvent(
     modifiers: NSEvent.ModifierFlags = [],
     clickCount: Int = 1
 ) -> NSEvent {
-    NSEvent.mouseEvent(
+    if type == .mouseEntered || type == .mouseExited {
+        return NSEvent.enterExitEvent(
+            with: type,
+            location: location,
+            modifierFlags: modifiers,
+            timestamp: 0,
+            windowNumber: 0,
+            context: nil,
+            eventNumber: 1,
+            trackingNumber: 1,
+            userData: nil
+        )!
+    }
+
+    return NSEvent.mouseEvent(
         with: type,
         location: location,
         modifierFlags: modifiers,

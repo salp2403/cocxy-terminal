@@ -219,6 +219,12 @@ extension MainWindowController {
                 guard let self else { return }
                 self.applyFocusToSurface(surfaceID: capturedSurfaceID)
             }
+            cocxyView.onActivateDetectedContent = { [weak self] content in
+                self?.activateTerminalDetectedContent(
+                    content,
+                    for: capturedSurfaceID
+                ) ?? false
+            }
             cocxyView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }
@@ -259,6 +265,12 @@ extension MainWindowController {
             daemonView.onFocusRequested = { [weak self] in
                 guard let self else { return }
                 self.applyFocusToSurface(surfaceID: capturedSurfaceID)
+            }
+            daemonView.onActivateDetectedContent = { [weak self] content in
+                self?.activateTerminalDetectedContent(
+                    content,
+                    for: capturedSurfaceID
+                ) ?? false
             }
             daemonView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
