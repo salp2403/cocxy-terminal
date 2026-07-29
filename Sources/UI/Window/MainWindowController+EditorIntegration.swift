@@ -76,8 +76,18 @@ extension MainWindowController {
         return actions
     }
 
-    func openURLInEditor(_ url: URL, editorID: String?) {
-        let request = EditorOpenRequest(filePath: url.path, editorID: editorID)
+    func openURLInEditor(
+        _ url: URL,
+        editorID: String?,
+        line: Int? = nil,
+        column: Int? = nil
+    ) {
+        let request = EditorOpenRequest(
+            filePath: url.path,
+            editorID: editorID,
+            line: line,
+            column: column
+        )
         let launcher = EditorRegistry.launcher(matching: editorID)
         let executablePath = launcher?.executableNames.lazy.compactMap { Self.resolveEditorExecutable(named: $0) }.first
         let bundleIdentifier = launcher?.bundleIdentifiers.first(where: {
@@ -90,6 +100,31 @@ extension MainWindowController {
             bundleIdentifier: bundleIdentifier
         )
         runEditorLaunchPlan(plan)
+    }
+
+    @discardableResult
+    func activateTerminalDetectedContent(
+        _ content: TerminalDetectedContent,
+        for surfaceID: SurfaceID
+    ) -> Bool {
+        guard let action = TerminalDetectedContentActionResolver.resolve(
+            content,
+            workingDirectory: workingDirectory(for: surfaceID)
+        ) else {
+            NSSound.beep()
+            return false
+        }
+
+        switch action {
+        case .openURL(let url):
+            return NSWorkspace.shared.open(url)
+        case .openFile(let url, let line, let column):
+            openURLInEditor(url, editorID: nil, line: line, column: column)
+            return true
+        case .copy(let text):
+            SystemClipboardService().write(text)
+            return true
+        }
     }
 
     private func openReviewFileInEditor(_ relativePath: String, workingDirectory: URL, editorID: String?) {
