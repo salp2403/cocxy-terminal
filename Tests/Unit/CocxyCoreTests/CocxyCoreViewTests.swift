@@ -1177,6 +1177,56 @@ struct CocxyCoreViewTests {
         #expect(controller.handleClickToPosition(at: target) == true)
     }
 
+    @Test("wide input cell emits one DECCKM-aware arrow through the PTY")
+    func wideInputCellEmitsOneDECCKMAwareArrow() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+
+        feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}界\u{1B}[?1h", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        #expect(snapshot.cursorColumn == 2)
+        #expect(snapshot.cellWidths[0] == 1)
+        #expect(snapshot.cellWidths[1] == 2)
+        harness.view.handleCommandInputStarted(at: TerminalGridPosition(
+            screenRow: snapshot.cursorScreenRow,
+            absoluteRow: snapshot.cursorAbsoluteRow,
+            column: 0
+        ))
+
+        let controller = harness.view.ideCursorController
+        let target = CGPoint(
+            x: controller.leftPadding + 1,
+            y: controller.topPadding
+                + controller.cellHeight * CGFloat(snapshot.cursorScreenRow)
+                + 1
+        )
+        let liveSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        #expect(liveSnapshot.semanticState == 2)
+        #expect(!liveSnapshot.isAltScreen)
+        #expect(liveSnapshot.mouseTrackingMode == 0)
+        #expect(!liveSnapshot.selectionActive)
+        #expect(liveSnapshot.visibleStartRow == liveSnapshot.historyMaxVisibleStart)
+        #expect(controller.arrowKeysForClick(at: target, viewBounds: harness.view.bounds) == [.left])
+        output.data.removeAll()
+
+        let handled = controller.handleClickToPosition(at: target)
+
+        #expect(handled)
+        let expected = Data("\u{1B}OD".utf8)
+        try await waitUntil { output.data.containsSubsequence(expected) }
+        #expect(output.data == expected)
+    }
+
     @Test("shell prompt at current cursor ignores missing surfaces")
     func shellPromptAtCurrentCursorIgnoresMissingSurfaces() {
         let view = CocxyCoreView(viewModel: TerminalViewModel())
@@ -1222,7 +1272,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
-        try await awaitRawPTYReady(harness, output: output)
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
         feed("\u{001B}[?1000h\u{001B}[?1002h\u{001B}[?1003h\u{001B}[?1006h", into: state.terminal)
 
         let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
@@ -1271,7 +1321,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
-        try await awaitRawPTYReady(harness, output: output)
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
         feed("\u{001B}[?9h", into: state.terminal)
         let topLeftInWindow = NSPoint(x: 0, y: harness.view.bounds.maxY)
 
@@ -1299,7 +1349,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
-        try await awaitRawPTYReady(harness, output: output)
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
         feed("selectable text", into: state.terminal)
         feed("\u{001B}[?1003h\u{001B}[?1006h", into: state.terminal)
 
@@ -1335,7 +1385,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
-        try await awaitRawPTYReady(harness, output: output)
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
         feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}", into: state.terminal)
         let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
         harness.view.handleCommandInputStarted(at: TerminalGridPosition(
@@ -1377,7 +1427,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
-        try await awaitRawPTYReady(harness, output: output)
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
         feed("\u{1B}]133;A\u{07}\u{1B}]133;B\u{07}abc", into: state.terminal)
         let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
         harness.view.handleCommandInputStarted(at: TerminalGridPosition(
@@ -2118,33 +2168,36 @@ private func makeViewHarness(command: String = "/bin/cat") throws -> ViewHarness
 
 @MainActor
 private func awaitRawPTYReady(
-    _ harness: ViewHarness,
+    at readyFileURL: URL,
     output: TestDataSink
 ) async throws {
-    let marker = "mouse-pty-ready-\(UUID().uuidString)"
-    harness.bridge.sendText(marker + "\n", to: harness.surfaceID)
-    let markerData = Data(marker.utf8)
     try await waitUntil {
-        output.data.containsSubsequence(markerData)
+        FileManager.default.fileExists(atPath: readyFileURL.path)
     }
     output.data.removeAll()
 }
 
-private func makeRawCatScript() throws -> (rootDirectory: URL, scriptURL: URL) {
+private func makeRawCatScript() throws -> (
+    rootDirectory: URL,
+    scriptURL: URL,
+    readyFileURL: URL
+) {
     let rootDirectory = FileManager.default.temporaryDirectory
         .appendingPathComponent("cocxy-raw-cat-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: rootDirectory, withIntermediateDirectories: true)
     let scriptURL = rootDirectory.appendingPathComponent("raw-cat.sh", isDirectory: false)
+    let readyFileURL = rootDirectory.appendingPathComponent("ready", isDirectory: false)
     try """
     #!/bin/sh
     stty raw -echo
+    : > "$(dirname "$0")/ready"
     exec /bin/cat
     """.write(to: scriptURL, atomically: true, encoding: .utf8)
     try FileManager.default.setAttributes(
         [.posixPermissions: 0o755],
         ofItemAtPath: scriptURL.path
     )
-    return (rootDirectory, scriptURL)
+    return (rootDirectory, scriptURL, readyFileURL)
 }
 
 private func makeKeyEvent(
