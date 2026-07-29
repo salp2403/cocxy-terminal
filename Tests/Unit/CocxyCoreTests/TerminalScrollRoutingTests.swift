@@ -19,6 +19,37 @@ struct TerminalScrollRoutingTests {
         expectDestination(.localViewport, localRange: 12, prefersLocal: false, tracking: 2, modifiers: [.option])
     }
 
+    @Test("alternate scroll precedes captured history and Option remains local")
+    func alternateScrollRouting() {
+        expectDestination(
+            .alternateScreenApplication,
+            localRange: 12,
+            prefersLocal: true,
+            tracking: 0,
+            isAltScreen: true,
+            alternateScrollMode: true
+        )
+        expectDestination(
+            .localViewport,
+            localRange: 12,
+            prefersLocal: true,
+            tracking: 0,
+            isAltScreen: true,
+            alternateScrollMode: true,
+            modifiers: [.option]
+        )
+        expectDestination(
+            .localViewport,
+            localRange: 12,
+            prefersLocal: false,
+            tracking: 0,
+            isAltScreen: true,
+            alternateScrollMode: false
+        )
+        #expect(TerminalAlternateScrollKey.keyCode(forScrollingDeltaY: 1) == 126)
+        #expect(TerminalAlternateScrollKey.keyCode(forScrollingDeltaY: -1) == 125)
+    }
+
     @Test("non-precise wheel uses three local rows without multiplying forwarded events")
     func wheelGranularitySeparatesLocalAndForwardedCounts() throws {
         let event = try #require(makeScrollEvent(deltaY: 1, units: .line))
@@ -180,12 +211,16 @@ struct TerminalScrollRoutingTests {
         localRange: UInt32,
         prefersLocal: Bool,
         tracking: UInt8,
+        isAltScreen: Bool = false,
+        alternateScrollMode: Bool = false,
         modifiers: NSEvent.ModifierFlags = []
     ) {
         #expect(TerminalScrollRouter.destination(
             localRange: localRange,
             prefersLocal: prefersLocal,
             mouseTrackingMode: tracking,
+            isAltScreen: isAltScreen,
+            alternateScrollMode: alternateScrollMode,
             modifiers: modifiers
         ) == expected)
     }

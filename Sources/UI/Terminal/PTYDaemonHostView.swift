@@ -536,6 +536,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             localRange: UInt32(clamping: frame.historyMaxVisibleStart),
             prefersLocal: prefersLocalScrollInMouseTrackingMode?() == true,
             mouseTrackingMode: mouseModes.tracking,
+            isAltScreen: frame.isAltScreen,
+            alternateScrollMode: frame.alternateScrollMode,
             modifiers: event.modifierFlags
         )
 
@@ -555,6 +557,24 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
                 ),
                 to: surfaceID
             )
+            return
+        case .alternateScreenApplication:
+            followLiveViewportBeforeUserInput()
+            let keyCode = TerminalAlternateScrollKey.keyCode(
+                forScrollingDeltaY: event.scrollingDeltaY
+            )
+            let count = TerminalScrollWheelMetrics.forwardedEventCount(for: event)
+            for _ in 0..<count {
+                _ = bridge.sendKeyEvent(
+                    KeyEvent(
+                        characters: nil,
+                        keyCode: keyCode,
+                        modifiers: [],
+                        isKeyDown: true
+                    ),
+                    to: surfaceID
+                )
+            }
             return
         case .localViewport:
             let deltaRows = TerminalScrollWheelMetrics.localDeltaRows(for: event)

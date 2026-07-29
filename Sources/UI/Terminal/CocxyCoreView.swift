@@ -1846,6 +1846,8 @@ final class CocxyCoreView: NSView {
             localRange: snapshot.historyMaxVisibleStart,
             prefersLocal: prefersLocalScrollInMouseTrackingMode?() == true,
             mouseTrackingMode: snapshot.mouseTrackingMode,
+            isAltScreen: snapshot.isAltScreen,
+            alternateScrollMode: snapshot.alternateScrollMode,
             modifiers: event.modifierFlags
         )
 
@@ -1862,6 +1864,24 @@ final class CocxyCoreView: NSView {
                 count: TerminalScrollWheelMetrics.forwardedEventCount(for: event)
             )
             _ = bridge.writeBytes(Array(payload), to: sid)
+            return
+        case .alternateScreenApplication:
+            followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
+            let keyCode = TerminalAlternateScrollKey.keyCode(
+                forScrollingDeltaY: event.scrollingDeltaY
+            )
+            let count = TerminalScrollWheelMetrics.forwardedEventCount(for: event)
+            for _ in 0..<count {
+                _ = bridge.sendKeyEvent(
+                    KeyEvent(
+                        characters: nil,
+                        keyCode: keyCode,
+                        modifiers: [],
+                        isKeyDown: true
+                    ),
+                    to: sid
+                )
+            }
             return
         case .localViewport:
             let deltaRows = TerminalScrollWheelMetrics.localDeltaRows(for: event)

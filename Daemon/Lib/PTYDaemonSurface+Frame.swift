@@ -63,6 +63,8 @@ extension PTYDaemonSurface {
             images: [],
             mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
             mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal),
+            isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
+            alternateScrollMode: cocxycore_terminal_mode_alternate_scroll(terminal),
             synchronizedOutput: cocxycore_terminal_mode_synchronized_output(terminal)
         )
     }

@@ -481,6 +481,34 @@ struct CocxyCoreHostWiringTests {
         #expect(engine.viewportScrollRequests.isEmpty)
     }
 
+    @Test("daemon host maps alternate scroll to application arrow keys")
+    func daemonHostMapsAlternateScrollToApplicationArrowKeys() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            historyMaxVisibleStart: 40,
+            isAltScreen: true,
+            alternateScrollMode: true
+        ))
+
+        view.scrollWheel(with: makeScrollEvent(deltaY: 7))
+
+        #expect(engine.keyEvents.count == 1)
+        let event = try #require(engine.keyEvents.first?.event)
+        #expect(event.keyCode == 126)
+        #expect(event.isKeyDown)
+        #expect(engine.viewportScrollRequests.map(\.deltaRows) == [Int(Int32.min)])
+    }
+
     @Test("daemon host exposes all local viewport keyboard commands")
     func daemonHostExposesViewportKeyboardCommands() {
         let engine = MockTerminalEngine()

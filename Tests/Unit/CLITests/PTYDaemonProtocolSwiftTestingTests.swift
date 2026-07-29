@@ -108,6 +108,8 @@ struct PTYDaemonProtocolSwiftTestingTests {
             ],
             mouseTrackingMode: 2,
             mouseEncodingMode: 3,
+            isAltScreen: true,
+            alternateScrollMode: false,
             synchronizedOutput: true
         )
         let response = PTYDaemonResponse(id: "frame-1", ok: true, frame: frame)
@@ -129,7 +131,9 @@ struct PTYDaemonProtocolSwiftTestingTests {
             scrollbackTop: 4,
             historyMaxVisibleStart: 20,
             mouseTrackingMode: 6,
-            mouseEncodingMode: 3
+            mouseEncodingMode: 3,
+            isAltScreen: true,
+            alternateScrollMode: false
         )
         let encoded = try JSONEncoder().encode(current)
         var legacyObject = try #require(
@@ -137,6 +141,8 @@ struct PTYDaemonProtocolSwiftTestingTests {
         )
         legacyObject.removeValue(forKey: "historyMaxVisibleStart")
         legacyObject.removeValue(forKey: "mouseEncodingMode")
+        legacyObject.removeValue(forKey: "isAltScreen")
+        legacyObject.removeValue(forKey: "alternateScrollMode")
         legacyObject.removeValue(forKey: "synchronizedOutput")
         let legacyData = try JSONSerialization.data(withJSONObject: legacyObject)
 
@@ -145,6 +151,8 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(decoded.historyMaxVisibleStart == 0)
         #expect(decoded.mouseTrackingMode == 6)
         #expect(decoded.mouseEncodingMode == nil)
+        #expect(decoded.isAltScreen == false)
+        #expect(decoded.alternateScrollMode == true)
         #expect(decoded.synchronizedOutput == false)
     }
 

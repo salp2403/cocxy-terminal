@@ -251,6 +251,7 @@ struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
     let isAltScreen: Bool
     let mouseTrackingMode: UInt8
     let mouseEncodingMode: UInt8
+    let alternateScrollMode: Bool
 
     var viewOffset: UInt32 {
         guard historyMaxVisibleStart >= visibleStartRow else { return 0 }
@@ -2025,7 +2026,8 @@ final class CocxyCoreBridge: TerminalEngine {
                 cellHeight: metrics.cell_height,
                 isAltScreen: cocxycore_terminal_is_alt_screen(state.terminal),
                 mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(state.terminal),
-                mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(state.terminal)
+                mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(state.terminal),
+                alternateScrollMode: cocxycore_terminal_mode_alternate_scroll(state.terminal)
             )
         } ?? nil
     }

@@ -7,6 +7,7 @@ import Foundation
 enum TerminalScrollDestination: Equatable, Sendable {
     case localViewport
     case terminalApplication
+    case alternateScreenApplication
     case none
 }
 
@@ -86,12 +87,17 @@ enum TerminalScrollRouter {
         localRange: UInt32,
         prefersLocal: Bool,
         mouseTrackingMode: UInt8,
+        isAltScreen: Bool,
+        alternateScrollMode: Bool,
         modifiers: NSEvent.ModifierFlags
     ) -> TerminalScrollDestination {
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
 
         if flags.contains(.option) {
             return localRange > 0 ? .localViewport : .none
+        }
+        if isAltScreen, alternateScrollMode, mouseTrackingMode == 0 {
+            return .alternateScreenApplication
         }
         if localRange > 0, prefersLocal {
             return .localViewport
@@ -103,6 +109,12 @@ enum TerminalScrollRouter {
             return .localViewport
         }
         return .none
+    }
+}
+
+enum TerminalAlternateScrollKey {
+    static func keyCode(forScrollingDeltaY deltaY: CGFloat) -> UInt16 {
+        deltaY > 0 ? 126 : 125
     }
 }
 

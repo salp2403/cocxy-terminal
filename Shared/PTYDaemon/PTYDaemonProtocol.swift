@@ -188,6 +188,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let images: [PTYDaemonImageReference]
     public let mouseTrackingMode: UInt8?
     public let mouseEncodingMode: UInt8?
+    public let isAltScreen: Bool
+    public let alternateScrollMode: Bool
     public let synchronizedOutput: Bool
 
     public init(
@@ -203,6 +205,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         images: [PTYDaemonImageReference] = [],
         mouseTrackingMode: UInt8? = nil,
         mouseEncodingMode: UInt8? = nil,
+        isAltScreen: Bool = false,
+        alternateScrollMode: Bool = true,
         synchronizedOutput: Bool = false
     ) {
         self.surfaceID = surfaceID
@@ -217,6 +221,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.images = images
         self.mouseTrackingMode = mouseTrackingMode
         self.mouseEncodingMode = mouseEncodingMode
+        self.isAltScreen = isAltScreen
+        self.alternateScrollMode = alternateScrollMode
         self.synchronizedOutput = synchronizedOutput
     }
 
@@ -233,6 +239,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         case images
         case mouseTrackingMode
         case mouseEncodingMode
+        case isAltScreen
+        case alternateScrollMode
         case synchronizedOutput
     }
 
@@ -253,6 +261,11 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         images = try container.decodeIfPresent([PTYDaemonImageReference].self, forKey: .images) ?? []
         mouseTrackingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseTrackingMode)
         mouseEncodingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseEncodingMode)
+        isAltScreen = try container.decodeIfPresent(Bool.self, forKey: .isAltScreen) ?? false
+        alternateScrollMode = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .alternateScrollMode
+        ) ?? true
         synchronizedOutput = try container.decodeIfPresent(
             Bool.self,
             forKey: .synchronizedOutput
@@ -273,6 +286,8 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         try container.encode(images, forKey: .images)
         try container.encodeIfPresent(mouseTrackingMode, forKey: .mouseTrackingMode)
         try container.encodeIfPresent(mouseEncodingMode, forKey: .mouseEncodingMode)
+        try container.encode(isAltScreen, forKey: .isAltScreen)
+        try container.encode(alternateScrollMode, forKey: .alternateScrollMode)
         try container.encode(synchronizedOutput, forKey: .synchronizedOutput)
     }
 }

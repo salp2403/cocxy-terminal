@@ -1589,6 +1589,40 @@ struct CocxyCoreViewTests {
         #expect(output.data.containsSubsequence(expected))
     }
 
+    @Test("alternate scroll emits DECCKM application arrows through the PTY")
+    func alternateScrollEmitsDECCKMApplicationArrows() async throws {
+        let rawCat = try makeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let harness = try makeViewHarness(command: rawCat.scriptURL.path)
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let output = TestDataSink()
+        harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
+            output.data.append(data)
+        }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
+
+        feed("\u{001B}[?1049h\u{001B}[?1h", into: state.terminal)
+        let snapshot = try #require(
+            harness.bridge.terminalViewportSnapshot(for: harness.surfaceID)
+        )
+        #expect(snapshot.isAltScreen)
+        #expect(snapshot.alternateScrollMode)
+        #expect(snapshot.mouseTrackingMode == 0)
+
+        output.data.removeAll()
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 7))
+        let up = Data("\u{001B}OA".utf8)
+        try await waitUntil { output.data.containsSubsequence(up) }
+        #expect(output.data == up)
+
+        output.data.removeAll()
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: -7))
+        let down = Data("\u{001B}OB".utf8)
+        try await waitUntil { output.data.containsSubsequence(down) }
+        #expect(output.data == down)
+    }
+
     @Test("shift forwards wheel input when local history is empty")
     func shiftForwardsWheelWhenHistoryIsEmpty() async throws {
         let rawCat = try makeRawCatScript()

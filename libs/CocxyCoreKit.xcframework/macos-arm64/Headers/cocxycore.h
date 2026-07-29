@@ -524,6 +524,34 @@ uint32_t cocxycore_terminal_history_cell_char(
     uint16_t col
 );
 
+/** Get cell width in combined history: 0=narrow, 1=wide, 2=continuation. */
+uint8_t cocxycore_terminal_history_cell_width(
+    const cocxycore_terminal* term,
+    uint32_t absolute_row,
+    uint16_t col
+);
+
+/** Check whether an absolute history row soft-wraps into the next row. */
+bool cocxycore_terminal_row_wrapped(
+    const cocxycore_terminal* term,
+    uint32_t absolute_row
+);
+
+/** OSC 133 cell classification returned by cocxycore_terminal_cell_semantic. */
+typedef enum {
+    COCXYCORE_CELL_SEMANTIC_NONE = 0,
+    COCXYCORE_CELL_SEMANTIC_PROMPT = 1,
+    COCXYCORE_CELL_SEMANTIC_INPUT = 2,
+    COCXYCORE_CELL_SEMANTIC_OUTPUT = 3,
+} cocxycore_cell_semantic;
+
+/** Get OSC 133 semantic content for a cell in the combined history view. */
+uint8_t cocxycore_terminal_cell_semantic(
+    const cocxycore_terminal* term,
+    uint32_t absolute_row,
+    uint16_t col
+);
+
 /* -- Selection -- */
 
 /** Inclusive range in the combined history view. */
@@ -897,6 +925,19 @@ uint8_t cocxycore_terminal_mode_mouse_tracking(const cocxycore_terminal* term);
 
 /** Get mouse encoding: 0=x10, 1=utf8, 2=urxvt, 3=sgr, 4=sgr_pixels. */
 uint8_t cocxycore_terminal_mode_mouse_encoding(const cocxycore_terminal* term);
+
+/** Check whether alternate scroll mode (DEC 1007) is active. */
+bool cocxycore_terminal_mode_alternate_scroll(const cocxycore_terminal* term);
+
+/** OSC 133 prompt click capability. */
+typedef enum {
+    COCXYCORE_SHELL_CLICK_NONE = 0,
+    COCXYCORE_SHELL_CLICK_LINE = 1,
+    COCXYCORE_SHELL_CLICK_MULTILINE = 2,
+} cocxycore_shell_click_mode;
+
+/** Get OSC 133 prompt click capability (cocxycore_shell_click_mode). */
+uint8_t cocxycore_terminal_shell_click_mode(const cocxycore_terminal* term);
 
 /** Clear mouse tracking and restore X10 coordinate encoding. */
 void cocxycore_terminal_reset_mouse_modes(cocxycore_terminal* term);
