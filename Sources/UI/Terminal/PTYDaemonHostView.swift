@@ -13,6 +13,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     var onFramePresented: (() -> Void)?
     var prefersLocalScrollInMouseTrackingMode: (() -> Bool)?
     var onTerminalInteractionStateChanged: (() -> Void)?
+    var onFocusRequested: (() -> Void)?
+    var clipboardService: ClipboardServiceProtocol = SystemClipboardService()
 
     private weak var bridge: (any TerminalEngine)?
     private var surfaceID: SurfaceID?
@@ -23,6 +25,11 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var eventDrainTimer: Timer?
     private(set) var historyPillView: TerminalHistoryPillView?
     private var lastNotifiedMouseTrackingActive: Bool?
+    private var mouseMotionTrackingArea: NSTrackingArea?
+    private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
+    private var localSelectionAnchor: PTYDaemonGridPosition?
+    private var localSelection: PTYDaemonGridSelection?
+    private var isDraggingLocalSelection = false
 
     init(
         viewModel: TerminalViewModel?,
@@ -71,6 +78,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
 
     func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {
         guard self.surfaceID != surfaceID else { return }
+        terminalMouseCaptureByButton.removeAll()
+        clearLocalSelection()
         self.bridge = bridge
         self.surfaceID = surfaceID
         if let daemon = bridge as? PTYDaemonClient {
@@ -150,6 +159,21 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         notificationRingLayer?.path = CGPath(rect: bounds.insetBy(dx: 1, dy: 1), transform: nil)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let mouseMotionTrackingArea {
+            removeTrackingArea(mouseMotionTrackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: .zero,
+            options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        mouseMotionTrackingArea = trackingArea
+    }
+
     override func keyDown(with event: NSEvent) {
         if performTerminalViewportKeyEquivalent(with: event) {
             return
@@ -174,6 +198,108 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         } else {
             super.keyDown(with: event)
         }
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        viewModel?.recordMouseDown(clickCount: event.clickCount)
+        if beginTerminalMouseGesture(button: .left, event: event) {
+            localSelectionAnchor = nil
+            isDraggingLocalSelection = false
+            return
+        }
+        guard beginLocalSelection(with: event) else {
+            super.mouseDown(with: event)
+            return
+        }
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        if continueTerminalMouseGesture(button: .left, event: event) {
+            return
+        }
+        guard updateLocalSelection(with: event) else {
+            super.mouseDragged(with: event)
+            return
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        viewModel?.recordMouseUp()
+        if endTerminalMouseGesture(button: .left, event: event) {
+            localSelectionAnchor = nil
+            isDraggingLocalSelection = false
+            return
+        }
+        guard localSelectionAnchor != nil else {
+            super.mouseUp(with: event)
+            return
+        }
+        finishLocalSelection()
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        if beginTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseDown(with: event)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        if continueTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseDragged(with: event)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        if endTerminalMouseGesture(button: .right, event: event) {
+            return
+        }
+        super.rightMouseUp(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        onFocusRequested?()
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseDown(with: event)
+            return
+        }
+        if beginTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseDown(with: event)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseDragged(with: event)
+            return
+        }
+        if continueTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseDragged(with: event)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard let button = TerminalMouseButton(appKitButtonNumber: event.buttonNumber) else {
+            super.otherMouseUp(with: event)
+            return
+        }
+        if endTerminalMouseGesture(button: button, event: event) {
+            return
+        }
+        super.otherMouseUp(with: event)
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard terminalReportsCurrentUnbuttonedMotion(event) else {
+            super.mouseMoved(with: event)
+            return
+        }
+        reportTerminalMouse(action: .motion, button: nil, event: event)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -245,18 +371,32 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         ]
 
         for cell in frame.cells {
-            guard cell.glyph != 0, cell.glyph != 32,
-                  let scalar = UnicodeScalar(cell.glyph) else { continue }
             let rect = CGRect(
                 x: CGFloat(cell.column) * cellSize.width,
                 y: CGFloat(cell.row) * cellSize.height,
                 width: cellSize.width,
                 height: cellSize.height
             )
-            NSColor(rgba: cell.backgroundRGBA).setFill()
-            rect.fill()
+            let isSelected = localSelection?.contains(
+                row: cell.row,
+                column: cell.column,
+                columnCount: frame.columns
+            ) == true
+            if isSelected {
+                NSColor.selectedTextBackgroundColor.setFill()
+                rect.fill()
+            }
+
+            guard cell.glyph != 0, cell.glyph != 32,
+                  let scalar = UnicodeScalar(cell.glyph) else { continue }
+            if !isSelected {
+                NSColor(rgba: cell.backgroundRGBA).setFill()
+                rect.fill()
+            }
             var cellAttributes = attributes
-            cellAttributes[.foregroundColor] = NSColor(rgba: cell.foregroundRGBA)
+            cellAttributes[.foregroundColor] = isSelected
+                ? NSColor.selectedTextColor
+                : NSColor(rgba: cell.foregroundRGBA)
             String(scalar).draw(
                 at: CGPoint(x: rect.minX, y: rect.minY),
                 withAttributes: cellAttributes
@@ -288,6 +428,12 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     func apply(_ frame: PTYDaemonSurfaceFrame) {
+        if let latestFrame,
+           latestFrame.surfaceID != frame.surfaceID ||
+            latestFrame.columns != frame.columns ||
+            latestFrame.rows != frame.rows {
+            clearLocalSelection()
+        }
         self.latestFrame = frame
         refreshHistoryPill(using: frame)
         needsDisplay = true
@@ -386,6 +532,132 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         return modifiers
     }
 
+    private func beginTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalCapturesCurrentMouseEvent(event)
+        terminalMouseCaptureByButton[button] = captures
+        guard captures else { return false }
+        reportTerminalMouse(action: .press, button: button, event: event)
+        return true
+    }
+
+    private func continueTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalMouseCaptureByButton[button]
+            ?? terminalCapturesCurrentMouseEvent(event)
+        guard captures else { return false }
+        reportTerminalMouse(action: .motion, button: button, event: event)
+        return true
+    }
+
+    private func endTerminalMouseGesture(
+        button: TerminalMouseButton,
+        event: NSEvent
+    ) -> Bool {
+        let captures = terminalMouseCaptureByButton.removeValue(forKey: button)
+            ?? terminalCapturesCurrentMouseEvent(event)
+        guard captures else { return false }
+        reportTerminalMouse(action: .release, button: button, event: event)
+        return true
+    }
+
+    private func terminalCapturesCurrentMouseEvent(_ event: NSEvent) -> Bool {
+        guard let latestFrame else { return false }
+        return TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: Self.mouseModes(for: latestFrame).tracking,
+            modifiers: event.modifierFlags
+        )
+    }
+
+    private func terminalReportsCurrentUnbuttonedMotion(_ event: NSEvent) -> Bool {
+        guard let latestFrame else { return false }
+        let tracking = Self.mouseModes(for: latestFrame).tracking
+        return TerminalMouseCapturePolicy.terminalCaptures(
+            trackingRawValue: tracking,
+            modifiers: event.modifierFlags
+        ) && TerminalMouseTracking
+            .normalized(rawValue: tracking)
+            .reports(.motion, hasButton: false)
+    }
+
+    private func reportTerminalMouse(
+        action: TerminalMouseAction,
+        button: TerminalMouseButton?,
+        event: NSEvent
+    ) {
+        guard let daemon = bridge as? PTYDaemonClient,
+              let surfaceID,
+              let frame = latestFrame else {
+            return
+        }
+        let modes = Self.mouseModes(for: frame)
+        let position = mousePosition(for: event, frame: frame)
+        guard let payload = TerminalMouseWireEncoder.buttonPayload(
+            action: action,
+            button: button,
+            trackingRawValue: modes.tracking,
+            encodingRawValue: modes.encoding,
+            row: position.row,
+            column: position.column,
+            pixelX: position.pixelX,
+            pixelY: position.pixelY,
+            modifiers: event.modifierFlags
+        ) else { return }
+        daemon.sendRawBytes(payload, to: surfaceID)
+    }
+
+    private func beginLocalSelection(with event: NSEvent) -> Bool {
+        guard let frame = latestFrame else { return false }
+        let position = mousePosition(for: event, frame: frame)
+        localSelectionAnchor = PTYDaemonGridPosition(
+            row: position.row,
+            column: position.column
+        )
+        localSelection = nil
+        isDraggingLocalSelection = false
+        needsDisplay = true
+        return true
+    }
+
+    private func updateLocalSelection(with event: NSEvent) -> Bool {
+        guard let frame = latestFrame,
+              let anchor = localSelectionAnchor else {
+            return false
+        }
+        let position = mousePosition(for: event, frame: frame)
+        localSelection = PTYDaemonGridSelection(
+            anchor: anchor,
+            head: PTYDaemonGridPosition(row: position.row, column: position.column)
+        )
+        isDraggingLocalSelection = true
+        needsDisplay = true
+        return true
+    }
+
+    private func finishLocalSelection() {
+        if isDraggingLocalSelection,
+           viewModel?.autoCopyOnSelect == true,
+           let frame = latestFrame,
+           let text = localSelection?.text(in: frame),
+           !text.isEmpty {
+            clipboardService.write(text)
+        }
+        localSelectionAnchor = nil
+        isDraggingLocalSelection = false
+        needsDisplay = true
+    }
+
+    private func clearLocalSelection() {
+        localSelectionAnchor = nil
+        localSelection = nil
+        isDraggingLocalSelection = false
+        needsDisplay = true
+    }
+
     private func mousePosition(
         for event: NSEvent,
         frame: PTYDaemonSurfaceFrame
@@ -432,6 +704,64 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             pixelY: Int(row),
             count: count
         )
+    }
+}
+
+private struct PTYDaemonGridPosition: Equatable {
+    let row: UInt16
+    let column: UInt16
+
+    func linearIndex(columnCount: UInt16) -> Int {
+        Int(row) * max(1, Int(columnCount)) + Int(column)
+    }
+}
+
+private struct PTYDaemonGridSelection: Equatable {
+    let anchor: PTYDaemonGridPosition
+    let head: PTYDaemonGridPosition
+
+    func contains(row: UInt16, column: UInt16, columnCount: UInt16) -> Bool {
+        let candidate = PTYDaemonGridPosition(row: row, column: column)
+            .linearIndex(columnCount: columnCount)
+        let anchorIndex = anchor.linearIndex(columnCount: columnCount)
+        let headIndex = head.linearIndex(columnCount: columnCount)
+        return (min(anchorIndex, headIndex)...max(anchorIndex, headIndex)).contains(candidate)
+    }
+
+    func text(in frame: PTYDaemonSurfaceFrame) -> String? {
+        guard frame.columns > 0, frame.rows > 0 else { return nil }
+        let columnCount = Int(frame.columns)
+        let maximumIndex = Int(frame.rows) * columnCount - 1
+        let anchorIndex = min(anchor.linearIndex(columnCount: frame.columns), maximumIndex)
+        let headIndex = min(head.linearIndex(columnCount: frame.columns), maximumIndex)
+        let lowerBound = min(anchorIndex, headIndex)
+        let upperBound = max(anchorIndex, headIndex)
+        var glyphByIndex: [Int: UInt32] = [:]
+        for cell in frame.cells {
+            glyphByIndex[Int(cell.row) * columnCount + Int(cell.column)] = cell.glyph
+        }
+
+        var lines: [String] = []
+        for row in (lowerBound / columnCount)...(upperBound / columnCount) {
+            let rowStart = row * columnCount
+            let start = max(lowerBound, rowStart)
+            let end = min(upperBound, rowStart + columnCount - 1)
+            var line = ""
+            for index in start...end {
+                if let glyph = glyphByIndex[index],
+                   glyph != 0,
+                   let scalar = UnicodeScalar(glyph) {
+                    line.append(Character(scalar))
+                } else {
+                    line.append(" ")
+                }
+            }
+            while line.last == " " {
+                line.removeLast()
+            }
+            lines.append(line)
+        }
+        return lines.joined(separator: "\n")
     }
 }
 

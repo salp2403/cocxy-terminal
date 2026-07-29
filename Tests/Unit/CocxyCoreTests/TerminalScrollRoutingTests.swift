@@ -58,6 +58,14 @@ struct TerminalScrollRoutingTests {
         #expect(TerminalMouseTracking.anyEvent.reports(.motion, hasButton: false))
     }
 
+    @Test("AppKit buttons map to terminal left middle and right codes")
+    func appKitButtonMapping() {
+        #expect(TerminalMouseButton(appKitButtonNumber: 0) == .left)
+        #expect(TerminalMouseButton(appKitButtonNumber: 1) == .right)
+        #expect(TerminalMouseButton(appKitButtonNumber: 2) == .middle)
+        #expect(TerminalMouseButton(appKitButtonNumber: 3) == nil)
+    }
+
     @Test("shift is a local-selection escape hatch from terminal mouse capture")
     func shiftEscapesTerminalMouseCapture() {
         #expect(TerminalMouseCapturePolicy.terminalCaptures(

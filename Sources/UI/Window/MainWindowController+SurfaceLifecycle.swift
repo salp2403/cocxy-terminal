@@ -245,6 +245,10 @@ extension MainWindowController {
                 in: cocxyView
             )
         } else if let daemonView = surfaceView as? PTYDaemonHostView {
+            daemonView.onFocusRequested = { [weak self] in
+                guard let self else { return }
+                self.applyFocusToSurface(surfaceID: capturedSurfaceID)
+            }
             daemonView.prefersLocalScrollInMouseTrackingMode = { [weak self] in
                 self?.surfaceLooksLikeActiveAgent(capturedSurfaceID) ?? false
             }

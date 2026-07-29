@@ -259,6 +259,132 @@ struct CocxyCoreHostWiringTests {
         ))
     }
 
+    @Test("daemon host routes a complete SGR mouse gesture through surface_write")
+    func daemonHostRoutesCompleteSGRMouseGesture() throws {
+        let rawSurfaceID = UUID()
+        let frame = PTYDaemonSurfaceFrame(
+            surfaceID: rawSurfaceID.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            mouseTrackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        let connection = RecordingPTYDaemonConnection(responses: [
+            PTYDaemonResponse(
+                id: "hello",
+                ok: true,
+                hello: PTYDaemonHello(
+                    version: "dev",
+                    capabilities: [
+                        PTYDaemonProtocol.jsonLinesCapability,
+                        PTYDaemonProtocol.terminalSurfaceCapability,
+                        PTYDaemonProtocol.terminalEngineCapability,
+                        PTYDaemonProtocol.terminalHostRendererCapability,
+                    ]
+                )
+            ),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: rawSurfaceID.uuidString),
+            PTYDaemonResponse(id: "subscribe", ok: true, frame: frame),
+            PTYDaemonResponse(id: "resize", ok: true),
+            PTYDaemonResponse(id: "press", ok: true),
+            PTYDaemonResponse(id: "drag", ok: true),
+            PTYDaemonResponse(id: "release", ok: true),
+            PTYDaemonResponse(id: "move", ok: true),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: TerminalEngineConfig(
+            fontFamily: "Menlo",
+            fontSize: 13,
+            themeName: "Catppuccin Mocha",
+            shell: "/bin/zsh",
+            workingDirectory: URL(fileURLWithPath: "/tmp")
+        ))
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: client))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = try client.createSurface(in: view, workingDirectory: nil, command: nil)
+        view.configureSurfaceIfNeeded(bridge: client, surfaceID: surfaceID)
+
+        var focusRequests = 0
+        view.onFocusRequested = { focusRequests += 1 }
+        view.updateTrackingAreas()
+        #expect(view.trackingAreas.contains { $0.options.contains(.mouseMoved) })
+
+        let topLeftInWindow = NSPoint(x: 0, y: view.bounds.maxY)
+        view.mouseDown(with: makeHostMouseEvent(type: .leftMouseDown, location: topLeftInWindow))
+        view.mouseDragged(with: makeHostMouseEvent(type: .leftMouseDragged, location: topLeftInWindow))
+        view.mouseUp(with: makeHostMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
+        view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+
+        let writes = try connection.requests
+            .filter { $0.command == .surfaceWrite }
+            .map { request -> Data in
+                let encoded = try #require(request.payload?["bytesBase64"])
+                return try #require(Data(base64Encoded: encoded))
+            }
+        #expect(focusRequests == 1)
+        #expect(writes == [
+            Data("\u{1B}[<0;1;1M".utf8),
+            Data("\u{1B}[<32;1;1M".utf8),
+            Data("\u{1B}[<0;1;1m".utf8),
+            Data("\u{1B}[<35;1;1M".utf8),
+        ])
+    }
+
+    @Test("daemon host Shift drag selects and copies visible frame text")
+    func daemonHostShiftDragSelectsVisibleText() throws {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 3,
+            rows: 1,
+            cells: Array("abc".unicodeScalars.enumerated()).map { index, scalar in
+                PTYDaemonGridCell(
+                    row: 0,
+                    column: UInt16(index),
+                    glyph: scalar.value,
+                    foregroundRGBA: 0xffffffff,
+                    backgroundRGBA: 0x000000ff
+                )
+            },
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            mouseTrackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            mouseEncodingMode: TerminalMouseEncoding.sgr.rawValue
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+
+        let y = view.bounds.maxY
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: NSPoint(x: 0, y: y),
+            modifiers: [.shift]
+        ))
+        view.mouseDragged(with: makeHostMouseEvent(
+            type: .leftMouseDragged,
+            location: NSPoint(x: view.bounds.maxX, y: y),
+            modifiers: [.shift]
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: NSPoint(x: view.bounds.maxX, y: y),
+            modifiers: [.shift]
+        ))
+
+        #expect(clipboard.read() == "abc")
+        #expect(viewModel.isDragging == false)
+    }
+
     @Test("in-process engine reaps a shell that exits without further PTY output")
     func inProcessEngineReapsSilentShellExit() throws {
         let root = FileManager.default.temporaryDirectory
@@ -654,6 +780,24 @@ private func makeScrollEvent(
     )!
     event.location = location
     return NSEvent(cgEvent: event)!
+}
+
+private func makeHostMouseEvent(
+    type: NSEvent.EventType,
+    location: NSPoint,
+    modifiers: NSEvent.ModifierFlags = []
+) -> NSEvent {
+    NSEvent.mouseEvent(
+        with: type,
+        location: location,
+        modifierFlags: modifiers,
+        timestamp: 0,
+        windowNumber: 0,
+        context: nil,
+        eventNumber: 1,
+        clickCount: 1,
+        pressure: 1
+    )!
 }
 
 private func makeKeyEvent(
