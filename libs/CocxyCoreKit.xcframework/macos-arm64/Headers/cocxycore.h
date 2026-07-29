@@ -577,6 +577,28 @@ void cocxycore_terminal_selection_set(
     uint16_t end_col
 );
 
+/** Set a rectangular selection using absolute history coordinates. */
+void cocxycore_terminal_selection_set_rectangular(
+    cocxycore_terminal* term,
+    uint32_t start_row,
+    uint16_t start_col,
+    uint32_t end_row,
+    uint16_t end_col
+);
+
+/** Select the word-like character run containing one history cell. */
+bool cocxycore_terminal_selection_select_word(
+    cocxycore_terminal* term,
+    uint32_t absolute_row,
+    uint16_t col
+);
+
+/** Select the complete logical line containing one absolute history row. */
+bool cocxycore_terminal_selection_select_logical_line(
+    cocxycore_terminal* term,
+    uint32_t absolute_row
+);
+
 /** Get the normalized active selection range. Returns false if none is active. */
 bool cocxycore_terminal_selection_get(
     const cocxycore_terminal* term,

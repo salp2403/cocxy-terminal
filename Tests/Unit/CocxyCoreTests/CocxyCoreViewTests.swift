@@ -1336,6 +1336,93 @@ struct CocxyCoreViewTests {
         #expect(harness.view.commandBlockOverlayView != nil)
     }
 
+    @Test("double click selects a word and auto-copies it")
+    func doubleClickSelectsWordAndAutoCopies() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let clipboard = RecordingClipboardService(readText: nil)
+        harness.view.clipboardService = clipboard
+        feed("alpha beta", into: state.terminal)
+
+        let location = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 2
+        ))
+
+        #expect(harness.viewModel.lastClickCount == 2)
+        #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.text == "alpha")
+
+        harness.view.mouseUp(with: makeMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            clickCount: 2
+        ))
+        #expect(clipboard.writtenText == "alpha")
+    }
+
+    @Test("triple click selects every physical row in a soft-wrapped logical line")
+    func tripleClickSelectsWrappedLogicalLine() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.viewModel.autoCopyOnSelect = false
+        harness.bridge.resize(
+            harness.surfaceID,
+            to: TerminalSize(columns: 4, rows: 3, pixelWidth: 80, pixelHeight: 60)
+        )
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("abcdef", into: state.terminal)
+
+        let location = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 3
+        ))
+
+        let selection = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
+        #expect(harness.viewModel.lastClickCount == 3)
+        #expect(selection.active)
+        #expect(selection.startRow == 0)
+        #expect(selection.endRow == 1)
+        #expect(selection.text == "abcd\nef")
+    }
+
+    @Test("Option drag selects a rectangular column band")
+    func optionDragSelectsRectangularBand() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        harness.viewModel.autoCopyOnSelect = false
+        harness.bridge.resize(
+            harness.surfaceID,
+            to: TerminalSize(columns: 6, rows: 4, pixelWidth: 120, pixelHeight: 80)
+        )
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed("abcdef\r\nghijkl\r\nmnopqr", into: state.terminal)
+
+        let start = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        let end = try selectionMouseLocation(row: 2, column: 3, harness: harness)
+        harness.view.mouseDown(with: makeMouseEvent(
+            type: .leftMouseDown,
+            location: start,
+            modifiers: [.option]
+        ))
+        harness.view.mouseDragged(with: makeMouseEvent(
+            type: .leftMouseDragged,
+            location: end
+        ))
+        harness.view.mouseUp(with: makeMouseEvent(type: .leftMouseUp, location: end))
+
+        let selection = try #require(harness.bridge.selectionSnapshot(for: harness.surfaceID))
+        #expect(selection.startRow == 0)
+        #expect(selection.startCol == 1)
+        #expect(selection.endRow == 2)
+        #expect(selection.endCol == 3)
+        #expect(selection.text == "bcd\nhij\nnop")
+    }
+
     @Test("any-event SGR tracking forwards button motion release and unbuttoned movement")
     func anyEventSGRTrackingForwardsCompleteMouseGesture() async throws {
         let rawCat = try makeRawCatScript()
@@ -2352,6 +2439,27 @@ private func makeMouseEvent(
         clickCount: clickCount,
         pressure: 1
     )!
+}
+
+@MainActor
+private func selectionMouseLocation(
+    row: UInt16,
+    column: UInt16,
+    harness: ViewHarness
+) throws -> NSPoint {
+    let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+    var metrics = cocxycore_font_metrics()
+    #expect(cocxycore_terminal_get_font_metrics(state.terminal, &metrics))
+    let scale = harness.view.window?.backingScaleFactor
+        ?? NSScreen.main?.backingScaleFactor
+        ?? 2.0
+    let cellWidth = CGFloat(metrics.cell_width) / scale
+    let cellHeight = CGFloat(metrics.cell_height) / scale
+    let viewY = harness.bridge.configuredPaddingY + (CGFloat(row) + 0.25) * cellHeight
+    return NSPoint(
+        x: harness.bridge.configuredPaddingX + (CGFloat(column) + 0.25) * cellWidth,
+        y: harness.view.bounds.maxY - viewY
+    )
 }
 
 private func makeScrollEvent(

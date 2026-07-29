@@ -1310,7 +1310,7 @@ final class CocxyCoreBridge: TerminalEngine {
         }
     }
 
-    /// Updates the text selection on the given surface to the rectangular
+    /// Updates the text selection on the given surface to the linear
     /// range defined by `(startRow, startCol)` → `(endRow, endCol)` in
     /// absolute history coordinates.
     ///
@@ -1330,6 +1330,37 @@ final class CocxyCoreBridge: TerminalEngine {
                 endRow, endCol
             )
         }
+    }
+
+    /// Updates a rectangular selection in absolute history coordinates.
+    func setRectangularSelection(
+        for surface: SurfaceID,
+        startRow: UInt32,
+        startCol: UInt16,
+        endRow: UInt32,
+        endCol: UInt16
+    ) {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_set_rectangular(
+                state.terminal,
+                startRow, startCol,
+                endRow, endCol
+            )
+        }
+    }
+
+    /// Selects the word-like run containing one absolute history cell.
+    func selectWord(for surface: SurfaceID, row: UInt32, col: UInt16) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_select_word(state.terminal, row, col)
+        } ?? false
+    }
+
+    /// Selects the complete logical line containing one absolute history row.
+    func selectLogicalLine(for surface: SurfaceID, row: UInt32) -> Bool {
+        withTerminalLock(surface) { state in
+            cocxycore_terminal_selection_select_logical_line(state.terminal, row)
+        } ?? false
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {

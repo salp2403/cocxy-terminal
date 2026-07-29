@@ -225,6 +225,10 @@ final class CocxyCoreView: NSView {
     /// Whether a drag selection is in progress.
     private var isDragging: Bool = false
 
+    /// Selection mode captured at mouse-down so modifier changes mid-drag
+    /// cannot change the geometry of the active gesture.
+    private var selectionIsRectangular: Bool = false
+
     // MARK: - Layout Tracking
 
     /// Last backing-pixel size sent to the bridge, prevents redundant resize calls.
@@ -1628,6 +1632,7 @@ final class CocxyCoreView: NSView {
         if beginTerminalMouseGesture(button: .left, event: event) {
             selectionAnchor = nil
             isDragging = false
+            selectionIsRectangular = false
             return
         }
 
@@ -1645,8 +1650,22 @@ final class CocxyCoreView: NSView {
         // the per-surface terminal lock and cannot race with the background
         // PTY feed loop.
         bridge.clearSelection(for: sid)
-        selectionAnchor = (row: absoluteRow, col: pos.col)
         isDragging = false
+        selectionIsRectangular = false
+
+        let clickCount = viewModel?.lastClickCount ?? event.clickCount
+        if clickCount >= 3 {
+            selectionAnchor = nil
+            _ = bridge.selectLogicalLine(for: sid, row: absoluteRow)
+            setNeedsTerminalDisplay()
+        } else if clickCount == 2 {
+            selectionAnchor = nil
+            _ = bridge.selectWord(for: sid, row: absoluteRow, col: pos.col)
+            setNeedsTerminalDisplay()
+        } else {
+            selectionAnchor = (row: absoluteRow, col: pos.col)
+            selectionIsRectangular = event.modifierFlags.contains(.option)
+        }
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -1666,13 +1685,23 @@ final class CocxyCoreView: NSView {
         // Route the selection mutation through the bridge so it acquires
         // the per-surface terminal lock and cannot race with the background
         // PTY feed loop.
-        bridge.setSelection(
-            for: sid,
-            startRow: anchor.row,
-            startCol: anchor.col,
-            endRow: absoluteRow,
-            endCol: pos.col
-        )
+        if selectionIsRectangular {
+            bridge.setRectangularSelection(
+                for: sid,
+                startRow: anchor.row,
+                startCol: anchor.col,
+                endRow: absoluteRow,
+                endCol: pos.col
+            )
+        } else {
+            bridge.setSelection(
+                for: sid,
+                startRow: anchor.row,
+                startCol: anchor.col,
+                endRow: absoluteRow,
+                endCol: pos.col
+            )
+        }
 
         setNeedsTerminalDisplay()
     }
@@ -1683,14 +1712,21 @@ final class CocxyCoreView: NSView {
         if endTerminalMouseGesture(button: .left, event: event) {
             isDragging = false
             selectionAnchor = nil
+            selectionIsRectangular = false
             return
         }
 
-        guard let bridge = bridge, let sid = surfaceID else { return }
+        guard let bridge = bridge, let sid = surfaceID else {
+            isDragging = false
+            selectionAnchor = nil
+            selectionIsRectangular = false
+            return
+        }
 
         let completedDrag = isDragging
+        let clickCount = viewModel?.lastClickCount ?? event.clickCount
         let selection = bridge.selectionSnapshot(for: sid)
-        if completedDrag, selection?.active == true {
+        if completedDrag || clickCount >= 2, selection?.active == true {
             if viewModel?.autoCopyOnSelect == true {
                 if let text = selection?.text, !text.isEmpty {
                     clipboardService.write(text)
@@ -1700,7 +1736,7 @@ final class CocxyCoreView: NSView {
 
         if !completedDrag,
            selection?.active != true,
-           event.clickCount == 1,
+           clickCount == 1,
            !event.modifierFlags.contains(.shift) {
             let location = convert(event.locationInWindow, from: nil)
             _ = ideCursorController.handleClickToPosition(at: location)
@@ -1708,6 +1744,7 @@ final class CocxyCoreView: NSView {
 
         isDragging = false
         selectionAnchor = nil
+        selectionIsRectangular = false
     }
 
     override func rightMouseDown(with event: NSEvent) {
