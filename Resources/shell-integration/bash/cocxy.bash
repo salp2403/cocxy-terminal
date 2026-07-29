@@ -158,7 +158,7 @@ __cocxy_precmd() {
   # the prompt without modifying $PS1. Modifying $PS1 would interact
   # with the user's prompt framework (bash-it, oh-my-bash, Liquidprompt)
   # and break their renderers — see Design notes at the top.
-  __cocxy_print "$(builtin printf '\e]133;A\a')"
+  __cocxy_print "$(builtin printf '\e]133;A;cl=m\a')"
 }
 
 __cocxy_preexec() {

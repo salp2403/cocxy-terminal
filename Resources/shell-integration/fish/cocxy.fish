@@ -64,7 +64,7 @@ function __cocxy_fish_prompt --on-event fish_prompt
         __cocxy_fish_print "\e]2;$title\a"
     end
 
-    __cocxy_fish_print "\e]133;A\a"
+    __cocxy_fish_print "\e]133;A;cl=m\a"
 end
 
 function __cocxy_fish_preexec --on-event fish_preexec

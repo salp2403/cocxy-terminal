@@ -1563,6 +1563,7 @@ struct CocxyCoreBridgeTests {
             let script = try String(contentsOf: scriptURL, encoding: .utf8)
 
             #expect(script.contains("133;C;"))
+            #expect(script.contains("133;A;cl=m"))
             #expect(script.contains("sanitized_command"))
             #expect(script.contains("cocxy-percent-v1:"))
             #expect(script.contains("%0A"))
