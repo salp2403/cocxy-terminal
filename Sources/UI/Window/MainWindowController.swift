@@ -535,6 +535,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// When set, the dashboard panel shows live agent sessions instead of an empty view.
     var injectedDashboardViewModel: AgentDashboardViewModel?
 
+    /// Lets AppDelegate release hook routing bindings after a tab is removed.
+    var onAgentTabClosed: ((TabID) -> Void)?
+
     /// Timeline store injected by AppDelegate for real event data.
     /// When set, the timeline panel shows live agent events instead of an empty list.
     var injectedTimelineStore: AgentTimelineStoreImpl?

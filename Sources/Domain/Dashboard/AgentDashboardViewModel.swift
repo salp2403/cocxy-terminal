@@ -96,6 +96,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// when multiple tabs may share the same working directory.
     var tabIdResolver: ((String, String?) -> UUID?)?
 
+    /// Resolves hook-native sessions to their exact terminal surface. This
+    /// lets the dashboard suppress the synthetic pattern mirror for the same
+    /// tab and surface without collapsing unrelated sessions in one tab.
+    var surfaceIDForHookSessionProvider: ((String) -> SurfaceID?)?
+
     /// Resolves a tab UUID to the window that currently owns it.
     /// Injected by AppDelegate for cross-window dashboard presentation.
     var windowIDForTabProvider: ((UUID) -> WindowID?)?
@@ -216,9 +221,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             handleTeammateIdle(event)
         case .taskCompleted:
             handleTaskCompleted(event)
-        case .notification, .userPromptSubmit:
+        case .notification:
             // Informational events -- no dashboard state change.
             break
+        case .userPromptSubmit:
+            handleUserPromptSubmit(event)
         case .richInputDraftSubmitted:
             // Rich Input submissions are exposed to plugin/hook observers and
             // timeline metadata; they do not imply an agent state transition.
@@ -369,6 +376,19 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     func removeAgentTeamRun(teamID: String) {
         sessionDataStore.removeValue(forKey: AgentTeamConfig.slug(teamID))
+        rebuildSessions()
+    }
+
+    /// Removes every dashboard row owned by a tab that has actually closed.
+    func removeSessions(forTabID tabID: UUID) {
+        let sessionIDs = sessionDataStore.compactMap { sessionID, data in
+            data.tabId == tabID ? sessionID : nil
+        }
+        guard !sessionIDs.isEmpty else { return }
+
+        for sessionID in sessionIDs {
+            sessionDataStore.removeValue(forKey: sessionID)
+        }
         rebuildSessions()
     }
 
@@ -526,6 +546,13 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             }
         }
 
+        sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
+        rebuildSessions()
+    }
+
+    private func handleUserPromptSubmit(_ event: HookEvent) {
+        guard sessionDataStore[event.sessionId] != nil else { return }
+        sessionDataStore[event.sessionId]?.state = .working
         sessionDataStore[event.sessionId]?.lastActivityTime = event.timestamp
         rebuildSessions()
     }
@@ -845,12 +872,19 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// mutating `sessionDataStore`. External code observes via the
     /// `@Published var sessions` property.
     func rebuildSessions() {
-        sessions = sessionDataStore.values
+        let rebuiltSessions = sessionDataStore.values
             .map { data in
                 let windowID = windowIDForTabProvider?(data.tabId)
                 let windowLabel = windowLabelProvider?(windowID)
                 return data.toAgentSessionInfo(windowID: windowID, windowLabel: windowLabel)
             }
+
+        let surfaceProvider = surfaceIDForHookSessionProvider ?? { _ in nil }
+        sessions = AgentDashboardSessionDeduplicator
+            .deduplicate(
+                rebuiltSessions,
+                surfaceIDForHookSession: surfaceProvider
+            )
             .sorted { lhs, rhs in
                 if lhs.priority != rhs.priority {
                     return lhs.priority < rhs.priority

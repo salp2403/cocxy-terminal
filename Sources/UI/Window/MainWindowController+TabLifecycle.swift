@@ -280,6 +280,10 @@ extension MainWindowController {
 
         // Remove from TabManager (activates next tab).
         tabManager.removeTab(id: tabID)
+        if tabManager.tab(for: tabID) == nil {
+            injectedDashboardViewModel?.removeSessions(forTabID: tabID.rawValue)
+            onAgentTabClosed?(tabID)
+        }
         handleWorktreeLifecycleAfterTabClose(
             closingTab,
             overridePolicy: worktreeClosePolicyOverride

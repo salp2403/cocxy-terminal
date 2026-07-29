@@ -23,6 +23,7 @@ import Combine
 /// working        + errorDetected    -> error
 /// working        + agentExited      -> idle
 /// waitingInput   + userInput        -> working
+/// waitingInput   + outputReceived   -> working
 /// waitingInput   + completionDetected -> finished
 /// waitingInput   + errorDetected    -> error
 /// waitingInput   + agentExited      -> idle
@@ -160,6 +161,8 @@ final class AgentStateMachine: ObservableObject {
 
         // waitingInput
         case (.waitingInput, .userInput):
+            return .working
+        case (.waitingInput, .outputReceived):
             return .working
         case (.waitingInput, .completionDetected):
             return .finished

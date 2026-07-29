@@ -26,6 +26,24 @@ struct AppDelegateCwdChangedHookSwiftTests {
         #expect(delegate.boundSurfaceIDForHookSession("sess-surface") == nil)
     }
 
+    @Test("closing a tab removes every hook routing binding owned by it")
+    func tabClosePrunesHookBindings() {
+        let delegate = AppDelegate()
+        let closingTabID = TabID()
+        let otherTabID = TabID()
+        delegate.bindHookSession("closing-one", to: closingTabID, surfaceID: SurfaceID())
+        delegate.bindHookSession("closing-two", to: closingTabID, surfaceID: SurfaceID())
+        delegate.bindHookSession("remaining", to: otherTabID, surfaceID: SurfaceID())
+
+        delegate.unbindHookSessions(for: closingTabID)
+
+        #expect(delegate.hookSessionTabBindings["closing-one"] == nil)
+        #expect(delegate.hookSessionSurfaceBindings["closing-one"] == nil)
+        #expect(delegate.hookSessionTabBindings["closing-two"] == nil)
+        #expect(delegate.hookSessionTabBindings["remaining"] == otherTabID)
+        #expect(delegate.hookSessionSurfaceBindings["remaining"] != nil)
+    }
+
     @Test("bound session wins when multiple tabs share the same previous directory")
     func cwdChangedPrefersBoundSessionWhenMultipleTabsShareTheSameDirectory() {
         let delegate = AppDelegate()

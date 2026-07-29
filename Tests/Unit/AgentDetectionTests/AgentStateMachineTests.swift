@@ -128,6 +128,15 @@ final class AgentStateMachineTests: XCTestCase {
         XCTAssertEqual(sut.currentState, .working)
     }
 
+    func testWaitingInputToWorkingOnOutputReceived() {
+        sut.processEvent(.agentDetected(name: "claude"))
+        sut.processEvent(.outputReceived)
+        sut.processEvent(.promptDetected)
+        sut.processEvent(.outputReceived)
+
+        XCTAssertEqual(sut.currentState, .working)
+    }
+
     func testWaitingInputToFinishedOnCompletionDetected() {
         sut.processEvent(.agentDetected(name: "claude"))
         sut.processEvent(.outputReceived)

@@ -815,6 +815,28 @@ final class TabSurfaceMappingTests: XCTestCase {
         )
     }
 
+    func testCloseTabPrunesDashboardRowsOnlyAfterRemoval() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let dashboard = AgentDashboardViewModel()
+        controller.injectedDashboardViewModel = dashboard
+        controller.newTabAction(nil)
+        guard let closingTabID = controller.tabManager.activeTabID else {
+            return XCTFail("A second tab must become active")
+        }
+        dashboard.tabIdResolver = { _, _ in closingTabID.rawValue }
+        dashboard.processHookEvent(HookEvent(
+            type: .sessionStart,
+            sessionId: "closing-tab-session",
+            data: .sessionStart(SessionStartData())
+        ))
+        XCTAssertEqual(dashboard.sessions.count, 1)
+
+        controller.performCloseTab(closingTabID)
+
+        XCTAssertNil(controller.tabManager.tab(for: closingTabID))
+        XCTAssertTrue(dashboard.sessions.isEmpty)
+    }
+
     // MARK: - Tab Count Consistency
 
     func testSurfaceViewCountMatchesTabCount() {

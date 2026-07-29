@@ -440,6 +440,10 @@ extension AppDelegate {
             )?.tabID.rawValue
         }
 
+        dashboardVM.surfaceIDForHookSessionProvider = { [weak self] sessionID in
+            self?.boundSurfaceIDForHookSession(sessionID)
+        }
+
         dashboardVM.windowIDForTabProvider = { [weak self] tabUUID in
             self?.windowIDForTab(tabUUID)
         }

@@ -1340,6 +1340,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         hookSessionSurfaceBindings.removeValue(forKey: sessionID)
     }
 
+    func unbindHookSessions(for tabID: TabID) {
+        let sessionIDs = hookSessionTabBindings.compactMap { sessionID, boundTabID in
+            boundTabID == tabID ? sessionID : nil
+        }
+        for sessionID in sessionIDs {
+            unbindHookSession(sessionID)
+        }
+    }
+
     func boundSurfaceIDForHookSession(_ sessionID: String?) -> SurfaceID? {
         guard let sessionID else { return nil }
         return hookSessionSurfaceBindings[sessionID]
@@ -1493,6 +1502,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedDashboardViewModel = agentDashboardViewModel
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedNotificationManager = notificationManager
+        controller.onAgentTabClosed = { [weak self] tabID in
+            self?.unbindHookSessions(for: tabID)
+        }
         controller.windowEventBus = windowEventBus
         controller.notificationAggregator = notificationAggregator
         controller.portScanner = portScanner

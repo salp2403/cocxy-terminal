@@ -80,7 +80,7 @@ struct MenuBarStatusItemSwiftTestingTests {
         let tabID = UUID()
         let otherTabID = UUID()
         let surfaceID = SurfaceID()
-        let hook = makeSession(id: "hook-session", state: .working, tabID: tabID)
+        let hook = makeSession(id: "hook-session", state: .finished, tabID: tabID)
         let duplicatePattern = makeSession(
             id: "pattern-\(tabID.uuidString)-\(surfaceID.rawValue.uuidString)",
             state: .working,
@@ -99,7 +99,8 @@ struct MenuBarStatusItemSwiftTestingTests {
             }
         )
 
-        #expect(summary.working == 2)
+        #expect(summary.working == 1)
+        #expect(summary.badgeTitle == " 1↻")
         #expect(summary.rows.map(\.sessionID) == [hook.id, otherTabPattern.id])
     }
 
