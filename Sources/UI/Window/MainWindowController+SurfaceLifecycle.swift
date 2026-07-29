@@ -425,6 +425,7 @@ extension MainWindowController {
 
     func clearSurfaceTracking(for surfaceID: SurfaceID) {
         if let surfaceView = surfaceView(for: surfaceID) {
+            (surfaceView as? CocxyCoreView)?.resetCommandBlockOverlayForSurfaceTeardown()
             let key = ObjectIdentifier(surfaceView)
             inlineImageRenderers[key]?.clearAllImages()
             inlineImageRenderers.removeValue(forKey: key)
@@ -961,7 +962,7 @@ extension MainWindowController {
         guard !blocks.isEmpty else { return }
 
         restoredCommandBlocksBySurfaceID[surfaceID] = blocks
-        (surfaceView as? CocxyCoreView)?.refreshCommandBlockOverlay()
+        (surfaceView as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
     }
 
     func availableCommandBlocks(
@@ -999,7 +1000,7 @@ extension MainWindowController {
         guard let block = liveBlocks.last else { return }
 
         preserveCommandBlockMetadata(for: surfaceID, liveBlocks: liveBlocks)
-        (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
+        (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
         updateCommandCorrectionSuggestion(for: block, tabID: tabID, surfaceID: surfaceID)
 
         let key = "\(surfaceID.rawValue.uuidString)#\(block.id)"
@@ -1096,6 +1097,9 @@ extension MainWindowController {
         coreView.restoredCommandBlocksProvider = { [weak self] in
             self?.restoredCommandBlocksBySurfaceID[surfaceID] ?? []
         }
+        coreView.updateCommandBlockOverlayConfiguration(
+            configService?.current.commandBlocks ?? .defaults
+        )
         coreView.onToggleCommandBlockBookmark = { [weak self] block in
             self?.toggleCommandBlockBookmark(block, tabID: tabID, surfaceID: surfaceID)
         }
@@ -1115,7 +1119,7 @@ extension MainWindowController {
             limit: 256
         )
 
-        (surfaceView(for: surfaceID) as? CocxyCoreView)?.refreshCommandBlockOverlay()
+        (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
 
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         let spotlightConfig = configService?.current.spotlight ?? .defaults

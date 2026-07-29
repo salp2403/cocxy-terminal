@@ -89,6 +89,7 @@ extension MainWindowController {
         updateDashboardPanelLocalizer(localizer)
         updateStatusBarLocalizer(localizer)
         updateTerminalHostLocalizers(localizer)
+        updateTerminalCommandBlockConfiguration(config.commandBlocks)
         gitHubPaneViewModel?.updateLocalizer(localizer)
         syncVaultSidebarRootView()
         updateRemoteWorkspacePanelLocalizer(localizer)
@@ -419,19 +420,31 @@ extension MainWindowController {
     }
 
     private func updateTerminalHostLocalizers(_ localizer: AppLocalizer) {
-        var seen = Set<ObjectIdentifier>()
-
-        func update(_ view: TerminalHostView?) {
-            guard let view else { return }
-            guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+        forEachTerminalHostView { view in
             view.updateLocalizer(localizer)
         }
+    }
 
-        update(terminalSurfaceView)
-        for view in tabSurfaceViews.values { update(view) }
-        for view in splitSurfaceViews.values { update(view) }
+    private func updateTerminalCommandBlockConfiguration(_ configuration: CommandBlocksConfig) {
+        forEachTerminalHostView { view in
+            view.updateCommandBlockOverlayConfiguration(configuration)
+        }
+    }
+
+    private func forEachTerminalHostView(_ update: (TerminalHostView) -> Void) {
+        var seen = Set<ObjectIdentifier>()
+
+        func visit(_ view: TerminalHostView?) {
+            guard let view else { return }
+            guard seen.insert(ObjectIdentifier(view)).inserted else { return }
+            update(view)
+        }
+
+        visit(terminalSurfaceView)
+        for view in tabSurfaceViews.values { visit(view) }
+        for view in splitSurfaceViews.values { visit(view) }
         for savedSplits in savedTabSplitSurfaceViews.values {
-            for view in savedSplits.values { update(view) }
+            for view in savedSplits.values { visit(view) }
         }
     }
 

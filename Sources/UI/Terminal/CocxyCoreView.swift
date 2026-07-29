@@ -142,6 +142,19 @@ final class CocxyCoreView: NSView {
 
     private(set) var commandBlockOverlayView: TerminalBlockOverlayView?
     private(set) var historyPillView: TerminalHistoryPillView?
+    private var commandBlockConfiguration: CommandBlocksConfig = .defaults
+    private var cachedCommandBlocks: [TerminalCommandBlock] = []
+    private var cachedCommandBlockSurfaceID: SurfaceID?
+    private var commandBlockDataNeedsRefresh = true
+    private var lastCommandBlockViewport: CommandBlockViewport?
+    private var lastCommandBlockPadding: CGPoint?
+    internal private(set) var commandBlockDataReloadCount = 0
+
+    private struct CommandBlockViewport: Equatable {
+        let visibleStartRow: UInt32
+        let visibleRowCount: UInt16
+        let cellHeight: CGFloat
+    }
 
     // MARK: - Command Corrections
 
@@ -311,6 +324,9 @@ final class CocxyCoreView: NSView {
 
     /// Configures the view with a bridge and surface. Call after createSurface.
     func configure(bridge: CocxyCoreBridge, surfaceID: SurfaceID, viewModel: TerminalViewModel) {
+        if self.bridge !== bridge || self.surfaceID != surfaceID {
+            resetCommandBlockOverlayForSurfaceTeardown()
+        }
         self.bridge = bridge
         self.surfaceID = surfaceID
         self.viewModel = viewModel
@@ -375,6 +391,7 @@ final class CocxyCoreView: NSView {
     /// Called from CocxyCoreBridge after PTY data is processed.
     func setNeedsTerminalDisplay() {
         needsRender = true
+        commandBlockDataNeedsRefresh = true
         updateDisplayLinkRunningState()
     }
 
@@ -431,6 +448,7 @@ final class CocxyCoreView: NSView {
             onFramePresented()
         }
         refreshHistoryPill()
+        refreshCommandBlockOverlay()
     }
 
     // MARK: - Layout & Resize
@@ -1630,6 +1648,7 @@ final class CocxyCoreView: NSView {
         surfaceID: SurfaceID
     ) {
         bridge.scrollToLiveBottom(surfaceID: surfaceID)
+        refreshCommandBlockOverlay()
         refreshHistoryPill()
     }
 
@@ -1996,27 +2015,96 @@ final class CocxyCoreView: NSView {
         guard let overlay = commandBlockOverlayView else { return }
         overlay.frame = bounds
 
-        guard let bridge, let sid = surfaceID,
-              let snapshot = bridge.terminalViewportSnapshot(for: sid),
-              !snapshot.isAltScreen else {
+        guard commandBlockConfiguration.enabled else {
             overlay.clear()
+            lastCommandBlockViewport = nil
+            lastCommandBlockPadding = nil
+            return
+        }
+
+        guard let bridge, let sid = surfaceID,
+              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+            overlay.clear()
+            lastCommandBlockViewport = nil
+            lastCommandBlockPadding = nil
+            return
+        }
+
+        guard !snapshot.isAltScreen else {
+            overlay.clear()
+            lastCommandBlockViewport = nil
+            lastCommandBlockPadding = nil
             return
         }
 
         let scale = currentBackingScale()
         let cellHeight = CGFloat(snapshot.cellHeight) / scale
-        let blocks = TerminalBlockRestoration.blocksForDisplay(
-            live: bridge.commandBlocks(for: sid, limit: 32),
-            restored: restoredCommandBlocksProvider?() ?? [],
-            limit: 32
+        let viewport = CommandBlockViewport(
+            visibleStartRow: snapshot.visibleStartRow,
+            visibleRowCount: snapshot.visibleRowCount,
+            cellHeight: cellHeight
         )
+        let padding = CGPoint(x: contentPadding.x, y: contentPadding.y)
+        let shouldReloadData = commandBlockDataNeedsRefresh || cachedCommandBlockSurfaceID != sid
+
+        if shouldReloadData {
+            cachedCommandBlocks = TerminalBlockRestoration.blocksForDisplay(
+                live: bridge.commandBlocks(for: sid, limit: 32),
+                restored: restoredCommandBlocksProvider?() ?? [],
+                limit: 32
+            )
+            cachedCommandBlockSurfaceID = sid
+            commandBlockDataNeedsRefresh = false
+            commandBlockDataReloadCount += 1
+        }
+
+        guard shouldReloadData
+                || viewport != lastCommandBlockViewport
+                || padding != lastCommandBlockPadding else {
+            return
+        }
+
         overlay.update(
-            blocks: blocks,
+            blocks: cachedCommandBlocks,
             visibleStartRow: snapshot.visibleStartRow,
             visibleRowCount: snapshot.visibleRowCount,
             cellHeight: cellHeight,
-            padding: CGPoint(x: contentPadding.x, y: contentPadding.y)
+            padding: padding,
+            showOnlyOnHover: commandBlockConfiguration.showOnlyOnHover
         )
+        lastCommandBlockViewport = viewport
+        lastCommandBlockPadding = padding
+    }
+
+    func invalidateCommandBlockOverlayData() {
+        commandBlockDataNeedsRefresh = true
+        refreshCommandBlockOverlay()
+    }
+
+    func updateCommandBlockOverlayConfiguration(_ configuration: CommandBlocksConfig) {
+        guard commandBlockConfiguration != configuration else { return }
+        let enabledChanged = commandBlockConfiguration.enabled != configuration.enabled
+        commandBlockConfiguration = configuration
+        if enabledChanged && configuration.enabled {
+            commandBlockDataNeedsRefresh = true
+        }
+        lastCommandBlockViewport = nil
+        lastCommandBlockPadding = nil
+        refreshCommandBlockOverlay()
+    }
+
+    func resetCommandBlockOverlayForSurfaceTeardown() {
+        commandBlockOverlayView?.resetForSurfaceTeardown()
+        cachedCommandBlocks.removeAll(keepingCapacity: false)
+        cachedCommandBlockSurfaceID = nil
+        commandBlockDataNeedsRefresh = true
+        lastCommandBlockViewport = nil
+        lastCommandBlockPadding = nil
+    }
+
+    @discardableResult
+    func dismissVisibleCommandBlocks() -> Int {
+        commandBlockOverlayView?.dismissAllVisible() ?? 0
     }
 
     private func copyBlockOutputFromOverlay(_ block: TerminalCommandBlock) {
@@ -2186,6 +2274,7 @@ extension CocxyCoreView: TerminalHostingView {
         lastNotifiedBackingSize = .zero
         syncSizeWithTerminal()
         refreshIDECursorMetrics()
+        refreshCommandBlockOverlay()
     }
 
     func configureSurfaceIfNeeded(

@@ -1749,6 +1749,108 @@ struct CocxyCoreViewTests {
         #expect(toggledIDs == [41])
     }
 
+    @Test("command block overlay caches data across geometry-only refreshes")
+    func commandBlockOverlayCachesDataAcrossGeometryRefreshes() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let block = makeCommandBlock(
+            id: 51,
+            command: "cached-overlay",
+            output: "cached output",
+            startRow: 0,
+            endRow: 1
+        )
+        var restoredReadCount = 0
+        harness.view.restoredCommandBlocksProvider = {
+            restoredReadCount += 1
+            return [block]
+        }
+
+        harness.view.invalidateCommandBlockOverlayData()
+        let reloadCount = harness.view.commandBlockDataReloadCount
+        let providerReadCount = restoredReadCount
+
+        harness.view.refreshCommandBlockOverlay()
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(harness.view.commandBlockDataReloadCount == reloadCount)
+        #expect(restoredReadCount == providerReadCount)
+
+        harness.view.setNeedsTerminalDisplay()
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(harness.view.commandBlockDataReloadCount == reloadCount + 1)
+        #expect(restoredReadCount == providerReadCount + 1)
+    }
+
+    @Test("command block dismissal survives alternate screen and resets on teardown")
+    func commandBlockDismissalSurvivesAlternateScreen() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        let block = makeCommandBlock(
+            id: 52,
+            command: "dismissed-overlay",
+            output: "dismissed output",
+            startRow: 0,
+            endRow: 1
+        )
+        harness.view.restoredCommandBlocksProvider = { [block] }
+        harness.view.invalidateCommandBlockOverlayData()
+
+        let overlay = try #require(harness.view.commandBlockOverlayView)
+        #expect(overlay.dismissAllVisible() == 1)
+        #expect(overlay.dismissedBlockIDs == [52])
+
+        feed("\u{001B}[?1049h", into: state.terminal)
+        harness.view.updateInteractionMetrics()
+        #expect(overlay.isHidden)
+        #expect(overlay.dismissedBlockIDs == [52])
+
+        feed("\u{001B}[?1049l", into: state.terminal)
+        harness.view.updateInteractionMetrics()
+        #expect(overlay.isHidden)
+        #expect(overlay.dismissedBlockIDs == [52])
+
+        harness.view.resetCommandBlockOverlayForSurfaceTeardown()
+        #expect(overlay.dismissedBlockIDs.isEmpty)
+    }
+
+    @Test("command block configuration disables rendering without loading data")
+    func commandBlockConfigurationControlsRuntimeRendering() throws {
+        let harness = try makeViewHarness(command: "/bin/cat")
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let block = makeCommandBlock(
+            id: 53,
+            command: "configured-overlay",
+            output: "configured output",
+            startRow: 0,
+            endRow: 1
+        )
+        harness.view.restoredCommandBlocksProvider = { [block] }
+        harness.view.invalidateCommandBlockOverlayData()
+
+        let overlay = try #require(harness.view.commandBlockOverlayView)
+        #expect(!overlay.isHidden)
+        let enabledReloadCount = harness.view.commandBlockDataReloadCount
+
+        harness.view.updateCommandBlockOverlayConfiguration(
+            CommandBlocksConfig(enabled: false, showOnlyOnHover: true)
+        )
+        harness.view.setNeedsTerminalDisplay()
+        harness.view.refreshCommandBlockOverlay()
+
+        #expect(overlay.isHidden)
+        #expect(harness.view.commandBlockDataReloadCount == enabledReloadCount)
+
+        harness.view.updateCommandBlockOverlayConfiguration(
+            CommandBlocksConfig(enabled: true, showOnlyOnHover: false)
+        )
+
+        #expect(!overlay.isHidden)
+        #expect(harness.view.commandBlockDataReloadCount == enabledReloadCount + 1)
+    }
+
     @Test("Option-generated printable characters are sent as literal text")
     func optionGeneratedPrintableCharactersAreLiteralText() {
         #expect(
