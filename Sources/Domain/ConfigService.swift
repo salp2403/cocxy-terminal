@@ -391,6 +391,10 @@ final class ConfigService: ConfigProviding {
         show-confidence-badge = \(defaults.commandCorrections.showConfidenceBadge)
         max-suggestions-shown = \(defaults.commandCorrections.maxSuggestionsShown)
 
+        [command-blocks]
+        enabled = \(defaults.commandBlocks.enabled)
+        show-only-on-hover = \(defaults.commandBlocks.showOnlyOnHover)
+
         [security]
         # Local artifact signature policy. Defaults preserve existing
         # unsigned templates, macros, and plugins while surfacing warnings.
@@ -798,6 +802,7 @@ final class ConfigService: ConfigProviding {
         let agentDetection = parseAgentDetectionConfig(from: parsed)
         let inputClassifier = parseInputClassifierConfig(from: parsed)
         let commandCorrections = parseCommandCorrectionsConfig(from: parsed)
+        let commandBlocks = parseCommandBlocksConfig(from: parsed)
         let security = parseSecurityConfig(from: parsed)
         let uxPolish = parseUXPolishConfig(from: parsed)
         let agent = parseAgentModeConfig(from: parsed)
@@ -841,6 +846,7 @@ final class ConfigService: ConfigProviding {
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
             commandCorrections: commandCorrections,
+            commandBlocks: commandBlocks,
             security: security,
             uxPolish: uxPolish,
             agent: agent,
@@ -1158,6 +1164,16 @@ final class ConfigService: ConfigProviding {
             autoShowOnFailure: boolValue(table["auto-show-on-failure"]) ?? defaults.autoShowOnFailure,
             showConfidenceBadge: boolValue(table["show-confidence-badge"]) ?? defaults.showConfidenceBadge,
             maxSuggestionsShown: maxSuggestions
+        )
+    }
+
+    private func parseCommandBlocksConfig(from parsed: [String: TOMLValue]) -> CommandBlocksConfig {
+        let table = extractTable("command-blocks", from: parsed)
+        let defaults = CommandBlocksConfig.defaults
+
+        return CommandBlocksConfig(
+            enabled: boolValue(table["enabled"]) ?? defaults.enabled,
+            showOnlyOnHover: boolValue(table["show-only-on-hover"]) ?? defaults.showOnlyOnHover
         )
     }
 

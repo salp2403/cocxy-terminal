@@ -2989,6 +2989,21 @@ struct TerminalPreferencesSection: View {
                 }
             }
 
+            Section(viewModel.localizedString("preferences.terminal.commandBlocks.section", fallback: "Command Blocks")) {
+                Toggle(
+                    viewModel.localizedString("preferences.terminal.commandBlocks.enabled", fallback: "Show command blocks"),
+                    isOn: $viewModel.commandBlocksEnabled
+                )
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.terminal.commandBlocks.hoverOnly",
+                        fallback: "Show command block actions only on hover"
+                    ),
+                    isOn: $viewModel.commandBlocksShowOnlyOnHover
+                )
+                .disabled(!viewModel.commandBlocksEnabled)
+            }
+
             Section(viewModel.localizedString("preferences.terminal.commandCorrections.section", fallback: "Command Corrections")) {
                 Toggle(
                     viewModel.localizedString("preferences.terminal.commandCorrections.enabled", fallback: "Suggest fixes after failed commands"),

@@ -53,6 +53,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     let agentDetection: AgentDetectionConfig
     let inputClassifier: InputClassifierConfig
     let commandCorrections: CommandCorrectionsConfig
+    let commandBlocks: CommandBlocksConfig
     let security: SecurityConfig
     let uxPolish: UXPolishConfig
     let agent: AgentModeConfig
@@ -88,6 +89,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         agentDetection: AgentDetectionConfig,
         inputClassifier: InputClassifierConfig = .defaults,
         commandCorrections: CommandCorrectionsConfig = .defaults,
+        commandBlocks: CommandBlocksConfig = .defaults,
         security: SecurityConfig = .defaults,
         uxPolish: UXPolishConfig = .defaults,
         agent: AgentModeConfig = .defaults,
@@ -122,6 +124,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.agentDetection = agentDetection
         self.inputClassifier = inputClassifier
         self.commandCorrections = commandCorrections
+        self.commandBlocks = commandBlocks
         self.security = security
         self.uxPolish = uxPolish
         self.agent = agent
@@ -164,6 +167,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             agentDetection: .defaults,
             inputClassifier: .defaults,
             commandCorrections: .defaults,
+            commandBlocks: .defaults,
             security: .defaults,
             uxPolish: .defaults,
             agent: .defaults,
@@ -201,7 +205,7 @@ struct CocxyConfig: Codable, Sendable, Equatable {
     /// introduced sections use `decodeIfPresent` so users upgrading
     /// from older releases never hit a decode failure.
     private enum CodingKeys: String, CodingKey {
-        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, security, uxPolish, agent, vault, hooks, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
+        case general, updates, appearance, terminal, agentDetection, inputClassifier, commandCorrections, commandBlocks, security, uxPolish, agent, vault, hooks, backup, activity, sessionReplay, voice, iCloudSync, completions, spotlight, codeReview
         case notifications, quickTerminal, keybindings, sessions, rateLimit, worktree, github, gitAssistant, notes, lsp, vim
         case richInput
         case experimental
@@ -218,6 +222,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
         self.inputClassifier = try container.decodeIfPresent(InputClassifierConfig.self, forKey: .inputClassifier)
             ?? .defaults
         self.commandCorrections = try container.decodeIfPresent(CommandCorrectionsConfig.self, forKey: .commandCorrections)
+            ?? .defaults
+        self.commandBlocks = try container.decodeIfPresent(CommandBlocksConfig.self, forKey: .commandBlocks)
             ?? .defaults
         self.security = try container.decodeIfPresent(SecurityConfig.self, forKey: .security)
             ?? .defaults
@@ -361,6 +367,8 @@ struct CocxyConfig: Codable, Sendable, Equatable {
             terminal: terminal,
             agentDetection: agentDetection,
             inputClassifier: inputClassifier,
+            commandCorrections: commandCorrections,
+            commandBlocks: commandBlocks,
             security: security,
             uxPolish: uxPolish,
             // Built-in Agent Mode is a global user preference. Project
@@ -1193,6 +1201,23 @@ struct CommandCorrectionsConfig: Codable, Sendable, Equatable {
 
     static func clampedSuggestionsShown(_ value: Int) -> Int {
         min(max(value, minSuggestionsShown), maxSuggestionsShownLimit)
+    }
+}
+
+// MARK: - Command Blocks Config
+
+/// `[command-blocks]` presentation settings for terminal command metadata.
+struct CommandBlocksConfig: Codable, Sendable, Equatable {
+    let enabled: Bool
+    let showOnlyOnHover: Bool
+
+    init(enabled: Bool = true, showOnlyOnHover: Bool = true) {
+        self.enabled = enabled
+        self.showOnlyOnHover = showOnlyOnHover
+    }
+
+    static var defaults: CommandBlocksConfig {
+        CommandBlocksConfig()
     }
 }
 

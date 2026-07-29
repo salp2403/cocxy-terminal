@@ -165,6 +165,14 @@ final class PreferencesViewModel: ObservableObject {
     /// Maximum suggestions shown in one correction prompt.
     @Published var commandCorrectionsMaxSuggestionsShown: Int
 
+    // MARK: - Command Blocks
+
+    /// Whether command block rails and headers are rendered in terminal surfaces.
+    @Published var commandBlocksEnabled: Bool
+
+    /// Whether command block actions stay hidden until hover or selection.
+    @Published var commandBlocksShowOnlyOnHover: Bool
+
     /// Whether the chrome theme picker should be interactive.
     ///
     /// Mirrors the runtime rule: the override only matters while the
@@ -666,6 +674,7 @@ final class PreferencesViewModel: ObservableObject {
             || appLanguage != c.appearance.appLanguage
             || uxPolishHasUnsavedChanges(comparedTo: c.uxPolish)
             || commandCorrectionsHasUnsavedChanges(comparedTo: c.commandCorrections)
+            || commandBlocksHasUnsavedChanges(comparedTo: c.commandBlocks)
             || imageFileTransfer != c.terminal.imageFileTransfer
             || enableSixelImages != c.terminal.enableSixelImages
             || enableKittyImages != c.terminal.enableKittyImages
@@ -842,6 +851,8 @@ final class PreferencesViewModel: ObservableObject {
         commandCorrectionsAutoShowOnFailure = c.commandCorrections.autoShowOnFailure
         commandCorrectionsShowConfidenceBadge = c.commandCorrections.showConfidenceBadge
         commandCorrectionsMaxSuggestionsShown = c.commandCorrections.maxSuggestionsShown
+        commandBlocksEnabled = c.commandBlocks.enabled
+        commandBlocksShowOnlyOnHover = c.commandBlocks.showOnlyOnHover
         imageFileTransfer = c.terminal.imageFileTransfer
         enableSixelImages = c.terminal.enableSixelImages
         enableKittyImages = c.terminal.enableKittyImages
@@ -1088,6 +1099,8 @@ final class PreferencesViewModel: ObservableObject {
         self.commandCorrectionsAutoShowOnFailure = config.commandCorrections.autoShowOnFailure
         self.commandCorrectionsShowConfidenceBadge = config.commandCorrections.showConfidenceBadge
         self.commandCorrectionsMaxSuggestionsShown = config.commandCorrections.maxSuggestionsShown
+        self.commandBlocksEnabled = config.commandBlocks.enabled
+        self.commandBlocksShowOnlyOnHover = config.commandBlocks.showOnlyOnHover
 
         // Agent Detection
         self.agentDetectionEnabled = config.agentDetection.enabled
@@ -1875,6 +1888,7 @@ final class PreferencesViewModel: ObservableObject {
         let spotlight = buildSpotlightConfigFromViewModel()
         let uxPolish = buildUXPolishConfigFromViewModel()
         let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
+        let commandBlocks = buildCommandBlocksConfigFromViewModel()
         let notes = buildNotesConfigFromViewModel()
         let keybindings = (pendingKeybindings ?? savedConfig.keybindings)
             .applyingFallbackShortcut(
@@ -1935,6 +1949,7 @@ final class PreferencesViewModel: ObservableObject {
                 idleTimeoutSeconds: idleTimeoutSeconds
             ),
             commandCorrections: commandCorrections,
+            commandBlocks: commandBlocks,
             security: savedConfig.security,
             uxPolish: uxPolish,
             agent: agent,
@@ -2102,6 +2117,17 @@ final class PreferencesViewModel: ObservableObject {
 
     private func commandCorrectionsHasUnsavedChanges(comparedTo config: CommandCorrectionsConfig) -> Bool {
         buildCommandCorrectionsConfigFromViewModel() != config
+    }
+
+    private func buildCommandBlocksConfigFromViewModel() -> CommandBlocksConfig {
+        CommandBlocksConfig(
+            enabled: commandBlocksEnabled,
+            showOnlyOnHover: commandBlocksShowOnlyOnHover
+        )
+    }
+
+    private func commandBlocksHasUnsavedChanges(comparedTo config: CommandBlocksConfig) -> Bool {
+        buildCommandBlocksConfigFromViewModel() != config
     }
 
     private func buildCompletionConfigFromViewModel() -> CompletionConfig {
@@ -2677,6 +2703,7 @@ final class PreferencesViewModel: ObservableObject {
         let spotlight = buildSpotlightConfigFromViewModel()
         let uxPolish = buildUXPolishConfigFromViewModel()
         let commandCorrections = buildCommandCorrectionsConfigFromViewModel()
+        let commandBlocks = buildCommandBlocksConfigFromViewModel()
         let lsp = buildLSPConfigFromViewModel()
         let vim = buildVimConfigFromViewModel()
         let gitAssistant = buildGitAssistantSettingsFromViewModel()
@@ -2758,6 +2785,10 @@ final class PreferencesViewModel: ObservableObject {
         auto-show-on-failure = \(commandCorrections.autoShowOnFailure)
         show-confidence-badge = \(commandCorrections.showConfidenceBadge)
         max-suggestions-shown = \(commandCorrections.maxSuggestionsShown)
+
+        [command-blocks]
+        enabled = \(commandBlocks.enabled)
+        show-only-on-hover = \(commandBlocks.showOnlyOnHover)
 
         [security]
         require-signed-templates = \(defaults.security.requireSignedTemplates)

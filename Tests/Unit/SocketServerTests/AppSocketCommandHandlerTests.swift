@@ -1412,6 +1412,20 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], "\(CommandCorrectionsConfig.defaults.enabled)")
     }
 
+    func test_configGet_commandBlocksKey_returnsDefault() {
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+        let request = SocketRequest(
+            id: "cg-command-blocks",
+            command: "config-get",
+            params: ["key": "command-blocks.show-only-on-hover"]
+        )
+        let response = handler.handleCommand(request)
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "command-blocks.show-only-on-hover")
+        XCTAssertEqual(response.data?["value"], "\(CommandBlocksConfig.defaults.showOnlyOnHover)")
+    }
+
     func test_configList_includesNewNotesAndRateLimitKeys() {
         let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let response = handler.handleCommand(SocketRequest(id: "cl-new-keys", command: "config-list", params: nil))
@@ -1473,6 +1487,11 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(
             response.data?["command-corrections.edit-distance-threshold"],
             "\(CommandCorrectionsConfig.defaults.editDistanceThreshold)"
+        )
+        XCTAssertEqual(response.data?["command-blocks.enabled"], "\(CommandBlocksConfig.defaults.enabled)")
+        XCTAssertEqual(
+            response.data?["command-blocks.show-only-on-hover"],
+            "\(CommandBlocksConfig.defaults.showOnlyOnHover)"
         )
     }
 
@@ -1543,6 +1562,24 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             "\(CommandCorrectionsConfig.defaults.foundationModelsEnabled)"
         )
         XCTAssertNil(response.data?["completions.inline-ai"])
+    }
+
+    func test_configList_withCommandBlocksFilterOnlyReturnsCommandBlockKeys() {
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cl-command-blocks",
+            command: "config-list",
+            params: ["filter": "command-blocks."]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["count"], "2")
+        XCTAssertEqual(response.data?["command-blocks.enabled"], "\(CommandBlocksConfig.defaults.enabled)")
+        XCTAssertEqual(
+            response.data?["command-blocks.show-only-on-hover"],
+            "\(CommandBlocksConfig.defaults.showOnlyOnHover)"
+        )
+        XCTAssertNil(response.data?["command-corrections.enabled"])
     }
 
     // MARK: config-set
@@ -1638,6 +1675,8 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 ("command-corrections.enabled", "FALSE"),
                 ("command-corrections.edit-distance-threshold", "1"),
                 ("command-corrections.max-suggestions-shown", "5"),
+                ("command-blocks.enabled", "FALSE"),
+                ("command-blocks.show-only-on-hover", "FALSE"),
                 ("completions.provider", "foundation-models-on-device"),
                 ("completions.enabled-languages", "[\"swift\", python, \"markdown\"]"),
                 ("rate-limit.enabled-providers", "[\"cursor\", copilot, \"cursor\"]"),
@@ -1662,6 +1701,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             XCTAssertTrue(written.contains("[experimental.remote-browser]\nenabled = true"))
             XCTAssertTrue(written.contains("clipboard-read-access = \"deny\""))
             XCTAssertTrue(written.contains("clipboard-write-access = \"allow\""))
+            XCTAssertTrue(written.contains("[command-blocks]\nenabled = false\nshow-only-on-hover = false"))
         }
     }
 

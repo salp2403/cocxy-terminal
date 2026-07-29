@@ -2241,6 +2241,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         case "command-corrections.max-suggestions-shown":
             return "\(config.commandCorrections.maxSuggestionsShown)"
 
+        // Command blocks
+        case "command-blocks.enabled":
+            return "\(config.commandBlocks.enabled)"
+        case "command-blocks.show-only-on-hover":
+            return "\(config.commandBlocks.showOnlyOnHover)"
+
         // Terminal
         case "terminal.scrollback-lines":
             return "\(config.terminal.scrollbackLines)"
@@ -2440,6 +2446,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
              "command-corrections.agent-fallback",
              "command-corrections.auto-show-on-failure",
              "command-corrections.show-confidence-badge":
+            guard let value = normalizedConfigBool(rawValue) else { return nil }
+            return value
+        case "command-blocks.enabled",
+             "command-blocks.show-only-on-hover":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
         case "command-corrections.edit-distance-threshold":
@@ -6059,6 +6069,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "command-corrections.foundation-models-enabled", "command-corrections.agent-fallback",
             "command-corrections.auto-show-on-failure", "command-corrections.show-confidence-badge",
             "command-corrections.max-suggestions-shown",
+            "command-blocks.enabled", "command-blocks.show-only-on-hover",
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",

@@ -505,6 +505,7 @@
 "terminal.blockOverlay.copyOutput" = "Copy block output";
 "terminal.blockOverlay.copySelectedOutputs" = "Copy selected block outputs";
 "terminal.blockOverlay.rerun" = "Rerun command block";
+"terminal.blockOverlay.dismiss" = "Hide command block";
 "terminal.historyPill.one" = "History · %d line up · ↩ jump to bottom";
 "terminal.historyPill.many" = "History · %d lines up · ↩ jump to bottom";
 "terminal.historyPill.help" = "Return to live terminal output";
@@ -887,6 +888,9 @@
 "preferences.terminal.commandCorrections.agentFallback" = "Allow active agent fallback";
 "preferences.terminal.commandCorrections.editDistance" = "Edit-distance threshold: %d";
 "preferences.terminal.commandCorrections.maxSuggestions" = "Max suggestions shown: %d";
+"preferences.terminal.commandBlocks.section" = "Command Blocks";
+"preferences.terminal.commandBlocks.enabled" = "Show command blocks";
+"preferences.terminal.commandBlocks.hoverOnly" = "Show command block actions only on hover";
 "terminal.commandCorrections.shortcutHint" = "Tab accept · Esc dismiss";
 "preferences.terminal.inlineImages.section" = "Inline Images";
 "preferences.terminal.enableSixelImages" = "Enable Sixel images";
