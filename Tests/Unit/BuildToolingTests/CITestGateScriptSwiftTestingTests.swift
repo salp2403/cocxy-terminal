@@ -126,6 +126,54 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(errno == ESRCH)
     }
 
+    @Test("serial Swift Testing rejects a zero-status truncated test run")
+    func serialSwiftTestingRejectsZeroStatusTruncatedTestRun() throws {
+        let fixtureRoot = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cocxy-serial-truncated-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: fixtureRoot,
+            withIntermediateDirectories: false,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(at: fixtureRoot) }
+
+        let fakeSwiftURL = fixtureRoot.appendingPathComponent("swift")
+        try """
+        #!/bin/bash
+        set -euo pipefail
+        if [[ "${1:-}" == "test" && "${2:-}" == "list" ]]; then
+          echo "CocxyTerminalTests.FakeTruncatedSuite/testTruncated()"
+          exit 0
+        fi
+        echo '◇ Test run started.'
+        echo '◇ Suite "Fake truncated suite" started.'
+        echo '◇ Test "never completes" started.'
+        exit 0
+        """.write(to: fakeSwiftURL, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: fakeSwiftURL.path
+        )
+
+        let existingPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let result = try runProcess(
+            repositoryRoot().appendingPathComponent("scripts/run-swift-testing-serial.sh"),
+            arguments: [],
+            environment: [
+                "PATH": "\(fixtureRoot.path):\(existingPath)",
+                "SWIFT_TESTING_SERIAL_LIMIT": "1",
+            ]
+        )
+
+        #expect(result.terminationStatus == 125)
+        #expect(result.stderr.contains(
+            "FakeTruncatedSuite' exited without a complete passing test-run summary"
+        ))
+        #expect(!result.stdout.contains("All 1 Swift Testing suite(s) passed."))
+    }
+
     @Test("bounded process containment uses current mandatory runners and rejects empty filters")
     func boundedProcessContainmentUsesCurrentRunnerAndNonemptyFilter() throws {
         let ci = try String(

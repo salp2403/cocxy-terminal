@@ -72,10 +72,15 @@ fi
 run_bounded() {
   local suite="$1"
   shift
+  local output_path
+  output_path="$(mktemp "${TMPDIR:-/tmp}/cocxy-swift-testing-suite.XXXXXX")"
   # Job control gives each suite its own process group so a timeout also
   # terminates Swift Testing helpers spawned underneath `swift test`.
   set -m
-  "$@" &
+  (
+    set -o pipefail
+    "$@" 2>&1 | tee "$output_path"
+  ) &
   local pid=$!
   set +m
   local waited=0
@@ -90,12 +95,30 @@ run_bounded() {
       done
       kill -KILL -- "-$pid" 2>/dev/null || true
       wait "$pid" 2>/dev/null || true
+      rm -f "$output_path"
       return 124
     fi
     sleep 1
     waited=$((waited + 1))
   done
-  wait "$pid"
+  local status
+  if wait "$pid"; then
+    status=0
+  else
+    status=$?
+  fi
+  if (( status != 0 )); then
+    rm -f "$output_path"
+    return "$status"
+  fi
+  if ! grep -Eq \
+    'Test run with [0-9]+ tests? in [0-9]+ suites? passed after [0-9.]+ seconds[.]$' \
+    "$output_path"; then
+    echo "error: Swift Testing suite '${suite}' exited without a complete passing test-run summary." >&2
+    rm -f "$output_path"
+    return 125
+  fi
+  rm -f "$output_path"
 }
 
 build_dir=""
