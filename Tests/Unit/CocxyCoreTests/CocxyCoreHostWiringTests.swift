@@ -743,6 +743,104 @@ struct CocxyCoreHostWiringTests {
         #expect(viewModel.isDragging == false)
     }
 
+    @Test("daemon host double click selects and copies a visible word")
+    func daemonHostDoubleClickSelectsVisibleWord() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(makeDaemonSelectionFrame(
+            surfaceID: surfaceID,
+            lines: ["alpha beta"],
+            columns: 10
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+        let location = hostSelectionMouseLocation(row: 0, column: 1, view: view)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 2
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            clickCount: 2
+        ))
+
+        #expect(viewModel.lastClickCount == 2)
+        #expect(clipboard.read() == "alpha")
+    }
+
+    @Test("daemon host triple click follows soft wraps in both directions")
+    func daemonHostTripleClickSelectsWrappedLogicalLine() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(makeDaemonSelectionFrame(
+            surfaceID: surfaceID,
+            lines: ["abcd", "ef", "tail"],
+            columns: 4,
+            wrappedRows: [0]
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+        let location = hostSelectionMouseLocation(row: 1, column: 0, view: view)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: location,
+            clickCount: 3
+        ))
+        view.mouseUp(with: makeHostMouseEvent(
+            type: .leftMouseUp,
+            location: location,
+            clickCount: 3
+        ))
+
+        #expect(viewModel.lastClickCount == 3)
+        #expect(clipboard.read() == "abcd\nef")
+    }
+
+    @Test("daemon host Option drag copies a rectangular column band")
+    func daemonHostOptionDragSelectsRectangularBand() {
+        let engine = MockTerminalEngine()
+        let viewModel = TerminalViewModel(engine: engine)
+        let view = PTYDaemonHostView(viewModel: viewModel)
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(makeDaemonSelectionFrame(
+            surfaceID: surfaceID,
+            lines: ["abcdef", "ghijkl", "mnopqr"],
+            columns: 6
+        ))
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+        let start = hostSelectionMouseLocation(row: 0, column: 1, view: view)
+        let end = hostSelectionMouseLocation(row: 2, column: 3, view: view)
+
+        view.mouseDown(with: makeHostMouseEvent(
+            type: .leftMouseDown,
+            location: start,
+            modifiers: [.option]
+        ))
+        view.mouseDragged(with: makeHostMouseEvent(
+            type: .leftMouseDragged,
+            location: end
+        ))
+        #expect(view.localSelectionTextForTesting == "bcd\nhij\nnop")
+        view.mouseUp(with: makeHostMouseEvent(type: .leftMouseUp, location: end))
+
+        #expect(clipboard.read() == "bcd\nhij\nnop")
+    }
+
     @Test("in-process engine reaps a shell that exits without further PTY output")
     func inProcessEngineReapsSilentShellExit() throws {
         let root = FileManager.default.temporaryDirectory
@@ -1143,7 +1241,8 @@ private func makeScrollEvent(
 private func makeHostMouseEvent(
     type: NSEvent.EventType,
     location: NSPoint,
-    modifiers: NSEvent.ModifierFlags = []
+    modifiers: NSEvent.ModifierFlags = [],
+    clickCount: Int = 1
 ) -> NSEvent {
     NSEvent.mouseEvent(
         with: type,
@@ -1153,9 +1252,53 @@ private func makeHostMouseEvent(
         windowNumber: 0,
         context: nil,
         eventNumber: 1,
-        clickCount: 1,
+        clickCount: clickCount,
         pressure: 1
     )!
+}
+
+@MainActor
+private func hostSelectionMouseLocation(
+    row: UInt16,
+    column: UInt16,
+    view: PTYDaemonHostView
+) -> NSPoint {
+    let cellSize = view.renderedCellSizeForTesting
+    let viewY = (CGFloat(row) + 0.25) * cellSize.height
+    return NSPoint(
+        x: (CGFloat(column) + 0.25) * cellSize.width,
+        y: view.bounds.maxY - viewY
+    )
+}
+
+private func makeDaemonSelectionFrame(
+    surfaceID: SurfaceID,
+    lines: [String],
+    columns: UInt16,
+    wrappedRows: [UInt16] = []
+) -> PTYDaemonSurfaceFrame {
+    var cells: [PTYDaemonGridCell] = []
+    for (row, line) in lines.enumerated() {
+        for (column, scalar) in line.unicodeScalars.prefix(Int(columns)).enumerated() {
+            cells.append(PTYDaemonGridCell(
+                row: UInt16(row),
+                column: UInt16(column),
+                glyph: scalar.value,
+                foregroundRGBA: 0xffffffff,
+                backgroundRGBA: 0x000000ff
+            ))
+        }
+    }
+    return PTYDaemonSurfaceFrame(
+        surfaceID: surfaceID.rawValue.uuidString,
+        revision: 1,
+        timestamp: 1,
+        columns: columns,
+        rows: UInt16(lines.count),
+        cells: cells,
+        cursor: PTYDaemonCursor(row: 0, column: 0),
+        wrappedRows: wrappedRows
+    )
 }
 
 private func makeKeyEvent(
