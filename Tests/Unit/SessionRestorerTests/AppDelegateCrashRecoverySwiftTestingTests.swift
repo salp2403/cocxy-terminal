@@ -192,7 +192,12 @@ struct AppDelegateCrashRecoverySwiftTestingTests {
         offer.show(over: parent)
         let restoreButton = try #require(button(titled: "Restore", in: offer.window?.contentView))
 
-        restoreButton.performClick(nil)
+        let action = try #require(restoreButton.action)
+        #expect(NSApplication.shared.sendAction(
+            action,
+            to: restoreButton.target,
+            from: restoreButton
+        ))
 
         #expect(completionObservedVisibleOffer == true)
         #expect(completionObservedChildOffer == true)
