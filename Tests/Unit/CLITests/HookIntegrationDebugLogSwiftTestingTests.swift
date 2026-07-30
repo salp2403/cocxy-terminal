@@ -79,6 +79,42 @@ struct HookIntegrationDebugLogSwiftTestingTests {
         #expect(try String(contentsOf: targetURL, encoding: .utf8) == "sentinel")
     }
 
+    @Test("logger rotates at its cap and retains one private backup")
+    func rotatesAtBoundedCap() throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let logURL = root.appendingPathComponent("logs/hook.log")
+        let backupURL = URL(fileURLWithPath: logURL.path + HookIntegrationDebugLog.rotatedFileSuffix)
+        let environment = [
+            HookIntegrationDebugLog.enabledEnvironmentKey: "1",
+            HookIntegrationDebugLog.pathOverrideEnvironmentKey: logURL.path,
+        ]
+        let payload = String(repeating: "x", count: 4_096)
+
+        for index in 0..<300 {
+            HookIntegrationDebugLog.append(
+                "entry-\(index)-\(payload)",
+                environment: environment,
+                timestamp: Date(timeIntervalSince1970: TimeInterval(index))
+            )
+        }
+
+        let activeAttributes = try FileManager.default.attributesOfItem(atPath: logURL.path)
+        let backupAttributes = try FileManager.default.attributesOfItem(atPath: backupURL.path)
+        let activeSize = try #require(activeAttributes[.size] as? NSNumber).int64Value
+        let backupSize = try #require(backupAttributes[.size] as? NSNumber).int64Value
+        let activeMode = try #require(activeAttributes[.posixPermissions] as? NSNumber).intValue
+        let backupMode = try #require(backupAttributes[.posixPermissions] as? NSNumber).intValue
+        let activeContent = try String(contentsOf: logURL, encoding: .utf8)
+
+        #expect(activeSize <= HookIntegrationDebugLog.maximumFileBytes)
+        #expect(backupSize <= HookIntegrationDebugLog.maximumFileBytes)
+        #expect(activeMode & 0o777 == 0o600)
+        #expect(backupMode & 0o777 == 0o600)
+        #expect(activeContent.contains("entry-299-"))
+        #expect(FileManager.default.fileExists(atPath: backupURL.path + ".1") == false)
+    }
+
     private func temporaryDirectory() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-hook-log-\(UUID().uuidString)", isDirectory: true)
