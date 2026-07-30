@@ -20,7 +20,8 @@ extension MainWindowController {
     @discardableResult
     func createTab(
         workingDirectory: URL? = nil,
-        terminalEnginePreference: TerminalEnginePreference? = nil
+        terminalEnginePreference: TerminalEnginePreference? = nil,
+        surfaceCreator: ((any TerminalEngine, TerminalHostView, URL?) throws -> SurfaceID)? = nil
     ) -> TabID {
         let dir = workingDirectory
             ?? tabManager.activeTab?.workingDirectory
@@ -52,7 +53,8 @@ extension MainWindowController {
             in: surfaceView,
             viewModel: viewModel,
             workingDirectory: dir,
-            engine: engine
+            engine: engine,
+            surfaceCreator: surfaceCreator
         )
 
         // Register this session with the multi-window registry so other
@@ -407,20 +409,23 @@ extension MainWindowController {
     /// Creates a terminal surface and wires OSC + output handlers.
     ///
     /// Shared by `createTab`, `newTabAction`, and session restoration.
+    @discardableResult
     func createAndWireSurface(
         for tabID: TabID,
         in surfaceView: TerminalHostView,
         viewModel: TerminalViewModel,
         workingDirectory: URL?,
-        engine providedEngine: (any TerminalEngine)? = nil
-    ) {
+        engine providedEngine: (any TerminalEngine)? = nil,
+        surfaceCreator: ((any TerminalEngine, TerminalHostView, URL?) throws -> SurfaceID)? = nil
+    ) -> SurfaceID? {
         let engine = providedEngine ?? terminalEngine(for: tabID)
         do {
-            let surfaceID = try engine.createSurface(
-                in: surfaceView,
-                workingDirectory: workingDirectory,
-                command: nil
-            )
+            let surfaceID = try surfaceCreator?(engine, surfaceView, workingDirectory)
+                ?? engine.createSurface(
+                    in: surfaceView,
+                    workingDirectory: workingDirectory,
+                    command: nil
+                )
             viewModel.markRunning(surfaceID: surfaceID)
             surfaceView.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
             surfaceView.syncSizeWithTerminal()
@@ -435,9 +440,11 @@ extension MainWindowController {
                 initialWorkingDirectory: workingDirectory ?? tabManager.tab(for: tabID)?.workingDirectory
             )
             startAutomaticSessionReplayIfNeeded(surfaceID: surfaceID, tabID: tabID)
+            return surfaceID
         } catch {
             NSLog("[MainWindowController] Failed to create surface for tab: %@",
                   String(describing: error))
+            return nil
         }
     }
 }

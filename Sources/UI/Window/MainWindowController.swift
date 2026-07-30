@@ -214,6 +214,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var tabTerminalEngines: [TabID: any TerminalEngine] = [:]
     var surfaceTerminalEngines: [SurfaceID: any TerminalEngine] = [:]
 
+    /// Owns daemon-backed transports for as long as their terminal surface lives.
+    var remoteDaemonTerminalViewModels: [SurfaceID: RemoteDaemonTerminalViewModel] = [:]
+
     /// Maps tab IDs to their terminal host views.
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceViews: [TabID: TerminalHostView] = [:]

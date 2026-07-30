@@ -67,6 +67,37 @@ struct TerminalEngineRoutingSwiftTestingTests {
         #expect(defaultEngine.sentTexts.isEmpty)
     }
 
+    @Test("custom surface creation keeps normal tab routing and destruction")
+    func customSurfaceCreationUsesSelectedEngine() {
+        let defaultEngine = MockTerminalEngine()
+        let inProcessEngine = MockTerminalEngine()
+        let expectedSurfaceID = SurfaceID()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .inProcess ? inProcessEngine : nil
+            }
+        )
+
+        let tabID = controller.createTab(
+            terminalEnginePreference: .inProcess,
+            surfaceCreator: { engine, _, _ in
+                #expect(engine === inProcessEngine)
+                return expectedSurfaceID
+            }
+        )
+
+        #expect(controller.tabSurfaceMap[tabID] == expectedSurfaceID)
+        #expect(defaultEngine.createSurfaceRequests.isEmpty)
+        #expect(inProcessEngine.createSurfaceRequests.isEmpty)
+        #expect(controller.terminalEngine(for: expectedSurfaceID) === inProcessEngine)
+
+        controller.performCloseTab(tabID)
+
+        #expect(inProcessEngine.destroyedSurfaces == [expectedSurfaceID])
+        #expect(controller.remoteDaemonTerminalViewModels[expectedSurfaceID] == nil)
+    }
+
     @Test("tab font updates route through the selected terminal engine")
     func tabFontUpdatesUseSelectedEngine() {
         let defaultEngine = MockTerminalEngine()

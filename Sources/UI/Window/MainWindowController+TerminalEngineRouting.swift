@@ -39,6 +39,7 @@ extension MainWindowController {
     }
 
     func clearTerminalEngineTracking(surfaceID: SurfaceID) {
+        remoteDaemonTerminalViewModels.removeValue(forKey: surfaceID)
         surfaceTerminalEngines.removeValue(forKey: surfaceID)
     }
 
@@ -47,6 +48,7 @@ extension MainWindowController {
     }
 
     func resetTerminalEngineRouting() {
+        remoteDaemonTerminalViewModels.removeAll()
         tabTerminalEngines.removeAll()
         surfaceTerminalEngines.removeAll()
     }
