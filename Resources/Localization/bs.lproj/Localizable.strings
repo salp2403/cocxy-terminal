@@ -90,3 +90,8 @@
 "cells.create.image" = "Slika ili predložak";
 "cells.create.host" = "SSH host";
 "cells.create.launch" = "Kreiraj";
+
+"taskQueue.rerun.action" = "Pokreni ponovo";
+"taskQueue.remove.action" = "Ukloni zadatak";
+"taskQueue.remove.confirmTitle" = "Ukloniti zadatak?";
+"taskQueue.remove.confirmMessage" = "Trajno ukloniti %@ iz reda čekanja? Ova radnja se ne može poništiti.";

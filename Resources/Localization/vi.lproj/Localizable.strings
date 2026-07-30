@@ -90,3 +90,8 @@
 "cells.create.image" = "Ảnh hoặc mẫu";
 "cells.create.host" = "Máy chủ SSH";
 "cells.create.launch" = "Tạo";
+
+"taskQueue.rerun.action" = "Chạy lại";
+"taskQueue.remove.action" = "Xóa tác vụ";
+"taskQueue.remove.confirmTitle" = "Xóa tác vụ?";
+"taskQueue.remove.confirmMessage" = "Xóa vĩnh viễn %@ khỏi hàng đợi? Không thể hoàn tác thao tác này.";

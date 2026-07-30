@@ -90,3 +90,8 @@
 "cells.create.image" = "Görüntü veya şablon";
 "cells.create.host" = "SSH ana makinesi";
 "cells.create.launch" = "Oluştur";
+
+"taskQueue.rerun.action" = "Yeniden çalıştır";
+"taskQueue.remove.action" = "Görevi kaldır";
+"taskQueue.remove.confirmTitle" = "Görev kaldırılsın mı?";
+"taskQueue.remove.confirmMessage" = "%@ kuyruktan kalıcı olarak kaldırılsın mı? Bu işlem geri alınamaz.";

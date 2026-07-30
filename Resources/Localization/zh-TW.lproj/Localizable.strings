@@ -90,3 +90,8 @@
 "cells.create.image" = "映像或範本";
 "cells.create.host" = "SSH 主機";
 "cells.create.launch" = "建立";
+
+"taskQueue.rerun.action" = "再次執行";
+"taskQueue.remove.action" = "移除任務";
+"taskQueue.remove.confirmTitle" = "移除任務？";
+"taskQueue.remove.confirmMessage" = "要從佇列中永久移除 %@ 嗎？此操作無法還原。";

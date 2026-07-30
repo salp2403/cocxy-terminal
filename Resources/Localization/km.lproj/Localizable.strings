@@ -90,3 +90,8 @@
 "cells.create.image" = "រូបភាព ឬ ពុម្ព";
 "cells.create.host" = "ម៉ាស៊ីន SSH";
 "cells.create.launch" = "បង្កើត";
+
+"taskQueue.rerun.action" = "ដំណើរការម្តងទៀត";
+"taskQueue.remove.action" = "យកភារកិច្ចចេញ";
+"taskQueue.remove.confirmTitle" = "យកភារកិច្ចចេញ?";
+"taskQueue.remove.confirmMessage" = "យក %@ ចេញពីជួររង់ចាំជាអចិន្ត្រៃយ៍? សកម្មភាពនេះមិនអាចមិនធ្វើវិញបានទេ។";

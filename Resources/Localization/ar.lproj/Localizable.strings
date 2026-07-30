@@ -90,3 +90,8 @@
 "cells.create.image" = "الصورة أو القالب";
 "cells.create.host" = "مضيف SSH";
 "cells.create.launch" = "إنشاء";
+
+"taskQueue.rerun.action" = "تشغيل مرة أخرى";
+"taskQueue.remove.action" = "إزالة المهمة";
+"taskQueue.remove.confirmTitle" = "إزالة المهمة؟";
+"taskQueue.remove.confirmMessage" = "إزالة %@ نهائيًا من قائمة الانتظار؟ لا يمكن التراجع عن هذا الإجراء.";

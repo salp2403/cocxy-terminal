@@ -90,3 +90,8 @@
 "cells.create.image" = "Образ або шаблон";
 "cells.create.host" = "Хост SSH";
 "cells.create.launch" = "Створити";
+
+"taskQueue.rerun.action" = "Запустити знову";
+"taskQueue.remove.action" = "Видалити завдання";
+"taskQueue.remove.confirmTitle" = "Видалити завдання?";
+"taskQueue.remove.confirmMessage" = "Назавжди видалити %@ з черги? Цю дію не можна скасувати.";

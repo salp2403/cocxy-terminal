@@ -90,3 +90,8 @@
 "cells.create.image" = "Image oder Vorlage";
 "cells.create.host" = "SSH-Host";
 "cells.create.launch" = "Erstellen";
+
+"taskQueue.rerun.action" = "Erneut ausführen";
+"taskQueue.remove.action" = "Aufgabe entfernen";
+"taskQueue.remove.confirmTitle" = "Aufgabe entfernen?";
+"taskQueue.remove.confirmMessage" = "%@ dauerhaft aus der Warteschlange entfernen? Dies kann nicht rückgängig gemacht werden.";

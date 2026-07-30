@@ -90,3 +90,8 @@
 "cells.create.image" = "Image eller skabelon";
 "cells.create.host" = "SSH-vært";
 "cells.create.launch" = "Opret";
+
+"taskQueue.rerun.action" = "Kør igen";
+"taskQueue.remove.action" = "Fjern opgave";
+"taskQueue.remove.confirmTitle" = "Fjern opgave?";
+"taskQueue.remove.confirmMessage" = "Fjern %@ permanent fra køen? Dette kan ikke fortrydes.";

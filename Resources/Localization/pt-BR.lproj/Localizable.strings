@@ -90,3 +90,8 @@
 "cells.create.image" = "Imagem ou modelo";
 "cells.create.host" = "Host SSH";
 "cells.create.launch" = "Criar";
+
+"taskQueue.rerun.action" = "Executar novamente";
+"taskQueue.remove.action" = "Remover tarefa";
+"taskQueue.remove.confirmTitle" = "Remover tarefa?";
+"taskQueue.remove.confirmMessage" = "Remover %@ permanentemente da fila? Esta ação não pode ser desfeita.";

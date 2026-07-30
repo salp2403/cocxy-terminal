@@ -90,3 +90,8 @@
 "cells.create.image" = "イメージまたはテンプレート";
 "cells.create.host" = "SSHホスト";
 "cells.create.launch" = "作成";
+
+"taskQueue.rerun.action" = "再実行";
+"taskQueue.remove.action" = "タスクを削除";
+"taskQueue.remove.confirmTitle" = "タスクを削除しますか？";
+"taskQueue.remove.confirmMessage" = "%@ をキューから完全に削除しますか？この操作は取り消せません。";

@@ -3410,6 +3410,10 @@
 "taskQueue.cancel.action" = "Cancelar tarea";
 "taskQueue.cancel.confirmTitle" = "¿Cancelar tarea?";
 "taskQueue.cancel.confirmMessage" = "¿Detener %@ e impedir ejecuciones futuras?";
+"taskQueue.rerun.action" = "Ejecutar de nuevo";
+"taskQueue.remove.action" = "Eliminar tarea";
+"taskQueue.remove.confirmTitle" = "¿Eliminar tarea?";
+"taskQueue.remove.confirmMessage" = "¿Eliminar %@ permanentemente de la cola? Esta acción no se puede deshacer.";
 "taskQueue.status.scheduled" = "Programada";
 "taskQueue.status.queued" = "En cola";
 "taskQueue.status.running" = "En ejecución";

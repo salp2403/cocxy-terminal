@@ -90,3 +90,8 @@
 "cells.create.image" = "Image ou modèle";
 "cells.create.host" = "Hôte SSH";
 "cells.create.launch" = "Créer";
+
+"taskQueue.rerun.action" = "Relancer";
+"taskQueue.remove.action" = "Supprimer la tâche";
+"taskQueue.remove.confirmTitle" = "Supprimer la tâche ?";
+"taskQueue.remove.confirmMessage" = "Supprimer définitivement %@ de la file d’attente ? Cette action est irréversible.";

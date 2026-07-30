@@ -90,3 +90,8 @@
 "cells.create.image" = "이미지 또는 템플릿";
 "cells.create.host" = "SSH 호스트";
 "cells.create.launch" = "만들기";
+
+"taskQueue.rerun.action" = "다시 실행";
+"taskQueue.remove.action" = "작업 제거";
+"taskQueue.remove.confirmTitle" = "작업을 제거할까요?";
+"taskQueue.remove.confirmMessage" = "%@을(를) 대기열에서 영구적으로 제거할까요? 이 작업은 되돌릴 수 없습니다.";

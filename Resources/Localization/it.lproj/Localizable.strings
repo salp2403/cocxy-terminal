@@ -90,3 +90,8 @@
 "cells.create.image" = "Immagine o modello";
 "cells.create.host" = "Host SSH";
 "cells.create.launch" = "Crea";
+
+"taskQueue.rerun.action" = "Esegui di nuovo";
+"taskQueue.remove.action" = "Rimuovi attività";
+"taskQueue.remove.confirmTitle" = "Rimuovere l’attività?";
+"taskQueue.remove.confirmMessage" = "Rimuovere definitivamente %@ dalla coda? Questa azione non può essere annullata.";

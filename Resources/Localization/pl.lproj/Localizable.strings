@@ -90,3 +90,8 @@
 "cells.create.image" = "Obraz lub szablon";
 "cells.create.host" = "Host SSH";
 "cells.create.launch" = "Utwórz";
+
+"taskQueue.rerun.action" = "Uruchom ponownie";
+"taskQueue.remove.action" = "Usuń zadanie";
+"taskQueue.remove.confirmTitle" = "Usunąć zadanie?";
+"taskQueue.remove.confirmMessage" = "Trwale usunąć %@ z kolejki? Tej operacji nie można cofnąć.";

@@ -3410,6 +3410,10 @@
 "taskQueue.cancel.action" = "Cancel Task";
 "taskQueue.cancel.confirmTitle" = "Cancel task?";
 "taskQueue.cancel.confirmMessage" = "Stop %@ and prevent future runs?";
+"taskQueue.rerun.action" = "Run Again";
+"taskQueue.remove.action" = "Remove Task";
+"taskQueue.remove.confirmTitle" = "Remove task?";
+"taskQueue.remove.confirmMessage" = "Permanently remove %@ from the queue? This cannot be undone.";
 "taskQueue.status.scheduled" = "Scheduled";
 "taskQueue.status.queued" = "Queued";
 "taskQueue.status.running" = "Running";

@@ -90,3 +90,8 @@
 "cells.create.image" = "อิมเมจหรือเทมเพลต";
 "cells.create.host" = "โฮสต์ SSH";
 "cells.create.launch" = "สร้าง";
+
+"taskQueue.rerun.action" = "เรียกใช้อีกครั้ง";
+"taskQueue.remove.action" = "นำงานออก";
+"taskQueue.remove.confirmTitle" = "นำงานออกหรือไม่";
+"taskQueue.remove.confirmMessage" = "นำ %@ ออกจากคิวอย่างถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้";
