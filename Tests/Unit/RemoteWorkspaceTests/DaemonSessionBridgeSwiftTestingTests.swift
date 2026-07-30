@@ -17,18 +17,28 @@ struct DaemonSessionBridgeSwiftTestingTests {
         #expect(!DaemonSessionBridge.isValidSessionIdentifier(String(repeating: "a", count: 129)))
     }
 
-    @Test("attached session serializes input, coalesces resize, and deduplicates snapshots")
+    @Test("snapshot repaint normalizes line endings, tracks cursor, and deduplicates state")
     func attachedSessionRoutesBidirectionalIO() async throws {
         let connection = RecordingDaemonSessionConnection()
-        let snapshot = Data("prompt$ ".utf8)
+        let snapshot = Data("prompt\nready\r\n".utf8)
         connection.outputResults = [
             .success(.success(data: [
                 "data": snapshot.base64EncodedString(),
                 "mode": "snapshot",
+                "cursor_x": 4,
+                "cursor_y": 1,
             ])),
             .success(.success(data: [
                 "data": snapshot.base64EncodedString(),
                 "mode": "snapshot",
+                "cursor_x": 4,
+                "cursor_y": 1,
+            ])),
+            .success(.success(data: [
+                "data": snapshot.base64EncodedString(),
+                "mode": "snapshot",
+                "cursor_x": 5,
+                "cursor_y": 1,
             ])),
         ]
         let bridge = DaemonSessionBridge(
@@ -40,11 +50,11 @@ struct DaemonSessionBridgeSwiftTestingTests {
         bridge.onOutput = { outputs.append($0) }
 
         try await bridge.attach(sessionID: "session-a")
-        try await waitForDaemonBridgeCondition { outputs.count == 1 }
+        try await waitForDaemonBridgeCondition { outputs.count == 2 }
 
-        #expect(outputs[0].starts(with: Data("\u{1B}[2J\u{1B}[H".utf8)))
+        #expect(outputs[0] == Data("\u{1B}[2J\u{1B}[Hprompt\r\nready\r\n\u{1B}[2;5H".utf8))
+        #expect(outputs[1] == Data("\u{1B}[2J\u{1B}[Hprompt\r\nready\r\n\u{1B}[2;6H".utf8))
         #expect(!outputs[0].starts(with: Data("\u{1B}[3J".utf8)))
-        #expect(outputs[0].suffix(snapshot.count) == snapshot)
         #expect(bridge.enqueueInput(Data("a".utf8)))
         #expect(bridge.enqueueInput(Data("b".utf8)))
 
@@ -71,11 +81,38 @@ struct DaemonSessionBridgeSwiftTestingTests {
         #expect(resize.arguments?["id"] == "session-a")
         #expect(resize.arguments?["cols"] == "132")
         #expect(resize.arguments?["rows"] == "42")
-        #expect(outputs.count == 1)
+        #expect(outputs.count == 2)
 
         await bridge.detach()
         #expect(!bridge.isAttached)
         #expect(connection.calls.last?.command == DaemonCommand.sessionDetach.rawValue)
+    }
+
+    @Test("stream output remains byte-for-byte compatible")
+    func streamOutputIsNotReframed() async throws {
+        let connection = RecordingDaemonSessionConnection()
+        let stream = Data("prompt\n\u{1B}[4mready\u{1B}[0m".utf8)
+        connection.outputResults = [
+            .success(.success(data: [
+                "data": stream.base64EncodedString(),
+                "mode": "stream",
+                "cursor_x": 8,
+                "cursor_y": 3,
+            ])),
+        ]
+        let bridge = DaemonSessionBridge(
+            connection: connection,
+            activePollIntervalNanoseconds: 1_000_000,
+            idlePollIntervalNanoseconds: 1_000_000
+        )
+        var outputs: [Data] = []
+        bridge.onOutput = { outputs.append($0) }
+
+        try await bridge.attach(sessionID: "session-stream")
+        try await waitForDaemonBridgeCondition { outputs.count == 1 }
+
+        #expect(outputs == [stream])
+        await bridge.detach()
     }
 
     @Test("input queue rejects overflow before any bytes can be dropped silently")
@@ -191,7 +228,7 @@ private final class RecordingDaemonSessionConnection: DaemonSessionRPCSending {
             return try outputResults.removeFirst().get()
         }
         if cmd == DaemonCommand.sessionOutput.rawValue {
-            return .success(data: ["data": "", "mode": "snapshot"])
+            return .success(data: ["data": "", "mode": "stream"])
         }
         if let response = responses[cmd] {
             return response

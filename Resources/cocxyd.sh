@@ -405,6 +405,25 @@ detect_session_tool() {
     fi
 }
 
+tmux_cursor_fields() {
+    cursor_target="$1"
+    cursor_position=$(tmux -S "$TMUX_SOCKET" display-message -p \
+        -t "=$cursor_target" '#{cursor_x}:#{cursor_y}' 2>/dev/null) || return 1
+    case "$cursor_position" in
+        *:*) ;;
+        *) return 1 ;;
+    esac
+    cursor_x=${cursor_position%%:*}
+    cursor_y=${cursor_position#*:}
+    case "$cursor_y" in
+        *:*) return 1 ;;
+    esac
+    case "$cursor_x:$cursor_y" in
+        *[!0-9:]*|:|:*|*:) return 1 ;;
+    esac
+    printf '"cursor_x":%s,"cursor_y":%s' "$cursor_x" "$cursor_y"
+}
+
 session_list() {
     req_id="$1"
     tool=$(detect_session_tool)
@@ -932,14 +951,22 @@ except: pass
                 return
             fi
             attach_mode="snapshot"
+            attach_cursor_fields=""
             if [ "$tool" = "screen" ]; then
                 if ! prepare_screen_log_for_attach "$session_id_arg"; then
                     json_err "$req_id" "screen session output setup failed"
                     return
                 fi
                 attach_mode="stream"
+            elif [ "$tool" = "tmux" ]; then
+                attach_cursor_fields=$(tmux_cursor_fields "$session_id_arg") \
+                    || attach_cursor_fields=""
             fi
-            json_ok "$req_id" "\"attached\":true,\"session\":\"$session_id_arg\",\"mode\":\"$attach_mode\",\"tool\":\"$tool\""
+            attach_data="\"attached\":true,\"session\":\"$session_id_arg\",\"mode\":\"$attach_mode\",\"tool\":\"$tool\""
+            if [ -n "$attach_cursor_fields" ]; then
+                attach_data="$attach_data,$attach_cursor_fields"
+            fi
+            json_ok "$req_id" "$attach_data"
             log_msg "Session attached: $session_id_arg"
             ;;
         session.input)
@@ -1009,10 +1036,13 @@ except: pass
                 return
             fi
             output_data=""
+            output_cursor_fields=""
             case "$tool" in
                 tmux)
                     if [ -n "$session_id_arg" ]; then
                         output_data=$(tmux -S "$TMUX_SOCKET" capture-pane -t "=$session_id_arg" -p -e 2>/dev/null)
+                        output_cursor_fields=$(tmux_cursor_fields "$session_id_arg") \
+                            || output_cursor_fields=""
                     fi
                     ;;
                 screen)
@@ -1025,10 +1055,14 @@ except: pass
             esac
             if [ -n "$output_data" ]; then
                 encoded=$(printf '%s\n' "$output_data" | base64 2>/dev/null | tr -d '\n')
-                json_ok "$req_id" "\"data\":\"$encoded\",\"mode\":\"snapshot\""
+                output_fields="\"data\":\"$encoded\",\"mode\":\"snapshot\""
             else
-                json_ok "$req_id" '"data":"","mode":"snapshot"'
+                output_fields='"data":"","mode":"snapshot"'
             fi
+            if [ -n "$output_cursor_fields" ]; then
+                output_fields="$output_fields,$output_cursor_fields"
+            fi
+            json_ok "$req_id" "$output_fields"
             ;;
         session.resize)
             if ! is_safe_identifier "$session_id_arg"; then

@@ -36,6 +36,16 @@ typealias SessionOutputHandler = @MainActor (Data) -> Void
 /// Callback type for receiving session disconnect events.
 typealias SessionDisconnectHandler = @MainActor () -> Void
 
+private struct DaemonSnapshotCursor: Equatable {
+    let x: Int
+    let y: Int
+}
+
+private struct DaemonSnapshotState: Equatable {
+    let bytes: Data
+    let cursor: DaemonSnapshotCursor?
+}
+
 @MainActor
 final class DaemonSessionBridge: ObservableObject {
 
@@ -78,7 +88,7 @@ final class DaemonSessionBridge: ObservableObject {
     private var queuedInputReadIndex = 0
     private var queuedInputByteCount = 0
     private var pendingResize: TerminalSize?
-    private var lastSnapshot: Data?
+    private var lastSnapshotState: DaemonSnapshotState?
 
     // MARK: - Dependencies
 
@@ -123,7 +133,7 @@ final class DaemonSessionBridge: ObservableObject {
 
         attachedSessionID = sessionID
         isAttached = true
-        lastSnapshot = nil
+        lastSnapshotState = nil
 
         // Start reading output from the daemon session.
         startOutputReader(sessionID: sessionID)
@@ -147,7 +157,7 @@ final class DaemonSessionBridge: ObservableObject {
         queuedInputReadIndex = 0
         queuedInputByteCount = 0
         pendingResize = nil
-        lastSnapshot = nil
+        lastSnapshotState = nil
 
         _ = try? await connection.sendSessionRPC(
             cmd: DaemonCommand.sessionDetach.rawValue,
@@ -295,12 +305,15 @@ final class DaemonSessionBridge: ObservableObject {
                         throw DaemonProtocolError.invalidResponse
                     }
                     consecutiveFailures = 0
-                    if !bytes.isEmpty {
-                        let mode = data["mode"] as? String
-                        if let output = self.normalizedOutput(bytes, mode: mode) {
-                            receivedOutput = true
-                            self.onOutput?(output)
-                        }
+                    let mode = data["mode"] as? String
+                    if !bytes.isEmpty || mode == "snapshot",
+                       let output = self.normalizedOutput(
+                           bytes,
+                           mode: mode,
+                           cursor: Self.snapshotCursor(from: data)
+                       ) {
+                        receivedOutput = true
+                        self.onOutput?(output)
                     }
                 } catch is CancellationError {
                     return
@@ -324,14 +337,70 @@ final class DaemonSessionBridge: ObservableObject {
         }
     }
 
-    private func normalizedOutput(_ bytes: Data, mode: String?) -> Data? {
+    private func normalizedOutput(
+        _ bytes: Data,
+        mode: String?,
+        cursor: DaemonSnapshotCursor?
+    ) -> Data? {
         guard mode == "snapshot" else { return bytes }
-        guard lastSnapshot != bytes else { return nil }
-        lastSnapshot = bytes
+        let state = DaemonSnapshotState(bytes: bytes, cursor: cursor)
+        guard lastSnapshotState != state else { return nil }
+        lastSnapshotState = state
 
         var framed = Data("\u{1B}[2J\u{1B}[H".utf8)
-        framed.append(bytes)
+        framed.append(Self.normalizedSnapshotLineEndings(bytes))
+        if let cursor {
+            framed.append(Data("\u{1B}[\(cursor.y + 1);\(cursor.x + 1)H".utf8))
+        }
         return framed
+    }
+
+    private static func snapshotCursor(from data: [String: Any]) -> DaemonSnapshotCursor? {
+        guard let x = nonnegativeCoordinate(data["cursor_x"]),
+              let y = nonnegativeCoordinate(data["cursor_y"]),
+              x < Int.max,
+              y < Int.max else {
+            return nil
+        }
+        return DaemonSnapshotCursor(x: x, y: y)
+    }
+
+    private static func nonnegativeCoordinate(_ value: Any?) -> Int? {
+        let coordinate: Int?
+        if let value = value as? Int {
+            coordinate = value
+        } else if let value = value as? String {
+            coordinate = Int(value)
+        } else {
+            coordinate = nil
+        }
+        guard let coordinate, coordinate >= 0 else { return nil }
+        return coordinate
+    }
+
+    private static func normalizedSnapshotLineEndings(_ bytes: Data) -> Data {
+        var previousWasCarriageReturn = false
+        var hasBareLineFeed = false
+        for byte in bytes {
+            if byte == 0x0A, !previousWasCarriageReturn {
+                hasBareLineFeed = true
+                break
+            }
+            previousWasCarriageReturn = byte == 0x0D
+        }
+        guard hasBareLineFeed else { return bytes }
+
+        var normalized = Data()
+        normalized.reserveCapacity(bytes.count)
+        previousWasCarriageReturn = false
+        for byte in bytes {
+            if byte == 0x0A, !previousWasCarriageReturn {
+                normalized.append(0x0D)
+            }
+            normalized.append(byte)
+            previousWasCarriageReturn = byte == 0x0D
+        }
+        return normalized
     }
 
     private func handleDisconnect() {
@@ -346,7 +415,7 @@ final class DaemonSessionBridge: ObservableObject {
         queuedInputReadIndex = 0
         queuedInputByteCount = 0
         pendingResize = nil
-        lastSnapshot = nil
+        lastSnapshotState = nil
         attachedSessionID = nil
         isAttached = false
         onDisconnect?()
