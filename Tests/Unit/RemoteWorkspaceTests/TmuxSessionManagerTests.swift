@@ -11,6 +11,7 @@ import Testing
 final class ScriptableSSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     var commandResults: [String: ProcessResult] = [:]
     var executedCommands: [String] = []
+    var controlPathOverride: String?
 
     func connect(
         profile: RemoteConnectionProfile,
@@ -22,7 +23,9 @@ final class ScriptableSSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
     func isAlive(profile: RemoteConnectionProfile, executor: any ProcessExecutor) async throws -> Bool { true }
     func isControlMasterProcessAlive(_ identity: SSHControlMasterIdentity) -> Bool { false }
     func terminateControlMaster(_ identity: SSHControlMasterIdentity) {}
-    func controlPath(for profile: RemoteConnectionProfile) -> String { profile.controlPath }
+    func controlPath(for profile: RemoteConnectionProfile) -> String {
+        controlPathOverride ?? profile.controlPath
+    }
     func newSession(profile: RemoteConnectionProfile) -> String { "ssh mock" }
     func forwardPort(_ forward: RemoteConnectionProfile.PortForward, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
     func cancelForward(_ forward: RemoteConnectionProfile.PortForward, on profile: RemoteConnectionProfile, executor: any ProcessExecutor) throws {}
@@ -189,34 +192,82 @@ struct TmuxSessionManagerTests {
 
     // MARK: - Attach Command
 
-    @Test func attachCommandFormatsCorrectly() {
+    @Test func attachCommandFormatsCorrectly() throws {
         let multiplexer = ScriptableSSHMultiplexer()
 
-        let command = manager.attachCommand(
+        let command = try #require(manager.attachCommand(
             sessionName: "dev",
             on: profile,
             multiplexer: multiplexer
-        )
+        ))
 
-        #expect(command.contains("tmux attach-session -t 'dev'"))
+        #expect(command.hasPrefix("/usr/bin/ssh "))
+        #expect(command.contains("'tmux attach-session -t dev'"))
         #expect(command.contains("ControlMaster=no"))
         #expect(command.contains("root@server.com"))
-        #expect(command.contains("-t"))
+        #expect(command.contains("-t -- root@server.com"))
     }
 
-    @Test func attachCommandIncludesPort() {
+    @Test func attachCommandIncludesPort() throws {
         let portProfile = RemoteConnectionProfile(
             name: "dev", host: "server.com", user: "root", port: 2222
         )
         let multiplexer = ScriptableSSHMultiplexer()
 
-        let command = manager.attachCommand(
+        let command = try #require(manager.attachCommand(
             sessionName: "work",
             on: portProfile,
             multiplexer: multiplexer
-        )
+        ))
 
         #expect(command.contains("-p 2222"))
+        #expect(command.contains("-t -- root@server.com"))
+    }
+
+    @Test func attachCommandKeepsUntrustedValuesInsideArguments() throws {
+        let multiplexer = ScriptableSSHMultiplexer()
+        multiplexer.controlPathOverride = "/tmp/cocxy socket'; printf exposed"
+        let sessionName = "dev'; touch /tmp/exposed"
+
+        let arguments = try #require(manager.attachCommandArguments(
+            sessionName: sessionName,
+            on: profile,
+            multiplexer: multiplexer
+        ))
+        let command = try #require(manager.attachCommand(
+            sessionName: sessionName,
+            on: profile,
+            multiplexer: multiplexer
+        ))
+
+        #expect(arguments[0] == "/usr/bin/ssh")
+        #expect(arguments[4] == "ControlPath=/tmp/cocxy socket'; printf exposed")
+        #expect(Array(arguments.suffix(4).prefix(3)) == ["-t", "--", "root@server.com"])
+        #expect(arguments.last == "tmux attach-session -t 'dev'\\''; touch /tmp/exposed'")
+        #expect(command.contains(TmuxSessionManager.shellToken(arguments[4])))
+        #expect(command.hasSuffix(TmuxSessionManager.shellToken(try #require(arguments.last))))
+    }
+
+    @Test func attachCommandRejectsInvalidConnectionValues() {
+        let multiplexer = ScriptableSSHMultiplexer()
+        let invalidHost = RemoteConnectionProfile(name: "bad", host: "-oProxyCommand=calc")
+        let invalidPort = RemoteConnectionProfile(name: "bad", host: "server.com", port: 70_000)
+
+        #expect(manager.attachCommand(
+            sessionName: "dev",
+            on: invalidHost,
+            multiplexer: multiplexer
+        ) == nil)
+        #expect(manager.attachCommand(
+            sessionName: "dev",
+            on: invalidPort,
+            multiplexer: multiplexer
+        ) == nil)
+        #expect(manager.attachCommand(
+            sessionName: "dev\nnext",
+            on: profile,
+            multiplexer: multiplexer
+        ) == nil)
     }
 
     // MARK: - Kill Session

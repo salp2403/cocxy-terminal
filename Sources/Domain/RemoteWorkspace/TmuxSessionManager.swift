@@ -95,7 +95,7 @@ protocol TmuxSessionManaging: Sendable {
         sessionName: String,
         on profile: RemoteConnectionProfile,
         multiplexer: any SSHMultiplexing
-    ) -> String
+    ) -> String?
 
     /// Detaches all clients from a tmux session without killing it.
     func detachSession(
@@ -242,28 +242,75 @@ struct TmuxSessionManager: TmuxSessionManaging, Sendable {
         sessionName: String,
         on profile: RemoteConnectionProfile,
         multiplexer: any SSHMultiplexing
-    ) -> String {
-        let controlPath = multiplexer.controlPath(for: profile)
-        let sanitized = sanitizeSessionName(sessionName)
+    ) -> String? {
+        attachCommandArguments(
+            sessionName: sessionName,
+            on: profile,
+            multiplexer: multiplexer
+        )?.map(Self.shellToken).joined(separator: " ")
+    }
 
-        var parts: [String] = ["ssh"]
-        parts.append("-o ControlMaster=no")
-        parts.append("-o ControlPath=\(controlPath)")
+    func attachCommandArguments(
+        sessionName: String,
+        on profile: RemoteConnectionProfile,
+        multiplexer: any SSHMultiplexing
+    ) -> [String]? {
+        guard let destination = try? SSHConnectionDestination(
+            user: profile.user,
+            host: profile.host
+        ),
+        let sessionTarget = validatedSessionTarget(sessionName) else {
+            return nil
+        }
+        if let port = profile.port, !(1...65_535).contains(port) {
+            return nil
+        }
+
+        let controlPath = multiplexer.controlPath(for: profile)
+        guard !controlPath.isEmpty,
+              !controlPath.unicodeScalars.contains(where: {
+                  CharacterSet.controlCharacters.contains($0)
+              }) else {
+            return nil
+        }
+
+        let remoteCommand = ["tmux", "attach-session", "-t", sessionTarget]
+            .map(Self.shellToken)
+            .joined(separator: " ")
+        var arguments = [
+            "/usr/bin/ssh",
+            "-o", "ControlMaster=no",
+            "-o", "ControlPath=\(controlPath)",
+        ]
 
         if let port = profile.port {
-            parts.append("-p \(port)")
+            arguments.append(contentsOf: ["-p", "\(port)"])
         }
 
-        if let user = profile.user {
-            parts.append("\(user)@\(profile.host)")
-        } else {
-            parts.append(profile.host)
+        arguments.append(contentsOf: ["-t", "--", destination.value, remoteCommand])
+        return arguments
+    }
+
+    private func validatedSessionTarget(_ name: String) -> String? {
+        guard !name.isEmpty,
+              name.utf8.count <= 1_024,
+              !name.unicodeScalars.contains(where: {
+                  CharacterSet.controlCharacters.contains($0)
+              }) else {
+            return nil
         }
+        return name
+    }
 
-        parts.append("-t")
-        parts.append("tmux attach-session -t '\(sanitized)'")
-
-        return parts.joined(separator: " ")
+    static func shellToken(_ value: String) -> String {
+        guard !value.isEmpty else { return "''" }
+        let safe = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+-./:@=~"
+        )
+        if value.unicodeScalars.allSatisfy({ safe.contains($0) }) {
+            return value
+        }
+        return "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     // MARK: - Detach Session
