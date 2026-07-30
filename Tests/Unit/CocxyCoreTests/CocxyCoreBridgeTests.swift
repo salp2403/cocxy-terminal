@@ -234,6 +234,63 @@ struct CocxyCoreBridgeTests {
         #expect(results[0].lineNumber == 1)
         #expect(results[0].column == 0)
         #expect(results[0].matchText.lowercased() == "beta")
+        #expect(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "")
+        ) == [])
+        #expect(bridge.searchScrollback(
+            surfaceID: SurfaceID(),
+            options: SearchOptions(query: "")
+        ) == nil)
+    }
+
+    @Test("literal scrollback search crosses a soft wrap and degrades to its first row")
+    func literalScrollbackSearchCrossesSoftWrap() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        bridge.resize(surfaceID, to: TerminalSize(
+            columns: 4,
+            rows: 2,
+            pixelWidth: 40,
+            pixelHeight: 40
+        ))
+        let contentStartRow = cocxycore_terminal_history_max_visible_start(state.terminal)
+            + UInt32(cocxycore_terminal_cursor_row(state.terminal))
+
+        feed("abcdef", to: state.terminal)
+        #expect(cocxycore_terminal_row_wrapped(state.terminal, contentStartRow))
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "cdef", caseSensitive: true, useRegex: false)
+        ))
+
+        #expect(results.count == 1)
+        #expect(results[0].lineNumber == Int(contentStartRow))
+        #expect(results[0].column == 2)
+        #expect(results[0].matchText == "cd")
+    }
+
+    @Test("regex scrollback search remains on the native regex path")
+    func regexScrollbackSearchRemainsAvailable() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("alpha-123\r\nomega\r\n", to: state.terminal)
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "alpha-[0-9]+", caseSensitive: true, useRegex: true)
+        ))
+
+        #expect(results.count == 1)
+        #expect(results[0].lineNumber == 0)
+        #expect(results[0].column == 0)
+        #expect(results[0].matchText == "alpha-123")
     }
 
     @Test("historyVisibleStart reports the live bottom before scrolling")
@@ -1214,7 +1271,7 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.terminalViewportSnapshot(for: SurfaceID()) == nil)
     }
 
-    @Test("cursor click snapshot keeps semantic cursor and cell widths in one read")
+    @Test("third-party OSC 133 defaults cursor clicks to single-line mode")
     func cursorClickSnapshotIsAtomic() throws {
         let bridge = try makeBridge()
         let (surfaceID, _) = try createSurface(using: bridge)
@@ -1232,8 +1289,25 @@ struct CocxyCoreBridgeTests {
         #expect(snapshot.isAltScreen == false)
         #expect(snapshot.mouseTrackingMode == 0)
         #expect(snapshot.selectionActive == false)
-        #expect(snapshot.shellClickMode == 0)
+        #expect(snapshot.shellClickMode == 1)
         #expect(bridge.terminalCursorClickSnapshot(for: SurfaceID()) == nil)
+    }
+
+    @Test("declared shell click mode survives later OSC 133 prompts without options")
+    func declaredShellClickModeSurvivesPlainPrompts() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("\u{1B}]133;A;cl=m\u{07}", to: state.terminal)
+        #expect(bridge.terminalCursorClickSnapshot(for: surfaceID)?.shellClickMode == 2)
+
+        feed("\u{1B}]133;A\u{07}", to: state.terminal)
+        #expect(bridge.terminalCursorClickSnapshot(for: surfaceID)?.shellClickMode == 2)
+
+        feed("\u{1B}]133;A;cl=none\u{07}", to: state.terminal)
+        #expect(bridge.terminalCursorClickSnapshot(for: surfaceID)?.shellClickMode == 0)
     }
 
     @Test("cursor click snapshot carries wrapped semantic input rows")

@@ -1183,29 +1183,39 @@ struct CocxyCoreViewTests {
         #expect(submitCount == 1)
     }
 
-    @Test("captured command input position enables click-to-position arrow synthesis")
-    func capturedCommandInputPositionEnablesClickToPositionArrowSynthesis() throws {
+    @Test("plain third-party OSC 133 enables single-line click-to-position")
+    func plainThirdPartyOSC133EnablesClickToPosition() throws {
         let harness = try makeViewHarness()
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
 
-        feed("\u{1B}]133;A;cl=m\u{07}\u{1B}]133;B\u{07}", into: state.terminal)
+        feed("\u{1B}]133;A\u{07}", into: state.terminal)
         harness.view.handleShellPromptAtCurrentCursor()
         #expect(harness.view.ideCursorController.promptPosition != nil)
         #expect(harness.view.ideCursorController.isOnPromptLine == false)
 
-        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        feed("\u{1B}]133;B\u{07}", into: state.terminal)
+        let inputSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
         harness.view.handleCommandInputStarted(at: TerminalGridPosition(
-            screenRow: snapshot.cursorScreenRow,
-            absoluteRow: snapshot.cursorAbsoluteRow,
-            column: snapshot.cursorColumn
+            screenRow: inputSnapshot.cursorScreenRow,
+            absoluteRow: inputSnapshot.cursorAbsoluteRow,
+            column: inputSnapshot.cursorColumn
         ))
+
+        feed("abc", into: state.terminal)
+        let snapshot = try #require(harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID))
+        #expect(snapshot.shellClickMode == 1)
+        #expect(snapshot.cursorColumn == inputSnapshot.cursorColumn + 3)
+
         let controller = harness.view.ideCursorController
         let target = CGPoint(
-            x: controller.leftPadding + controller.cellWidth * 3,
+            x: controller.leftPadding + controller.cellWidth + 1,
             y: controller.topPadding + CGFloat(controller.promptRow) * controller.cellHeight + 1
         )
 
+        #expect(controller.arrowKeysForClick(at: target, viewBounds: harness.view.bounds) == [.left, .left])
         #expect(controller.handleClickToPosition(at: target) == true)
     }
 

@@ -1536,12 +1536,98 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
-        guard let state = surfaces[surfaceID] else { return nil }
-        guard !options.query.isEmpty else { return [] }
-        guard let engine = cocxycore_gpu_search_init(state.terminal) else { return nil }
+        return withTerminalLock(surfaceID) { state in
+            guard !options.query.isEmpty else { return [] }
+            if options.useRegex {
+                return searchRegexScrollback(terminal: state.terminal, options: options)
+            }
+            return searchLiteralScrollback(terminal: state.terminal, options: options)
+        }
+    }
+
+    private func searchLiteralScrollback(
+        terminal: OpaquePointer,
+        options: SearchOptions
+    ) -> [SearchResult] {
+        let resultLimit = max(1, min(options.maxResults, Int(UInt32.max)))
+        let historyRowCount = cocxycore_terminal_history_rows(terminal)
+        let columnCount = cocxycore_terminal_cols(terminal)
+        guard historyRowCount > 0, columnCount > 0 else { return [] }
+
+        let queryBytes = Array(options.query.utf8)
+        var results: [SearchResult] = []
+        results.reserveCapacity(min(resultLimit, 64))
+        var fromRow: UInt32 = 0
+        var fromColumn: UInt16 = 0
+
+        queryBytes.withUnsafeBufferPointer { queryBuffer in
+            guard let queryBaseAddress = queryBuffer.baseAddress else { return }
+
+            while results.count < resultLimit {
+                var range = cocxycore_buffer_range()
+                guard cocxycore_terminal_search_next(
+                    terminal,
+                    queryBaseAddress,
+                    queryBuffer.count,
+                    fromRow,
+                    fromColumn,
+                    options.caseSensitive,
+                    &range
+                ) else {
+                    break
+                }
+
+                guard range.start_row < historyRowCount,
+                      range.end_row < historyRowCount,
+                      range.start_row <= range.end_row else {
+                    break
+                }
+
+                let spansRows = range.start_row != range.end_row
+                let firstRowEndColumn = spansRows
+                    ? columnCount - 1
+                    : min(range.end_col, columnCount - 1)
+                let line = historyLineText(
+                    terminal: terminal,
+                    absoluteRow: range.start_row,
+                    columnCount: columnCount,
+                    trimTrailingSpaces: !spansRows
+                )
+
+                // SearchResult currently models one physical row. Keep the
+                // logical match anchor and expose only its first-row fragment.
+                results.append(Self.makeSearchResult(
+                    line: line,
+                    lineNumber: Int(range.start_row),
+                    startColumn: Int(min(range.start_col, columnCount - 1)),
+                    endColumnInclusive: Int(firstRowEndColumn),
+                    fallbackMatchText: spansRows ? "" : options.query
+                ))
+
+                // Advance one cell after the match start so overlapping
+                // literal matches remain discoverable without repeating one.
+                if range.start_col < columnCount - 1 {
+                    fromRow = range.start_row
+                    fromColumn = range.start_col + 1
+                } else {
+                    guard range.start_row < historyRowCount - 1 else { break }
+                    fromRow = range.start_row + 1
+                    fromColumn = 0
+                }
+            }
+        }
+
+        return results
+    }
+
+    private func searchRegexScrollback(
+        terminal: OpaquePointer,
+        options: SearchOptions
+    ) -> [SearchResult] {
+        guard let engine = cocxycore_gpu_search_init(terminal) else { return [] }
         defer { cocxycore_gpu_search_destroy(engine) }
 
-        cocxycore_gpu_search_sync(engine, state.terminal)
+        cocxycore_gpu_search_sync(engine, terminal)
 
         let cappedResultCount = max(1, min(options.maxResults, Int(UInt32.max)))
         var matches = Array(
@@ -1555,7 +1641,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 guard let baseAddress = buffer.baseAddress else { return 0 }
                 return cocxycore_gpu_search_find(
                     engine,
-                    state.terminal,
+                    terminal,
                     queryPtr,
                     UInt32(options.query.utf8.count),
                     options.useRegex,
@@ -1572,10 +1658,10 @@ final class CocxyCoreBridge: TerminalEngine {
 
         guard matchCount > 0 else { return [] }
 
-        let columnCount = cocxycore_terminal_cols(state.terminal)
+        let columnCount = cocxycore_terminal_cols(terminal)
         return matches.prefix(Int(matchCount)).map { match in
             let line = historyLineText(
-                terminal: state.terminal,
+                terminal: terminal,
                 absoluteRow: match.row,
                 columnCount: columnCount
             )
@@ -4768,7 +4854,8 @@ final class CocxyCoreBridge: TerminalEngine {
     private func historyLineText(
         terminal: OpaquePointer,
         absoluteRow: UInt32,
-        columnCount: UInt16
+        columnCount: UInt16,
+        trimTrailingSpaces: Bool = true
     ) -> String {
         guard columnCount > 0 else { return "" }
 
@@ -4783,8 +4870,10 @@ final class CocxyCoreBridge: TerminalEngine {
             }
         }
 
-        while line.last == " " {
-            line.removeLast()
+        if trimTrailingSpaces {
+            while line.last == " " {
+                line.removeLast()
+            }
         }
 
         return line
