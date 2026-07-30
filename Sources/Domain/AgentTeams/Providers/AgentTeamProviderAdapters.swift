@@ -72,6 +72,34 @@ struct AgentTeamProviderLaunchSpec: Codable, Sendable, Equatable {
     }
 }
 
+enum AgentTeamLaunchCommand {
+    static func makeShellCommand(for launchSpec: AgentTeamProviderLaunchSpec) -> String? {
+        let environment = launchSpec.environment.sorted { lhs, rhs in
+            lhs.key < rhs.key
+        }
+        let values = [launchSpec.executable]
+            + launchSpec.arguments
+            + environment.flatMap { [$0.key, $0.value] }
+        guard !launchSpec.executable.isEmpty,
+              values.allSatisfy({ !$0.contains("\0") }),
+              environment.allSatisfy({ !$0.key.isEmpty && !$0.key.contains("=") }) else {
+            return nil
+        }
+
+        var components = ["exec", shellQuote("/usr/bin/env")]
+        components.append(contentsOf: environment.map { key, value in
+            shellQuote("\(key)=\(value)")
+        })
+        components.append(shellQuote(launchSpec.executable))
+        components.append(contentsOf: launchSpec.arguments.map(shellQuote))
+        return components.joined(separator: " ")
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'\(value.replacingOccurrences(of: "'", with: "'\\''"))'"
+    }
+}
+
 enum AgentTeamProviderAdapterError: Error, Equatable, Sendable, CustomStringConvertible {
     case executableUnavailable(provider: AgentTeamProvider, candidates: [String])
     case providerMismatch(expected: AgentTeamProvider, actual: AgentTeamProvider)

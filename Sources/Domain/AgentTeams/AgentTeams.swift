@@ -222,7 +222,11 @@ struct AgentTeamLaunchResult: Sendable, Equatable {
 
 @MainActor
 protocol AgentTeamPaneLaunching: AnyObject {
-    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool
+    func closeAgentTeamPanes(teamID: String)
 }
 
 @MainActor
@@ -254,28 +258,40 @@ final class AgentTeamLauncher {
             )
         }
 
-        var launchedIDs: [String] = []
-        var launchSpecs: [AgentTeamProviderLaunchSpec] = []
-        for teammate in config.teammates {
-            let launchSpec = try adapter.makeLaunchSpec(
-                config: config,
-                teammate: teammate,
-                profile: launchProfileProvider(teammate)
-            )
-            let didLaunch = paneLauncher.spawnAgentTeamPane(launchSpec: launchSpec)
-            guard didLaunch else {
-                throw AgentTeamError.paneLaunchFailed(teammate.id)
+        var hasLaunchedPane = false
+        do {
+            var launchedIDs: [String] = []
+            var launchSpecs: [AgentTeamProviderLaunchSpec] = []
+            for teammate in config.teammates {
+                let launchSpec = try adapter.makeLaunchSpec(
+                    config: config,
+                    teammate: teammate,
+                    profile: launchProfileProvider(teammate)
+                )
+                let didLaunch = paneLauncher.spawnAgentTeamPane(
+                    launchSpec: launchSpec,
+                    initialPrompt: teammate.prompt
+                )
+                guard didLaunch else {
+                    throw AgentTeamError.paneLaunchFailed(teammate.id)
+                }
+                hasLaunchedPane = true
+                launchedIDs.append(teammate.id)
+                launchSpecs.append(launchSpec)
             }
-            launchedIDs.append(teammate.id)
-            launchSpecs.append(launchSpec)
-        }
 
-        return AgentTeamLaunchResult(
-            teamID: config.id,
-            launchedCount: launchedIDs.count,
-            teammateIDs: launchedIDs,
-            launchSpecs: launchSpecs
-        )
+            return AgentTeamLaunchResult(
+                teamID: config.id,
+                launchedCount: launchedIDs.count,
+                teammateIDs: launchedIDs,
+                launchSpecs: launchSpecs
+            )
+        } catch {
+            if hasLaunchedPane {
+                paneLauncher.closeAgentTeamPanes(teamID: config.id)
+            }
+            throw error
+        }
     }
 }
 

@@ -192,6 +192,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Internal access for session restoration in AppDelegate.
     var tabSurfaceMap: [TabID: SurfaceID] = [:]
 
+    /// Tracks the real terminal tabs owned by each locally launched agent team.
+    /// The mapping drives transactional rollback, explicit team stop, and
+    /// cleanup when a user closes an agent tab directly.
+    var agentTeamTabIDsByTeamID: [String: Set<TabID>] = [:]
+
     /// Restored tabs whose metadata has been installed but whose terminal
     /// surfaces have not been created yet. Hidden restore tabs stay here until
     /// the user activates them, avoiding startup-time PTY creation.

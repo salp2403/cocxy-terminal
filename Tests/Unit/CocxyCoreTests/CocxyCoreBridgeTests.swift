@@ -54,6 +54,58 @@ struct CocxyCoreBridgeTests {
         #expect(registration.shellIdentity?.pid == registration.shellPID)
     }
 
+    @Test("agent team launch command replaces the shell with a live provider process")
+    func agentTeamLaunchCommandRunsExpectedLiveProcess() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-agent-team-live-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let marker = root.appendingPathComponent("provider.env")
+        let launchSpec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "live-team",
+            teammateID: "live-team-reviewer",
+            teammateName: "Reviewer",
+            executable: "/bin/sh",
+            arguments: [
+                "-c",
+                "printf '%s:%s' \"$COCXY_AGENT_TEAM_ID\" \"$COCXY_AGENT_TEAMMATE_ID\" " +
+                    "> \"$MARKER_PATH\"; exec /bin/sleep 30",
+            ],
+            environment: [
+                "COCXY_AGENT_TEAM_ID": "live-team",
+                "COCXY_AGENT_TEAMMATE_ID": "live-team-reviewer",
+                "MARKER_PATH": marker.path,
+            ],
+            workingDirectory: root.path,
+            mutatesUserConfiguration: false,
+            requiresPreviewBeforeLaunch: true
+        )
+        let command = try #require(AgentTeamLaunchCommand.makeShellCommand(for: launchSpec))
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/zsh")
+        defer { bridge.destroySurface(surfaceID) }
+        let registration = try #require(bridge.processMonitorRegistration(for: surfaceID))
+
+        bridge.sendText(command + "\r", to: surfaceID)
+
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(5))
+        var processName: String?
+        while clock.now < deadline {
+            processName = ForegroundProcessDetector.processName(for: registration.shellPID)
+            if FileManager.default.fileExists(atPath: marker.path), processName == "sleep" {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        #expect(try String(contentsOf: marker, encoding: .utf8) == "live-team:live-team-reviewer")
+        #expect(processName == "sleep")
+        #expect(bridge.isProcessAlive(for: surfaceID))
+    }
+
     @Test("surfaceState returns nil for unknown surfaces")
     func surfaceStateReturnsNilForUnknownSurface() throws {
         let bridge = try makeBridge()

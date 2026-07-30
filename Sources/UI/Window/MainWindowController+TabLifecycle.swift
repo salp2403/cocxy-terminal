@@ -189,6 +189,7 @@ extension MainWindowController {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
         let closingTab = tabManager.tab(for: tabID)
         let closingSessionID = sessionIDForTab(tabID)
+        unregisterAgentTeamTab(tabID)
         deferredRestoredTabs.removeValue(forKey: tabID)
         deferredRestoredTabMetadataIDs.remove(tabID)
         dispatchPluginEvent(.sessionEnd, tabID: tabID, sessionID: closingSessionID)

@@ -1,161 +1,127 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AgentTeamViews.swift - SwiftUI surfaces for local agent teams.
+// AgentTeamViews.swift - Real terminal surfaces for local agent teams.
 
-import SwiftUI
-
-struct AgentTeamSidebarBadge: View {
-    let teammate: AgentTeammateState
-    let unreadCount: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 7, height: 7)
-            Text(teammate.name.prefix(2).uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .lineLimit(1)
-            if unreadCount > 0 {
-                Text(unreadCount > 9 ? "9+" : "\(unreadCount)")
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(Color.red.opacity(0.92), in: Capsule())
-                    .foregroundStyle(Color.white)
-            }
-        }
-        .accessibilityLabel("\(teammate.name), \(teammate.status.rawValue)")
-    }
-
-    private var statusColor: Color {
-        switch teammate.status {
-        case .starting: return .blue
-        case .working: return .green
-        case .waiting: return .yellow
-        case .finished: return .secondary
-        case .error: return .red
-        }
-    }
-}
-
-struct AgentTeammateRowView: View {
-    let teammate: AgentTeammateState
-    let notifications: [AgentTeamNotification]
-
-    var body: some View {
-        HStack(spacing: 10) {
-            AgentTeamSidebarBadge(teammate: teammate, unreadCount: notifications.count)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(teammate.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .lineLimit(1)
-                Text(teammate.status.rawValue)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-        }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel)
-    }
-
-    private var accessibilityLabel: String {
-        if notifications.isEmpty {
-            return "\(teammate.name), \(teammate.status.rawValue)"
-        }
-        return "\(teammate.name), \(teammate.status.rawValue), \(notifications.count) notifications"
-    }
-}
-
-struct AgentTeamPanelView: View {
-    let coordinator: AgentTeamCoordinator
-    var graph: AgentTeamGraph?
-    var feed: AgentTeamFeed?
-    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text(localizer.string("agentTeams.panel.title", fallback: "Agent Team"))
-                    .font(.system(size: 13, weight: .semibold))
-                Spacer()
-                Text("\(coordinator.config.teammates.count)")
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            ForEach(coordinator.teammateStates) { teammate in
-                AgentTeammateRowView(
-                    teammate: teammate,
-                    notifications: coordinator.notifications(for: teammate.id)
-                )
-            }
-            if let graph {
-                Divider()
-                TeamGraphView(graph: graph, localizer: localizer)
-            }
-            if let feed {
-                Divider()
-                AgentTeamFeedView(feed: feed, localizer: localizer)
-            }
-        }
-        .padding(12)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(localizer.string("agentTeams.panel.title", fallback: "Agent Team"))
-    }
-}
-
-struct AgentTeamCreatorSheet: View {
-    @Binding var teammates: String
-    let onLaunch: () -> Void
-    var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(localizer.string("agentTeams.creator.title", fallback: "Agent Team"))
-                .font(.headline)
-            TextField(
-                localizer.string("agentTeams.creator.placeholder", fallback: "Design, Build, Review"),
-                text: $teammates
-            )
-                .textFieldStyle(.roundedBorder)
-            HStack {
-                Spacer()
-                Button(
-                    localizer.string("agentTeams.creator.launch", fallback: "Launch"),
-                    action: onLaunch
-                )
-                    .keyboardShortcut(.defaultAction)
-            }
-        }
-        .padding(18)
-        .frame(minWidth: 360)
-    }
-}
+import Foundation
 
 extension MainWindowController: AgentTeamPaneLaunching {
     func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
-        spawnAgentTeamPane(launchSpec: launchSpec, targetTabID: nil)
+        spawnAgentTeamPane(
+            launchSpec: launchSpec,
+            initialPrompt: nil,
+            targetTabID: nil
+        )
     }
 
     func spawnAgentTeamPane(
         launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool {
+        spawnAgentTeamPane(
+            launchSpec: launchSpec,
+            initialPrompt: initialPrompt,
+            targetTabID: nil
+        )
+    }
+
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String? = nil,
         targetTabID: UUID?
     ) -> Bool {
-        let before = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count
-        spawnSubagentPanel(
-            subagentId: launchSpec.teammateID,
-            sessionId: launchSpec.teamID,
-            agentType: "\(launchSpec.teammateName) - \(launchSpec.provider.displayName)",
-            targetTabId: targetTabID ?? visibleTabID?.rawValue ?? tabManager.activeTabID?.rawValue,
-            allowReadableGridReflow: true
+        guard let command = AgentTeamLaunchCommand.makeShellCommand(for: launchSpec),
+              let workingDirectory = agentTeamWorkingDirectory(
+                launchSpec: launchSpec,
+                targetTabID: targetTabID
+              ) else {
+            return false
+        }
+
+        let tabID = createTab(
+            workingDirectory: workingDirectory,
+            terminalEnginePreference: .inProcess
         )
-        let after = panelContentViews.values.compactMap { $0 as? SubagentContentView }.count
-        return after > before || panelContentViews.values.contains { view in
-            guard let subagentView = view as? SubagentContentView else { return false }
-            return subagentView.subagentId == launchSpec.teammateID
-                && subagentView.sessionId == launchSpec.teamID
+        let title = "\(launchSpec.teammateName) - \(launchSpec.provider.displayName)"
+        tabManager.renameTab(id: tabID, newTitle: title)
+
+        guard let surfaceID = tabSurfaceMap[tabID] else {
+            performCloseTab(tabID)
+            return false
+        }
+
+        let teamID = AgentTeamConfig.slug(launchSpec.teamID)
+        agentTeamTabIDsByTeamID[teamID, default: []].insert(tabID)
+        terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID)
+        scheduleAgentTeamPrompt(
+            initialPrompt,
+            teamID: teamID,
+            tabID: tabID
+        )
+        refreshTabStrip()
+        return true
+    }
+
+    func closeAgentTeamPanes(teamID: String) {
+        let normalizedTeamID = AgentTeamConfig.slug(teamID)
+        let tabIDs = agentTeamTabIDsByTeamID.removeValue(forKey: normalizedTeamID) ?? []
+        for tabID in tabIDs.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+            if tabManager.tab(for: tabID) != nil {
+                performCloseTab(tabID)
+            }
+        }
+        removeSubagentPanels(forSession: normalizedTeamID)
+    }
+
+    func unregisterAgentTeamTab(_ tabID: TabID) {
+        for teamID in Array(agentTeamTabIDsByTeamID.keys) {
+            agentTeamTabIDsByTeamID[teamID]?.remove(tabID)
+            if agentTeamTabIDsByTeamID[teamID]?.isEmpty == true {
+                agentTeamTabIDsByTeamID.removeValue(forKey: teamID)
+            }
+        }
+    }
+
+    private func agentTeamWorkingDirectory(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        targetTabID: UUID?
+    ) -> URL? {
+        let directory: URL
+        if let path = launchSpec.workingDirectory {
+            directory = URL(fileURLWithPath: path, isDirectory: true).standardizedFileURL
+        } else if let targetTabID,
+                  let tab = tabManager.tab(for: TabID(rawValue: targetTabID)) {
+            directory = (tab.worktreeRoot ?? tab.workingDirectory).standardizedFileURL
+        } else {
+            directory = (tabManager.activeTab?.worktreeRoot
+                ?? tabManager.activeTab?.workingDirectory
+                ?? FileManager.default.homeDirectoryForCurrentUser).standardizedFileURL
+        }
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            return nil
+        }
+        return directory
+    }
+
+    private func scheduleAgentTeamPrompt(
+        _ prompt: String?,
+        teamID: String,
+        tabID: TabID
+    ) {
+        guard let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty else {
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(500))
+            guard let self,
+                  self.agentTeamTabIDsByTeamID[teamID]?.contains(tabID) == true,
+                  let surfaceID = self.tabSurfaceMap[tabID] else {
+                return
+            }
+            self.terminalEngine(for: surfaceID).sendText(prompt + "\r", to: surfaceID)
         }
     }
 }

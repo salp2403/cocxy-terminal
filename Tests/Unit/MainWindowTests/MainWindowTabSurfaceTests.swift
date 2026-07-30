@@ -1461,11 +1461,12 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         )
     }
 
-    func testAgentTeamPaneHandoffUsesProviderLaunchSpec() {
+    func testAgentTeamLaunchCreatesTerminalSurfaceAndRunsProviderCommand() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         controller.injectedDashboardViewModel = AgentDashboardViewModel()
+        let initialTabCount = controller.tabManager.tabs.count
 
         let spec = AgentTeamProviderLaunchSpec(
             provider: .codex,
@@ -1474,33 +1475,67 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             teammateName: "Plan",
             executable: "/usr/local/bin/codex",
             arguments: ["--profile", "agent-team"],
-            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-            workingDirectory: "/tmp/ship",
+            environment: [
+                "COCXY_AGENT_TEAM_ID": "ship",
+                "COCXY_AGENT_TEAMMATE_ID": "ship-plan",
+            ],
+            workingDirectory: NSTemporaryDirectory(),
             mutatesUserConfiguration: false,
             requiresPreviewBeforeLaunch: true
         )
 
         XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
-        let matchingPanel = controller.panelContentViews.first { _, view in
-            guard let subagentView = view as? SubagentContentView else { return false }
-            return subagentView.subagentId == "ship-plan" && subagentView.sessionId == "ship"
-        }
-
-        let contentID = matchingPanel?.key
-        XCTAssertNotNil(contentID)
-        if let contentID {
-            XCTAssertEqual(
-                controller.activeSplitManager?.panelTitle(for: contentID),
-                "Plan - Codex CLI"
-            )
-        }
+        XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount + 1)
+        let teamTabID = try? XCTUnwrap(controller.agentTeamTabIDsByTeamID["ship"]?.first)
+        XCTAssertNotNil(teamTabID)
+        guard let teamTabID else { return }
+        XCTAssertNotNil(controller.tabSurfaceMap[teamTabID])
+        XCTAssertEqual(controller.tabManager.tab(for: teamTabID)?.displayTitle, "Plan - Codex CLI")
+        XCTAssertEqual(
+            bridge.createSurfaceRequests.last?.workingDirectory?.standardizedFileURL.path,
+            URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).standardizedFileURL.path
+        )
+        XCTAssertEqual(
+            bridge.sentTexts.last?.text,
+            "exec '/usr/bin/env' 'COCXY_AGENT_TEAMMATE_ID=ship-plan' " +
+                "'COCXY_AGENT_TEAM_ID=ship' '/usr/local/bin/codex' '--profile' 'agent-team'\r"
+        )
+        XCTAssertTrue(controller.panelContentViews.isEmpty)
     }
 
-    func testAgentTeamPaneHandoffCreatesOnePanelPerTeammate() {
+    func testAgentTeamLaunchInjectsConfiguredPromptAfterProcessStart() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-reviewer",
+            teammateName: "Reviewer",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+            workingDirectory: NSTemporaryDirectory(),
+            mutatesUserConfiguration: false,
+            requiresPreviewBeforeLaunch: true
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(
+            launchSpec: spec,
+            initialPrompt: "Review the implementation",
+            targetTabID: nil
+        ))
+        try await Task.sleep(for: .milliseconds(600))
+
+        XCTAssertEqual(bridge.sentTexts.last?.text, "Review the implementation\r")
+    }
+
+    func testAgentTeamLaunchCreatesAndStopsOneTerminalPerTeammate() {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
         controller.injectedDashboardViewModel = AgentDashboardViewModel()
+        let initialTabCount = controller.tabManager.tabs.count
 
         let specs = [
             AgentTeamProviderLaunchSpec(
@@ -1510,8 +1545,11 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                 teammateName: "Planner",
                 executable: "/usr/local/bin/codex",
                 arguments: ["--profile", "agent-team"],
-                environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-                workingDirectory: "/tmp/ship",
+                environment: [
+                    "COCXY_AGENT_TEAM_ID": "ship",
+                    "COCXY_AGENT_TEAMMATE_ID": "ship-planner",
+                ],
+                workingDirectory: NSTemporaryDirectory(),
                 mutatesUserConfiguration: false,
                 requiresPreviewBeforeLaunch: true
             ),
@@ -1522,8 +1560,11 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                 teammateName: "Reviewer",
                 executable: "/usr/local/bin/codex",
                 arguments: ["--profile", "agent-team"],
-                environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-                workingDirectory: "/tmp/ship",
+                environment: [
+                    "COCXY_AGENT_TEAM_ID": "ship",
+                    "COCXY_AGENT_TEAMMATE_ID": "ship-reviewer",
+                ],
+                workingDirectory: NSTemporaryDirectory(),
                 mutatesUserConfiguration: false,
                 requiresPreviewBeforeLaunch: true
             ),
@@ -1533,10 +1574,20 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
         }
 
-        let subagentPanels = controller.panelContentViews.values.compactMap { $0 as? SubagentContentView }
-        XCTAssertEqual(subagentPanels.count, 2)
-        XCTAssertTrue(subagentPanels.contains { $0.subagentId == "ship-planner" && $0.sessionId == "ship" })
-        XCTAssertTrue(subagentPanels.contains { $0.subagentId == "ship-reviewer" && $0.sessionId == "ship" })
+        let teamTabIDs = controller.agentTeamTabIDsByTeamID["ship"] ?? []
+        XCTAssertEqual(teamTabIDs.count, 2)
+        XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount + 2)
+        XCTAssertTrue(teamTabIDs.allSatisfy { controller.tabSurfaceMap[$0] != nil })
+        XCTAssertTrue(bridge.sentTexts.contains { $0.text.contains("ship-planner") })
+        XCTAssertTrue(bridge.sentTexts.contains { $0.text.contains("ship-reviewer") })
+
+        let teamSurfaceIDs = Set(teamTabIDs.compactMap { controller.tabSurfaceMap[$0] })
+        controller.closeAgentTeamPanes(teamID: "ship")
+
+        XCTAssertNil(controller.agentTeamTabIDsByTeamID["ship"])
+        XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount)
+        XCTAssertTrue(teamTabIDs.allSatisfy { controller.tabManager.tab(for: $0) == nil })
+        XCTAssertTrue(teamSurfaceIDs.isSubset(of: Set(bridge.destroyedSurfaces)))
     }
 
     func testSpawnSubagentPanelIgnoresGenericSubprocessAgentType() {

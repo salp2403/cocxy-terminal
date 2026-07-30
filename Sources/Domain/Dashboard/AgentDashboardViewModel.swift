@@ -396,7 +396,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
                 type: teammate.name,
                 state: mapAgentTeamStatus(teammateStates[teammate.id] ?? .working),
                 startTime: run.createdAt,
-                lastActivity: "Provider handoff ready",
+                lastActivity: "Provider process started",
                 lastActivityTime: run.updatedAt
             )
         }
@@ -411,7 +411,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             tabId: tabId,
             state: state,
             agentName: run.config.provider.displayName,
-            lastActivity: teammateNames.isEmpty ? "Agent team launched" : "Agent team launched: \(teammateNames)",
+            lastActivity: teammateNames.isEmpty ? "Agent team running" : "Agent team running: \(teammateNames)",
             lastActivityTime: run.updatedAt,
             subagents: subagents
         )

@@ -510,7 +510,7 @@ struct AgentTeamSwiftTestingTests {
 
         #expect(result.teamID == "ship")
         #expect(result.launchedCount == 3)
-        #expect(paneLauncher.requests.map(\.teammateID) == [
+        #expect(paneLauncher.requests.map(\.launchSpec.teammateID) == [
             "ship-planner",
             "ship-implementer",
             "ship-reviewer",
@@ -530,7 +530,61 @@ struct AgentTeamSwiftTestingTests {
             "ship-implementer",
             "ship-reviewer",
         ])
-        #expect(paneLauncher.requests == result.launchSpecs)
+        #expect(paneLauncher.requests.map(\.launchSpec) == result.launchSpecs)
+        #expect(paneLauncher.requests.allSatisfy { $0.initialPrompt == nil })
+    }
+
+    @Test("launcher forwards prompts and rolls back partially opened teams")
+    @MainActor
+    func launcherForwardsPromptsAndRollsBackPartialLaunch() throws {
+        let config = try AgentTeamTemplateCatalog.builtin.makeConfig(
+            templateID: "cli-tool",
+            teamID: "ship",
+            provider: .codex
+        )
+        let paneLauncher = RecordingAgentTeamPaneLauncher(failingRequestIndex: 1)
+        let launcher = AgentTeamLauncher(
+            paneLauncher: paneLauncher,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { executable in
+                executable == "codex" ? "/usr/local/bin/codex" : nil
+            })
+        )
+
+        do {
+            _ = try launcher.launch(config: config)
+            Issue.record("Expected the second pane launch to fail")
+        } catch let error as AgentTeamError {
+            #expect(error == .paneLaunchFailed("ship-parser"))
+        }
+
+        #expect(paneLauncher.requests.map(\.initialPrompt) == [
+            "Own the core domain behavior and error model.",
+            "Own argument parsing, command contracts, and user-facing validation.",
+        ])
+        #expect(paneLauncher.closedTeamIDs == ["ship"])
+    }
+
+    @Test("provider launch command quotes environment executable and arguments deterministically")
+    func providerLaunchCommandIsDeterministicAndShellSafe() throws {
+        let launchSpec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-review",
+            teammateName: "Review",
+            executable: "/tmp/provider's bin",
+            arguments: ["--prompt", "review; exit 9"],
+            environment: [
+                "ROLE": "review's owner",
+                "COCXY_AGENT_TEAM_ID": "ship",
+            ],
+            workingDirectory: "/tmp",
+            mutatesUserConfiguration: false,
+            requiresPreviewBeforeLaunch: true
+        )
+
+        #expect(AgentTeamLaunchCommand.makeShellCommand(for: launchSpec) ==
+            "exec '/usr/bin/env' 'COCXY_AGENT_TEAM_ID=ship' 'ROLE=review'\\''s owner' " +
+            "'/tmp/provider'\\''s bin' '--prompt' 'review; exit 9'")
     }
 
     @Test("launcher rejects missing provider executable before opening panes")
@@ -554,6 +608,7 @@ struct AgentTeamSwiftTestingTests {
             #expect(error == .executableUnavailable(provider: .gemini, candidates: ["gemini"]))
         }
         #expect(paneLauncher.requests.isEmpty)
+        #expect(paneLauncher.closedTeamIDs.isEmpty)
     }
 
     @Test("coordinator keeps teammate notifications isolated")
@@ -591,12 +646,29 @@ struct AgentTeamSwiftTestingTests {
 
 @MainActor
 private final class RecordingAgentTeamPaneLauncher: AgentTeamPaneLaunching {
-    typealias Request = AgentTeamProviderLaunchSpec
+    struct Request: Equatable {
+        let launchSpec: AgentTeamProviderLaunchSpec
+        let initialPrompt: String?
+    }
 
     private(set) var requests: [Request] = []
+    private(set) var closedTeamIDs: [String] = []
+    private let failingRequestIndex: Int?
 
-    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
-        requests.append(launchSpec)
-        return true
+    init(failingRequestIndex: Int? = nil) {
+        self.failingRequestIndex = failingRequestIndex
+    }
+
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool {
+        let requestIndex = requests.count
+        requests.append(Request(launchSpec: launchSpec, initialPrompt: initialPrompt))
+        return requestIndex != failingRequestIndex
+    }
+
+    func closeAgentTeamPanes(teamID: String) {
+        closedTeamIDs.append(teamID)
     }
 }

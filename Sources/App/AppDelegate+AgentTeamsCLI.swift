@@ -75,11 +75,20 @@ extension AppDelegate {
             } else {
                 return (false, ["error": "Missing required param: teammates"])
             }
+            guard activeAgentTeamCoordinators[config.id] == nil else {
+                return (false, ["error": "Agent team is already running: \(config.id)"])
+            }
             let paneLauncher = SocketBoundAgentTeamPaneLauncher(
                 controller: controller,
                 targetTabID: rawTabID
             )
-            let launcher = AgentTeamLauncher(paneLauncher: paneLauncher)
+            let launchWorkingDirectory = approvedContext.workingDirectory
+            let launcher = AgentTeamLauncher(
+                paneLauncher: paneLauncher,
+                launchProfileProvider: { _ in
+                    AgentTeamLaunchProfile(workingDirectory: launchWorkingDirectory)
+                }
+            )
             let result = try launcher.launch(config: config)
             activeAgentTeamCoordinators[config.id] = AgentTeamCoordinator(config: config)
             activeAgentTeamRuns[config.id] = AgentTeamRunState(
@@ -103,8 +112,9 @@ extension AppDelegate {
                 "provider": config.provider.rawValue,
                 "teammates": "\(result.launchedCount)",
                 "launch-specs": "\(result.launchSpecs.count)",
+                "surfaces": "\(result.launchedCount)",
                 "provider-preflight": "passed",
-                "runtime-handoff": "provider-launch-spec",
+                "runtime-handoff": "provider-process",
                 "notifications-isolated": "\(config.notificationsIsolated)",
             ]
             if let templateID = params["template"], !templateID.isEmpty {
@@ -149,7 +159,7 @@ extension AppDelegate {
 
         for controller in allWindowControllers {
             controller.dashboardViewModel?.removeAgentTeamRun(teamID: teamID)
-            controller.removeSubagentPanels(forSession: teamID)
+            controller.closeAgentTeamPanes(teamID: teamID)
         }
 
         return (true, [
@@ -226,10 +236,18 @@ private final class SocketBoundAgentTeamPaneLauncher: AgentTeamPaneLaunching {
         self.targetTabID = targetTabID
     }
 
-    func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
+    func spawnAgentTeamPane(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String?
+    ) -> Bool {
         controller?.spawnAgentTeamPane(
             launchSpec: launchSpec,
+            initialPrompt: initialPrompt,
             targetTabID: targetTabID
         ) ?? false
+    }
+
+    func closeAgentTeamPanes(teamID: String) {
+        controller?.closeAgentTeamPanes(teamID: teamID)
     }
 }
