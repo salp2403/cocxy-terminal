@@ -7,6 +7,79 @@ import Testing
 
 @Suite("MainWindowController Voice input")
 struct MainWindowVoiceInputSwiftTestingTests {
+    @Test("Voice transcript writes to a detected terminal agent without submitting")
+    @MainActor
+    func voiceTranscriptWritesToDetectedAgentForReview() throws {
+        let engine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: engine,
+            configService: try voiceConfigService(autoSendToAgent: false)
+        )
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
+        controller.showWindow(nil)
+        _ = controller.createTab()
+        controller.injectedAgentPromptRunner = MainWindowAgentPromptRunner()
+        let agentPanel = controller.resolveAgentPanelViewModel()
+        controller.isAgentModeVisible = true
+
+        let surfaceID = try #require(controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID)
+        store.update(surfaceID: surfaceID) { state in
+            state.agentState = .waitingInput
+            state.detectedAgent = detectedAgent()
+        }
+
+        controller.applyVoiceTranscript(VoiceTranscript(
+            text: "  review this change  ",
+            localeIdentifier: "en-US",
+            isFinal: true
+        ))
+
+        #expect(engine.sentTexts.count == 1)
+        #expect(engine.sentTexts.first?.surface == surfaceID)
+        #expect(engine.sentTexts.first?.text == "review this change")
+        #expect(agentPanel.promptDraft.isEmpty)
+        #expect(controller.isCommandPaletteVisible == false)
+    }
+
+    @Test("Voice auto-send submits to the detected agent in the focused split")
+    @MainActor
+    func voiceAutoSendTargetsFocusedSplit() throws {
+        let engine = MockTerminalEngine()
+        let controller = MainWindowController(
+            bridge: engine,
+            configService: try voiceConfigService(autoSendToAgent: true)
+        )
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
+        controller.showWindow(nil)
+        _ = controller.createTab()
+        let primarySurfaceID = try #require(
+            controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        )
+
+        controller.performVisualSplit(isVertical: true)
+
+        let focusedSurfaceID = try #require(
+            controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+        )
+        #expect(focusedSurfaceID != primarySurfaceID)
+        store.update(surfaceID: focusedSurfaceID) { state in
+            state.agentState = .waitingInput
+            state.detectedAgent = detectedAgent()
+        }
+
+        controller.applyVoiceTranscript(VoiceTranscript(
+            text: "run the checks",
+            localeIdentifier: "en-US",
+            isFinal: true
+        ))
+
+        #expect(engine.sentTexts.count == 1)
+        #expect(engine.sentTexts.first?.surface == focusedSurfaceID)
+        #expect(engine.sentTexts.first?.text == "run the checks\r")
+    }
+
     @Test("Voice transcript opens Command Palette and fills query")
     @MainActor
     func voiceTranscriptOpensCommandPaletteAndFillsQuery() async throws {
@@ -79,6 +152,26 @@ struct MainWindowVoiceInputSwiftTestingTests {
 
         #expect(controller.agentPanelViewModel?.promptDraft == "summarize terminal output")
         #expect(controller.isCommandPaletteVisible == false)
+    }
+
+    @MainActor
+    private func voiceConfigService(autoSendToAgent: Bool) throws -> ConfigService {
+        let service = ConfigService(fileProvider: VoiceInputConfigProvider(content: """
+        [voice]
+        enabled = true
+        locale = "system"
+        auto-send-to-agent = \(autoSendToAgent)
+        """))
+        try service.reload()
+        return service
+    }
+
+    private func detectedAgent() -> DetectedAgent {
+        DetectedAgent(
+            name: "codex",
+            launchCommand: "codex",
+            startedAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
     }
 }
 

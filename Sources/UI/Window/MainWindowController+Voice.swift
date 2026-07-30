@@ -44,6 +44,17 @@ extension MainWindowController {
         let text = transcript.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 
+        if let surfaceID = activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
+           injectedPerSurfaceStore?.state(for: surfaceID).hasAgent == true {
+            let shouldSubmit = configService?.current.voice.autoSendToAgent
+                ?? VoiceConfig.defaults.autoSendToAgent
+            terminalEngine(for: surfaceID).sendText(
+                shouldSubmit ? text + "\r" : text,
+                to: surfaceID
+            )
+            return
+        }
+
         if isAgentModeVisible {
             let viewModel = resolveAgentPanelViewModel()
             viewModel.promptDraft = mergedVoiceText(existing: viewModel.promptDraft, transcript: text)
