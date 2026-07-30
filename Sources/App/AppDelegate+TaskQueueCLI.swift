@@ -186,7 +186,7 @@ extension AppDelegate {
         )
     }
 
-    nonisolated private static func normalizedTaskQueuePipeline(
+    nonisolated static func normalizedTaskQueuePipeline(
         _ pipeline: AgentPipeline,
         defaultWorktree: String
     ) throws -> AgentPipeline {

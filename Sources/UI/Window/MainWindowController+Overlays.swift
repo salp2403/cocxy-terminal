@@ -1093,6 +1093,19 @@ extension MainWindowController {
                     }
                 }
             ),
+            CommandAction(
+                id: "taskQueue.manage",
+                name: "Task Queue...",
+                description: "Schedule and manage persistent local agent pipelines",
+                shortcut: nil,
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.showTaskQueueCenter()
+                    }
+                }
+            ),
             commandPaletteTaskHandoffAction(),
             CommandAction(
                 id: "worktree.create",

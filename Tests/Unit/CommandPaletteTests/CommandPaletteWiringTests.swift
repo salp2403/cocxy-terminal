@@ -92,6 +92,7 @@ final class CommandPaletteWiringTests: XCTestCase {
             "window.pictureInPicture",
             "taskRun.fanOut",
             "taskRun.compare",
+            "taskQueue.manage",
         ]
 
         XCTAssertTrue(
@@ -127,6 +128,7 @@ final class CommandPaletteWiringTests: XCTestCase {
         XCTAssertTrue(auroraActionIDs.contains("navigation.jumpProject"))
         XCTAssertTrue(auroraActionIDs.contains("taskRun.fanOut"))
         XCTAssertTrue(auroraActionIDs.contains("taskRun.compare"))
+        XCTAssertTrue(auroraActionIDs.contains("taskQueue.manage"))
         XCTAssertEqual(actionsByID["theme.cycle"]?.name, "Toggle Light/Dark Theme")
         XCTAssertEqual(
             actionsByID["theme.cycle"]?.localized(
