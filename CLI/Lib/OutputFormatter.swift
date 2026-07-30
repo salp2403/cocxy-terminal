@@ -453,6 +453,17 @@ public enum OutputFormatter {
                 return "Task candidate \(candidateID) promoted."
             }
             return "Task candidate \(candidateID) promoted; cleanup needs attention:\n\(cleanupFailures)"
+        case .taskEnqueue:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            let status = response.data?["task-status"] ?? "queued"
+            let trigger = response.data?["trigger"] ?? "manual"
+            let steps = response.data?["steps"] ?? "0"
+            return "Task \(taskID) enqueued (\(status), \(trigger), \(steps) steps)."
+        case .taskList:
+            return formatTaskQueueList(response: response)
+        case .taskCancel:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            return "Task \(taskID) cancelled."
 
         // SSH (v4)
         case .ssh:
@@ -838,6 +849,31 @@ public enum OutputFormatter {
 
     private static func formattedWebHost(_ bindAddress: String) -> String {
         bindAddress.contains(":") ? "[\(bindAddress)]" : bindAddress
+    }
+
+    private static func formatTaskQueueList(response: CLISocketResponse) -> String {
+        guard let data = response.data,
+              let returned = Int(data["returned"] ?? "0"),
+              returned > 0 else {
+            return "No scheduled tasks."
+        }
+
+        let total = data["total"] ?? String(returned)
+        let offset = data["offset"] ?? "0"
+        var lines = ["Scheduled tasks: \(returned) shown, \(total) total (offset \(offset))"]
+        for index in 0..<returned {
+            let prefix = "task_\(index)_"
+            let taskID = data[prefix + "id"] ?? "unknown"
+            let status = data[prefix + "status"] ?? "unknown"
+            let trigger = data[prefix + "trigger"] ?? "manual"
+            let steps = data[prefix + "steps"] ?? "0"
+            let runs = data[prefix + "runs"] ?? "0"
+            lines.append("\(taskID)  \(status)  \(trigger)  steps \(steps)  runs \(runs)")
+            if let nextRun = data[prefix + "next-run-at"], !nextRun.isEmpty {
+                lines.append("  next: \(nextRun)")
+            }
+        }
+        return lines.joined(separator: "\n")
     }
 
     private static func boolText(_ value: String) -> String {

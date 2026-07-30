@@ -5,12 +5,16 @@ import Foundation
 
 enum AgentPipelineError: Error, Equatable, Sendable, CustomStringConvertible {
     case emptyID
+    case idTooLong(maximumBytes: Int)
     case emptyStepID
+    case stepIDTooLong(stepID: String, maximumBytes: Int)
     case emptySteps
     case tooManySteps(maximum: Int)
     case duplicateStepID(String)
     case emptyPrompt(stepID: String)
     case promptTooLarge(stepID: String, maximumBytes: Int)
+    case nameTooLong(maximumBytes: Int)
+    case worktreePathTooLong(stepID: String, maximumBytes: Int)
     case unknownDependency(stepID: String, dependencyID: String)
     case selfDependency(stepID: String)
     case dependencyCycle([String])
@@ -20,8 +24,12 @@ enum AgentPipelineError: Error, Equatable, Sendable, CustomStringConvertible {
         switch self {
         case .emptyID:
             return "Agent pipeline id cannot be empty"
+        case .idTooLong(let maximumBytes):
+            return "Agent pipeline id cannot exceed \(maximumBytes) UTF-8 bytes"
         case .emptyStepID:
             return "Agent pipeline step id cannot be empty"
+        case .stepIDTooLong(let stepID, let maximumBytes):
+            return "Agent pipeline step id \(stepID) cannot exceed \(maximumBytes) UTF-8 bytes"
         case .emptySteps:
             return "Agent pipeline must contain at least one step"
         case .tooManySteps(let maximum):
@@ -32,6 +40,10 @@ enum AgentPipelineError: Error, Equatable, Sendable, CustomStringConvertible {
             return "Agent pipeline step \(stepID) has an empty prompt"
         case .promptTooLarge(let stepID, let maximumBytes):
             return "Agent pipeline step \(stepID) exceeds the \(maximumBytes)-byte prompt limit"
+        case .nameTooLong(let maximumBytes):
+            return "Agent pipeline name cannot exceed \(maximumBytes) UTF-8 bytes"
+        case .worktreePathTooLong(let stepID, let maximumBytes):
+            return "Agent pipeline step \(stepID) worktree cannot exceed \(maximumBytes) UTF-8 bytes"
         case .unknownDependency(let stepID, let dependencyID):
             return "Agent pipeline step \(stepID) depends on unknown step \(dependencyID)"
         case .selfDependency(let stepID):
@@ -46,6 +58,8 @@ enum AgentPipelineError: Error, Equatable, Sendable, CustomStringConvertible {
 
 struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
     static let maximumPromptBytes = 32 * 1_024
+    static let maximumIDBytes = 128
+    static let maximumWorktreePathBytes = 4_096
 
     let id: String
     let provider: AgentTeamProvider
@@ -89,7 +103,11 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
 
     static func normalizedID(_ rawID: String) -> String {
         let trimmed = rawID.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "" : AgentTeamConfig.slug(trimmed)
+        guard !trimmed.isEmpty,
+              trimmed.unicodeScalars.contains(where: CharacterSet.alphanumerics.contains) else {
+            return ""
+        }
+        return AgentTeamConfig.slug(trimmed)
     }
 
     private static func uniqueNormalizedIDs(_ rawIDs: [String]) -> [String] {
@@ -103,6 +121,8 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
 
 struct AgentPipeline: Identifiable, Codable, Sendable, Equatable {
     static let maximumStepCount = 64
+    static let maximumIDBytes = 128
+    static let maximumNameBytes = 256
 
     let id: String
     let name: String?
@@ -113,15 +133,21 @@ struct AgentPipeline: Identifiable, Codable, Sendable, Equatable {
         name: String? = nil,
         steps: [AgentPipelineStep]
     ) throws {
-        let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty else { throw AgentPipelineError.emptyID }
+        let normalizedID = AgentPipelineStep.normalizedID(id)
+        guard !normalizedID.isEmpty else { throw AgentPipelineError.emptyID }
+        guard normalizedID.utf8.count <= Self.maximumIDBytes else {
+            throw AgentPipelineError.idTooLong(maximumBytes: Self.maximumIDBytes)
+        }
         guard !steps.isEmpty else { throw AgentPipelineError.emptySteps }
         guard steps.count <= Self.maximumStepCount else {
             throw AgentPipelineError.tooManySteps(maximum: Self.maximumStepCount)
         }
 
-        self.id = AgentTeamConfig.slug(trimmedID)
+        self.id = normalizedID
         let trimmedName = name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let trimmedName, trimmedName.utf8.count > Self.maximumNameBytes {
+            throw AgentPipelineError.nameTooLong(maximumBytes: Self.maximumNameBytes)
+        }
         self.name = trimmedName?.isEmpty == false ? trimmedName : nil
         self.steps = steps
         try validate()
@@ -176,6 +202,12 @@ struct AgentPipeline: Identifiable, Codable, Sendable, Equatable {
             guard !step.id.isEmpty else {
                 throw AgentPipelineError.emptyStepID
             }
+            guard step.id.utf8.count <= AgentPipelineStep.maximumIDBytes else {
+                throw AgentPipelineError.stepIDTooLong(
+                    stepID: step.id,
+                    maximumBytes: AgentPipelineStep.maximumIDBytes
+                )
+            }
             guard knownIDs.insert(step.id).inserted else {
                 throw AgentPipelineError.duplicateStepID(step.id)
             }
@@ -186,6 +218,13 @@ struct AgentPipeline: Identifiable, Codable, Sendable, Equatable {
                 throw AgentPipelineError.promptTooLarge(
                     stepID: step.id,
                     maximumBytes: AgentPipelineStep.maximumPromptBytes
+                )
+            }
+            if let worktree = step.worktree,
+               worktree.utf8.count > AgentPipelineStep.maximumWorktreePathBytes {
+                throw AgentPipelineError.worktreePathTooLong(
+                    stepID: step.id,
+                    maximumBytes: AgentPipelineStep.maximumWorktreePathBytes
                 )
             }
         }

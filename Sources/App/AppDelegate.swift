@@ -229,6 +229,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Persistent scheduled agent pipelines and their runtime rendezvous state.
     var taskQueue: TaskQueue?
+    var taskQueueIsReady = false
     var taskQueueTimer: Timer?
     let agentPipelineCompletionBroker = AgentPipelineCompletionBroker()
     var taskQueueAgentTeamContexts: [String: TaskQueueAgentTeamContext] = [:]
@@ -463,6 +464,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         taskQueueTimer = nil
         let terminatingTaskQueue = taskQueue
         taskQueue = nil
+        taskQueueIsReady = false
         Task { [agentPipelineCompletionBroker] in
             await terminatingTaskQueue?.shutdown()
             await agentPipelineCompletionBroker.cancelAll()
@@ -3018,6 +3020,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     return fallback
                 }
                 return delegate.handleTaskRunCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
+            },
+            taskQueueCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleTaskQueueCLIRequest(
                     kind: kind,
                     params: params,
                     approvedContext: context

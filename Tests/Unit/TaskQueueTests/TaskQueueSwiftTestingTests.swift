@@ -53,6 +53,26 @@ struct TaskQueueSwiftTestingTests {
         }
     }
 
+    @Test("rejects unusable and oversized task identifiers before persistence")
+    func rejectsInvalidTaskIdentifiers() throws {
+        let pipeline = try AgentPipeline(
+            id: "valid-pipeline",
+            steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
+        )
+        #expect(throws: TaskQueueError.emptyTaskID) {
+            _ = try TaskQueueItem(id: "---", pipeline: pipeline, trigger: .manual)
+        }
+        #expect(throws: TaskQueueError.taskIDTooLong(
+            maximumBytes: TaskQueueItem.maximumIDBytes
+        )) {
+            _ = try TaskQueueItem(
+                id: String(repeating: "t", count: TaskQueueItem.maximumIDBytes + 1),
+                pipeline: pipeline,
+                trigger: .manual
+            )
+        }
+    }
+
     @Test("manual tasks retry after backoff and emit paired lifecycle events")
     func manualTaskRetriesAfterBackoff() async throws {
         let clock = LockedQueueClock(now: Date(timeIntervalSince1970: 10_000))

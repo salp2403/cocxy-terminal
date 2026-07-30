@@ -18,6 +18,7 @@ extension AppDelegate {
 
     func setupTaskQueueRuntime() {
         guard taskQueue == nil else { return }
+        taskQueueIsReady = false
 
         do {
             let queue = try TaskQueue(
@@ -56,6 +57,7 @@ extension AppDelegate {
         report: TaskQueueStoreLoadReport
     ) {
         guard taskQueue === queue else { return }
+        taskQueueIsReady = true
         if !report.rejectedFiles.isEmpty {
             Self.taskQueueLogger.warning(
                 "Task queue ignored \(report.rejectedFiles.count, privacy: .public) invalid persisted file(s)"
@@ -74,6 +76,7 @@ extension AppDelegate {
     private func failTaskQueueStartup(queue: TaskQueue, error: Error) {
         guard taskQueue === queue else { return }
         taskQueue = nil
+        taskQueueIsReady = false
         taskQueueTimer?.invalidate()
         taskQueueTimer = nil
         Self.taskQueueLogger.error(
@@ -219,7 +222,10 @@ extension AppDelegate {
         _ event: PluginEvent,
         environment: [String: String]
     ) {
-        if event != .taskRunStarted, event != .taskRunFinished, let taskQueue {
+        if event != .taskRunStarted,
+           event != .taskRunFinished,
+           taskQueueIsReady,
+           let taskQueue {
             Task { await taskQueue.handlePluginEvent(event) }
         }
         pluginManager?.dispatchEvent(event, environment: environment)

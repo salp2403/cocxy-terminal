@@ -418,6 +418,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// worktree state and native terminal surfaces stay one transaction.
     let taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Routes persistent task queue enqueue/list/cancel operations through AppDelegate.
+    let taskQueueCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Exports bounded tab context and imports it into a destination agent tab.
     let taskHandoffCLIProvider: (@Sendable (
         String,
@@ -728,6 +731,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        taskQueueCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         taskHandoffCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
@@ -842,6 +846,19 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             }
         } else {
             self.taskRunCLIProvider = nil
+        }
+        if let taskQueueCLIProvider {
+            self.taskQueueCLIProvider = { kind, params in
+                if kind == "list" {
+                    return taskQueueCLIProvider(kind, params)
+                }
+                guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                    return (false, ["error": "Authorization denied"])
+                }
+                return taskQueueCLIProvider(kind, params)
+            }
+        } else {
+            self.taskQueueCLIProvider = nil
         }
         self.taskHandoffCLIProvider = Self.approvalGated(
             taskHandoffCLIProvider,
@@ -1346,6 +1363,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTaskRun(kind: "list", request: request)
         case .taskRunPromote:
             return handleTaskRun(kind: "promote", request: request)
+        case .taskEnqueue:
+            return handleTaskQueue(kind: "enqueue", request: request)
+        case .taskList:
+            return handleTaskQueue(kind: "list", request: request)
+        case .taskCancel:
+            return handleTaskQueue(kind: "cancel", request: request)
         case .handoffExport:
             return handleTaskHandoff(kind: "export", request: request)
         case .handoffImport:

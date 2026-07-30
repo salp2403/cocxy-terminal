@@ -205,6 +205,81 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(preview.contains("authority.repository: /tmp/project"))
     }
 
+    @Test("task enqueue preview hashes prompt content instead of displaying it")
+    func taskEnqueuePreviewRedactsPrompt() throws {
+        let prompt = "Review a private implementation detail"
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "task-enqueue-preview",
+                command: "task-enqueue",
+                params: [
+                    "task-id": "review",
+                    "provider": "codex",
+                    "prompt": prompt,
+                    "cwd": "/tmp/project",
+                    "trigger": "manual",
+                ]
+            )
+        ))
+
+        let preview = SocketPrivilegedCommandSecurity.approvalPreview(request)
+        let expectedDigest = SocketPrivilegedCommandSecurity.digest(data: Data(prompt.utf8))
+
+        #expect(!preview.contains(prompt))
+        #expect(preview.contains("prompt: \(prompt.utf8.count) UTF-8 bytes"))
+        #expect(preview.contains(expectedDigest))
+    }
+
+    @Test("task enqueue approval binds canonical pipeline bytes and worktree")
+    func taskEnqueueApprovalBindsPipelineAndWorktree() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-task-approval-\(UUID().uuidString)", isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        let pipelineURL = root.appendingPathComponent("pipeline.json")
+        let pipelineData = Data("{\"id\":\"review\",\"steps\":[]}".utf8)
+        try pipelineData.write(to: pipelineURL)
+
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            deferContentSetup: true
+        )
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "task-enqueue-pipeline",
+                command: "task-enqueue",
+                params: [
+                    "task-id": "review",
+                    "input": pipelineURL.path,
+                    "cwd": root.path,
+                    "trigger": "manual",
+                ]
+            )
+        ))
+
+        let target = try #require(
+            delegate.privilegedSocketCommandPresentationTarget(for: request)
+        )
+
+        #expect(target.context.scope == .localExecution)
+        #expect(target.context.workingDirectory == root.path)
+        #expect(target.context.localResourcePaths["cwd"] == root.path)
+        #expect(target.context.localResourcePaths["input"] == pipelineURL.path)
+        #expect(
+            target.context.localResourceDigests["input"]
+                == SocketPrivilegedCommandSecurity.digest(data: pipelineData)
+        )
+        #expect(target.context.authorityDetails == [
+            "operation": "enqueue",
+            "task-id": "review",
+            "trigger": "manual",
+        ])
+    }
+
     @Test("cell cloud-init reads and binds bytes only after approval")
     func cellCloudInitApprovalBindsPathAndDigest() throws {
         let root = FileManager.default.temporaryDirectory

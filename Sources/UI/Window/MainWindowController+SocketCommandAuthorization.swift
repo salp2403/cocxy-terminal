@@ -602,6 +602,51 @@ extension AppDelegate {
                     controller: controller
                 )
             }
+            if request.command == .taskEnqueue {
+                guard let authorityDetails = TaskQueueSocketAuthority.details(
+                    operation: "enqueue",
+                    params: request.params
+                ),
+                      let workingDirectoryURL = canonicalCLIPath(request.params["cwd"]),
+                      Self.isExistingDirectory(workingDirectoryURL) else {
+                    return nil
+                }
+                var localResourcePaths = ["cwd": workingDirectoryURL.path]
+                var localResourceDigests: [String: String] = [:]
+                if request.params["input"] != nil {
+                    guard let inputURL = canonicalCLIPath(request.params["input"]),
+                          let digest = SocketPrivilegedCommandSecurity.boundedFileDigest(
+                            at: inputURL
+                          ) else {
+                        return nil
+                    }
+                    localResourcePaths["input"] = inputURL.path
+                    localResourceDigests["input"] = digest
+                }
+                return globalPresentationTarget(
+                    controller: focusedController,
+                    scope: .localExecution,
+                    workingDirectory: workingDirectoryURL.path,
+                    localResourcePaths: localResourcePaths,
+                    localResourceDigests: localResourceDigests,
+                    authorityDetails: authorityDetails,
+                    displayName: "Queue task \(authorityDetails["task-id"] ?? "task")"
+                )
+            }
+            if request.command == .taskCancel {
+                guard let authorityDetails = TaskQueueSocketAuthority.details(
+                    operation: "cancel",
+                    params: request.params
+                ) else {
+                    return nil
+                }
+                return globalPresentationTarget(
+                    controller: focusedController,
+                    scope: .localExecution,
+                    authorityDetails: authorityDetails,
+                    displayName: "Cancel task \(authorityDetails["task-id"] ?? "task")"
+                )
+            }
             if request.command == .agentTeamLaunch || request.command == .taskRun {
                 guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
                 let workingDirectory = canonicalWorkingDirectory(for: tab)
@@ -966,6 +1011,12 @@ extension AppDelegate {
         return URL(fileURLWithPath: expanded)
             .resolvingSymlinksInPath()
             .standardizedFileURL
+    }
+
+    private static func isExistingDirectory(_ url: URL) -> Bool {
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
     }
 
     private func canonicalSocketResourcePaths(

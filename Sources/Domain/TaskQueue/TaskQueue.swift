@@ -5,6 +5,7 @@ import Foundation
 
 enum TaskQueueError: Error, Equatable, Sendable, CustomStringConvertible {
     case emptyTaskID
+    case taskIDTooLong(maximumBytes: Int)
     case duplicateTask(String)
     case taskNotFound(String)
     case taskAlreadyFinished(String)
@@ -18,6 +19,8 @@ enum TaskQueueError: Error, Equatable, Sendable, CustomStringConvertible {
         switch self {
         case .emptyTaskID:
             return "Queued task id cannot be empty"
+        case .taskIDTooLong(let maximumBytes):
+            return "Queued task id cannot exceed \(maximumBytes) UTF-8 bytes"
         case .duplicateTask(let taskID):
             return "Queued task already exists: \(taskID)"
         case .taskNotFound(let taskID):
@@ -113,6 +116,8 @@ enum TaskQueueItemStatus: String, Codable, Sendable, Equatable {
 }
 
 struct TaskQueueItem: Identifiable, Codable, Sendable, Equatable {
+    static let maximumIDBytes = 128
+
     let id: String
     let pipeline: AgentPipeline
     let trigger: TaskQueueTrigger
@@ -139,8 +144,11 @@ struct TaskQueueItem: Identifiable, Codable, Sendable, Equatable {
         maximumParallelSteps: Int = 2,
         now: Date = Date()
     ) throws {
-        let trimmedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedID.isEmpty else { throw TaskQueueError.emptyTaskID }
+        let normalizedID = AgentPipelineStep.normalizedID(id)
+        guard !normalizedID.isEmpty else { throw TaskQueueError.emptyTaskID }
+        guard normalizedID.utf8.count <= Self.maximumIDBytes else {
+            throw TaskQueueError.taskIDTooLong(maximumBytes: Self.maximumIDBytes)
+        }
         guard (0...5).contains(maximumRetries) else {
             throw TaskQueueError.invalidMaximumRetries(maximumRetries)
         }
@@ -148,7 +156,7 @@ struct TaskQueueItem: Identifiable, Codable, Sendable, Equatable {
             throw TaskQueueError.invalidConcurrency(maximumParallelSteps)
         }
 
-        self.id = AgentTeamConfig.slug(trimmedID)
+        self.id = normalizedID
         self.pipeline = pipeline
         self.trigger = trigger
         try Self.validateTrigger(trigger)
@@ -185,8 +193,11 @@ struct TaskQueueItem: Identifiable, Codable, Sendable, Equatable {
     }
 
     func validatePersistedState() throws {
-        guard !id.isEmpty, id == AgentTeamConfig.slug(id) else {
+        guard !id.isEmpty, id == AgentPipelineStep.normalizedID(id) else {
             throw TaskQueueError.invalidPersistedState("invalid task id")
+        }
+        guard id.utf8.count <= Self.maximumIDBytes else {
+            throw TaskQueueError.taskIDTooLong(maximumBytes: Self.maximumIDBytes)
         }
         guard (0...5).contains(maximumRetries) else {
             throw TaskQueueError.invalidMaximumRetries(maximumRetries)

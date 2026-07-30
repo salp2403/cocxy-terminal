@@ -403,6 +403,12 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case taskRunList = "task-run-list"
     /// Merge one selected candidate after explicit local approval.
     case taskRunPromote = "task-run-promote"
+    /// Persist and schedule an agent pipeline.
+    case taskEnqueue = "task-enqueue"
+    /// List persistent scheduled tasks without prompt or path content.
+    case taskList = "task-list"
+    /// Cancel a scheduled or active task.
+    case taskCancel = "task-cancel"
 
     // MARK: - Window Management (v3)
 

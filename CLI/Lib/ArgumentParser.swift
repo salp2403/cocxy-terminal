@@ -142,6 +142,77 @@ public struct TaskRunCLIOptions: Equatable {
     }
 }
 
+public enum TaskQueueCLITrigger: Equatable {
+    case manual
+    case cron(expression: String, timeZoneIdentifier: String?)
+    case event(String)
+}
+
+public struct TaskEnqueueCLIOptions: Equatable {
+    public let taskID: String
+    public let pipelinePath: String?
+    public let provider: String?
+    public let prompt: String?
+    public let worktree: String?
+    public let trigger: TaskQueueCLITrigger
+    public let maximumRetries: Int
+    public let maximumParallelSteps: Int
+
+    public init(
+        taskID: String,
+        pipelinePath: String? = nil,
+        provider: String? = nil,
+        prompt: String? = nil,
+        worktree: String? = nil,
+        trigger: TaskQueueCLITrigger = .manual,
+        maximumRetries: Int = 0,
+        maximumParallelSteps: Int = 2
+    ) {
+        self.taskID = taskID
+        self.pipelinePath = pipelinePath
+        self.provider = provider
+        self.prompt = prompt
+        self.worktree = worktree
+        self.trigger = trigger
+        self.maximumRetries = maximumRetries
+        self.maximumParallelSteps = maximumParallelSteps
+    }
+
+    var socketParams: [String: String] {
+        var params: [String: String] = [
+            "task-id": taskID,
+            "retries": String(maximumRetries),
+            "concurrency": String(maximumParallelSteps),
+        ]
+        if let pipelinePath { params["input"] = pipelinePath }
+        if let provider { params["provider"] = provider }
+        if let prompt { params["prompt"] = prompt }
+        if let worktree { params["cwd"] = worktree }
+        switch trigger {
+        case .manual:
+            params["trigger"] = "manual"
+        case .cron(let expression, let timeZoneIdentifier):
+            params["trigger"] = "cron"
+            params["cron"] = expression
+            if let timeZoneIdentifier { params["timezone"] = timeZoneIdentifier }
+        case .event(let event):
+            params["trigger"] = "on-event"
+            params["event"] = event
+        }
+        return params
+    }
+}
+
+public struct TaskListCLIOptions: Equatable {
+    public let limit: Int
+    public let offset: Int
+
+    public init(limit: Int = 50, offset: Int = 0) {
+        self.limit = limit
+        self.offset = offset
+    }
+}
+
 public struct CellCreateCLIOptions: Equatable {
     public let provider: String
     public let profile: String?
@@ -952,6 +1023,15 @@ public enum ParsedCommand: Equatable {
     /// `cocxy task-run promote <run-id> --candidate <candidate-id>`
     case taskRunPromote(runID: String, candidateID: String)
 
+    /// `cocxy task-enqueue --id <id> (--pipeline <path> | --prompt <text>)`
+    case taskEnqueue(TaskEnqueueCLIOptions)
+
+    /// `cocxy task-list [--limit <1...100>] [--offset <n>]`
+    case taskList(TaskListCLIOptions)
+
+    /// `cocxy task-cancel <task-id>`
+    case taskCancel(taskID: String)
+
     // MARK: - SSH (v4)
 
     /// `cocxy ssh user@host [-p port] [-i identity]`
@@ -1461,6 +1541,15 @@ public enum CLIArgumentParser {
 
         case "task-run":
             return try parseTaskRun(arguments: Array(arguments.dropFirst()))
+
+        case "task-enqueue":
+            return try parseTaskEnqueue(arguments: Array(arguments.dropFirst()))
+
+        case "task-list":
+            return try parseTaskList(arguments: Array(arguments.dropFirst()))
+
+        case "task-cancel":
+            return try parseTaskCancel(arguments: Array(arguments.dropFirst()))
 
         case "web":
             return try parseWeb(arguments: Array(arguments.dropFirst()))
@@ -5467,6 +5556,233 @@ public enum CLIArgumentParser {
             count: count,
             baseRef: normalizedBaseRef?.isEmpty == false ? normalizedBaseRef : nil
         ))
+    }
+
+    private static func parseTaskEnqueue(arguments: [String]) throws -> ParsedCommand {
+        var taskID: String?
+        var pipelinePath: String?
+        var provider: String?
+        var prompt: String?
+        var worktree: String?
+        var cronExpression: String?
+        var timeZoneIdentifier: String?
+        var event: String?
+        var maximumRetries = 0
+        var maximumParallelSteps = 2
+        var index = 0
+
+        while index < arguments.count {
+            let argument = arguments[index]
+            switch argument {
+            case "--id":
+                taskID = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--pipeline":
+                pipelinePath = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--provider":
+                provider = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--prompt":
+                prompt = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--worktree":
+                worktree = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--cron":
+                cronExpression = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--timezone":
+                timeZoneIdentifier = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--event":
+                event = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--retries":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+                guard let parsed = Int(rawValue), (0...5).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-enqueue",
+                        argument: rawValue,
+                        reason: "--retries must be an integer from 0 through 5."
+                    )
+                }
+                maximumRetries = parsed
+            case "--concurrency":
+                let rawValue = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+                guard let parsed = Int(rawValue), (1...8).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-enqueue",
+                        argument: rawValue,
+                        reason: "--concurrency must be an integer from 1 through 8."
+                    )
+                }
+                maximumParallelSteps = parsed
+            default:
+                throw CLIError.invalidArgument(
+                    command: "task-enqueue",
+                    argument: argument,
+                    reason: "Use --id, --pipeline, --provider, --prompt, --worktree, --cron, --timezone, --event, --retries, or --concurrency."
+                )
+            }
+            index += 1
+        }
+
+        guard let taskID = taskID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !taskID.isEmpty else {
+            throw CLIError.missingArgument(command: "task-enqueue", argument: "--id <id>")
+        }
+        let normalizedPipelinePath = pipelinePath?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedWorktree = worktree?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasPipeline = normalizedPipelinePath?.isEmpty == false
+        let hasPrompt = normalizedPrompt?.isEmpty == false
+        guard hasPipeline != hasPrompt else {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "pipeline source",
+                reason: "Use exactly one of --pipeline <path> or --prompt <text>."
+            )
+        }
+        if hasPipeline, provider != nil {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--provider",
+                reason: "Pipeline JSON defines the provider for each step."
+            )
+        }
+        if provider != nil, normalizedProvider?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--provider",
+                reason: "Provider cannot be empty."
+            )
+        }
+        if worktree != nil, normalizedWorktree?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--worktree",
+                reason: "Worktree cannot be empty."
+            )
+        }
+
+        let normalizedCron = cronExpression?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedEvent = event?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedTimeZone = timeZoneIdentifier?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cronExpression != nil, normalizedCron?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--cron",
+                reason: "Cron expression cannot be empty."
+            )
+        }
+        if event != nil, normalizedEvent?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--event",
+                reason: "Event cannot be empty."
+            )
+        }
+        if timeZoneIdentifier != nil, normalizedTimeZone?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--timezone",
+                reason: "Time zone cannot be empty."
+            )
+        }
+        guard !(normalizedCron?.isEmpty == false && normalizedEvent?.isEmpty == false) else {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--cron --event",
+                reason: "Use only one trigger."
+            )
+        }
+        if timeZoneIdentifier != nil, normalizedCron?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--timezone",
+                reason: "--timezone requires --cron."
+            )
+        }
+
+        let trigger: TaskQueueCLITrigger
+        if let normalizedCron, !normalizedCron.isEmpty {
+            trigger = .cron(
+                expression: normalizedCron,
+                timeZoneIdentifier: normalizedTimeZone
+            )
+        } else if let normalizedEvent, !normalizedEvent.isEmpty {
+            trigger = .event(normalizedEvent)
+        } else {
+            trigger = .manual
+        }
+
+        return .taskEnqueue(TaskEnqueueCLIOptions(
+            taskID: taskID,
+            pipelinePath: hasPipeline ? normalizedPipelinePath : nil,
+            provider: hasPrompt ? (normalizedProvider ?? "claude-code") : nil,
+            prompt: hasPrompt ? normalizedPrompt : nil,
+            worktree: normalizedWorktree,
+            trigger: trigger,
+            maximumRetries: maximumRetries,
+            maximumParallelSteps: maximumParallelSteps
+        ))
+    }
+
+    private static func parseTaskList(arguments: [String]) throws -> ParsedCommand {
+        var limit = 50
+        var offset = 0
+        var index = 0
+        while index < arguments.count {
+            let argument = arguments[index]
+            guard argument == "--limit" || argument == "--offset" else {
+                throw CLIError.invalidArgument(
+                    command: "task-list",
+                    argument: argument,
+                    reason: "Use --limit <1...100> or --offset <n>."
+                )
+            }
+            let rawValue = try value(
+                after: argument,
+                in: arguments,
+                at: &index,
+                command: "task-list"
+            )
+            switch argument {
+            case "--limit":
+                guard let parsed = Int(rawValue), (1...100).contains(parsed) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-list",
+                        argument: rawValue,
+                        reason: "--limit must be an integer from 1 through 100."
+                    )
+                }
+                limit = parsed
+            case "--offset":
+                guard let parsed = Int(rawValue), parsed >= 0 else {
+                    throw CLIError.invalidArgument(
+                        command: "task-list",
+                        argument: rawValue,
+                        reason: "--offset must be a non-negative integer."
+                    )
+                }
+                offset = parsed
+            default:
+                preconditionFailure("Validated task-list option drifted")
+            }
+            index += 1
+        }
+        return .taskList(TaskListCLIOptions(limit: limit, offset: offset))
+    }
+
+    private static func parseTaskCancel(arguments: [String]) throws -> ParsedCommand {
+        guard let taskID = arguments.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !taskID.isEmpty,
+              !taskID.hasPrefix("-") else {
+            throw CLIError.missingArgument(command: "task-cancel", argument: "task-id")
+        }
+        guard arguments.count == 1 else {
+            throw CLIError.invalidArgument(
+                command: "task-cancel",
+                argument: Array(arguments.dropFirst()).joined(separator: " "),
+                reason: "Use exactly one task-id."
+            )
+        }
+        return .taskCancel(taskID: taskID)
     }
 
     private static func value(

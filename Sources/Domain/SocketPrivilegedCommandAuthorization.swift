@@ -476,6 +476,8 @@ enum SocketPrivilegedCommandSecurity {
              .agentTeamStop,
              .taskRun,
              .taskRunPromote,
+             .taskEnqueue,
+             .taskCancel,
              .webStart,
              .webStop,
              .webStatus,
@@ -577,6 +579,7 @@ enum SocketPrivilegedCommandSecurity {
              .browserInitScriptAdd,
              .agentTeamList,
              .taskRunList,
+             .taskList,
              .windowNew,
              .windowList,
              .windowFocus,
@@ -659,6 +662,11 @@ enum SocketPrivilegedCommandSecurity {
                     let data = Data(value.utf8)
                     lines.append(
                         "artifact: \(data.count) UTF-8 bytes; sha256 \(digest(data: data))"
+                    )
+                } else if command == .taskEnqueue, key == "prompt" {
+                    let data = Data(value.utf8)
+                    lines.append(
+                        "prompt: \(data.count) UTF-8 bytes; sha256 \(digest(data: data))"
                     )
                 } else {
                     lines.append("\(escapedPreview(key)):\n\(escapedPreview(value))")

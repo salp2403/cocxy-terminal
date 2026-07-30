@@ -63,6 +63,50 @@ struct AgentPipelineSwiftTestingTests {
         }
     }
 
+    @Test("bounds persisted identifiers, names, and worktree paths")
+    func boundsPersistedMetadata() {
+        #expect(throws: AgentPipelineError.emptyID) {
+            _ = try AgentPipeline(
+                id: "!!!",
+                steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
+            )
+        }
+        #expect(throws: AgentPipelineError.idTooLong(
+            maximumBytes: AgentPipeline.maximumIDBytes
+        )) {
+            _ = try AgentPipeline(
+                id: String(repeating: "a", count: AgentPipeline.maximumIDBytes + 1),
+                steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
+            )
+        }
+        #expect(throws: AgentPipelineError.nameTooLong(
+            maximumBytes: AgentPipeline.maximumNameBytes
+        )) {
+            _ = try AgentPipeline(
+                id: "named",
+                name: String(repeating: "n", count: AgentPipeline.maximumNameBytes + 1),
+                steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
+            )
+        }
+        #expect(throws: AgentPipelineError.worktreePathTooLong(
+            stepID: "run",
+            maximumBytes: AgentPipelineStep.maximumWorktreePathBytes
+        )) {
+            _ = try AgentPipeline(
+                id: "path",
+                steps: [AgentPipelineStep(
+                    id: "run",
+                    provider: .codex,
+                    prompt: "Run",
+                    worktree: "/" + String(
+                        repeating: "w",
+                        count: AgentPipelineStep.maximumWorktreePathBytes
+                    )
+                )]
+            )
+        }
+    }
+
     @Test("executes independent steps in parallel before their dependent")
     func executesDAGWithBoundedParallelism() async throws {
         let probe = PipelineConcurrencyProbe()

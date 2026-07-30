@@ -227,6 +227,9 @@ public enum CLICommand: String, CaseIterable {
     case taskRun = "task-run"
     case taskRunList = "task-run-list"
     case taskRunPromote = "task-run-promote"
+    case taskEnqueue = "task-enqueue"
+    case taskList = "task-list"
+    case taskCancel = "task-cancel"
 
     // MARK: - Window Management (v3)
 
@@ -542,6 +545,9 @@ public enum CLICommand: String, CaseIterable {
         case .taskRun: return "Fan out one prompt across isolated worktrees and local agent processes"
         case .taskRunList: return "List parallel task runs and candidate states"
         case .taskRunPromote: return "Promote one task candidate and discard the other worktree directories"
+        case .taskEnqueue: return "Schedule a persistent agent pipeline"
+        case .taskList: return "List persistent scheduled tasks"
+        case .taskCancel: return "Cancel a scheduled or running task"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -834,6 +840,9 @@ public enum CLICommand: String, CaseIterable {
         case .taskRun: return "cocxy task-run --prompt <text> --agents <provider,...> [--count <2...8>] [--base-ref <ref>]"
         case .taskRunList: return "cocxy task-run list"
         case .taskRunPromote: return "cocxy task-run promote <run-id> --candidate <candidate-id>"
+        case .taskEnqueue: return "cocxy task-enqueue --id <id> (--pipeline <path> | --prompt <text>) [--provider <provider>] [--worktree <path>] [--cron <expression> | --event <event>]"
+        case .taskList: return "cocxy task-list [--limit <1...100>] [--offset <n>]"
+        case .taskCancel: return "cocxy task-cancel <task-id>"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"

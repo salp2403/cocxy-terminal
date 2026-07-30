@@ -1819,6 +1819,42 @@ public struct CommandRunner {
                 ]
             )
 
+        case .taskEnqueue(let options):
+            let currentDirectory = FileManager.default.currentDirectoryPath
+            var params = options.socketParams
+            params["cwd"] = Self.absoluteCLIPath(
+                options.worktree ?? currentDirectory,
+                relativeTo: currentDirectory
+            )
+            if let pipelinePath = options.pipelinePath {
+                params["input"] = Self.absoluteCLIPath(
+                    pipelinePath,
+                    relativeTo: currentDirectory
+                )
+            }
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-enqueue",
+                params: params
+            )
+
+        case .taskList(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-list",
+                params: [
+                    "limit": String(options.limit),
+                    "offset": String(options.offset),
+                ]
+            )
+
+        case .taskCancel(let taskID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-cancel",
+                params: ["task-id": taskID]
+            )
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):
@@ -2135,6 +2171,21 @@ public struct CommandRunner {
                 params: params.isEmpty ? nil : params
             )
         }
+    }
+
+    private static func absoluteCLIPath(
+        _ rawPath: String,
+        relativeTo currentDirectory: String
+    ) -> String {
+        let expanded = (rawPath as NSString).expandingTildeInPath
+        let url: URL
+        if NSString(string: expanded).isAbsolutePath {
+            url = URL(fileURLWithPath: expanded)
+        } else {
+            url = URL(fileURLWithPath: currentDirectory, isDirectory: true)
+                .appendingPathComponent(expanded)
+        }
+        return url.standardizedFileURL.resolvingSymlinksInPath().path
     }
 
     func socketClient(for command: ParsedCommand) -> SocketClient {
