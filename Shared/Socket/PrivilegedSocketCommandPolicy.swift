@@ -34,6 +34,7 @@ public enum CocxyPrivilegedSocketCommandPolicy {
             return .terminalInput
 
         case "capture-pane",
+             "handoff-export",
              "timeline-show",
              "timeline-export",
              "search",
@@ -141,6 +142,7 @@ public enum CocxyPrivilegedSocketCommandPolicy {
              "notebook-template-create",
              "notebook-run",
              "workflow-run",
+             "handoff-import",
              "agent-team-launch",
              "agent-team-stop",
              "task-run",

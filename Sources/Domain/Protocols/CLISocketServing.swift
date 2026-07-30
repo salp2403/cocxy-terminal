@@ -186,6 +186,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case send
     /// Send a keystroke to the active terminal.
     case sendKey = "send-key"
+    /// Export bounded task context from an exact terminal tab.
+    case handoffExport = "handoff-export"
+    /// Launch a local agent tab with an approved task artifact.
+    case handoffImport = "handoff-import"
     /// Open the visual Vault sidebar in the focused window.
     case vaultOpen = "vault-open"
 

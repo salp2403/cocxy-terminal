@@ -5,6 +5,10 @@ import Foundation
 import CocxyShared
 import CocxyVault
 
+#if canImport(Darwin)
+import Darwin
+#endif
+
 // MARK: - Parsed Command
 
 public struct BrowserImportCLIOptions: Equatable {
@@ -500,6 +504,12 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]`
     case sendKey(key: String, tabID: String?, orchestrationSession: String?)
+
+    /// `cocxy handoff-export --tab <id> [--blocks <1...16>]`
+    case handoffExport(tabID: String, blockLimit: Int)
+
+    /// `cocxy handoff-import --agent <provider> [--stdin|--file <path>]`
+    case handoffImport(agent: String, artifact: String)
 
     /// `cocxy classify <input>`
     case classify(input: String)
@@ -1357,6 +1367,12 @@ public enum CLIArgumentParser {
 
         case "send-key":
             return try parseSendKey(arguments: Array(arguments.dropFirst()))
+
+        case "handoff-export":
+            return try parseHandoffExport(arguments: Array(arguments.dropFirst()))
+
+        case "handoff-import":
+            return try parseHandoffImport(arguments: Array(arguments.dropFirst()))
 
         case "classify":
             return try parseClassify(arguments: Array(arguments.dropFirst()))
@@ -2575,6 +2591,264 @@ public enum CLIArgumentParser {
             tabID: tabID,
             orchestrationSession: orchestrationSession
         )
+    }
+
+    private static func parseHandoffExport(arguments: [String]) throws -> ParsedCommand {
+        var tabID: String?
+        var blockLimit = CocxyTaskHandoffWireContract.defaultBlockLimit
+        var blockLimitWasSpecified = false
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--tab":
+                tabID = try uniqueOptionValue(
+                    current: tabID,
+                    option: "--tab",
+                    arguments: arguments,
+                    index: &index,
+                    command: "handoff-export",
+                    argumentName: "tab id"
+                )
+                index += 1
+            case "--blocks":
+                guard !blockLimitWasSpecified else {
+                    throw CLIError.invalidArgument(
+                        command: "handoff-export",
+                        argument: "--blocks",
+                        reason: "The option may only be specified once."
+                    )
+                }
+                let rawValue = try value(
+                    after: "--blocks",
+                    in: arguments,
+                    at: &index,
+                    command: "handoff-export"
+                )
+                guard let parsedLimit = Int(rawValue),
+                      (1...CocxyTaskHandoffWireContract.maximumBlockLimit)
+                        .contains(parsedLimit) else {
+                    throw CLIError.invalidArgument(
+                        command: "handoff-export",
+                        argument: rawValue,
+                        reason: "--blocks must be between 1 and "
+                            + "\(CocxyTaskHandoffWireContract.maximumBlockLimit)"
+                    )
+                }
+                blockLimit = parsedLimit
+                blockLimitWasSpecified = true
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: "handoff-export",
+                    argument: arguments[index],
+                    reason: "Use --tab <id> with optional --blocks <1...16>."
+                )
+            }
+        }
+
+        guard let tabID, !tabID.isEmpty else {
+            throw CLIError.missingArgument(
+                command: "handoff-export",
+                argument: "--tab <id>"
+            )
+        }
+        guard UUID(uuidString: tabID) != nil else {
+            throw CLIError.invalidArgument(
+                command: "handoff-export",
+                argument: tabID,
+                reason: "The tab id must be a UUID."
+            )
+        }
+        return .handoffExport(tabID: tabID, blockLimit: blockLimit)
+    }
+
+    private static func parseHandoffImport(arguments: [String]) throws -> ParsedCommand {
+        var agent: String?
+        var artifactFile: String?
+        var readsStandardInput = false
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--agent":
+                agent = try uniqueOptionValue(
+                    current: agent,
+                    option: "--agent",
+                    arguments: arguments,
+                    index: &index,
+                    command: "handoff-import",
+                    argumentName: "agent provider"
+                )
+                index += 1
+            case "--file":
+                artifactFile = try uniqueOptionValue(
+                    current: artifactFile,
+                    option: "--file",
+                    arguments: arguments,
+                    index: &index,
+                    command: "handoff-import",
+                    argumentName: "artifact path"
+                )
+                index += 1
+            case "--stdin", "-":
+                guard !readsStandardInput else {
+                    throw CLIError.invalidArgument(
+                        command: "handoff-import",
+                        argument: arguments[index],
+                        reason: "Standard input may only be selected once."
+                    )
+                }
+                readsStandardInput = true
+                index += 1
+            default:
+                throw CLIError.invalidArgument(
+                    command: "handoff-import",
+                    argument: arguments[index],
+                    reason: "Use --agent <provider> with --stdin or --file <path>."
+                )
+            }
+        }
+
+        guard let agent = agent?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !agent.isEmpty else {
+            throw CLIError.missingArgument(
+                command: "handoff-import",
+                argument: "--agent <provider>"
+            )
+        }
+        guard artifactFile == nil || !readsStandardInput else {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "--stdin",
+                reason: "--stdin cannot be combined with --file."
+            )
+        }
+
+        let artifact: String
+        if let artifactFile {
+            artifact = try readHandoffArtifact(
+                from: URL(fileURLWithPath: artifactFile).standardizedFileURL
+            )
+        } else {
+            guard readsStandardInput || !standardInputIsTerminal else {
+                throw CLIError.missingArgument(
+                    command: "handoff-import",
+                    argument: "artifact via stdin or --file <path>"
+                )
+            }
+            artifact = try readHandoffArtifact(from: .standardInput)
+        }
+        return .handoffImport(agent: agent.lowercased(), artifact: artifact)
+    }
+
+    private static func uniqueOptionValue(
+        current: String?,
+        option: String,
+        arguments: [String],
+        index: inout Int,
+        command: String,
+        argumentName: String
+    ) throws -> String {
+        guard current == nil else {
+            throw CLIError.invalidArgument(
+                command: command,
+                argument: option,
+                reason: "The option may only be specified once."
+            )
+        }
+        let result = try value(
+            after: option,
+            in: arguments,
+            at: &index,
+            command: command
+        )
+        guard !result.isEmpty else {
+            throw CLIError.missingArgument(command: command, argument: argumentName)
+        }
+        return result
+    }
+
+    private static func readHandoffArtifact(from url: URL) throws -> String {
+        do {
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            guard values.isRegularFile == true else {
+                throw CLIError.invalidArgument(
+                    command: "handoff-import",
+                    argument: url.path,
+                    reason: "The artifact path must refer to a regular file."
+                )
+            }
+            if let fileSize = values.fileSize,
+               fileSize > CocxyTaskHandoffWireContract.maximumArtifactBytes {
+                throw CLIError.payloadTooLarge(
+                    size: fileSize,
+                    maximum: CocxyTaskHandoffWireContract.maximumArtifactBytes
+                )
+            }
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            return try readHandoffArtifact(from: handle)
+        } catch let error as CLIError {
+            throw error
+        } catch {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: url.path,
+                reason: "The artifact file could not be read: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func readHandoffArtifact(from handle: FileHandle) throws -> String {
+        let maximum = CocxyTaskHandoffWireContract.maximumArtifactBytes
+        var data = Data()
+        do {
+            while data.count <= maximum {
+                let remaining = maximum + 1 - data.count
+                guard let chunk = try handle.read(upToCount: min(8_192, remaining)),
+                      !chunk.isEmpty else {
+                    break
+                }
+                data.append(chunk)
+            }
+        } catch {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "artifact",
+                reason: "The artifact could not be read: \(error.localizedDescription)"
+            )
+        }
+        guard data.count <= maximum else {
+            throw CLIError.payloadTooLarge(size: data.count, maximum: maximum)
+        }
+        guard let artifact = String(data: data, encoding: .utf8) else {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "artifact",
+                reason: "The artifact must be valid UTF-8."
+            )
+        }
+        guard !artifact.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw CLIError.missingArgument(
+                command: "handoff-import",
+                argument: "non-empty artifact"
+            )
+        }
+        guard !artifact.contains("\0") else {
+            throw CLIError.invalidArgument(
+                command: "handoff-import",
+                argument: "artifact",
+                reason: "The artifact cannot contain NUL bytes."
+            )
+        }
+        return artifact
+    }
+
+    private static var standardInputIsTerminal: Bool {
+        #if canImport(Darwin)
+        return isatty(STDIN_FILENO) == 1
+        #else
+        return false
+        #endif
     }
 
     /// Parses a small tmux-compatible command layer onto existing Cocxy CLI commands.

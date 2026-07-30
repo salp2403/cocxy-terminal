@@ -148,6 +148,14 @@ public enum OutputFormatter {
             return "Text sent."
         case .sendKey:
             return "Key sent."
+        case .handoffExport:
+            return response.data?["artifact"] ?? ""
+        case .handoffImport:
+            let provider = response.data?["provider"] ?? "agent"
+            if let tabID = response.data?["tab-id"] {
+                return "Task passed to \(provider) in tab \(tabID)."
+            }
+            return "Task passed to \(provider)."
         case .classify:
             return formatDataOrJSON(response: response)
         case .correct:

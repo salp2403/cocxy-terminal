@@ -2,6 +2,7 @@
 // TaskHandoffArtifact.swift - Bounded, redacted context shared between local agent tabs.
 
 import Foundation
+import CocxyShared
 
 struct TaskHandoffSemanticBlock: Equatable, Sendable {
     let command: String
@@ -29,9 +30,9 @@ struct TaskHandoffArtifact: Equatable, Sendable {
 }
 
 enum TaskHandoffArtifactBuilder {
-    static let defaultBlockLimit = 8
-    static let maximumBlockLimit = 16
-    static let maximumArtifactBytes = 28_000
+    static let defaultBlockLimit = CocxyTaskHandoffWireContract.defaultBlockLimit
+    static let maximumBlockLimit = CocxyTaskHandoffWireContract.maximumBlockLimit
+    static let maximumArtifactBytes = CocxyTaskHandoffWireContract.maximumArtifactBytes
     static let maximumSummaryBytes = 3_072
     static let maximumCommandBytes = 1_024
     static let maximumOutputBytesPerBlock = 2_048

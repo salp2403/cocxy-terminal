@@ -86,6 +86,8 @@ public enum CLICommand: String, CaseIterable {
 
     case send
     case sendKey = "send-key"
+    case handoffExport = "handoff-export"
+    case handoffImport = "handoff-import"
     case classify
     case correct
     case identify
@@ -412,6 +414,8 @@ public enum CLICommand: String, CaseIterable {
         // System
         case .send: return "Send text to the active or specified terminal tab"
         case .sendKey: return "Send a keystroke to the active or specified terminal tab"
+        case .handoffExport: return "Export bounded context from a terminal tab"
+        case .handoffImport: return "Open an agent tab with a task handoff artifact"
         case .classify: return "Classify terminal input locally as JSON"
         case .correct: return "Suggest local fixes for a failed shell command as JSON"
         case .identify: return "Describe this Cocxy CLI and owning app as JSON"
@@ -702,6 +706,8 @@ public enum CLICommand: String, CaseIterable {
         // System
         case .send: return "cocxy send <text>|--stdin [--tab <id>] [--orchestration-session <token>]"
         case .sendKey: return "cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]"
+        case .handoffExport: return "cocxy handoff-export --tab <id> [--blocks <1...16>]"
+        case .handoffImport: return "cocxy handoff-import --agent <provider> [--stdin|--file <path>]"
         case .classify: return "cocxy classify <input>"
         case .correct: return "cocxy correct <command>"
         case .identify: return "cocxy identify"

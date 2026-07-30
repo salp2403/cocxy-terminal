@@ -418,6 +418,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// worktree state and native terminal surfaces stay one transaction.
     let taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Exports bounded tab context and imports it into a destination agent tab.
+    let taskHandoffCLIProvider: (@Sendable (
+        String,
+        [String: String]
+    ) -> (success: Bool, data: [String: String]))?
+
     /// Routes `cocxy cell-*` verbs through the app-owned Cells coordinator.
     let cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
@@ -722,6 +728,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        taskHandoffCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.privilegedCommandAuthorizationProvider =
@@ -836,6 +843,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         } else {
             self.taskRunCLIProvider = nil
         }
+        self.taskHandoffCLIProvider = Self.approvalGated(
+            taskHandoffCLIProvider,
+            denied: (false, ["error": "Authorization denied"])
+        )
         self.cellCLIProvider = Self.approvalGated(
             cellCLIProvider,
             denied: (false, ["error": "Authorization denied"])
@@ -1335,6 +1346,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTaskRun(kind: "list", request: request)
         case .taskRunPromote:
             return handleTaskRun(kind: "promote", request: request)
+        case .handoffExport:
+            return handleTaskHandoff(kind: "export", request: request)
+        case .handoffImport:
+            return handleTaskHandoff(kind: "import", request: request)
 
         // Remote workspace commands
         case .remoteList:

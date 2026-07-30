@@ -1125,6 +1125,26 @@ public struct CommandRunner {
                 params: params
             )
 
+        case .handoffExport(let tabID, let blockLimit):
+            return CLISocketRequest(
+                id: requestID,
+                command: "handoff-export",
+                params: [
+                    "tabId": tabID,
+                    "limit": "\(blockLimit)",
+                ]
+            )
+
+        case .handoffImport(let agent, let artifact):
+            return CLISocketRequest(
+                id: requestID,
+                command: "handoff-import",
+                params: [
+                    "agent": agent,
+                    "artifact": artifact,
+                ]
+            )
+
         // MARK: Window Management (v3)
 
         case .windowNew(let engine):

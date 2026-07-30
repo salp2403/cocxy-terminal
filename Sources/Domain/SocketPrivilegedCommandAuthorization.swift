@@ -389,6 +389,8 @@ enum SocketPrivilegedCommandSecurity {
         switch command {
         case .send,
              .sendKey,
+             .handoffExport,
+             .handoffImport,
              .timelineShow,
              .timelineExport,
              .search,
@@ -652,7 +654,15 @@ enum SocketPrivilegedCommandSecurity {
         } else {
             lines.append("Parameters:")
             for key in params.keys.sorted() {
-                lines.append("\(escapedPreview(key)):\n\(escapedPreview(params[key] ?? ""))")
+                let value = params[key] ?? ""
+                if command == .handoffImport, key == "artifact" {
+                    let data = Data(value.utf8)
+                    lines.append(
+                        "artifact: \(data.count) UTF-8 bytes; sha256 \(digest(data: data))"
+                    )
+                } else {
+                    lines.append("\(escapedPreview(key)):\n\(escapedPreview(value))")
+                }
             }
         }
         return lines.joined(separator: "\n")
