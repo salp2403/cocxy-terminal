@@ -293,6 +293,9 @@ final class PreferencesViewModel: ObservableObject {
     /// `"system"` or a normalized locale identifier selected by the user.
     @Published var voiceLocaleIdentifier: String
 
+    /// Whether a transcript sent to a detected terminal agent also submits it.
+    @Published var voiceAutoSendToAgent: Bool
+
     // MARK: - Inline Completions
 
     /// Master opt-in for local inline AI completions in editor tabs.
@@ -890,6 +893,7 @@ final class PreferencesViewModel: ObservableObject {
         hookAgents = c.hooks.agents
         voiceEnabled = c.voice.enabled
         voiceLocaleIdentifier = c.voice.localeIdentifier
+        voiceAutoSendToAgent = c.voice.autoSendToAgent
         completionInlineAIEnabled = c.completions.inlineAIEnabled
         completionIdleDelaySeconds = c.completions.idleDelaySeconds
         completionMaxContextUTF16Length = c.completions.maxContextUTF16Length
@@ -1146,6 +1150,7 @@ final class PreferencesViewModel: ObservableObject {
         // Voice Input
         self.voiceEnabled = config.voice.enabled
         self.voiceLocaleIdentifier = config.voice.localeIdentifier
+        self.voiceAutoSendToAgent = config.voice.autoSendToAgent
 
         // Inline Completions
         self.completionInlineAIEnabled = config.completions.inlineAIEnabled
@@ -2027,6 +2032,7 @@ final class PreferencesViewModel: ObservableObject {
         backupMonthlyRetentionCount = backup.monthlyRetentionCount
         backupArtifactKinds = backup.artifactKinds
         voiceLocaleIdentifier = voice.localeIdentifier
+        voiceAutoSendToAgent = voice.autoSendToAgent
         completionIdleDelaySeconds = completions.idleDelaySeconds
         completionMaxContextUTF16Length = completions.maxContextUTF16Length
         completionEnabledLanguageIDs = Set(completions.enabledLanguageIDs)
@@ -2107,13 +2113,15 @@ final class PreferencesViewModel: ObservableObject {
     private func buildVoiceConfigFromViewModel() -> VoiceConfig {
         VoiceConfig(
             enabled: voiceEnabled,
-            localeIdentifier: voiceLocaleIdentifier
+            localeIdentifier: voiceLocaleIdentifier,
+            autoSendToAgent: voiceAutoSendToAgent
         )
     }
 
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
         voiceEnabled != config.enabled
             || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier
+            || voiceAutoSendToAgent != config.autoSendToAgent
     }
 
     private func buildCommandCorrectionsConfigFromViewModel() -> CommandCorrectionsConfig {
@@ -2854,6 +2862,7 @@ final class PreferencesViewModel: ObservableObject {
         [voice]
         enabled = \(voice.enabled)
         locale = "\(voice.localeIdentifier)"
+        auto-send-to-agent = \(voice.autoSendToAgent)
 
         [completions]
         inline-ai = \(completions.inlineAIEnabled)

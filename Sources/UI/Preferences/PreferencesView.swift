@@ -1929,6 +1929,21 @@ struct VoicePreferencesSection: View {
                         fallback: "Enables local dictation entry points when supported by macOS."
                     )
                 )
+
+                Toggle(
+                    viewModel.localizedString(
+                        "preferences.voice.autoSendToAgent",
+                        fallback: "Send automatically to detected agents"
+                    ),
+                    isOn: $viewModel.voiceAutoSendToAgent
+                )
+                .disabled(!viewModel.voiceEnabled)
+                .help(
+                    viewModel.localizedString(
+                        "preferences.voice.autoSendToAgent.help",
+                        fallback: "Submits dictated text immediately instead of leaving it at the prompt for review."
+                    )
+                )
             }
 
             Section(viewModel.localizedString("preferences.voice.locale.section", fallback: "Locale")) {

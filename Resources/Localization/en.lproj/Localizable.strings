@@ -773,6 +773,8 @@
 "preferences.voice.feature.section" = "Feature";
 "preferences.voice.enable" = "Enable Voice input";
 "preferences.voice.enable.help" = "Enables local dictation entry points when supported by macOS.";
+"preferences.voice.autoSendToAgent" = "Send automatically to detected agents";
+"preferences.voice.autoSendToAgent.help" = "Submits dictated text immediately instead of leaving it at the prompt for review.";
 "preferences.voice.locale.section" = "Locale";
 "preferences.voice.recognitionLocale" = "Recognition locale";
 "preferences.voice.systemLocale" = "System";

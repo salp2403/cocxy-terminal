@@ -38,7 +38,11 @@ struct VoicePreferencesSwiftTestingTests {
             appearance: .defaults,
             terminal: .defaults,
             agentDetection: .defaults,
-            voice: VoiceConfig(enabled: true, localeIdentifier: "es-ES"),
+            voice: VoiceConfig(
+                enabled: true,
+                localeIdentifier: "es-ES",
+                autoSendToAgent: true
+            ),
             notifications: .defaults,
             quickTerminal: .defaults,
             keybindings: .defaults,
@@ -49,6 +53,7 @@ struct VoicePreferencesSwiftTestingTests {
 
         #expect(vm.voiceEnabled == true)
         #expect(vm.voiceLocaleIdentifier == "es-ES")
+        #expect(vm.voiceAutoSendToAgent == true)
         #expect(vm.availableVoiceLocales.map(\.identifier) == ["en-US", "es-ES"])
         #expect(vm.resolvedVoiceLocale == VoiceLocaleResolution(
             localeIdentifier: "es-ES",
@@ -61,15 +66,17 @@ struct VoicePreferencesSwiftTestingTests {
     func changingVoiceFieldsMarksDirtyAndDiscardRestores() {
         let (vm, _) = makeViewModel()
 
-        vm.voiceEnabled = true
+        vm.voiceEnabled = false
         vm.voiceLocaleIdentifier = "en-US"
+        vm.voiceAutoSendToAgent = true
 
         #expect(vm.hasUnsavedChanges == true)
 
         vm.discardChanges()
 
-        #expect(vm.voiceEnabled == false)
+        #expect(vm.voiceEnabled == true)
         #expect(vm.voiceLocaleIdentifier == VoiceConfig.systemLocaleIdentifier)
+        #expect(vm.voiceAutoSendToAgent == false)
         #expect(vm.hasUnsavedChanges == false)
     }
 
@@ -79,6 +86,7 @@ struct VoicePreferencesSwiftTestingTests {
 
         vm.voiceEnabled = true
         vm.voiceLocaleIdentifier = "es-ES"
+        vm.voiceAutoSendToAgent = true
         try vm.save()
 
         let written = try #require(provider.content)
@@ -87,6 +95,7 @@ struct VoicePreferencesSwiftTestingTests {
 
         #expect(service.current.voice.enabled == true)
         #expect(service.current.voice.localeIdentifier == "es-ES")
+        #expect(service.current.voice.autoSendToAgent == true)
         #expect(vm.hasUnsavedChanges == false)
     }
 }

@@ -773,6 +773,8 @@
 "preferences.voice.feature.section" = "Función";
 "preferences.voice.enable" = "Activar entrada por voz";
 "preferences.voice.enable.help" = "Activa puntos de entrada de dictado local cuando macOS lo soporta.";
+"preferences.voice.autoSendToAgent" = "Enviar automáticamente a agentes detectados";
+"preferences.voice.autoSendToAgent.help" = "Envía el texto dictado de inmediato en lugar de dejarlo en el prompt para revisarlo.";
 "preferences.voice.locale.section" = "Idioma";
 "preferences.voice.recognitionLocale" = "Idioma de reconocimiento";
 "preferences.voice.systemLocale" = "Sistema";

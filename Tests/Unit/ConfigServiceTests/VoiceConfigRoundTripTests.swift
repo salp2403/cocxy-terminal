@@ -25,12 +25,13 @@ struct VoiceConfigRoundTripTests {
         return service.current
     }
 
-    @Test("Voice defaults are disabled local and system-locale first")
-    func defaultsAreDisabledLocalAndSystemLocaleFirst() {
+    @Test("Voice defaults are discoverable local review-first and system-locale first")
+    func defaultsAreEnabledLocalReviewFirstAndSystemLocaleFirst() {
         let defaults = CocxyConfig.defaults.voice
 
-        #expect(defaults.enabled == false)
+        #expect(defaults.enabled == true)
         #expect(defaults.localeIdentifier == VoiceConfig.systemLocaleIdentifier)
+        #expect(defaults.autoSendToAgent == false)
     }
 
     @Test("generated default TOML documents Voice locale policy")
@@ -38,8 +39,9 @@ struct VoiceConfigRoundTripTests {
         let toml = ConfigService.generateDefaultToml()
 
         #expect(toml.contains("[voice]"))
-        #expect(toml.contains("enabled = false"))
+        #expect(toml.contains("enabled = true"))
         #expect(toml.contains("locale = \"system\""))
+        #expect(toml.contains("auto-send-to-agent = false"))
     }
 
     @Test("TOML opt-in preserves explicit Voice locale override")
@@ -48,10 +50,12 @@ struct VoiceConfigRoundTripTests {
         [voice]
         enabled = true
         locale = "es-ES"
+        auto-send-to-agent = true
         """)
 
         #expect(config.voice.enabled == true)
         #expect(config.voice.localeIdentifier == "es-ES")
+        #expect(config.voice.autoSendToAgent == true)
     }
 
     @Test("missing malformed or empty Voice config falls back defensively")
@@ -64,6 +68,7 @@ struct VoiceConfigRoundTripTests {
         [voice]
         enabled = "yes"
         locale = 42
+        auto-send-to-agent = "yes"
         """)
         let emptyLocale = try loadConfig(from: """
         [voice]
@@ -75,8 +80,8 @@ struct VoiceConfigRoundTripTests {
         #expect(emptyLocale.voice.localeIdentifier == VoiceConfig.systemLocaleIdentifier)
     }
 
-    @Test("legacy Codable payloads decode with Voice disabled")
-    func legacyCodablePayloadsDecodeWithVoiceDisabled() throws {
+    @Test("legacy Codable payloads decode with current Voice defaults")
+    func legacyCodablePayloadsDecodeWithCurrentVoiceDefaults() throws {
         let config = CocxyConfig(
             general: .defaults,
             appearance: .defaults,
@@ -91,5 +96,16 @@ struct VoiceConfigRoundTripTests {
         let data = try JSONEncoder().encode(config)
         let decoded = try JSONDecoder().decode(CocxyConfig.self, from: data)
         #expect(decoded.voice == .defaults)
+    }
+
+    @Test("legacy Voice payload without auto-send remains review-first")
+    func legacyVoicePayloadWithoutAutoSendRemainsReviewFirst() throws {
+        let data = Data(#"{"enabled":true,"localeIdentifier":"es-ES"}"#.utf8)
+
+        let decoded = try JSONDecoder().decode(VoiceConfig.self, from: data)
+
+        #expect(decoded.enabled == true)
+        #expect(decoded.localeIdentifier == "es-ES")
+        #expect(decoded.autoSendToAgent == false)
     }
 }

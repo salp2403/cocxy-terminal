@@ -465,12 +465,15 @@ final class ConfigService: ConfigProviding {
         \(hookAgentsToml)
 
         [voice]
-        # Local voice input. Disabled by default. "system" resolves to
-        # the current macOS locale when Speech supports it, with a
-        # same-language fallback when only another region is available.
+        # Local voice input. Recognition starts only when explicitly invoked
+        # and remains gated by macOS Speech and microphone permissions.
+        # "system" resolves to the current macOS locale when Speech supports
+        # it, with a same-language fallback when only another region is available.
         # Set a BCP-47 locale such as "es-ES" to override manually.
         enabled = \(defaults.voice.enabled)
         locale = "\(defaults.voice.localeIdentifier)"
+        # Keep false to place dictated text at the detected agent prompt for review.
+        auto-send-to-agent = \(defaults.voice.autoSendToAgent)
 
         [backup]
         # Local-only automatic backups. Enabled by default and stored on
@@ -1323,16 +1326,17 @@ final class ConfigService: ConfigProviding {
         )
     }
 
-    /// Parses the `[voice]` section. Missing or malformed values stay
-    /// disabled and system-locale-first; locale strings are normalized to a
-    /// stable BCP-47-ish form while empty values fall back to `"system"`.
+    /// Parses the `[voice]` section. Missing or malformed values use the
+    /// discoverable, permission-gated defaults; locale strings are normalized
+    /// to a stable BCP-47-ish form while empty values fall back to `"system"`.
     private func parseVoiceConfig(from parsed: [String: TOMLValue]) -> VoiceConfig {
         let table = extractTable("voice", from: parsed)
         let defaults = VoiceConfig.defaults
 
         return VoiceConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
-            localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier
+            localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier,
+            autoSendToAgent: boolValue(table["auto-send-to-agent"]) ?? defaults.autoSendToAgent
         )
     }
 

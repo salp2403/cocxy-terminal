@@ -2266,26 +2266,54 @@ struct SessionReplayPolicy: Codable, Sendable, Equatable {
 
 /// `[voice]` section for local Voice input.
 ///
-/// Disabled by default and locale-aware without introducing a backend
-/// dependency. The `"system"` sentinel means Cocxy resolves against the
-/// user's current macOS locale and the locales supported by Speech on the
-/// current machine; any explicit locale is a manual override.
+/// Enabled by default and locale-aware without introducing a backend
+/// dependency. Recognition still starts only from an explicit user action
+/// and remains gated by the macOS Speech and microphone permissions. The
+/// `"system"` sentinel means Cocxy resolves against the user's current macOS
+/// locale and the locales supported by Speech on the current machine; any
+/// explicit locale is a manual override.
 struct VoiceConfig: Codable, Sendable, Equatable {
     static let systemLocaleIdentifier = "system"
 
     let enabled: Bool
     let localeIdentifier: String
+    /// Whether a transcript routed to a detected terminal agent also sends Return.
+    let autoSendToAgent: Bool
 
     static var defaults: VoiceConfig {
-        VoiceConfig(enabled: false, localeIdentifier: systemLocaleIdentifier)
+        VoiceConfig(
+            enabled: true,
+            localeIdentifier: systemLocaleIdentifier,
+            autoSendToAgent: false
+        )
     }
 
     init(
-        enabled: Bool = false,
-        localeIdentifier: String = systemLocaleIdentifier
+        enabled: Bool = true,
+        localeIdentifier: String = systemLocaleIdentifier,
+        autoSendToAgent: Bool = false
     ) {
         self.enabled = enabled
         self.localeIdentifier = Self.normalizedLocaleIdentifier(localeIdentifier)
+        self.autoSendToAgent = autoSendToAgent
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case enabled
+        case localeIdentifier
+        case autoSendToAgent
+    }
+
+    init(from decoder: Decoder) throws {
+        let defaults = Self.defaults
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            enabled: try container.decodeIfPresent(Bool.self, forKey: .enabled) ?? defaults.enabled,
+            localeIdentifier: try container.decodeIfPresent(String.self, forKey: .localeIdentifier)
+                ?? defaults.localeIdentifier,
+            autoSendToAgent: try container.decodeIfPresent(Bool.self, forKey: .autoSendToAgent)
+                ?? defaults.autoSendToAgent
+        )
     }
 
     static func normalizedLocaleIdentifier(_ rawValue: String) -> String {
