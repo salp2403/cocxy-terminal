@@ -807,6 +807,7 @@ extension Design {
             }
             .padding(.horizontal, Spacing.small)
             .padding(.vertical, CGFloat(layout.verticalPadding))
+            .background(activationHitTarget)
             .background(backgroundView)
             .background(SessionFrameReporter(sessionID: session.id))
             .overlay(borderView)
@@ -846,6 +847,18 @@ extension Design {
             guard isRenaming else { return }
             DispatchQueue.main.async {
                 isRenameFieldFocused = true
+            }
+        }
+
+        @ViewBuilder
+        private var activationHitTarget: some View {
+            if !isRenaming {
+                Button(action: onActivate) {
+                    Color.clear
+                        .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityHidden(true)
             }
         }
 

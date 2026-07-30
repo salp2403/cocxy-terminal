@@ -26,10 +26,13 @@ struct AuroraRenameIntegrationSwiftTestingTests {
         let suiteName = "AuroraRenameIntegrationTests.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
-        let controller = MainWindowController(bridge: MockTerminalEngine())
-        controller.auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore(
+        let titleStore = AuroraWorkspaceTitleStore(
             defaults: defaults,
             storageKey: "titles"
+        )
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titleStore
         )
         let tab = controller.tabManager.tabs[0]
         let resolver = GitAncestorWorkspaceRootResolver()
@@ -49,5 +52,29 @@ struct AuroraRenameIntegrationSwiftTestingTests {
         controller.applyAuroraWorkspaceRename(workspaceID: workspaceID, newTitle: "")
         #expect(controller.auroraWorkspaceTitleStore.title(for: workspaceID) == nil)
         #expect(controller.auroraWorkspaceTitleStore.snapshot[workspaceID] == "")
+    }
+
+    @Test("windows sharing the app title store observe workspace renames immediately")
+    func windowsShareWorkspaceTitleStore() throws {
+        let suiteName = "AuroraSharedWorkspaceTitleStoreTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let titleStore = AuroraWorkspaceTitleStore(
+            defaults: defaults,
+            storageKey: "titles"
+        )
+        let first = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titleStore
+        )
+        let second = MainWindowController(
+            bridge: MockTerminalEngine(),
+            auroraWorkspaceTitleStore: titleStore
+        )
+
+        first.auroraWorkspaceTitleStore.setTitle("Shared Workspace", for: "/repo/shared")
+
+        #expect(first.auroraWorkspaceTitleStore === second.auroraWorkspaceTitleStore)
+        #expect(second.auroraWorkspaceTitleStore.title(for: "/repo/shared") == "Shared Workspace")
     }
 }

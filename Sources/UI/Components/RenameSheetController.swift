@@ -160,6 +160,7 @@ final class RenameSheetController {
 
         // Coordinator for button actions.
         let coordinator = FloatingPanelCoordinator(
+            parentWindow: window,
             panel: panel,
             textField: textField,
             onComplete: onComplete
@@ -224,11 +225,24 @@ private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
     let textField: NSTextField
     let onComplete: (String?) -> Void
     private var hasFinished = false
+    private var isParentWindowClosing = false
 
-    init(panel: NSPanel, textField: NSTextField, onComplete: @escaping (String?) -> Void) {
+    init(
+        parentWindow: NSWindow,
+        panel: NSPanel,
+        textField: NSTextField,
+        onComplete: @escaping (String?) -> Void
+    ) {
         self.panel = panel
         self.textField = textField
         self.onComplete = onComplete
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(parentWindowWillClose),
+            name: NSWindow.willCloseNotification,
+            object: parentWindow
+        )
     }
 
     @objc func confirm() {
@@ -241,19 +255,34 @@ private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        finish(with: nil, orderOut: false)
+        finish(
+            with: nil,
+            orderOut: false,
+            notifyCompletion: !isParentWindowClosing
+        )
     }
 
-    private func finish(with value: String?, orderOut: Bool = true) {
+    @objc private func parentWindowWillClose(_ notification: Notification) {
+        isParentWindowClosing = true
+    }
+
+    private func finish(
+        with value: String?,
+        orderOut: Bool = true,
+        notifyCompletion: Bool = true
+    ) {
         guard !hasFinished else { return }
         hasFinished = true
 
+        NotificationCenter.default.removeObserver(self)
         panel.parent?.removeChildWindow(panel)
         panel.delegate = nil
         RenameSheetController.releaseCoordinator(from: panel)
         if orderOut {
             panel.orderOut(nil)
         }
-        onComplete(value)
+        if notifyCompletion && !isParentWindowClosing {
+            onComplete(value)
+        }
     }
 }

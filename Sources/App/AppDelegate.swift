@@ -87,6 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// to avoid redundant file system scanning.
     private(set) var themeEngine: ThemeEngineImpl?
 
+    /// Workspace aliases are app-scoped so concurrent windows never persist
+    /// divergent snapshots of the same identity map.
+    let auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
+
     /// The session manager for persistence and restoration.
     /// Internal setter: extensions (+SessionManagement) assign during init.
     var sessionManager: SessionManagerImpl?
@@ -1636,6 +1640,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let controller = MainWindowController(
             bridge: bridge,
             configService: configService,
+            auroraWorkspaceTitleStore: auroraWorkspaceTitleStore,
             terminalEngineFactory: { [weak self] preference in
                 self?.makeInitializedTerminalEngine(preference: preference)
             },

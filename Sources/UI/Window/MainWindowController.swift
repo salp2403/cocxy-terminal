@@ -587,7 +587,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Workspace aliases are keyed by full project identity rather than
     /// copied onto every tab in the group.
-    var auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
+    let auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore
 
     /// Watchdog that guards against surfaces that enter `.launched`
     /// and never transition further because the agent terminated
@@ -753,6 +753,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         bridge: any TerminalEngine,
         configService: ConfigService? = nil,
         tabManager: TabManager? = nil,
+        auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
         terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil,
         deferContentSetup: Bool = false
     ) {
@@ -760,6 +761,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.terminalEngineFactory = terminalEngineFactory
         self.configService = configService
         self.tabManager = tabManager ?? TabManager()
+        self.auroraWorkspaceTitleStore = auroraWorkspaceTitleStore ?? AuroraWorkspaceTitleStore()
         self.terminalViewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize
