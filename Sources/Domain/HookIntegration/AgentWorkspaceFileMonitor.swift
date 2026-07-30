@@ -20,11 +20,15 @@ struct AgentWorkspaceFileChange: Equatable, Sendable {
 }
 
 protocol AgentWorkspaceFileMonitoring: AnyObject {
-    @discardableResult
-    func start(sessionId: String, rootPath: String) -> Bool
+    func start(sessionId: String, rootPath: String)
     func stop(sessionId: String)
     func stopAll()
     func updateDebugLogging(enabled: Bool)
+}
+
+struct AgentWorkspaceFileMonitorStateSnapshot: Equatable, Sendable {
+    let activeRootCount: Int
+    let activeSessionCount: Int
 }
 
 /// Path and event policy kept separate from FSEvents so its security and
@@ -230,12 +234,13 @@ private let agentWorkspaceFileStreamCallback: FSEventStreamCallback = {
 /// to the same workspace and is released when its final session unbinds.
 final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchecked Sendable {
     typealias ChangeHandler = @Sendable (AgentWorkspaceFileChange) -> Void
+    typealias RootValidator = @Sendable (String) -> String?
 
     private let eventHandler: ChangeHandler
+    private let rootValidator: RootValidator
     private let latency: CFTimeInterval
     private let deduplicationInterval: TimeInterval
     private let queue = DispatchQueue(label: "dev.cocxy.workspace-file-monitor", qos: .utility)
-    private let queueKey = DispatchSpecificKey<UInt8>()
     private var rootWatches: [String: AgentWorkspaceRootWatch] = [:]
     private var rootBySessionId: [String: String] = [:]
     private var debugLoggingEnabled: Bool
@@ -244,77 +249,62 @@ final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchec
         debugLoggingEnabled: Bool = false,
         latency: CFTimeInterval = 0.1,
         deduplicationInterval: TimeInterval = 0.15,
+        rootValidator: @escaping RootValidator = {
+            AgentWorkspaceFileMonitorPolicy.validatedRoot($0)
+        },
         eventHandler: @escaping ChangeHandler
     ) {
         self.debugLoggingEnabled = debugLoggingEnabled
         self.latency = max(0.02, latency)
         self.deduplicationInterval = max(0, deduplicationInterval)
+        self.rootValidator = rootValidator
         self.eventHandler = eventHandler
-        queue.setSpecific(key: queueKey, value: 1)
     }
 
     deinit {
-        performSync {
-            stopAllLocked()
+        // Public operations retain the monitor until their queued work has
+        // completed. Any remaining watches here therefore have no concurrent
+        // owner and can be released without synchronously hopping to the
+        // FSEvents queue from the thread that drops the final reference.
+        let watches = Array(rootWatches.values)
+        for watch in watches {
+            destroyWatch(watch)
         }
     }
 
-    @discardableResult
-    func start(sessionId: String, rootPath: String) -> Bool {
-        let sessionId = sessionId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sessionId.isEmpty,
-              let rootPath = AgentWorkspaceFileMonitorPolicy.validatedRoot(rootPath) else {
-            writeDebugLog("stage=workspace-monitor-rejected reason=invalid-session-or-root")
-            return false
-        }
-
-        return performSync {
-            if rootBySessionId[sessionId] == rootPath {
-                return true
-            }
-            detachSessionLocked(sessionId)
-
-            if let existingWatch = rootWatches[rootPath] {
-                existingWatch.sessionIds.insert(sessionId)
-                rootBySessionId[sessionId] = rootPath
-                return true
-            }
-
-            guard let watch = makeWatchLocked(rootPath: rootPath, sessionIds: [sessionId]) else {
-                writeDebugLog("stage=workspace-monitor-start-failed root=\(rootPath)")
-                return false
-            }
-            rootWatches[rootPath] = watch
-            rootBySessionId[sessionId] = rootPath
-            writeDebugLog("stage=workspace-monitor-started root=\(rootPath)")
-            return true
+    func start(sessionId: String, rootPath: String) {
+        queue.async { [self] in
+            startLocked(sessionId: sessionId, rootPath: rootPath)
         }
     }
 
     func stop(sessionId: String) {
-        performSync {
+        queue.async { [self] in
             detachSessionLocked(sessionId)
         }
     }
 
     func stopAll() {
-        performSync {
+        queue.async { [self] in
             stopAllLocked()
         }
     }
 
     func updateDebugLogging(enabled: Bool) {
-        performSync {
+        queue.async { [self] in
             debugLoggingEnabled = enabled
         }
     }
 
-    var activeRootCount: Int {
-        performSync { rootWatches.count }
-    }
-
-    var activeSessionCount: Int {
-        performSync { rootBySessionId.count }
+    func stateSnapshot() async -> AgentWorkspaceFileMonitorStateSnapshot {
+        await withCheckedContinuation { continuation in
+            queue.async { [self] in
+                continuation.resume(returning: AgentWorkspaceFileMonitorStateSnapshot(
+                    activeRootCount: rootWatches.count,
+                    activeSessionCount: rootBySessionId.count
+                ))
+            }
+        }
     }
 
     fileprivate func process(
@@ -432,6 +422,33 @@ final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchec
         )
     }
 
+    private func startLocked(sessionId rawSessionId: String, rootPath rawRootPath: String) {
+        dispatchPrecondition(condition: .onQueue(queue))
+        let sessionId = rawSessionId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !sessionId.isEmpty,
+              let rootPath = rootValidator(rawRootPath) else {
+            writeDebugLog("stage=workspace-monitor-rejected reason=invalid-session-or-root")
+            return
+        }
+
+        guard rootBySessionId[sessionId] != rootPath else { return }
+        detachSessionLocked(sessionId)
+
+        if let existingWatch = rootWatches[rootPath] {
+            existingWatch.sessionIds.insert(sessionId)
+            rootBySessionId[sessionId] = rootPath
+            return
+        }
+
+        guard let watch = makeWatchLocked(rootPath: rootPath, sessionIds: [sessionId]) else {
+            writeDebugLog("stage=workspace-monitor-start-failed root=\(rootPath)")
+            return
+        }
+        rootWatches[rootPath] = watch
+        rootBySessionId[sessionId] = rootPath
+        writeDebugLog("stage=workspace-monitor-started root=\(rootPath)")
+    }
+
     private func detachSessionLocked(_ sessionId: String) {
         dispatchPrecondition(condition: .onQueue(queue))
         guard let rootPath = rootBySessionId.removeValue(forKey: sessionId),
@@ -441,7 +458,7 @@ final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchec
         watch.sessionIds.remove(sessionId)
         guard watch.sessionIds.isEmpty else { return }
         rootWatches.removeValue(forKey: rootPath)
-        destroyWatchLocked(watch)
+        destroyWatch(watch)
         writeDebugLog("stage=workspace-monitor-stopped root=\(rootPath)")
     }
 
@@ -451,12 +468,11 @@ final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchec
         rootWatches.removeAll()
         rootBySessionId.removeAll()
         for watch in watches {
-            destroyWatchLocked(watch)
+            destroyWatch(watch)
         }
     }
 
-    private func destroyWatchLocked(_ watch: AgentWorkspaceRootWatch) {
-        dispatchPrecondition(condition: .onQueue(queue))
+    private func destroyWatch(_ watch: AgentWorkspaceRootWatch) {
         FSEventStreamStop(watch.stream)
         FSEventStreamInvalidate(watch.stream)
         FSEventStreamRelease(watch.stream)
@@ -483,9 +499,9 @@ final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchec
         dispatchPrecondition(condition: .onQueue(queue))
         guard let oldWatch = rootWatches.removeValue(forKey: rootPath) else { return }
         let sessionIds = oldWatch.sessionIds
-        destroyWatchLocked(oldWatch)
+        destroyWatch(oldWatch)
 
-        guard AgentWorkspaceFileMonitorPolicy.validatedRoot(rootPath) != nil,
+        guard rootValidator(rootPath) != nil,
               let replacement = makeWatchLocked(rootPath: rootPath, sessionIds: sessionIds) else {
             for sessionId in sessionIds {
                 rootBySessionId.removeValue(forKey: sessionId)
@@ -496,16 +512,9 @@ final class AgentWorkspaceFileMonitorImpl: AgentWorkspaceFileMonitoring, @unchec
         rootWatches[rootPath] = replacement
     }
 
-    private func performSync<T>(_ operation: () -> T) -> T {
-        if DispatchQueue.getSpecific(key: queueKey) != nil {
-            return operation()
-        }
-        return queue.sync(execute: operation)
-    }
-
     private func writeDebugLog(_ message: String) {
-        let enabled = performSync { debugLoggingEnabled }
-        guard enabled else { return }
+        dispatchPrecondition(condition: .onQueue(queue))
+        guard debugLoggingEnabled else { return }
         var environment = ProcessInfo.processInfo.environment
         environment[HookIntegrationDebugLog.enabledEnvironmentKey] = "1"
         HookIntegrationDebugLog.append(message, environment: environment)

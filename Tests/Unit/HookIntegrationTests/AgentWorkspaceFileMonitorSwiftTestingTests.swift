@@ -103,7 +103,7 @@ struct AgentWorkspaceFileMonitorSwiftTestingTests {
     }
 
     @Test("sessions share one root stream and release it after the final stop")
-    func rootStreamSharing() throws {
+    func rootStreamSharing() async throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-file-sharing-\(UUID().uuidString)", isDirectory: true)
         let migratedRoot = FileManager.default.temporaryDirectory
@@ -116,22 +116,54 @@ struct AgentWorkspaceFileMonitorSwiftTestingTests {
         }
         let monitor = AgentWorkspaceFileMonitorImpl { _ in }
 
-        #expect(monitor.start(sessionId: "session-a", rootPath: root.path))
-        #expect(monitor.start(sessionId: "session-b", rootPath: root.path))
-        #expect(monitor.activeRootCount == 1)
-        #expect(monitor.activeSessionCount == 2)
+        monitor.start(sessionId: "session-a", rootPath: root.path)
+        monitor.start(sessionId: "session-b", rootPath: root.path)
+        var snapshot = await monitor.stateSnapshot()
+        #expect(snapshot.activeRootCount == 1)
+        #expect(snapshot.activeSessionCount == 2)
 
         monitor.stop(sessionId: "session-a")
-        #expect(monitor.activeRootCount == 1)
-        #expect(monitor.activeSessionCount == 1)
+        snapshot = await monitor.stateSnapshot()
+        #expect(snapshot.activeRootCount == 1)
+        #expect(snapshot.activeSessionCount == 1)
 
-        #expect(monitor.start(sessionId: "session-b", rootPath: migratedRoot.path))
-        #expect(monitor.activeRootCount == 1)
-        #expect(monitor.activeSessionCount == 1)
+        monitor.start(sessionId: "session-b", rootPath: migratedRoot.path)
+        snapshot = await monitor.stateSnapshot()
+        #expect(snapshot.activeRootCount == 1)
+        #expect(snapshot.activeSessionCount == 1)
 
         monitor.stop(sessionId: "session-b")
-        #expect(monitor.activeRootCount == 0)
-        #expect(monitor.activeSessionCount == 0)
+        snapshot = await monitor.stateSnapshot()
+        #expect(snapshot.activeRootCount == 0)
+        #expect(snapshot.activeSessionCount == 0)
+    }
+
+    @Test("root validation and stream startup run away from the main thread")
+    @MainActor
+    func rootValidationIsAsynchronous() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-file-async-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let probe = AgentWorkspaceRootValidationProbe()
+        let monitor = AgentWorkspaceFileMonitorImpl(
+            rootValidator: { path in
+                probe.record(isMainThread: Thread.isMainThread)
+                return path
+            },
+            eventHandler: { _ in }
+        )
+
+        monitor.start(sessionId: "session-async", rootPath: root.path)
+        let snapshot = await monitor.stateSnapshot()
+
+        #expect(probe.wasMainThread == false)
+        #expect(snapshot.activeRootCount == 1)
+        #expect(snapshot.activeSessionCount == 1)
+
+        monitor.stopAll()
+        #expect(await monitor.stateSnapshot().activeRootCount == 0)
     }
 
     @Test("native stream emits source edits and excludes dependency files")
@@ -156,7 +188,8 @@ struct AgentWorkspaceFileMonitorSwiftTestingTests {
             try? fileManager.removeItem(at: root)
         }
 
-        #expect(monitor.start(sessionId: "session-live", rootPath: root.path))
+        monitor.start(sessionId: "session-live", rootPath: root.path)
+        #expect(await monitor.stateSnapshot().activeSessionCount == 1)
         try await Task.sleep(for: .milliseconds(200))
 
         let sourceFile = sources.appendingPathComponent("Live.swift")
@@ -175,6 +208,8 @@ struct AgentWorkspaceFileMonitorSwiftTestingTests {
         #expect(!collector.snapshot.contains {
             $0.filePath == HookPathNormalizer.normalize(dependencyFile)
         })
+        monitor.stopAll()
+        #expect(await monitor.stateSnapshot().activeRootCount == 0)
     }
 
     private func flags(_ values: Int...) -> FSEventStreamEventFlags {
@@ -226,7 +261,8 @@ struct AgentWorkspaceFileMonitorLargeRepoSmokeSwiftTestingTests {
 
         let memoryBefore = MemoryDiagnostics.current()
         let startTime = Date()
-        #expect(monitor.start(sessionId: "large-smoke", rootPath: root.path))
+        monitor.start(sessionId: "large-smoke", rootPath: root.path)
+        let monitorState = await monitor.stateSnapshot()
         let startupSeconds = Date().timeIntervalSince(startTime)
         let memoryAfterStart = MemoryDiagnostics.current()
         let residentDelta = max(
@@ -252,9 +288,12 @@ struct AgentWorkspaceFileMonitorLargeRepoSmokeSwiftTestingTests {
                 + "delivery_ms=\(String(format: "%.3f", deliverySeconds * 1_000))"
         )
         #expect(collector.snapshot.contains { $0.filePath == normalizedProbe })
+        #expect(monitorState.activeSessionCount == 1)
         #expect(startupSeconds < 1)
         #expect(residentDelta < 64 * 1_048_576)
         #expect(deliverySeconds < 1)
+        monitor.stopAll()
+        #expect(await monitor.stateSnapshot().activeRootCount == 0)
     }
 }
 
@@ -401,6 +440,21 @@ private final class AgentWorkspaceFileChangeCollector: @unchecked Sendable {
     }
 }
 
+private final class AgentWorkspaceRootValidationProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var validationRanOnMainThread: Bool?
+
+    var wasMainThread: Bool? {
+        lock.withLock { validationRanOnMainThread }
+    }
+
+    func record(isMainThread: Bool) {
+        lock.withLock {
+            validationRanOnMainThread = isMainThread
+        }
+    }
+}
+
 private final class RecordingAgentWorkspaceFileMonitor: AgentWorkspaceFileMonitoring {
     struct StartCall: Equatable {
         let sessionId: String
@@ -410,9 +464,8 @@ private final class RecordingAgentWorkspaceFileMonitor: AgentWorkspaceFileMonito
     private(set) var startCalls: [StartCall] = []
     private(set) var stopCalls: [String] = []
 
-    func start(sessionId: String, rootPath: String) -> Bool {
+    func start(sessionId: String, rootPath: String) {
         startCalls.append(StartCall(sessionId: sessionId, rootPath: rootPath))
-        return true
     }
 
     func stop(sessionId: String) {
