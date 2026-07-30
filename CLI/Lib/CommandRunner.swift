@@ -1765,6 +1765,30 @@ public struct CommandRunner {
                 params: ["team-id": teamID]
             )
 
+        case .taskRun(let options):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-run",
+                params: options.socketParams
+            )
+
+        case .taskRunList:
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-run-list",
+                params: nil
+            )
+
+        case .taskRunPromote(let runID, let candidateID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-run-promote",
+                params: [
+                    "run-id": runID,
+                    "candidate-id": candidateID,
+                ]
+            )
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):

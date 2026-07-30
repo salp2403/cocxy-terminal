@@ -43,7 +43,125 @@ enum TaskRunExecutionError: Error, Sendable, Equatable, CustomStringConvertible 
     }
 }
 
+private struct TaskRunCLICandidateSummary: Codable {
+    let id: String
+    let provider: String
+    let branch: String?
+    let status: String
+    let estimatedCostMicros: Int64?
+}
+
+private struct TaskRunCLISummary: Codable {
+    let id: String
+    let origin: String
+    let baseRef: String
+    let baseCommit: String
+    let status: String
+    let createdAt: Date
+    let promotedCandidateID: String?
+    let candidates: [TaskRunCLICandidateSummary]
+}
+
 extension AppDelegate {
+    nonisolated func handleTaskRunCLIRequest(
+        kind: String,
+        params: [String: String],
+        approvedContext: SocketPrivilegedCommandContext? = nil
+    ) -> (success: Bool, data: [String: String]) {
+        if kind == "list" {
+            return syncOnMainActor { self.listTaskRunsForCLI() }
+        }
+
+        let semaphore = DispatchSemaphore(value: 0)
+        let box = LockedBox<(Bool, [String: String])>((
+            false,
+            ["error": "Parallel task dispatch did not complete"]
+        ))
+        Task.detached { [self] in
+            let result = await performTaskRunCLIRequest(
+                kind: kind,
+                params: params,
+                approvedContext: approvedContext
+            )
+            box.withValue { $0 = result }
+            semaphore.signal()
+        }
+        semaphore.wait()
+        return box.withValue { $0 }
+    }
+
+    nonisolated func performTaskRunCLIRequest(
+        kind: String,
+        params: [String: String],
+        approvedContext: SocketPrivilegedCommandContext?
+    ) async -> (Bool, [String: String]) {
+        do {
+            switch kind {
+            case "launch":
+                guard let approvedContext,
+                      let context = await MainActor.run(body: {
+                          self.approvedTaskRunLaunchContext(approvedContext)
+                      }) else {
+                    return (false, ["error": "Approved parallel task target is unavailable"])
+                }
+                let count = try params["count"].map { raw -> Int in
+                    guard let value = Int(raw) else {
+                        throw TaskRunError.invalidCandidateCount(0)
+                    }
+                    return value
+                }
+                let request = try TaskRunRequest.make(
+                    prompt: params["prompt"] ?? "",
+                    agents: params["agents"] ?? "",
+                    count: count,
+                    baseRef: params["base-ref"]
+                )
+                let run = try await performTaskRunLaunch(
+                    request: request,
+                    context: context
+                )
+                return (true, [
+                    "status": "launched",
+                    "run-id": run.id,
+                    "candidates": "\(run.candidates.count)",
+                    "base-ref": run.baseRef,
+                    "base-commit": run.baseCommit,
+                ])
+
+            case "promote":
+                let runID = params["run-id"] ?? ""
+                let candidateID = params["candidate-id"] ?? ""
+                guard let approvedContext,
+                      await MainActor.run(body: {
+                          self.approvedTaskRunPromotionMatches(
+                              approvedContext,
+                              runID: runID,
+                              candidateID: candidateID
+                          )
+                      }) else {
+                    return (false, ["error": "Approved task promotion target is unavailable"])
+                }
+                let outcome = try await promoteTaskRun(
+                    runID: runID,
+                    candidateID: candidateID
+                )
+                return (true, [
+                    "status": "promoted",
+                    "run-id": outcome.run.id,
+                    "candidate-id": outcome.run.promotedCandidateID ?? "",
+                    "candidate-commit": outcome.gitResult.candidateCommit,
+                    "merged-commit": outcome.gitResult.mergedCommit,
+                    "cleanup-failures": outcome.cleanupFailures.joined(separator: "\n"),
+                ])
+
+            default:
+                return (false, ["error": "Unknown task run action: \(kind)"])
+            }
+        } catch {
+            return (false, ["error": String(describing: error)])
+        }
+    }
+
     @MainActor
     func focusedTaskRunLaunchContext() -> TaskRunLaunchContext? {
         guard let controller = focusedWindowController() ?? windowController,
@@ -68,6 +186,33 @@ extension AppDelegate {
             return nil
         }
         return makeTaskRunLaunchContext(controller: controller, tab: tab)
+    }
+
+    @MainActor
+    func approvedTaskRunPromotionMatches(
+        _ approvedContext: SocketPrivilegedCommandContext,
+        runID rawRunID: String,
+        candidateID rawCandidateID: String
+    ) -> Bool {
+        let runID = AgentTeamConfig.slug(rawRunID)
+        let candidateID = AgentTeamConfig.slug(rawCandidateID)
+        guard approvedContext.scope == .localExecution,
+              let run = activeTaskRuns[runID],
+              run.status == .running,
+              let candidate = run.candidates.first(where: { $0.id == candidateID }),
+              let entry = candidate.worktree,
+              let tabID = entry.tabID,
+              approvedContext.tabID == tabID.rawValue,
+              let controller = privilegedSocketController(for: approvedContext),
+              controller.tabManager.tab(for: tabID) != nil,
+              entry.path.resolvingSymlinksInPath().standardizedFileURL.path
+                == approvedContext.workingDirectory,
+              approvedContext.authorityDetails["run-id"] == run.id,
+              approvedContext.authorityDetails["candidate-id"] == candidate.id,
+              approvedContext.authorityDetails["branch"] == entry.branch else {
+            return false
+        }
+        return true
     }
 
     nonisolated func performTaskRunLaunch(
@@ -395,6 +540,43 @@ extension AppDelegate {
             if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
             return lhs.id < rhs.id
         }
+    }
+
+    @MainActor
+    private func listTaskRunsForCLI() -> (Bool, [String: String]) {
+        let summaries = taskRunsSnapshot().map { run in
+            TaskRunCLISummary(
+                id: run.id,
+                origin: run.originRepoPath.path,
+                baseRef: run.baseRef,
+                baseCommit: run.baseCommit,
+                status: run.status.rawValue,
+                createdAt: run.createdAt,
+                promotedCandidateID: run.promotedCandidateID,
+                candidates: run.candidates.map { candidate in
+                    TaskRunCLICandidateSummary(
+                        id: candidate.id,
+                        provider: candidate.provider.rawValue,
+                        branch: candidate.worktree?.branch,
+                        status: candidate.status.rawValue,
+                        estimatedCostMicros: candidate.estimatedCostMicros > 0
+                            ? candidate.estimatedCostMicros
+                            : nil
+                    )
+                }
+            )
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let json = (try? encoder.encode(summaries))
+            .flatMap { String(data: $0, encoding: .utf8) }
+            ?? "[]"
+        return (true, [
+            "status": "listed",
+            "count": "\(summaries.count)",
+            "runs": json,
+        ])
     }
 
     @MainActor

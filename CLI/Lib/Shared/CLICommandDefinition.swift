@@ -220,6 +220,12 @@ public enum CLICommand: String, CaseIterable {
     case agentTeamList = "agent-team-list"
     case agentTeamStop = "agent-team-stop"
 
+    // MARK: - Parallel Tasks
+
+    case taskRun = "task-run"
+    case taskRunList = "task-run-list"
+    case taskRunPromote = "task-run-promote"
+
     // MARK: - Window Management (v3)
 
     case windowNew = "window-new"
@@ -529,6 +535,9 @@ public enum CLICommand: String, CaseIterable {
         case .agentTeamLaunch: return "Launch a local agent team in native panes"
         case .agentTeamList: return "List active local agent teams"
         case .agentTeamStop: return "Stop a local agent team and close its panes"
+        case .taskRun: return "Fan out one prompt across isolated worktrees and local agent processes"
+        case .taskRunList: return "List parallel task runs and candidate states"
+        case .taskRunPromote: return "Promote one task candidate and discard the other worktree directories"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -816,6 +825,9 @@ public enum CLICommand: String, CaseIterable {
         case .agentTeamLaunch: return "cocxy agent-teams (--teammates <name,name> | --template <id>) [--provider <provider>]"
         case .agentTeamList: return "cocxy agent-teams list"
         case .agentTeamStop: return "cocxy agent-teams stop <team-id>"
+        case .taskRun: return "cocxy task-run --prompt <text> --agents <provider,...> [--count <2...8>] [--base-ref <ref>]"
+        case .taskRunList: return "cocxy task-run list"
+        case .taskRunPromote: return "cocxy task-run promote <run-id> --candidate <candidate-id>"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"

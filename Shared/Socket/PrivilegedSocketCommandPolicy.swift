@@ -142,7 +142,9 @@ public enum CocxyPrivilegedSocketCommandPolicy {
              "notebook-run",
              "workflow-run",
              "agent-team-launch",
-             "agent-team-stop":
+             "agent-team-stop",
+             "task-run",
+             "task-run-promote":
             return .localExecution
 
         case "cell-create",

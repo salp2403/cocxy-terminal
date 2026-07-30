@@ -414,6 +414,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// can create panes on the focused window without owning UI state.
     let agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
+    /// Routes parallel task launch/list/promotion through AppDelegate so Git
+    /// worktree state and native terminal surfaces stay one transaction.
+    let taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+
     /// Routes `cocxy cell-*` verbs through the app-owned Cells coordinator.
     let cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
@@ -717,6 +721,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        taskRunCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         cellCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil
     ) {
         self.privilegedCommandAuthorizationProvider =
@@ -817,6 +822,19 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             }
         } else {
             self.agentTeamCLIProvider = nil
+        }
+        if let taskRunCLIProvider {
+            self.taskRunCLIProvider = { kind, params in
+                if kind == "list" {
+                    return taskRunCLIProvider(kind, params)
+                }
+                guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                    return (false, ["error": "Authorization denied"])
+                }
+                return taskRunCLIProvider(kind, params)
+            }
+        } else {
+            self.taskRunCLIProvider = nil
         }
         self.cellCLIProvider = Self.approvalGated(
             cellCLIProvider,
@@ -1311,6 +1329,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleAgentTeam(kind: "list", request: request)
         case .agentTeamStop:
             return handleAgentTeam(kind: "stop", request: request)
+        case .taskRun:
+            return handleTaskRun(kind: "launch", request: request)
+        case .taskRunList:
+            return handleTaskRun(kind: "list", request: request)
+        case .taskRunPromote:
+            return handleTaskRun(kind: "promote", request: request)
 
         // Remote workspace commands
         case .remoteList:

@@ -425,6 +425,19 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .agentTeamStop:
             return formatDataOrJSON(response: response)
+        case .taskRun:
+            let runID = response.data?["run-id"] ?? "unknown"
+            let count = response.data?["candidates"] ?? "0"
+            return "Task run \(runID) launched with \(count) candidates."
+        case .taskRunList:
+            return formatDataOrJSON(response: response)
+        case .taskRunPromote:
+            let candidateID = response.data?["candidate-id"] ?? "selected candidate"
+            let cleanupFailures = response.data?["cleanup-failures"] ?? ""
+            if cleanupFailures.isEmpty {
+                return "Task candidate \(candidateID) promoted."
+            }
+            return "Task candidate \(candidateID) promoted; cleanup needs attention:\n\(cleanupFailures)"
 
         // SSH (v4)
         case .ssh:

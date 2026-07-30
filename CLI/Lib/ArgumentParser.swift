@@ -109,6 +109,35 @@ public struct AgentTeamCLIOptions: Equatable {
     }
 }
 
+public struct TaskRunCLIOptions: Equatable {
+    public let prompt: String
+    public let agents: String
+    public let count: Int?
+    public let baseRef: String?
+
+    public init(
+        prompt: String,
+        agents: String,
+        count: Int? = nil,
+        baseRef: String? = nil
+    ) {
+        self.prompt = prompt
+        self.agents = agents
+        self.count = count
+        self.baseRef = baseRef
+    }
+
+    var socketParams: [String: String] {
+        var params = [
+            "prompt": prompt,
+            "agents": agents,
+        ]
+        if let count { params["count"] = "\(count)" }
+        if let baseRef { params["base-ref"] = baseRef }
+        return params
+    }
+}
+
 public struct CellCreateCLIOptions: Equatable {
     public let provider: String
     public let profile: String?
@@ -904,6 +933,15 @@ public enum ParsedCommand: Equatable {
     /// `cocxy agent-teams stop <team-id>`
     case agentTeamStop(teamID: String)
 
+    /// `cocxy task-run --prompt <text> --agents <provider,...> [--count N]`
+    case taskRun(TaskRunCLIOptions)
+
+    /// `cocxy task-run list`
+    case taskRunList
+
+    /// `cocxy task-run promote <run-id> --candidate <candidate-id>`
+    case taskRunPromote(runID: String, candidateID: String)
+
     // MARK: - SSH (v4)
 
     /// `cocxy ssh user@host [-p port] [-i identity]`
@@ -1404,6 +1442,9 @@ public enum CLIArgumentParser {
 
         case "claude-teams", "agent-teams":
             return try parseAgentTeams(arguments: Array(arguments.dropFirst()))
+
+        case "task-run":
+            return try parseTaskRun(arguments: Array(arguments.dropFirst()))
 
         case "web":
             return try parseWeb(arguments: Array(arguments.dropFirst()))
@@ -4870,6 +4911,134 @@ public enum CLIArgumentParser {
             configPath: configPath,
             templateID: hasTemplate ? normalizedTemplateID : nil,
             provider: provider
+        ))
+    }
+
+    private static func parseTaskRun(arguments: [String]) throws -> ParsedCommand {
+        if arguments.first == "list" {
+            guard arguments.count == 1 else {
+                throw CLIError.invalidArgument(
+                    command: "task-run list",
+                    argument: Array(arguments.dropFirst()).joined(separator: " "),
+                    reason: "List does not accept additional arguments."
+                )
+            }
+            return .taskRunList
+        }
+
+        if arguments.first == "promote" {
+            guard arguments.count >= 2,
+                  !arguments[1].isEmpty,
+                  !arguments[1].hasPrefix("-") else {
+                throw CLIError.missingArgument(
+                    command: "task-run promote",
+                    argument: "run-id"
+                )
+            }
+            let runID = arguments[1]
+            let rest = Array(arguments.dropFirst(2))
+            var candidateID: String?
+            var index = 0
+            while index < rest.count {
+                let argument = rest[index]
+                switch argument {
+                case "--candidate":
+                    candidateID = try value(
+                        after: argument,
+                        in: rest,
+                        at: &index,
+                        command: "task-run promote"
+                    )
+                default:
+                    throw CLIError.invalidArgument(
+                        command: "task-run promote",
+                        argument: argument,
+                        reason: "Use --candidate <candidate-id>."
+                    )
+                }
+                index += 1
+            }
+            guard let candidateID else {
+                throw CLIError.missingArgument(
+                    command: "task-run promote",
+                    argument: "--candidate <candidate-id>"
+                )
+            }
+            return .taskRunPromote(runID: runID, candidateID: candidateID)
+        }
+
+        var launchArguments = arguments
+        if launchArguments.first == "launch" {
+            launchArguments.removeFirst()
+        }
+        var prompt: String?
+        var agents: String?
+        var count: Int?
+        var baseRef: String?
+        var index = 0
+        while index < launchArguments.count {
+            let argument = launchArguments[index]
+            switch argument {
+            case "--prompt":
+                prompt = try value(
+                    after: argument,
+                    in: launchArguments,
+                    at: &index,
+                    command: "task-run"
+                )
+            case "--agents":
+                agents = try value(
+                    after: argument,
+                    in: launchArguments,
+                    at: &index,
+                    command: "task-run"
+                )
+            case "--count":
+                let rawCount = try value(
+                    after: argument,
+                    in: launchArguments,
+                    at: &index,
+                    command: "task-run"
+                )
+                guard let parsedCount = Int(rawCount), (2...8).contains(parsedCount) else {
+                    throw CLIError.invalidArgument(
+                        command: "task-run",
+                        argument: rawCount,
+                        reason: "--count must be an integer from 2 through 8."
+                    )
+                }
+                count = parsedCount
+            case "--base-ref":
+                baseRef = try value(
+                    after: argument,
+                    in: launchArguments,
+                    at: &index,
+                    command: "task-run"
+                )
+            default:
+                throw CLIError.invalidArgument(
+                    command: "task-run",
+                    argument: argument,
+                    reason: "Use --prompt <text>, --agents <provider,...>, --count <2...8>, or --base-ref <ref>."
+                )
+            }
+            index += 1
+        }
+
+        guard let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty else {
+            throw CLIError.missingArgument(command: "task-run", argument: "--prompt <text>")
+        }
+        guard let agents = agents?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !agents.isEmpty else {
+            throw CLIError.missingArgument(command: "task-run", argument: "--agents <provider,...>")
+        }
+        let normalizedBaseRef = baseRef?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return .taskRun(TaskRunCLIOptions(
+            prompt: prompt,
+            agents: agents,
+            count: count,
+            baseRef: normalizedBaseRef?.isEmpty == false ? normalizedBaseRef : nil
         ))
     }
 

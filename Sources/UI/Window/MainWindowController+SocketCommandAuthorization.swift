@@ -471,9 +471,50 @@ extension AppDelegate {
             )
 
         case .localExecution:
-            if request.command == .agentTeamLaunch {
+            if request.command == .taskRunPromote {
+                guard let rawRunID = request.params["run-id"],
+                      let rawCandidateID = request.params["candidate-id"],
+                      let run = activeTaskRuns[AgentTeamConfig.slug(rawRunID)],
+                      run.status == .running,
+                      let candidate = run.candidates.first(where: {
+                          $0.id == AgentTeamConfig.slug(rawCandidateID)
+                      }),
+                      let entry = candidate.worktree,
+                      let tabID = entry.tabID,
+                      let controller = controllerContainingTab(tabID),
+                      controller.tabManager.tab(for: tabID) != nil else {
+                    return nil
+                }
+                let workingDirectory = entry.path
+                    .resolvingSymlinksInPath()
+                    .standardizedFileURL.path
+                return SocketPrivilegedCommandPresentationTarget(
+                    context: SocketPrivilegedCommandContext(
+                        scope: .localExecution,
+                        windowControllerIdentifier: ObjectIdentifier(controller),
+                        tabID: tabID.rawValue,
+                        workingDirectory: workingDirectory,
+                        authorityDetails: [
+                            "run-id": run.id,
+                            "candidate-id": candidate.id,
+                            "branch": entry.branch,
+                            "discarded-candidates": "\(max(0, run.candidates.count - 1))",
+                        ],
+                        surfaceID: nil,
+                        browserViewModelIdentifier: nil,
+                        browserTabID: nil,
+                        browserURL: nil,
+                        targetDisplayName: "Promote \(candidate.provider.displayName) candidate \(entry.branch)"
+                    ),
+                    controller: controller
+                )
+            }
+            if request.command == .agentTeamLaunch || request.command == .taskRun {
                 guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
                 let workingDirectory = canonicalWorkingDirectory(for: tab)
+                let targetName = request.command == .taskRun
+                    ? "Parallel task in \(tab.displayTitle)"
+                    : "Agent team in \(tab.displayTitle)"
                 return SocketPrivilegedCommandPresentationTarget(
                     context: SocketPrivilegedCommandContext(
                         scope: .localExecution,
@@ -484,7 +525,7 @@ extension AppDelegate {
                         browserViewModelIdentifier: nil,
                         browserTabID: nil,
                         browserURL: nil,
-                        targetDisplayName: "Agent team in \(tab.displayTitle)"
+                        targetDisplayName: targetName
                     ),
                     controller: focusedController
                 )

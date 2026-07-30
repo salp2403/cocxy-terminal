@@ -2968,6 +2968,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     approvedContext: context
                 )
             },
+            taskRunCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                let fallback: (Bool, [String: String]) = (
+                    false,
+                    ["error": "Cocxy process has shut down"]
+                )
+                guard let delegate = delegateRef.value else {
+                    return fallback
+                }
+                return delegate.handleTaskRunCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
+                )
+            },
             cellCLIProvider: { kind, params in
                 let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 let fallback: (Bool, [String: String]) = (

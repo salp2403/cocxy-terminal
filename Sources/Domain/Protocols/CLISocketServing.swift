@@ -393,6 +393,12 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case agentTeamList = "agent-team-list"
     /// Stop a local agent team and close its panes.
     case agentTeamStop = "agent-team-stop"
+    /// Fan out one prompt into isolated worktrees and real provider tabs.
+    case taskRun = "task-run"
+    /// List in-memory parallel task runs.
+    case taskRunList = "task-run-list"
+    /// Merge one selected candidate after explicit local approval.
+    case taskRunPromote = "task-run-promote"
 
     // MARK: - Window Management (v3)
 
