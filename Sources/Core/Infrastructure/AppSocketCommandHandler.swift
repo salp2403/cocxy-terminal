@@ -2326,6 +2326,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return "\(config.terminal.mouseHideWhileTyping)"
         case "terminal.copy-on-select":
             return "\(config.terminal.copyOnSelect)"
+        case "terminal.cursor-click-to-move":
+            return "\(config.terminal.cursorClickToMove)"
         case "terminal.clipboard-paste-protection":
             return "\(config.terminal.clipboardPasteProtection)"
         case "terminal.clipboard-read-access":
@@ -2503,7 +2505,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             let normalized = rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             guard ClipboardWriteAccess(rawValue: normalized) != nil else { return nil }
             return AppSocketConfigTOMLUpdater.renderedScalarValue(normalized)
-        case "ux-polish.always-show-shortcut-hints",
+        case "terminal.cursor-click-to-move",
+             "ux-polish.always-show-shortcut-hints",
              "ux-polish.shortcut-hint-debug-overlay":
             guard let value = normalizedConfigBool(rawValue) else { return nil }
             return value
@@ -6139,6 +6142,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             "terminal.scrollback-lines", "terminal.cursor-style",
             "terminal.cursor-blink", "terminal.cursor-opacity",
             "terminal.mouse-hide-while-typing", "terminal.copy-on-select",
+            "terminal.cursor-click-to-move",
             "terminal.clipboard-paste-protection", "terminal.clipboard-read-access",
             "terminal.clipboard-write-access",
             "terminal.image-memory-limit-mb", "terminal.image-file-transfer",

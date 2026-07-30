@@ -1261,6 +1261,22 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["value"], ClipboardWriteAccess.prompt.rawValue)
     }
 
+    func test_configGet_cursorClickToMove_returnsDefault() {
+        let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+        let response = handler.handleCommand(SocketRequest(
+            id: "cg-cursor-click",
+            command: "config-get",
+            params: ["key": "terminal.cursor-click-to-move"]
+        ))
+
+        XCTAssertTrue(response.success)
+        XCTAssertEqual(response.data?["key"], "terminal.cursor-click-to-move")
+        XCTAssertEqual(
+            response.data?["value"],
+            "\(TerminalConfig.defaults.cursorClickToMove)"
+        )
+    }
+
     func test_configGet_withMissingKey_returnsError() {
         let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
         let request = SocketRequest(id: "cg-2", command: "config-get", params: nil)
@@ -1433,6 +1449,10 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["notes.enabled"], "\(NotesConfig.defaults.enabled)")
         XCTAssertEqual(response.data?["notes.shortcut"], NotesConfig.defaults.shortcut)
+        XCTAssertEqual(
+            response.data?["terminal.cursor-click-to-move"],
+            "\(TerminalConfig.defaults.cursorClickToMove)"
+        )
         XCTAssertEqual(response.data?["appearance.aurora-enabled"], "\(AppearanceConfig.defaults.auroraEnabled)")
         XCTAssertEqual(
             response.data?["appearance.rate-limit-indicator-enabled"],
@@ -1672,6 +1692,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 ("appearance.aurora-enabled", "FALSE"),
                 ("terminal.clipboard-read-access", " DENY "),
                 ("terminal.clipboard-write-access", "ALLOW"),
+                ("terminal.cursor-click-to-move", "FALSE"),
                 ("command-corrections.enabled", "FALSE"),
                 ("command-corrections.edit-distance-threshold", "1"),
                 ("command-corrections.max-suggestions-shown", "5"),
@@ -1701,7 +1722,28 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             XCTAssertTrue(written.contains("[experimental.remote-browser]\nenabled = true"))
             XCTAssertTrue(written.contains("clipboard-read-access = \"deny\""))
             XCTAssertTrue(written.contains("clipboard-write-access = \"allow\""))
+            XCTAssertTrue(written.contains("cursor-click-to-move = false"))
             XCTAssertTrue(written.contains("[command-blocks]\nenabled = false\nshow-only-on-hover = false"))
+        }
+    }
+
+    func test_configSet_rejectsInvalidCursorClickToMoveValue() {
+        preservingUserConfig {
+            let handler = AppSocketCommandHandler(privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) }, tabManager: nil, hookEventReceiver: nil)
+            let response = handler.handleCommand(SocketRequest(
+                id: "cs-invalid-cursor-click",
+                command: "config-set",
+                params: [
+                    "key": "terminal.cursor-click-to-move",
+                    "value": "sometimes",
+                ]
+            ))
+
+            XCTAssertFalse(response.success)
+            XCTAssertEqual(
+                response.error,
+                "Invalid value for config key: terminal.cursor-click-to-move"
+            )
         }
     }
 
