@@ -115,72 +115,86 @@ struct TaskQueueSocketSwiftTestingTests {
         #expect(approvals.value == 1)
     }
 
-    @Test("lifecycle queue events cannot recursively trigger queued tasks")
-    func lifecycleEventsAreRejectedAsTriggers() {
-        let approvals = TaskQueueLockedCounter()
-        let providerCalls = TaskQueueLockedCounter()
-        let handler = AppSocketCommandHandler(
-            privilegedCommandAuthorizationProvider: { request in
-                approvals.increment()
-                return .internalTrusted(for: request)
-            },
-            tabManager: nil,
-            hookEventReceiver: nil,
-            taskQueueCLIProvider: { _, _ in
-                providerCalls.increment()
-                return (true, [:])
-            }
-        )
+    @Test("only emitted plugin events can trigger queued tasks")
+    func unavailableEventsAreRejectedAsTriggers() {
+        for event in [
+            "agent-detected",
+            "agent-state-changed",
+            "command-complete",
+            "directory-changed",
+            "task-run-started",
+            "task-run-finished",
+        ] {
+            let approvals = TaskQueueLockedCounter()
+            let providerCalls = TaskQueueLockedCounter()
+            let handler = AppSocketCommandHandler(
+                privilegedCommandAuthorizationProvider: { request in
+                    approvals.increment()
+                    return .internalTrusted(for: request)
+                },
+                tabManager: nil,
+                hookEventReceiver: nil,
+                taskQueueCLIProvider: { _, _ in
+                    providerCalls.increment()
+                    return (true, [:])
+                }
+            )
 
-        let response = handler.handleCommand(SocketRequest(
-            id: "task-enqueue-loop",
-            command: "task-enqueue",
-            params: [
-                "task-id": "loop",
-                "provider": "codex",
-                "prompt": "Loop",
-                "cwd": "/tmp/project",
-                "trigger": "on-event",
-                "event": "task-run-finished",
-            ]
-        ))
+            let response = handler.handleCommand(SocketRequest(
+                id: "task-enqueue-\(event)",
+                command: "task-enqueue",
+                params: [
+                    "task-id": "dead-event",
+                    "provider": "codex",
+                    "prompt": "Do not run",
+                    "cwd": "/tmp/project",
+                    "trigger": "on-event",
+                    "event": event,
+                ]
+            ))
 
-        #expect(!response.success)
-        #expect(response.error?.contains("cannot trigger queued tasks") == true)
-        #expect(providerCalls.value == 0)
-        #expect(approvals.value == 0)
+            #expect(!response.success)
+            #expect(providerCalls.value == 0)
+            #expect(approvals.value == 0)
+        }
     }
 
-    @Test("cancel requires approval and preserves the exact task identifier")
-    func cancelRequiresApproval() {
-        let approvals = TaskQueueLockedCounter()
-        let providerCalls = TaskQueueLockedCounter()
-        let handler = AppSocketCommandHandler(
-            privilegedCommandAuthorizationProvider: { request in
-                approvals.increment()
-                #expect(request.command == .taskCancel)
-                #expect(request.params == ["task-id": "nightly-review"])
-                return .internalTrusted(for: request)
-            },
-            tabManager: nil,
-            hookEventReceiver: nil,
-            taskQueueCLIProvider: { kind, params in
-                providerCalls.increment()
-                #expect(kind == "cancel")
-                #expect(params == ["task-id": "nightly-review"])
-                return (true, ["status": "cancelled", "task-id": "nightly-review"])
-            }
-        )
+    @Test("task mutations require approval and preserve the exact identifier")
+    func taskMutationsRequireApproval() {
+        for (command, expectedCommand, kind) in [
+            ("task-cancel", CLICommandName.taskCancel, "cancel"),
+            ("task-rerun", .taskRerun, "rerun"),
+            ("task-remove", .taskRemove, "remove"),
+        ] {
+            let approvals = TaskQueueLockedCounter()
+            let providerCalls = TaskQueueLockedCounter()
+            let handler = AppSocketCommandHandler(
+                privilegedCommandAuthorizationProvider: { request in
+                    approvals.increment()
+                    #expect(request.command == expectedCommand)
+                    #expect(request.params == ["task-id": "nightly-review"])
+                    return .internalTrusted(for: request)
+                },
+                tabManager: nil,
+                hookEventReceiver: nil,
+                taskQueueCLIProvider: { receivedKind, params in
+                    providerCalls.increment()
+                    #expect(receivedKind == kind)
+                    #expect(params == ["task-id": "nightly-review"])
+                    return (true, ["status": kind, "task-id": "nightly-review"])
+                }
+            )
 
-        let response = handler.handleCommand(SocketRequest(
-            id: "task-cancel-approved",
-            command: "task-cancel",
-            params: ["task-id": "nightly-review"]
-        ))
+            let response = handler.handleCommand(SocketRequest(
+                id: "\(command)-approved",
+                command: command,
+                params: ["task-id": "nightly-review"]
+            ))
 
-        #expect(response.success)
-        #expect(providerCalls.value == 1)
-        #expect(approvals.value == 1)
+            #expect(response.success)
+            #expect(providerCalls.value == 1)
+            #expect(approvals.value == 1)
+        }
     }
 }
 

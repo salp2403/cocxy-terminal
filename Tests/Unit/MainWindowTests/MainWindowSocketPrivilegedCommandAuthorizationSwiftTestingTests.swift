@@ -205,8 +205,8 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(preview.contains("authority.repository: /tmp/project"))
     }
 
-    @Test("task enqueue preview hashes prompt content instead of displaying it")
-    func taskEnqueuePreviewRedactsPrompt() throws {
+    @Test("task enqueue preview displays a bounded prompt and binds its digest")
+    func taskEnqueuePreviewDisplaysBoundedPrompt() throws {
         let prompt = "Review a private implementation detail"
         let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
             socketRequest: SocketRequest(
@@ -225,9 +225,30 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         let preview = SocketPrivilegedCommandSecurity.approvalPreview(request)
         let expectedDigest = SocketPrivilegedCommandSecurity.digest(data: Data(prompt.utf8))
 
-        #expect(!preview.contains(prompt))
-        #expect(preview.contains("prompt: \(prompt.utf8.count) UTF-8 bytes"))
+        #expect(preview.contains(prompt))
+        #expect(preview.contains("prompt (\(prompt.utf8.count) UTF-8 bytes):"))
         #expect(preview.contains(expectedDigest))
+
+        let longPrompt = String(repeating: "á", count: 1_000)
+        let longRequest = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "task-enqueue-long-preview",
+                command: "task-enqueue",
+                params: [
+                    "task-id": "long-review",
+                    "prompt": longPrompt,
+                    "cwd": "/tmp/project",
+                    "trigger": "manual",
+                ]
+            )
+        ))
+        let longPreview = SocketPrivilegedCommandSecurity.approvalPreview(longRequest)
+        #expect(longPreview.contains(String(repeating: "á", count: 512)))
+        #expect(!longPreview.contains(String(repeating: "á", count: 513)))
+        #expect(longPreview.contains("preview truncated to 1024 UTF-8 bytes"))
+        #expect(longPreview.contains(SocketPrivilegedCommandSecurity.digest(
+            data: Data(longPrompt.utf8)
+        )))
     }
 
     @Test("task enqueue approval binds canonical pipeline bytes and worktree")

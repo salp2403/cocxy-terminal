@@ -230,6 +230,8 @@ public enum CLICommand: String, CaseIterable {
     case taskEnqueue = "task-enqueue"
     case taskList = "task-list"
     case taskCancel = "task-cancel"
+    case taskRerun = "task-rerun"
+    case taskRemove = "task-remove"
 
     // MARK: - Window Management (v3)
 
@@ -548,6 +550,8 @@ public enum CLICommand: String, CaseIterable {
         case .taskEnqueue: return "Schedule a persistent agent pipeline"
         case .taskList: return "List persistent scheduled tasks"
         case .taskCancel: return "Cancel a scheduled or running task"
+        case .taskRerun: return "Re-enqueue a completed or failed task"
+        case .taskRemove: return "Remove a terminal task from the queue"
 
         // Window Management
         case .windowNew: return "Create a new window"
@@ -843,6 +847,8 @@ public enum CLICommand: String, CaseIterable {
         case .taskEnqueue: return "cocxy task-enqueue --id <id> (--pipeline <path> | --prompt <text>) [--provider <provider>] [--worktree <path>] [--cron <expression> | --event <event>]"
         case .taskList: return "cocxy task-list [--limit <1...100>] [--offset <n>]"
         case .taskCancel: return "cocxy task-cancel <task-id>"
+        case .taskRerun: return "cocxy task-rerun <task-id>"
+        case .taskRemove: return "cocxy task-remove <task-id>"
 
         // Window Management
         case .windowNew: return "cocxy window new [--engine system|in-process|daemon]"

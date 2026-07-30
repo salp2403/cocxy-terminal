@@ -56,14 +56,14 @@ struct TaskQueueUISwiftTestingTests {
         imported.sourceMode = .pipeline
         imported.pipelinePath = pipelineURL.path
         imported.triggerMode = .event
-        imported.event = .commandComplete
+        imported.event = .tabCreated
 
         let importedItem = try imported.makeItem()
         #expect(importedItem.pipeline.id == "review-dag")
         #expect(importedItem.pipeline.steps.first?.worktree == child.path)
         #expect(importedItem.status == .scheduled)
         #expect(importedItem.nextRunAt == nil)
-        #expect(importedItem.trigger == .event(.commandComplete))
+        #expect(importedItem.trigger == .event(.tabCreated))
     }
 
     @Test("draft validation rejects unsafe or inconsistent queue inputs")
@@ -103,7 +103,9 @@ struct TaskQueueUISwiftTestingTests {
             operations: TaskQueueCenterOperations(
                 load: { backend.load() },
                 enqueue: { draft in try backend.enqueue(draft) },
-                cancel: { taskID in try backend.cancel(taskID) }
+                cancel: { taskID in try backend.cancel(taskID) },
+                rerun: { taskID in try backend.rerun(taskID) },
+                remove: { taskID in try backend.remove(taskID) }
             )
         )
 
@@ -131,6 +133,15 @@ struct TaskQueueUISwiftTestingTests {
         #expect(model.selectedTask?.status == .cancelled)
         #expect(model.cancellingTaskID == nil)
         #expect(model.errorMessage == nil)
+
+        await model.rerun(taskID: "ui-task")
+        #expect(model.selectedTask?.status == .queued)
+        #expect(model.operatingTaskID == nil)
+        await model.cancel(taskID: "ui-task")
+        await model.remove(taskID: "ui-task")
+        #expect(model.items.isEmpty)
+        #expect(model.selectedTaskID == nil)
+        #expect(model.operatingTaskID == nil)
     }
 
     @Test("both palettes expose the queue center")
@@ -159,8 +170,8 @@ struct TaskQueueUISwiftTestingTests {
                 == "En ejecución"
         )
         #expect(
-            TaskQueuePresentation.eventLabel(.commandComplete, localizer: localizer)
-                == "Comando completado"
+            TaskQueuePresentation.eventLabel(.tabCreated, localizer: localizer)
+                == "Pestaña creada"
         )
     }
 
@@ -171,7 +182,9 @@ struct TaskQueueUISwiftTestingTests {
             operations: TaskQueueCenterOperations(
                 load: { [] },
                 enqueue: { draft in try draft.makeItem() },
-                cancel: { _ in throw TaskQueueError.taskNotFound("missing") }
+                cancel: { _ in throw TaskQueueError.taskNotFound("missing") },
+                rerun: { _ in throw TaskQueueError.taskNotFound("missing") },
+                remove: { _ in throw TaskQueueError.taskNotFound("missing") }
             )
         )
         _ = TaskQueueCenterView(
@@ -218,5 +231,31 @@ private final class TaskQueueUITestBackend {
         item.updatedAt = Date(timeIntervalSince1970: 200)
         items[index] = item
         return item
+    }
+
+    func rerun(_ taskID: String) throws -> TaskQueueItem {
+        guard let index = items.firstIndex(where: { $0.id == taskID }) else {
+            throw TaskQueueError.taskNotFound(taskID)
+        }
+        guard items[index].status.isFinished else {
+            throw TaskQueueError.taskNotFinished(taskID)
+        }
+        var item = items[index]
+        item.status = .queued
+        item.nextRunAt = Date(timeIntervalSince1970: 300)
+        item.completedAt = nil
+        item.updatedAt = Date(timeIntervalSince1970: 300)
+        items[index] = item
+        return item
+    }
+
+    func remove(_ taskID: String) throws -> TaskQueueItem {
+        guard let index = items.firstIndex(where: { $0.id == taskID }) else {
+            throw TaskQueueError.taskNotFound(taskID)
+        }
+        guard items[index].status.isFinished else {
+            throw TaskQueueError.taskNotFinished(taskID)
+        }
+        return items.remove(at: index)
     }
 }

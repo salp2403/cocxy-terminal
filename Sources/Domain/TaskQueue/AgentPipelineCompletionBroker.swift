@@ -10,6 +10,7 @@ enum AgentPipelineRuntimeError: Error, Equatable, Sendable, CustomStringConverti
     case launchAlreadyPending(String)
     case launchFailed(String)
     case agentFailed(String)
+    case stepTimedOut(String)
 
     var description: String {
         switch self {
@@ -25,6 +26,8 @@ enum AgentPipelineRuntimeError: Error, Equatable, Sendable, CustomStringConverti
             return "Agent pipeline launch failed: \(message)"
         case .agentFailed(let message):
             return "Agent pipeline step failed: \(message)"
+        case .stepTimedOut(let teamID):
+            return "Agent pipeline step timed out: \(teamID)"
         }
     }
 }
@@ -99,9 +102,15 @@ actor AgentPipelineCompletionBroker {
     private struct PendingLaunch {
         let token: UUID
         let continuation: CheckedContinuation<AgentPipelineStepExecutionOutput, Error>
+        var watchdog: Task<Void, Never>?
     }
 
+    private let stepTimeout: Duration
     private var pendingLaunches: [String: PendingLaunch] = [:]
+
+    init(stepTimeout: Duration = .seconds(30 * 60)) {
+        self.stepTimeout = stepTimeout
+    }
 
     func launchAndWait(
         teamID: String,
@@ -119,8 +128,18 @@ actor AgentPipelineCompletionBroker {
                 }
                 pendingLaunches[teamID] = PendingLaunch(
                     token: token,
-                    continuation: continuation
+                    continuation: continuation,
+                    watchdog: nil
                 )
+                pendingLaunches[teamID]?.watchdog = Task { [weak self] in
+                    do {
+                        try await Task.sleep(for: self?.stepTimeout ?? .zero)
+                    } catch {
+                        return
+                    }
+                    guard !Task.isCancelled else { return }
+                    await self?.timeout(teamID: teamID, token: token)
+                }
                 Task { @MainActor in
                     guard await self.shouldLaunch(teamID: teamID, token: token) else {
                         return
@@ -145,6 +164,7 @@ actor AgentPipelineCompletionBroker {
         guard let pending = pendingLaunches.removeValue(forKey: teamID) else {
             return false
         }
+        pending.watchdog?.cancel()
         pending.continuation.resume(returning: output)
         return true
     }
@@ -154,6 +174,7 @@ actor AgentPipelineCompletionBroker {
         guard let pending = pendingLaunches.removeValue(forKey: teamID) else {
             return false
         }
+        pending.watchdog?.cancel()
         pending.continuation.resume(throwing: AgentPipelineRuntimeError.agentFailed(message))
         return true
     }
@@ -163,6 +184,7 @@ actor AgentPipelineCompletionBroker {
         guard let pending = pendingLaunches.removeValue(forKey: teamID) else {
             return false
         }
+        pending.watchdog?.cancel()
         pending.continuation.resume(throwing: CancellationError())
         return true
     }
@@ -171,6 +193,7 @@ actor AgentPipelineCompletionBroker {
         let pending = pendingLaunches
         pendingLaunches.removeAll()
         for launch in pending.values {
+            launch.watchdog?.cancel()
             launch.continuation.resume(throwing: CancellationError())
         }
     }
@@ -189,6 +212,7 @@ actor AgentPipelineCompletionBroker {
             return false
         }
         pendingLaunches.removeValue(forKey: teamID)
+        pending.watchdog?.cancel()
         pending.continuation.resume(throwing: CancellationError())
         return true
     }
@@ -198,8 +222,19 @@ actor AgentPipelineCompletionBroker {
             return
         }
         pendingLaunches.removeValue(forKey: teamID)
+        pending.watchdog?.cancel()
         pending.continuation.resume(
             throwing: AgentPipelineRuntimeError.launchFailed(String(describing: error))
+        )
+    }
+
+    private func timeout(teamID: String, token: UUID) {
+        guard let pending = pendingLaunches[teamID], pending.token == token else {
+            return
+        }
+        pendingLaunches.removeValue(forKey: teamID)
+        pending.continuation.resume(
+            throwing: AgentPipelineRuntimeError.stepTimedOut(teamID)
         )
     }
 }

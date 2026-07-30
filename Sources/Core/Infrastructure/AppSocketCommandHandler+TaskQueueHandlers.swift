@@ -118,7 +118,7 @@ extension AppSocketCommandHandler {
             }
             return nil
 
-        case "cancel":
+        case "cancel", "rerun", "remove":
             if let error = unexpectedParameter(allowed: ["task-id"]) {
                 return error
             }
@@ -126,7 +126,7 @@ extension AppSocketCommandHandler {
                 return "Missing required param: task-id"
             }
             guard TaskQueueSocketAuthority.details(
-                operation: "cancel",
+                operation: kind,
                 params: params
             ) != nil else {
                 return "Invalid task-id"

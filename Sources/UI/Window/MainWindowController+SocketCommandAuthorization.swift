@@ -633,9 +633,18 @@ extension AppDelegate {
                     displayName: "Queue task \(authorityDetails["task-id"] ?? "task")"
                 )
             }
-            if request.command == .taskCancel {
+            if request.command == .taskCancel
+                || request.command == .taskRerun
+                || request.command == .taskRemove {
+                let operation: String
+                switch request.command {
+                case .taskCancel: operation = "cancel"
+                case .taskRerun: operation = "rerun"
+                case .taskRemove: operation = "remove"
+                default: preconditionFailure("Validated task queue command drifted")
+                }
                 guard let authorityDetails = TaskQueueSocketAuthority.details(
-                    operation: "cancel",
+                    operation: operation,
                     params: request.params
                 ) else {
                     return nil
@@ -644,7 +653,7 @@ extension AppDelegate {
                     controller: focusedController,
                     scope: .localExecution,
                     authorityDetails: authorityDetails,
-                    displayName: "Cancel task \(authorityDetails["task-id"] ?? "task")"
+                    displayName: "\(operation.capitalized) task \(authorityDetails["task-id"] ?? "task")"
                 )
             }
             if request.command == .agentTeamLaunch || request.command == .taskRun {

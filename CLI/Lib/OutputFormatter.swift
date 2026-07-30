@@ -464,6 +464,12 @@ public enum OutputFormatter {
         case .taskCancel:
             let taskID = response.data?["task-id"] ?? "unknown"
             return "Task \(taskID) cancelled."
+        case .taskRerun:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            return "Task \(taskID) re-enqueued."
+        case .taskRemove:
+            let taskID = response.data?["task-id"] ?? "unknown"
+            return "Task \(taskID) removed."
 
         // SSH (v4)
         case .ssh:
@@ -852,15 +858,23 @@ public enum OutputFormatter {
     }
 
     private static func formatTaskQueueList(response: CLISocketResponse) -> String {
-        guard let data = response.data,
-              let returned = Int(data["returned"] ?? "0"),
-              returned > 0 else {
+        guard let data = response.data else {
             return "No scheduled tasks."
         }
 
+        let returned = Int(data["returned"] ?? "0") ?? 0
         let total = data["total"] ?? String(returned)
+        let active = data["active"] ?? "0"
+        let terminal = data["terminal"] ?? "0"
         let offset = data["offset"] ?? "0"
-        var lines = ["Scheduled tasks: \(returned) shown, \(total) total (offset \(offset))"]
+        guard returned > 0 else {
+            return total == "0"
+                ? "No scheduled tasks."
+                : "Tasks: none on this page, \(total) total, \(active) active, \(terminal) terminal (offset \(offset))."
+        }
+        var lines = [
+            "Tasks: \(returned) shown, \(total) total, \(active) active, \(terminal) terminal (offset \(offset))",
+        ]
         for index in 0..<returned {
             let prefix = "task_\(index)_"
             let taskID = data[prefix + "id"] ?? "unknown"

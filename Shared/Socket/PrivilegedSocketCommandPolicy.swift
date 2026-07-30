@@ -148,7 +148,9 @@ public enum CocxyPrivilegedSocketCommandPolicy {
              "task-run",
              "task-run-promote",
              "task-enqueue",
-             "task-cancel":
+             "task-cancel",
+             "task-rerun",
+             "task-remove":
             return .localExecution
 
         case "cell-create",

@@ -7,7 +7,7 @@ import Testing
 @MainActor
 @Suite("Task queue app CLI")
 struct TaskQueueCLISwiftTestingTests {
-    @Test("approved pipeline persists, lists without private content, and cancels")
+    @Test("approved pipeline persists, reports counts, reruns, and removes")
     func approvedPipelineLifecycle() async throws {
         let fixture = try await makeFixture(taskID: "scheduled-review")
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -34,6 +34,8 @@ struct TaskQueueCLISwiftTestingTests {
         }.value
         #expect(listed.success)
         #expect(listed.data["total"] == "1")
+        #expect(listed.data["active"] == "1")
+        #expect(listed.data["terminal"] == "0")
         #expect(listed.data["task_0_id"] == "scheduled-review")
         #expect(!listed.data.values.contains(where: { value in
             value.contains("Audit private changes") || value.contains(fixture.root.path)
@@ -54,6 +56,54 @@ struct TaskQueueCLISwiftTestingTests {
         }.value
         #expect(cancelled.success)
         #expect(await fixture.queue.item(id: "scheduled-review")?.status == .cancelled)
+
+        let rerunParams = ["task-id": "scheduled-review"]
+        let rerunContext = Self.context(
+            operation: "rerun",
+            params: rerunParams,
+            workingDirectory: fixture.root.path
+        )
+        let rerun = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "rerun",
+                params: rerunParams,
+                approvedContext: rerunContext
+            )
+        }.value
+        #expect(rerun.success)
+        #expect(rerun.data["task-status"] == "queued")
+
+        _ = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "cancel",
+                params: cancelParams,
+                approvedContext: cancelContext
+            )
+        }.value
+        let removeContext = Self.context(
+            operation: "remove",
+            params: rerunParams,
+            workingDirectory: fixture.root.path
+        )
+        let removed = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "remove",
+                params: rerunParams,
+                approvedContext: removeContext
+            )
+        }.value
+        #expect(removed.success)
+        #expect(await fixture.queue.item(id: "scheduled-review") == nil)
+
+        let emptyList = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "list",
+                params: ["limit": "50", "offset": "0"]
+            )
+        }.value
+        #expect(emptyList.data["total"] == "0")
+        #expect(emptyList.data["active"] == "0")
+        #expect(emptyList.data["terminal"] == "0")
         await fixture.queue.shutdown()
     }
 
@@ -118,7 +168,7 @@ struct TaskQueueCLISwiftTestingTests {
             "input": pipelineURL.path,
             "cwd": root.path,
             "trigger": "on-event",
-            "event": "command-complete",
+            "event": "tab-created",
             "retries": "1",
             "concurrency": "2",
         ]

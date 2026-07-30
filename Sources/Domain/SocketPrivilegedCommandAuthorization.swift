@@ -478,6 +478,8 @@ enum SocketPrivilegedCommandSecurity {
              .taskRunPromote,
              .taskEnqueue,
              .taskCancel,
+             .taskRerun,
+             .taskRemove,
              .webStart,
              .webStop,
              .webStatus,
@@ -665,9 +667,14 @@ enum SocketPrivilegedCommandSecurity {
                     )
                 } else if command == .taskEnqueue, key == "prompt" {
                     let data = Data(value.utf8)
+                    let promptPreview = boundedApprovalText(value)
                     lines.append(
-                        "prompt: \(data.count) UTF-8 bytes; sha256 \(digest(data: data))"
+                        "prompt (\(data.count) UTF-8 bytes):\n\(escapedPreview(promptPreview.text))"
                     )
+                    if promptPreview.wasTruncated {
+                        lines.append("prompt: preview truncated to \(promptPreview.text.utf8.count) UTF-8 bytes")
+                    }
+                    lines.append("prompt sha256: \(digest(data: data))")
                 } else {
                     lines.append("\(escapedPreview(key)):\n\(escapedPreview(value))")
                 }
@@ -788,5 +795,24 @@ enum SocketPrivilegedCommandSecurity {
             }
         }
         return preview
+    }
+
+    private static func boundedApprovalText(
+        _ value: String,
+        maximumUTF8Bytes: Int = 1_024
+    ) -> (text: String, wasTruncated: Bool) {
+        guard value.utf8.count > maximumUTF8Bytes else {
+            return (value, false)
+        }
+        var result = ""
+        result.reserveCapacity(maximumUTF8Bytes)
+        var usedBytes = 0
+        for character in value {
+            let characterBytes = String(character).utf8.count
+            guard usedBytes + characterBytes <= maximumUTF8Bytes else { break }
+            result.append(character)
+            usedBytes += characterBytes
+        }
+        return (result, true)
     }
 }

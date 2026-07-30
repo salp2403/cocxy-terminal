@@ -1369,6 +1369,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTaskQueue(kind: "list", request: request)
         case .taskCancel:
             return handleTaskQueue(kind: "cancel", request: request)
+        case .taskRerun:
+            return handleTaskQueue(kind: "rerun", request: request)
+        case .taskRemove:
+            return handleTaskQueue(kind: "remove", request: request)
         case .handoffExport:
             return handleTaskHandoff(kind: "export", request: request)
         case .handoffImport:

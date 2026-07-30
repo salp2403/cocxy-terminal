@@ -122,6 +122,7 @@ struct TaskQueueCenterView: View {
     let onDismiss: () -> Void
 
     @State private var cancellationTask: TaskQueueItem?
+    @State private var removalTask: TaskQueueItem?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -169,6 +170,34 @@ struct TaskQueueCenterView: View {
                 format: localizer.string(
                     "taskQueue.cancel.confirmMessage",
                     fallback: "Stop %@ and prevent future runs?"
+                ),
+                item.id
+            ))
+        }
+        .confirmationDialog(
+            localizer.string("taskQueue.remove.confirmTitle", fallback: "Remove task?"),
+            isPresented: Binding(
+                get: { removalTask != nil },
+                set: { if !$0 { removalTask = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: removalTask
+        ) { item in
+            Button(
+                localizer.string("taskQueue.remove.action", fallback: "Remove Task"),
+                role: .destructive
+            ) {
+                removalTask = nil
+                Task { await viewModel.remove(taskID: item.id) }
+            }
+            Button(localizer.string("common.cancel", fallback: "Cancel"), role: .cancel) {
+                removalTask = nil
+            }
+        } message: { item in
+            Text(String(
+                format: localizer.string(
+                    "taskQueue.remove.confirmMessage",
+                    fallback: "Remove %@ and its saved queue record?"
                 ),
                 item.id
             ))
@@ -275,8 +304,11 @@ struct TaskQueueCenterView: View {
                 TaskQueueDetailView(
                     item: item,
                     isCancelling: viewModel.cancellingTaskID == item.id,
+                    isOperating: viewModel.operatingTaskID == item.id,
                     localizer: localizer,
-                    onCancel: { cancellationTask = item }
+                    onCancel: { cancellationTask = item },
+                    onRerun: { Task { await viewModel.rerun(taskID: item.id) } },
+                    onRemove: { removalTask = item }
                 )
             } else {
                 VStack(spacing: 10) {
@@ -343,8 +375,11 @@ private struct TaskQueueRowView: View {
 private struct TaskQueueDetailView: View {
     let item: TaskQueueItem
     let isCancelling: Bool
+    let isOperating: Bool
     let localizer: AppLocalizer
     let onCancel: () -> Void
+    let onRerun: () -> Void
+    let onRemove: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -478,7 +513,33 @@ private struct TaskQueueDetailView: View {
                             )
                         }
                     }
-                    .disabled(isCancelling)
+                    .disabled(isCancelling || isOperating)
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+            } else {
+                Divider()
+                HStack(spacing: 10) {
+                    Spacer()
+                    Button(action: onRerun) {
+                        Label(
+                            localizer.string("taskQueue.rerun.action", fallback: "Run Again"),
+                            systemImage: "arrow.clockwise"
+                        )
+                    }
+                    .disabled(isOperating)
+                    Button(role: .destructive, action: onRemove) {
+                        if isOperating {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Label(
+                                localizer.string("taskQueue.remove.action", fallback: "Remove Task"),
+                                systemImage: "trash"
+                            )
+                        }
+                    }
+                    .disabled(isOperating)
                 }
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)

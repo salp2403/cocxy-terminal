@@ -52,6 +52,22 @@ extension MainWindowController {
                     throw TaskQueueCenterAccessError.unavailable
                 }
                 return try await queue.cancel(id: taskID)
+            },
+            rerun: { [weak delegate] taskID in
+                guard let delegate,
+                      delegate.taskQueueIsReady,
+                      let queue = delegate.taskQueue else {
+                    throw TaskQueueCenterAccessError.unavailable
+                }
+                return try await queue.rerun(id: taskID)
+            },
+            remove: { [weak delegate] taskID in
+                guard let delegate,
+                      delegate.taskQueueIsReady,
+                      let queue = delegate.taskQueue else {
+                    throw TaskQueueCenterAccessError.unavailable
+                }
+                return try await queue.remove(id: taskID)
             }
         )
         let viewModel = TaskQueueCenterViewModel(

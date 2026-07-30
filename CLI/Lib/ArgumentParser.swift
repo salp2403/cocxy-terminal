@@ -1032,6 +1032,12 @@ public enum ParsedCommand: Equatable {
     /// `cocxy task-cancel <task-id>`
     case taskCancel(taskID: String)
 
+    /// `cocxy task-rerun <task-id>`
+    case taskRerun(taskID: String)
+
+    /// `cocxy task-remove <task-id>`
+    case taskRemove(taskID: String)
+
     // MARK: - SSH (v4)
 
     /// `cocxy ssh user@host [-p port] [-i identity]`
@@ -1246,6 +1252,14 @@ public enum SplitDirection: String, Equatable {
 /// Zero external dependencies. Handles all known subcommands,
 /// flags, and error cases manually.
 public enum CLIArgumentParser {
+    private static let supportedTaskQueueEvents: Set<String> = [
+        "session-start",
+        "session-end",
+        "rich-input-submit",
+        "tab-created",
+        "tab-closed",
+    ]
+
 
     /// The current CLI version string.
     ///
@@ -1549,7 +1563,25 @@ public enum CLIArgumentParser {
             return try parseTaskList(arguments: Array(arguments.dropFirst()))
 
         case "task-cancel":
-            return try parseTaskCancel(arguments: Array(arguments.dropFirst()))
+            return try parseTaskIDCommand(
+                command: "task-cancel",
+                arguments: Array(arguments.dropFirst()),
+                makeCommand: ParsedCommand.taskCancel
+            )
+
+        case "task-rerun":
+            return try parseTaskIDCommand(
+                command: "task-rerun",
+                arguments: Array(arguments.dropFirst()),
+                makeCommand: ParsedCommand.taskRerun
+            )
+
+        case "task-remove":
+            return try parseTaskIDCommand(
+                command: "task-remove",
+                arguments: Array(arguments.dropFirst()),
+                makeCommand: ParsedCommand.taskRemove
+            )
 
         case "web":
             return try parseWeb(arguments: Array(arguments.dropFirst()))
@@ -5677,6 +5709,15 @@ public enum CLIArgumentParser {
                 reason: "Event cannot be empty."
             )
         }
+        if let normalizedEvent,
+           !normalizedEvent.isEmpty,
+           !supportedTaskQueueEvents.contains(normalizedEvent) {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: normalizedEvent,
+                reason: "Supported events: \(supportedTaskQueueEvents.sorted().joined(separator: ", "))."
+            )
+        }
         if timeZoneIdentifier != nil, normalizedTimeZone?.isEmpty != false {
             throw CLIError.invalidArgument(
                 command: "task-enqueue",
@@ -5769,20 +5810,24 @@ public enum CLIArgumentParser {
         return .taskList(TaskListCLIOptions(limit: limit, offset: offset))
     }
 
-    private static func parseTaskCancel(arguments: [String]) throws -> ParsedCommand {
+    private static func parseTaskIDCommand(
+        command: String,
+        arguments: [String],
+        makeCommand: (String) -> ParsedCommand
+    ) throws -> ParsedCommand {
         guard let taskID = arguments.first?.trimmingCharacters(in: .whitespacesAndNewlines),
               !taskID.isEmpty,
               !taskID.hasPrefix("-") else {
-            throw CLIError.missingArgument(command: "task-cancel", argument: "task-id")
+            throw CLIError.missingArgument(command: command, argument: "task-id")
         }
         guard arguments.count == 1 else {
             throw CLIError.invalidArgument(
-                command: "task-cancel",
+                command: command,
                 argument: Array(arguments.dropFirst()).joined(separator: " "),
                 reason: "Use exactly one task-id."
             )
         }
-        return .taskCancel(taskID: taskID)
+        return makeCommand(taskID)
     }
 
     private static func value(

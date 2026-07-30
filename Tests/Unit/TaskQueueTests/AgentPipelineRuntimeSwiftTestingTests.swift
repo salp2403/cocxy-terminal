@@ -66,6 +66,16 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         #expect(await waitUntil { await broker.pendingTeamIDs.isEmpty })
     }
 
+    @Test("watchdog fails a stalled step and releases broker state")
+    func watchdogTimeout() async {
+        let broker = AgentPipelineCompletionBroker(stepTimeout: .milliseconds(20))
+
+        await #expect(throws: AgentPipelineRuntimeError.stepTimedOut("queue-timeout")) {
+            _ = try await broker.launchAndWait(teamID: "queue-timeout") {}
+        }
+        #expect(await broker.pendingTeamIDs.isEmpty)
+    }
+
     @Test("classifies only terminal lifecycle hooks")
     func hookOutcomeClassification() {
         let taskCompleted = HookEvent(

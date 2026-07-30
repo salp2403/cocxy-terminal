@@ -1855,6 +1855,20 @@ public struct CommandRunner {
                 params: ["task-id": taskID]
             )
 
+        case .taskRerun(let taskID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-rerun",
+                params: ["task-id": taskID]
+            )
+
+        case .taskRemove(let taskID):
+            return CLISocketRequest(
+                id: requestID,
+                command: "task-remove",
+                params: ["task-id": taskID]
+            )
+
         // MARK: SSH (v4)
 
         case .ssh(let destination, let port, let identityFile):

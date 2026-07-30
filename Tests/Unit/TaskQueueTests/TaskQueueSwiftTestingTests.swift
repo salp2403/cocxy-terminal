@@ -132,24 +132,38 @@ struct TaskQueueSwiftTestingTests {
 
     @Test("event triggers are coalesced while a run is active")
     func eventTriggersCoalesceWhileRunning() async throws {
+        let clock = LockedQueueClock(now: Date(timeIntervalSince1970: 20_000))
         let gate = QueueConcurrencyGate()
         let queue = try TaskQueue(
             store: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            eventRetriggerMinimumInterval: 5,
+            clock: { clock.now },
             runHandler: { item in await gate.run(item) }
         )
         _ = try await queue.start()
-        let trigger = try TaskQueueTrigger.eventTrigger(.commandComplete)
-        let item = try makeQueueItem(id: "on-command", trigger: trigger)
+        let trigger = try TaskQueueTrigger.eventTrigger(.tabCreated)
+        let item = try makeQueueItem(id: "on-tab", trigger: trigger, now: clock.now)
         _ = try await queue.enqueue(item)
 
-        await queue.handlePluginEvent(.tabCreated)
+        await queue.handlePluginEvent(.sessionStart)
         #expect(await gate.startedCount == 0)
-        await queue.handlePluginEvent(.commandComplete)
+        await queue.handlePluginEvent(.tabCreated)
         try await waitUntil { await gate.startedCount == 1 }
-        await queue.handlePluginEvent(.commandComplete)
-        await queue.handlePluginEvent(.commandComplete)
+        await queue.handlePluginEvent(.tabCreated)
+        await queue.handlePluginEvent(.tabCreated)
 
         await gate.releaseAll()
+        let deferred = try await waitForQueueItem(queue, id: item.id) {
+            $0.status == .queued && !$0.pendingRun
+        }
+        #expect(deferred.nextRunAt == clock.now.addingTimeInterval(5))
+        #expect(await gate.startedCount == 1)
+
+        clock.advance(by: 4)
+        await queue.tick(at: clock.now)
+        #expect(await gate.startedCount == 1)
+        clock.advance(by: 1)
+        await queue.tick(at: clock.now)
         try await waitUntil { await gate.startedCount == 2 }
         await gate.releaseAll()
         let waiting = try await waitForQueueItem(queue, id: item.id) {
@@ -157,6 +171,29 @@ struct TaskQueueSwiftTestingTests {
         }
         #expect(!waiting.pendingRun)
         #expect(waiting.nextRunAt == nil)
+    }
+
+    @Test("event triggers expose only events emitted by the application")
+    func eventTriggersRejectUnavailableEvents() throws {
+        #expect(TaskQueueTrigger.supportedEvents == [
+            .sessionStart,
+            .sessionEnd,
+            .richInputSubmit,
+            .tabCreated,
+            .tabClosed,
+        ])
+        for event in [
+            PluginEvent.agentDetected,
+            .agentStateChanged,
+            .commandComplete,
+            .directoryChanged,
+            .taskRunStarted,
+            .taskRunFinished,
+        ] {
+            #expect(throws: TaskQueueError.unsupportedEventTrigger(event.rawValue)) {
+                _ = try TaskQueueTrigger.eventTrigger(event)
+            }
+        }
     }
 
     @Test("cron tasks run only after their computed due date and remain scheduled")
@@ -203,6 +240,73 @@ struct TaskQueueSwiftTestingTests {
 
         #expect(cancelled.status == .cancelled)
         #expect(try store.loadAll().items.first?.status == .cancelled)
+    }
+
+    @Test("rerun accepts terminal tasks and rejects nonterminal tasks")
+    func rerunTerminalTasks() async throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        for (id, status) in [
+            ("succeeded", TaskQueueItemStatus.succeeded),
+            ("failed", .failed),
+            ("cancelled", .cancelled),
+        ] {
+            var item = try makeQueueItem(id: id, trigger: .event(.tabCreated))
+            item.status = status
+            item.completedAt = item.updatedAt
+            try store.save(item)
+        }
+        let gate = QueueConcurrencyGate()
+        let queue = try TaskQueue(
+            store: store,
+            maximumConcurrentRuns: 1,
+            runHandler: { item in await gate.run(item) }
+        )
+        _ = try await queue.start()
+
+        for id in ["succeeded", "failed", "cancelled"] {
+            let item = try await queue.rerun(id: id)
+            #expect(item.status == .queued)
+            #expect(item.completedAt == nil)
+            #expect(item.retryAttempt == 0)
+            #expect(item.lastError == nil)
+        }
+        await #expect(throws: TaskQueueError.taskNotFinished("succeeded")) {
+            _ = try await queue.rerun(id: "succeeded")
+        }
+        await queue.shutdown()
+    }
+
+    @Test("remove deletes terminal persistence and rejects active records")
+    func removeTerminalTasks() async throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        var terminal = try makeQueueItem(id: "finished", trigger: .event(.tabCreated))
+        terminal.status = .failed
+        terminal.completedAt = terminal.updatedAt
+        try store.save(terminal)
+        let active = try makeQueueItem(id: "scheduled", trigger: .event(.tabCreated))
+        try store.save(active)
+        let queue = try TaskQueue(store: store, runHandler: { item in
+            AgentPipelineRunSummary(
+                pipelineID: item.pipeline.id,
+                status: .succeeded,
+                stepResults: [],
+                startedAt: Date(),
+                finishedAt: Date()
+            )
+        })
+        _ = try await queue.start()
+
+        let removed = try await queue.remove(id: "finished")
+        #expect(removed.status == .failed)
+        #expect(await queue.item(id: "finished") == nil)
+        #expect(!FileManager.default.fileExists(atPath: store.fileURL(taskID: "finished").path))
+        await #expect(throws: TaskQueueError.taskNotFinished("scheduled")) {
+            _ = try await queue.remove(id: "scheduled")
+        }
     }
 
     private func makeQueueItem(

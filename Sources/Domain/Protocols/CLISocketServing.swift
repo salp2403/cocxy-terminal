@@ -409,6 +409,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case taskList = "task-list"
     /// Cancel a scheduled or active task.
     case taskCancel = "task-cancel"
+    /// Re-enqueue a terminal task.
+    case taskRerun = "task-rerun"
+    /// Remove a terminal task and its persisted record.
+    case taskRemove = "task-remove"
 
     // MARK: - Window Management (v3)
 

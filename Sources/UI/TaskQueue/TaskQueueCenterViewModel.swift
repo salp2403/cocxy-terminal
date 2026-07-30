@@ -51,9 +51,7 @@ enum TaskQueueDraftError: Error, CustomStringConvertible {
 }
 
 struct TaskQueueEnqueueDraft: Equatable, Sendable {
-    static let supportedEvents = PluginEvent.allCases.filter {
-        $0 != .taskRunStarted && $0 != .taskRunFinished
-    }
+    static let supportedEvents = TaskQueueTrigger.supportedEvents
 
     var taskID: String
     var sourceMode: TaskQueueDraftSourceMode = .prompt
@@ -198,6 +196,8 @@ struct TaskQueueCenterOperations {
     let load: @MainActor () async throws -> [TaskQueueItem]
     let enqueue: @MainActor (TaskQueueEnqueueDraft) async throws -> TaskQueueItem
     let cancel: @MainActor (String) async throws -> TaskQueueItem
+    let rerun: @MainActor (String) async throws -> TaskQueueItem
+    let remove: @MainActor (String) async throws -> TaskQueueItem
 }
 
 @MainActor
@@ -213,6 +213,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var isSubmitting = false
     @Published private(set) var cancellingTaskID: String?
+    @Published private(set) var operatingTaskID: String?
     @Published private(set) var errorMessage: String?
     @Published var draft: TaskQueueEnqueueDraft
 
@@ -326,7 +327,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
     }
 
     func cancel(taskID: String) async {
-        guard cancellingTaskID == nil else { return }
+        guard cancellingTaskID == nil, operatingTaskID == nil else { return }
         cancellingTaskID = taskID
         clearError()
         do {
@@ -336,6 +337,41 @@ final class TaskQueueCenterViewModel: ObservableObject {
             await reload(showProgress: false)
         } catch {
             cancellingTaskID = nil
+            errorMessage = String(describing: error)
+            errorSource = .operation
+        }
+    }
+
+    func rerun(taskID: String) async {
+        guard operatingTaskID == nil, cancellingTaskID == nil else { return }
+        operatingTaskID = taskID
+        clearError()
+        do {
+            let item = try await operations.rerun(taskID)
+            upsert(item)
+            operatingTaskID = nil
+            await reload(showProgress: false)
+        } catch {
+            operatingTaskID = nil
+            errorMessage = String(describing: error)
+            errorSource = .operation
+        }
+    }
+
+    func remove(taskID: String) async {
+        guard operatingTaskID == nil, cancellingTaskID == nil else { return }
+        operatingTaskID = taskID
+        clearError()
+        do {
+            _ = try await operations.remove(taskID)
+            items.removeAll { $0.id == taskID }
+            if selectedTaskID == taskID {
+                selectedTaskID = items.first?.id
+            }
+            operatingTaskID = nil
+            await reload(showProgress: false)
+        } catch {
+            operatingTaskID = nil
             errorMessage = String(describing: error)
             errorSource = .operation
         }

@@ -82,6 +82,8 @@ extension AppDelegate {
                 var data: [String: String] = [
                     "status": "listed",
                     "total": String(items.count),
+                    "active": String(items.filter { !$0.status.isFinished }.count),
+                    "terminal": String(items.filter { $0.status.isFinished }.count),
                     "returned": String(page.count),
                     "offset": String(offset),
                     "has-more": String(offset + page.count < items.count),
@@ -117,6 +119,31 @@ extension AppDelegate {
                     "status": "cancelled",
                     "task-id": cancelled.id,
                     "task-status": cancelled.status.rawValue,
+                ])
+
+            case "rerun", "remove":
+                guard let approvedContext,
+                      approvedContext.scope == .localExecution,
+                      approvedContext.authorityDetails == TaskQueueSocketAuthority.details(
+                        operation: kind,
+                        params: params
+                      ),
+                      let taskID = params["task-id"] else {
+                    return (false, ["error": "Approved task \(kind) context is unavailable"])
+                }
+                if kind == "rerun" {
+                    let rerun = try await queue.rerun(id: taskID)
+                    return (true, [
+                        "status": "re-enqueued",
+                        "task-id": rerun.id,
+                        "task-status": rerun.status.rawValue,
+                    ])
+                }
+                let removed = try await queue.remove(id: taskID)
+                return (true, [
+                    "status": "removed",
+                    "task-id": removed.id,
+                    "task-status": removed.status.rawValue,
                 ])
 
             default:

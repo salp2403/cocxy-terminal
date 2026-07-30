@@ -8,7 +8,7 @@ enum TaskQueueSocketAuthority {
         operation: String,
         params: [String: String]
     ) -> [String: String]? {
-        guard operation == "enqueue" || operation == "cancel",
+        guard ["enqueue", "cancel", "rerun", "remove"].contains(operation),
               let rawTaskID = params["task-id"]?.trimmingCharacters(in: .whitespacesAndNewlines),
               !rawTaskID.isEmpty else {
             return nil

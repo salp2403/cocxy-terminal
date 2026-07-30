@@ -9,6 +9,7 @@ enum TaskQueueError: Error, Equatable, Sendable, CustomStringConvertible {
     case duplicateTask(String)
     case taskNotFound(String)
     case taskAlreadyFinished(String)
+    case taskNotFinished(String)
     case invalidMaximumRetries(Int)
     case invalidConcurrency(Int)
     case unsupportedEventTrigger(String)
@@ -27,6 +28,8 @@ enum TaskQueueError: Error, Equatable, Sendable, CustomStringConvertible {
             return "Queued task not found: \(taskID)"
         case .taskAlreadyFinished(let taskID):
             return "Queued task is already finished: \(taskID)"
+        case .taskNotFinished(let taskID):
+            return "Queued task must be finished before this operation: \(taskID)"
         case .invalidMaximumRetries(let value):
             return "Queued task retries must be between 0 and 5, got \(value)"
         case .invalidConcurrency(let value):
@@ -60,9 +63,16 @@ enum TaskQueueTrigger: Codable, Sendable, Equatable {
         }
     }
 
+    static let supportedEvents: [PluginEvent] = [
+        .sessionStart,
+        .sessionEnd,
+        .richInputSubmit,
+        .tabCreated,
+        .tabClosed,
+    ]
+
     static func eventTrigger(_ event: PluginEvent) throws -> TaskQueueTrigger {
-        guard event.rawValue != "task-run-started",
-              event.rawValue != "task-run-finished" else {
+        guard supportedEvents.contains(event) else {
             throw TaskQueueError.unsupportedEventTrigger(event.rawValue)
         }
         return .event(event)
@@ -244,6 +254,7 @@ actor TaskQueue {
     private let store: TaskQueueStore
     private let maximumConcurrentRuns: Int
     private let retryBaseDelay: TimeInterval
+    private let eventRetriggerMinimumInterval: TimeInterval
     private let clock: @Sendable () -> Date
     private let runHandler: TaskQueueRunHandler
     private let lifecycleHandler: TaskQueueLifecycleHandler
@@ -257,6 +268,7 @@ actor TaskQueue {
         store: TaskQueueStore = TaskQueueStore(),
         maximumConcurrentRuns: Int = 2,
         retryBaseDelay: TimeInterval = 5,
+        eventRetriggerMinimumInterval: TimeInterval = 5,
         clock: @escaping @Sendable () -> Date = { Date() },
         runHandler: @escaping TaskQueueRunHandler,
         lifecycleHandler: @escaping TaskQueueLifecycleHandler = { _ in }
@@ -267,6 +279,7 @@ actor TaskQueue {
         self.store = store
         self.maximumConcurrentRuns = maximumConcurrentRuns
         self.retryBaseDelay = max(1, retryBaseDelay)
+        self.eventRetriggerMinimumInterval = max(0, eventRetriggerMinimumInterval)
         self.clock = clock
         self.runHandler = runHandler
         self.lifecycleHandler = lifecycleHandler
@@ -360,9 +373,47 @@ actor TaskQueue {
         return item
     }
 
+    @discardableResult
+    func rerun(id rawID: String) throws -> TaskQueueItem {
+        let taskID = AgentTeamConfig.slug(rawID)
+        guard var item = itemsByID[taskID] else {
+            throw TaskQueueError.taskNotFound(taskID)
+        }
+        guard item.status.isFinished else {
+            throw TaskQueueError.taskNotFinished(taskID)
+        }
+
+        let now = clock()
+        item.status = .queued
+        item.updatedAt = now
+        item.nextRunAt = now
+        item.completedAt = nil
+        item.retryAttempt = 0
+        item.pendingRun = false
+        item.lastError = nil
+        try store.save(item)
+        itemsByID[taskID] = item
+        drainEligibleRuns(at: now)
+        return item
+    }
+
+    @discardableResult
+    func remove(id rawID: String) throws -> TaskQueueItem {
+        let taskID = AgentTeamConfig.slug(rawID)
+        guard let item = itemsByID[taskID] else {
+            throw TaskQueueError.taskNotFound(taskID)
+        }
+        guard item.status.isFinished else {
+            throw TaskQueueError.taskNotFinished(taskID)
+        }
+
+        try store.remove(taskID: taskID)
+        itemsByID.removeValue(forKey: taskID)
+        return item
+    }
+
     func handlePluginEvent(_ event: PluginEvent, at date: Date? = nil) {
-        guard event.rawValue != "task-run-started",
-              event.rawValue != "task-run-finished" else {
+        guard TaskQueueTrigger.supportedEvents.contains(event) else {
             return
         }
         let now = date ?? clock()
@@ -378,7 +429,7 @@ actor TaskQueue {
             } else {
                 item.retryAttempt = 0
                 item.status = .queued
-                item.nextRunAt = now
+                item.nextRunAt = earliestEventRunDate(for: item, after: now)
             }
             item.updatedAt = now
             persistBestEffort(item)
@@ -481,7 +532,7 @@ actor TaskQueue {
             if item.pendingRun {
                 item.pendingRun = false
                 item.status = .queued
-                item.nextRunAt = now
+                item.nextRunAt = earliestEventRunDate(for: item, after: now)
             } else if item.trigger.isRecurring {
                 rescheduleRecurringItem(&item, after: now)
             } else {
@@ -499,7 +550,7 @@ actor TaskQueue {
                 item.pendingRun = false
                 item.retryAttempt = 0
                 item.status = .queued
-                item.nextRunAt = now
+                item.nextRunAt = earliestEventRunDate(for: item, after: now)
             } else if item.trigger.isRecurring {
                 item.retryAttempt = 0
                 rescheduleRecurringItem(&item, after: now)
@@ -544,6 +595,17 @@ actor TaskQueue {
 
     private func retryDelay(for attempt: Int) -> TimeInterval {
         min(retryBaseDelay * pow(2, Double(max(0, attempt - 1))), 300)
+    }
+
+    private func earliestEventRunDate(
+        for item: TaskQueueItem,
+        after now: Date
+    ) -> Date {
+        guard case .event = item.trigger,
+              let lastRunAt = item.lastRunAt else {
+            return now
+        }
+        return max(now, lastRunAt.addingTimeInterval(eventRetriggerMinimumInterval))
     }
 
     private func persistBestEffort(_ item: TaskQueueItem) {
