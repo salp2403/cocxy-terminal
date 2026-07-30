@@ -120,12 +120,21 @@ extension AppDelegate {
                     request: request,
                     context: context
                 )
+                guard let credential = await MainActor.run(body: {
+                    self.taskOrchestrationSessionManager.credential(forRunID: run.id)
+                }) else {
+                    return (false, ["error": "Task orchestration session is unavailable"])
+                }
                 return (true, [
                     "status": "launched",
                     "run-id": run.id,
                     "candidates": "\(run.candidates.count)",
                     "base-ref": run.baseRef,
                     "base-commit": run.baseCommit,
+                    "orchestration-session": credential.token,
+                    "orchestration-expires-at": ISO8601DateFormatter().string(
+                        from: credential.expiresAt
+                    ),
                 ])
 
             case "promote":
@@ -377,6 +386,10 @@ extension AppDelegate {
                 run,
                 fallbackTabID: context.sourceTabID.rawValue
             )
+            let runningSnapshot = run
+            _ = try await MainActor.run {
+                try self.registerTaskOrchestrationSession(for: runningSnapshot)
+            }
             return run
         } catch {
             let rollback = await rollbackTaskRunLaunch(
@@ -518,6 +531,10 @@ extension AppDelegate {
             ? nil
             : "Winner merged; some worktree directories still need cleanup"
         try run.markCompleted(candidateID: candidateID, warning: warning)
+        let completedRunID = run.id
+        await MainActor.run {
+            self.taskOrchestrationSessionManager.revoke(runID: completedRunID)
+        }
         await publishTaskRunSnapshot(run, fallbackTabID: fallbackTabID)
         return TaskRunPromotionOutcome(
             run: run,
@@ -575,6 +592,7 @@ extension AppDelegate {
         }
         if run.candidates.allSatisfy({ $0.status == .failed }) {
             run.markFailed(reason)
+            taskOrchestrationSessionManager.revoke(runID: run.id)
         }
         publishTaskRun(
             run,
@@ -609,6 +627,17 @@ extension AppDelegate {
             if lhs.createdAt != rhs.createdAt { return lhs.createdAt > rhs.createdAt }
             return lhs.id < rhs.id
         }
+    }
+
+    @MainActor
+    private func registerTaskOrchestrationSession(
+        for run: TaskRun
+    ) throws -> TaskOrchestrationSessionCredential {
+        let tabIDs = Set(run.candidates.compactMap(\.worktree?.tabID?.rawValue))
+        return try taskOrchestrationSessionManager.issue(
+            runID: run.id,
+            tabIDs: tabIDs
+        )
     }
 
     @MainActor

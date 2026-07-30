@@ -224,6 +224,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Reverse lookup used to fold provider hook events into one TaskRun row.
     var taskRunIDByTeamID: [String: String] = [:]
 
+    /// In-memory, HMAC-bound authorization sessions for directed TaskRun input.
+    var taskOrchestrationSessionManager = TaskOrchestrationSessionManager()
+
     /// The agent config service for agents.toml hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigService: AgentConfigService?
