@@ -87,6 +87,7 @@ enum AgentTeamStatus: String, Codable, Sendable, Equatable {
 enum AgentTeamError: Error, Equatable, Sendable {
     case emptyTeammates
     case unknownTeammate(String)
+    case alreadyRunning(String)
     case paneLaunchFailed(String)
     case persistenceFailed(String)
 }

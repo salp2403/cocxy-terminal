@@ -68,6 +68,35 @@ struct TaskRunSwiftTestingTests {
         #expect(run.candidates[0].estimatedCostMicros == 42)
     }
 
+    @Test("launch planning preflights every provider and preserves the prompt")
+    func launchPlanningPreflightsEveryProvider() throws {
+        let request = try TaskRunRequest.make(
+            prompt: "Implement, test, and report",
+            agents: "claude,codex",
+            count: 3
+        )
+        let run = TaskRun(
+            id: "preflight",
+            request: request,
+            originRepoPath: URL(fileURLWithPath: "/tmp/repo"),
+            baseCommit: "abc123"
+        )
+
+        let plans = try TaskRunAgentLaunchPlan.make(
+            run: run,
+            preflightWorkingDirectory: URL(fileURLWithPath: "/tmp/repo"),
+            executableResolver: { "/resolved/\($0)" }
+        )
+
+        #expect(plans.map(\.candidateID) == run.candidates.map(\.id))
+        #expect(plans.map(\.config.provider) == [.claudeCode, .codex, .claudeCode])
+        #expect(plans.allSatisfy { $0.config.teammates.first?.prompt == request.prompt })
+        #expect(plans.allSatisfy { $0.preflightSpec.workingDirectory == "/tmp/repo" })
+        #expect(plans.allSatisfy {
+            $0.preflightSpec.environment["COCXY_AGENT_TEAM_ID"] == $0.config.id
+        })
+    }
+
     @Test("comparison includes committed diff and synthetic untracked files")
     func comparisonIncludesTrackedAndUntrackedFiles() throws {
         let root = FileManager.default.temporaryDirectory
@@ -81,7 +110,7 @@ struct TaskRunSwiftTestingTests {
         )
 
         let service = TaskRunComparisonService { _, arguments in
-            if arguments.first == "diff" {
+            if arguments.contains("diff") {
                 return CodeReviewGitResult(
                     stdout: """
                     diff --git a/tracked.txt b/tracked.txt
@@ -182,6 +211,96 @@ struct TaskRunPromotionSwiftTestingTests {
         #expect(result.candidateCommit != baseCommit)
         #expect(result.mergedCommit != baseCommit)
         #expect(try String(contentsOf: repo.appendingPathComponent("result.txt"), encoding: .utf8) == "winner\n")
+    }
+
+    @Test("promotion preflight rejects an origin with uncommitted work")
+    func promotionRejectsDirtyOrigin() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-task-run-dirty-origin-\(UUID().uuidString)", isDirectory: true)
+        let repo = root.appendingPathComponent("repo", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try runGit(["init", "-b", "main"], at: repo)
+        try runGit(["config", "user.name", "Cocxy Tests"], at: repo)
+        try runGit(["config", "user.email", "tests@cocxy.dev"], at: repo)
+        try "base\n".write(
+            to: repo.appendingPathComponent("result.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "result.txt"], at: repo)
+        try runGit(["commit", "-m", "base"], at: repo)
+
+        let service = WorktreeService(
+            gitExecutableURLProvider: { URL(fileURLWithPath: "/usr/bin/git") }
+        )
+        let baseCommit = try await service.revision("HEAD", at: repo)
+        try "dirty\n".write(
+            to: repo.appendingPathComponent("result.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+
+        do {
+            try await service.validatePromotionOrigin(
+                originRepoPath: repo,
+                expectedBaseCommit: baseCommit
+            )
+            Issue.record("Expected dirty-origin rejection")
+        } catch let error as WorktreeServiceError {
+            guard case .originHasUncommittedChanges(let path, _) = error else {
+                Issue.record("Unexpected error: \(error)")
+                return
+            }
+            #expect(path == repo.path)
+        }
+    }
+
+    @Test("promotion preflight rejects a base revision that moved")
+    func promotionRejectsMovedBase() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-task-run-moved-base-\(UUID().uuidString)", isDirectory: true)
+        let repo = root.appendingPathComponent("repo", isDirectory: true)
+        try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        try runGit(["init", "-b", "main"], at: repo)
+        try runGit(["config", "user.name", "Cocxy Tests"], at: repo)
+        try runGit(["config", "user.email", "tests@cocxy.dev"], at: repo)
+        try "base\n".write(
+            to: repo.appendingPathComponent("result.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "result.txt"], at: repo)
+        try runGit(["commit", "-m", "base"], at: repo)
+
+        let service = WorktreeService(
+            gitExecutableURLProvider: { URL(fileURLWithPath: "/usr/bin/git") }
+        )
+        let baseCommit = try await service.revision("HEAD", at: repo)
+        try "moved\n".write(
+            to: repo.appendingPathComponent("result.txt"),
+            atomically: true,
+            encoding: .utf8
+        )
+        try runGit(["add", "result.txt"], at: repo)
+        try runGit(["commit", "-m", "move base"], at: repo)
+        let actualCommit = try await service.revision("HEAD", at: repo)
+
+        do {
+            try await service.validatePromotionOrigin(
+                originRepoPath: repo,
+                expectedBaseCommit: baseCommit
+            )
+            Issue.record("Expected moved-base rejection")
+        } catch let error as WorktreeServiceError {
+            #expect(error == .baseRevisionChanged(
+                expected: baseCommit,
+                actual: actualCommit
+            ))
+        }
     }
 
     private func runGit(_ arguments: [String], at directory: URL) throws {

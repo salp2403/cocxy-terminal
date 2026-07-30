@@ -483,6 +483,40 @@ struct AgentTeamSwiftTestingTests {
         #expect(run.reviewBeforeShipRequests.count == 1)
     }
 
+    @Test("team completion updates the configured teammate coordinator")
+    func teamCompletionUpdatesConfiguredTeammate() throws {
+        let config = try AgentTeamConfig.from(
+            teammates: "Builder",
+            teamID: "completion-team",
+            provider: .codex
+        )
+        let teammate = try #require(config.teammates.first)
+        var run = AgentTeamRunState(config: config, launchSpecs: [])
+
+        _ = try run.apply(HookEvent(
+            type: .sessionStart,
+            sessionId: config.id,
+            data: .sessionStart(SessionStartData(
+                model: nil,
+                agentType: "Codex",
+                workingDirectory: "/tmp/repo"
+            )),
+            teamID: config.id,
+            teammateID: teammate.id,
+            teammateName: teammate.name
+        ))
+        _ = try run.apply(HookEvent(
+            type: .taskCompleted,
+            sessionId: config.id,
+            data: .taskCompleted(TaskCompletedData(taskDescription: "Done")),
+            teamID: config.id,
+            teammateID: teammate.id,
+            teammateName: teammate.name
+        ))
+
+        #expect(run.coordinator.teammateStates.map(\.status) == [.finished])
+    }
+
     @Test("launcher spawns one native pane per teammate")
     @MainActor
     func launcherSpawnsOnePanePerTeammate() throws {

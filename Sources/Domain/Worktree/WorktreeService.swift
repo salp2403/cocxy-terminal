@@ -505,18 +505,10 @@ actor WorktreeService {
         return result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    func promote(
-        id: String,
+    func validatePromotionOrigin(
         originRepoPath: URL,
-        expectedBaseCommit: String,
-        commitMessage: String,
-        store: WorktreeManifestStore
-    ) async throws -> WorktreePromotionResult {
-        let manifest = try await loadManifest(store)
-        guard let entry = manifest.entry(withID: id) else {
-            throw WorktreeServiceError.worktreeNotFound(id: id)
-        }
-
+        expectedBaseCommit: String
+    ) throws {
         let originStatus = try runGit(
             at: originRepoPath,
             arguments: ["status", "--porcelain"]
@@ -543,6 +535,24 @@ actor WorktreeService {
                 actual: actualBaseCommit
             )
         }
+    }
+
+    func promote(
+        id: String,
+        originRepoPath: URL,
+        expectedBaseCommit: String,
+        commitMessage: String,
+        store: WorktreeManifestStore
+    ) async throws -> WorktreePromotionResult {
+        let manifest = try await loadManifest(store)
+        guard let entry = manifest.entry(withID: id) else {
+            throw WorktreeServiceError.worktreeNotFound(id: id)
+        }
+
+        try validatePromotionOrigin(
+            originRepoPath: originRepoPath,
+            expectedBaseCommit: expectedBaseCommit
+        )
 
         let candidateStatus = try runGit(
             at: entry.path,

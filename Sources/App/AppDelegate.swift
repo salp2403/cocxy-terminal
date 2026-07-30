@@ -218,6 +218,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Runtime Agent Team hook projections keyed by team ID.
     var activeAgentTeamRuns: [String: AgentTeamRunState] = [:]
 
+    /// Parallel task runs retained for comparison and winner promotion.
+    var activeTaskRuns: [String: TaskRun] = [:]
+
+    /// Reverse lookup used to fold provider hook events into one TaskRun row.
+    var taskRunIDByTeamID: [String: String] = [:]
+
     /// The agent config service for agents.toml hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigService: AgentConfigService?
@@ -1520,6 +1526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedNotificationManager = notificationManager
         controller.onAgentTabClosed = { [weak self] tabID in
             self?.unbindHookSessions(for: tabID)
+            self?.handleTaskRunTabClosed(tabID)
         }
         controller.windowEventBus = windowEventBus
         controller.notificationAggregator = notificationAggregator

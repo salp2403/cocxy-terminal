@@ -28,12 +28,25 @@ extension MainWindowController: AgentTeamPaneLaunching {
         initialPrompt: String? = nil,
         targetTabID: UUID?
     ) -> Bool {
+        spawnAgentTeamTerminal(
+            launchSpec: launchSpec,
+            initialPrompt: initialPrompt,
+            targetTabID: targetTabID
+        ) != nil
+    }
+
+    @discardableResult
+    func spawnAgentTeamTerminal(
+        launchSpec: AgentTeamProviderLaunchSpec,
+        initialPrompt: String? = nil,
+        targetTabID: UUID?
+    ) -> TabID? {
         guard let command = AgentTeamLaunchCommand.makeShellCommand(for: launchSpec),
               let workingDirectory = agentTeamWorkingDirectory(
                 launchSpec: launchSpec,
                 targetTabID: targetTabID
               ) else {
-            return false
+            return nil
         }
 
         let tabID = createTab(
@@ -45,7 +58,7 @@ extension MainWindowController: AgentTeamPaneLaunching {
 
         guard let surfaceID = tabSurfaceMap[tabID] else {
             performCloseTab(tabID)
-            return false
+            return nil
         }
 
         let teamID = AgentTeamConfig.slug(launchSpec.teamID)
@@ -57,15 +70,28 @@ extension MainWindowController: AgentTeamPaneLaunching {
             tabID: tabID
         )
         refreshTabStrip()
-        return true
+        return tabID
     }
 
     func closeAgentTeamPanes(teamID: String) {
+        closeAgentTeamPanes(
+            teamID: teamID,
+            worktreeClosePolicyOverride: nil
+        )
+    }
+
+    func closeAgentTeamPanes(
+        teamID: String,
+        worktreeClosePolicyOverride: WorktreeOnClose?
+    ) {
         let normalizedTeamID = AgentTeamConfig.slug(teamID)
         let tabIDs = agentTeamTabIDsByTeamID.removeValue(forKey: normalizedTeamID) ?? []
         for tabID in tabIDs.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
             if tabManager.tab(for: tabID) != nil {
-                performCloseTab(tabID)
+                performCloseTab(
+                    tabID,
+                    worktreeClosePolicyOverride: worktreeClosePolicyOverride
+                )
             }
         }
         removeSubagentPanels(forSession: normalizedTeamID)

@@ -7,6 +7,10 @@ struct TaskRunComparisonService: Sendable {
     typealias GitRunner = @Sendable (URL, [String]) throws -> CodeReviewGitResult
 
     private let gitRunner: GitRunner
+    private static let gitSafetyOverrides = [
+        "-c", "core.hooksPath=/dev/null",
+        "-c", "core.fsmonitor=false",
+    ]
 
     init(gitRunner: @escaping GitRunner = { directory, arguments in
         try CodeReviewGit.run(workingDirectory: directory, arguments: arguments)
@@ -31,8 +35,9 @@ struct TaskRunComparisonService: Sendable {
         workingDirectory: URL,
         baseCommit: String
     ) throws -> [FileDiff] {
-        let diffResult = try gitRunner(workingDirectory, [
+        let diffResult = try gitRunner(workingDirectory, Self.gitSafetyOverrides + [
             "diff", "--no-color", "--no-ext-diff",
+            "--no-textconv",
             "--end-of-options", baseCommit, "--", ".",
         ])
         guard diffResult.terminationStatus == 0 else {
@@ -43,7 +48,10 @@ struct TaskRunComparisonService: Sendable {
             )
         }
 
-        let statusResult = try gitRunner(workingDirectory, ["status", "--porcelain"])
+        let statusResult = try gitRunner(
+            workingDirectory,
+            Self.gitSafetyOverrides + ["status", "--porcelain"]
+        )
         guard statusResult.terminationStatus == 0 else {
             throw WorktreeServiceError.gitCommandFailed(
                 command: "git status --porcelain",

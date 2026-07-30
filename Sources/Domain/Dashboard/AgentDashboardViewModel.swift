@@ -423,6 +423,61 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         rebuildSessions()
     }
 
+    /// Mirrors all candidates in one parallel task as subagents of a single
+    /// dashboard row. Provider hook rows stay folded into this aggregate.
+    func syncTaskRun(_ run: TaskRun, fallbackTabId: UUID) {
+        let subagents = run.candidates.map { candidate in
+            let branch = candidate.worktree?.branch ?? "Preparing worktree"
+            let cost = candidate.estimatedCostMicros > 0
+                ? String(format: "$%.4f estimated", Double(candidate.estimatedCostMicros) / 1_000_000)
+                : "Cost unavailable"
+            return SubagentInfo(
+                id: candidate.id,
+                type: candidate.provider.displayName,
+                state: mapTaskRunCandidateStatus(candidate.status),
+                startTime: run.createdAt,
+                lastActivity: "\(branch) - \(cost)",
+                lastActivityTime: run.updatedAt
+            )
+        }
+        let tabId = run.candidates
+            .compactMap(\.worktree?.tabID?.rawValue)
+            .first ?? fallbackTabId
+        let activity: String
+        switch run.status {
+        case .launching:
+            activity = "Preparing \(run.candidates.count) candidates"
+        case .running:
+            activity = "Comparing \(run.candidates.count) parallel candidates"
+        case .promoting:
+            activity = "Promoting selected candidate"
+        case .completed:
+            activity = run.completionWarning ?? "Winner promoted"
+        case .failed:
+            activity = run.failureMessage ?? "Task run failed"
+        case .cancelled:
+            activity = "Task run cancelled"
+        }
+
+        sessionDataStore[run.id] = MutableSessionData(
+            id: run.id,
+            projectName: extractProjectName(from: run.originRepoPath.path),
+            tabId: tabId,
+            state: mapTaskRunStatus(run),
+            agentName: "Parallel Task",
+            gitBranch: run.baseRef,
+            lastActivity: activity,
+            lastActivityTime: run.updatedAt,
+            subagents: subagents
+        )
+        rebuildSessions()
+    }
+
+    func removeTaskRun(runID: String) {
+        sessionDataStore.removeValue(forKey: AgentTeamConfig.slug(runID))
+        rebuildSessions()
+    }
+
     /// Removes every dashboard row owned by a tab that has actually closed.
     func removeSessions(forTabID tabID: UUID) {
         let sessionIDs = sessionDataStore.compactMap { sessionID, data in
@@ -1152,6 +1207,40 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         if states.contains(.launching) { return .launching }
         if !states.isEmpty, states.allSatisfy({ $0 == .finished }) { return .finished }
         return .working
+    }
+
+    private func mapTaskRunCandidateStatus(
+        _ status: TaskRunCandidateStatus
+    ) -> AgentDashboardState {
+        switch status {
+        case .preparing:
+            return .launching
+        case .running:
+            return .working
+        case .finished, .promoted:
+            return .finished
+        case .failed:
+            return .error
+        case .discarded:
+            return .idle
+        }
+    }
+
+    private func mapTaskRunStatus(_ run: TaskRun) -> AgentDashboardState {
+        switch run.status {
+        case .launching:
+            return .launching
+        case .promoting:
+            return .working
+        case .completed, .cancelled:
+            return .finished
+        case .failed:
+            return .error
+        case .running:
+            return aggregateAgentTeamState(
+                run.candidates.map { mapTaskRunCandidateStatus($0.status) }
+            )
+        }
     }
 }
 

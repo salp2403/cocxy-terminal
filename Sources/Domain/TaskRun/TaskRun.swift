@@ -163,6 +163,7 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
     let id: String
     let prompt: String
     let originRepoPath: URL
+    let worktreeBasePath: String
     let baseRef: String
     let baseCommit: String
     let createdAt: Date
@@ -171,18 +172,21 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
     var candidates: [TaskRunCandidate]
     var promotedCandidateID: String?
     var failureMessage: String?
+    var completionWarning: String?
 
     init(
         id: String,
         request: TaskRunRequest,
         originRepoPath: URL,
         baseCommit: String,
+        worktreeBasePath: String = WorktreeConfig.defaults.basePath,
         now: Date = Date()
     ) {
         let normalizedID = AgentTeamConfig.slug(id)
         self.id = normalizedID
         self.prompt = request.prompt
         self.originRepoPath = originRepoPath.standardizedFileURL
+        self.worktreeBasePath = worktreeBasePath
         self.baseRef = request.baseRef
         self.baseCommit = baseCommit
         self.createdAt = now
@@ -198,6 +202,7 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         }
         self.promotedCandidateID = nil
         self.failureMessage = nil
+        self.completionWarning = nil
     }
 
     mutating func updateCandidate(
@@ -216,12 +221,14 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         status = .running
         updatedAt = now
         failureMessage = nil
+        completionWarning = nil
     }
 
     mutating func markFailed(_ message: String, now: Date = Date()) {
         status = .failed
         updatedAt = now
         failureMessage = message
+        completionWarning = nil
     }
 
     mutating func markPromoting(candidateID: String, now: Date = Date()) throws {
@@ -232,9 +239,21 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         status = .promoting
         promotedCandidateID = candidateID
         updatedAt = now
+        failureMessage = nil
     }
 
-    mutating func markCompleted(candidateID: String, now: Date = Date()) throws {
+    mutating func markPromotionFailed(_ message: String, now: Date = Date()) {
+        status = .running
+        promotedCandidateID = nil
+        updatedAt = now
+        failureMessage = message
+    }
+
+    mutating func markCompleted(
+        candidateID: String,
+        warning: String? = nil,
+        now: Date = Date()
+    ) throws {
         guard candidates.contains(where: { $0.id == candidateID }) else {
             throw TaskRunError.candidateNotFound(candidateID)
         }
@@ -245,6 +264,53 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         status = .completed
         updatedAt = now
         failureMessage = nil
+        completionWarning = warning
+    }
+}
+
+struct TaskRunAgentLaunchPlan: Sendable, Equatable {
+    let candidateID: String
+    let config: AgentTeamConfig
+    let preflightSpec: AgentTeamProviderLaunchSpec
+
+    static func make(
+        run: TaskRun,
+        preflightWorkingDirectory: URL,
+        executableResolver: @escaping AgentTeamExecutableResolver = AgentTeamProviderAdapterRegistry.defaultExecutableResolver
+    ) throws -> [TaskRunAgentLaunchPlan] {
+        let registry = AgentTeamProviderAdapterRegistry(
+            executableResolver: executableResolver
+        )
+        return try run.candidates.enumerated().map { index, candidate in
+            let teammate = AgentTeammateConfig(
+                id: "\(candidate.teamID)-provider",
+                name: "Candidate \(index + 1)",
+                prompt: run.prompt
+            )
+            let config = AgentTeamConfig(
+                id: candidate.teamID,
+                provider: candidate.provider,
+                teammates: [teammate]
+            )
+            guard let adapter = registry.adapter(for: candidate.provider) else {
+                throw AgentTeamProviderAdapterError.executableUnavailable(
+                    provider: candidate.provider,
+                    candidates: candidate.provider.executableCandidates
+                )
+            }
+            let launchSpec = try adapter.makeLaunchSpec(
+                config: config,
+                teammate: teammate,
+                profile: AgentTeamLaunchProfile(
+                    workingDirectory: preflightWorkingDirectory.path
+                )
+            )
+            return TaskRunAgentLaunchPlan(
+                candidateID: candidate.id,
+                config: config,
+                preflightSpec: launchSpec
+            )
+        }
     }
 }
 

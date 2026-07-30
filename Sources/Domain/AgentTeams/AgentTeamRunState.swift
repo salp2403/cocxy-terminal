@@ -134,6 +134,13 @@ struct AgentTeamRunState: Codable, Sendable, Equatable {
         case .taskCompleted, .sessionEnd, .stop:
             if let teammateID = event.teammateID {
                 try ensureNode(id: teammateID, name: event.teammateName, status: .finished, event: event)
+                if config.teammates.contains(where: { $0.id == teammateID }) {
+                    try coordinator.updateStatus(
+                        teammateID: teammateID,
+                        status: .finished,
+                        now: event.timestamp
+                    )
+                }
                 _ = try feed.record(
                     teammateID: teammateID,
                     kind: .completion,

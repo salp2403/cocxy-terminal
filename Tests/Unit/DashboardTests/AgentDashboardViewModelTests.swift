@@ -172,6 +172,32 @@ final class AgentDashboardViewModelTests: XCTestCase {
         XCTAssertFalse(sut.isVisible)
     }
 
+    func testTaskRunUsesOneGroupedDashboardSession() throws {
+        let request = try TaskRunRequest.make(
+            prompt: "Compare implementations",
+            agents: "claude,codex"
+        )
+        var run = TaskRun(
+            id: "grouped-run",
+            request: request,
+            originRepoPath: URL(fileURLWithPath: "/tmp/project"),
+            baseCommit: "abc123"
+        )
+        run.markRunning()
+
+        let fallbackTabID = UUID()
+        sut.syncTaskRun(run, fallbackTabId: fallbackTabID)
+
+        XCTAssertEqual(sut.sessions.count, 1)
+        XCTAssertEqual(sut.sessions.first?.id, "grouped-run")
+        XCTAssertEqual(sut.sessions.first?.tabId, fallbackTabID)
+        XCTAssertEqual(sut.sessions.first?.subagents.count, 2)
+        XCTAssertEqual(
+            sut.sessions.first?.subagents.compactMap(\.type),
+            ["Claude Code", "Codex CLI"]
+        )
+    }
+
     // MARK: - ViewModel Tests: Hook SessionStart
 
     func testSessionStartCreatesNewSession() {
