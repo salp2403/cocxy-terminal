@@ -2,6 +2,7 @@
 // AgentTeamProviderAdapters.swift - Local-first launch planning for agent team providers.
 
 import Foundation
+import Darwin
 
 struct AgentTeamLaunchProfile: Codable, Sendable, Equatable {
     let workingDirectory: String?
@@ -28,8 +29,6 @@ struct AgentTeamProviderLaunchSpec: Codable, Sendable, Equatable {
     let arguments: [String]
     let environment: [String: String]
     let workingDirectory: String?
-    let mutatesUserConfiguration: Bool
-    let requiresPreviewBeforeLaunch: Bool
 
     init(
         provider: AgentTeamProvider,
@@ -39,9 +38,7 @@ struct AgentTeamProviderLaunchSpec: Codable, Sendable, Equatable {
         executable: String,
         arguments: [String],
         environment: [String: String],
-        workingDirectory: String?,
-        mutatesUserConfiguration: Bool,
-        requiresPreviewBeforeLaunch: Bool
+        workingDirectory: String?
     ) {
         self.provider = provider
         self.teamID = teamID
@@ -51,8 +48,6 @@ struct AgentTeamProviderLaunchSpec: Codable, Sendable, Equatable {
         self.arguments = arguments
         self.environment = environment
         self.workingDirectory = workingDirectory
-        self.mutatesUserConfiguration = mutatesUserConfiguration
-        self.requiresPreviewBeforeLaunch = requiresPreviewBeforeLaunch
     }
 
     init(from decoder: Decoder) throws {
@@ -64,8 +59,6 @@ struct AgentTeamProviderLaunchSpec: Codable, Sendable, Equatable {
         arguments = try container.decode([String].self, forKey: .arguments)
         environment = try container.decode([String: String].self, forKey: .environment)
         workingDirectory = try container.decodeIfPresent(String.self, forKey: .workingDirectory)
-        mutatesUserConfiguration = try container.decode(Bool.self, forKey: .mutatesUserConfiguration)
-        requiresPreviewBeforeLaunch = try container.decode(Bool.self, forKey: .requiresPreviewBeforeLaunch)
         teamID = try container.decodeIfPresent(String.self, forKey: .teamID)
             ?? environment["COCXY_AGENT_TEAM_ID"]
             ?? teammateID
@@ -190,10 +183,153 @@ private struct AgentTeamProviderAdapterCore: Sendable {
             executable: executable,
             arguments: profile.arguments,
             environment: environment,
-            workingDirectory: profile.workingDirectory,
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: profile.workingDirectory
         )
+    }
+}
+
+final class AgentTeamExecutableLocator: @unchecked Sendable {
+    typealias ExecutableCheck = @Sendable (String) -> Bool
+    typealias ShellLookup = @Sendable (String) -> String?
+
+    private enum CacheEntry {
+        case found(String)
+        case missing
+    }
+
+    private let lock = NSLock()
+    private let candidateDirectories: [String]
+    private let isExecutable: ExecutableCheck
+    private let shellLookup: ShellLookup
+    private var cache: [String: CacheEntry] = [:]
+
+    init(
+        candidateDirectories: [String],
+        isExecutable: @escaping ExecutableCheck,
+        shellLookup: @escaping ShellLookup
+    ) {
+        self.candidateDirectories = Self.deduplicated(candidateDirectories)
+        self.isExecutable = isExecutable
+        self.shellLookup = shellLookup
+    }
+
+    func resolve(_ executable: String) -> String? {
+        let normalized = executable.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, !normalized.contains("\0") else { return nil }
+
+        lock.lock()
+        let cached = cache[normalized]
+        lock.unlock()
+        switch cached {
+        case .found(let path): return path
+        case .missing: return nil
+        case nil: break
+        }
+
+        let resolved: String?
+        if normalized.contains("/") {
+            let path = URL(fileURLWithPath: normalized).standardizedFileURL.path
+            resolved = isExecutable(path) ? path : nil
+        } else if let candidate = candidateDirectories.lazy
+            .map({ URL(fileURLWithPath: $0, isDirectory: true)
+                .appendingPathComponent(normalized, isDirectory: false)
+                .standardizedFileURL.path })
+            .first(where: isExecutable) {
+            resolved = candidate
+        } else if let shellPath = shellLookup(normalized)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(whereSeparator: { $0.isNewline })
+            .first
+            .map(String.init),
+                  shellPath.hasPrefix("/"),
+                  isExecutable(shellPath) {
+            resolved = URL(fileURLWithPath: shellPath).standardizedFileURL.path
+        } else {
+            resolved = nil
+        }
+
+        lock.lock()
+        cache[normalized] = resolved.map(CacheEntry.found) ?? .missing
+        lock.unlock()
+        return resolved
+    }
+
+    static func userCandidateDirectories(
+        pathValue: String?,
+        homeDirectory: URL
+    ) -> [String] {
+        let pathDirectories = (pathValue ?? "")
+            .split(separator: ":", omittingEmptySubsequences: true)
+            .map(String.init)
+        let fixedDirectories = [
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            homeDirectory.appendingPathComponent(".local/bin", isDirectory: true).path,
+            homeDirectory.appendingPathComponent("bin", isDirectory: true).path,
+            "/usr/bin",
+            "/bin",
+        ]
+        return deduplicated(pathDirectories + fixedDirectories)
+    }
+
+    static func loginShellLookup(
+        executable: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        timeout: TimeInterval = 2
+    ) -> String? {
+        guard !executable.isEmpty,
+              executable.unicodeScalars.allSatisfy({
+                  CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+                      .contains($0)
+              }) else {
+            return nil
+        }
+        let requestedShell = environment["SHELL"] ?? "/bin/zsh"
+        let shell = FileManager.default.isExecutableFile(atPath: requestedShell)
+            ? requestedShell
+            : "/bin/sh"
+        guard FileManager.default.isExecutableFile(atPath: shell) else { return nil }
+
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: shell)
+        process.arguments = [
+            "-lc",
+            "command -v \"$1\"",
+            "cocxy-command-resolver",
+            executable,
+        ]
+        process.environment = environment
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+
+        do {
+            try process.run()
+        } catch {
+            return nil
+        }
+        guard exited.wait(timeout: .now() + max(0.1, timeout)) == .success else {
+            process.terminate()
+            if exited.wait(timeout: .now() + 0.25) != .success {
+                Darwin.kill(process.processIdentifier, SIGKILL)
+                _ = exited.wait(timeout: .now() + 0.25)
+            }
+            return nil
+        }
+        guard process.terminationStatus == 0 else { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        guard data.count <= 4_096 else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func deduplicated(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { value in
+            let path = URL(fileURLWithPath: value, isDirectory: true).standardizedFileURL.path
+            return seen.insert(path).inserted ? path : nil
+        }
     }
 }
 
@@ -439,6 +575,14 @@ struct KiroTeamProviderAdapter: AgentTeamProviderAdapter {
 
 struct AgentTeamProviderAdapterRegistry: Sendable {
     private let adaptersByProvider: [AgentTeamProvider: any AgentTeamProviderAdapter]
+    private static let defaultExecutableLocator = AgentTeamExecutableLocator(
+        candidateDirectories: AgentTeamExecutableLocator.userCandidateDirectories(
+            pathValue: ProcessInfo.processInfo.environment["PATH"],
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+        ),
+        isExecutable: { FileManager.default.isExecutableFile(atPath: $0) },
+        shellLookup: { AgentTeamExecutableLocator.loginShellLookup(executable: $0) }
+    )
 
     init(executableResolver: @escaping AgentTeamExecutableResolver = Self.defaultExecutableResolver) {
         let adapters: [any AgentTeamProviderAdapter] = [
@@ -467,17 +611,6 @@ struct AgentTeamProviderAdapterRegistry: Sendable {
     }
 
     static let defaultExecutableResolver: AgentTeamExecutableResolver = { executable in
-        if executable.contains("/") {
-            return FileManager.default.isExecutableFile(atPath: executable) ? executable : nil
-        }
-
-        let pathValue = ProcessInfo.processInfo.environment["PATH"] ?? "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
-        for directory in pathValue.split(separator: ":") {
-            let candidate = URL(fileURLWithPath: String(directory)).appendingPathComponent(executable).path
-            if FileManager.default.isExecutableFile(atPath: candidate) {
-                return candidate
-            }
-        }
-        return nil
+        defaultExecutableLocator.resolve(executable)
     }
 }

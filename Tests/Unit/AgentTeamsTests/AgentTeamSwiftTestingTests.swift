@@ -88,6 +88,51 @@ struct AgentTeamSwiftTestingTests {
         ])
     }
 
+    @Test("executable lookup always supplements Finder PATH with user install locations")
+    func executableLookupIncludesFixedUserLocations() {
+        let home = URL(fileURLWithPath: "/Users/test", isDirectory: true)
+        let directories = AgentTeamExecutableLocator.userCandidateDirectories(
+            pathValue: "/custom/bin:/usr/bin:/custom/bin",
+            homeDirectory: home
+        )
+
+        #expect(directories == [
+            "/custom/bin",
+            "/usr/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/Users/test/.local/bin",
+            "/Users/test/bin",
+            "/bin",
+        ])
+    }
+
+    @Test("executable lookup prefers direct candidates and caches shell fallback")
+    func executableLookupUsesCandidateAndCachedShellFallback() {
+        let shellCalls = LockedBox(0)
+        let executablePaths: Set<String> = [
+            "/Users/test/.local/bin/codex",
+            "/Users/test/tools/claude",
+        ]
+        let locator = AgentTeamExecutableLocator(
+            candidateDirectories: ["/usr/bin", "/Users/test/.local/bin"],
+            isExecutable: { executablePaths.contains($0) },
+            shellLookup: { executable in
+                shellCalls.withValue { $0 += 1 }
+                return executable == "claude" ? "/Users/test/tools/claude\n" : nil
+            }
+        )
+
+        #expect(locator.resolve("codex") == "/Users/test/.local/bin/codex")
+        #expect(shellCalls.withValue { $0 } == 0)
+        #expect(locator.resolve("claude") == "/Users/test/tools/claude")
+        #expect(locator.resolve("claude") == "/Users/test/tools/claude")
+        #expect(shellCalls.withValue { $0 } == 1)
+        #expect(locator.resolve("missing") == nil)
+        #expect(locator.resolve("missing") == nil)
+        #expect(shellCalls.withValue { $0 } == 2)
+    }
+
     @Test("provider adapters build preview-only launch specs without config mutation")
     func providerAdaptersBuildPreviewOnlyLaunchSpecs() throws {
         let config = try AgentTeamConfig.from(
@@ -120,8 +165,6 @@ struct AgentTeamSwiftTestingTests {
         #expect(spec.environment["COCXY_AGENT_TEAMMATE_ID"] == "codex-team-plan")
         #expect(spec.environment["COCXY_AGENT_TEAMMATE_NAME"] == "Plan")
         #expect(spec.environment["COCXY_AGENT_PROVIDER"] == "codex")
-        #expect(spec.mutatesUserConfiguration == false)
-        #expect(spec.requiresPreviewBeforeLaunch == true)
     }
 
     @Test("provider launch specs decode legacy snapshots without teamID")
@@ -373,9 +416,7 @@ struct AgentTeamSwiftTestingTests {
             executable: "/usr/local/bin/codex",
             arguments: ["--profile", "local"],
             environment: ["COCXY_AGENT_TEAM_ID": "ship-cli"],
-            workingDirectory: "/tmp/workspace",
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: "/tmp/workspace"
         )
 
         let snapshot = AgentTeamSessionSnapshot(
@@ -556,8 +597,6 @@ struct AgentTeamSwiftTestingTests {
         #expect(result.launchSpecs.map(\.teamID) == ["ship", "ship", "ship"])
         #expect(result.launchSpecs.allSatisfy { $0.provider == .codex })
         #expect(result.launchSpecs.allSatisfy { $0.executable == "/usr/local/bin/codex" })
-        #expect(result.launchSpecs.allSatisfy { $0.requiresPreviewBeforeLaunch })
-        #expect(result.launchSpecs.allSatisfy { !$0.mutatesUserConfiguration })
         #expect(result.launchSpecs.map(\.arguments) == [
             ["--profile", "agent-team"],
             ["--profile", "agent-team"],
@@ -615,9 +654,7 @@ struct AgentTeamSwiftTestingTests {
                 "ROLE": "review's owner",
                 "COCXY_AGENT_TEAM_ID": "ship",
             ],
-            workingDirectory: "/tmp",
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: "/tmp"
         )
 
         #expect(AgentTeamLaunchCommand.makeShellCommand(for: launchSpec) ==

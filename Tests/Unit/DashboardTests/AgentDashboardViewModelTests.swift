@@ -494,9 +494,7 @@ final class AgentDashboardViewModelTests: XCTestCase {
                 executable: "/usr/local/bin/codex",
                 arguments: [],
                 environment: [:],
-                workingDirectory: "/tmp/cocxy-project",
-                mutatesUserConfiguration: false,
-                requiresPreviewBeforeLaunch: true
+                workingDirectory: "/tmp/cocxy-project"
             )
         }
         let run = AgentTeamRunState(config: config, launchSpecs: launchSpecs)

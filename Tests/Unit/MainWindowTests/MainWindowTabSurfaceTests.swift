@@ -1479,9 +1479,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                 "COCXY_AGENT_TEAM_ID": "ship",
                 "COCXY_AGENT_TEAMMATE_ID": "ship-plan",
             ],
-            workingDirectory: NSTemporaryDirectory(),
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: NSTemporaryDirectory()
         )
 
         XCTAssertTrue(controller.spawnAgentTeamPane(launchSpec: spec))
@@ -1520,9 +1518,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             executable: "/usr/local/bin/codex",
             arguments: [],
             environment: ["COCXY_AGENT_TEAM_ID": "ship"],
-            workingDirectory: NSTemporaryDirectory(),
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: NSTemporaryDirectory()
         )
 
         XCTAssertTrue(controller.spawnAgentTeamPane(
@@ -1554,9 +1550,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                     "COCXY_AGENT_TEAM_ID": "ship",
                     "COCXY_AGENT_TEAMMATE_ID": "ship-planner",
                 ],
-                workingDirectory: NSTemporaryDirectory(),
-                mutatesUserConfiguration: false,
-                requiresPreviewBeforeLaunch: true
+                workingDirectory: NSTemporaryDirectory()
             ),
             AgentTeamProviderLaunchSpec(
                 provider: .codex,
@@ -1569,9 +1563,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
                     "COCXY_AGENT_TEAM_ID": "ship",
                     "COCXY_AGENT_TEAMMATE_ID": "ship-reviewer",
                 ],
-                workingDirectory: NSTemporaryDirectory(),
-                mutatesUserConfiguration: false,
-                requiresPreviewBeforeLaunch: true
+                workingDirectory: NSTemporaryDirectory()
             ),
         ]
 

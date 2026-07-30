@@ -394,9 +394,7 @@ struct AgentPipelineRuntimeSwiftTestingTests {
             executable: "/usr/local/bin/codex",
             arguments: [],
             environment: ["COCXY_AGENT_TEAM_ID": teamID],
-            workingDirectory: NSTemporaryDirectory(),
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: NSTemporaryDirectory()
         )
         let tabID = try #require(controller.spawnAgentTeamTerminal(
             launchSpec: launchSpec,

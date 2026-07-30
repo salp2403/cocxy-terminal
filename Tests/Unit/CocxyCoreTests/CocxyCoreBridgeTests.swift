@@ -130,9 +130,7 @@ struct CocxyCoreBridgeTests {
                 "COCXY_AGENT_TEAMMATE_ID": "live-team-reviewer",
                 "MARKER_PATH": marker.path,
             ],
-            workingDirectory: root.path,
-            mutatesUserConfiguration: false,
-            requiresPreviewBeforeLaunch: true
+            workingDirectory: root.path
         )
         let command = try #require(AgentTeamLaunchCommand.makeShellCommand(for: launchSpec))
         let bridge = try makeBridge()
