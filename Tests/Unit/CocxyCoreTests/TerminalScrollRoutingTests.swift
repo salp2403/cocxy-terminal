@@ -12,6 +12,13 @@ struct TerminalScrollRoutingTests {
     func routingCascade() {
         expectDestination(.localViewport, localRange: 12, prefersLocal: true, tracking: 2)
         expectDestination(.terminalApplication, localRange: 0, prefersLocal: true, tracking: 2, modifiers: [.shift])
+        expectDestination(
+            .localViewport,
+            localRange: 12,
+            prefersLocal: false,
+            tracking: 2,
+            modifiers: [.shift]
+        )
         expectDestination(.terminalApplication, localRange: 12, prefersLocal: false, tracking: 2)
         expectDestination(.localViewport, localRange: 12, prefersLocal: false, tracking: 0)
         expectDestination(.none, localRange: 0, prefersLocal: false, tracking: 0)

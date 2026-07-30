@@ -98,6 +98,9 @@ enum TerminalScrollRouter {
         if flags.contains(.option) {
             return localRange > 0 ? .localViewport : .none
         }
+        if flags.contains(.shift), localRange > 0 {
+            return .localViewport
+        }
         if isAltScreen, alternateScrollMode, mouseTrackingMode == 0 {
             return .alternateScreenApplication
         }
