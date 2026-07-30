@@ -218,6 +218,74 @@ extension AppDelegate {
     }
 
     @MainActor
+    func preauthorizedTaskOrchestrationGrant(
+        for request: SocketPrivilegedCommandAuthorizationRequest
+    ) -> SocketPrivilegedCommandAuthorizationGrant? {
+        guard request.command == .send || request.command == .sendKey,
+              let token = request.params["orchestration-session"],
+              let rawTabID = request.params["tabId"],
+              let tabUUID = UUID(uuidString: rawTabID),
+              let authorization = taskOrchestrationSessionManager.authorization(
+                  token: token,
+                  tabID: tabUUID
+              ),
+              let run = activeTaskRuns[authorization.runID],
+              run.status == .running,
+              let candidate = run.candidates.first(where: {
+                  $0.status == .running && $0.worktree?.tabID?.rawValue == tabUUID
+              }),
+              let entry = candidate.worktree,
+              let focusedController = focusedWindowController() ?? windowController,
+              let target = terminalInputPresentationTarget(
+                  tabID: rawTabID,
+                  fallbackController: focusedController,
+                  authorityDetails: [
+                      "orchestration-preauthorized": "true",
+                      "orchestration-run-id": authorization.runID,
+                      "orchestration-session-id": authorization.sessionID.uuidString,
+                  ]
+              ),
+              target.context.workingDirectory
+                == entry.path.resolvingSymlinksInPath().standardizedFileURL.path else {
+            return nil
+        }
+        return SocketPrivilegedCommandAuthorizationGrant(
+            request: request,
+            context: target.context
+        )
+    }
+
+    @MainActor
+    func auditTaskOrchestrationWriteIfNeeded(
+        context: SocketPrivilegedCommandContext,
+        command: CLICommandName,
+        payloadBytes: Int
+    ) -> Bool {
+        guard context.authorityDetails["orchestration-preauthorized"] == "true" else {
+            return true
+        }
+        guard command == .send || command == .sendKey,
+              let rawSessionID = context.authorityDetails["orchestration-session-id"],
+              let sessionID = UUID(uuidString: rawSessionID),
+              let runID = context.authorityDetails["orchestration-run-id"],
+              let tabID = context.tabID,
+              let run = activeTaskRuns[runID],
+              run.status == .running,
+              run.candidates.contains(where: {
+                  $0.status == .running && $0.worktree?.tabID?.rawValue == tabID
+              }) else {
+            return false
+        }
+        return taskOrchestrationSessionManager.recordWrite(
+            sessionID: sessionID,
+            runID: runID,
+            tabID: tabID,
+            command: command.rawValue,
+            payloadBytes: payloadBytes
+        )
+    }
+
+    @MainActor
     func privilegedSocketBrowserViewModel(
         for context: SocketPrivilegedCommandContext?
     ) -> BrowserViewModel? {
@@ -671,7 +739,8 @@ extension AppDelegate {
     @MainActor
     private func terminalInputPresentationTarget(
         tabID rawTabID: String,
-        fallbackController: MainWindowController
+        fallbackController: MainWindowController,
+        authorityDetails: [String: String] = [:]
     ) -> SocketPrivilegedCommandPresentationTarget? {
         guard let uuid = UUID(uuidString: rawTabID) else { return nil }
         let tabID = TabID(rawValue: uuid)
@@ -686,7 +755,8 @@ extension AppDelegate {
             tabID: tabID,
             tab: tab,
             controller: controller,
-            workingDirectory: canonicalWorkingDirectory(for: tab)
+            workingDirectory: canonicalWorkingDirectory(for: tab),
+            authorityDetails: authorityDetails
         )
     }
 
@@ -695,7 +765,8 @@ extension AppDelegate {
         tabID: TabID,
         tab: Tab,
         controller: MainWindowController,
-        workingDirectory: String
+        workingDirectory: String,
+        authorityDetails: [String: String] = [:]
     ) -> SocketPrivilegedCommandPresentationTarget? {
         let availableSurfaceIDs = controller.surfaceIDs(for: tabID)
         let isVisible = (controller.visibleTabID ?? controller.tabManager.activeTabID) == tabID
@@ -718,6 +789,7 @@ extension AppDelegate {
                 windowControllerIdentifier: ObjectIdentifier(controller),
                 tabID: tabID.rawValue,
                 workingDirectory: workingDirectory,
+                authorityDetails: authorityDetails,
                 surfaceID: surfaceID.rawValue,
                 browserViewModelIdentifier: nil,
                 browserTabID: nil,

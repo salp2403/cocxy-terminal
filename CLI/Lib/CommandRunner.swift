@@ -1101,18 +1101,24 @@ public struct CommandRunner {
 
         // MARK: System (v2)
 
-        case .send(let text, let tabID):
+        case .send(let text, let tabID, let orchestrationSession):
             var params = ["text": text]
             if let tabID { params["tabId"] = tabID }
+            if let orchestrationSession {
+                params["orchestration-session"] = orchestrationSession
+            }
             return CLISocketRequest(
                 id: requestID,
                 command: "send",
                 params: params
             )
 
-        case .sendKey(let key, let tabID):
+        case .sendKey(let key, let tabID, let orchestrationSession):
             var params = ["key": key]
             if let tabID { params["tabId"] = tabID }
+            if let orchestrationSession {
+                params["orchestration-session"] = orchestrationSession
+            }
             return CLISocketRequest(
                 id: requestID,
                 command: "send-key",

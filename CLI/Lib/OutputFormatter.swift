@@ -428,7 +428,14 @@ public enum OutputFormatter {
         case .taskRun:
             let runID = response.data?["run-id"] ?? "unknown"
             let count = response.data?["candidates"] ?? "0"
-            return "Task run \(runID) launched with \(count) candidates."
+            var lines = ["Task run \(runID) launched with \(count) candidates."]
+            if let token = response.data?["orchestration-session"], !token.isEmpty {
+                lines.append("Orchestration session (shown once): \(token)")
+            }
+            if let expiresAt = response.data?["orchestration-expires-at"], !expiresAt.isEmpty {
+                lines.append("Orchestration session expires: \(expiresAt)")
+            }
+            return lines.joined(separator: "\n")
         case .taskRunList:
             return formatDataOrJSON(response: response)
         case .taskRunPromote:

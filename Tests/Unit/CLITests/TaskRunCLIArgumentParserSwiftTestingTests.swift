@@ -98,4 +98,28 @@ final class TaskRunCLIArgumentParserSwiftTestingTests: XCTestCase {
             "task-run", "promote", "task-1", "--force",
         ]))
     }
+
+    func testLaunchOutputExposesTheScopedSessionOnce() {
+        let command = ParsedCommand.taskRun(TaskRunCLIOptions(
+            prompt: "Compare",
+            agents: "codex,claude"
+        ))
+        let response = CLISocketResponse(
+            id: "task-run",
+            success: true,
+            data: [
+                "run-id": "task-1",
+                "candidates": "2",
+                "orchestration-session": "lease-1",
+                "orchestration-expires-at": "2026-07-30T01:00:00Z",
+            ],
+            error: nil
+        )
+
+        let output = OutputFormatter.formatSuccess(command: command, response: response)
+
+        XCTAssertTrue(output.contains("Task run task-1 launched with 2 candidates."))
+        XCTAssertTrue(output.contains("Orchestration session (shown once): lease-1"))
+        XCTAssertTrue(output.contains("2026-07-30T01:00:00Z"))
+    }
 }

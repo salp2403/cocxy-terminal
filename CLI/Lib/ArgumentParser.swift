@@ -495,11 +495,11 @@ public enum ParsedCommand: Equatable {
 
     // MARK: - System (v2)
 
-    /// `cocxy send <text> [--tab <id>]`
-    case send(text: String, tabID: String?)
+    /// `cocxy send <text> [--tab <id>] [--orchestration-session <token>]`
+    case send(text: String, tabID: String?, orchestrationSession: String?)
 
-    /// `cocxy send-key <key> [--tab <id>]`
-    case sendKey(key: String, tabID: String?)
+    /// `cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]`
+    case sendKey(key: String, tabID: String?, orchestrationSession: String?)
 
     /// `cocxy classify <input>`
     case classify(input: String)
@@ -2397,13 +2397,14 @@ public enum CLIArgumentParser {
         }
     }
 
-    /// Parses `cocxy send <text>|--stdin [--tab <id>]`.
+    /// Parses `cocxy send <text>|--stdin [--tab <id>] [--orchestration-session <token>]`.
     private static func parseSend(arguments: [String]) throws -> ParsedCommand {
         guard !arguments.isEmpty else {
             throw CLIError.missingArgument(command: "send", argument: "text")
         }
 
         var tabID: String?
+        var orchestrationSession: String?
         var readsStandardInput = false
         var textArguments: [String] = []
         var index = 0
@@ -2420,7 +2421,34 @@ public enum CLIArgumentParser {
                         reason: "The target tab may only be specified once."
                     )
                 }
-                tabID = arguments[index + 1]
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(command: "send", argument: "tab id")
+                }
+                tabID = value
+                index += 2
+            case "--orchestration-session":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(
+                        command: "send",
+                        argument: "orchestration session token"
+                    )
+                }
+                guard orchestrationSession == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send",
+                        argument: "--orchestration-session",
+                        reason: "The orchestration session may only be specified once."
+                    )
+                }
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(
+                        command: "send",
+                        argument: "orchestration session token"
+                    )
+                }
+                orchestrationSession = value
                 index += 2
             case "--stdin", "-":
                 readsStandardInput = true
@@ -2429,6 +2457,13 @@ public enum CLIArgumentParser {
                 textArguments.append(arguments[index])
                 index += 1
             }
+        }
+
+        if orchestrationSession != nil, tabID == nil {
+            throw CLIError.missingArgument(
+                command: "send --orchestration-session",
+                argument: "--tab <id>"
+            )
         }
 
         if readsStandardInput {
@@ -2446,18 +2481,27 @@ public enum CLIArgumentParser {
             guard !text.isEmpty else {
                 throw CLIError.missingArgument(command: "send --stdin", argument: "stdin")
             }
-            return .send(text: text, tabID: tabID)
+            return .send(
+                text: text,
+                tabID: tabID,
+                orchestrationSession: orchestrationSession
+            )
         }
 
         guard !textArguments.isEmpty else {
             throw CLIError.missingArgument(command: "send", argument: "text")
         }
-        return .send(text: textArguments.joined(separator: " "), tabID: tabID)
+        return .send(
+            text: textArguments.joined(separator: " "),
+            tabID: tabID,
+            orchestrationSession: orchestrationSession
+        )
     }
 
-    /// Parses `cocxy send-key <key> [--tab <id>]`.
+    /// Parses `cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]`.
     private static func parseSendKey(arguments: [String]) throws -> ParsedCommand {
         var tabID: String?
+        var orchestrationSession: String?
         var key: String?
         var index = 0
         while index < arguments.count {
@@ -2472,7 +2516,36 @@ public enum CLIArgumentParser {
                         reason: "The target tab may only be specified once."
                     )
                 }
-                tabID = arguments[index + 1]
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(command: "send-key", argument: "tab id")
+                }
+                tabID = value
+                index += 2
+                continue
+            }
+            if arguments[index] == "--orchestration-session" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(
+                        command: "send-key",
+                        argument: "orchestration session token"
+                    )
+                }
+                guard orchestrationSession == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send-key",
+                        argument: "--orchestration-session",
+                        reason: "The orchestration session may only be specified once."
+                    )
+                }
+                let value = arguments[index + 1]
+                guard !value.isEmpty else {
+                    throw CLIError.missingArgument(
+                        command: "send-key",
+                        argument: "orchestration session token"
+                    )
+                }
+                orchestrationSession = value
                 index += 2
                 continue
             }
@@ -2487,10 +2560,21 @@ public enum CLIArgumentParser {
             index += 1
         }
 
+        if orchestrationSession != nil, tabID == nil {
+            throw CLIError.missingArgument(
+                command: "send-key --orchestration-session",
+                argument: "--tab <id>"
+            )
+        }
+
         guard let key, !key.isEmpty else {
             throw CLIError.missingArgument(command: "send-key", argument: "key")
         }
-        return .sendKey(key: key, tabID: tabID)
+        return .sendKey(
+            key: key,
+            tabID: tabID,
+            orchestrationSession: orchestrationSession
+        )
     }
 
     /// Parses a small tmux-compatible command layer onto existing Cocxy CLI commands.
@@ -2599,7 +2683,7 @@ public enum CLIArgumentParser {
         guard !text.isEmpty else {
             throw CLIError.missingArgument(command: "tmux send-keys", argument: "keys")
         }
-        return .send(text: text, tabID: nil)
+        return .send(text: text, tabID: nil, orchestrationSession: nil)
     }
 
     private static func appendTmuxKey(_ token: String, to text: inout String) {

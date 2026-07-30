@@ -348,6 +348,100 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         )
     }
 
+    @Test("TaskRun lease preauthorizes only its live candidate tab and audits the write")
+    func taskRunLeaseBindsLiveCandidateAndAuditsWrite() throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        let directory = URL(fileURLWithPath: "/tmp/cocxy-orchestrated-input")
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let tabID = controller.createTab(workingDirectory: directory)
+
+        let audit = SocketTaskOrchestrationAuditLog()
+        let sessionManager = TaskOrchestrationSessionManager(
+            secret: Data(repeating: 5, count: 32),
+            auditLog: audit
+        )
+        let delegate = AppDelegate()
+        delegate.taskOrchestrationSessionManager = sessionManager
+        delegate.installWindowControllerForTesting(controller)
+
+        let taskRequest = try TaskRunRequest.make(
+            prompt: "Continue safely",
+            agents: "codex,claude"
+        )
+        var run = TaskRun(
+            id: "task-orchestration",
+            request: taskRequest,
+            originRepoPath: directory,
+            baseCommit: "abc123"
+        )
+        let candidateID = try #require(run.candidates.first?.id)
+        try run.updateCandidate(id: candidateID) { candidate in
+            candidate.status = .running
+            candidate.worktree = WorktreeManifest.WorktreeEntry(
+                id: "wt-1",
+                branch: "cocxy/wt-1",
+                path: directory,
+                createdAt: Date(timeIntervalSince1970: 4_000),
+                agent: candidate.provider.rawValue,
+                tabID: tabID
+            )
+        }
+        run.markRunning()
+        delegate.activeTaskRuns[run.id] = run
+        let credential = try sessionManager.issue(
+            runID: run.id,
+            tabIDs: [tabID.rawValue]
+        )
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "orchestrated-send",
+                command: "send",
+                params: [
+                    "text": "continue",
+                    "tabId": tabID.rawValue.uuidString,
+                    "orchestration-session": credential.token,
+                ]
+            )
+        ))
+
+        let grant = try #require(
+            delegate.preauthorizedTaskOrchestrationGrant(for: request)
+        )
+        #expect(grant.context.tabID == tabID.rawValue)
+        #expect(grant.context.authorityDetails["orchestration-run-id"] == run.id)
+        #expect(delegate.auditTaskOrchestrationWriteIfNeeded(
+            context: grant.context,
+            command: .send,
+            payloadBytes: 8
+        ))
+        #expect(audit.recordedEvents.count == 1)
+        #expect(audit.recordedEvents.first?.tabID == tabID.rawValue)
+
+        let tampered = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "tampered-send",
+                command: "send",
+                params: [
+                    "text": "continue",
+                    "tabId": tabID.rawValue.uuidString,
+                    "orchestration-session": credential.token + "x",
+                ]
+            )
+        ))
+        #expect(delegate.preauthorizedTaskOrchestrationGrant(for: tampered) == nil)
+
+        try run.updateCandidate(id: candidateID) { $0.status = .finished }
+        delegate.activeTaskRuns[run.id] = run
+        #expect(delegate.preauthorizedTaskOrchestrationGrant(for: request) == nil)
+        #expect(!delegate.auditTaskOrchestrationWriteIfNeeded(
+            context: grant.context,
+            command: .send,
+            payloadBytes: 8
+        ))
+    }
+
     private func makeFixture() -> (
         controller: MainWindowController,
         tabID: TabID,
@@ -392,5 +486,20 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
                 params: nil
             )
         ))
+    }
+}
+
+private final class SocketTaskOrchestrationAuditLog: TaskOrchestrationAuditLogging, @unchecked Sendable {
+    private let lock = NSLock()
+    private var events: [TaskOrchestrationAuditEvent] = []
+
+    var recordedEvents: [TaskOrchestrationAuditEvent] {
+        lock.withLock { events }
+    }
+
+    func append(_ event: TaskOrchestrationAuditEvent) {
+        lock.withLock {
+            events.append(event)
+        }
     }
 }

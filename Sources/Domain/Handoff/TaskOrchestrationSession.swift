@@ -206,13 +206,48 @@ final class TaskOrchestrationSessionManager: @unchecked Sendable {
         command: String,
         payloadBytes: Int
     ) -> Bool {
+        recordWrite(
+            sessionID: authorization.sessionID,
+            runID: authorization.runID,
+            tabID: authorization.tabID,
+            expectedExpiresAt: authorization.expiresAt,
+            command: command,
+            payloadBytes: payloadBytes
+        )
+    }
+
+    func recordWrite(
+        sessionID: UUID,
+        runID: String,
+        tabID: UUID,
+        command: String,
+        payloadBytes: Int
+    ) -> Bool {
+        recordWrite(
+            sessionID: sessionID,
+            runID: runID,
+            tabID: tabID,
+            expectedExpiresAt: nil,
+            command: command,
+            payloadBytes: payloadBytes
+        )
+    }
+
+    private func recordWrite(
+        sessionID: UUID,
+        runID: String,
+        tabID: UUID,
+        expectedExpiresAt: Date?,
+        command: String,
+        payloadBytes: Int
+    ) -> Bool {
         lock.withLock {
             let now = clock()
             purgeExpiredSessions(at: now)
-            guard var session = sessionsByID[authorization.sessionID],
-                  session.runID == authorization.runID,
-                  session.tabIDs.contains(authorization.tabID),
-                  session.expiresAt == authorization.expiresAt,
+            guard var session = sessionsByID[sessionID],
+                  session.runID == runID,
+                  session.tabIDs.contains(tabID),
+                  expectedExpiresAt == nil || session.expiresAt == expectedExpiresAt,
                   session.writeCount < session.maximumWrites,
                   command == "send" || command == "send-key" else {
                 return false
@@ -221,7 +256,7 @@ final class TaskOrchestrationSessionManager: @unchecked Sendable {
                 try auditLog.append(TaskOrchestrationAuditEvent(
                     sessionID: session.id,
                     runID: session.runID,
-                    tabID: authorization.tabID,
+                    tabID: tabID,
                     command: command,
                     payloadBytes: payloadBytes,
                     createdAt: now

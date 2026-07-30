@@ -700,8 +700,8 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "cocxy theme set <name>"
 
         // System
-        case .send: return "cocxy send <text>|--stdin [--tab <id>]"
-        case .sendKey: return "cocxy send-key <key> [--tab <id>]"
+        case .send: return "cocxy send <text>|--stdin [--tab <id>] [--orchestration-session <token>]"
+        case .sendKey: return "cocxy send-key <key> [--tab <id>] [--orchestration-session <token>]"
         case .classify: return "cocxy classify <input>"
         case .correct: return "cocxy correct <command>"
         case .identify: return "cocxy identify"

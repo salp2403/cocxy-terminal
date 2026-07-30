@@ -434,24 +434,51 @@ final class SystemCommandTests: XCTestCase {
 
     func testSendParsesTextCorrectly() throws {
         let result = try CLIArgumentParser.parse(["send", "hello world"])
-        XCTAssertEqual(result, .send(text: "hello world", tabID: nil))
+        XCTAssertEqual(
+            result,
+            .send(text: "hello world", tabID: nil, orchestrationSession: nil)
+        )
     }
 
     func testSendReadsTextFromStandardInput() throws {
         try withRedirectedStandardInput("line 1\nline 2\r") {
             let result = try CLIArgumentParser.parse(["send", "--stdin"])
-            XCTAssertEqual(result, .send(text: "line 1\nline 2\r", tabID: nil))
+            XCTAssertEqual(
+                result,
+                .send(
+                    text: "line 1\nline 2\r",
+                    tabID: nil,
+                    orchestrationSession: nil
+                )
+            )
         }
     }
 
     func testSendParsesExactTabTargetBeforeOrAfterText() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse(["send", "--tab", "tab-1", "hello", "world"]),
-            .send(text: "hello world", tabID: "tab-1")
+            .send(text: "hello world", tabID: "tab-1", orchestrationSession: nil)
         )
         XCTAssertEqual(
             try CLIArgumentParser.parse(["send", "hello", "--tab", "tab-2"]),
-            .send(text: "hello", tabID: "tab-2")
+            .send(text: "hello", tabID: "tab-2", orchestrationSession: nil)
+        )
+    }
+
+    func testSendParsesTaskOrchestrationSession() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "send", "--tab", "tab-1", "--orchestration-session", "lease-1", "continue",
+            ]),
+            .send(text: "continue", tabID: "tab-1", orchestrationSession: "lease-1")
+        )
+    }
+
+    func testSendRejectsOrchestrationSessionWithoutTab() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse([
+                "send", "--orchestration-session", "lease-1", "continue",
+            ])
         )
     }
 
@@ -459,32 +486,63 @@ final class SystemCommandTests: XCTestCase {
 
     func testSendKeyParsesKeyCorrectly() throws {
         let result = try CLIArgumentParser.parse(["send-key", "ctrl+c"])
-        XCTAssertEqual(result, .sendKey(key: "ctrl+c", tabID: nil))
+        XCTAssertEqual(
+            result,
+            .sendKey(key: "ctrl+c", tabID: nil, orchestrationSession: nil)
+        )
     }
 
     func testSendKeyParsesExactTabTarget() throws {
         XCTAssertEqual(
             try CLIArgumentParser.parse(["send-key", "--tab", "tab-1", "ctrl+c"]),
-            .sendKey(key: "ctrl+c", tabID: "tab-1")
+            .sendKey(key: "ctrl+c", tabID: "tab-1", orchestrationSession: nil)
+        )
+    }
+
+    func testSendKeyParsesTaskOrchestrationSession() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse([
+                "send-key", "enter", "--tab", "tab-1",
+                "--orchestration-session", "lease-1",
+            ]),
+            .sendKey(key: "enter", tabID: "tab-1", orchestrationSession: "lease-1")
+        )
+    }
+
+    func testSendKeyRejectsOrchestrationSessionWithoutTab() {
+        XCTAssertThrowsError(
+            try CLIArgumentParser.parse([
+                "send-key", "enter", "--orchestration-session", "lease-1",
+            ])
         )
     }
 
     // MARK: - 30. Send builds correct request
 
     func testSendBuildRequest() {
-        let request = runner.buildRequest(from: .send(text: "hello", tabID: "tab-1"))
+        let request = runner.buildRequest(from: .send(
+            text: "hello",
+            tabID: "tab-1",
+            orchestrationSession: "lease-1"
+        ))
         XCTAssertEqual(request.command, "send")
         XCTAssertEqual(request.params?["text"], "hello")
         XCTAssertEqual(request.params?["tabId"], "tab-1")
+        XCTAssertEqual(request.params?["orchestration-session"], "lease-1")
     }
 
     // MARK: - 31. Send-key builds correct request
 
     func testSendKeyBuildRequest() {
-        let request = runner.buildRequest(from: .sendKey(key: "ctrl+c", tabID: "tab-1"))
+        let request = runner.buildRequest(from: .sendKey(
+            key: "ctrl+c",
+            tabID: "tab-1",
+            orchestrationSession: "lease-1"
+        ))
         XCTAssertEqual(request.command, "send-key")
         XCTAssertEqual(request.params?["key"], "ctrl+c")
         XCTAssertEqual(request.params?["tabId"], "tab-1")
+        XCTAssertEqual(request.params?["orchestration-session"], "lease-1")
     }
 }
 

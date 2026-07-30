@@ -640,7 +640,7 @@ final class CLIArgumentParserTests: XCTestCase {
         XCTAssertEqual(try CLIArgumentParser.parse(["tmux", "kill-session", "-t", "abc"]), .closeTab(id: "abc"))
         XCTAssertEqual(
             try CLIArgumentParser.parse(["tmux", "send-keys", "echo hello", "Enter"]),
-            .send(text: "echo hello\n", tabID: nil)
+            .send(text: "echo hello\n", tabID: nil, orchestrationSession: nil)
         )
     }
 

@@ -1942,6 +1942,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                             semaphore.signal()
                             return
                         }
+                        if request.params["orchestration-session"] != nil {
+                            result.withValue {
+                                $0 = delegate.preauthorizedTaskOrchestrationGrant(for: request)
+                            }
+                            semaphore.signal()
+                            return
+                        }
                         delegate.privilegedSocketCommandAuthorizationCoordinator.requestAuthorization(
                             request,
                             targetProvider: { [weak delegate] in
@@ -2580,7 +2587,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 return syncOnMainActor {
                     guard let delegate = delegateRef.value,
-                          let target = delegate.privilegedSocketTerminalTarget(for: context) else {
+                          let context,
+                          let target = delegate.privilegedSocketTerminalTarget(for: context),
+                          delegate.auditTaskOrchestrationWriteIfNeeded(
+                              context: context,
+                              command: .send,
+                              payloadBytes: text.utf8.count
+                          ) else {
                         return false
                     }
                     target.controller.terminalEngine(for: target.surfaceID)
@@ -2593,11 +2606,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
                 return syncOnMainActor {
                     guard let delegate = delegateRef.value,
+                          let context,
                           let target = delegate.privilegedSocketTerminalTarget(for: context) else {
                         return false
                     }
                     let sequence = SocketTerminalKeySequence.sequence(for: keyName)
-                    guard let seq = sequence else { return false }
+                    guard let seq = sequence,
+                          delegate.auditTaskOrchestrationWriteIfNeeded(
+                              context: context,
+                              command: .sendKey,
+                              payloadBytes: seq.utf8.count
+                          ) else {
+                        return false
+                    }
                     target.controller.terminalEngine(for: target.surfaceID)
                         .sendText(seq, to: target.surfaceID)
                     return true
