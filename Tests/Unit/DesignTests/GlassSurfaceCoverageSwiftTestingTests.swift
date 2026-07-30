@@ -131,6 +131,8 @@ struct GlassSurfaceCoverageSwiftTestingTests {
             "NSPanel shell owns its translucent backgroundColor outside the SwiftUI glass primitive; the hosted RichInputComposerView renders the composer chrome.",
         "Sources/UI/Terminal/Block/TerminalBlockOverlayView.swift":
             "Transparent AppKit overlay drawn on top of terminal cells; per-row rails/buttons are not standalone panels.",
+        "Sources/UI/Terminal/TerminalDetectedContentOverlayView.swift":
+            "Non-interactive transparent AppKit overlay that draws underlines and compact hint badges directly over terminal cells; it is not a standalone panel surface.",
         "Sources/UI/UXPolish/ShortcutHintsOverlayView.swift":
             "Non-interactive shortcut-hint overlay that draws per-chip thin material pills; it is decorative (allowsHitTesting=false, accessibilityHidden) rather than a standalone panel surface.",
     ]
