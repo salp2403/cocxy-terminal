@@ -92,18 +92,23 @@ struct AgentTeamPresentationSwiftTestingTests {
         #expect(filteredRows[0].accessibilityLabel == "Build, error, Network request failed")
     }
 
-    @Test("panel source exposes VoiceOver container and teammate row labels")
-    func panelSourceExposesVoiceOverContainerAndRows() throws {
-        let source = try String(
+    @Test("grouped dashboard exposes VoiceOver container and session row labels")
+    func groupedDashboardExposesVoiceOverContracts() throws {
+        let dashboardSource = try String(
             contentsOf: repositoryRoot()
-                .appendingPathComponent("Sources/UI/AgentTeams/AgentTeamViews.swift"),
+                .appendingPathComponent("Sources/UI/Dashboard/DashboardPanelView.swift"),
+            encoding: .utf8
+        )
+        let rowSource = try String(
+            contentsOf: repositoryRoot()
+                .appendingPathComponent("Sources/UI/Dashboard/DashboardSessionRow.swift"),
             encoding: .utf8
         )
 
-        #expect(source.contains(".accessibilityElement(children: .contain)"))
-        #expect(source.contains("agentTeams.panel.title"))
-        #expect(source.contains(".accessibilityElement(children: .ignore)"))
-        #expect(source.contains("notifications.count"))
+        #expect(dashboardSource.contains(".accessibilityElement(children: .contain)"))
+        #expect(dashboardSource.contains("agentDashboard.accessibility"))
+        #expect(rowSource.contains(".accessibilityLabel(accessibilityDescription)"))
+        #expect(rowSource.contains("agentDashboard.row.activateHint"))
     }
 }
 
