@@ -141,6 +141,13 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     private var hookSilenceTasks: [UUID: Task<Void, Never>] = [:]
     private var tabsWithObservedHooks = Set<UUID>()
 
+    static let maxFileImpactsPerSession = 512
+    static let retainedPendingFileChangesPerSession = maxFileImpactsPerSession * 2
+    static let pendingFileChangeCompactionThreshold = maxFileImpactsPerSession * 4
+    var pendingFileChangesBySession: [String: [String: PendingDashboardFileChange]] = [:]
+    var fileChangeFlushTimer: DispatchSourceTimer?
+    var fileChangeDebounceInterval: TimeInterval = 0.25
+
     // MARK: - Initialization
 
     /// Creates a dashboard ViewModel and subscribes to event sources.
@@ -486,6 +493,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         guard !sessionIDs.isEmpty else { return }
 
         for sessionID in sessionIDs {
+            discardPendingFileChanges(for: sessionID)
             sessionDataStore.removeValue(forKey: sessionID)
         }
         cancelHookSilenceWatch(for: tabID, clearObservation: true)
@@ -638,6 +646,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     }
 
     private func handleSessionEnd(_ event: HookEvent) {
+        discardPendingFileChanges(for: event.sessionId)
         sessionDataStore.removeValue(forKey: event.sessionId)
         rebuildSessions()
     }
@@ -915,12 +924,30 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         operation: FileImpact.FileOperation,
         timestamp: Date
     ) {
-        guard sessionDataStore[sessionId] != nil else { return }
-        var impact = sessionDataStore[sessionId]?.fileImpacts[filePath]
+        guard var sessionData = sessionDataStore[sessionId] else { return }
+        var impact = sessionData.fileImpacts[filePath]
             ?? FileImpact(path: filePath, lastChangedAt: timestamp)
         impact.operations.insert(operation)
         impact.lastChangedAt = max(impact.lastChangedAt, timestamp)
-        sessionDataStore[sessionId]?.fileImpacts[filePath] = impact
+        sessionData.fileImpacts[filePath] = impact
+        Self.pruneFileImpacts(&sessionData.fileImpacts)
+        sessionDataStore[sessionId] = sessionData
+    }
+
+    static func pruneFileImpacts(_ impacts: inout [String: FileImpact]) {
+        let overflow = impacts.count - maxFileImpactsPerSession
+        guard overflow > 0 else { return }
+        let keysToRemove = impacts.sorted { lhs, rhs in
+                if lhs.value.lastChangedAt != rhs.value.lastChangedAt {
+                    return lhs.value.lastChangedAt < rhs.value.lastChangedAt
+                }
+                return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
+            }
+            .prefix(overflow)
+            .map(\.key)
+        for key in keysToRemove {
+            impacts.removeValue(forKey: key)
+        }
     }
 
     // MARK: - Private: Subscriptions

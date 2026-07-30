@@ -628,6 +628,10 @@ extension AppDelegate {
         guard let receiver = hookEventReceiver else { return }
 
         receiver.eventPublisher
+            // FileChanged bursts belong in the bounded dashboard impact
+            // model. Keeping them off the append-only timeline preserves
+            // prompts, tools, and errors during large workspace updates.
+            .filter { $0.type != .fileChanged }
             .receive(on: DispatchQueue.main)
             .sink { [weak self, weak timelineStore] hookEvent in
                 guard let self, let store = timelineStore else { return }

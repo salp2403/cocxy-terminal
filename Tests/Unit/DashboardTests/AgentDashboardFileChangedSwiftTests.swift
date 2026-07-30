@@ -5,6 +5,7 @@
 // `event.sessionId` lookup and respecting deduplication semantics.
 
 import Foundation
+import Combine
 import Testing
 @testable import CocxyTerminal
 
@@ -24,6 +25,7 @@ struct AgentDashboardFileChangedSwiftTests {
             filePath: "/tmp/proj/main.swift",
             changeType: "edit"
         ))
+        viewModel.flushPendingFileChanges()
 
         let session = viewModel.sessions.first { $0.id == "sess-1" }
         #expect(session != nil)
@@ -45,6 +47,7 @@ struct AgentDashboardFileChangedSwiftTests {
             filePath: "/tmp/proj/lonely.swift",
             changeType: "write"
         ))
+        viewModel.flushPendingFileChanges()
 
         let session = viewModel.sessions.first { $0.id == "sess-2" }
         let impact = session?.filesTouched.first { $0.path == "/tmp/proj/lonely.swift" }
@@ -63,6 +66,7 @@ struct AgentDashboardFileChangedSwiftTests {
             filePath: "/tmp/proj/x.swift",
             changeType: "edit"
         ))
+        viewModel.flushPendingFileChanges()
 
         let realSession = viewModel.sessions.first { $0.id == "sess-real" }
         #expect(realSession?.filesTouched.isEmpty == true)
@@ -82,6 +86,7 @@ struct AgentDashboardFileChangedSwiftTests {
                 changeType: "edit"
             ))
         }
+        viewModel.flushPendingFileChanges()
 
         let session = viewModel.sessions.first { $0.id == "sess-3" }
         let matching = session?.filesTouched.filter { $0.path == "/tmp/proj/repeat.swift" }
@@ -100,6 +105,7 @@ struct AgentDashboardFileChangedSwiftTests {
             filePath: "",
             changeType: "edit"
         ))
+        viewModel.flushPendingFileChanges()
 
         let session = viewModel.sessions.first { $0.id == "sess-4" }
         #expect(session?.filesTouched.isEmpty == true)
@@ -116,6 +122,7 @@ struct AgentDashboardFileChangedSwiftTests {
             filePath: "/tmp/proj/gone.swift",
             changeType: "unlink"
         ))
+        viewModel.flushPendingFileChanges()
 
         let session = viewModel.sessions.first { $0.id == "sess-5" }
         let impact = session?.filesTouched.first { $0.path == "/tmp/proj/gone.swift" }
@@ -143,6 +150,7 @@ struct AgentDashboardFileChangedSwiftTests {
             changeType: "add",
             timestamp: newer
         ))
+        viewModel.flushPendingFileChanges()
 
         let impacts = viewModel.sessions.first { $0.id == "sess-recency" }?.filesTouched
         #expect(impacts?.map(\.fileName) == ["newer.swift", "older.swift"])
@@ -161,6 +169,7 @@ struct AgentDashboardFileChangedSwiftTests {
             filePath: path,
             changeType: "change"
         ))
+        viewModel.flushPendingFileChanges()
         var opened: (String, String)?
         viewModel.onOpenFileImpact = { opened = ($0, $1) }
 
@@ -168,6 +177,60 @@ struct AgentDashboardFileChangedSwiftTests {
 
         #expect(opened?.0 == "sess-open")
         #expect(opened?.1 == path)
+    }
+
+    @Test("rapid FileChanged bursts publish one coalesced dashboard snapshot")
+    func rapidFileChangedBurstIsCoalesced() async throws {
+        let viewModel = AgentDashboardViewModel()
+        viewModel.fileChangeDebounceInterval = 0.02
+        seedSession(viewModel, sessionId: "sess-burst", cwd: "/tmp/proj")
+
+        var publishedSnapshotCount = 0
+        let cancellable = viewModel.sessionsPublisher
+            .dropFirst()
+            .sink { _ in
+                publishedSnapshotCount += 1
+            }
+
+        for index in 0..<64 {
+            viewModel.processHookEvent(fileChangedEvent(
+                sessionId: "sess-burst",
+                cwd: "/tmp/proj",
+                filePath: "/tmp/proj/file-\(index).swift",
+                changeType: "change",
+                timestamp: Date(timeIntervalSince1970: TimeInterval(index))
+            ))
+        }
+
+        #expect(viewModel.sessions.first?.filesTouched.isEmpty == true)
+        try await Task.sleep(for: .milliseconds(100))
+
+        #expect(publishedSnapshotCount == 1)
+        #expect(viewModel.sessions.first?.filesTouched.count == 64)
+        withExtendedLifetime(cancellable) {}
+    }
+
+    @Test("FileChanged impacts retain only the 512 most recent paths")
+    func fileChangedImpactsUseBoundedLRU() {
+        let viewModel = AgentDashboardViewModel()
+        seedSession(viewModel, sessionId: "sess-lru", cwd: "/tmp/proj")
+
+        for index in 0..<600 {
+            viewModel.processHookEvent(fileChangedEvent(
+                sessionId: "sess-lru",
+                cwd: "/tmp/proj",
+                filePath: "/tmp/proj/file-\(index).swift",
+                changeType: "change",
+                timestamp: Date(timeIntervalSince1970: TimeInterval(index))
+            ))
+        }
+        viewModel.flushPendingFileChanges()
+
+        let impacts = viewModel.sessions.first?.filesTouched
+        #expect(impacts?.count == AgentDashboardViewModel.maxFileImpactsPerSession)
+        #expect(impacts?.first?.fileName == "file-599.swift")
+        #expect(impacts?.last?.fileName == "file-88.swift")
+        #expect(impacts?.contains { $0.fileName == "file-87.swift" } == false)
     }
 
     // MARK: - Helpers
