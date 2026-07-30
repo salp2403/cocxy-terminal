@@ -556,6 +556,10 @@ extension AppDelegate {
             return "Worktree not found: \(id)"
         case .uncommittedChanges(let path, _):
             return "Worktree has uncommitted changes at \(path). Commit, stash, or discard those changes, then retry."
+        case .originHasUncommittedChanges(let path, _):
+            return "The origin repository has uncommitted changes at \(path). Commit or stash them before promoting a task candidate."
+        case .baseRevisionChanged(let expected, let actual):
+            return "The origin repository moved after the task started (expected \(expected), found \(actual)). Start a new task run from the current base."
         case .manifestError(let underlying):
             return "Manifest error: \(underlying)"
         }
