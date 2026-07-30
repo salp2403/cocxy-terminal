@@ -2134,8 +2134,8 @@ struct CocxyCoreViewTests {
         #expect(handledPayload == payload)
     }
 
-    @Test("command block overlay restores rows and routes actions")
-    func commandBlockOverlayRestoresRowsAndRoutesActions() async throws {
+    @Test("restored command blocks stay hidden without live row mapping and route actions")
+    func restoredCommandBlocksStayHiddenAndRouteActions() async throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
         let clipboard = RecordingClipboardService(readText: nil)
@@ -2166,8 +2166,8 @@ struct CocxyCoreViewTests {
         harness.view.refreshCommandBlockOverlay()
 
         let overlay = try #require(harness.view.commandBlockOverlayView)
-        #expect(overlay.isHidden == false)
-        #expect(overlay.subviews.isEmpty == false)
+        #expect(overlay.isHidden)
+        #expect(overlay.subviews.isEmpty)
 
         overlay.onCopyBlockOutput?(block)
         #expect(clipboard.writtenText == "overlay output")
@@ -2221,6 +2221,17 @@ struct CocxyCoreViewTests {
         harness.view.setNeedsTerminalDisplay()
         harness.view.refreshCommandBlockOverlay()
 
+        #expect(harness.view.commandBlockDataReloadCount == reloadCount)
+        #expect(restoredReadCount == providerReadCount)
+
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(
+            "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}echo marker\r\n" +
+                "\u{001B}]133;C\u{0007}marker\r\n\u{001B}]133;D;0\u{0007}",
+            into: state.terminal
+        )
+        harness.view.refreshCommandBlockOverlay()
+
         #expect(harness.view.commandBlockDataReloadCount == reloadCount + 1)
         #expect(restoredReadCount == providerReadCount + 1)
     }
@@ -2238,9 +2249,15 @@ struct CocxyCoreViewTests {
             endRow: 1
         )
         harness.view.restoredCommandBlocksProvider = { [block] }
-        harness.view.invalidateCommandBlockOverlayData()
-
         let overlay = try #require(harness.view.commandBlockOverlayView)
+        overlay.update(
+            blocks: [block],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 16,
+            padding: .zero,
+            showOnlyOnHover: false
+        )
         #expect(overlay.dismissAllVisible() == 1)
         #expect(overlay.dismissedBlockIDs == [52])
 
@@ -2262,14 +2279,12 @@ struct CocxyCoreViewTests {
     func commandBlockConfigurationControlsRuntimeRendering() throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        let block = makeCommandBlock(
-            id: 53,
-            command: "configured-overlay",
-            output: "configured output",
-            startRow: 0,
-            endRow: 1
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(
+            "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}configured-overlay\r\n" +
+                "\u{001B}]133;C\u{0007}configured output\r\n\u{001B}]133;D;0\u{0007}",
+            into: state.terminal
         )
-        harness.view.restoredCommandBlocksProvider = { [block] }
         harness.view.invalidateCommandBlockOverlayData()
 
         let overlay = try #require(harness.view.commandBlockOverlayView)
@@ -2640,6 +2655,8 @@ private func makeCommandBlock(
         durationNs: 100,
         startRow: startRow,
         endRow: endRow,
+        visibleStartRow: startRow,
+        visibleEndRow: endRow,
         streamID: 1,
         blockType: 3
     )

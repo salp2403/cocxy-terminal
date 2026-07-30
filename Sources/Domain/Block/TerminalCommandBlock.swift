@@ -9,7 +9,7 @@ struct TerminalCommandBlockReference: Codable, Equatable, Sendable {
 }
 
 struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
-    static let currentSchemaVersion: UInt8 = 2
+    static let currentSchemaVersion: UInt8 = 3
 
     let schemaVersion: UInt8
     let id: UInt64
@@ -22,6 +22,8 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
     let durationNs: UInt64
     let startRow: UInt32
     let endRow: UInt32
+    let visibleStartRow: UInt32?
+    let visibleEndRow: UInt32?
     let streamID: UInt32
     let blockType: UInt8
     let isBookmarked: Bool
@@ -38,6 +40,8 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
         durationNs: UInt64,
         startRow: UInt32,
         endRow: UInt32,
+        visibleStartRow: UInt32? = nil,
+        visibleEndRow: UInt32? = nil,
         streamID: UInt32,
         blockType: UInt8,
         isBookmarked: Bool = false
@@ -53,6 +57,8 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
         self.durationNs = durationNs
         self.startRow = startRow
         self.endRow = endRow
+        self.visibleStartRow = visibleStartRow
+        self.visibleEndRow = visibleEndRow
         self.streamID = streamID
         self.blockType = blockType
         self.isBookmarked = isBookmarked
@@ -71,6 +77,8 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
             durationNs: durationNs,
             startRow: startRow,
             endRow: endRow,
+            visibleStartRow: visibleStartRow,
+            visibleEndRow: visibleEndRow,
             streamID: streamID,
             blockType: blockType,
             isBookmarked: isBookmarked
@@ -79,6 +87,27 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
 
     func mergingRestoredMetadata(from restored: TerminalCommandBlock) -> TerminalCommandBlock {
         withBookmark(restored.isBookmarked)
+    }
+
+    func withoutVisibleMapping() -> TerminalCommandBlock {
+        TerminalCommandBlock(
+            schemaVersion: Self.currentSchemaVersion,
+            id: id,
+            command: command,
+            output: output,
+            exitCode: exitCode,
+            pwd: pwd,
+            startTimeNs: startTimeNs,
+            endTimeNs: endTimeNs,
+            durationNs: durationNs,
+            startRow: startRow,
+            endRow: endRow,
+            visibleStartRow: nil,
+            visibleEndRow: nil,
+            streamID: streamID,
+            blockType: blockType,
+            isBookmarked: isBookmarked
+        )
     }
 }
 
@@ -95,6 +124,8 @@ extension TerminalCommandBlock {
         case durationNs
         case startRow
         case endRow
+        case visibleStartRow
+        case visibleEndRow
         case streamID
         case blockType
         case isBookmarked
@@ -126,6 +157,8 @@ extension TerminalCommandBlock {
             durationNs: try container.decode(UInt64.self, forKey: .durationNs),
             startRow: try container.decode(UInt32.self, forKey: .startRow),
             endRow: try container.decode(UInt32.self, forKey: .endRow),
+            visibleStartRow: try container.decodeIfPresent(UInt32.self, forKey: .visibleStartRow),
+            visibleEndRow: try container.decodeIfPresent(UInt32.self, forKey: .visibleEndRow),
             streamID: try container.decode(UInt32.self, forKey: .streamID),
             blockType: try container.decode(UInt8.self, forKey: .blockType),
             isBookmarked: try container.decodeIfPresent(Bool.self, forKey: .isBookmarked) ?? false
@@ -145,6 +178,8 @@ extension TerminalCommandBlock {
         try container.encode(durationNs, forKey: .durationNs)
         try container.encode(startRow, forKey: .startRow)
         try container.encode(endRow, forKey: .endRow)
+        try container.encodeIfPresent(visibleStartRow, forKey: .visibleStartRow)
+        try container.encodeIfPresent(visibleEndRow, forKey: .visibleEndRow)
         try container.encode(streamID, forKey: .streamID)
         try container.encode(blockType, forKey: .blockType)
         try container.encode(isBookmarked, forKey: .isBookmarked)
@@ -234,7 +269,7 @@ enum TerminalBlockRestoration {
 
         let source: [TerminalCommandBlock]
         if live.isEmpty {
-            source = newestRestoredBlocksByID(restored)
+            source = newestRestoredBlocksByID(restored).map { $0.withoutVisibleMapping() }
         } else {
             let restoredByID = newestRestoredBlockMapByID(restored)
             source = live.map { block in
@@ -255,7 +290,7 @@ enum TerminalBlockRestoration {
             guard let restored = newestRestoredBlockMapByID(restored)[id] else { return live }
             return live.mergingRestoredMetadata(from: restored)
         }
-        return restored.last { $0.id == id }
+        return restored.last { $0.id == id }?.withoutVisibleMapping()
     }
 
     private static func newestRestoredBlocksByID(

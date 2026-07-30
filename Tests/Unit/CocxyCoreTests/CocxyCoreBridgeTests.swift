@@ -1675,8 +1675,8 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.performSemanticNavigation(.selectCommandOutput, for: surfaceID) == nil)
     }
 
-    @Test("commandBlocks omits evicted rows and maps retained rows into history")
-    func commandBlocksOmitEvictedRowsAndMapRetainedRowsIntoHistory() throws {
+    @Test("commandBlocks preserves evicted metadata and maps only retained rows")
+    func commandBlocksPreserveEvictedMetadataAndMapRetainedRows() throws {
         let bridge = try makeBridge()
         let (surfaceID, _) = try createSurface(using: bridge)
         defer { bridge.destroySurface(surfaceID) }
@@ -1705,15 +1705,59 @@ struct CocxyCoreBridgeTests {
         )
 
         let blocks = bridge.commandBlocks(for: surfaceID, limit: 10)
-        let retained = try #require(blocks.first)
+        let evicted = try #require(blocks.first { $0.id == evictedID })
+        let retained = try #require(blocks.first { $0.command == "echo retained" })
+        let retainedVisibleStart = try #require(retained.visibleStartRow)
+        let retainedVisibleEnd = try #require(retained.visibleEndRow)
         let maximumHistoryRow = cocxycore_terminal_scrollback_len(state.terminal)
             + UInt32(cocxycore_terminal_rows(state.terminal) - 1)
 
-        #expect(blocks.count == 1)
+        #expect(blocks.count == 2)
+        #expect(evicted.command == "echo evicted")
+        #expect(evicted.visibleStartRow == nil)
+        #expect(evicted.visibleEndRow == nil)
         #expect(retained.command == "echo retained")
         #expect(retained.startRow <= retained.endRow)
-        #expect(retained.endRow <= maximumHistoryRow)
-        #expect(bridge.commandBlock(for: surfaceID, blockID: evictedID) == nil)
+        #expect(retainedVisibleStart <= retainedVisibleEnd)
+        #expect(retainedVisibleEnd <= maximumHistoryRow)
+        #expect(bridge.commandBlock(for: surfaceID, blockID: evictedID)?.id == evictedID)
+    }
+
+    @Test("commandBlocks bounds metadata work before building overlay blocks")
+    func commandBlocksBoundMetadataAndSkipOutputCopies() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        for index in 0..<1_024 {
+            feed(
+                "\u{1B}]133;A\u{7}" +
+                "\u{1B}]133;B\u{7}" +
+                "printf \(index)\r\n" +
+                "\u{1B}]133;C\u{7}" +
+                "\(index)\r\n" +
+                "\u{1B}]133;D;0\u{7}",
+                to: state.terminal
+            )
+        }
+
+        var metadataLoads = 0
+        var outputCopies = 0
+        bridge.commandBlockMetadataLoadObserver = { metadataLoads += 1 }
+        bridge.commandBlockOutputCopyObserver = { outputCopies += 1 }
+
+        let blocks = bridge.commandBlocks(
+            for: surfaceID,
+            limit: 32,
+            includeOutput: false
+        )
+
+        #expect(blocks.count == 32)
+        #expect(metadataLoads == 32)
+        #expect(outputCopies == 0)
+        #expect(blocks.allSatisfy { $0.output.isEmpty })
+        #expect(blocks.last?.command == "printf 1023")
     }
 
     @Test("commandBlocks groups multiline commands into one block")

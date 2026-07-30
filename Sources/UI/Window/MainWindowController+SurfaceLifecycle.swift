@@ -1020,7 +1020,6 @@ extension MainWindowController {
         let liveBlocks = cocxyBridge.commandBlocks(for: surfaceID, limit: 32)
         guard let block = liveBlocks.last else { return }
 
-        preserveCommandBlockMetadata(for: surfaceID, liveBlocks: liveBlocks)
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
         updateCommandCorrectionSuggestion(for: block, tabID: tabID, surfaceID: surfaceID)
 
@@ -1086,27 +1085,6 @@ extension MainWindowController {
             )
         } else {
             coreView.dismissCommandCorrection()
-        }
-    }
-
-    private func preserveCommandBlockMetadata(
-        for surfaceID: SurfaceID,
-        liveBlocks: [TerminalCommandBlock]
-    ) {
-        guard let restored = restoredCommandBlocksBySurfaceID[surfaceID],
-              !restored.isEmpty else { return }
-
-        let liveIDs = Set(liveBlocks.map(\.id))
-        let metadata = TerminalBlockRestoration.blocksForDisplay(
-            live: [],
-            restored: restored.filter { liveIDs.contains($0.id) },
-            limit: 256
-        )
-
-        if metadata.isEmpty {
-            restoredCommandBlocksBySurfaceID.removeValue(forKey: surfaceID)
-        } else {
-            restoredCommandBlocksBySurfaceID[surfaceID] = metadata
         }
     }
 

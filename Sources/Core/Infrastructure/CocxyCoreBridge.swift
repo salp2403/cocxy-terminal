@@ -259,6 +259,21 @@ struct TerminalViewportSnapshot: Equatable, Sendable, Encodable {
     }
 }
 
+struct TerminalCommandBlockOverlayMarker: Equatable, Sendable {
+    let blockCount: UInt32
+    let newestBlockType: UInt8
+    let newestStartRow: UInt32
+    let newestEndRow: UInt32
+    let newestStartTimeNs: UInt64
+    let newestEndTimeNs: UInt64
+    let newestStreamID: UInt32
+}
+
+struct TerminalCommandBlockOverlaySnapshot: Equatable, Sendable {
+    let viewport: TerminalViewportSnapshot
+    let marker: TerminalCommandBlockOverlayMarker
+}
+
 /// One physical row in the editable command range captured for cursor-click
 /// movement. Widths use the core's 0=narrow, 1=wide, 2=continuation encoding;
 /// semantics use 2 for command-input cells.
@@ -587,6 +602,11 @@ final class CocxyCoreBridge: TerminalEngine {
     /// host does not need it, and tests can exercise the bridge without
     /// a subscriber.
     var inputDeliveryObserver: (@MainActor (SurfaceID, InputDeliveryEvent) -> Void)?
+
+    /// Test-only probe used to prove that metadata-only overlay refreshes do
+    /// not copy command output from CocxyCore.
+    var commandBlockOutputCopyObserver: (() -> Void)?
+    var commandBlockMetadataLoadObserver: (() -> Void)?
 
     /// Semantic adapter that converts CocxyCore events to HookEvent/TimelineEvent
     /// format for the existing agent detection and timeline systems.
@@ -2183,26 +2203,55 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func terminalViewportSnapshot(for surface: SurfaceID) -> TerminalViewportSnapshot? {
         withTerminalLock(surface) { state -> TerminalViewportSnapshot? in
-            var metrics = cocxycore_font_metrics()
-            guard cocxycore_terminal_get_font_metrics(state.terminal, &metrics),
-                  metrics.cell_width > 0,
-                  metrics.cell_height > 0 else {
-                return nil
-            }
+            Self.viewportSnapshot(from: state.terminal)
+        } ?? nil
+    }
 
-            return TerminalViewportSnapshot(
-                visibleStartRow: cocxycore_terminal_history_visible_start(state.terminal),
-                historyMaxVisibleStart: cocxycore_terminal_history_max_visible_start(state.terminal),
-                visibleRowCount: cocxycore_terminal_rows(state.terminal),
-                visibleColumnCount: cocxycore_terminal_cols(state.terminal),
-                cellWidth: metrics.cell_width,
-                cellHeight: metrics.cell_height,
-                isAltScreen: cocxycore_terminal_is_alt_screen(state.terminal),
-                mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(state.terminal),
-                mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(state.terminal),
-                alternateScrollMode: cocxycore_terminal_mode_alternate_scroll(state.terminal)
+    func commandBlockOverlaySnapshot(
+        for surface: SurfaceID
+    ) -> TerminalCommandBlockOverlaySnapshot? {
+        withTerminalLock(surface) { state -> TerminalCommandBlockOverlaySnapshot? in
+            guard let viewport = Self.viewportSnapshot(from: state.terminal) else { return nil }
+            let blockCount = cocxycore_terminal_semantic_block_count(state.terminal)
+            var newest = cocxycore_semantic_block()
+            let hasNewest = blockCount > 0
+                && cocxycore_terminal_semantic_get_block(state.terminal, 0, &newest)
+            return TerminalCommandBlockOverlaySnapshot(
+                viewport: viewport,
+                marker: TerminalCommandBlockOverlayMarker(
+                    blockCount: blockCount,
+                    newestBlockType: hasNewest ? newest.block_type : 0,
+                    newestStartRow: hasNewest ? newest.start_row : 0,
+                    newestEndRow: hasNewest ? newest.end_row : 0,
+                    newestStartTimeNs: hasNewest ? newest.timestamp_start : 0,
+                    newestEndTimeNs: hasNewest ? newest.timestamp_end : 0,
+                    newestStreamID: hasNewest ? newest.stream_id : 0
+                )
             )
         } ?? nil
+    }
+
+    private static func viewportSnapshot(
+        from terminal: OpaquePointer
+    ) -> TerminalViewportSnapshot? {
+        var metrics = cocxycore_font_metrics()
+        guard cocxycore_terminal_get_font_metrics(terminal, &metrics),
+              metrics.cell_width > 0,
+              metrics.cell_height > 0 else {
+            return nil
+        }
+        return TerminalViewportSnapshot(
+            visibleStartRow: cocxycore_terminal_history_visible_start(terminal),
+            historyMaxVisibleStart: cocxycore_terminal_history_max_visible_start(terminal),
+            visibleRowCount: cocxycore_terminal_rows(terminal),
+            visibleColumnCount: cocxycore_terminal_cols(terminal),
+            cellWidth: metrics.cell_width,
+            cellHeight: metrics.cell_height,
+            isAltScreen: cocxycore_terminal_is_alt_screen(terminal),
+            mouseTrackingMode: cocxycore_terminal_mode_mouse_tracking(terminal),
+            mouseEncodingMode: cocxycore_terminal_mode_mouse_encoding(terminal),
+            alternateScrollMode: cocxycore_terminal_mode_alternate_scroll(terminal)
+        )
     }
 
     func detectedContent(
@@ -2744,24 +2793,62 @@ final class CocxyCoreBridge: TerminalEngine {
         return regions
     }
 
-    func commandBlocks(for surface: SurfaceID, limit: UInt32) -> [TerminalCommandBlock] {
+    func commandBlocks(
+        for surface: SurfaceID,
+        limit: UInt32,
+        includeOutput: Bool = true
+    ) -> [TerminalCommandBlock] {
         withTerminalLock(surface) { state in
-            guard limit > 0, let iterator = cocxycore_block_iterator_create(state.terminal) else {
+            let blockIDs = Self.latestCommandBlockIDs(
+                from: state.terminal,
+                limit: min(limit, Self.semanticBlockCapacity)
+            )
+            return blockIDs.compactMap { blockID in
+                Self.commandBlock(
+                    from: state.terminal,
+                    blockID: blockID,
+                    includeOutput: includeOutput,
+                    metadataLoadObserver: self.commandBlockMetadataLoadObserver,
+                    outputCopyObserver: includeOutput ? self.commandBlockOutputCopyObserver : nil
+                )
+            }
+        } ?? []
+    }
+
+    private static func latestCommandBlockIDs(
+        from terminal: OpaquePointer,
+        limit: UInt32
+    ) -> [UInt64] {
+        let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+        guard blockCount > 0,
+              limit > 0,
+              let iterator = cocxycore_block_iterator_create(terminal) else {
+            return []
+        }
+        defer { cocxycore_block_iterator_destroy(iterator) }
+
+        var blockIDs: [UInt64] = []
+        blockIDs.reserveCapacity(Int(blockCount))
+        while cocxycore_block_iterator_next(iterator) {
+            let blockID = cocxycore_block_iterator_current_id(iterator)
+            guard blockID != 0 else { return [] }
+            blockIDs.append(blockID)
+        }
+        guard blockIDs.count == Int(blockCount) else { return [] }
+
+        var newestCommandIDs: [UInt64] = []
+        newestCommandIDs.reserveCapacity(Int(min(limit, blockCount)))
+        for offset in 0..<blockCount {
+            var block = cocxycore_semantic_block()
+            guard cocxycore_terminal_semantic_get_block(terminal, offset, &block) else {
                 return []
             }
-            defer { cocxycore_block_iterator_destroy(iterator) }
+            guard isCommandBlockType(block.block_type) else { continue }
 
-            var blocks: [TerminalCommandBlock] = []
-            while cocxycore_block_iterator_next(iterator) {
-                let blockID = cocxycore_block_iterator_current_id(iterator)
-                guard blockID != 0 else { continue }
-                guard let block = Self.commandBlock(from: state.terminal, blockID: blockID) else { continue }
-                blocks.append(block)
-            }
-
-            let maxCount = Int(limit)
-            return blocks.count > maxCount ? Array(blocks.suffix(maxCount)) : blocks
-        } ?? []
+            newestCommandIDs.append(blockIDs[blockIDs.count - 1 - Int(offset)])
+            if newestCommandIDs.count == Int(limit) { break }
+        }
+        return newestCommandIDs.reversed()
     }
 
     func completedCommandBlockReferences(
@@ -2798,7 +2885,13 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func commandBlock(for surface: SurfaceID, blockID: UInt64) -> TerminalCommandBlock? {
         let block: TerminalCommandBlock?? = withTerminalLock(surface) { state in
-            Self.commandBlock(from: state.terminal, blockID: blockID)
+            Self.commandBlock(
+                from: state.terminal,
+                blockID: blockID,
+                includeOutput: true,
+                metadataLoadObserver: self.commandBlockMetadataLoadObserver,
+                outputCopyObserver: self.commandBlockOutputCopyObserver
+            )
         }
         return block ?? nil
     }
@@ -2818,8 +2911,15 @@ final class CocxyCoreBridge: TerminalEngine {
         } ?? ""
     }
 
-    private static func commandBlock(from terminal: OpaquePointer, blockID: UInt64) -> TerminalCommandBlock? {
+    private static func commandBlock(
+        from terminal: OpaquePointer,
+        blockID: UInt64,
+        includeOutput: Bool,
+        metadataLoadObserver: (() -> Void)?,
+        outputCopyObserver: (() -> Void)?
+    ) -> TerminalCommandBlock? {
         var metadata = cocxycore_block_metadata()
+        metadataLoadObserver?()
         guard cocxycore_block_get_metadata(terminal, blockID, &metadata) else {
             return nil
         }
@@ -2827,24 +2927,38 @@ final class CocxyCoreBridge: TerminalEngine {
         let blockType = metadata.block_type
         guard isCommandBlockType(blockType) else { return nil }
 
-        var startRow: UInt32 = 0
-        var endRow: UInt32 = 0
-        guard cocxycore_block_visible_row(terminal, metadata.start_row, &startRow),
-              cocxycore_block_visible_row(terminal, metadata.end_row, &endRow) else {
-            return nil
+        var mappedStartRow: UInt32 = 0
+        var mappedEndRow: UInt32 = 0
+        let hasVisibleRows = cocxycore_block_visible_row(
+            terminal,
+            metadata.start_row,
+            &mappedStartRow
+        ) && cocxycore_block_visible_row(
+            terminal,
+            metadata.end_row,
+            &mappedEndRow
+        )
+        let output: String
+        if includeOutput {
+            outputCopyObserver?()
+            output = blockOutput(from: terminal, blockID: blockID)
+        } else {
+            output = ""
         }
 
         return TerminalCommandBlock(
             id: metadata.id,
             command: string(from: metadata.command, length: metadata.command_len),
-            output: blockOutput(from: terminal, blockID: blockID),
+            output: output,
             exitCode: metadata.exit_code >= 0 ? metadata.exit_code : nil,
             pwd: optionalString(from: metadata.pwd, length: metadata.pwd_len),
             startTimeNs: metadata.start_time_ns,
             endTimeNs: metadata.end_time_ns,
             durationNs: metadata.duration_ns,
-            startRow: startRow,
-            endRow: endRow,
+            startRow: metadata.start_row,
+            endRow: metadata.end_row,
+            visibleStartRow: hasVisibleRows ? mappedStartRow : nil,
+            visibleEndRow: hasVisibleRows ? mappedEndRow : nil,
             streamID: metadata.stream_id,
             blockType: blockType
         )
@@ -4071,7 +4185,7 @@ final class CocxyCoreBridge: TerminalEngine {
             let screenRow = cocxycore_terminal_cursor_row(box.terminal)
             let position = TerminalGridPosition(
                 screenRow: screenRow,
-                absoluteRow: cocxycore_terminal_history_visible_start(box.terminal)
+                absoluteRow: cocxycore_terminal_history_max_visible_start(box.terminal)
                     + UInt32(screenRow),
                 column: cocxycore_terminal_cursor_col(box.terminal)
             )

@@ -39,25 +39,27 @@ enum TerminalBlockOverlayLayout {
         let railX = max(0, padding.x + 2)
 
         return blocks.compactMap { block in
-            guard block.endRow >= block.startRow,
-                  block.endRow >= visibleStartRow,
-                  block.startRow < visibleEndExclusive else {
+            guard let blockStartRow = block.visibleStartRow,
+                  let blockEndRow = block.visibleEndRow,
+                  blockEndRow >= blockStartRow,
+                  blockEndRow >= visibleStartRow,
+                  blockStartRow < visibleEndExclusive else {
                 return nil
             }
 
-            let clampedStart = max(block.startRow, visibleStartRow)
-            let blockEndExclusive = block.endRow.addingReportingOverflow(1).overflow
+            let clampedStart = max(blockStartRow, visibleStartRow)
+            let blockEndExclusive = blockEndRow.addingReportingOverflow(1).overflow
                 ? UInt32.max
-                : block.endRow + 1
+                : blockEndRow + 1
             let clampedEndExclusive = min(blockEndExclusive, visibleEndExclusive)
             guard clampedEndExclusive > clampedStart else { return nil }
 
             let visibleRow = CGFloat(clampedStart - visibleStartRow)
             let y = padding.y + visibleRow * cellHeight
-            let headerFrame: NSRect? = block.startRow >= visibleStartRow
+            let headerFrame: NSRect? = blockStartRow >= visibleStartRow
                 ? NSRect(
                     x: headerX,
-                    y: padding.y + CGFloat(block.startRow - visibleStartRow) * cellHeight,
+                    y: padding.y + CGFloat(blockStartRow - visibleStartRow) * cellHeight,
                     width: resolvedHeaderWidth,
                     height: headerHeight
                 )

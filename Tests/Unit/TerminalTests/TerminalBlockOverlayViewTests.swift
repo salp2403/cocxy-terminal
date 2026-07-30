@@ -83,6 +83,34 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
         XCTAssertEqual(entries.map(\.block.id), [2])
     }
 
+    func testLayoutSkipsBlocksWithoutLiveRowMapping() {
+        let block = TerminalCommandBlock(
+            id: 7,
+            command: "restored",
+            output: "persisted output",
+            exitCode: 0,
+            pwd: "/tmp/project",
+            startTimeNs: 100,
+            endTimeNs: 200,
+            durationNs: 100,
+            startRow: 3,
+            endRow: 4,
+            streamID: 1,
+            blockType: 3
+        )
+
+        let entries = TerminalBlockOverlayLayout.entries(
+            blocks: [block],
+            visibleStartRow: 0,
+            visibleRowCount: 24,
+            cellHeight: 11,
+            padding: CGPoint(x: 8, y: 4),
+            width: 480
+        )
+
+        XCTAssertTrue(entries.isEmpty)
+    }
+
     func testOverlayPassesThroughBackgroundAndKeepsButtonsInteractive() {
         let overlay = TerminalBlockOverlayView(frame: NSRect(x: 0, y: 0, width: 480, height: 260))
         overlay.update(
@@ -401,6 +429,8 @@ final class TerminalBlockOverlayViewTests: XCTestCase {
             durationNs: 100,
             startRow: startRow,
             endRow: endRow,
+            visibleStartRow: startRow,
+            visibleEndRow: endRow,
             streamID: 1,
             blockType: 3
         )

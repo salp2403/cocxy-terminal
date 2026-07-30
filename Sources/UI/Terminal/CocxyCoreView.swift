@@ -154,6 +154,7 @@ final class CocxyCoreView: NSView {
     private var cachedCommandBlockSurfaceID: SurfaceID?
     private var commandBlockDataNeedsRefresh = true
     private var lastCommandBlockViewport: CommandBlockViewport?
+    private var lastCommandBlockMarker: TerminalCommandBlockOverlayMarker?
     private var lastCommandBlockPadding: CGPoint?
     internal private(set) var commandBlockDataReloadCount = 0
 
@@ -430,7 +431,6 @@ final class CocxyCoreView: NSView {
     /// Called from CocxyCoreBridge after PTY data is processed.
     func setNeedsTerminalDisplay() {
         needsRender = true
-        commandBlockDataNeedsRefresh = true
         updateDisplayLinkRunningState()
     }
 
@@ -2548,21 +2548,25 @@ final class CocxyCoreView: NSView {
         guard commandBlockConfiguration.enabled else {
             overlay.clear()
             lastCommandBlockViewport = nil
+            lastCommandBlockMarker = nil
             lastCommandBlockPadding = nil
             return
         }
 
         guard let bridge, let sid = surfaceID,
-              let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
+              let overlaySnapshot = bridge.commandBlockOverlaySnapshot(for: sid) else {
             overlay.clear()
             lastCommandBlockViewport = nil
+            lastCommandBlockMarker = nil
             lastCommandBlockPadding = nil
             return
         }
+        let snapshot = overlaySnapshot.viewport
 
         guard !snapshot.isAltScreen else {
             overlay.clear()
             lastCommandBlockViewport = nil
+            lastCommandBlockMarker = nil
             lastCommandBlockPadding = nil
             return
         }
@@ -2575,16 +2579,19 @@ final class CocxyCoreView: NSView {
             cellHeight: cellHeight
         )
         let padding = CGPoint(x: contentPadding.x, y: contentPadding.y)
-        let shouldReloadData = commandBlockDataNeedsRefresh || cachedCommandBlockSurfaceID != sid
+        let shouldReloadData = commandBlockDataNeedsRefresh
+            || cachedCommandBlockSurfaceID != sid
+            || lastCommandBlockMarker != overlaySnapshot.marker
 
         if shouldReloadData {
             cachedCommandBlocks = TerminalBlockRestoration.blocksForDisplay(
-                live: bridge.commandBlocks(for: sid, limit: 32),
+                live: bridge.commandBlocks(for: sid, limit: 32, includeOutput: false),
                 restored: restoredCommandBlocksProvider?() ?? [],
                 limit: 32
             )
             cachedCommandBlockSurfaceID = sid
             commandBlockDataNeedsRefresh = false
+            lastCommandBlockMarker = overlaySnapshot.marker
             commandBlockDataReloadCount += 1
         }
 
@@ -2629,6 +2636,7 @@ final class CocxyCoreView: NSView {
         cachedCommandBlockSurfaceID = nil
         commandBlockDataNeedsRefresh = true
         lastCommandBlockViewport = nil
+        lastCommandBlockMarker = nil
         lastCommandBlockPadding = nil
     }
 
@@ -2638,13 +2646,16 @@ final class CocxyCoreView: NSView {
     }
 
     private func copyBlockOutputFromOverlay(_ block: TerminalCommandBlock) {
-        let text = block.output.isEmpty ? block.command : block.output
+        let resolved = resolvedCommandBlockForOverlayAction(block)
+        let text = resolved.output.isEmpty ? resolved.command : resolved.output
         guard !text.isEmpty else { return }
         clipboardService.write(text)
     }
 
     private func copySelectedBlockOutputsFromOverlay(_ blocks: [TerminalCommandBlock]) {
-        let text = BlockSelectionCopyFormatter.outputText(for: blocks)
+        let text = BlockSelectionCopyFormatter.outputText(
+            for: blocks.map(resolvedCommandBlockForOverlayAction)
+        )
         guard !text.isEmpty else { return }
         clipboardService.write(text)
     }
@@ -2660,7 +2671,9 @@ final class CocxyCoreView: NSView {
     }
 
     private func shareBlockFromOverlay(_ block: TerminalCommandBlock, sourceView: NSView) {
-        let text = TerminalBlockShareFormatter.text(for: block)
+        let text = TerminalBlockShareFormatter.text(
+            for: resolvedCommandBlockForOverlayAction(block)
+        )
         guard !text.isEmpty else { return }
         NSSharingServicePicker(items: [text]).show(
             relativeTo: sourceView.bounds,
@@ -2670,7 +2683,18 @@ final class CocxyCoreView: NSView {
     }
 
     private func toggleBlockBookmarkFromOverlay(_ block: TerminalCommandBlock) {
-        onToggleCommandBlockBookmark?(block)
+        onToggleCommandBlockBookmark?(resolvedCommandBlockForOverlayAction(block))
+    }
+
+    private func resolvedCommandBlockForOverlayAction(
+        _ block: TerminalCommandBlock
+    ) -> TerminalCommandBlock {
+        guard let bridge,
+              let sid = surfaceID,
+              let live = bridge.commandBlock(for: sid, blockID: block.id) else {
+            return block
+        }
+        return live.mergingRestoredMetadata(from: block)
     }
 }
 
