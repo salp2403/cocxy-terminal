@@ -442,6 +442,128 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         ))
     }
 
+    @Test("handoff export binds an exact tab and returns its current metadata")
+    func handoffExportUsesApprovedTabContext() throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        let sourceTabID = try #require(controller.tabManager.activeTabID)
+        let targetTabID = controller.createTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/cocxy-handoff-export")
+        )
+        controller.tabManager.updateTab(id: targetTabID) { tab in
+            tab.gitBranch = "feature/export"
+            tab.worktreeID = "wt-export"
+            tab.worktreeBranch = "worktree/export"
+        }
+        #expect(controller.focusTab(id: sourceTabID))
+
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        let taskRequest = try TaskRunRequest.make(
+            prompt: "Finish the handoff flow",
+            agents: "codex,claude"
+        )
+        var taskRun = TaskRun(
+            id: "handoff-export-run",
+            request: taskRequest,
+            originRepoPath: URL(fileURLWithPath: "/tmp/cocxy-handoff-export"),
+            baseCommit: "abc123"
+        )
+        let candidate = try #require(taskRun.candidates.first)
+        try taskRun.updateCandidate(id: candidate.id) { candidate in
+            candidate.worktree = WorktreeManifest.WorktreeEntry(
+                id: "wt-export",
+                branch: "worktree/export",
+                path: URL(fileURLWithPath: "/tmp/cocxy-handoff-export"),
+                createdAt: Date(timeIntervalSince1970: 5_000),
+                agent: candidate.provider.rawValue,
+                tabID: targetTabID
+            )
+        }
+        delegate.activeTaskRuns[taskRun.id] = taskRun
+        let teamConfig = AgentTeamConfig(
+            id: candidate.teamID,
+            provider: candidate.provider,
+            teammates: [
+                AgentTeammateConfig(
+                    id: "handoff-worker",
+                    name: "Worker",
+                    prompt: taskRun.prompt
+                ),
+            ]
+        )
+        var teamRun = AgentTeamRunState(config: teamConfig, launchSpecs: [])
+        try teamRun.graph.recordTouchedFile(
+            nodeID: "handoff-worker",
+            path: "Sources/Handoff.swift"
+        )
+        delegate.activeAgentTeamRuns[candidate.teamID] = teamRun
+        let rawTabID = targetTabID.rawValue.uuidString.lowercased()
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "handoff-export",
+                command: "handoff-export",
+                params: ["tabId": rawTabID, "limit": "8"]
+            )
+        ))
+        let target = try #require(
+            delegate.privilegedSocketCommandPresentationTarget(for: request)
+        )
+
+        #expect(target.context.scope == .terminalTab)
+        #expect(target.context.tabID == targetTabID.rawValue)
+        #expect(target.context.workingDirectory == "/tmp/cocxy-handoff-export")
+        let result = delegate.handleTaskHandoffCLIRequest(
+            kind: "export",
+            params: request.params,
+            approvedContext: target.context
+        )
+        #expect(result.success)
+        #expect(result.data["tab-id"] == targetTabID.rawValue.uuidString)
+        #expect(result.data["artifact"]?.contains("worktree/export") == true)
+        #expect(result.data["artifact"]?.contains("wt-export") == true)
+        #expect(result.data["artifact"]?.contains("Finish the handoff flow") == true)
+        #expect(result.data["artifact"]?.contains("Sources/Handoff.swift") == true)
+        #expect(result.data["artifact"]?.contains("No semantic command blocks") == true)
+    }
+
+    @Test("handoff import authority binds source, provider, and artifact digest")
+    func handoffImportBindsExactAuthority() throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        let sourceTabID = try #require(controller.tabManager.activeTabID)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        let artifact = "# Task Handoff\n\nContinue the current task."
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "handoff-import",
+                command: "handoff-import",
+                params: ["agent": "codex", "artifact": artifact]
+            )
+        ))
+        let target = try #require(
+            delegate.privilegedSocketCommandPresentationTarget(for: request)
+        )
+        let destination = try TaskHandoffDestination.make(
+            agent: "codex",
+            artifact: artifact
+        )
+
+        #expect(target.context.scope == .localExecution)
+        #expect(target.context.tabID == sourceTabID.rawValue)
+        #expect(target.context.authorityDetails == destination.authorityDetails)
+        #expect(target.context.targetDisplayName.contains("Codex CLI"))
+
+        let tamperedResult = delegate.handleTaskHandoffCLIRequest(
+            kind: "import",
+            params: ["agent": "codex", "artifact": artifact + "tampered"],
+            approvedContext: target.context
+        )
+        #expect(!tamperedResult.success)
+        #expect(controller.tabManager.tabs.count == 1)
+    }
+
     private func makeFixture() -> (
         controller: MainWindowController,
         tabID: TabID,

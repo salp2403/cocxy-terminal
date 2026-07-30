@@ -407,6 +407,12 @@ extension AppDelegate {
                         tabID: rawTabID,
                         fallbackController: focusedController
                     )
+                case .handoffExport:
+                    return terminalTabPresentationTarget(
+                        tabID: rawTabID,
+                        fallbackController: focusedController,
+                        displayPrefix: "Task handoff source"
+                    )
                 case .timelineShow, .timelineExport, .search:
                     return terminalTabPresentationTarget(
                         tabID: rawTabID,
@@ -531,6 +537,34 @@ extension AppDelegate {
             )
 
         case .localExecution:
+            if request.command == .handoffImport {
+                guard let rawAgent = request.params["agent"],
+                      let artifact = request.params["artifact"],
+                      let destination = try? TaskHandoffDestination.make(
+                          agent: rawAgent,
+                          artifact: artifact
+                      ),
+                      let (tabID, tab) = activeTab(in: focusedController) else {
+                    return nil
+                }
+                let workingDirectory = canonicalWorkingDirectory(for: tab)
+                return SocketPrivilegedCommandPresentationTarget(
+                    context: SocketPrivilegedCommandContext(
+                        scope: .localExecution,
+                        windowControllerIdentifier: ObjectIdentifier(focusedController),
+                        tabID: tabID.rawValue,
+                        workingDirectory: workingDirectory,
+                        authorityDetails: destination.authorityDetails,
+                        surfaceID: nil,
+                        browserViewModelIdentifier: nil,
+                        browserTabID: nil,
+                        browserURL: nil,
+                        targetDisplayName: "Pass task from \(tab.displayTitle) to "
+                            + destination.provider.displayName
+                    ),
+                    controller: focusedController
+                )
+            }
             if request.command == .taskRunPromote {
                 guard let rawRunID = request.params["run-id"],
                       let rawCandidateID = request.params["candidate-id"],

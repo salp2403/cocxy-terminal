@@ -17,6 +17,24 @@ enum AgentTeamProvider: String, CaseIterable, Codable, Sendable, Equatable {
     case qoder
     case kiro
 
+    static func resolve(named rawName: String) -> AgentTeamProvider? {
+        switch rawName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "claude", "claude-code": return .claudeCode
+        case "codex": return .codex
+        case "open-code", "opencode": return .opencode
+        case "pi": return .pi
+        case "cursor": return .cursor
+        case "gemini": return .gemini
+        case "rovo", "rovo-dev": return .rovoDev
+        case "copilot": return .copilot
+        case "codebuddy": return .codebuddy
+        case "factory": return .factory
+        case "qoder": return .qoder
+        case "kiro": return .kiro
+        default: return nil
+        }
+    }
+
     var displayName: String {
         switch self {
         case .claudeCode:

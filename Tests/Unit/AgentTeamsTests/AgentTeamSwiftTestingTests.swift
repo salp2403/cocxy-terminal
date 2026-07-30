@@ -27,6 +27,10 @@ struct AgentTeamSwiftTestingTests {
         #expect(AgentTeamProvider.allCases.map(\.rawValue).contains("hosted-cocxy") == false)
         #expect(AgentTeamProvider.codex.displayName == "Codex CLI")
         #expect(AgentTeamProvider.gemini.executableCandidates == ["gemini"])
+        #expect(AgentTeamProvider.resolve(named: " Claude ") == .claudeCode)
+        #expect(AgentTeamProvider.resolve(named: "open-code") == .opencode)
+        #expect(AgentTeamProvider.resolve(named: "ROVO") == .rovoDev)
+        #expect(AgentTeamProvider.resolve(named: "unknown") == nil)
     }
 
     @Test("config parses teammate lists with stable IDs and isolated notifications")

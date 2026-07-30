@@ -4,6 +4,9 @@
 import Foundation
 
 extension MainWindowController: AgentTeamPaneLaunching {
+    private static let multilinePromptReadyAttempts = 150
+    private static let multilinePromptReadyDelay = Duration.milliseconds(100)
+
     func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
         spawnAgentTeamPane(
             launchSpec: launchSpec,
@@ -135,19 +138,71 @@ extension MainWindowController: AgentTeamPaneLaunching {
         teamID: String,
         tabID: TabID
     ) {
-        guard let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !prompt.isEmpty else {
+        guard let prompt,
+              !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             return
         }
+        let normalizedPrompt = CocxyCoreView.normalizedTerminalPasteText(prompt)
+        guard !normalizedPrompt.isEmpty else { return }
 
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(500))
-            guard let self,
-                  self.agentTeamTabIDsByTeamID[teamID]?.contains(tabID) == true,
-                  let surfaceID = self.tabSurfaceMap[tabID] else {
-                return
+            let requiresBracketedPaste = normalizedPrompt.contains("\n")
+            for attempt in 0..<Self.multilinePromptReadyAttempts {
+                guard let self,
+                      self.agentTeamTabIDsByTeamID[teamID]?.contains(tabID) == true,
+                      let surfaceID = self.tabSurfaceMap[tabID] else {
+                    return
+                }
+                if !requiresBracketedPaste {
+                    self.terminalEngine(for: surfaceID).sendText(
+                        Self.agentTeamPromptPayload(
+                            normalizedPrompt,
+                            usesBracketedPaste: false
+                        ),
+                        to: surfaceID
+                    )
+                    return
+                }
+                if let bridge = self.cocxyCoreBridge(forSurface: surfaceID),
+                   bridge.modeDiagnostics(for: surfaceID)?.bracketedPasteMode == true {
+                    bridge.sendText(
+                        Self.agentTeamPromptPayload(
+                            normalizedPrompt,
+                            usesBracketedPaste: true
+                        ),
+                        to: surfaceID
+                    )
+                    return
+                }
+                guard attempt + 1 < Self.multilinePromptReadyAttempts else {
+                    self.terminalEngine(for: surfaceID).sendText(
+                        Self.agentTeamPromptPayload(
+                            normalizedPrompt,
+                            usesBracketedPaste: false
+                        ),
+                        to: surfaceID
+                    )
+                    return
+                }
+                try? await Task.sleep(for: Self.multilinePromptReadyDelay)
             }
-            self.terminalEngine(for: surfaceID).sendText(prompt + "\r", to: surfaceID)
         }
+    }
+
+    nonisolated static func agentTeamPromptPayload(
+        _ normalizedPrompt: String,
+        usesBracketedPaste: Bool
+    ) -> String {
+        if usesBracketedPaste {
+            return "\u{1B}[200~" + normalizedPrompt + "\u{1B}[201~\r"
+        }
+        guard normalizedPrompt.contains("\n") else {
+            return normalizedPrompt + "\r"
+        }
+        let encoded = normalizedPrompt
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\n", with: "\\n")
+        return "Task context with encoded newlines: " + encoded + "\r"
     }
 }

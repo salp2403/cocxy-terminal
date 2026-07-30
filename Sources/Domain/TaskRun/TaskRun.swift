@@ -85,24 +85,7 @@ struct TaskRunRequest: Equatable, Sendable {
     }
 
     private static func parseProvider(_ raw: String) throws -> AgentTeamProvider {
-        let aliases: [String: AgentTeamProvider] = [
-            "claude": .claudeCode,
-            "claude-code": .claudeCode,
-            "codex": .codex,
-            "open-code": .opencode,
-            "opencode": .opencode,
-            "pi": .pi,
-            "cursor": .cursor,
-            "gemini": .gemini,
-            "rovo": .rovoDev,
-            "rovo-dev": .rovoDev,
-            "copilot": .copilot,
-            "codebuddy": .codebuddy,
-            "factory": .factory,
-            "qoder": .qoder,
-            "kiro": .kiro,
-        ]
-        guard let provider = aliases[raw] else {
+        guard let provider = AgentTeamProvider.resolve(named: raw) else {
             throw TaskRunError.unsupportedProvider(raw)
         }
         return provider
