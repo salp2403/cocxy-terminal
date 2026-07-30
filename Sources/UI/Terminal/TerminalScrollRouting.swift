@@ -84,6 +84,44 @@ enum TerminalMouseCapturePolicy {
     }
 }
 
+struct TerminalMouseMotionDeduplicator {
+    private struct Signature: Equatable {
+        let row: UInt16
+        let column: UInt16
+        let button: TerminalMouseButton?
+        let modifiers: UInt
+        let trackingMode: UInt8
+        let encodingMode: UInt8
+    }
+
+    private var lastSignature: Signature?
+
+    mutating func shouldReport(
+        row: UInt16,
+        column: UInt16,
+        button: TerminalMouseButton?,
+        modifiers: NSEvent.ModifierFlags,
+        trackingMode: UInt8,
+        encodingMode: UInt8
+    ) -> Bool {
+        let signature = Signature(
+            row: row,
+            column: column,
+            button: button,
+            modifiers: modifiers.intersection(.deviceIndependentFlagsMask).rawValue,
+            trackingMode: trackingMode,
+            encodingMode: encodingMode
+        )
+        guard signature != lastSignature else { return false }
+        lastSignature = signature
+        return true
+    }
+
+    mutating func reset() {
+        lastSignature = nil
+    }
+}
+
 enum TerminalScrollRouter {
     static func destination(
         localRange: UInt32,

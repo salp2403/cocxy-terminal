@@ -181,6 +181,69 @@ struct TerminalScrollRoutingTests {
         ) == nil)
     }
 
+    @Test("mouse motion deduplication preserves semantic changes")
+    func mouseMotionDeduplicationPreservesSemanticChanges() {
+        var deduplicator = TerminalMouseMotionDeduplicator()
+
+        let firstCell = deduplicator.shouldReport(
+            row: 3,
+            column: 5,
+            button: nil,
+            modifiers: [],
+            trackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            encodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        let repeatedCell = deduplicator.shouldReport(
+            row: 3,
+            column: 5,
+            button: nil,
+            modifiers: [],
+            trackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            encodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        let nextCell = deduplicator.shouldReport(
+            row: 3,
+            column: 6,
+            button: nil,
+            modifiers: [],
+            trackingMode: TerminalMouseTracking.anyEvent.rawValue,
+            encodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        let changedButton = deduplicator.shouldReport(
+            row: 3,
+            column: 6,
+            button: .left,
+            modifiers: [],
+            trackingMode: TerminalMouseTracking.buttonEvent.rawValue,
+            encodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        let changedModifier = deduplicator.shouldReport(
+            row: 3,
+            column: 6,
+            button: .left,
+            modifiers: [.control],
+            trackingMode: TerminalMouseTracking.buttonEvent.rawValue,
+            encodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+
+        #expect(firstCell)
+        #expect(!repeatedCell)
+        #expect(nextCell)
+        #expect(changedButton)
+        #expect(changedModifier)
+
+        deduplicator.reset()
+        let afterReset = deduplicator.shouldReport(
+            row: 3,
+            column: 6,
+            button: .left,
+            modifiers: [.control],
+            trackingMode: TerminalMouseTracking.buttonEvent.rawValue,
+            encodingMode: TerminalMouseEncoding.sgr.rawValue
+        )
+        #expect(afterReset)
+    }
+
     private func encode(
         _ encoding: TerminalMouseEncoding,
         row: UInt16 = 2,

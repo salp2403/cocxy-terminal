@@ -1564,8 +1564,17 @@ struct CocxyCoreViewTests {
         harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: topLeftInWindow))
         try await waitUntil { output.data.containsSubsequence(move) }
 
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        let nextCellInWindow = try selectionMouseLocation(row: 0, column: 1, harness: harness)
+        let nextCellMove = Data("\u{001B}[<35;2;1M".utf8)
+        harness.view.mouseMoved(with: makeMouseEvent(type: .mouseMoved, location: nextCellInWindow))
+        try await waitUntil { output.data.containsSubsequence(nextCellMove) }
+
+        var expectedMotionOutput = move
+        expectedMotionOutput.append(nextCellMove)
+
         #expect(focusRequests == 1)
-        #expect(output.data.containsSubsequence(move))
+        #expect(output.data == expectedMotionOutput)
         #expect(harness.bridge.selectionSnapshot(for: harness.surfaceID)?.active == false)
     }
 

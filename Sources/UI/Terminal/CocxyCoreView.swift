@@ -246,6 +246,7 @@ final class CocxyCoreView: NSView {
     private var lastNotifiedMouseTrackingActive: Bool?
     private var mouseMotionTrackingArea: NSTrackingArea?
     private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
+    private var terminalMouseMotionDeduplicator = TerminalMouseMotionDeduplicator()
     private(set) var detectedContentOverlayView: TerminalDetectedContentOverlayView?
     private(set) var hoveredDetectedContent: TerminalDetectedContent?
     private(set) var detectedContentHintSession: TerminalDetectedContentHintSession?
@@ -1909,6 +1910,7 @@ final class CocxyCoreView: NSView {
     override func mouseMoved(with event: NSEvent) {
         updateDetectedContentHover(with: event)
         guard terminalReportsCurrentUnbuttonedMotion(event) else {
+            terminalMouseMotionDeduplicator.reset()
             super.mouseMoved(with: event)
             return
         }
@@ -1916,6 +1918,7 @@ final class CocxyCoreView: NSView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        terminalMouseMotionDeduplicator.reset()
         clearDetectedContentHover()
         super.mouseExited(with: event)
     }
@@ -2197,6 +2200,9 @@ final class CocxyCoreView: NSView {
         button: TerminalMouseButton?,
         event: NSEvent
     ) {
+        if action != .motion {
+            terminalMouseMotionDeduplicator.reset()
+        }
         guard let bridge,
               let sid = surfaceID,
               let snapshot = bridge.terminalViewportSnapshot(for: sid) else {
@@ -2214,6 +2220,16 @@ final class CocxyCoreView: NSView {
             pixelY: position.pixelY,
             modifiers: event.modifierFlags
         ) else { return }
+        if action == .motion {
+            guard terminalMouseMotionDeduplicator.shouldReport(
+                row: position.row,
+                column: position.column,
+                button: button,
+                modifiers: event.modifierFlags,
+                trackingMode: snapshot.mouseTrackingMode,
+                encodingMode: snapshot.mouseEncodingMode
+            ) else { return }
+        }
         _ = bridge.writeBytes(Array(payload), to: sid)
     }
 

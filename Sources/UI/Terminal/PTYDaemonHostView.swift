@@ -37,6 +37,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private var lastNotifiedMouseTrackingActive: Bool?
     private var mouseMotionTrackingArea: NSTrackingArea?
     private var terminalMouseCaptureByButton: [TerminalMouseButton: Bool] = [:]
+    private var terminalMouseMotionDeduplicator = TerminalMouseMotionDeduplicator()
     private var localSelectionAnchor: PTYDaemonGridPosition?
     private var localSelection: PTYDaemonGridSelection?
     private var semanticSelection: TerminalSemanticSelection?
@@ -592,6 +593,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     override func mouseMoved(with event: NSEvent) {
         updateDetectedContentHover(with: event)
         guard terminalReportsCurrentUnbuttonedMotion(event) else {
+            terminalMouseMotionDeduplicator.reset()
             super.mouseMoved(with: event)
             return
         }
@@ -599,6 +601,7 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     }
 
     override func mouseExited(with event: NSEvent) {
+        terminalMouseMotionDeduplicator.reset()
         clearDetectedContentHover()
         super.mouseExited(with: event)
     }
@@ -1009,6 +1012,9 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
         button: TerminalMouseButton?,
         event: NSEvent
     ) {
+        if action != .motion {
+            terminalMouseMotionDeduplicator.reset()
+        }
         guard let daemon = bridge as? PTYDaemonClient,
               let surfaceID,
               let frame = latestFrame else {
@@ -1027,6 +1033,16 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             pixelY: position.pixelY,
             modifiers: event.modifierFlags
         ) else { return }
+        if action == .motion {
+            guard terminalMouseMotionDeduplicator.shouldReport(
+                row: position.row,
+                column: position.column,
+                button: button,
+                modifiers: event.modifierFlags,
+                trackingMode: modes.tracking,
+                encodingMode: modes.encoding
+            ) else { return }
+        }
         daemon.sendRawBytes(payload, to: surfaceID)
     }
 

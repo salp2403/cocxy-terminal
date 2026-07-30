@@ -686,6 +686,7 @@ struct CocxyCoreHostWiringTests {
             PTYDaemonResponse(id: "drag", ok: true),
             PTYDaemonResponse(id: "release", ok: true),
             PTYDaemonResponse(id: "move", ok: true),
+            PTYDaemonResponse(id: "move-next-cell", ok: true),
         ])
         let client = PTYDaemonClient(connection: connection)
         try client.initialize(config: TerminalEngineConfig(
@@ -710,6 +711,11 @@ struct CocxyCoreHostWiringTests {
         view.mouseDragged(with: makeHostMouseEvent(type: .leftMouseDragged, location: topLeftInWindow))
         view.mouseUp(with: makeHostMouseEvent(type: .leftMouseUp, location: topLeftInWindow))
         view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        view.mouseMoved(with: makeHostMouseEvent(type: .mouseMoved, location: topLeftInWindow))
+        view.mouseMoved(with: makeHostMouseEvent(
+            type: .mouseMoved,
+            location: NSPoint(x: view.bounds.maxX - 1, y: view.bounds.maxY)
+        ))
 
         let writes = try connection.requests
             .filter { $0.command == .surfaceWrite }
@@ -723,6 +729,7 @@ struct CocxyCoreHostWiringTests {
             Data("\u{1B}[<32;1;1M".utf8),
             Data("\u{1B}[<0;1;1m".utf8),
             Data("\u{1B}[<35;1;1M".utf8),
+            Data("\u{1B}[<35;80;1M".utf8),
         ])
     }
 
