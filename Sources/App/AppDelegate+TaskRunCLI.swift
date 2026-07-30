@@ -353,7 +353,7 @@ extension AppDelegate {
                         controller: controller,
                         targetTabID: context.sourceTabID.rawValue,
                         workingDirectory: entrySnapshot.path.path,
-                        persist: false,
+                        persistSnapshot: false,
                         syncDashboard: false
                     )
                     guard launch.tabIDs.count == 1, let tabID = launch.tabIDs.first else {

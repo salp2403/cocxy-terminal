@@ -765,24 +765,6 @@ struct AgentTeamSwiftTestingTests {
         #expect(coordinator.notifications(for: "missing").isEmpty)
     }
 
-    @Test("persistence round trips configs with owner-only file permissions")
-    func persistenceRoundTripsWithOwnerOnlyPermissions() throws {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-agent-teams-\(UUID().uuidString)")
-        defer { try? FileManager.default.removeItem(at: root) }
-
-        let store = AgentTeamPersistence(directory: root)
-        let config = try AgentTeamConfig.from(teammates: "A, B, C", teamID: "persisted", provider: .claudeCode)
-
-        try store.save(config)
-        let loaded = try store.load(teamID: "persisted")
-
-        #expect(loaded == config)
-        let permissions = try FileManager.default.attributesOfItem(
-            atPath: root.appendingPathComponent("persisted.json").path
-        )[.posixPermissions] as? NSNumber
-        #expect(permissions?.intValue == 0o600)
-    }
 }
 
 @MainActor

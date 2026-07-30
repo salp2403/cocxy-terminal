@@ -113,7 +113,8 @@ extension AppDelegate {
                 config,
                 controller: sourceController,
                 targetTabID: sourceTabID.rawValue,
-                workingDirectory: canonicalTaskHandoffWorkingDirectory(for: sourceTab)
+                workingDirectory: canonicalTaskHandoffWorkingDirectory(for: sourceTab),
+                persistSnapshot: false
             )
             guard result.launchResult.launchedCount == 1,
                   result.tabIDs.count == 1 else {

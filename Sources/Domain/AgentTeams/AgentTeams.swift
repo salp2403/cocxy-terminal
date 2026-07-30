@@ -108,7 +108,6 @@ enum AgentTeamError: Error, Equatable, Sendable {
     case alreadyRunning(String)
     case paneLaunchFailed(String)
     case launchPlanMismatch(String)
-    case persistenceFailed(String)
 }
 
 struct AgentTeammateConfig: Identifiable, Codable, Sendable, Equatable {
@@ -350,56 +349,5 @@ final class AgentTeamLauncher {
                 throw AgentTeamError.launchPlanMismatch(teammate.id)
             }
         }
-    }
-}
-
-struct AgentTeamPersistence: Sendable {
-    let directory: URL
-
-    init(directory: URL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/cocxy/teams")) {
-        self.directory = directory
-    }
-
-    func save(_ config: AgentTeamConfig) throws {
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let data = try JSONEncoder.agentTeams.encode(config)
-            let url = fileURL(teamID: config.id)
-            try data.write(to: url, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
-        } catch {
-            throw AgentTeamError.persistenceFailed(error.localizedDescription)
-        }
-    }
-
-    func load(teamID: String) throws -> AgentTeamConfig {
-        do {
-            let data = try Data(contentsOf: fileURL(teamID: teamID))
-            return try JSONDecoder.agentTeams.decode(AgentTeamConfig.self, from: data)
-        } catch {
-            throw AgentTeamError.persistenceFailed(error.localizedDescription)
-        }
-    }
-
-    func fileURL(teamID: String) -> URL {
-        directory.appendingPathComponent("\(AgentTeamConfig.slug(teamID)).json")
-    }
-}
-
-private extension JSONEncoder {
-    static var agentTeams: JSONEncoder {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        encoder.dateEncodingStrategy = .iso8601
-        return encoder
-    }
-}
-
-private extension JSONDecoder {
-    static var agentTeams: JSONDecoder {
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        return decoder
     }
 }

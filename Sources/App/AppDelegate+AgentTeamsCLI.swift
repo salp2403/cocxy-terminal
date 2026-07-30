@@ -270,7 +270,7 @@ extension AppDelegate {
         targetTabID: UUID,
         workingDirectory: String,
         authorizedLaunchSpecs: [AgentTeamProviderLaunchSpec]? = nil,
-        persist: Bool = true,
+        persistSnapshot: Bool = true,
         syncDashboard: Bool = true,
         excludesTaskQueueLifecycleEvents: Bool = false
     ) throws -> AgentTeamAppLaunchResult {
@@ -314,8 +314,7 @@ extension AppDelegate {
                 tabID: paneLauncher.launchedTabIDs.first?.rawValue ?? targetTabID
             )
         }
-        if persist {
-            try? AgentTeamPersistence().save(config)
+        if persistSnapshot {
             if let snapshot = activeAgentTeamRuns[config.id]?.snapshot() {
                 try? AgentTeamSessionSnapshotStore().save(snapshot)
             }

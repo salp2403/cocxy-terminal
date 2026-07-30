@@ -162,7 +162,7 @@ extension AppDelegate {
             controller: controller,
             targetTabID: targetTabID,
             workingDirectory: workingDirectory,
-            persist: false,
+            persistSnapshot: false,
             syncDashboard: true,
             excludesTaskQueueLifecycleEvents: true
         )
