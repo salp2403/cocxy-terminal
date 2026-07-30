@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "เตรียมคำสั่งในเครื่องสำหรับสร้างเซลล์ Docker";
 "command.cells.createSSH.name" = "Cells: สร้างเซลล์ SSH";
 "command.cells.createSSH.description" = "เตรียมคำสั่งสำหรับสร้างเซลล์ SSH ที่ผู้ใช้เป็นเจ้าของ";
+"menu.view.scrollPageUp" = "เลื่อนเทอร์มินัลขึ้นหนึ่งหน้า";
+"menu.view.scrollPageDown" = "เลื่อนเทอร์มินัลลงหนึ่งหน้า";
+"menu.view.scrollToTop" = "เลื่อนเทอร์มินัลไปด้านบนสุด";
+"menu.view.scrollToBottom" = "เลื่อนเทอร์มินัลไปด้านล่างสุด";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "สลับ Vault";
 "keybindings.action.window.vaultSidebar.summary" = "แสดงหรือซ่อน Vault ในเครื่องสำหรับเซสชันเอเจนต์ภายนอก";

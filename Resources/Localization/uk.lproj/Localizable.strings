@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Підготувати локальну команду створення Docker-комірки";
 "command.cells.createSSH.name" = "Cells: створити SSH-комірку";
 "command.cells.createSSH.description" = "Підготувати команду створення користувацької SSH-комірки";
+"menu.view.scrollPageUp" = "Прокрутити термінал на сторінку вгору";
+"menu.view.scrollPageDown" = "Прокрутити термінал на сторінку вниз";
+"menu.view.scrollToTop" = "Прокрутити термінал на початок";
+"menu.view.scrollToBottom" = "Прокрутити термінал у кінець";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Перемкнути Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Показати або приховати локальний Vault сеансів зовнішніх агентів.";

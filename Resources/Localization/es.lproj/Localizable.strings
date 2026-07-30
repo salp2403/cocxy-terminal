@@ -481,6 +481,10 @@
 "menu.view.navigateSplitRight" = "Navegar a división derecha";
 "menu.view.navigateSplitUp" = "Navegar a división superior";
 "menu.view.navigateSplitDown" = "Navegar a división inferior";
+"menu.view.scrollPageUp" = "Desplazar terminal una página arriba";
+"menu.view.scrollPageDown" = "Desplazar terminal una página abajo";
+"menu.view.scrollToTop" = "Desplazar terminal al inicio";
+"menu.view.scrollToBottom" = "Desplazar terminal al final";
 "menu.view.previousPrompt" = "Prompt anterior";
 "menu.view.nextPrompt" = "Prompt siguiente";
 "menu.view.selectCommandOutput" = "Seleccionar salida del comando";

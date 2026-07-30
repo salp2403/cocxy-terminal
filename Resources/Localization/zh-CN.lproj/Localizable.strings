@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "准备用于创建 Docker 单元的本地命令";
 "command.cells.createSSH.name" = "Cells：创建 SSH 单元";
 "command.cells.createSSH.description" = "准备用于创建用户拥有的 SSH 单元的命令";
+"menu.view.scrollPageUp" = "将终端向上滚动一页";
+"menu.view.scrollPageDown" = "将终端向下滚动一页";
+"menu.view.scrollToTop" = "将终端滚动到顶部";
+"menu.view.scrollToBottom" = "将终端滚动到底部";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "切换 Vault";
 "keybindings.action.window.vaultSidebar.summary" = "显示或隐藏本地外部代理会话 Vault。";

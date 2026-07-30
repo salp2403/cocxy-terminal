@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Pripremi lokalnu komandu za kreiranje Docker ćelije";
 "command.cells.createSSH.name" = "Cells: kreiraj SSH ćeliju";
 "command.cells.createSSH.description" = "Pripremi komandu za kreiranje korisničke SSH ćelije";
+"menu.view.scrollPageUp" = "Pomjeri terminal jednu stranicu gore";
+"menu.view.scrollPageDown" = "Pomjeri terminal jednu stranicu dolje";
+"menu.view.scrollToTop" = "Pomjeri terminal na vrh";
+"menu.view.scrollToBottom" = "Pomjeri terminal na dno";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Uključi Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Prikaži ili sakrij lokalni Vault sesija vanjskih agenata.";

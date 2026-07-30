@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Forbered en lokal kommando for å opprette en Docker-celle";
 "command.cells.createSSH.name" = "Cells: opprett SSH-celle";
 "command.cells.createSSH.description" = "Forbered en kommando for å opprette en brukereid SSH-celle";
+"menu.view.scrollPageUp" = "Rull terminalen én side opp";
+"menu.view.scrollPageDown" = "Rull terminalen én side ned";
+"menu.view.scrollToTop" = "Rull terminalen til toppen";
+"menu.view.scrollToBottom" = "Rull terminalen til bunnen";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vis/skjul Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Vis eller skjul lokal Vault for eksterne agentøkter.";

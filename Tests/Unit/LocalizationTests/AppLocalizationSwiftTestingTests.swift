@@ -1097,6 +1097,36 @@ struct AppLocalizationSwiftTestingTests {
     }
 
     @Test
+    func terminalScrollMenuLocalizationKeysExistInEverySupportedResource() throws {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let expectedKeys: Set<String> = [
+            "menu.view.scrollPageUp",
+            "menu.view.scrollPageDown",
+            "menu.view.scrollToTop",
+            "menu.view.scrollToBottom",
+        ]
+        let languages = AppLocalizationResolver.supportedLanguages
+
+        #expect(languages.filter { $0 != .english }.count == 20)
+        for language in languages {
+            let keys = try localizationKeys(
+                at: resourcesRoot.appendingPathComponent(
+                    "\(language.rawValue).lproj/Localizable.strings"
+                )
+            )
+            let missingKeys = expectedKeys.subtracting(keys).sorted()
+
+            #expect(
+                missingKeys.isEmpty,
+                Comment(
+                    rawValue: "\(language.rawValue).lproj is missing terminal scroll menu keys: \(missingKeys.joined(separator: ", "))"
+                )
+            )
+        }
+    }
+
+    @Test
     func agentWorkspaceLocalizationResourcesExposeCellsAndAgentTeamKeys() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)

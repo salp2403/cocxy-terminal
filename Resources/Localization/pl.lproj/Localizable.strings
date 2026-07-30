@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Przygotuj lokalne polecenie utworzenia komórki Docker";
 "command.cells.createSSH.name" = "Cells: utwórz komórkę SSH";
 "command.cells.createSSH.description" = "Przygotuj polecenie utworzenia komórki SSH należącej do użytkownika";
+"menu.view.scrollPageUp" = "Przewiń terminal o stronę w górę";
+"menu.view.scrollPageDown" = "Przewiń terminal o stronę w dół";
+"menu.view.scrollToTop" = "Przewiń terminal na początek";
+"menu.view.scrollToBottom" = "Przewiń terminal na koniec";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Przełącz Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Pokaż lub ukryj lokalny Vault sesji zewnętrznych agentów.";

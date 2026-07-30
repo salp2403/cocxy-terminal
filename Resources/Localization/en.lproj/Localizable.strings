@@ -481,6 +481,10 @@
 "menu.view.navigateSplitRight" = "Navigate Split Right";
 "menu.view.navigateSplitUp" = "Navigate Split Up";
 "menu.view.navigateSplitDown" = "Navigate Split Down";
+"menu.view.scrollPageUp" = "Scroll Terminal Page Up";
+"menu.view.scrollPageDown" = "Scroll Terminal Page Down";
+"menu.view.scrollToTop" = "Scroll Terminal to Top";
+"menu.view.scrollToBottom" = "Scroll Terminal to Bottom";
 "menu.view.previousPrompt" = "Previous Prompt";
 "menu.view.nextPrompt" = "Next Prompt";
 "menu.view.selectCommandOutput" = "Select Command Output";

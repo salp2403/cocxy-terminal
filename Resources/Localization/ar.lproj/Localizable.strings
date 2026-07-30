@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "تحضير أمر محلي لإنشاء خلية Docker";
 "command.cells.createSSH.name" = "Cells: إنشاء خلية SSH";
 "command.cells.createSSH.description" = "تحضير أمر لإنشاء خلية SSH مملوكة للمستخدم";
+"menu.view.scrollPageUp" = "تمرير الطرفية صفحة إلى أعلى";
+"menu.view.scrollPageDown" = "تمرير الطرفية صفحة إلى أسفل";
+"menu.view.scrollToTop" = "التمرير إلى أعلى الطرفية";
+"menu.view.scrollToBottom" = "التمرير إلى أسفل الطرفية";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "تبديل Vault";
 "keybindings.action.window.vaultSidebar.summary" = "إظهار أو إخفاء Vault المحلي لجلسات الوكلاء الخارجية.";

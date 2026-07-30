@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "準備用於建立 Docker 單元的本機命令";
 "command.cells.createSSH.name" = "Cells：建立 SSH 單元";
 "command.cells.createSSH.description" = "準備用於建立使用者擁有的 SSH 單元的命令";
+"menu.view.scrollPageUp" = "將終端機向上捲動一頁";
+"menu.view.scrollPageDown" = "將終端機向下捲動一頁";
+"menu.view.scrollToTop" = "將終端機捲動到頂端";
+"menu.view.scrollToBottom" = "將終端機捲動到底端";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "切換 Vault";
 "keybindings.action.window.vaultSidebar.summary" = "顯示或隱藏本機外部代理工作階段 Vault。";

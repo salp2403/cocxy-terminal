@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Docker セル作成用のローカルコマンドを準備";
 "command.cells.createSSH.name" = "Cells: SSH セルを作成";
 "command.cells.createSSH.description" = "ユーザー所有の SSH セル作成コマンドを準備";
+"menu.view.scrollPageUp" = "ターミナルを1ページ上にスクロール";
+"menu.view.scrollPageDown" = "ターミナルを1ページ下にスクロール";
+"menu.view.scrollToTop" = "ターミナルの先頭へスクロール";
+"menu.view.scrollToBottom" = "ターミナルの末尾へスクロール";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault を切り替え";
 "keybindings.action.window.vaultSidebar.summary" = "ローカルの外部エージェントセッション Vault を表示または非表示にします。";

@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Docker hücresi oluşturmak için yerel bir komut hazırla";
 "command.cells.createSSH.name" = "Cells: SSH hücresi oluştur";
 "command.cells.createSSH.description" = "Kullanıcıya ait bir SSH hücresi oluşturma komutu hazırla";
+"menu.view.scrollPageUp" = "Terminali bir sayfa yukarı kaydır";
+"menu.view.scrollPageDown" = "Terminali bir sayfa aşağı kaydır";
+"menu.view.scrollToTop" = "Terminali en üste kaydır";
+"menu.view.scrollToBottom" = "Terminali en alta kaydır";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault’u aç/kapat";
 "keybindings.action.window.vaultSidebar.summary" = "Yerel harici ajan oturumu Vault’unu göster veya gizle.";

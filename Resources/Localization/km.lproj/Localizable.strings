@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "រៀបចំពាក្យបញ្ជាមូលដ្ឋានសម្រាប់បង្កើត Docker cell";
 "command.cells.createSSH.name" = "Cells: បង្កើត SSH cell";
 "command.cells.createSSH.description" = "រៀបចំពាក្យបញ្ជាសម្រាប់បង្កើត SSH cell ដែលអ្នកប្រើជាម្ចាស់";
+"menu.view.scrollPageUp" = "រំកិលស្ថានីយឡើងលើមួយទំព័រ";
+"menu.view.scrollPageDown" = "រំកិលស្ថានីយចុះក្រោមមួយទំព័រ";
+"menu.view.scrollToTop" = "រំកិលស្ថានីយទៅខាងលើបំផុត";
+"menu.view.scrollToBottom" = "រំកិលស្ថានីយទៅខាងក្រោមបំផុត";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "បិទ/បើក Vault";
 "keybindings.action.window.vaultSidebar.summary" = "បង្ហាញ ឬលាក់ Vault ក្នុងម៉ាស៊ីនសម្រាប់សម័យភ្នាក់ងារខាងក្រៅ។";

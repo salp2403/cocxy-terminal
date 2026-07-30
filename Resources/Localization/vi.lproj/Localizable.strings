@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Chuẩn bị lệnh cục bộ để tạo cell Docker";
 "command.cells.createSSH.name" = "Cells: tạo cell SSH";
 "command.cells.createSSH.description" = "Chuẩn bị lệnh để tạo cell SSH do người dùng sở hữu";
+"menu.view.scrollPageUp" = "Cuộn terminal lên một trang";
+"menu.view.scrollPageDown" = "Cuộn terminal xuống một trang";
+"menu.view.scrollToTop" = "Cuộn terminal lên đầu";
+"menu.view.scrollToBottom" = "Cuộn terminal xuống cuối";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Bật/tắt Vault";
 "keybindings.action.window.vaultSidebar.summary" = "Hiển thị hoặc ẩn Vault cục bộ cho các phiên tác nhân bên ngoài.";

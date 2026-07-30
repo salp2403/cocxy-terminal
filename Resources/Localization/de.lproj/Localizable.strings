@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Einen lokalen Befehl zum Erstellen einer Docker-Zelle vorbereiten";
 "command.cells.createSSH.name" = "Cells: SSH-Zelle erstellen";
 "command.cells.createSSH.description" = "Einen Befehl zum Erstellen einer benutzereigenen SSH-Zelle vorbereiten";
+"menu.view.scrollPageUp" = "Terminal eine Seite nach oben scrollen";
+"menu.view.scrollPageDown" = "Terminal eine Seite nach unten scrollen";
+"menu.view.scrollToTop" = "Terminal ganz nach oben scrollen";
+"menu.view.scrollToBottom" = "Terminal ganz nach unten scrollen";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault umschalten";
 "keybindings.action.window.vaultSidebar.summary" = "Die lokale Vault für externe Agent-Sitzungen ein- oder ausblenden.";

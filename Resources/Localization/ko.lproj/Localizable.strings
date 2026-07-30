@@ -57,6 +57,10 @@
 "command.cells.createDocker.description" = "Docker 셀 생성을 위한 로컬 명령 준비";
 "command.cells.createSSH.name" = "Cells: SSH 셀 생성";
 "command.cells.createSSH.description" = "사용자 소유 SSH 셀 생성 명령 준비";
+"menu.view.scrollPageUp" = "터미널 한 페이지 위로 스크롤";
+"menu.view.scrollPageDown" = "터미널 한 페이지 아래로 스크롤";
+"menu.view.scrollToTop" = "터미널 맨 위로 스크롤";
+"menu.view.scrollToBottom" = "터미널 맨 아래로 스크롤";
 "menu.view.vault" = "Vault";
 "keybindings.action.window.vaultSidebar.name" = "Vault 전환";
 "keybindings.action.window.vaultSidebar.summary" = "로컬 외부 에이전트 세션 Vault를 표시하거나 숨깁니다.";
