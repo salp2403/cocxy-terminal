@@ -82,4 +82,41 @@ struct CommandPaletteTaskHandoffSwiftTestingTests {
 
         #expect(available == [.claudeCode, .codex, .gemini])
     }
+
+    @Test("global palette toggle dismisses the handoff picker before routing to Aurora")
+    func globalToggleDismissesTransientPickerWithAuroraActive() throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        defer { controller.close() }
+
+        let auroraController = AuroraChromeController(
+            tabManager: controller.tabManager,
+            store: AgentStatePerSurfaceStore()
+        )
+        let sidebarHost = auroraController.makeSidebarHost()
+        sidebarHost.isHidden = false
+        controller.auroraChromeController = auroraController
+
+        let sourceTabID = try #require(controller.tabManager.activeTabID)
+        let actions = controller.taskHandoffProviderActions(
+            sourceTabID: sourceTabID,
+            currentProvider: nil,
+            availableProviders: [.codex]
+        )
+        controller.showTransientCommandPaletteOverlay(
+            engine: StaticCommandPaletteEngine(actions: actions)
+        )
+        let transientHost = try #require(controller.commandPaletteHostingView)
+
+        #expect(controller.isAuroraChromeActive)
+        #expect(controller.isCommandPaletteVisible)
+        #expect(transientHost.superview === controller.overlayContainerView)
+
+        controller.toggleCommandPalette()
+
+        #expect(controller.isCommandPaletteVisible == false)
+        #expect(controller.commandPaletteHostingView == nil)
+        #expect(transientHost.superview == nil)
+        #expect(auroraController.isPaletteVisible == false)
+    }
 }

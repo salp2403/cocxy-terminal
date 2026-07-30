@@ -25,6 +25,14 @@ extension MainWindowController {
     // MARK: - Command Palette (Cmd+Shift+P)
 
     func toggleCommandPalette() {
+        // Transient pickers reuse the classic palette host even when Aurora
+        // chrome is active. Close that host before routing the global toggle
+        // so the two palette implementations can never be visible together.
+        if isCommandPaletteVisible {
+            dismissCommandPalette()
+            return
+        }
+
         // When the Aurora chrome is active the shortcut must drive the
         // redesigned palette. Routing here keeps a single entry point
         // (menu action, sidebar tray button, direct caller) consistent
@@ -33,11 +41,7 @@ extension MainWindowController {
             toggleAuroraPalette()
             return
         }
-        if isCommandPaletteVisible {
-            dismissCommandPalette()
-        } else {
-            showCommandPaletteOverlay()
-        }
+        showCommandPaletteOverlay()
     }
 
     @objc func toggleCommandPaletteAction(_ sender: Any?) {
