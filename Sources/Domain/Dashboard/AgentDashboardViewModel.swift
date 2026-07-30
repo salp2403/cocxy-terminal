@@ -56,6 +56,9 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     /// Result of the most recent explicit repair action.
     @Published private(set) var hookRepairSucceeded: Bool?
 
+    /// Total events rejected because their CWD matched no open tab.
+    @Published private(set) var droppedByCwdCount: Int
+
     // MARK: - Publishers
 
     var sessionsPublisher: AnyPublisher<[AgentSessionInfo], Never> {
@@ -163,6 +166,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         self.hookSilenceInterval = hookSilenceInterval
         self.hookConnectionIssue = nil
         self.hookRepairSucceeded = nil
+        self.droppedByCwdCount = 0
         self.hookEventReceiver = hookEventReceiver as? HookEventReceiverImpl
         subscribeToHookEvents(hookEventReceiver)
         subscribeToHookDiagnostics(hookEventReceiver as? HookEventReceiverImpl)
@@ -987,6 +991,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] diagnostics in
                 guard let self else { return }
+                self.droppedByCwdCount = diagnostics.droppedByCwdCount
                 if let context = diagnostics.lastDroppedByCwd {
                     self.hookRepairSucceeded = nil
                     self.hookConnectionIssue = .cwdMismatch(context)

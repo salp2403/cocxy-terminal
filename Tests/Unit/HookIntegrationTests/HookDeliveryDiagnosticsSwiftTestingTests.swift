@@ -131,6 +131,7 @@ struct AgentDashboardHookDiagnosticsSwiftTestingTests {
 
         receiver.recordDroppedByCwd(event)
         try await settleMainActor()
+        #expect(viewModel.droppedByCwdCount == 1)
         guard case .cwdMismatch(let issueContext) = viewModel.hookConnectionIssue else {
             Issue.record("Expected CWD mismatch diagnostic")
             return
@@ -142,6 +143,7 @@ struct AgentDashboardHookDiagnosticsSwiftTestingTests {
         #expect(boundContext == issueContext)
         #expect(viewModel.hookConnectionIssue == nil)
         #expect(viewModel.hookRepairSucceeded == true)
+        #expect(viewModel.droppedByCwdCount == 1)
     }
 
     @Test("reinstall reports failure without hiding the actionable issue")

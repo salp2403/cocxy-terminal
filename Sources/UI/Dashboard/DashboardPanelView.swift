@@ -169,6 +169,10 @@ struct DashboardPanelView: View {
                         } else if let repairSucceeded = viewModel.hookRepairSucceeded {
                             hookRepairResultView(succeeded: repairSucceeded)
                             Divider()
+                        } else if viewModel.droppedByCwdCount > 0 {
+                            droppedEventCountView
+                                .padding(12)
+                            Divider()
                         }
                         ForEach(displayedSessions) { session in
                             DashboardSessionRow(
@@ -209,6 +213,7 @@ struct DashboardPanelView: View {
                 .foregroundColor(Color(nsColor: CocxyColors.overlay0))
                 .multilineTextAlignment(.center)
                 .lineSpacing(2)
+            droppedEventCountView
             Spacer()
         }
         .frame(maxWidth: .infinity)
@@ -258,6 +263,8 @@ struct DashboardPanelView: View {
                 .controlSize(.small)
             }
 
+            droppedEventCountView
+
             if let repairSucceeded = viewModel.hookRepairSucceeded {
                 hookRepairResultContent(succeeded: repairSucceeded)
             }
@@ -268,8 +275,31 @@ struct DashboardPanelView: View {
         .accessibilityElement(children: .contain)
     }
 
+    @ViewBuilder
+    private var droppedEventCountView: some View {
+        if viewModel.droppedByCwdCount > 0 {
+            Label(
+                String(
+                    format: localized(
+                        "agentDashboard.hooks.droppedCount",
+                        fallback: "%d events ignored because their directory did not match"
+                    ),
+                    viewModel.droppedByCwdCount
+                ),
+                systemImage: "folder.badge.questionmark"
+            )
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(Color(nsColor: CocxyColors.overlay1))
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityIdentifier("agentDashboard.hooks.droppedCount")
+        }
+    }
+
     private func hookRepairResultView(succeeded: Bool) -> some View {
-        hookRepairResultContent(succeeded: succeeded)
+        VStack(alignment: .leading, spacing: 8) {
+            hookRepairResultContent(succeeded: succeeded)
+            droppedEventCountView
+        }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(12)
     }

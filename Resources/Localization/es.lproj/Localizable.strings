@@ -383,12 +383,14 @@
 "agentDashboard.empty.all.message" = "Ejecuta un agente IA en la terminal\npara ver su actividad aquí.";
 "agentDashboard.hooks.noEvents" = "Claude Code está corriendo pero Cocxy no recibe sus eventos.";
 "agentDashboard.hooks.cwdMismatch" = "Cocxy recibió eventos del agente que no coinciden con el directorio de ninguna pestaña abierta.";
+"agentDashboard.hooks.droppedCount" = "%d eventos ignorados porque su directorio no coincidió";
 "agentDashboard.hooks.reinstall" = "Reinstalar hooks";
 "agentDashboard.hooks.bind" = "Vincular esta sesión a esta pestaña";
 "agentDashboard.hooks.repair.success" = "La reparación de hooks terminó. Los eventos nuevos volverán a conectar esta sesión.";
 "agentDashboard.hooks.repair.failure" = "No fue posible reparar los hooks desde esta instalación de la aplicación.";
 "agentDashboard.fileImpact.open" = "Revisar %@, %@";
 "agentDashboard.fileImpact.more" = "%d más";
+"agentDashboard.fileImpact.less" = "Mostrar menos";
 "agentDashboard.row.activateHint" = "Activar para cambiar a esta pestaña";
 "agentDashboard.priority.focus" = "Foco";
 "agentDashboard.priority.priority" = "Prioridad";

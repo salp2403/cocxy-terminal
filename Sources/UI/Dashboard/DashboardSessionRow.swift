@@ -25,6 +25,7 @@ struct DashboardSessionRow: View {
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
     @State private var isPulsing = false
+    @State private var areFileImpactsExpanded = false
 
     // MARK: - Body
 
@@ -80,7 +81,10 @@ struct DashboardSessionRow: View {
     private var fileImpactSection: some View {
         if !session.filesTouched.isEmpty {
             VStack(alignment: .leading, spacing: 3) {
-                ForEach(session.filesTouched.prefix(4), id: \.path) { impact in
+                ForEach(Self.visibleFileImpacts(
+                    session.filesTouched,
+                    expanded: areFileImpactsExpanded
+                ), id: \.path) { impact in
                     Button {
                         onOpenFileImpact?(impact.path)
                     } label: {
@@ -118,26 +122,42 @@ struct DashboardSessionRow: View {
                 }
 
                 if session.filesTouched.count > 4 {
-                    HStack(spacing: 4) {
-                        Spacer()
-                        Text(
-                            String(
-                                format: localized(
-                                    "agentDashboard.fileImpact.more",
-                                    fallback: "%d more"
-                                ),
-                                session.filesTouched.count - 4
-                            )
-                        )
-                        .font(.system(size: 8, design: .monospaced))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 7, weight: .semibold))
+                    Button {
+                        areFileImpactsExpanded.toggle()
+                    } label: {
+                        HStack(spacing: 4) {
+                            Spacer()
+                            Text(fileImpactDisclosureTitle)
+                                .font(.system(size: 8, design: .monospaced))
+                            Image(systemName: areFileImpactsExpanded ? "chevron.up" : "chevron.down")
+                                .font(.system(size: 7, weight: .semibold))
+                        }
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay0))
+                    .accessibilityLabel(fileImpactDisclosureTitle)
                 }
             }
             .padding(.leading, 18)
         }
+    }
+
+    static func visibleFileImpacts(
+        _ impacts: [FileImpact],
+        expanded: Bool
+    ) -> ArraySlice<FileImpact> {
+        impacts.prefix(expanded ? impacts.count : 4)
+    }
+
+    private var fileImpactDisclosureTitle: String {
+        if areFileImpactsExpanded {
+            return localized("agentDashboard.fileImpact.less", fallback: "Show fewer")
+        }
+        return String(
+            format: localized("agentDashboard.fileImpact.more", fallback: "%d more"),
+            session.filesTouched.count - 4
+        )
     }
 
     // MARK: - Priority Context Menu

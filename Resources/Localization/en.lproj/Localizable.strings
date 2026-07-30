@@ -383,12 +383,14 @@
 "agentDashboard.empty.all.message" = "Run an AI agent in the terminal\nto see its activity here.";
 "agentDashboard.hooks.noEvents" = "Claude Code is running, but Cocxy is not receiving its events.";
 "agentDashboard.hooks.cwdMismatch" = "Cocxy received agent events that do not match any open tab directory.";
+"agentDashboard.hooks.droppedCount" = "%d events ignored because their directory did not match";
 "agentDashboard.hooks.reinstall" = "Reinstall hooks";
 "agentDashboard.hooks.bind" = "Link this session to this tab";
 "agentDashboard.hooks.repair.success" = "Hook repair completed. New events will reconnect this session.";
 "agentDashboard.hooks.repair.failure" = "Hook repair could not be completed from this app installation.";
 "agentDashboard.fileImpact.open" = "Review %@, %@";
 "agentDashboard.fileImpact.more" = "%d more";
+"agentDashboard.fileImpact.less" = "Show fewer";
 "agentDashboard.row.activateHint" = "Activate to switch to this tab";
 "agentDashboard.priority.focus" = "Focus";
 "agentDashboard.priority.priority" = "Priority";
