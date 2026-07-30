@@ -242,11 +242,24 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         failureMessage = nil
     }
 
-    mutating func markPromotionFailed(_ message: String, now: Date = Date()) {
-        status = .running
+    mutating func markPromotionFailed(
+        candidateID: String,
+        message: String,
+        now: Date = Date()
+    ) {
+        if let index = candidates.firstIndex(where: { $0.id == candidateID }) {
+            candidates[index].status = .failed
+            candidates[index].failureMessage = message
+            candidates[index].worktree?.tabID = nil
+        }
+        let hasAlternative = candidates.contains {
+            $0.id != candidateID && $0.status != .failed && $0.status != .discarded
+        }
+        status = hasAlternative ? .running : .failed
         promotedCandidateID = nil
         updatedAt = now
         failureMessage = message
+        completionWarning = nil
     }
 
     mutating func markCompleted(

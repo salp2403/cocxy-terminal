@@ -3351,8 +3351,8 @@
 "taskRun.compare.promoting" = "Promoviendo candidato...";
 "taskRun.compare.promote" = "Promover";
 "taskRun.compare.confirmTitle" = "¿Promover %@?";
-"taskRun.compare.confirmMessage.one" = "Fusionar la rama %@ en el checkout de origen y eliminar el directorio de %d worktree adicional de la tarea.";
-"taskRun.compare.confirmMessage.many" = "Fusionar la rama %@ en el checkout de origen y eliminar los directorios de otros %d worktrees de la tarea.";
+"taskRun.compare.confirmMessage.one" = "Fusionar la rama %@ en el checkout de origen y luego eliminar todos los directorios de worktree de la tarea. Cualquier cambio sin commit del %d candidato no seleccionado se descartará permanentemente.";
+"taskRun.compare.confirmMessage.many" = "Fusionar la rama %@ en el checkout de origen y luego eliminar todos los directorios de worktree de la tarea. Cualquier cambio sin commit de los %d candidatos no seleccionados se descartará permanentemente.";
 "taskRun.promote.successTitle" = "Candidato promovido";
 "taskRun.promote.successMessage" = "Se fusionó el candidato %@ en el checkout de origen.";
 "taskRun.promote.cleanupTitle" = "Candidato promovido con avisos de limpieza";

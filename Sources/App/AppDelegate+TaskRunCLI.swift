@@ -185,7 +185,13 @@ extension AppDelegate {
         guard actualWorkingDirectory == approvedContext.workingDirectory else {
             return nil
         }
-        return makeTaskRunLaunchContext(controller: controller, tab: tab)
+        guard let context = makeTaskRunLaunchContext(controller: controller, tab: tab),
+              approvedContext.authorityDetails == Self.taskRunLaunchAuthorityDetails(
+                  for: context
+              ) else {
+            return nil
+        }
+        return context
     }
 
     @MainActor
@@ -207,12 +213,49 @@ extension AppDelegate {
               controller.tabManager.tab(for: tabID) != nil,
               entry.path.resolvingSymlinksInPath().standardizedFileURL.path
                 == approvedContext.workingDirectory,
-              approvedContext.authorityDetails["run-id"] == run.id,
-              approvedContext.authorityDetails["candidate-id"] == candidate.id,
-              approvedContext.authorityDetails["branch"] == entry.branch else {
+              approvedContext.authorityDetails == Self.taskRunPromotionAuthorityDetails(
+                  run: run,
+                  candidate: candidate,
+                  entry: entry
+              ) else {
             return false
         }
         return true
+    }
+
+    nonisolated static func taskRunLaunchAuthorityDetails(
+        for context: TaskRunLaunchContext
+    ) -> [String: String] {
+        let origin = resolveOriginRepoRoot(from: context.originRepoPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL.path
+        let expandedBasePath = (context.worktreeConfig.basePath as NSString)
+            .expandingTildeInPath
+        let worktreeRoot = URL(
+            fileURLWithPath: expandedBasePath,
+            isDirectory: true
+        ).standardizedFileURL.path
+        return [
+            "origin-repository": origin,
+            "worktree-root": worktreeRoot,
+        ]
+    }
+
+    nonisolated static func taskRunPromotionAuthorityDetails(
+        run: TaskRun,
+        candidate: TaskRunCandidate,
+        entry: WorktreeManifest.WorktreeEntry
+    ) -> [String: String] {
+        [
+            "run-id": run.id,
+            "candidate-id": candidate.id,
+            "branch": entry.branch,
+            "origin-repository": run.originRepoPath
+                .resolvingSymlinksInPath()
+                .standardizedFileURL.path,
+            "base-commit": run.baseCommit,
+            "discarded-candidates": "\(max(0, run.candidates.count - 1))",
+        ]
     }
 
     nonisolated func performTaskRunLaunch(
@@ -394,15 +437,12 @@ extension AppDelegate {
         try run.markPromoting(candidateID: candidateID)
         let fallbackTabID = selectedEntry.tabID?.rawValue ?? UUID()
         await publishTaskRunSnapshot(run, fallbackTabID: fallbackTabID)
-        let candidatesToStop = run.candidates
         await MainActor.run {
-            for taskCandidate in candidatesToStop {
-                _ = self.removeAgentTeamRuntime(
-                    teamID: taskCandidate.teamID,
-                    worktreeClosePolicyOverride: .keep,
-                    removeDashboardRow: false
-                )
-            }
+            _ = self.removeAgentTeamRuntime(
+                teamID: candidate.teamID,
+                worktreeClosePolicyOverride: .keep,
+                removeDashboardRow: false
+            )
         }
 
         let gitResult: WorktreePromotionResult
@@ -415,9 +455,38 @@ extension AppDelegate {
                 store: store
             )
         } catch {
-            run.markPromotionFailed(String(describing: error))
-            await publishTaskRunSnapshot(run, fallbackTabID: fallbackTabID)
-            throw error
+            let promotionError = error
+            run.markPromotionFailed(
+                candidateID: candidateID,
+                message: String(describing: promotionError)
+            )
+            if let detachedEntry = run.candidates
+                .first(where: { $0.id == candidateID })?
+                .worktree {
+                do {
+                    try await store.upsert(detachedEntry)
+                } catch {
+                    let primaryMessage = run.failureMessage
+                        ?? String(describing: promotionError)
+                    run.failureMessage = "\(primaryMessage). Worktree metadata update failed: \(error)"
+                }
+            }
+            let recoveryTabID = run.candidates
+                .compactMap(\.worktree?.tabID?.rawValue)
+                .first ?? fallbackTabID
+            await publishTaskRunSnapshot(run, fallbackTabID: recoveryTabID)
+            throw promotionError
+        }
+
+        let remainingCandidates = run.candidates.filter { $0.id != candidateID }
+        await MainActor.run {
+            for taskCandidate in remainingCandidates {
+                _ = self.removeAgentTeamRuntime(
+                    teamID: taskCandidate.teamID,
+                    worktreeClosePolicyOverride: .keep,
+                    removeDashboardRow: false
+                )
+            }
         }
 
         var cleanupFailures: [String] = []

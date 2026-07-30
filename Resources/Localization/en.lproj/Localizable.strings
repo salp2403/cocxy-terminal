@@ -3351,8 +3351,8 @@
 "taskRun.compare.promoting" = "Promoting candidate...";
 "taskRun.compare.promote" = "Promote";
 "taskRun.compare.confirmTitle" = "Promote %@?";
-"taskRun.compare.confirmMessage.one" = "Merge branch %@ into the origin checkout and remove %d other task worktree directory.";
-"taskRun.compare.confirmMessage.many" = "Merge branch %@ into the origin checkout and remove %d other task worktree directories.";
+"taskRun.compare.confirmMessage.one" = "Merge branch %@ into the origin checkout, then remove all task worktree directories. Any uncommitted changes in the %d unselected candidate will be permanently discarded.";
+"taskRun.compare.confirmMessage.many" = "Merge branch %@ into the origin checkout, then remove all task worktree directories. Any uncommitted changes in the %d unselected candidates will be permanently discarded.";
 "taskRun.promote.successTitle" = "Candidate Promoted";
 "taskRun.promote.successMessage" = "Merged candidate %@ into the origin checkout.";
 "taskRun.promote.cleanupTitle" = "Candidate Promoted with Cleanup Warnings";

@@ -68,6 +68,127 @@ struct TaskRunSwiftTestingTests {
         #expect(run.candidates[0].estimatedCostMicros == 42)
     }
 
+    @Test("failed promotion detaches only the selected candidate and keeps an alternative runnable")
+    func failedPromotionKeepsAlternativeRunnable() throws {
+        let request = try TaskRunRequest.make(
+            prompt: "Ship",
+            agents: "codex,claude"
+        )
+        var run = TaskRun(
+            id: "promotion-recovery",
+            request: request,
+            originRepoPath: URL(fileURLWithPath: "/tmp/repo"),
+            baseCommit: "abc123"
+        )
+        let selectedID = try #require(run.candidates.first?.id)
+        let alternativeID = try #require(run.candidates.last?.id)
+        let selectedTabID = TabID()
+        let alternativeTabID = TabID()
+        try run.updateCandidate(id: selectedID) {
+            $0.status = .running
+            $0.worktree = WorktreeManifest.WorktreeEntry(
+                id: "selected-worktree",
+                branch: "task/selected",
+                path: URL(fileURLWithPath: "/tmp/selected-worktree"),
+                createdAt: Date(timeIntervalSince1970: 1),
+                agent: "codex",
+                tabID: selectedTabID
+            )
+        }
+        try run.updateCandidate(id: alternativeID) {
+            $0.status = .running
+            $0.worktree = WorktreeManifest.WorktreeEntry(
+                id: "alternative-worktree",
+                branch: "task/alternative",
+                path: URL(fileURLWithPath: "/tmp/alternative-worktree"),
+                createdAt: Date(timeIntervalSince1970: 1),
+                agent: "claude-code",
+                tabID: alternativeTabID
+            )
+        }
+        run.markRunning()
+        try run.markPromoting(candidateID: selectedID)
+
+        run.markPromotionFailed(
+            candidateID: selectedID,
+            message: "commit failed"
+        )
+
+        #expect(run.status == .running)
+        #expect(run.promotedCandidateID == nil)
+        #expect(run.failureMessage == "commit failed")
+        #expect(run.candidates.first(where: { $0.id == selectedID })?.status == .failed)
+        #expect(run.candidates.first(where: { $0.id == selectedID })?.worktree?.tabID == nil)
+        #expect(run.candidates.first(where: { $0.id == alternativeID })?.status == .running)
+        #expect(run.candidates.first(where: { $0.id == alternativeID })?.worktree?.tabID == alternativeTabID)
+    }
+
+    @Test("task run authority identifies every filesystem mutation boundary")
+    func taskRunAuthorityIdentifiesMutationBoundaries() throws {
+        let worktreeConfig = WorktreeConfig(
+            enabled: true,
+            basePath: "~/.cocxy/worktrees",
+            branchTemplate: "cocxy/{agent}/{id}",
+            baseRef: "HEAD",
+            onClose: .keep,
+            openInNewTab: true,
+            idLength: 6,
+            inheritProjectConfig: true,
+            showBadge: true
+        )
+        let launchContext = TaskRunLaunchContext(
+            worktreeConfig: worktreeConfig,
+            originRepoPath: URL(fileURLWithPath: "/tmp/task-run-authority"),
+            windowID: WindowID(),
+            sourceTabID: TabID(),
+            approvedWorkingDirectory: "/tmp/task-run-authority"
+        )
+        let launchDetails = AppDelegate.taskRunLaunchAuthorityDetails(
+            for: launchContext
+        )
+        #expect(launchDetails["origin-repository"] == URL(
+            fileURLWithPath: "/tmp/task-run-authority"
+        ).resolvingSymlinksInPath().standardizedFileURL.path)
+        #expect(launchDetails["worktree-root"] == URL(
+            fileURLWithPath: (worktreeConfig.basePath as NSString).expandingTildeInPath,
+            isDirectory: true
+        ).standardizedFileURL.path)
+
+        let request = try TaskRunRequest.make(
+            prompt: "Compare",
+            agents: "codex,claude"
+        )
+        var run = TaskRun(
+            id: "authority",
+            request: request,
+            originRepoPath: URL(fileURLWithPath: "/tmp/task-run-origin"),
+            baseCommit: "abc123"
+        )
+        let candidateID = try #require(run.candidates.first?.id)
+        let entry = WorktreeManifest.WorktreeEntry(
+            id: "candidate-worktree",
+            branch: "task/candidate",
+            path: URL(fileURLWithPath: "/tmp/candidate-worktree"),
+            createdAt: Date(timeIntervalSince1970: 1),
+            agent: "codex",
+            tabID: TabID()
+        )
+        try run.updateCandidate(id: candidateID) { $0.worktree = entry }
+        let candidate = try #require(run.candidates.first)
+        let promotionDetails = AppDelegate.taskRunPromotionAuthorityDetails(
+            run: run,
+            candidate: candidate,
+            entry: entry
+        )
+
+        #expect(promotionDetails["run-id"] == run.id)
+        #expect(promotionDetails["candidate-id"] == candidate.id)
+        #expect(promotionDetails["branch"] == entry.branch)
+        #expect(promotionDetails["origin-repository"] == run.originRepoPath.path)
+        #expect(promotionDetails["base-commit"] == run.baseCommit)
+        #expect(promotionDetails["discarded-candidates"] == "1")
+    }
+
     @Test("launch planning preflights every provider and preserves the prompt")
     func launchPlanningPreflightsEveryProvider() throws {
         let request = try TaskRunRequest.make(

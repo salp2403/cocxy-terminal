@@ -494,12 +494,11 @@ extension AppDelegate {
                         windowControllerIdentifier: ObjectIdentifier(controller),
                         tabID: tabID.rawValue,
                         workingDirectory: workingDirectory,
-                        authorityDetails: [
-                            "run-id": run.id,
-                            "candidate-id": candidate.id,
-                            "branch": entry.branch,
-                            "discarded-candidates": "\(max(0, run.candidates.count - 1))",
-                        ],
+                        authorityDetails: Self.taskRunPromotionAuthorityDetails(
+                            run: run,
+                            candidate: candidate,
+                            entry: entry
+                        ),
                         surfaceID: nil,
                         browserViewModelIdentifier: nil,
                         browserTabID: nil,
@@ -512,6 +511,19 @@ extension AppDelegate {
             if request.command == .agentTeamLaunch || request.command == .taskRun {
                 guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
                 let workingDirectory = canonicalWorkingDirectory(for: tab)
+                let authorityDetails: [String: String]
+                if request.command == .taskRun {
+                    guard let launchContext = focusedTaskRunLaunchContext(),
+                          launchContext.windowID == focusedController.windowID,
+                          launchContext.sourceTabID == tabID else {
+                        return nil
+                    }
+                    authorityDetails = Self.taskRunLaunchAuthorityDetails(
+                        for: launchContext
+                    )
+                } else {
+                    authorityDetails = [:]
+                }
                 let targetName = request.command == .taskRun
                     ? "Parallel task in \(tab.displayTitle)"
                     : "Agent team in \(tab.displayTitle)"
@@ -521,6 +533,7 @@ extension AppDelegate {
                         windowControllerIdentifier: ObjectIdentifier(focusedController),
                         tabID: tabID.rawValue,
                         workingDirectory: workingDirectory,
+                        authorityDetails: authorityDetails,
                         surfaceID: nil,
                         browserViewModelIdentifier: nil,
                         browserTabID: nil,
