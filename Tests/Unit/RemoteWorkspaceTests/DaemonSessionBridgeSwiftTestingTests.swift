@@ -7,6 +7,16 @@ import Testing
 @Suite("DaemonSessionBridge", .serialized)
 @MainActor
 struct DaemonSessionBridgeSwiftTestingTests {
+    @Test("session identifiers match the remote daemon contract")
+    func sessionIdentifierValidation() {
+        #expect(DaemonSessionBridge.isValidSessionIdentifier("build_1.2@$"))
+        #expect(DaemonSessionBridge.isValidSessionIdentifier(String(repeating: "a", count: 128)))
+        #expect(!DaemonSessionBridge.isValidSessionIdentifier("-option"))
+        #expect(!DaemonSessionBridge.isValidSessionIdentifier("build session"))
+        #expect(!DaemonSessionBridge.isValidSessionIdentifier("sesión"))
+        #expect(!DaemonSessionBridge.isValidSessionIdentifier(String(repeating: "a", count: 129)))
+    }
+
     @Test("attached session serializes input, coalesces resize, and deduplicates snapshots")
     func attachedSessionRoutesBidirectionalIO() async throws {
         let connection = RecordingDaemonSessionConnection()

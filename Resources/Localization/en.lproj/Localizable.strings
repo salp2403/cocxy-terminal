@@ -3107,6 +3107,7 @@
 "remoteWorkspace.daemon.session.disconnected" = "Remote session disconnected. Reconnect from Remote Workspaces.";
 "remoteWorkspace.daemon.session.surfaceUnavailable" = "A terminal surface is not available for this remote session.";
 "remoteWorkspace.daemon.session.connectionUnavailable" = "Reconnect this profile before opening a remote session.";
+"remoteWorkspace.daemon.session.invalidTitle" = "Use 1-128 characters: A-Z, a-z, 0-9, . _ @ $ or -; the name cannot start with -.";
 "remoteWorkspace.daemon.persistentForwards" = "Persistent Forwards";
 "remoteWorkspace.daemon.forwardSpec.placeholder" = "local:remote";
 "remoteWorkspace.daemon.noPersistentForwards" = "No persistent forwards";

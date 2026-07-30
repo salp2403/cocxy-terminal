@@ -115,6 +115,38 @@ struct RemoteSessionAttachSwiftTestingTests {
         controller.performCloseTab(tabID)
     }
 
+    @Test("invalid daemon session names fail before creating a tab")
+    func invalidDaemonSessionNameRollsBackBeforeCreation() async throws {
+        let defaultEngine = MockTerminalEngine()
+        let inProcessBridge = try makeRemoteSessionTestBridge()
+        let controller = MainWindowController(
+            bridge: defaultEngine,
+            terminalEngineFactory: { preference in
+                preference == .inProcess ? inProcessBridge : nil
+            }
+        )
+        let connection = RecordingRemoteSessionConnection()
+        let viewModel = RemoteDaemonTerminalViewModel(
+            sessionBridge: DaemonSessionBridge(connection: connection)
+        )
+        let initialTabIDs = controller.tabManager.tabs.map(\.id)
+
+        do {
+            _ = try await controller.openRemoteDaemonTerminal(
+                viewModel: viewModel,
+                action: .create(title: "invalid session"),
+                title: "invalid session"
+            )
+            Issue.record("Expected invalid daemon session name to fail")
+        } catch {
+            #expect(error.localizedDescription.contains("1-128"))
+        }
+
+        #expect(controller.tabManager.tabs.map(\.id) == initialTabIDs)
+        #expect(connection.calls.isEmpty)
+        #expect(controller.remoteDaemonTerminalViewModels.isEmpty)
+    }
+
     @Test("tmux attach sends the validated command to the new in-process tab")
     func tmuxAttachTabSendsCommand() async throws {
         let defaultEngine = MockTerminalEngine()

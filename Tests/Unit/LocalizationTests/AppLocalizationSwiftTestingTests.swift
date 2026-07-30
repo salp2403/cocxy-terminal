@@ -393,6 +393,7 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("remoteWorkspace.daemon.controls", fallback: "Controls") == "Controles")
         #expect(spanish.string("remoteWorkspace.sessions.attach.help", fallback: "Open session in a terminal tab") == "Abrir sesión en una pestaña de terminal")
         #expect(spanish.string("remoteWorkspace.daemon.session.disconnected", fallback: "Remote session disconnected. Reconnect from Remote Workspaces.") == "La sesión remota se desconectó. Vuelve a conectarla desde Espacios remotos.")
+        #expect(spanish.string("remoteWorkspace.daemon.session.invalidTitle", fallback: "Invalid session name") == "Usa de 1 a 128 caracteres: A-Z, a-z, 0-9, . _ @ $ o -; el nombre no puede comenzar con -.")
         #expect(spanish.string("remoteWorkspace.relay.activeChannels", fallback: "Active Channels") == "Canales activos")
         #expect(spanish.string("remoteWorkspace.relay.hosts", fallback: "Hosts:") == "Servidores:")
         #expect(spanish.string("remoteWorkspace.relay.processes", fallback: "Procs:") == "Procesos:")

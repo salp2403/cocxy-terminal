@@ -276,7 +276,17 @@ struct DaemonControlView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundColor(Color(nsColor: CocxyColors.green))
-                    .disabled(isLoadingSessions)
+                    .disabled(isLoadingSessions || !isNewSessionTitleValid)
+                }
+
+                if !isNewSessionTitleValid {
+                    Text(localized(
+                        "remoteWorkspace.daemon.session.invalidTitle",
+                        fallback: "Use 1-128 characters: A-Z, a-z, 0-9, . _ @ $ or -; the name cannot start with -."
+                    ))
+                    .font(.system(size: 9))
+                    .foregroundColor(Color(nsColor: CocxyColors.red))
+                    .fixedSize(horizontal: false, vertical: true)
                 }
 
                 if isLoadingSessions {
@@ -577,6 +587,13 @@ struct DaemonControlView: View {
     private func createSession() {
         let normalizedTitle = newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
         let title = normalizedTitle.isEmpty ? "cocxy-session" : normalizedTitle
+        guard DaemonSessionBridge.isValidSessionIdentifier(title) else {
+            errorMessage = localized(
+                "remoteWorkspace.daemon.session.invalidTitle",
+                fallback: "Use 1-128 characters: A-Z, a-z, 0-9, . _ @ $ or -; the name cannot start with -."
+            )
+            return
+        }
         guard let onCreateSession else {
             errorMessage = localized(
                 "remoteWorkspace.daemon.session.surfaceUnavailable",
@@ -753,6 +770,11 @@ struct DaemonControlView: View {
             return "\(hours)h \(minutes)m"
         }
         return "\(minutes)m"
+    }
+
+    private var isNewSessionTitleValid: Bool {
+        let normalized = newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty || DaemonSessionBridge.isValidSessionIdentifier(normalized)
     }
 
     private func localized(_ key: String, fallback: String) -> String {

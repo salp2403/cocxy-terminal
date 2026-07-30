@@ -3107,6 +3107,7 @@
 "remoteWorkspace.daemon.session.disconnected" = "La sesión remota se desconectó. Vuelve a conectarla desde Espacios remotos.";
 "remoteWorkspace.daemon.session.surfaceUnavailable" = "No hay una superficie de terminal disponible para esta sesión remota.";
 "remoteWorkspace.daemon.session.connectionUnavailable" = "Vuelve a conectar este perfil antes de abrir una sesión remota.";
+"remoteWorkspace.daemon.session.invalidTitle" = "Usa de 1 a 128 caracteres: A-Z, a-z, 0-9, . _ @ $ o -; el nombre no puede comenzar con -.";
 "remoteWorkspace.daemon.persistentForwards" = "Redirecciones persistentes";
 "remoteWorkspace.daemon.forwardSpec.placeholder" = "local:remoto";
 "remoteWorkspace.daemon.noPersistentForwards" = "No hay redirecciones persistentes";

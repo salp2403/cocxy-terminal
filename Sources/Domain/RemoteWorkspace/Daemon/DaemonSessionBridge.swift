@@ -44,6 +44,18 @@ final class DaemonSessionBridge: ObservableObject {
     static let idlePollIntervalNanoseconds: UInt64 = 150_000_000
     static let maximumConsecutiveReadFailures = 3
 
+    static func isValidSessionIdentifier(_ value: String) -> Bool {
+        guard !value.isEmpty,
+              value.utf8.count <= 128,
+              value.first != "-" else {
+            return false
+        }
+        let allowed = CharacterSet(
+            charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._@$-"
+        )
+        return value.unicodeScalars.allSatisfy { allowed.contains($0) }
+    }
+
     // MARK: - State
 
     @Published private(set) var attachedSessionID: String?

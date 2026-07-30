@@ -60,6 +60,20 @@ extension MainWindowController {
         action: RemoteDaemonTerminalOpenAction,
         title: String
     ) async throws -> TabID {
+        let validatedAction: RemoteDaemonTerminalOpenAction
+        switch action {
+        case .attach:
+            validatedAction = action
+        case .create(let sessionTitle):
+            let normalizedTitle = sessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard DaemonSessionBridge.isValidSessionIdentifier(normalizedTitle) else {
+                throw remoteSessionError(
+                    key: "remoteWorkspace.daemon.session.invalidTitle",
+                    fallback: "Use 1-128 characters: A-Z, a-z, 0-9, . _ @ $ or -; the name cannot start with -."
+                )
+            }
+            validatedAction = .create(title: normalizedTitle)
+        }
         let disconnectMessage = appLocalizer().string(
             "remoteWorkspace.daemon.session.disconnected",
             fallback: "Remote session disconnected. Reconnect from Remote Workspaces."
@@ -100,7 +114,7 @@ extension MainWindowController {
         }
 
         do {
-            switch action {
+            switch validatedAction {
             case .attach(let sessionID):
                 try await viewModel.attach(sessionID: sessionID)
             case .create(let sessionTitle):
