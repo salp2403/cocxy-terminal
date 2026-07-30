@@ -139,7 +139,7 @@ extension MainWindowController {
     }
 
     @MainActor
-    private func availableWorktreeBaseRefs() -> [String] {
+    func availableWorktreeBaseRefs() -> [String] {
         guard let repo = currentWorktreeOriginRepo() else {
             return ["HEAD"]
         }

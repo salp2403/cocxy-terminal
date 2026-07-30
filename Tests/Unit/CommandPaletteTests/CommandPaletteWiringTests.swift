@@ -87,8 +87,11 @@ final class CommandPaletteWiringTests: XCTestCase {
             "theme.cycle",
             "sidebar.transparency",
             "navigation.quickswitch",
+            "navigation.jumpProject",
             "navigation.quickterminal",
             "window.pictureInPicture",
+            "taskRun.fanOut",
+            "taskRun.compare",
         ]
 
         XCTAssertTrue(
@@ -121,6 +124,9 @@ final class CommandPaletteWiringTests: XCTestCase {
         let auroraActionIDs = Set(controller.buildAuroraPaletteActions().map(\.id))
         XCTAssertTrue(auroraActionIDs.contains("tabs.rename"))
         XCTAssertTrue(auroraActionIDs.contains("workspace.rename"))
+        XCTAssertTrue(auroraActionIDs.contains("navigation.jumpProject"))
+        XCTAssertTrue(auroraActionIDs.contains("taskRun.fanOut"))
+        XCTAssertTrue(auroraActionIDs.contains("taskRun.compare"))
         XCTAssertEqual(actionsByID["theme.cycle"]?.name, "Toggle Light/Dark Theme")
         XCTAssertEqual(
             actionsByID["theme.cycle"]?.localized(

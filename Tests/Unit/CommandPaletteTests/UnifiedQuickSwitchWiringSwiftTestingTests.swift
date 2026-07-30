@@ -149,6 +149,48 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
         #expect(controller.tabManager.activeTabID == worktreeTab.id)
     }
 
+    @Test("project targets use Aurora workspace names and prefer the active session")
+    func projectTargetsUseAuroraWorkspaceNames() {
+        let activeID = UUID().uuidString
+        let otherID = UUID().uuidString
+        let session = { (id: String, name: String) in
+            Design.AuroraSession(
+                id: id,
+                name: name,
+                agent: .claude,
+                state: .working,
+                panes: []
+            )
+        }
+        let workspaces = [
+            Design.AuroraWorkspace(
+                id: "/repo/product",
+                name: "Product Workspace",
+                branch: "main",
+                isCollapsed: false,
+                sessions: [session(otherID, "first"), session(activeID, "active")]
+            ),
+            Design.AuroraWorkspace(
+                id: "/repo/empty",
+                name: "Empty Workspace",
+                branch: nil,
+                isCollapsed: false,
+                sessions: []
+            ),
+        ]
+
+        let targets = MainWindowController.projectQuickSwitchTargets(
+            from: workspaces,
+            activeSessionID: activeID
+        )
+
+        #expect(targets.count == 1)
+        #expect(targets[0].name == "Product Workspace")
+        #expect(targets[0].sessionID == activeID)
+        #expect(targets[0].sessionCount == 2)
+        #expect(targets[0].branch == "main")
+    }
+
     @Test("configured QuickSwitch defaults to the unified command palette")
     func configuredQuickSwitchOpensUnifiedOverlay() throws {
         let controller = MainWindowController(

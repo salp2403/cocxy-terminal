@@ -15,6 +15,7 @@ struct DiffViewerView: View {
     @Binding var mode: DiffViewerMode
     var onStage: (FileDiff, DiffHunk, DiffStagingAction) -> Void
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
+    var showsStagingControls = true
 
     @State private var selectedFilePath: String?
 
@@ -111,9 +112,19 @@ struct DiffViewerView: View {
         if let selectedFile {
             switch mode {
             case .unified:
-                UnifiedDiffView(fileDiff: selectedFile, onStage: onStage, localizer: localizer)
+                UnifiedDiffView(
+                    fileDiff: selectedFile,
+                    onStage: onStage,
+                    localizer: localizer,
+                    showsStagingControls: showsStagingControls
+                )
             case .split:
-                SplitDiffView(fileDiff: selectedFile, onStage: onStage, localizer: localizer)
+                SplitDiffView(
+                    fileDiff: selectedFile,
+                    onStage: onStage,
+                    localizer: localizer,
+                    showsStagingControls: showsStagingControls
+                )
             }
         } else {
             SourceControlEmptyState(
@@ -128,6 +139,7 @@ struct UnifiedDiffView: View {
     let fileDiff: FileDiff
     var onStage: (FileDiff, DiffHunk, DiffStagingAction) -> Void
     var localizer: AppLocalizer
+    var showsStagingControls: Bool
 
     var body: some View {
         ScrollView {
@@ -138,7 +150,8 @@ struct UnifiedDiffView: View {
                         hunk: hunk,
                         mode: .unified,
                         onStage: onStage,
-                        localizer: localizer
+                        localizer: localizer,
+                        showsStagingControls: showsStagingControls
                     )
                 }
             }
@@ -151,6 +164,7 @@ struct SplitDiffView: View {
     let fileDiff: FileDiff
     var onStage: (FileDiff, DiffHunk, DiffStagingAction) -> Void
     var localizer: AppLocalizer
+    var showsStagingControls: Bool
 
     var body: some View {
         ScrollView {
@@ -161,7 +175,8 @@ struct SplitDiffView: View {
                         hunk: hunk,
                         mode: .split,
                         onStage: onStage,
-                        localizer: localizer
+                        localizer: localizer,
+                        showsStagingControls: showsStagingControls
                     )
                 }
             }
@@ -176,6 +191,7 @@ struct DiffHunkView: View {
     let mode: DiffViewerMode
     var onStage: (FileDiff, DiffHunk, DiffStagingAction) -> Void
     var localizer: AppLocalizer
+    var showsStagingControls: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -185,10 +201,12 @@ struct DiffHunkView: View {
                     .foregroundColor(.secondary)
                     .lineLimit(1)
                 Spacer()
-                DiffStagingControls(
-                    onAction: { action in onStage(fileDiff, hunk, action) },
-                    localizer: localizer
-                )
+                if showsStagingControls {
+                    DiffStagingControls(
+                        onAction: { action in onStage(fileDiff, hunk, action) },
+                        localizer: localizer
+                    )
+                }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 6)

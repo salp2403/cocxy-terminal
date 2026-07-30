@@ -1035,6 +1035,19 @@ extension MainWindowController {
                 }
             ),
             CommandAction(
+                id: "navigation.jumpProject",
+                name: "Jump to Project...",
+                description: "Switch to a live project by its workspace name",
+                shortcut: nil,
+                category: .navigation,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.showProjectQuickSwitchOverlay()
+                    }
+                }
+            ),
+            CommandAction(
                 id: "navigation.quickterminal",
                 name: "Toggle Quick Terminal",
                 description: "Show or hide the dropdown quick terminal",
@@ -1049,6 +1062,32 @@ extension MainWindowController {
             ),
             pictureInPictureCommandAction(
                 isEnabled: configService?.current.experimental.pipEnabled == true
+            ),
+            CommandAction(
+                id: "taskRun.fanOut",
+                name: "Fan Out Task...",
+                description: "Run one task in isolated worktrees with multiple local agents",
+                shortcut: nil,
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.showTaskRunLaunchSheet()
+                    }
+                }
+            ),
+            CommandAction(
+                id: "taskRun.compare",
+                name: "Compare Parallel Task...",
+                description: "Review candidate status, cost, branches, and diffs",
+                shortcut: nil,
+                category: .agent,
+                handler: { [weak self] in
+                    self?.dismissCommandPalette()
+                    Task { @MainActor in
+                        self?.showTaskRunComparisonPicker()
+                    }
+                }
             ),
             CommandAction(
                 id: "worktree.create",

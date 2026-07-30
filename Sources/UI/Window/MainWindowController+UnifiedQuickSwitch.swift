@@ -6,6 +6,14 @@ import CocxyShared
 import Foundation
 import SwiftUI
 
+struct ProjectQuickSwitchTarget: Identifiable, Equatable, Sendable {
+    let id: String
+    let name: String
+    let branch: String?
+    let sessionID: String
+    let sessionCount: Int
+}
+
 @MainActor
 extension MainWindowController {
 
@@ -27,6 +35,54 @@ extension MainWindowController {
         }
 
         showTransientCommandPaletteOverlay(engine: StaticCommandPaletteEngine(actions: actions))
+    }
+
+    /// Opens a project-only palette whose search surface is built from
+    /// the canonical Aurora workspace names. This remains available when
+    /// Aurora chrome is disabled by deriving the same workspace model from
+    /// live tabs without mounting any additional chrome.
+    func showProjectQuickSwitchOverlay() {
+        let workspaces = projectQuickSwitchWorkspaces()
+        let targets = Self.projectQuickSwitchTargets(
+            from: workspaces,
+            activeSessionID: tabManager.activeTabID?.rawValue.uuidString
+        )
+        guard !targets.isEmpty else {
+            NSSound.beep()
+            return
+        }
+        let localizer = appLocalizer()
+        let actions = targets.map { target in
+            let sessionLabel = String(
+                format: localizer.string(
+                    target.sessionCount == 1
+                        ? "quickSwitch.project.session.one"
+                        : "quickSwitch.project.session.many",
+                    fallback: target.sessionCount == 1
+                        ? "%d session"
+                        : "%d sessions"
+                ),
+                target.sessionCount
+            )
+            let details = [target.branch, sessionLabel]
+                .compactMap { $0 }
+                .joined(separator: " | ")
+            return CommandAction(
+                id: "project.quickswitch.\(target.id)",
+                name: target.name,
+                description: details,
+                shortcut: nil,
+                category: .navigation,
+                handler: { [weak self, sessionID = target.sessionID] in
+                    self?.dismissCommandPalette()
+                    guard let uuid = UUID(uuidString: sessionID) else { return }
+                    _ = self?.focusTab(id: TabID(rawValue: uuid))
+                }
+            )
+        }
+        showTransientCommandPaletteOverlay(
+            engine: StaticCommandPaletteEngine(actions: actions)
+        )
     }
 
     /// Executes the user-configured QuickSwitch mode.
@@ -106,6 +162,48 @@ extension MainWindowController {
         items.append(contentsOf: unifiedQuickSwitchWorktreeItems(localizer: localizer))
         items.append(contentsOf: unifiedQuickSwitchNoteItems(localizer: localizer))
         return items
+    }
+
+    static func projectQuickSwitchTargets(
+        from workspaces: [Design.AuroraWorkspace],
+        activeSessionID: String?
+    ) -> [ProjectQuickSwitchTarget] {
+        workspaces.compactMap { workspace in
+            guard let session = workspace.sessions.first(where: {
+                $0.id == activeSessionID
+            }) ?? workspace.sessions.first else {
+                return nil
+            }
+            return ProjectQuickSwitchTarget(
+                id: workspace.id,
+                name: workspace.name,
+                branch: workspace.branch,
+                sessionID: session.id,
+                sessionCount: workspace.sessions.count
+            )
+        }
+    }
+
+    private func projectQuickSwitchWorkspaces() -> [Design.AuroraWorkspace] {
+        if let controller = auroraChromeController {
+            controller.refreshSources()
+            return controller.workspaces
+        }
+        let store = injectedPerSurfaceStore ?? AgentStatePerSurfaceStore()
+        let sources = AuroraSourceBuilder.buildSources(
+            tabs: tabManager.tabs,
+            surfaceIDsByTab: [:],
+            store: store,
+            workspaceTitlesByIdentity: auroraWorkspaceTitleStore.snapshot,
+            worktreeBadgeVisibleProvider: { [weak self] tab in
+                guard let self else { return true }
+                return Self.effectiveWorktreeConfig(
+                    for: tab,
+                    globalConfig: self.configService?.current ?? .defaults
+                ).showBadge
+            }
+        )
+        return Design.AuroraWorkspaceAdapter.workspaces(from: sources)
     }
 
     private func unifiedQuickSwitchTabItems(localizer: AppLocalizer) -> [UnifiedQuickSwitchItem] {
