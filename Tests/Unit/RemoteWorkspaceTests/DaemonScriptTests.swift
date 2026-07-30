@@ -356,6 +356,148 @@ struct DaemonScriptTests {
         ).contains(#""pong":true"#))
     }
 
+    @Test("Authenticated session attach carries input, output, and resize semantics")
+    func sessionAttachTransportRoundTrip() throws {
+        let runtimeDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxyd-session-transport-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: runtimeDirectory,
+            withIntermediateDirectories: true
+        )
+        defer {
+            _ = try? runScript(
+                args: ["stop", profileNamespace],
+                runtimeDirectory: runtimeDirectory
+            )
+            try? FileManager.default.removeItem(at: runtimeDirectory)
+        }
+
+        let start = try runScript(
+            args: ["start", profileNamespace],
+            runtimeDirectory: runtimeDirectory
+        )
+        let port = try daemonPort(from: start.stdout)
+        let capability = try daemonCapability(
+            runtimeDirectory: runtimeDirectory,
+            namespace: profileNamespace
+        )
+        let sessionID = "transport-\(UUID().uuidString.prefix(8).lowercased())"
+        defer {
+            _ = try? sendLoopbackRequest(
+                "\(capability)\t"
+                    + #"{"proto":1,"id":"req-48","cmd":"session.kill","args":{"id":""#
+                    + sessionID + #""}}"#,
+                port: port,
+                expectSuccess: false
+            )
+        }
+
+        let status = try responseObject(try sendLoopbackRequest(
+            "\(capability)\t" + #"{"proto":1,"id":"req-40","cmd":"status"}"#,
+            port: port
+        ))
+        let statusData = try #require(status["data"] as? [String: Any])
+        let sessionTool = try #require(statusData["sessionTool"] as? String)
+
+        let create = try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-41","cmd":"session.create","args":{"title":""#
+                + sessionID + #""}}"#,
+            port: port
+        )
+        #expect(try responseObject(create)["ok"] as? Bool == true)
+
+        let missingAttach = try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-42","cmd":"session.attach","args":{"id":"missing-session"}}"#,
+            port: port
+        )
+        #expect(try responseObject(missingAttach)["ok"] as? Bool == false)
+
+        let attach = try responseObject(try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-43","cmd":"session.attach","args":{"id":""#
+                + sessionID + #""}}"#,
+            port: port
+        ))
+        #expect(attach["ok"] as? Bool == true)
+        let attachData = try #require(attach["data"] as? [String: Any])
+        #expect(attachData["mode"] as? String == (sessionTool == "screen" ? "stream" : "snapshot"))
+        #expect(attachData["tool"] as? String == sessionTool)
+
+        let invalidResize = try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-44","cmd":"session.resize","args":{"id":""#
+                + sessionID + #"","cols":"0","rows":"24"}}"#,
+            port: port
+        )
+        #expect(try responseObject(invalidResize)["ok"] as? Bool == false)
+
+        let inputBytes = Data("printf 'cocxy-transport-ok\\n'\r".utf8)
+        let input = try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-45","cmd":"session.input","args":{"id":""#
+                + sessionID + #"","data":""# + inputBytes.base64EncodedString() + #""}}"#,
+            port: port
+        )
+        let inputAccepted = try responseObject(input)["ok"] as? Bool == true
+
+        let resize = try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-46","cmd":"session.resize","args":{"id":""#
+                + sessionID + #"","cols":"90","rows":"30"}}"#,
+            port: port
+        )
+        let resizeAccepted = try responseObject(resize)["ok"] as? Bool == true
+
+        if sessionTool == "pty" {
+            #expect(!inputAccepted)
+            #expect(!resizeAccepted)
+        } else {
+            #expect(inputAccepted)
+            #expect(resizeAccepted)
+            var observedOutput = false
+            for attempt in 0..<30 where !observedOutput {
+                if attempt > 0 { usleep(100_000) }
+                let output = try responseObject(try sendLoopbackRequest(
+                    "\(capability)\t"
+                        + #"{"proto":1,"id":"req-47","cmd":"session.output","args":{"id":""#
+                        + sessionID + #""}}"#,
+                    port: port
+                ))
+                if let data = output["data"] as? [String: Any],
+                   let encoded = data["data"] as? String,
+                   let decoded = Data(base64Encoded: encoded),
+                   String(data: decoded, encoding: .utf8)?.contains("cocxy-transport-ok") == true {
+                    observedOutput = true
+                }
+            }
+            #expect(observedOutput)
+
+            let subsequentOutput = try responseObject(try sendLoopbackRequest(
+                "\(capability)\t"
+                    + #"{"proto":1,"id":"req-49","cmd":"session.output","args":{"id":""#
+                    + sessionID + #""}}"#,
+                port: port
+            ))
+            let subsequentData = subsequentOutput["data"] as? [String: Any]
+            let subsequentEncoded = subsequentData?["data"] as? String ?? ""
+            let subsequentDecoded = Data(base64Encoded: subsequentEncoded) ?? Data()
+            #expect(
+                String(data: subsequentDecoded, encoding: .utf8)?
+                    .contains("cocxy-transport-ok") != true
+            )
+        }
+
+        let kill = try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-48","cmd":"session.kill","args":{"id":""#
+                + sessionID + #""}}"#,
+            port: port
+        )
+        #expect(try responseObject(kill)["ok"] as? Bool == true)
+    }
+
     @Test("Unauthenticated connection slots expire and become reusable")
     func preauthenticationSlotsExpire() throws {
         let runtimeDirectory = FileManager.default.temporaryDirectory
@@ -453,6 +595,27 @@ struct DaemonScriptTests {
         #expect(!script.contains("CMD: $line"))
     }
 
+    @Test("Session transport is binary-safe, snapshot-aware, and validates targets")
+    func sessionTransportContracts() throws {
+        let script = try String(contentsOfFile: scriptPath, encoding: .utf8)
+
+        #expect(script.contains(#"COCXYD_VERSION="1.2.0""#))
+        #expect(script.contains(#"load-buffer -b "$buffer_name" "$input_file""#))
+        #expect(script.contains(#"paste-buffer -b "$buffer_name""#))
+        #expect(script.contains(#"screen -S "$session_id_arg" -p 0"#))
+        #expect(script.contains(#"-X readbuf "$input_file""#))
+        #expect(script.contains(#"\"mode\":\"stream\""#))
+        #expect(script.contains("MAX_SESSION_OUTPUT_CHUNK_BYTES=524288"))
+        #expect(script.contains(#"compact_consumed_screen_log "$target" "$next_offset""#))
+        #expect(script.contains(#"\"mode\":\"snapshot\""#))
+        #expect(script.contains(#"session_exists "$tool" "$session_id_arg""#))
+        #expect(script.contains(#"resize-window -t "=$session_id_arg""#))
+        #expect(script.contains(#"-X width "$cols_arg" "$rows_arg""#))
+        #expect(!script.contains("decoded=$("))
+        #expect(!script.contains("send-keys -t"))
+        #expect(!script.contains(#"> "/proc/$pid/fd/0""#))
+    }
+
     @Test("App build copies and verifies the reachable daemon script")
     func appBundlePipelineIncludesScript() throws {
         let root = URL(fileURLWithPath: scriptPath)
@@ -505,6 +668,13 @@ struct DaemonScriptTests {
         })
         let port = try #require(Int(portLine.dropFirst("COCXYD_PORT=".count)))
         return try #require((1...65_535).contains(port) ? port : nil)
+    }
+
+    private func responseObject(_ response: String) throws -> [String: Any] {
+        let data = try #require(response.data(using: .utf8))
+        return try #require(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
     }
 
     private func daemonCapability(

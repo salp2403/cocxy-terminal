@@ -5,9 +5,9 @@
 #
 # Usage: cocxyd.sh {start|stop|status|ping} <profile-namespace>
 # Protocol: JSON lines over Unix socket, bridged to TCP for SSH reverse tunnel.
-# Version: 1.1.0
+# Version: 1.2.0
 
-COCXYD_VERSION="1.1.0"
+COCXYD_VERSION="1.2.0"
 COCXYD_PROTO=1
 umask 077
 
@@ -59,6 +59,11 @@ MAX_LOG_SIZE=5242880
 
 # Auto-cleanup: 24 hours.
 MAX_IDLE_SECONDS=86400
+
+# Session logs are private and bounded. Screen has no incremental capture API,
+# so its raw output log is drained by offset and compacted on the next attach.
+MAX_SESSION_LOG_BYTES=4194304
+MAX_SESSION_OUTPUT_CHUNK_BYTES=524288
 
 # --- Utility Functions ---
 
@@ -175,6 +180,16 @@ is_safe_request_id() {
         *[!0-9]*) return 1 ;;
     esac
     [ "${#digits}" -le 20 ]
+}
+
+decode_base64_to_private_file() {
+    encoded_value="$1"
+    destination="$2"
+    if printf '%s' "$encoded_value" | base64 -d > "$destination" 2>/dev/null; then
+        return 0
+    fi
+    : > "$destination" || return 1
+    printf '%s' "$encoded_value" | base64 -D > "$destination" 2>/dev/null
 }
 
 log_msg() {
@@ -450,7 +465,12 @@ session_create() {
             ;;
         screen)
             if SCREENDIR="$SCREEN_DIR" screen -dmS "$title" 2>/dev/null; then
-                json_ok "$req_id" "\"id\":\"$title\",\"pid\":0"
+                if configure_screen_logging "$title"; then
+                    json_ok "$req_id" "\"id\":\"$title\",\"pid\":0"
+                else
+                    SCREENDIR="$SCREEN_DIR" screen -S "$title" -X quit 2>/dev/null
+                    json_err "$req_id" "Failed to configure screen session output"
+                fi
             else
                 json_err "$req_id" "Failed to create screen session"
             fi
@@ -465,6 +485,169 @@ session_create() {
     esac
 
     log_msg "Session created: $title"
+}
+
+screen_log_path() {
+    printf '%s/%s.screenlog\n' "$SESSION_DIR" "$1"
+}
+
+screen_offset_path() {
+    printf '%s/%s.offset\n' "$SESSION_DIR" "$1"
+}
+
+configure_screen_logging() {
+    target="$1"
+    output_log=$(screen_log_path "$target")
+    [ ! -L "$output_log" ] || return 1
+    if [ ! -e "$output_log" ]; then
+        : > "$output_log" || return 1
+    fi
+    [ -f "$output_log" ] || return 1
+    chmod 600 "$output_log" || return 1
+    SCREENDIR="$SCREEN_DIR" screen -S "$target" -p 0 \
+        -X logfile "$output_log" 2>/dev/null \
+        && SCREENDIR="$SCREEN_DIR" screen -S "$target" -p 0 \
+            -X logfile flush 1 2>/dev/null \
+        && SCREENDIR="$SCREEN_DIR" screen -S "$target" -p 0 \
+            -X log on 2>/dev/null
+}
+
+prepare_screen_log_for_attach() {
+    target="$1"
+    output_log=$(screen_log_path "$target")
+    configure_screen_logging "$target" || return 1
+    output_size=$(wc -c < "$output_log" 2>/dev/null | tr -d ' ')
+    case "$output_size" in
+        ''|*[!0-9]*) return 1 ;;
+    esac
+    if [ "$output_size" -gt "$MAX_SESSION_LOG_BYTES" ] 2>/dev/null; then
+        compact_log=$(mktemp "$SESSION_DIR/.screenlog.XXXXXX" 2>/dev/null) || return 1
+        chmod 600 "$compact_log" || { rm -f "$compact_log"; return 1; }
+        SCREENDIR="$SCREEN_DIR" screen -S "$target" -p 0 -X log off 2>/dev/null
+        tail -c "$MAX_SESSION_LOG_BYTES" "$output_log" > "$compact_log" 2>/dev/null \
+            || { rm -f "$compact_log"; return 1; }
+        cat "$compact_log" > "$output_log" || { rm -f "$compact_log"; return 1; }
+        rm -f "$compact_log"
+        configure_screen_logging "$target" || return 1
+    fi
+    publish_private_value "$(screen_offset_path "$target")" 0
+}
+
+screen_session_output() {
+    req_id="$1"
+    target="$2"
+    output_log=$(screen_log_path "$target")
+    offset_file=$(screen_offset_path "$target")
+    [ -f "$output_log" ] && [ ! -L "$output_log" ] || {
+        json_err "$req_id" "screen session output is unavailable"
+        return
+    }
+    output_size=$(wc -c < "$output_log" 2>/dev/null | tr -d ' ')
+    output_offset=$(cat "$offset_file" 2>/dev/null)
+    case "$output_size:$output_offset" in
+        *[!0-9:]*) json_err "$req_id" "invalid screen output state"; return ;;
+    esac
+    if [ -z "$output_offset" ] || [ "$output_offset" -gt "$output_size" ] 2>/dev/null; then
+        output_offset=0
+    fi
+    remaining=$((output_size - output_offset))
+    if [ "$remaining" -le 0 ]; then
+        json_ok "$req_id" '"data":"","mode":"stream"'
+        return
+    fi
+    output_count="$remaining"
+    if [ "$output_count" -gt "$MAX_SESSION_OUTPUT_CHUNK_BYTES" ]; then
+        output_count="$MAX_SESSION_OUTPUT_CHUNK_BYTES"
+    fi
+    output_start=$((output_offset + 1))
+    encoded=$(tail -c "+$output_start" "$output_log" 2>/dev/null \
+        | head -c "$output_count" \
+        | base64 2>/dev/null \
+        | tr -d '\n')
+    [ -n "$encoded" ] || {
+        json_err "$req_id" "screen session output encoding failed"
+        return
+    }
+    next_offset=$((output_offset + output_count))
+    publish_private_value "$offset_file" "$next_offset" || {
+        json_err "$req_id" "screen session output cursor failed"
+        return
+    }
+    if [ "$next_offset" -ge "$MAX_SESSION_LOG_BYTES" ] 2>/dev/null; then
+        compact_consumed_screen_log "$target" "$next_offset" || \
+            log_msg "Screen output compaction deferred: $target"
+    fi
+    json_ok "$req_id" "\"data\":\"$encoded\",\"mode\":\"stream\""
+}
+
+compact_consumed_screen_log() {
+    target="$1"
+    consumed_bytes="$2"
+    output_log=$(screen_log_path "$target")
+    offset_file=$(screen_offset_path "$target")
+    compact_log=$(mktemp "$SESSION_DIR/.screenlog.XXXXXX" 2>/dev/null) || return 1
+    chmod 600 "$compact_log" || { rm -f "$compact_log"; return 1; }
+    SCREENDIR="$SCREEN_DIR" screen -S "$target" -p 0 -X log off 2>/dev/null \
+        || { rm -f "$compact_log"; return 1; }
+    current_size=$(wc -c < "$output_log" 2>/dev/null | tr -d ' ')
+    case "$current_size" in
+        ''|*[!0-9]*)
+            rm -f "$compact_log"
+            configure_screen_logging "$target" >/dev/null 2>&1
+            return 1
+            ;;
+    esac
+    if [ "$consumed_bytes" -gt "$current_size" ] 2>/dev/null; then
+        consumed_bytes="$current_size"
+    fi
+    unread_start=$((consumed_bytes + 1))
+    if [ "$current_size" -gt "$consumed_bytes" ] 2>/dev/null; then
+        tail -c "+$unread_start" "$output_log" > "$compact_log" 2>/dev/null || {
+            rm -f "$compact_log"
+            configure_screen_logging "$target" >/dev/null 2>&1
+            return 1
+        }
+    fi
+    cat "$compact_log" > "$output_log" || {
+        rm -f "$compact_log"
+        configure_screen_logging "$target" >/dev/null 2>&1
+        return 1
+    }
+    rm -f "$compact_log"
+    publish_private_value "$offset_file" 0 || {
+        configure_screen_logging "$target" >/dev/null 2>&1
+        return 1
+    }
+    configure_screen_logging "$target"
+}
+
+session_exists() {
+    tool="$1"
+    target="$2"
+    case "$tool" in
+        tmux)
+            tmux -S "$TMUX_SOCKET" has-session -t "=$target" 2>/dev/null
+            ;;
+        screen)
+            SCREENDIR="$SCREEN_DIR" screen -ls 2>/dev/null | awk -v target="$target" '
+                /^[[:space:]]*[0-9]+\./ {
+                    entry=$1
+                    sub(/^[0-9]+\./, "", entry)
+                    if (entry == target) found=1
+                }
+                END { exit found ? 0 : 1 }
+            '
+            ;;
+        pty)
+            target_file="$SESSION_DIR/${target}.pid"
+            [ -f "$target_file" ] && [ ! -L "$target_file" ] || return 1
+            target_pid=$(cat "$target_file" 2>/dev/null)
+            case "$target_pid" in
+                ''|*[!0-9]*) return 1 ;;
+            esac
+            [ "$target_pid" -gt 1 ] 2>/dev/null && kill -0 "$target_pid" 2>/dev/null
+            ;;
+    esac
 }
 
 session_kill() {
@@ -501,6 +684,7 @@ session_kill() {
     esac
 
     if [ "$killed" -eq 1 ]; then
+        rm -f "$(screen_log_path "$target")" "$(screen_offset_path "$target")"
         json_simple_ok "$req_id"
         log_msg "Session killed: $target"
     else
@@ -692,6 +876,8 @@ handle_command() {
     update_last_client
     title_arg=$(printf '%s' "$line" | sed -n 's/.*"title"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     data_arg=$(printf '%s' "$line" | sed -n 's/.*"data"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+    cols_arg=$(printf '%s' "$line" | sed -n 's/.*"cols"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\)".*/\1/p')
+    rows_arg=$(printf '%s' "$line" | sed -n 's/.*"rows"[[:space:]]*:[[:space:]]*"\([0-9][0-9]*\)".*/\1/p')
     # Extract session ID from args. The Swift client sends {"args":{"id":"...","data":"..."}}.
     # We try multiple extraction patterns to handle any JSON key ordering.
     session_id_arg=""
@@ -740,7 +926,20 @@ except: pass
                 json_err "$req_id" "invalid session identifier"
                 return
             fi
-            json_ok "$req_id" "\"attached\":true,\"session\":\"$session_id_arg\""
+            tool=$(detect_session_tool)
+            if ! session_exists "$tool" "$session_id_arg"; then
+                json_err "$req_id" "session not found"
+                return
+            fi
+            attach_mode="snapshot"
+            if [ "$tool" = "screen" ]; then
+                if ! prepare_screen_log_for_attach "$session_id_arg"; then
+                    json_err "$req_id" "screen session output setup failed"
+                    return
+                fi
+                attach_mode="stream"
+            fi
+            json_ok "$req_id" "\"attached\":true,\"session\":\"$session_id_arg\",\"mode\":\"$attach_mode\",\"tool\":\"$tool\""
             log_msg "Session attached: $session_id_arg"
             ;;
         session.input)
@@ -748,33 +947,54 @@ except: pass
                 json_err "$req_id" "invalid session identifier"
                 return
             fi
-            # Write base64-decoded input bytes to the session's PTY stdin.
             tool=$(detect_session_tool)
+            if ! session_exists "$tool" "$session_id_arg"; then
+                json_err "$req_id" "session not found"
+                return
+            fi
+            input_file=$(mktemp "$SESSION_DIR/.input.XXXXXX" 2>/dev/null)
+            if [ -z "$input_file" ] || [ ! -f "$input_file" ] || [ -L "$input_file" ]; then
+                json_err "$req_id" "could not allocate private input buffer"
+                return
+            fi
+            chmod 600 "$input_file" || {
+                rm -f "$input_file"
+                json_err "$req_id" "could not secure private input buffer"
+                return
+            }
+            if ! decode_base64_to_private_file "$data_arg" "$input_file"; then
+                rm -f "$input_file"
+                json_err "$req_id" "invalid base64 input"
+                return
+            fi
+
+            input_status=1
             case "$tool" in
                 tmux)
-                    decoded=$(echo "$data_arg" | base64 -d 2>/dev/null)
-                    if [ -n "$decoded" ] && [ -n "$session_id_arg" ]; then
-                        tmux -S "$TMUX_SOCKET" send-keys -t "=$session_id_arg" "$decoded" 2>/dev/null
+                    buffer_name="cocxy-${req_id#req-}-$$"
+                    if tmux -S "$TMUX_SOCKET" load-buffer -b "$buffer_name" "$input_file" 2>/dev/null \
+                        && tmux -S "$TMUX_SOCKET" paste-buffer -b "$buffer_name" -t "=$session_id_arg" -d 2>/dev/null; then
+                        input_status=0
                     fi
                     ;;
                 screen)
-                    decoded=$(echo "$data_arg" | base64 -d 2>/dev/null)
-                    if [ -n "$decoded" ] && [ -n "$session_id_arg" ]; then
-                        SCREENDIR="$SCREEN_DIR" screen -S "$session_id_arg" -X stuff "$decoded" 2>/dev/null
+                    if SCREENDIR="$SCREEN_DIR" screen -S "$session_id_arg" -p 0 \
+                        -X readbuf "$input_file" 2>/dev/null \
+                        && SCREENDIR="$SCREEN_DIR" screen -S "$session_id_arg" -p 0 \
+                            -X paste . 2>/dev/null; then
+                        input_status=0
                     fi
                     ;;
-                pty)
-                    decoded=$(echo "$data_arg" | base64 -d 2>/dev/null)
-                    if [ -n "$decoded" ] && [ -f "$SESSION_DIR/${session_id_arg}.pid" ]; then
-                        pid=$(cat "$SESSION_DIR/${session_id_arg}.pid" 2>/dev/null)
-                        if [ -n "$pid" ]; then
-                            # Write to the PTY fd via /proc or send to process.
-                            echo "$decoded" > "/proc/$pid/fd/0" 2>/dev/null
-                        fi
-                    fi
-                    ;;
+                pty) input_status=2 ;;
             esac
-            json_simple_ok "$req_id"
+            rm -f "$input_file"
+            if [ "$input_status" -eq 0 ]; then
+                json_simple_ok "$req_id"
+            elif [ "$input_status" -eq 2 ]; then
+                json_err "$req_id" "direct PTY input is unavailable; install tmux or screen"
+            else
+                json_err "$req_id" "session input delivery failed"
+            fi
             ;;
         session.output)
             if ! is_safe_identifier "$session_id_arg"; then
@@ -782,31 +1002,73 @@ except: pass
                 return
             fi
             # Read pending output from the session and return as base64.
-            # tmux: capture-pane. screen: hardcopy. pty: read from output file.
+            # tmux uses snapshots; screen drains its private raw stream log.
             tool=$(detect_session_tool)
+            if ! session_exists "$tool" "$session_id_arg"; then
+                json_err "$req_id" "session not found"
+                return
+            fi
             output_data=""
             case "$tool" in
                 tmux)
                     if [ -n "$session_id_arg" ]; then
-                        output_data=$(tmux -S "$TMUX_SOCKET" capture-pane -t "=$session_id_arg" -p 2>/dev/null | tail -5)
+                        output_data=$(tmux -S "$TMUX_SOCKET" capture-pane -t "=$session_id_arg" -p -e 2>/dev/null)
                     fi
                     ;;
                 screen)
-                    tmpfile=$(mktemp)
-                    SCREENDIR="$SCREEN_DIR" screen -S "$session_id_arg" -X hardcopy "$tmpfile" 2>/dev/null
-                    output_data=$(tail -5 "$tmpfile" 2>/dev/null)
-                    rm -f "$tmpfile"
+                    screen_session_output "$req_id" "$session_id_arg"
+                    return
                     ;;
                 pty)
                     output_data=""
                     ;;
             esac
             if [ -n "$output_data" ]; then
-                encoded=$(echo "$output_data" | base64 2>/dev/null | tr -d '\n')
-                json_ok "$req_id" "\"data\":\"$encoded\""
+                encoded=$(printf '%s\n' "$output_data" | base64 2>/dev/null | tr -d '\n')
+                json_ok "$req_id" "\"data\":\"$encoded\",\"mode\":\"snapshot\""
             else
-                json_ok "$req_id" '"data":""'
+                json_ok "$req_id" '"data":"","mode":"snapshot"'
             fi
+            ;;
+        session.resize)
+            if ! is_safe_identifier "$session_id_arg"; then
+                json_err "$req_id" "invalid session identifier"
+                return
+            fi
+            tool=$(detect_session_tool)
+            if ! session_exists "$tool" "$session_id_arg"; then
+                json_err "$req_id" "session not found"
+                return
+            fi
+            case "$cols_arg:$rows_arg" in
+                *[!0-9:]*|:|:*|*:) json_err "$req_id" "invalid terminal size"; return ;;
+            esac
+            if [ "$cols_arg" -lt 1 ] 2>/dev/null || [ "$cols_arg" -gt 1000 ] 2>/dev/null \
+                || [ "$rows_arg" -lt 1 ] 2>/dev/null || [ "$rows_arg" -gt 1000 ] 2>/dev/null; then
+                json_err "$req_id" "terminal size out of range"
+                return
+            fi
+            case "$tool" in
+                tmux)
+                    if tmux -S "$TMUX_SOCKET" resize-window -t "=$session_id_arg" \
+                        -x "$cols_arg" -y "$rows_arg" 2>/dev/null; then
+                        json_simple_ok "$req_id"
+                    else
+                        json_err "$req_id" "session resize failed"
+                    fi
+                    ;;
+                screen)
+                    if SCREENDIR="$SCREEN_DIR" screen -S "$session_id_arg" -p 0 \
+                        -X width "$cols_arg" "$rows_arg" 2>/dev/null; then
+                        json_simple_ok "$req_id"
+                    else
+                        json_err "$req_id" "session resize failed"
+                    fi
+                    ;;
+                pty)
+                    json_err "$req_id" "direct PTY resize is unavailable; install tmux or screen"
+                    ;;
+            esac
             ;;
         session.detach)
             if is_safe_identifier "$session_id_arg"; then

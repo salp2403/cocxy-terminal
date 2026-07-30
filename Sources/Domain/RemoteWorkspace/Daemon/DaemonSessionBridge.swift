@@ -5,6 +5,25 @@ import Foundation
 
 // MARK: - Daemon Session Bridge
 
+@MainActor
+protocol DaemonSessionRPCSending: AnyObject {
+    var isConnected: Bool { get }
+
+    func sendSessionRPC(
+        cmd: String,
+        args: [String: String]?
+    ) async throws -> DaemonResponse
+}
+
+extension DaemonConnection: DaemonSessionRPCSending {
+    func sendSessionRPC(
+        cmd: String,
+        args: [String: String]?
+    ) async throws -> DaemonResponse {
+        try await send(cmd: cmd, args: args)
+    }
+}
+
 /// Connects remote daemon sessions to the local terminal display.
 ///
 /// Sends `session.attach(id)` to the daemon and establishes
@@ -19,6 +38,11 @@ typealias SessionDisconnectHandler = @MainActor () -> Void
 
 @MainActor
 final class DaemonSessionBridge: ObservableObject {
+
+    static let maximumQueuedInputBytes = 256 * 1_024
+    static let activePollIntervalNanoseconds: UInt64 = 50_000_000
+    static let idlePollIntervalNanoseconds: UInt64 = 150_000_000
+    static let maximumConsecutiveReadFailures = 3
 
     // MARK: - State
 
@@ -36,13 +60,28 @@ final class DaemonSessionBridge: ObservableObject {
 
     /// Task that continuously reads output from the daemon.
     private var readTask: Task<Void, Never>?
+    private var inputDrainTask: Task<Void, Never>?
+    private var resizeTask: Task<Void, Never>?
+    private var queuedInputs: [Data] = []
+    private var queuedInputReadIndex = 0
+    private var queuedInputByteCount = 0
+    private var pendingResize: TerminalSize?
+    private var lastSnapshot: Data?
 
     // MARK: - Dependencies
 
-    private let connection: DaemonConnection
+    private let connection: any DaemonSessionRPCSending
+    private let activePollIntervalNanoseconds: UInt64
+    private let idlePollIntervalNanoseconds: UInt64
 
-    init(connection: DaemonConnection) {
+    init(
+        connection: any DaemonSessionRPCSending,
+        activePollIntervalNanoseconds: UInt64 = DaemonSessionBridge.activePollIntervalNanoseconds,
+        idlePollIntervalNanoseconds: UInt64 = DaemonSessionBridge.idlePollIntervalNanoseconds
+    ) {
         self.connection = connection
+        self.activePollIntervalNanoseconds = activePollIntervalNanoseconds
+        self.idlePollIntervalNanoseconds = idlePollIntervalNanoseconds
     }
 
     // MARK: - Attach
@@ -57,8 +96,11 @@ final class DaemonSessionBridge: ObservableObject {
         guard connection.isConnected else {
             throw DaemonProtocolError.connectionLost
         }
+        if isAttached {
+            await detach()
+        }
 
-        let response = try await connection.send(
+        let response = try await connection.sendSessionRPC(
             cmd: DaemonCommand.sessionAttach.rawValue,
             args: ["id": sessionID]
         )
@@ -69,6 +111,7 @@ final class DaemonSessionBridge: ObservableObject {
 
         attachedSessionID = sessionID
         isAttached = true
+        lastSnapshot = nil
 
         // Start reading output from the daemon session.
         startOutputReader(sessionID: sessionID)
@@ -84,8 +127,17 @@ final class DaemonSessionBridge: ObservableObject {
 
         readTask?.cancel()
         readTask = nil
+        inputDrainTask?.cancel()
+        inputDrainTask = nil
+        resizeTask?.cancel()
+        resizeTask = nil
+        queuedInputs.removeAll(keepingCapacity: false)
+        queuedInputReadIndex = 0
+        queuedInputByteCount = 0
+        pendingResize = nil
+        lastSnapshot = nil
 
-        _ = try? await connection.send(
+        _ = try? await connection.sendSessionRPC(
             cmd: DaemonCommand.sessionDetach.rawValue,
             args: ["id": sessionID]
         )
@@ -99,14 +151,106 @@ final class DaemonSessionBridge: ObservableObject {
     /// Sends keyboard input to the attached remote session.
     ///
     /// - Parameter data: Raw bytes from the local keyboard/terminal.
-    func sendInput(_ data: Data) async {
-        guard let sessionID = attachedSessionID, isAttached else { return }
+    func sendInput(_ data: Data) async throws {
+        guard !data.isEmpty else { return }
+        guard let sessionID = attachedSessionID, isAttached else {
+            throw DaemonProtocolError.connectionLost
+        }
 
         let base64Input = data.base64EncodedString()
-        _ = try? await connection.send(
+        let response = try await connection.sendSessionRPC(
             cmd: DaemonCommand.sessionInput.rawValue,
             args: ["id": sessionID, "data": base64Input]
         )
+        guard response.ok else { throw DaemonProtocolError.invalidResponse }
+    }
+
+    /// Enqueues input without blocking AppKit's key event dispatch. One drain
+    /// task preserves byte ordering across rapid keyboard and paste events.
+    @discardableResult
+    func enqueueInput(_ data: Data) -> Bool {
+        guard !data.isEmpty, isAttached, attachedSessionID != nil else { return false }
+        guard data.count <= Self.maximumQueuedInputBytes,
+              queuedInputByteCount <= Self.maximumQueuedInputBytes - data.count else {
+            return false
+        }
+
+        queuedInputs.append(data)
+        queuedInputByteCount += data.count
+        startInputDrainIfNeeded()
+        return true
+    }
+
+    func enqueueResize(_ size: TerminalSize) {
+        guard isAttached, attachedSessionID != nil else { return }
+        pendingResize = size
+        guard resizeTask == nil else { return }
+
+        resizeTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(nanoseconds: 75_000_000)
+            } catch {
+                return
+            }
+            guard let self,
+                  let sessionID = self.attachedSessionID,
+                  let size = self.pendingResize,
+                  self.isAttached else {
+                self?.resizeTask = nil
+                return
+            }
+            self.pendingResize = nil
+            self.resizeTask = nil
+            do {
+                let response = try await self.connection.sendSessionRPC(
+                    cmd: DaemonCommand.sessionResize.rawValue,
+                    args: [
+                        "id": sessionID,
+                        "cols": "\(size.columns)",
+                        "rows": "\(size.rows)",
+                    ]
+                )
+                guard response.ok else {
+                    self.handleDisconnect()
+                    return
+                }
+            } catch {
+                self.handleDisconnect()
+                return
+            }
+            if let pendingResize = self.pendingResize {
+                self.enqueueResize(pendingResize)
+            }
+        }
+    }
+
+    func beginDetach() {
+        Task { @MainActor [self] in
+            await detach()
+        }
+    }
+
+    private func startInputDrainIfNeeded() {
+        guard inputDrainTask == nil else { return }
+        inputDrainTask = Task { @MainActor [weak self] in
+            while let self,
+                  !Task.isCancelled,
+                  self.queuedInputReadIndex < self.queuedInputs.count {
+                let data = self.queuedInputs[self.queuedInputReadIndex]
+                self.queuedInputReadIndex += 1
+                self.queuedInputByteCount -= data.count
+                do {
+                    try await self.sendInput(data)
+                } catch {
+                    self.inputDrainTask = nil
+                    self.handleDisconnect()
+                    return
+                }
+            }
+            self?.queuedInputs.removeAll(keepingCapacity: true)
+            self?.queuedInputReadIndex = 0
+            self?.inputDrainTask = nil
+        }
     }
 
     // MARK: - Output Reader (daemon → local terminal)
@@ -114,36 +258,83 @@ final class DaemonSessionBridge: ObservableObject {
     /// Continuously polls the daemon for session output.
     ///
     /// The daemon sends output data as base64-encoded chunks in
-    /// response to `session.output` requests. This loop runs every
-    /// 50ms while attached, forwarding data to the `onOutput` handler.
+    /// response to `session.output` requests. Active output polls at 50ms;
+    /// unchanged snapshots back off to 150ms to avoid needless remote work.
     private func startOutputReader(sessionID: String) {
         readTask?.cancel()
         readTask = Task { @MainActor [weak self] in
+            var consecutiveFailures = 0
             while !Task.isCancelled {
                 guard let self, self.isAttached, self.connection.isConnected else {
                     self?.handleDisconnect()
                     return
                 }
 
-                if let response = try? await self.connection.send(
-                    cmd: DaemonCommand.sessionOutput.rawValue,
-                    args: ["id": sessionID]
-                ) {
-                    if response.ok, let data = response.data,
-                       let encoded = data["data"] as? String,
-                       let bytes = Data(base64Encoded: encoded),
-                       !bytes.isEmpty {
-                        self.onOutput?(bytes)
+                var receivedOutput = false
+                do {
+                    let response = try await self.connection.sendSessionRPC(
+                        cmd: DaemonCommand.sessionOutput.rawValue,
+                        args: ["id": sessionID]
+                    )
+                    guard response.ok,
+                          let data = response.data,
+                          let encoded = data["data"] as? String,
+                          let bytes = Data(base64Encoded: encoded) else {
+                        throw DaemonProtocolError.invalidResponse
+                    }
+                    consecutiveFailures = 0
+                    if !bytes.isEmpty {
+                        let mode = data["mode"] as? String
+                        if let output = self.normalizedOutput(bytes, mode: mode) {
+                            receivedOutput = true
+                            self.onOutput?(output)
+                        }
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    consecutiveFailures += 1
+                    if consecutiveFailures >= Self.maximumConsecutiveReadFailures {
+                        self.handleDisconnect()
+                        return
                     }
                 }
 
-                // Poll interval: 50ms for responsive feel.
-                try? await Task.sleep(nanoseconds: 50_000_000)
+                let interval = receivedOutput
+                    ? self.activePollIntervalNanoseconds
+                    : self.idlePollIntervalNanoseconds
+                do {
+                    try await Task.sleep(nanoseconds: interval)
+                } catch {
+                    return
+                }
             }
         }
     }
 
+    private func normalizedOutput(_ bytes: Data, mode: String?) -> Data? {
+        guard mode == "snapshot" else { return bytes }
+        guard lastSnapshot != bytes else { return nil }
+        lastSnapshot = bytes
+
+        var framed = Data("\u{1B}[2J\u{1B}[H".utf8)
+        framed.append(bytes)
+        return framed
+    }
+
     private func handleDisconnect() {
+        guard isAttached || attachedSessionID != nil else { return }
+        readTask?.cancel()
+        readTask = nil
+        inputDrainTask?.cancel()
+        inputDrainTask = nil
+        resizeTask?.cancel()
+        resizeTask = nil
+        queuedInputs.removeAll(keepingCapacity: false)
+        queuedInputReadIndex = 0
+        queuedInputByteCount = 0
+        pendingResize = nil
+        lastSnapshot = nil
         attachedSessionID = nil
         isAttached = false
         onDisconnect?()
@@ -157,7 +348,7 @@ final class DaemonSessionBridge: ObservableObject {
     /// - Returns: The created session ID.
     @discardableResult
     func createAndAttach(title: String) async throws -> String {
-        let response = try await connection.send(
+        let response = try await connection.sendSessionRPC(
             cmd: DaemonCommand.sessionCreate.rawValue,
             args: ["title": title]
         )
@@ -176,7 +367,10 @@ final class DaemonSessionBridge: ObservableObject {
 
     /// Lists all sessions on the remote daemon.
     func listSessions() async throws -> [DaemonSessionInfo] {
-        let response = try await connection.send(cmd: DaemonCommand.sessionList.rawValue)
+        let response = try await connection.sendSessionRPC(
+            cmd: DaemonCommand.sessionList.rawValue,
+            args: nil
+        )
 
         guard response.ok, let data = response.data,
               let sessions = data["sessions"] as? [[String: Any]]
@@ -191,7 +385,7 @@ final class DaemonSessionBridge: ObservableObject {
 
     /// Kills a remote session.
     func killSession(sessionID: String) async throws {
-        let response = try await connection.send(
+        let response = try await connection.sendSessionRPC(
             cmd: DaemonCommand.sessionKill.rawValue,
             args: ["id": sessionID]
         )
@@ -201,8 +395,7 @@ final class DaemonSessionBridge: ObservableObject {
         }
 
         if attachedSessionID == sessionID {
-            attachedSessionID = nil
-            isAttached = false
+            handleDisconnect()
         }
     }
 }
