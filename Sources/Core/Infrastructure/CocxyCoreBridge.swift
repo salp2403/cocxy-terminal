@@ -2026,7 +2026,9 @@ final class CocxyCoreBridge: TerminalEngine {
     func setCursorColorOverride(_ rgba: UInt32, for surface: SurfaceID) {
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_cursor_color_override(state.terminal, rgba)
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
         }
+        (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
     func processDiagnostics(for surface: SurfaceID) -> TerminalProcessDiagnostics? {
@@ -3226,34 +3228,15 @@ final class CocxyCoreBridge: TerminalEngine {
     /// Apply a theme change without destroying surfaces.
     ///
     /// CocxyCore supports runtime theme updates, so the active surface can
-    /// redraw immediately without teardown/recreation. The 18+ individual C
-    /// mutations (`set_theme`, 16× `set_theme_base16`, `set_selection_color`)
-    /// run as one atomic critical section so the background feed loop never
-    /// observes a partially-applied palette.
+    /// redraw immediately without teardown/recreation. Apply the complete
+    /// palette through one C mutation so DEC mode 2031 observes one coherent
+    /// color-scheme change instead of a burst of intermediate palettes.
     func applyTheme(_ palette: ThemePalette, to surface: SurfaceID) {
-        // Parse hex colors BEFORE acquiring the lock to keep the critical
-        // section as short as possible. Parsing is pure Swift and never
-        // touches the terminal state.
-        let fg = Self.parseHexColor(palette.foreground)
-        let bg = Self.parseHexColor(palette.background)
-        let cur = Self.parseHexColor(palette.cursor)
-        let sel = Self.parseHexColor(palette.selectionBackground)
-        let ansi: [(r: UInt8, g: UInt8, b: UInt8)] = (0..<min(palette.ansiColors.count, 16)).map {
-            Self.parseHexColor(palette.ansiColors[$0])
-        }
+        var theme = Self.runtimeTheme(from: palette)
 
-        // Apply the full palette atomically inside the lock.
         withTerminalLock(surface) { state in
-            cocxycore_terminal_set_theme(
-                state.terminal,
-                fg.r, fg.g, fg.b,
-                bg.r, bg.g, bg.b,
-                cur.r, cur.g, cur.b
-            )
-            for (index, c) in ansi.enumerated() {
-                cocxycore_terminal_set_theme_base16(state.terminal, UInt8(index), c.r, c.g, c.b)
-            }
-            cocxycore_terminal_set_selection_color(state.terminal, sel.r, sel.g, sel.b, 128)
+            cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, 0)
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3273,6 +3256,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var theme = Self.runtimeTheme(from: palette)
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, transitionMs)
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3284,6 +3268,7 @@ final class CocxyCoreBridge: TerminalEngine {
     func advanceThemeTransitionMs(_ deltaMs: UInt32, for surface: SurfaceID) {
         withTerminalLock(surface) { state in
             cocxycore_terminal_advance_theme_transition_ms(state.terminal, deltaMs)
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }

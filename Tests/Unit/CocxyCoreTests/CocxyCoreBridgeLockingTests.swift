@@ -373,6 +373,30 @@ struct CocxyCoreBridgeLockingTests {
             cocxycore_terminal_has_response(state.terminal) == false
         } ?? false
         #expect(focusResponseWasDrained)
+
+        _ = bridge.withTerminalLock(surfaceID) { state in
+            let mode = Array("\u{001B}[?2031h".utf8)
+            cocxycore_terminal_feed(state.terminal, mode, mode.count)
+        }
+
+        bridge.applyTheme(Self.makeTestPalette(), to: surfaceID)
+        let themeResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(themeResponseWasDrained)
+
+        bridge.setCursorColorOverride(0x102030FF, for: surfaceID)
+        let cursorColorResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(cursorColorResponseWasDrained)
+
+        bridge.applyTheme(Self.makeTestPalette(), to: surfaceID, transitionMs: 50)
+        bridge.advanceThemeTransitionMs(50, for: surfaceID)
+        let transitionResponseWasDrained = bridge.withTerminalLock(surfaceID) { state in
+            cocxycore_terminal_has_response(state.terminal) == false
+        } ?? false
+        #expect(transitionResponseWasDrained)
     }
 
     // MARK: - Additional mutator serialization

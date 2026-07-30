@@ -807,6 +807,36 @@ struct CocxyCoreBridgeTests {
         #expect(String(data: received.data, encoding: .utf8)?.contains("ping") == true)
     }
 
+    @Test("theme changes flush one negotiated color-scheme report to the PTY")
+    func themeChangeFlushesSingleColorSchemeReport() async throws {
+        let rawCat = try makeBridgeRawCatScript()
+        defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: rawCat.scriptURL.path)
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+        try await waitUntil {
+            FileManager.default.fileExists(atPath: rawCat.readyURL.path)
+        }
+
+        bridge.withTerminalLock(surfaceID) { state in
+            feed("\u{001B}[?2031h", to: state.terminal)
+        }
+        bridge.applyTheme(makeUXPolishPalette(), to: surfaceID)
+
+        let expected = "\u{001B}[?997;1n"
+        try await waitUntil {
+            String(decoding: received.data, as: UTF8.self).contains(expected)
+        }
+        try await Task.sleep(nanoseconds: 100_000_000)
+
+        let output = String(decoding: received.data, as: UTF8.self)
+        #expect(output.components(separatedBy: expected).count - 1 == 1)
+    }
+
     @Test("updateDefaults stores shell and padding for future surfaces")
     func updateDefaultsStoresFutureSurfaceConfig() throws {
         let bridge = try makeBridge()
