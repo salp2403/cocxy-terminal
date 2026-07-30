@@ -495,11 +495,11 @@ public enum ParsedCommand: Equatable {
 
     // MARK: - System (v2)
 
-    /// `cocxy send <text>`
-    case send(text: String)
+    /// `cocxy send <text> [--tab <id>]`
+    case send(text: String, tabID: String?)
 
-    /// `cocxy send-key <key>`
-    case sendKey(key: String)
+    /// `cocxy send-key <key> [--tab <id>]`
+    case sendKey(key: String, tabID: String?)
 
     /// `cocxy classify <input>`
     case classify(input: String)
@@ -2397,12 +2397,48 @@ public enum CLIArgumentParser {
         }
     }
 
-    /// Parses `cocxy send <text>`.
+    /// Parses `cocxy send <text>|--stdin [--tab <id>]`.
     private static func parseSend(arguments: [String]) throws -> ParsedCommand {
         guard !arguments.isEmpty else {
             throw CLIError.missingArgument(command: "send", argument: "text")
         }
-        if arguments == ["--stdin"] || arguments == ["-"] {
+
+        var tabID: String?
+        var readsStandardInput = false
+        var textArguments: [String] = []
+        var index = 0
+        while index < arguments.count {
+            switch arguments[index] {
+            case "--tab":
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "send", argument: "tab id")
+                }
+                guard tabID == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send",
+                        argument: "--tab",
+                        reason: "The target tab may only be specified once."
+                    )
+                }
+                tabID = arguments[index + 1]
+                index += 2
+            case "--stdin", "-":
+                readsStandardInput = true
+                index += 1
+            default:
+                textArguments.append(arguments[index])
+                index += 1
+            }
+        }
+
+        if readsStandardInput {
+            guard textArguments.isEmpty else {
+                throw CLIError.invalidArgument(
+                    command: "send",
+                    argument: textArguments.joined(separator: " "),
+                    reason: "Text cannot be combined with --stdin."
+                )
+            }
             let text = String(
                 decoding: FileHandle.standardInput.readDataToEndOfFile(),
                 as: UTF8.self
@@ -2410,18 +2446,51 @@ public enum CLIArgumentParser {
             guard !text.isEmpty else {
                 throw CLIError.missingArgument(command: "send --stdin", argument: "stdin")
             }
-            return .send(text: text)
+            return .send(text: text, tabID: tabID)
         }
-        let text = arguments.joined(separator: " ")
-        return .send(text: text)
+
+        guard !textArguments.isEmpty else {
+            throw CLIError.missingArgument(command: "send", argument: "text")
+        }
+        return .send(text: textArguments.joined(separator: " "), tabID: tabID)
     }
 
-    /// Parses `cocxy send-key <key>`.
+    /// Parses `cocxy send-key <key> [--tab <id>]`.
     private static func parseSendKey(arguments: [String]) throws -> ParsedCommand {
-        guard let key = arguments.first, !key.isEmpty else {
+        var tabID: String?
+        var key: String?
+        var index = 0
+        while index < arguments.count {
+            if arguments[index] == "--tab" {
+                guard index + 1 < arguments.count else {
+                    throw CLIError.missingArgument(command: "send-key", argument: "tab id")
+                }
+                guard tabID == nil else {
+                    throw CLIError.invalidArgument(
+                        command: "send-key",
+                        argument: "--tab",
+                        reason: "The target tab may only be specified once."
+                    )
+                }
+                tabID = arguments[index + 1]
+                index += 2
+                continue
+            }
+            guard key == nil else {
+                throw CLIError.invalidArgument(
+                    command: "send-key",
+                    argument: arguments[index],
+                    reason: "Only one key may be sent at a time."
+                )
+            }
+            key = arguments[index]
+            index += 1
+        }
+
+        guard let key, !key.isEmpty else {
             throw CLIError.missingArgument(command: "send-key", argument: "key")
         }
-        return .sendKey(key: key)
+        return .sendKey(key: key, tabID: tabID)
     }
 
     /// Parses a small tmux-compatible command layer onto existing Cocxy CLI commands.
@@ -2530,7 +2599,7 @@ public enum CLIArgumentParser {
         guard !text.isEmpty else {
             throw CLIError.missingArgument(command: "tmux send-keys", argument: "keys")
         }
-        return .send(text: text)
+        return .send(text: text, tabID: nil)
     }
 
     private static func appendTmuxKey(_ token: String, to text: inout String) {

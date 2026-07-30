@@ -333,16 +333,21 @@ extension AppDelegate {
                 )
             }
             if let rawTabID = request.params["tabId"] {
-                guard request.command == .timelineShow
-                    || request.command == .timelineExport
-                    || request.command == .search else {
+                switch request.command {
+                case .send, .sendKey:
+                    return terminalInputPresentationTarget(
+                        tabID: rawTabID,
+                        fallbackController: focusedController
+                    )
+                case .timelineShow, .timelineExport, .search:
+                    return terminalTabPresentationTarget(
+                        tabID: rawTabID,
+                        fallbackController: focusedController,
+                        displayPrefix: "Terminal tab"
+                    )
+                default:
                     return nil
                 }
-                return terminalTabPresentationTarget(
-                    tabID: rawTabID,
-                    fallbackController: focusedController,
-                    displayPrefix: "Terminal tab"
-                )
             }
             guard let (tabID, tab) = activeTab(in: focusedController) else { return nil }
             let workingDirectory = canonicalWorkingDirectory(for: tab)
@@ -362,24 +367,11 @@ extension AppDelegate {
                     controller: focusedController
                 )
             }
-            guard let surfaceID = focusedController.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-                ?? focusedController.activeTerminalSurfaceView?.terminalViewModel?.surfaceID,
-                  focusedController.surfaceIDs(for: tabID).contains(surfaceID) else {
-                return nil
-            }
-            return SocketPrivilegedCommandPresentationTarget(
-                context: SocketPrivilegedCommandContext(
-                    scope: .terminalSurface,
-                    windowControllerIdentifier: ObjectIdentifier(focusedController),
-                    tabID: tabID.rawValue,
-                    workingDirectory: workingDirectory,
-                    surfaceID: surfaceID.rawValue,
-                    browserViewModelIdentifier: nil,
-                    browserTabID: nil,
-                    browserURL: nil,
-                    targetDisplayName: "Terminal surface \(surfaceID.rawValue.uuidString)"
-                ),
-                controller: focusedController
+            return terminalInputPresentationTarget(
+                tabID: tabID,
+                tab: tab,
+                controller: focusedController,
+                workingDirectory: workingDirectory
             )
 
         case .browserControl, .browserRead:
@@ -671,6 +663,66 @@ extension AppDelegate {
                 browserTabID: nil,
                 browserURL: nil,
                 targetDisplayName: "\(displayPrefix) \(tab.displayTitle)"
+            ),
+            controller: controller
+        )
+    }
+
+    @MainActor
+    private func terminalInputPresentationTarget(
+        tabID rawTabID: String,
+        fallbackController: MainWindowController
+    ) -> SocketPrivilegedCommandPresentationTarget? {
+        guard let uuid = UUID(uuidString: rawTabID) else { return nil }
+        let tabID = TabID(rawValue: uuid)
+        guard let controller = controllerContainingTab(tabID)
+                ?? (fallbackController.tabManager.tab(for: tabID) == nil
+                    ? nil
+                    : fallbackController),
+              let tab = controller.tabManager.tab(for: tabID) else {
+            return nil
+        }
+        return terminalInputPresentationTarget(
+            tabID: tabID,
+            tab: tab,
+            controller: controller,
+            workingDirectory: canonicalWorkingDirectory(for: tab)
+        )
+    }
+
+    @MainActor
+    private func terminalInputPresentationTarget(
+        tabID: TabID,
+        tab: Tab,
+        controller: MainWindowController,
+        workingDirectory: String
+    ) -> SocketPrivilegedCommandPresentationTarget? {
+        let availableSurfaceIDs = controller.surfaceIDs(for: tabID)
+        let isVisible = (controller.visibleTabID ?? controller.tabManager.activeTabID) == tabID
+        let visibleSurfaceID = isVisible
+            ? controller.focusedSplitSurfaceView?.terminalViewModel?.surfaceID
+                ?? controller.activeTerminalSurfaceView?.terminalViewModel?.surfaceID
+            : nil
+        let surfaceID = visibleSurfaceID.flatMap { availableSurfaceIDs.contains($0) ? $0 : nil }
+            ?? controller.tabSurfaceMap[tabID].flatMap {
+                availableSurfaceIDs.contains($0) ? $0 : nil
+            }
+            ?? availableSurfaceIDs.sorted {
+                $0.rawValue.uuidString < $1.rawValue.uuidString
+            }.first
+        guard let surfaceID else { return nil }
+
+        return SocketPrivilegedCommandPresentationTarget(
+            context: SocketPrivilegedCommandContext(
+                scope: .terminalSurface,
+                windowControllerIdentifier: ObjectIdentifier(controller),
+                tabID: tabID.rawValue,
+                workingDirectory: workingDirectory,
+                surfaceID: surfaceID.rawValue,
+                browserViewModelIdentifier: nil,
+                browserTabID: nil,
+                browserURL: nil,
+                targetDisplayName: "Terminal tab \(tab.displayTitle) (\(tabID.rawValue.uuidString))"
             ),
             controller: controller
         )

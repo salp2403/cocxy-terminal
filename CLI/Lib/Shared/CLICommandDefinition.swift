@@ -410,8 +410,8 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "Set the active theme"
 
         // System
-        case .send: return "Send text to the active terminal (or read it from stdin)"
-        case .sendKey: return "Send a keystroke to the active terminal"
+        case .send: return "Send text to the active or specified terminal tab"
+        case .sendKey: return "Send a keystroke to the active or specified terminal tab"
         case .classify: return "Classify terminal input locally as JSON"
         case .correct: return "Suggest local fixes for a failed shell command as JSON"
         case .identify: return "Describe this Cocxy CLI and owning app as JSON"
@@ -700,8 +700,8 @@ public enum CLICommand: String, CaseIterable {
         case .themeSet: return "cocxy theme set <name>"
 
         // System
-        case .send: return "cocxy send <text>|--stdin"
-        case .sendKey: return "cocxy send-key <key>"
+        case .send: return "cocxy send <text>|--stdin [--tab <id>]"
+        case .sendKey: return "cocxy send-key <key> [--tab <id>]"
         case .classify: return "cocxy classify <input>"
         case .correct: return "cocxy correct <command>"
         case .identify: return "cocxy identify"

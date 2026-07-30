@@ -434,37 +434,57 @@ final class SystemCommandTests: XCTestCase {
 
     func testSendParsesTextCorrectly() throws {
         let result = try CLIArgumentParser.parse(["send", "hello world"])
-        XCTAssertEqual(result, .send(text: "hello world"))
+        XCTAssertEqual(result, .send(text: "hello world", tabID: nil))
     }
 
     func testSendReadsTextFromStandardInput() throws {
         try withRedirectedStandardInput("line 1\nline 2\r") {
             let result = try CLIArgumentParser.parse(["send", "--stdin"])
-            XCTAssertEqual(result, .send(text: "line 1\nline 2\r"))
+            XCTAssertEqual(result, .send(text: "line 1\nline 2\r", tabID: nil))
         }
+    }
+
+    func testSendParsesExactTabTargetBeforeOrAfterText() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["send", "--tab", "tab-1", "hello", "world"]),
+            .send(text: "hello world", tabID: "tab-1")
+        )
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["send", "hello", "--tab", "tab-2"]),
+            .send(text: "hello", tabID: "tab-2")
+        )
     }
 
     // MARK: - 29. Send-key parses key correctly
 
     func testSendKeyParsesKeyCorrectly() throws {
         let result = try CLIArgumentParser.parse(["send-key", "ctrl+c"])
-        XCTAssertEqual(result, .sendKey(key: "ctrl+c"))
+        XCTAssertEqual(result, .sendKey(key: "ctrl+c", tabID: nil))
+    }
+
+    func testSendKeyParsesExactTabTarget() throws {
+        XCTAssertEqual(
+            try CLIArgumentParser.parse(["send-key", "--tab", "tab-1", "ctrl+c"]),
+            .sendKey(key: "ctrl+c", tabID: "tab-1")
+        )
     }
 
     // MARK: - 30. Send builds correct request
 
     func testSendBuildRequest() {
-        let request = runner.buildRequest(from: .send(text: "hello"))
+        let request = runner.buildRequest(from: .send(text: "hello", tabID: "tab-1"))
         XCTAssertEqual(request.command, "send")
         XCTAssertEqual(request.params?["text"], "hello")
+        XCTAssertEqual(request.params?["tabId"], "tab-1")
     }
 
     // MARK: - 31. Send-key builds correct request
 
     func testSendKeyBuildRequest() {
-        let request = runner.buildRequest(from: .sendKey(key: "ctrl+c"))
+        let request = runner.buildRequest(from: .sendKey(key: "ctrl+c", tabID: "tab-1"))
         XCTAssertEqual(request.command, "send-key")
         XCTAssertEqual(request.params?["key"], "ctrl+c")
+        XCTAssertEqual(request.params?["tabId"], "tab-1")
     }
 }
 

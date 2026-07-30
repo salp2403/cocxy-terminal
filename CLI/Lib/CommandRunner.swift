@@ -1101,18 +1101,22 @@ public struct CommandRunner {
 
         // MARK: System (v2)
 
-        case .send(let text):
+        case .send(let text, let tabID):
+            var params = ["text": text]
+            if let tabID { params["tabId"] = tabID }
             return CLISocketRequest(
                 id: requestID,
                 command: "send",
-                params: ["text": text]
+                params: params
             )
 
-        case .sendKey(let key):
+        case .sendKey(let key, let tabID):
+            var params = ["key": key]
+            if let tabID { params["tabId"] = tabID }
             return CLISocketRequest(
                 id: requestID,
                 command: "send-key",
-                params: ["key": key]
+                params: params
             )
 
         // MARK: Window Management (v3)

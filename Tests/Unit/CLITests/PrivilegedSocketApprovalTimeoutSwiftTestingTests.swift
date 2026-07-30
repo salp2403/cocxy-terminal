@@ -13,7 +13,7 @@ struct PrivilegedSocketApprovalTimeoutSwiftTestingTests {
             timeoutSeconds: 5
         ))
 
-        #expect(runner.socketClient(for: .send(text: "id")).timeoutSeconds == 70)
+        #expect(runner.socketClient(for: .send(text: "id", tabID: nil)).timeoutSeconds == 70)
         #expect(runner.socketClient(for: .browserEval(script: "1 + 1")).timeoutSeconds == 70)
         #expect(runner.socketClient(for: .browserWait(selector: "#ready", timeoutMilliseconds: nil)).timeoutSeconds == 73)
         #expect(runner.socketClient(for: .browserWait(selector: "#ready", timeoutMilliseconds: 30_000)).timeoutSeconds == 98)

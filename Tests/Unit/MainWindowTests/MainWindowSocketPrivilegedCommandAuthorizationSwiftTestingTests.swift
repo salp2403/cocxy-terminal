@@ -309,6 +309,45 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         #expect(grant == nil)
     }
 
+    @Test("directed terminal input approval binds the requested tab and its surface")
+    func directedTerminalInputBindsRequestedTabAndSurface() throws {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        controller.showWindow(nil)
+        let sourceTab = try #require(controller.tabManager.activeTab)
+        let targetTabID = controller.createTab(
+            workingDirectory: URL(fileURLWithPath: "/tmp/cocxy-directed-input")
+        )
+        let targetSurfaceID = try #require(controller.tabSurfaceMap[targetTabID])
+        #expect(controller.focusTab(id: sourceTab.id))
+
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "directed-send",
+                command: "send",
+                params: [
+                    "text": "status",
+                    "tabId": targetTabID.rawValue.uuidString,
+                ]
+            )
+        ))
+
+        let target = try #require(
+            delegate.privilegedSocketCommandPresentationTarget(for: request)
+        )
+
+        #expect(target.context.scope == .terminalSurface)
+        #expect(target.context.tabID == targetTabID.rawValue)
+        #expect(target.context.surfaceID == targetSurfaceID.rawValue)
+        #expect(target.context.workingDirectory == "/tmp/cocxy-directed-input")
+        #expect(target.context.targetDisplayName.contains(targetTabID.rawValue.uuidString))
+        #expect(
+            delegate.privilegedSocketTerminalTarget(for: target.context)?.surfaceID
+                == targetSurfaceID
+        )
+    }
+
     private func makeFixture() -> (
         controller: MainWindowController,
         tabID: TabID,
