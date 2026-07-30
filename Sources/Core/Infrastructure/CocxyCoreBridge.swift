@@ -498,6 +498,12 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// All state associated with a single terminal surface.
     struct SurfaceState {
+        struct ExternalTransport {
+            let write: (Data) -> Bool
+            let resize: (TerminalSize) -> Void
+            let close: () -> Void
+        }
+
         struct WebServerState {
             let handle: OpaquePointer
             let bindAddress: String
@@ -511,11 +517,11 @@ final class CocxyCoreBridge: TerminalEngine {
         }
 
         let terminal: OpaquePointer      // cocxycore_terminal*
-        let pty: OpaquePointer           // cocxycore_pty*
+        let pty: OpaquePointer?          // cocxycore_pty* for local surfaces
         let masterFD: Int32
         let childPID: pid_t
         let childProcessIdentity: TerminalProcessIdentity?
-        let readSource: DispatchSourceRead
+        let readSource: DispatchSourceRead?
         let contextBox: Unmanaged<CallbackContext>
         /// Serializes access to the C terminal state between the PTY read
         /// loop (background queue, calls `cocxycore_terminal_feed`) and the
@@ -540,6 +546,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var configuredImageDiskCacheDirectory: URL?
         var configuredImageDiskCacheLimitBytes: UInt64 = 512 * 1024 * 1024
         var accessibilityNotificationHandler: ((TerminalAccessibilityNotification) -> Void)?
+        let externalTransport: ExternalTransport?
 
         var outputHandler: (@Sendable (Data) -> Void)?
         var oscHandler: (@Sendable (OSCNotification) -> Void)?
@@ -790,13 +797,69 @@ final class CocxyCoreBridge: TerminalEngine {
             configuredImageFileTransferEnabled: config.imageFileTransferEnabled,
             configuredImageITerm2Enabled: config.iterm2ImagesEnabled,
             configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
-            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes
+            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes,
+            externalTransport: nil
         )
         reapedPTYChildren.remove(surfaceID)
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
         startExitReapTimerIfNeeded()
+        return surfaceID
+    }
+
+    /// Creates a renderer-backed terminal surface whose bytes are carried by
+    /// an external transport instead of a locally spawned PTY.
+    ///
+    /// The CocxyCore parser, mode-aware key encoder, Metal renderer, IME state,
+    /// semantic callbacks, and accessibility model remain identical to local
+    /// surfaces. Only byte delivery, resize propagation, and teardown are
+    /// delegated to the caller-provided transport.
+    func createExternalSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        transport: SurfaceState.ExternalTransport
+    ) throws -> SurfaceID {
+        guard let config else {
+            throw TerminalEngineError.initializationFailed(reason: "Bridge not initialized")
+        }
+
+        let initialRows: UInt16 = 24
+        let initialCols: UInt16 = 80
+        guard let terminal = cocxycore_terminal_create(initialRows, initialCols) else {
+            throw TerminalEngineError.surfaceCreationFailed(reason: "Terminal allocation failed")
+        }
+
+        configureTerminal(terminal, config: config)
+        applyNativeSemanticPatterns(to: terminal)
+
+        let surfaceID = SurfaceID()
+        let contextBox = Unmanaged.passRetained(
+            CallbackContext(surfaceID: surfaceID, terminal: terminal, bridge: self)
+        )
+        registerCallbacks(terminal: terminal, context: contextBox.toOpaque())
+
+        surfaces[surfaceID] = SurfaceState(
+            terminal: terminal,
+            pty: nil,
+            masterFD: -1,
+            childPID: -1,
+            childProcessIdentity: nil,
+            readSource: nil,
+            contextBox: contextBox,
+            terminalLock: NSLock(),
+            hostView: view,
+            lastKnownWorkingDirectory: (workingDirectory ?? config.workingDirectory).standardizedFileURL,
+            lastReportedFocus: nil,
+            configuredImageMemoryLimitBytes: config.imageMemoryLimitBytes,
+            configuredImageFileTransferEnabled: config.imageFileTransferEnabled,
+            configuredImageITerm2Enabled: config.iterm2ImagesEnabled,
+            configuredImageDiskCacheDirectory: config.imageDiskCacheDirectory,
+            configuredImageDiskCacheLimitBytes: config.imageDiskCacheLimitBytes,
+            externalTransport: transport
+        )
+
+        applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         return surfaceID
     }
 
@@ -819,9 +882,15 @@ final class CocxyCoreBridge: TerminalEngine {
             cocxycore_web_destroy(webState.handle)
         }
 
-        // Resource teardown is deferred to the source's cancel handler so
-        // any in-flight read callback drains before the raw pointers vanish.
-        state.readSource.cancel()
+        if let readSource = state.readSource {
+            // Local PTY resource teardown is deferred to the source's cancel
+            // handler so an in-flight read drains before pointers vanish.
+            readSource.cancel()
+        } else {
+            state.externalTransport?.close()
+            cocxycore_terminal_destroy(state.terminal)
+            state.contextBox.release()
+        }
     }
 
     @discardableResult
@@ -839,7 +908,11 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     private func writeBytes(_ bytes: [UInt8], to state: SurfaceState) -> Bool {
-        writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: state.pty) > 0
+        if let pty = state.pty {
+            return writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: pty) > 0
+        }
+        guard let transport = state.externalTransport else { return false }
+        return transport.write(Data(bytes))
     }
 
     @discardableResult
@@ -887,6 +960,55 @@ final class CocxyCoreBridge: TerminalEngine {
                 pty: pty
             )
         }
+    }
+
+    private func drainTerminalResponsesLocked(for state: SurfaceState) {
+        if let pty = state.pty {
+            drainTerminalResponsesLocked(terminal: state.terminal, pty: pty)
+            return
+        }
+
+        guard let transport = state.externalTransport else { return }
+        var responseBuffer = [UInt8](repeating: 0, count: Self.responseBufferSize)
+        while cocxycore_terminal_has_response(state.terminal) {
+            let count = cocxycore_terminal_read_response(
+                state.terminal,
+                &responseBuffer,
+                responseBuffer.count
+            )
+            guard count > 0 else { break }
+            _ = transport.write(Data(responseBuffer.prefix(count)))
+        }
+    }
+
+    /// Feeds bytes received from an external session into CocxyCore's normal
+    /// parser and redraw pipeline. Returns false for a local or missing surface.
+    @discardableResult
+    func feedExternalOutput(_ data: Data, to surface: SurfaceID) -> Bool {
+        guard !data.isEmpty else {
+            return surfaces[surface]?.externalTransport != nil
+        }
+
+        let altScreenChanged = withTerminalLock(surface) { state -> Bool? in
+            guard state.externalTransport != nil else { return nil }
+            let wasAltScreen = cocxycore_terminal_is_alt_screen(state.terminal)
+            let bytes = [UInt8](data)
+            bytes.withUnsafeBufferPointer { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                cocxycore_terminal_feed(state.terminal, baseAddress, buffer.count)
+            }
+            drainTerminalResponsesLocked(for: state)
+            return wasAltScreen != cocxycore_terminal_is_alt_screen(state.terminal)
+        } ?? nil
+
+        guard let altScreenChanged else { return false }
+        let hostView = surfaces[surface]?.hostView as? TerminalHostView
+        if altScreenChanged {
+            hostView?.updateInteractionMetrics()
+        }
+        hostView?.requestImmediateRedraw()
+        surfaces[surface]?.outputHandler?(data)
+        return true
     }
 
     @discardableResult
@@ -1206,8 +1328,12 @@ final class CocxyCoreBridge: TerminalEngine {
         // transparent frame (see bug v0.1.52).
         let observesProtocolV2 = withTerminalLock(surface) { state -> Bool in
             cocxycore_terminal_resize(state.terminal, size.rows, size.columns)
-            cocxycore_pty_resize(state.pty, size.rows, size.columns)
-            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
+            if let pty = state.pty {
+                cocxycore_pty_resize(pty, size.rows, size.columns)
+            } else {
+                state.externalTransport?.resize(size)
+            }
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -1248,10 +1374,11 @@ final class CocxyCoreBridge: TerminalEngine {
 
         for surfaceID in Array(surfaces.keys) where !reapedPTYChildren.contains(surfaceID) {
             let didReap = withTerminalLock(surfaceID) { state -> Bool in
+                guard let pty = state.pty else { return false }
                 cocxycore_terminal_poll_processes(state.terminal)
                 var waitResult = cocxycore_pty_wait_result()
-                _ = cocxycore_pty_wait_check(state.pty, &waitResult)
-                guard cocxycore_pty_is_alive(state.pty) == false else { return false }
+                _ = cocxycore_pty_wait_check(pty, &waitResult)
+                guard cocxycore_pty_is_alive(pty) == false else { return false }
                 return TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID)
             }
             if didReap == true {
@@ -1376,10 +1503,7 @@ final class CocxyCoreBridge: TerminalEngine {
         // observe a half-applied focus transition.
         withTerminalLock(surface) { lockedState in
             cocxycore_terminal_notify_focus(lockedState.terminal, focused)
-            drainTerminalResponsesLocked(
-                terminal: lockedState.terminal,
-                pty: lockedState.pty
-            )
+            drainTerminalResponsesLocked(for: lockedState)
         }
 
         // Persist the new focus state in the Swift-side surface map and
@@ -1541,6 +1665,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     func processMonitorRegistration(for id: SurfaceID) -> TerminalProcessMonitorRegistration? {
         guard let state = surfaces[id],
+              state.pty != nil,
               state.childPID > 0,
               state.masterFD >= 0 else {
             return nil
@@ -2026,16 +2151,16 @@ final class CocxyCoreBridge: TerminalEngine {
     func setCursorColorOverride(_ rgba: UInt32, for surface: SurfaceID) {
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_cursor_color_override(state.terminal, rgba)
-            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
+            drainTerminalResponsesLocked(for: state)
         }
         (surfaces[surface]?.hostView as? TerminalHostView)?.requestImmediateRedraw()
     }
 
     func processDiagnostics(for surface: SurfaceID) -> TerminalProcessDiagnostics? {
-        guard let state = surfaces[surface] else { return nil }
+        guard let state = surfaces[surface], let pty = state.pty else { return nil }
         return TerminalProcessDiagnostics(
             childPID: state.childPID,
-            isAlive: cocxycore_pty_is_alive(state.pty)
+            isAlive: cocxycore_pty_is_alive(pty)
         )
     }
 
@@ -2842,8 +2967,8 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     func sendSignal(_ signal: Int32, to surface: SurfaceID) -> Bool {
         withTerminalLock(surface) { state -> Bool in
-            guard cocxycore_pty_is_alive(state.pty) else { return false }
-            cocxycore_pty_send_signal(state.pty, signal)
+            guard let pty = state.pty, cocxycore_pty_is_alive(pty) else { return false }
+            cocxycore_pty_send_signal(pty, signal)
             return true
         } ?? false
     }
@@ -3236,7 +3361,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, 0)
-            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3256,7 +3381,7 @@ final class CocxyCoreBridge: TerminalEngine {
         var theme = Self.runtimeTheme(from: palette)
         withTerminalLock(surface) { state in
             cocxycore_terminal_set_theme_with_transition_ms(state.terminal, &theme, transitionMs)
-            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3268,7 +3393,7 @@ final class CocxyCoreBridge: TerminalEngine {
     func advanceThemeTransitionMs(_ deltaMs: UInt32, for surface: SurfaceID) {
         withTerminalLock(surface) { state in
             cocxycore_terminal_advance_theme_transition_ms(state.terminal, deltaMs)
-            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3378,7 +3503,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 ligaturesEnabled: ligaturesEnabled,
                 to: state.terminal
             )
-            drainTerminalResponsesLocked(terminal: state.terminal, pty: state.pty)
+            drainTerminalResponsesLocked(for: state)
             if let webState = state.webServer {
                 cocxycore_web_force_full_frame(webState.handle)
             }
@@ -3414,8 +3539,8 @@ final class CocxyCoreBridge: TerminalEngine {
 
     /// Check if PTY child process is still alive.
     func isProcessAlive(for surface: SurfaceID) -> Bool {
-        guard let state = surfaces[surface] else { return false }
-        return cocxycore_pty_is_alive(state.pty)
+        guard let state = surfaces[surface], let pty = state.pty else { return false }
+        return cocxycore_pty_is_alive(pty)
     }
 
     /// Check if selection is active for a surface.
@@ -4447,11 +4572,11 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     private func verifiedChildPID(for state: SurfaceState) -> pid_t? {
-        guard state.childPID > 0 else { return nil }
+        guard state.childPID > 0, let pty = state.pty else { return nil }
 
         var waitResult = cocxycore_pty_wait_result()
-        _ = cocxycore_pty_wait_check(state.pty, &waitResult)
-        guard cocxycore_pty_is_alive(state.pty) else { return nil }
+        _ = cocxycore_pty_wait_check(pty, &waitResult)
+        guard cocxycore_pty_is_alive(pty) else { return nil }
 
         guard let currentIdentity = processIdentity(for: state.childPID) else { return nil }
         if let expectedIdentity = state.childProcessIdentity,

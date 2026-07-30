@@ -54,6 +54,58 @@ struct CocxyCoreBridgeTests {
         #expect(registration.shellIdentity?.pid == registration.shellPID)
     }
 
+    @Test("external surface routes output input resize and teardown without a local PTY")
+    func externalSurfaceRoutesTransportLifecycle() throws {
+        let bridge = try makeBridge()
+        let hostView = InteractionMetricsTrackingHostView()
+        let transport = ExternalSurfaceTransportProbe()
+        let output = TestDataSink()
+        let surfaceID = try bridge.createExternalSurface(
+            in: hostView,
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory()),
+            transport: .init(
+                write: { transport.write($0) },
+                resize: { transport.resize($0) },
+                close: { transport.close() }
+            )
+        )
+        bridge.setOutputHandler(for: surfaceID) { data in
+            output.data.append(data)
+        }
+
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        #expect(state.pty == nil)
+        #expect(state.readSource == nil)
+        #expect(bridge.processMonitorRegistration(for: surfaceID) == nil)
+
+        let remoteOutput = Data("alpha\r\nbeta\r\n\u{1B}[?1h".utf8)
+        #expect(bridge.feedExternalOutput(remoteOutput, to: surfaceID))
+        #expect(bridge.historyLines(for: surfaceID).contains("alpha"))
+        #expect(output.data == remoteOutput)
+
+        bridge.sendText("echo", to: surfaceID)
+        #expect(transport.writes.last == Data("echo".utf8))
+        #expect(bridge.sendKeyEvent(
+            KeyEvent(characters: nil, keyCode: 123, modifiers: [], isKeyDown: true),
+            to: surfaceID
+        ))
+        #expect(transport.writes.last == Data("\u{1B}OD".utf8))
+
+        let size = TerminalSize(
+            columns: 132,
+            rows: 40,
+            pixelWidth: 1_320,
+            pixelHeight: 800
+        )
+        bridge.resize(surfaceID, to: size)
+        #expect(transport.sizes == [size])
+
+        bridge.destroySurface(surfaceID)
+        #expect(transport.closeCount == 1)
+        #expect(bridge.surfaceState(for: surfaceID) == nil)
+        #expect(!bridge.feedExternalOutput(Data("late".utf8), to: surfaceID))
+    }
+
     @Test("agent team launch command replaces the shell with a live provider process")
     func agentTeamLaunchCommandRunsExpectedLiveProcess() async throws {
         let root = FileManager.default.temporaryDirectory
@@ -2012,6 +2064,26 @@ private final class RecordingClipboardService: ClipboardServiceProtocol {
     }
 
     func clear() {}
+}
+
+@MainActor
+private final class ExternalSurfaceTransportProbe {
+    private(set) var writes: [Data] = []
+    private(set) var sizes: [TerminalSize] = []
+    private(set) var closeCount = 0
+
+    func write(_ data: Data) -> Bool {
+        writes.append(data)
+        return true
+    }
+
+    func resize(_ size: TerminalSize) {
+        sizes.append(size)
+    }
+
+    func close() {
+        closeCount += 1
+    }
 }
 
 @MainActor
