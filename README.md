@@ -342,7 +342,8 @@ Cocxy has no telemetry pipeline, no analytics SDK, no automatic diagnostic sende
 | Agent Timeline | `Cmd+Shift+T` |
 | Smart Routing | `Cmd+Shift+U` |
 | Notifications | `Cmd+Shift+I` |
-| Browser Panel | `Cmd+Shift+B` |
+| Toggle Browser | `Cmd+Option+B` |
+| Hide Command Blocks | `Cmd+Shift+B` |
 | Remote Workspaces | `Cmd+Shift+R` |
 | Markdown Outline (when active) | `Cmd+Shift+O` |
 | Markdown Source / Preview / Split | `Cmd+1` / `Cmd+2` / `Cmd+3` |
