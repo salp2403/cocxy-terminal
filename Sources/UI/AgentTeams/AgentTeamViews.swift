@@ -3,6 +3,23 @@
 
 import Foundation
 
+struct AgentTeamTerminalContext: Sendable, Equatable {
+    let teamID: String
+    let teammateID: String
+}
+
+enum AgentTeamTerminalEndReason: Sendable, Equatable {
+    case processExited
+    case tabClosed
+}
+
+struct AgentTeamTerminalEnd: Sendable, Equatable {
+    let context: AgentTeamTerminalContext
+    let tabID: TabID
+    let remainingTabCount: Int
+    let reason: AgentTeamTerminalEndReason
+}
+
 extension MainWindowController: AgentTeamPaneLaunching {
     private static let multilinePromptReadyAttempts = 150
     private static let multilinePromptReadyDelay = Duration.milliseconds(100)
@@ -42,7 +59,8 @@ extension MainWindowController: AgentTeamPaneLaunching {
     func spawnAgentTeamTerminal(
         launchSpec: AgentTeamProviderLaunchSpec,
         initialPrompt: String? = nil,
-        targetTabID: UUID?
+        targetTabID: UUID?,
+        excludesTaskQueueLifecycleEvents: Bool = false
     ) -> TabID? {
         guard let command = AgentTeamLaunchCommand.makeShellCommand(for: launchSpec),
               let workingDirectory = agentTeamWorkingDirectory(
@@ -54,7 +72,8 @@ extension MainWindowController: AgentTeamPaneLaunching {
 
         let tabID = createTab(
             workingDirectory: workingDirectory,
-            terminalEnginePreference: .inProcess
+            terminalEnginePreference: .inProcess,
+            triggersTaskQueueLifecycleEvents: !excludesTaskQueueLifecycleEvents
         )
         let title = "\(launchSpec.teammateName) - \(launchSpec.provider.displayName)"
         tabManager.renameTab(id: tabID, newTitle: title)
@@ -66,6 +85,10 @@ extension MainWindowController: AgentTeamPaneLaunching {
 
         let teamID = AgentTeamConfig.slug(launchSpec.teamID)
         agentTeamTabIDsByTeamID[teamID, default: []].insert(tabID)
+        agentTeamTabContextByTabID[tabID] = AgentTeamTerminalContext(
+            teamID: teamID,
+            teammateID: launchSpec.teammateID
+        )
         terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID)
         scheduleAgentTeamPrompt(
             initialPrompt,
@@ -90,6 +113,7 @@ extension MainWindowController: AgentTeamPaneLaunching {
         let normalizedTeamID = AgentTeamConfig.slug(teamID)
         let tabIDs = agentTeamTabIDsByTeamID.removeValue(forKey: normalizedTeamID) ?? []
         for tabID in tabIDs.sorted(by: { $0.rawValue.uuidString < $1.rawValue.uuidString }) {
+            agentTeamTabContextByTabID.removeValue(forKey: tabID)
             if tabManager.tab(for: tabID) != nil {
                 performCloseTab(
                     tabID,
@@ -100,12 +124,30 @@ extension MainWindowController: AgentTeamPaneLaunching {
         removeSubagentPanels(forSession: normalizedTeamID)
     }
 
-    func unregisterAgentTeamTab(_ tabID: TabID) {
-        for teamID in Array(agentTeamTabIDsByTeamID.keys) {
-            agentTeamTabIDsByTeamID[teamID]?.remove(tabID)
-            if agentTeamTabIDsByTeamID[teamID]?.isEmpty == true {
-                agentTeamTabIDsByTeamID.removeValue(forKey: teamID)
-            }
+    @discardableResult
+    func unregisterAgentTeamTab(
+        _ tabID: TabID,
+        reason: AgentTeamTerminalEndReason
+    ) -> AgentTeamTerminalEnd? {
+        guard let context = agentTeamTabContextByTabID.removeValue(forKey: tabID) else {
+            return nil
+        }
+        agentTeamTabIDsByTeamID[context.teamID]?.remove(tabID)
+        let remainingTabCount = agentTeamTabIDsByTeamID[context.teamID]?.count ?? 0
+        if remainingTabCount == 0 {
+            agentTeamTabIDsByTeamID.removeValue(forKey: context.teamID)
+        }
+        return AgentTeamTerminalEnd(
+            context: context,
+            tabID: tabID,
+            remainingTabCount: remainingTabCount,
+            reason: reason
+        )
+    }
+
+    func notifyAgentTeamTerminalEnded(_ terminalEnd: AgentTeamTerminalEnd) {
+        DispatchQueue.main.async { [weak self] in
+            self?.onAgentTeamTerminalEnded?(terminalEnd)
         }
     }
 

@@ -196,6 +196,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// The mapping drives transactional rollback, explicit team stop, and
     /// cleanup when a user closes an agent tab directly.
     var agentTeamTabIDsByTeamID: [String: Set<TabID>] = [:]
+    var agentTeamTabContextByTabID: [TabID: AgentTeamTerminalContext] = [:]
+
+    /// Tabs created by the persistent queue still dispatch plugin events, but
+    /// their lifecycle must never feed that same queue again.
+    var taskQueueLifecycleExcludedTabIDs = Set<TabID>()
 
     /// Restored tabs whose metadata has been installed but whose terminal
     /// surfaces have not been created yet. Hidden restore tabs stay here until
@@ -545,6 +550,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Lets AppDelegate release hook routing bindings after a tab is removed.
     var onAgentTabClosed: ((TabID) -> Void)?
+
+    /// Reports provider-process and direct-tab termination after local tab
+    /// bookkeeping has been detached from the team runtime.
+    var onAgentTeamTerminalEnded: ((AgentTeamTerminalEnd) -> Void)?
 
     /// Timeline store injected by AppDelegate for real event data.
     /// When set, the timeline panel shows live agent events instead of an empty list.

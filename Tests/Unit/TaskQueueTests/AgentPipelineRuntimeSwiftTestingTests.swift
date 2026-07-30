@@ -151,6 +151,168 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         #expect(delegate.activeAgentTeamRuns[teamID] == nil)
     }
 
+    @Test("provider exit completes queued work without hook infrastructure")
+    func providerExitCompletesQueuedWorkWithoutHooks() async throws {
+        _ = NSApplication.shared
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.configureSharedServices(for: controller, registerWindow: false)
+        let fixture = try installTeamRuntime(
+            teamID: "queue-process-exit",
+            bridge: bridge,
+            controller: controller,
+            delegate: delegate,
+            queued: true
+        )
+        #expect(delegate.hookEventReceiver == nil)
+        #expect(controller.taskQueueLifecycleExcludedTabIDs.contains(fixture.tabID))
+
+        let waiter = Task {
+            try await delegate.agentPipelineCompletionBroker.launchAndWait(
+                teamID: fixture.teamID
+            ) {}
+        }
+        #expect(await waitUntil {
+            await delegate.agentPipelineCompletionBroker.pendingTeamIDs == [fixture.teamID]
+        })
+
+        controller.handleOSCNotification(
+            .processExited,
+            fromTabID: fixture.tabID,
+            surfaceID: fixture.surfaceID
+        )
+
+        #expect(try await waiter.value == AgentPipelineStepExecutionOutput(
+            summary: "Provider process exited"
+        ))
+        let didCleanQueueRuntime = await waitUntilOnMainActor {
+            delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil
+                && delegate.activeAgentTeamRuns[fixture.teamID] == nil
+                && controller.tabManager.tab(for: fixture.tabID) == nil
+        }
+        #expect(didCleanQueueRuntime)
+    }
+
+    @Test("closing a queued provider tab fails its step and clears runtime state")
+    func closingQueuedProviderTabFailsStep() async throws {
+        _ = NSApplication.shared
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.configureSharedServices(for: controller, registerWindow: false)
+        let fixture = try installTeamRuntime(
+            teamID: "queue-tab-close",
+            bridge: bridge,
+            controller: controller,
+            delegate: delegate,
+            queued: true
+        )
+        let waiter = Task {
+            try await delegate.agentPipelineCompletionBroker.launchAndWait(
+                teamID: fixture.teamID
+            ) {}
+        }
+        #expect(await waitUntil {
+            await delegate.agentPipelineCompletionBroker.pendingTeamIDs == [fixture.teamID]
+        })
+
+        controller.performCloseTab(fixture.tabID)
+
+        await #expect(throws: AgentPipelineRuntimeError.agentFailed(
+            "Provider terminal tab closed"
+        )) {
+            _ = try await waiter.value
+        }
+        #expect(delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil)
+        #expect(delegate.activeAgentTeamRuns[fixture.teamID] == nil)
+    }
+
+    @Test("queue-origin plugin events cannot retrigger event tasks")
+    func queueOriginPluginEventsAreSuppressed() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-queue-plugin-events-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let runCount = LockedBox(0)
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: root.appendingPathComponent("queue")),
+            runHandler: { item in
+                runCount.withValue { $0 += 1 }
+                let now = Date()
+                return AgentPipelineRunSummary(
+                    pipelineID: item.pipeline.id,
+                    status: .succeeded,
+                    stepResults: [],
+                    startedAt: now,
+                    finishedAt: now
+                )
+            }
+        )
+        _ = try await queue.start()
+        let item = try TaskQueueItem(
+            id: "on-tab-created",
+            pipeline: AgentPipeline(
+                id: "event-pipeline",
+                steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
+            ),
+            trigger: .event(.tabCreated)
+        )
+        _ = try await queue.enqueue(item)
+        let delegate = AppDelegate()
+        delegate.taskQueue = queue
+        delegate.taskQueueIsReady = true
+
+        delegate.dispatchApplicationPluginEvent(
+            .tabCreated,
+            environment: [:],
+            triggersTaskQueue: false
+        )
+        try await Task.sleep(for: .milliseconds(30))
+        #expect(runCount.withValue { $0 } == 0)
+        #expect(await queue.item(id: item.id)?.status == .scheduled)
+
+        delegate.dispatchApplicationPluginEvent(.tabCreated, environment: [:])
+        #expect(await waitUntil { runCount.withValue { $0 } == 1 })
+        await queue.shutdown()
+    }
+
+    @Test("last provider exit cleans a normal team while preserving terminal output")
+    func providerExitCleansNormalTeamRuntime() async throws {
+        _ = NSApplication.shared
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.configureSharedServices(for: controller, registerWindow: false)
+        let fixture = try installTeamRuntime(
+            teamID: "normal-process-exit",
+            bridge: bridge,
+            controller: controller,
+            delegate: delegate,
+            queued: false
+        )
+
+        controller.handleOSCNotification(
+            .processExited,
+            fromTabID: fixture.tabID,
+            surfaceID: fixture.surfaceID
+        )
+
+        let didCleanNormalRuntime = await waitUntilOnMainActor {
+            delegate.activeAgentTeamRuns[fixture.teamID] == nil
+                && delegate.activeAgentTeamCoordinators[fixture.teamID] == nil
+        }
+        #expect(didCleanNormalRuntime)
+        #expect(controller.tabManager.tab(for: fixture.tabID) != nil)
+        #expect(!controller.taskQueueLifecycleExcludedTabIDs.contains(fixture.tabID))
+        controller.performCloseTab(fixture.tabID)
+    }
+
     @Test("bounds terminal hook summaries by UTF-8 bytes")
     func boundsHookSummary() throws {
         let event = HookEvent(
@@ -194,6 +356,68 @@ struct AgentPipelineRuntimeSwiftTestingTests {
             try? await Task.sleep(for: .milliseconds(5))
         }
         return false
+    }
+
+    private func waitUntilOnMainActor(
+        attempts: Int = 200,
+        _ condition: @escaping @MainActor () -> Bool
+    ) async -> Bool {
+        for _ in 0..<attempts {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        return false
+    }
+
+    private func installTeamRuntime(
+        teamID: String,
+        bridge: MockTerminalEngine,
+        controller: MainWindowController,
+        delegate: AppDelegate,
+        queued: Bool
+    ) throws -> (teamID: String, tabID: TabID, surfaceID: SurfaceID) {
+        let teammateID = "\(teamID)-agent"
+        let config = AgentTeamConfig(
+            id: teamID,
+            provider: .codex,
+            teammates: [AgentTeammateConfig(
+                id: teammateID,
+                name: "agent",
+                prompt: "Run"
+            )]
+        )
+        let launchSpec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: teamID,
+            teammateID: teammateID,
+            teammateName: "agent",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": teamID],
+            workingDirectory: NSTemporaryDirectory(),
+            mutatesUserConfiguration: false,
+            requiresPreviewBeforeLaunch: true
+        )
+        let tabID = try #require(controller.spawnAgentTeamTerminal(
+            launchSpec: launchSpec,
+            targetTabID: nil,
+            excludesTaskQueueLifecycleEvents: queued
+        ))
+        let surfaceID = try #require(controller.tabSurfaceMap[tabID])
+        delegate.activeAgentTeamCoordinators[teamID] = AgentTeamCoordinator(config: config)
+        delegate.activeAgentTeamRuns[teamID] = AgentTeamRunState(
+            config: config,
+            launchSpecs: [launchSpec]
+        )
+        if queued {
+            delegate.taskQueueAgentTeamContexts[teamID] = TaskQueueAgentTeamContext(
+                taskID: "scheduled-task",
+                pipelineID: "pipeline",
+                stepID: "step"
+            )
+        }
+        #expect(bridge.sentTexts.last?.text.contains("codex") == true)
+        return (teamID, tabID, surfaceID)
     }
 }
 

@@ -5,7 +5,6 @@ import Foundation
 
 enum AgentPipelineRuntimeError: Error, Equatable, Sendable, CustomStringConvertible {
     case runtimeUnavailable
-    case hooksUnavailable
     case worktreeUnavailable(String)
     case launchAlreadyPending(String)
     case launchFailed(String)
@@ -16,8 +15,6 @@ enum AgentPipelineRuntimeError: Error, Equatable, Sendable, CustomStringConverti
         switch self {
         case .runtimeUnavailable:
             return "Agent pipeline runtime is unavailable"
-        case .hooksUnavailable:
-            return "Agent pipeline execution requires lifecycle hooks"
         case .worktreeUnavailable(let path):
             return "Agent pipeline worktree is unavailable: \(path)"
         case .launchAlreadyPending(let teamID):

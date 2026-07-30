@@ -108,10 +108,6 @@ extension AppDelegate {
         item: TaskQueueItem,
         step: AgentPipelineStep
     ) async throws -> AgentPipelineStepExecutionOutput {
-        guard hookEventReceiver != nil else {
-            throw AgentPipelineRuntimeError.hooksUnavailable
-        }
-
         let worktree = try Self.canonicalTaskQueueWorktree(step.worktree)
         let teamID = "queue-\(UUID().uuidString.lowercased())"
         let context = TaskQueueAgentTeamContext(
@@ -153,9 +149,6 @@ extension AppDelegate {
         context: TaskQueueAgentTeamContext,
         workingDirectory: String
     ) throws {
-        guard hookEventReceiver != nil else {
-            throw AgentPipelineRuntimeError.hooksUnavailable
-        }
         guard let controller = focusedWindowController() ?? windowController,
               let targetTabID = controller.visibleTabID?.rawValue else {
             throw AgentPipelineRuntimeError.runtimeUnavailable
@@ -170,7 +163,8 @@ extension AppDelegate {
             targetTabID: targetTabID,
             workingDirectory: workingDirectory,
             persist: false,
-            syncDashboard: true
+            syncDashboard: true,
+            excludesTaskQueueLifecycleEvents: true
         )
         taskQueueAgentTeamContexts[config.id] = context
     }
@@ -220,9 +214,11 @@ extension AppDelegate {
 
     func dispatchApplicationPluginEvent(
         _ event: PluginEvent,
-        environment: [String: String]
+        environment: [String: String],
+        triggersTaskQueue: Bool = true
     ) {
-        if event != .taskRunStarted,
+        if triggersTaskQueue,
+           event != .taskRunStarted,
            event != .taskRunFinished,
            taskQueueIsReady,
            let taskQueue {

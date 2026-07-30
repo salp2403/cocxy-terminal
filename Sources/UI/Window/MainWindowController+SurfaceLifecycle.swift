@@ -965,6 +965,11 @@ extension MainWindowController {
             updateAgentProgressOverlay()
             updateNotificationRing(for: tabID, agentState: .idle)
             auroraChromeController?.refreshSources()
+            let isPrimarySurface = sourceSurfaceID == nil || tabSurfaceMap[tabID] == sourceSurfaceID
+            if isPrimarySurface,
+               let terminalEnd = unregisterAgentTeamTab(tabID, reason: .processExited) {
+                notifyAgentTeamTerminalEnded(terminalEnd)
+            }
         }
     }
 

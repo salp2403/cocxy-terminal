@@ -226,6 +226,61 @@ extension AppDelegate {
         }
     }
 
+    func handleAgentTeamTerminalEnd(
+        _ terminalEnd: AgentTeamTerminalEnd,
+        in controller: MainWindowController
+    ) {
+        let teamID = terminalEnd.context.teamID
+        let status: AgentTeamStatus = terminalEnd.reason == .processExited
+            ? .finished
+            : .error
+        let message = terminalEnd.reason == .processExited
+            ? "Provider process exited"
+            : "Provider terminal tab closed"
+
+        if var run = activeAgentTeamRuns[teamID] {
+            try? run.markTeammateTerminated(
+                teammateID: terminalEnd.context.teammateID,
+                status: status,
+                message: message
+            )
+            activeAgentTeamRuns[teamID] = run
+            activeAgentTeamCoordinators[teamID] = run.coordinator
+        }
+
+        if taskQueueAgentTeamContexts[teamID] != nil {
+            let outcome: AgentPipelineHookOutcome = terminalEnd.reason == .processExited
+                ? .succeeded(message)
+                : .failed(message)
+            completeQueuedAgentTeam(teamID: teamID, outcome: outcome)
+            if terminalEnd.reason == .processExited,
+               controller.tabManager.tab(for: terminalEnd.tabID) != nil {
+                controller.performCloseTab(
+                    terminalEnd.tabID,
+                    worktreeClosePolicyOverride: .keep
+                )
+            }
+            return
+        }
+
+        guard let run = activeAgentTeamRuns[teamID] else { return }
+        if let taskRunID = taskRunIDByTeamID[teamID] {
+            updateTaskRunCandidate(taskRunID: taskRunID, teamID: teamID, from: run)
+        } else {
+            syncAgentTeamRunToDashboard(
+                run,
+                tabID: terminalEnd.tabID.rawValue
+            )
+        }
+        guard terminalEnd.remainingTabCount == 0 else { return }
+
+        _ = removeAgentTeamRuntime(
+            teamID: teamID,
+            worktreeClosePolicyOverride: .keep,
+            removeDashboardRow: taskRunIDByTeamID[teamID] == nil
+        )
+    }
+
     @MainActor
     func launchAgentTeamConfig(
         _ config: AgentTeamConfig,
@@ -233,7 +288,8 @@ extension AppDelegate {
         targetTabID: UUID,
         workingDirectory: String,
         persist: Bool = true,
-        syncDashboard: Bool = true
+        syncDashboard: Bool = true,
+        excludesTaskQueueLifecycleEvents: Bool = false
     ) throws -> AgentTeamAppLaunchResult {
         guard activeAgentTeamCoordinators[config.id] == nil else {
             throw AgentTeamError.alreadyRunning(config.id)
@@ -241,7 +297,8 @@ extension AppDelegate {
 
         let paneLauncher = SocketBoundAgentTeamPaneLauncher(
             controller: controller,
-            targetTabID: targetTabID
+            targetTabID: targetTabID,
+            excludesTaskQueueLifecycleEvents: excludesTaskQueueLifecycleEvents
         )
         let launcher = AgentTeamLauncher(
             paneLauncher: paneLauncher,
@@ -343,11 +400,17 @@ extension AppDelegate {
 private final class SocketBoundAgentTeamPaneLauncher: AgentTeamPaneLaunching {
     private weak var controller: MainWindowController?
     private let targetTabID: UUID
+    private let excludesTaskQueueLifecycleEvents: Bool
     private(set) var launchedTabIDs: [TabID] = []
 
-    init(controller: MainWindowController, targetTabID: UUID) {
+    init(
+        controller: MainWindowController,
+        targetTabID: UUID,
+        excludesTaskQueueLifecycleEvents: Bool
+    ) {
         self.controller = controller
         self.targetTabID = targetTabID
+        self.excludesTaskQueueLifecycleEvents = excludesTaskQueueLifecycleEvents
     }
 
     func spawnAgentTeamPane(
@@ -357,7 +420,8 @@ private final class SocketBoundAgentTeamPaneLauncher: AgentTeamPaneLaunching {
         guard let tabID = controller?.spawnAgentTeamTerminal(
             launchSpec: launchSpec,
             initialPrompt: initialPrompt,
-            targetTabID: targetTabID
+            targetTabID: targetTabID,
+            excludesTaskQueueLifecycleEvents: excludesTaskQueueLifecycleEvents
         ) else {
             return false
         }

@@ -1548,6 +1548,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.unbindHookSessions(for: tabID)
             self?.handleTaskRunTabClosed(tabID)
         }
+        controller.onAgentTeamTerminalEnded = { [weak self, weak controller] terminalEnd in
+            guard let self, let controller else { return }
+            self.handleAgentTeamTerminalEnd(terminalEnd, in: controller)
+        }
         controller.windowEventBus = windowEventBus
         controller.notificationAggregator = notificationAggregator
         controller.portScanner = portScanner

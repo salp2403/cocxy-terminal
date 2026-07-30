@@ -21,6 +21,7 @@ extension MainWindowController {
     func createTab(
         workingDirectory: URL? = nil,
         terminalEnginePreference: TerminalEnginePreference? = nil,
+        triggersTaskQueueLifecycleEvents: Bool = true,
         surfaceCreator: ((any TerminalEngine, TerminalHostView, URL?) throws -> SurfaceID)? = nil
     ) -> TabID {
         let dir = workingDirectory
@@ -61,6 +62,9 @@ extension MainWindowController {
         // windows can see it in the dashboard and notification aggregator.
         let sessionID = SessionID()
         tabSessionMap[newTab.id] = sessionID
+        if !triggersTaskQueueLifecycleEvents {
+            taskQueueLifecycleExcludedTabIDs.insert(newTab.id)
+        }
         sessionRegistry?.registerSession(SessionEntry(
             sessionID: sessionID,
             ownerWindowID: windowID,
@@ -83,8 +87,18 @@ extension MainWindowController {
             workingDirectory: dir,
             sessionID: sessionID.rawValue.uuidString
         )
-        dispatchPluginEvent(.tabCreated, tabID: newTab.id, sessionID: sessionID)
-        dispatchPluginEvent(.sessionStart, tabID: newTab.id, sessionID: sessionID)
+        dispatchPluginEvent(
+            .tabCreated,
+            tabID: newTab.id,
+            sessionID: sessionID,
+            triggersTaskQueue: triggersTaskQueueLifecycleEvents
+        )
+        dispatchPluginEvent(
+            .sessionStart,
+            tabID: newTab.id,
+            sessionID: sessionID,
+            triggersTaskQueue: triggersTaskQueueLifecycleEvents
+        )
 
         handleTabSwitch(to: newTab.id)
         return newTab.id
@@ -191,11 +205,23 @@ extension MainWindowController {
         let isClosingActiveTab = (tabID == tabManager.activeTabID)
         let closingTab = tabManager.tab(for: tabID)
         let closingSessionID = sessionIDForTab(tabID)
-        unregisterAgentTeamTab(tabID)
+        let triggersTaskQueue = !taskQueueLifecycleExcludedTabIDs.contains(tabID)
+        let agentTeamTerminalEnd = unregisterAgentTeamTab(tabID, reason: .tabClosed)
         deferredRestoredTabs.removeValue(forKey: tabID)
         deferredRestoredTabMetadataIDs.remove(tabID)
-        dispatchPluginEvent(.sessionEnd, tabID: tabID, sessionID: closingSessionID)
-        dispatchPluginEvent(.tabClosed, tabID: tabID, sessionID: closingSessionID)
+        dispatchPluginEvent(
+            .sessionEnd,
+            tabID: tabID,
+            sessionID: closingSessionID,
+            triggersTaskQueue: triggersTaskQueue
+        )
+        dispatchPluginEvent(
+            .tabClosed,
+            tabID: tabID,
+            sessionID: closingSessionID,
+            triggersTaskQueue: triggersTaskQueue
+        )
+        taskQueueLifecycleExcludedTabIDs.remove(tabID)
 
         // Remove this session from the multi-window registry before
         // destroying surfaces, so other windows receive the removal
@@ -289,6 +315,9 @@ extension MainWindowController {
         if tabManager.tab(for: tabID) == nil {
             injectedDashboardViewModel?.removeSessions(forTabID: tabID.rawValue)
             onAgentTabClosed?(tabID)
+        }
+        if let agentTeamTerminalEnd {
+            notifyAgentTeamTerminalEnded(agentTeamTerminalEnd)
         }
         handleWorktreeLifecycleAfterTabClose(
             closingTab,

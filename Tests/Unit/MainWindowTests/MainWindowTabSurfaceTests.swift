@@ -1490,6 +1490,11 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         XCTAssertNotNil(teamTabID)
         guard let teamTabID else { return }
         XCTAssertNotNil(controller.tabSurfaceMap[teamTabID])
+        XCTAssertEqual(
+            controller.agentTeamTabContextByTabID[teamTabID],
+            AgentTeamTerminalContext(teamID: "ship", teammateID: "ship-plan")
+        )
+        XCTAssertFalse(controller.taskQueueLifecycleExcludedTabIDs.contains(teamTabID))
         XCTAssertEqual(controller.tabManager.tab(for: teamTabID)?.displayTitle, "Plan - Codex CLI")
         XCTAssertEqual(
             bridge.createSurfaceRequests.last?.workingDirectory?.standardizedFileURL.path,
@@ -1585,6 +1590,10 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         controller.closeAgentTeamPanes(teamID: "ship")
 
         XCTAssertNil(controller.agentTeamTabIDsByTeamID["ship"])
+        XCTAssertTrue(teamTabIDs.allSatisfy {
+            controller.agentTeamTabContextByTabID[$0] == nil
+                && !controller.taskQueueLifecycleExcludedTabIDs.contains($0)
+        })
         XCTAssertEqual(controller.tabManager.tabs.count, initialTabCount)
         XCTAssertTrue(teamTabIDs.allSatisfy { controller.tabManager.tab(for: $0) == nil })
         XCTAssertTrue(teamSurfaceIDs.isSubset(of: Set(bridge.destroyedSurfaces)))

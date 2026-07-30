@@ -7,7 +7,8 @@ extension MainWindowController {
     func dispatchPluginEvent(
         _ event: PluginEvent,
         tabID: TabID,
-        sessionID: SessionID
+        sessionID: SessionID,
+        triggersTaskQueue: Bool = true
     ) {
         let environment = Self.pluginEventEnvironment(
             tabID: tabID,
@@ -15,12 +16,17 @@ extension MainWindowController {
             windowID: windowID
         )
 
-        dispatchPluginEvent(event, environment: environment)
+        dispatchPluginEvent(
+            event,
+            environment: environment,
+            triggersTaskQueue: triggersTaskQueue
+        )
     }
 
     func dispatchPluginEvent(
         _ event: PluginEvent,
-        environment: [String: String]
+        environment: [String: String],
+        triggersTaskQueue: Bool = true
     ) {
         if let pluginEventDispatcher {
             pluginEventDispatcher(event, environment)
@@ -29,7 +35,8 @@ extension MainWindowController {
 
         (NSApp.delegate as? AppDelegate)?.dispatchApplicationPluginEvent(
             event,
-            environment: environment
+            environment: environment,
+            triggersTaskQueue: triggersTaskQueue
         )
     }
 
@@ -48,7 +55,11 @@ extension MainWindowController {
         environment["COCXY_RICH_INPUT_TEXT_CHARACTER_COUNT"] = "\(text.count)"
         environment["COCXY_RICH_INPUT_ATTACHMENT_COUNT"] = "\(attachmentCount)"
 
-        dispatchPluginEvent(.richInputSubmit, environment: environment)
+        dispatchPluginEvent(
+            .richInputSubmit,
+            environment: environment,
+            triggersTaskQueue: !taskQueueLifecycleExcludedTabIDs.contains(tabID)
+        )
 
         let hookEvent = HookEvent(
             type: .richInputDraftSubmitted,

@@ -173,6 +173,27 @@ struct AgentTeamRunState: Codable, Sendable, Equatable {
         )
     }
 
+    mutating func markTeammateTerminated(
+        teammateID: String,
+        status: AgentTeamStatus,
+        message: String,
+        now: Date = Date()
+    ) throws {
+        guard status == .finished || status == .error,
+              config.teammates.contains(where: { $0.id == teammateID }) else {
+            throw AgentTeamError.unknownTeammate(teammateID)
+        }
+        updatedAt = now
+        try coordinator.updateStatus(teammateID: teammateID, status: status, now: now)
+        try graph.updateStatus(nodeID: teammateID, status: status, now: now)
+        _ = try feed.record(
+            teammateID: teammateID,
+            kind: status == .finished ? .completion : .error,
+            message: message,
+            createdAt: now
+        )
+    }
+
     private func accepts(_ event: HookEvent) -> Bool {
         if let eventTeamID = event.teamID.map(AgentTeamConfig.slug) {
             return eventTeamID == config.id

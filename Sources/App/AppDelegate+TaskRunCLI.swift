@@ -603,10 +603,15 @@ extension AppDelegate {
     @MainActor
     func handleTaskRunTabClosed(_ tabID: TabID) {
         for (runID, storedRun) in activeTaskRuns {
-            guard storedRun.status == .launching || storedRun.status == .running,
-                  let candidate = storedRun.candidates.first(where: {
-                      $0.worktree?.tabID == tabID
-                  }) else {
+            guard storedRun.status == .launching || storedRun.status == .running else {
+                continue
+            }
+            let candidate = storedRun.candidates.first(where: { candidate in
+                let isActive = candidate.status == TaskRunCandidateStatus.preparing
+                    || candidate.status == TaskRunCandidateStatus.running
+                return isActive && candidate.worktree?.tabID == tabID
+            })
+            guard let candidate else {
                 continue
             }
             activeAgentTeamCoordinators.removeValue(forKey: candidate.teamID)
