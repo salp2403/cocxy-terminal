@@ -4,6 +4,7 @@
 import XCTest
 import AppKit
 import SwiftUI
+import CocxyShared
 @testable import CocxyTerminal
 
 @MainActor
@@ -18,6 +19,7 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     private(set) var refreshDisplayLinkAnchorCallCount = 0
     private(set) var dismissCommandBlocksCallCount = 0
     private(set) var showDetectedContentHintsCallCount = 0
+    private(set) var semanticNavigationActions: [TerminalSemanticNavigationAction] = []
     private(set) var commandBlockConfigurations: [CommandBlocksConfig] = []
     private(set) var cursorClickToMoveValues: [Bool] = []
     private(set) var shellPromptPositions: [TerminalGridPosition] = []
@@ -72,6 +74,12 @@ private final class TrackingTerminalHostView: NSView, TerminalHostingView {
     func showDetectedContentHints() -> Int {
         showDetectedContentHintsCallCount += 1
         return 1
+    }
+
+    @discardableResult
+    func performSemanticNavigation(_ action: TerminalSemanticNavigationAction) -> Bool {
+        semanticNavigationActions.append(action)
+        return true
     }
 
     func refreshDisplayLinkAnchor() {
@@ -321,6 +329,21 @@ final class TabSurfaceMappingTests: XCTestCase {
         controller.showDetectedContentHintsAction(nil)
 
         XCTAssertEqual(surfaceView.showDetectedContentHintsCallCount, 1)
+    }
+
+    func testSemanticNavigationActionsRouteToActiveTerminalSurface() {
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let surfaceView = TrackingTerminalHostView()
+        controller.terminalSurfaceView = surfaceView
+
+        controller.previousTerminalPromptAction(nil)
+        controller.nextTerminalPromptAction(nil)
+        controller.selectTerminalCommandOutputAction(nil)
+
+        XCTAssertEqual(
+            surfaceView.semanticNavigationActions,
+            [.previousPrompt, .nextPrompt, .selectCommandOutput]
+        )
     }
 
     func testCodeReviewSubmitRoutesToOriginatingTabSurface() {

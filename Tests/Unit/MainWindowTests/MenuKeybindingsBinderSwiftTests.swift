@@ -225,6 +225,12 @@ struct MenuKeybindingsBinderSwiftTests {
                 #selector(MainWindowController.scrollTerminalToTopAction(_:)),
             KeybindingActionCatalog.terminalScrollToBottom.id:
                 #selector(MainWindowController.scrollTerminalToBottomAction(_:)),
+            KeybindingActionCatalog.terminalPreviousPrompt.id:
+                #selector(MainWindowController.previousTerminalPromptAction(_:)),
+            KeybindingActionCatalog.terminalNextPrompt.id:
+                #selector(MainWindowController.nextTerminalPromptAction(_:)),
+            KeybindingActionCatalog.terminalSelectCommandOutput.id:
+                #selector(MainWindowController.selectTerminalCommandOutputAction(_:)),
             KeybindingActionCatalog.terminalHideCommandBlocks.id:
                 #selector(MainWindowController.hideCommandBlocksAction(_:)),
             KeybindingActionCatalog.terminalShowDetectedContentHints.id:
@@ -252,6 +258,31 @@ struct MenuKeybindingsBinderSwiftTests {
         })
         #expect(hintsItem.keyEquivalent == "l")
         #expect(hintsItem.keyEquivalentModifierMask == [.command, .shift])
+
+        let previousPromptItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalPreviousPrompt.id
+        })
+        #expect(previousPromptItem.keyEquivalent == String(Character(
+            UnicodeScalar(NSUpArrowFunctionKey)!
+        )))
+        #expect(previousPromptItem.keyEquivalentModifierMask == [.command])
+
+        let nextPromptItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalNextPrompt.id
+        })
+        #expect(nextPromptItem.keyEquivalent == String(Character(
+            UnicodeScalar(NSDownArrowFunctionKey)!
+        )))
+        #expect(nextPromptItem.keyEquivalentModifierMask == [.command])
+
+        let outputItem = try #require(viewMenu.items.first {
+            MenuKeybindingsBinder.actionId(of: $0)
+                == KeybindingActionCatalog.terminalSelectCommandOutput.id
+        })
+        #expect(outputItem.keyEquivalent == "a")
+        #expect(outputItem.keyEquivalentModifierMask == [.command, .shift])
     }
 
     // MARK: - Nested Menus

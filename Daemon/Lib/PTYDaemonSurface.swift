@@ -27,6 +27,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
     static let maximumRows = 512
     static let maximumColumns = 2_048
     static let maximumCells = 131_072
+    static let semanticBlockCapacity: UInt32 = 1_024
 
     /// Deadline for the asynchronous teardown that `close` waits on.
     ///
@@ -108,6 +109,11 @@ final class PTYDaemonSurface: @unchecked Sendable {
             cocxycore_terminal_destroy(terminal)
             throw PTYDaemonSurfaceError.creationFailed("terminal font configuration failed")
         }
+        guard cocxycore_terminal_enable_scrollback(terminal, 10_000),
+              cocxycore_terminal_enable_semantic(terminal, semanticBlockCapacity) else {
+            cocxycore_terminal_destroy(terminal)
+            throw PTYDaemonSurfaceError.creationFailed("terminal history configuration failed")
+        }
 
         guard let pty = spawnPTY(rows: rows, columns: columns, shell: shell, workingDirectory: workingDirectory) else {
             cocxycore_terminal_destroy(terminal)
@@ -120,7 +126,6 @@ final class PTYDaemonSurface: @unchecked Sendable {
             throw PTYDaemonSurfaceError.creationFailed("PTY attach failed")
         }
 
-        _ = cocxycore_terminal_enable_scrollback(terminal, 10_000)
         _ = cocxycore_terminal_enable_process_tracking(terminal, cocxycore_pty_child_pid(pty), 256)
 
         let surface = PTYDaemonSurface(
@@ -378,6 +383,25 @@ final class PTYDaemonSurface: @unchecked Sendable {
                 return nil
             }
             return (result, makeFrameLocked())
+        }
+    }
+
+    func semanticNavigationUnavailableReason() -> String {
+        terminalLock.withLock {
+            let blockCount = cocxycore_terminal_semantic_block_count(terminal)
+            let promptCount = cocxycore_terminal_semantic_block_count_by_type(
+                terminal,
+                UInt8(COCXYCORE_BLOCK_PROMPT.rawValue)
+            )
+            let retainedPrompts = Self.semanticPromptRegions(
+                terminal: terminal,
+                blockCount: blockCount
+            ).count
+            return "semantic navigation target unavailable " +
+                "(blocks=\(blockCount), prompts=\(promptCount), " +
+                "retainedPrompts=\(retainedPrompts), " +
+                "visibleStart=\(cocxycore_terminal_history_visible_start(terminal)), " +
+                "maximumVisibleStart=\(cocxycore_terminal_history_max_visible_start(terminal)))"
         }
     }
 

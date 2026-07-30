@@ -20,11 +20,13 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
             PTYDaemonProtocol.terminalEngineCapability,
             PTYDaemonProtocol.terminalHostRendererCapability,
             PTYDaemonProtocol.terminalContentDetectionCapability,
+            PTYDaemonProtocol.terminalSemanticNavigationCapability,
         ])
         #expect(decoded.hello?.supportsTerminalSurfaces == true)
         #expect(decoded.hello?.supportsTerminalHostRenderer == true)
         #expect(decoded.hello?.supportsTerminalEngineAdapter == true)
         #expect(decoded.hello?.supportsTerminalContentDetection == true)
+        #expect(decoded.hello?.supportsTerminalSemanticNavigation == true)
     }
 
     @Test("daemon frames carry engine-detected paths and URLs")
@@ -79,6 +81,109 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(path.line == 42)
         #expect(path.column == 7)
         #expect(contents.contains { $0.kind == .url && $0.target == "https://cocxy.dev" })
+    }
+
+    @Test("daemon navigates prompts and returns complete command output selection")
+    func daemonSemanticNavigationRoundTripsThroughServer() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-pty-semantic-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let script = root.appendingPathComponent("emit-semantic.sh")
+        try writeExecutableTestScript(
+            """
+            #!/bin/sh
+            emit_cycle() {
+              label="$1"
+              printf '\\033]133;A\\007$ \\033]133;B\\007echo %s\\r\\n\\033]133;C\\007' "$label"
+              index=0
+              while [ "$index" -lt 4 ]; do
+                printf '%s-output-%s\\r\\n' "$label" "$index"
+                index=$((index + 1))
+              done
+              printf '\\033]133;D;0\\007'
+            }
+            emit_cycle oldest
+            emit_cycle middle
+            emit_cycle latest
+            printf 'SEMANTIC_READY\\r\\n'
+            sleep 5
+            """,
+            to: script
+        )
+
+        let helper = try RunningHelperProcess()
+        defer { helper.shutdownIfNeeded() }
+        let create = try helper.sendAndWait(
+            PTYDaemonRequest(
+                id: "create-semantic",
+                command: .surfaceCreate,
+                payload: [
+                    "command": script.path,
+                    "workingDirectory": root.path,
+                    "rows": "6",
+                    "columns": "48",
+                ]
+            )
+        )
+        let surfaceID = try #require(create.surfaceID)
+        let emitted = try helper.waitForOutputText(
+            surfaceID: surfaceID,
+            containingUTF8: "SEMANTIC_READY",
+            timeout: 5
+        )
+        #expect(emitted.contains("\u{1B}]133;A\u{7}"))
+        #expect(emitted.contains("\u{1B}]133;D;0\u{7}"))
+
+        func navigate(
+            _ id: String,
+            _ action: TerminalSemanticNavigationAction
+        ) throws -> PTYDaemonResponse {
+            try helper.sendAndWait(PTYDaemonRequest(
+                id: id,
+                command: .surfaceSemanticNavigation,
+                payload: ["surfaceID": surfaceID, "action": action.rawValue]
+            ))
+        }
+
+        let previous = try navigate("semantic-previous", .previousPrompt)
+        let older = try navigate("semantic-older", .previousPrompt)
+        let newer = try navigate("semantic-newer", .nextPrompt)
+        let newestBoundary = try navigate("semantic-newest-boundary", .nextPrompt)
+
+        let previousRow = try #require(previous.semanticNavigation).viewportStartRow
+        let olderRow = try #require(older.semanticNavigation).viewportStartRow
+        let newerRow = try #require(newer.semanticNavigation).viewportStartRow
+        #expect(previous.ok && older.ok && newer.ok)
+        #expect(olderRow < previousRow)
+        #expect(newerRow == previousRow)
+        #expect(newestBoundary.ok == false)
+        #expect(newestBoundary.error?.contains("target unavailable") == true)
+
+        let output = try navigate("semantic-output", .selectCommandOutput)
+        let outputResult = try #require(output.semanticNavigation)
+        let selection = try #require(outputResult.selection)
+        #expect(output.ok)
+        #expect(outputResult.action == .selectCommandOutput)
+        #expect(selection.text.contains("latest-output-0"))
+        #expect(selection.text.contains("latest-output-3"))
+        #expect(selection.text.contains("middle-output") == false)
+        #expect(output.frame?.scrollbackTop == Int(outputResult.viewportStartRow))
+
+        let invalid = try helper.sendAndWait(PTYDaemonRequest(
+            id: "semantic-invalid",
+            command: .surfaceSemanticNavigation,
+            payload: ["surfaceID": surfaceID, "action": "invalid"]
+        ))
+        #expect(invalid.ok == false)
+        #expect(invalid.error?.contains("valid action") == true)
+
+        let close = try helper.sendAndWait(PTYDaemonRequest(
+            id: "close-semantic",
+            command: .surfaceClose,
+            payload: ["surfaceID": surfaceID]
+        ))
+        #expect(close.ok)
     }
 
     @Test("daemon preedit honors the UTF-8 cursor and emits immediate frames")

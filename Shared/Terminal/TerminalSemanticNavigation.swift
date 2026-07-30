@@ -168,13 +168,6 @@ public enum TerminalSemanticNavigationResolver {
         }
         guard outputs.isEmpty == false else { return nil }
 
-        let containingOutputs = outputs.filter {
-            $0.startRow <= visibleStartRow && visibleStartRow <= $0.endRow
-        }
-        if let containing = containingOutputs.max(by: regionStartAscending) {
-            return containing
-        }
-
         let prompts = regions.filter {
             $0.kind == .prompt && $0.startRow <= $0.endRow
         }
@@ -195,6 +188,13 @@ public enum TerminalSemanticNavigationResolver {
             if let completed = priorOutputs.max(by: regionEndAscending) {
                 return completed
             }
+        }
+
+        let containingOutputs = outputs.filter {
+            $0.startRow <= visibleStartRow && visibleStartRow <= $0.endRow
+        }
+        if let containing = containingOutputs.max(by: regionStartAscending) {
+            return containing
         }
 
         return outputs

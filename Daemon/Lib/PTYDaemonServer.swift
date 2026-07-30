@@ -140,7 +140,11 @@ public final class PTYDaemonServer {
                     )
                 }
                 guard let navigation = surface.performSemanticNavigation(action) else {
-                    return PTYDaemonResponse(id: request.id, ok: false)
+                    return PTYDaemonResponse(
+                        id: request.id,
+                        ok: false,
+                        error: surface.semanticNavigationUnavailableReason()
+                    )
                 }
                 return PTYDaemonResponse(
                     id: request.id,

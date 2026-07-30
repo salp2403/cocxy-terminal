@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
 import AppKit
+import CocxyShared
 @testable import CocxyTerminal
 
 @MainActor
@@ -30,6 +31,10 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var fontDefaultUpdates: [(family: String, size: Double)] = []
     private(set) var scrolledResults: [(surface: SurfaceID, lineNumber: Int)] = []
     private(set) var viewportScrollRequests: [(surface: SurfaceID, deltaRows: Int)] = []
+    private(set) var semanticNavigationRequests: [(
+        surface: SurfaceID,
+        action: TerminalSemanticNavigationAction
+    )] = []
     private(set) var focusNotifications: [(surface: SurfaceID, focused: Bool)] = []
     private(set) var nativeSearchRequests: [(surface: SurfaceID, options: SearchOptions)] = []
     private(set) var sessionReplayStartRequests: [SessionReplayStartRequest] = []
@@ -41,6 +46,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     var sendKeyEventReturnValue: Bool = true
     var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
     var detectedContents: [SurfaceID: [TerminalDetectedContent]] = [:]
+    var semanticNavigationResult: TerminalSemanticNavigationResult?
     var sessionReplayShouldStart = true
     var sessionReplayShouldReplay = true
 
@@ -127,6 +133,14 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
 
     func scrollViewport(surfaceID: SurfaceID, deltaRows: Int) {
         viewportScrollRequests.append((surfaceID, deltaRows))
+    }
+
+    func performSemanticNavigation(
+        _ action: TerminalSemanticNavigationAction,
+        for surface: SurfaceID
+    ) -> TerminalSemanticNavigationResult? {
+        semanticNavigationRequests.append((surface, action))
+        return semanticNavigationResult
     }
 
     func notifyFocus(_ focused: Bool, for surface: SurfaceID) {

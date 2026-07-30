@@ -367,6 +367,87 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect(deliveredScrollbackTop.withValue { $0 } == 18)
     }
 
+    @Test("semantic navigation sends the negotiated action and delivers its frame")
+    func semanticNavigationSendsActionAndDeliversFrame() throws {
+        let surfaceID = UUID()
+        let frame = PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.uuidString,
+            revision: 4,
+            timestamp: 4,
+            columns: 80,
+            rows: 24,
+            cells: [],
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 12,
+            historyMaxVisibleStart: 20
+        )
+        let result = TerminalSemanticNavigationResult(
+            action: .selectCommandOutput,
+            viewportStartRow: 12,
+            selection: TerminalSemanticSelection(
+                blockID: 88,
+                startRow: 12,
+                startColumn: 0,
+                endRow: 15,
+                endColumn: 79,
+                text: "complete daemon output"
+            )
+        )
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+            PTYDaemonResponse(
+                id: "semantic",
+                ok: true,
+                frame: frame,
+                semanticNavigation: result
+            ),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+        let deliveredRevision = LockedBox<UInt64?>(nil)
+        client.setFrameHandler(for: surface) { delivered in
+            deliveredRevision.withValue { $0 = delivered.revision }
+        }
+
+        let returned = client.performSemanticNavigation(.selectCommandOutput, for: surface)
+
+        #expect(returned == result)
+        #expect(connection.requests.map(\.command) == [
+            .hello,
+            .surfaceCreate,
+            .surfaceSemanticNavigation,
+        ])
+        #expect(connection.requests[2].payload?["surfaceID"] == surfaceID.uuidString)
+        #expect(connection.requests[2].payload?["action"] == "select_command_output")
+        #expect(deliveredRevision.withValue { $0 } == 4)
+    }
+
+    @Test("semantic navigation is not sent to an older compatible daemon")
+    func semanticNavigationRequiresCapability() throws {
+        let surfaceID = UUID()
+        let hello = PTYDaemonHello(
+            version: "dev",
+            capabilities: [
+                PTYDaemonProtocol.jsonLinesCapability,
+                PTYDaemonProtocol.terminalSurfaceCapability,
+                PTYDaemonProtocol.terminalEngineCapability,
+                PTYDaemonProtocol.terminalHostRendererCapability,
+            ]
+        )
+        let connection = MockPTYDaemonClientConnection(responses: [
+            PTYDaemonResponse(id: "hello", ok: true, hello: hello),
+            PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
+        ])
+        let client = PTYDaemonClient(connection: connection)
+        try client.initialize(config: testConfig())
+        let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
+
+        #expect(client.performSemanticNavigation(.previousPrompt, for: surface) == nil)
+        #expect(connection.requests.map(\.command) == [.hello, .surfaceCreate])
+    }
+
     @Test("search and process registration map daemon payloads to domain models")
     func searchAndProcessRegistrationMapPayloads() throws {
         let surfaceID = UUID()
@@ -974,6 +1055,7 @@ struct PTYDaemonClientSwiftTestingTests {
                 PTYDaemonProtocol.terminalSurfaceCapability,
                 PTYDaemonProtocol.terminalEngineCapability,
                 PTYDaemonProtocol.terminalHostRendererCapability,
+                PTYDaemonProtocol.terminalSemanticNavigationCapability,
             ]
         )
     }

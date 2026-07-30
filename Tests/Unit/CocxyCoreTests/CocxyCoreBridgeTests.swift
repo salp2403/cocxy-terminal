@@ -4,6 +4,7 @@ import AppKit
 import Combine
 import Testing
 import CocxyCoreKit
+import CocxyShared
 @testable import CocxyTerminal
 
 @Suite("CocxyCoreBridge", .serialized)
@@ -1459,6 +1460,87 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.commandBlock(for: surfaceID, blockID: block.id + 1) == nil)
     }
 
+    @Test("semantic prompt navigation follows retained CocxyCore history")
+    func semanticPromptNavigationFollowsRetainedHistory() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        cocxycore_terminal_resize(state.terminal, 6, 48)
+
+        for index in 1...4 {
+            feed(
+                semanticCommandCycle(label: "command-\(index)", outputLineCount: 4),
+                to: state.terminal
+            )
+        }
+
+        let liveBottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+        let previous = try #require(bridge.performSemanticNavigation(
+            .previousPrompt,
+            for: surfaceID
+        ))
+        let older = try #require(bridge.performSemanticNavigation(
+            .previousPrompt,
+            for: surfaceID
+        ))
+        let newer = try #require(bridge.performSemanticNavigation(
+            .nextPrompt,
+            for: surfaceID
+        ))
+
+        #expect(liveBottom > 0)
+        #expect(previous.viewportStartRow < liveBottom)
+        #expect(older.viewportStartRow < previous.viewportStartRow)
+        #expect(newer.viewportStartRow == previous.viewportStartRow)
+        #expect(bridge.historyVisibleStart(for: surfaceID) == previous.viewportStartRow)
+        #expect(bridge.selectionSnapshot(for: surfaceID)?.active == false)
+    }
+
+    @Test("semantic output selection exposes the complete current command output")
+    func semanticOutputSelectionExposesCompleteOutput() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        cocxycore_terminal_resize(state.terminal, 6, 48)
+
+        feed(semanticCommandCycle(label: "older", outputLineCount: 4), to: state.terminal)
+        feed(semanticCommandCycle(label: "latest", outputLineCount: 4), to: state.terminal)
+        let liveBottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+        #expect(cocxycore_terminal_history_set_visible_start(state.terminal, liveBottom))
+
+        let result = try #require(bridge.performSemanticNavigation(
+            .selectCommandOutput,
+            for: surfaceID
+        ))
+        let selection = try #require(result.selection)
+        let snapshot = try #require(bridge.selectionSnapshot(for: surfaceID))
+
+        #expect(result.action == .selectCommandOutput)
+        #expect(selection.blockID != 0)
+        #expect(selection.text.contains("latest-output-0"))
+        #expect(selection.text.contains("latest-output-3"))
+        #expect(selection.text.contains("older-output") == false)
+        #expect(snapshot.active)
+        #expect(snapshot.startRow == selection.startRow)
+        #expect(snapshot.startCol == selection.startColumn)
+        #expect(snapshot.endRow == selection.endRow)
+        #expect(snapshot.endCol == selection.endColumn)
+        #expect(snapshot.text?.contains("latest-output-3") == true)
+    }
+
+    @Test("semantic navigation rejects missing surfaces and absent semantic data")
+    func semanticNavigationRejectsMissingData() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+
+        #expect(bridge.performSemanticNavigation(.previousPrompt, for: SurfaceID()) == nil)
+        #expect(bridge.performSemanticNavigation(.previousPrompt, for: surfaceID) == nil)
+        #expect(bridge.performSemanticNavigation(.selectCommandOutput, for: surfaceID) == nil)
+    }
+
     @Test("commandBlocks omits evicted rows and maps retained rows into history")
     func commandBlocksOmitEvictedRowsAndMapRetainedRowsIntoHistory() throws {
         let bridge = try makeBridge()
@@ -1868,6 +1950,19 @@ private func numberedLines(_ count: Int) -> String {
     (0..<count)
         .map { String(format: "line-%02d", $0) }
         .joined(separator: "\r\n") + "\r\n"
+}
+
+private func semanticCommandCycle(label: String, outputLineCount: Int) -> String {
+    let output = (0..<outputLineCount)
+        .map { "\(label)-output-\($0)\r\n" }
+        .joined()
+    return "\u{1B}]133;A\u{7}" +
+        "$ " +
+        "\u{1B}]133;B\u{7}" +
+        "echo \(label)\r\n" +
+        "\u{1B}]133;C\u{7}" +
+        output +
+        "\u{1B}]133;D;0\u{7}"
 }
 
 private func makeTemporaryDirectory(named prefix: String) throws -> URL {

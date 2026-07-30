@@ -500,6 +500,7 @@
 "menu.help.title" = "Ayuda";
 "menu.help.cocxyTerminalHelp" = "Ayuda de Cocxy Terminal";
 "menu.help.showOnboarding" = "Mostrar configuración guiada";
+"terminal.smartCopy.openLink" = "Abrir enlace";
 "terminal.smartCopy.openURL" = "Abrir URL";
 "terminal.smartCopy.openPath" = "Abrir ruta";
 "terminal.smartCopy.copyIPAddress" = "Copiar dirección IP";

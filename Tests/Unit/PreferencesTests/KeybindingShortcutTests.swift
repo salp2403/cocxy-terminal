@@ -179,11 +179,29 @@ struct KeybindingActionCatalogTests {
         #expect(KeybindingActionCatalog.terminalScrollPageDown.defaultShortcut.canonical == "shift+pagedown")
         #expect(KeybindingActionCatalog.terminalScrollToTop.defaultShortcut.canonical == "cmd+home")
         #expect(KeybindingActionCatalog.terminalScrollToBottom.defaultShortcut.canonical == "cmd+end")
+        #expect(KeybindingActionCatalog.terminalPreviousPrompt.defaultShortcut.canonical == "cmd+up")
+        #expect(KeybindingActionCatalog.terminalNextPrompt.defaultShortcut.canonical == "cmd+down")
+        #expect(
+            KeybindingActionCatalog.terminalSelectCommandOutput.defaultShortcut.canonical
+                == "cmd+shift+a"
+        )
         #expect(
             KeybindingActionCatalog.terminalShowDetectedContentHints.defaultShortcut.canonical
                 == "cmd+shift+l"
         )
-        #expect(KeybindingActionCatalog.all.count == 52)
+        #expect(KeybindingActionCatalog.all.count == 55)
+    }
+
+    @Test func terminalHostRoutesSemanticShortcutsLocally() {
+        #expect(TerminalHostKeybindingRouting.actionIDs.contains(
+            KeybindingActionCatalog.terminalPreviousPrompt.id
+        ))
+        #expect(TerminalHostKeybindingRouting.actionIDs.contains(
+            KeybindingActionCatalog.terminalNextPrompt.id
+        ))
+        #expect(TerminalHostKeybindingRouting.actionIDs.contains(
+            KeybindingActionCatalog.terminalSelectCommandOutput.id
+        ))
     }
 
     @Test func commandBlockAndBrowserActionsUseDistinctShortcuts() {

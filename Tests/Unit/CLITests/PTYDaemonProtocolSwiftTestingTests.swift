@@ -37,6 +37,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(hello.supportsTerminalSurfaces == false)
         #expect(hello.supportsTerminalHostRenderer == false)
         #expect(hello.supportsTerminalEngineAdapter == false)
+        #expect(hello.supportsTerminalSemanticNavigation == false)
     }
 
     @Test("terminal engine adapter requires surface frames, engine transport and host renderer")
@@ -73,6 +74,17 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(engineOnly.supportsTerminalEngineAdapter == false)
         #expect(complete.supportsTerminalHostRenderer == true)
         #expect(complete.supportsTerminalEngineAdapter == true)
+    }
+
+    @Test("semantic navigation capability is explicitly negotiated")
+    func semanticNavigationCapabilityIsExplicit() {
+        let hello = PTYDaemonHello(
+            version: "dev",
+            capabilities: [PTYDaemonProtocol.terminalSemanticNavigationCapability]
+        )
+
+        #expect(hello.supportsTerminalSemanticNavigation)
+        #expect(hello.supportsTerminalEngineAdapter == false)
     }
 
     @Test("surface frame response round-trips through newline codec")
@@ -130,6 +142,42 @@ struct PTYDaemonProtocolSwiftTestingTests {
         let data = try PTYDaemonLineCodec.encode(response)
 
         #expect(try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: data) == response)
+    }
+
+    @Test("semantic navigation response round-trips with absolute selection data")
+    func semanticNavigationResponseRoundTrips() throws {
+        let result = TerminalSemanticNavigationResult(
+            action: .selectCommandOutput,
+            viewportStartRow: 12,
+            selection: TerminalSemanticSelection(
+                blockID: 44,
+                startRow: 12,
+                startColumn: 0,
+                endRow: 15,
+                endColumn: 79,
+                text: "complete output"
+            )
+        )
+        let response = PTYDaemonResponse(
+            id: "semantic-1",
+            ok: true,
+            semanticNavigation: result
+        )
+
+        let data = try PTYDaemonLineCodec.encode(response)
+
+        #expect(try PTYDaemonLineCodec.decode(PTYDaemonResponse.self, fromLine: data) == response)
+    }
+
+    @Test("responses from older daemons decode without semantic navigation data")
+    func olderResponsesDecodeWithoutSemanticNavigation() throws {
+        let data = Data(#"{"id":"legacy","ok":true}"#.utf8)
+
+        let response = try JSONDecoder().decode(PTYDaemonResponse.self, from: data)
+
+        #expect(response.id == "legacy")
+        #expect(response.ok)
+        #expect(response.semanticNavigation == nil)
     }
 
     @Test("surface frames from older daemons default new routing fields")
@@ -222,15 +270,25 @@ struct PTYDaemonProtocolSwiftTestingTests {
 
     @Test("modern surface commands remain JSONL round-trippable")
     func modernSurfaceCommandsRoundTrip() throws {
-        let request = PTYDaemonRequest(
+        let fontRequest = PTYDaemonRequest(
             id: "font-1",
             command: .surfaceFont,
             payload: ["family": "Menlo", "size": "14", "dpiScale": "2"]
         )
+        let semanticRequest = PTYDaemonRequest(
+            id: "semantic-1",
+            command: .surfaceSemanticNavigation,
+            payload: ["surfaceID": "surface-1", "action": "previous_prompt"]
+        )
 
-        let data = try PTYDaemonLineCodec.encode(request)
+        let fontData = try PTYDaemonLineCodec.encode(fontRequest)
+        let semanticData = try PTYDaemonLineCodec.encode(semanticRequest)
 
-        #expect(try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: data) == request)
+        #expect(try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: fontData) == fontRequest)
+        #expect(
+            try PTYDaemonLineCodec.decode(PTYDaemonRequest.self, fromLine: semanticData)
+                == semanticRequest
+        )
     }
 
     @Test("shared macOS key mapping covers progressive keyboard identities")

@@ -71,7 +71,7 @@ struct TerminalSemanticNavigationSwiftTestingTests {
                 blockID: 101,
                 kind: .commandOutput,
                 startRow: 12,
-                endRow: 18
+                endRow: 20
             ),
             TerminalSemanticRegion(
                 blockID: 102,

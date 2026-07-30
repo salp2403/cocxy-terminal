@@ -47,6 +47,9 @@ final class CommandPaletteWiringTests: XCTestCase {
             "navigation.splitDown",
             "search.toggle",
             "terminal.richInput",
+            "terminal.previousPrompt",
+            "terminal.nextPrompt",
+            "terminal.selectCommandOutput",
             "terminal.showDetectedContentHints",
             "editor.zoomIn",
             "editor.zoomOut",
@@ -103,6 +106,18 @@ final class CommandPaletteWiringTests: XCTestCase {
             actionsByID["terminal.showDetectedContentHints"]?.shortcut,
             KeybindingActionCatalog.terminalShowDetectedContentHints.defaultShortcut.prettyLabel
         )
+        XCTAssertEqual(
+            actionsByID["terminal.previousPrompt"]?.shortcut,
+            KeybindingActionCatalog.terminalPreviousPrompt.defaultShortcut.prettyLabel
+        )
+        XCTAssertEqual(
+            actionsByID["terminal.nextPrompt"]?.shortcut,
+            KeybindingActionCatalog.terminalNextPrompt.defaultShortcut.prettyLabel
+        )
+        XCTAssertEqual(
+            actionsByID["terminal.selectCommandOutput"]?.shortcut,
+            KeybindingActionCatalog.terminalSelectCommandOutput.defaultShortcut.prettyLabel
+        )
         let auroraActionIDs = Set(controller.buildAuroraPaletteActions().map(\.id))
         XCTAssertTrue(auroraActionIDs.contains("tabs.rename"))
         XCTAssertTrue(auroraActionIDs.contains("workspace.rename"))
@@ -148,6 +163,9 @@ final class CommandPaletteWiringTests: XCTestCase {
             toggleQuickTerminal: defaults.toggleQuickTerminal,
             customOverrides: [
                 KeybindingActionCatalog.terminalShowDetectedContentHints.id: "cmd+alt+h",
+                KeybindingActionCatalog.terminalPreviousPrompt.id: "cmd+alt+up",
+                KeybindingActionCatalog.terminalNextPrompt.id: "cmd+alt+down",
+                KeybindingActionCatalog.terminalSelectCommandOutput.id: "cmd+alt+o",
             ]
         )
 
@@ -158,6 +176,20 @@ final class CommandPaletteWiringTests: XCTestCase {
                 $0.id == "terminal.showDetectedContentHints"
             })?.shortcut,
             KeybindingShortcut.parse("cmd+alt+h")?.prettyLabel
+        )
+        XCTAssertEqual(
+            engine.allActions.first(where: { $0.id == "terminal.previousPrompt" })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+up")?.prettyLabel
+        )
+        XCTAssertEqual(
+            engine.allActions.first(where: { $0.id == "terminal.nextPrompt" })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+down")?.prettyLabel
+        )
+        XCTAssertEqual(
+            engine.allActions.first(where: {
+                $0.id == "terminal.selectCommandOutput"
+            })?.shortcut,
+            KeybindingShortcut.parse("cmd+alt+o")?.prettyLabel
         )
     }
 

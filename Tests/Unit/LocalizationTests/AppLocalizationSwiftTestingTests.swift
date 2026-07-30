@@ -683,6 +683,21 @@ struct AppLocalizationSwiftTestingTests {
         #expect(KeybindingCategory.tab.localizedTitle(using: spanish) == "Pestañas")
         #expect(KeybindingActionCatalog.tabNew.localizedDisplayName(using: spanish) == "Nueva pestaña")
         #expect(KeybindingActionCatalog.tabNew.localizedSummary(using: spanish) == "Abrir una nueva pestaña de terminal.")
+        #expect(
+            KeybindingActionCatalog.terminalPreviousPrompt.localizedDisplayName(using: spanish)
+                == "Prompt anterior"
+        )
+        #expect(
+            KeybindingActionCatalog.terminalSelectCommandOutput.localizedSummary(using: spanish)
+                == "Seleccionar la salida del comando asociada al prompt actual."
+        )
+        #expect(spanish.string("menu.view.nextPrompt", fallback: "Next Prompt") == "Prompt siguiente")
+        #expect(
+            spanish.string(
+                "command.terminal.selectCommandOutput.name",
+                fallback: "Select Command Output"
+            ) == "Seleccionar salida del comando"
+        )
 
         for category in KeybindingCategory.allCases {
             #expect(

@@ -53,6 +53,40 @@ struct CocxyCoreHostWiringTests {
         #expect(viewA !== viewC)
     }
 
+    @Test("CocxyCore host routes semantic actions through its live bridge")
+    func cocxyCoreHostRoutesSemanticActionsThroughLiveBridge() throws {
+        let bridge = try makeBridge()
+        let view = CocxyCoreView(viewModel: TerminalViewModel(engine: bridge))
+        let surfaceID = try bridge.createSurface(
+            in: NSView(frame: NSRect(x: 0, y: 0, width: 800, height: 400)),
+            workingDirectory: URL(fileURLWithPath: "/tmp"),
+            command: "/bin/cat"
+        )
+        defer { bridge.destroySurface(surfaceID) }
+        view.bridge = bridge
+        view.surfaceID = surfaceID
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        cocxycore_terminal_resize(state.terminal, 6, 48)
+
+        for label in ["oldest", "middle", "latest"] {
+            let output = (0..<4)
+                .map { "\(label)-output-\($0)\r\n" }
+                .joined()
+            feed(
+                "\u{1B}]133;A\u{7}$ " +
+                    "\u{1B}]133;B\u{7}echo \(label)\r\n" +
+                    "\u{1B}]133;C\u{7}\(output)" +
+                    "\u{1B}]133;D;0\u{7}",
+                into: state.terminal
+            )
+        }
+        let liveBottom = cocxycore_terminal_history_max_visible_start(state.terminal)
+
+        #expect(view.performSemanticNavigation(.previousPrompt))
+        let visibleStart = try #require(bridge.historyVisibleStart(for: surfaceID))
+        #expect(visibleStart < liveBottom)
+    }
+
     @Test("daemon host receives its initial localizer and supports live updates through the shared contract")
     func daemonHostReceivesAndUpdatesLocalizer() throws {
         let bundle = try #require(localizationBundle())
@@ -778,6 +812,60 @@ struct CocxyCoreHostWiringTests {
         view.keyDown(with: makeKeyEvent(characters: "\u{1B}", keyCode: 53))
         #expect(activated == nil)
         #expect(view.detectedContentHintSession == nil)
+        #expect(engine.keyEvents.isEmpty)
+        #expect(engine.sentTexts.isEmpty)
+    }
+
+    @Test("daemon host retains semantic output selection and copies its complete text")
+    func daemonHostCopiesCompleteSemanticOutputSelection() throws {
+        let engine = MockTerminalEngine()
+        let view = PTYDaemonHostView(viewModel: TerminalViewModel(engine: engine))
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        let surfaceID = SurfaceID()
+        view.configureSurfaceIfNeeded(bridge: engine, surfaceID: surfaceID)
+        view.apply(PTYDaemonSurfaceFrame(
+            surfaceID: surfaceID.rawValue.uuidString,
+            revision: 1,
+            timestamp: 1,
+            columns: 3,
+            rows: 1,
+            cells: Array("abc".unicodeScalars.enumerated()).map { index, scalar in
+                PTYDaemonGridCell(
+                    row: 0,
+                    column: UInt16(index),
+                    glyph: scalar.value,
+                    foregroundRGBA: 0xffffffff,
+                    backgroundRGBA: 0x000000ff
+                )
+            },
+            cursor: PTYDaemonCursor(row: 0, column: 0),
+            scrollbackTop: 8,
+            historyMaxVisibleStart: 12
+        ))
+        let selection = TerminalSemanticSelection(
+            blockID: 42,
+            startRow: 8,
+            startColumn: 0,
+            endRow: 10,
+            endColumn: 2,
+            text: "visible\ncomplete off-screen output"
+        )
+        engine.semanticNavigationResult = TerminalSemanticNavigationResult(
+            action: .selectCommandOutput,
+            viewportStartRow: 8,
+            selection: selection
+        )
+        let clipboard = MockClipboardService()
+        view.clipboardService = clipboard
+
+        #expect(view.performSemanticNavigation(.selectCommandOutput))
+        view.copy(nil)
+
+        #expect(engine.semanticNavigationRequests.count == 1)
+        #expect(engine.semanticNavigationRequests[0].surface == surfaceID)
+        #expect(engine.semanticNavigationRequests[0].action == .selectCommandOutput)
+        #expect(view.localSelectionTextForTesting == selection.text)
+        #expect(clipboard.read() == selection.text)
         #expect(engine.keyEvents.isEmpty)
         #expect(engine.sentTexts.isEmpty)
     }
