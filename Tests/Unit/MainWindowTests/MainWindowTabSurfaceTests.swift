@@ -1510,6 +1510,8 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        let store = AgentStatePerSurfaceStore()
+        controller.injectedPerSurfaceStore = store
         let spec = AgentTeamProviderLaunchSpec(
             provider: .codex,
             teamID: "ship",
@@ -1526,9 +1528,65 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
             initialPrompt: "Review the implementation",
             targetTabID: nil
         ))
-        try await Task.sleep(for: .milliseconds(600))
+        let teamTabID = try XCTUnwrap(controller.agentTeamTabIDsByTeamID["ship"]?.first)
+        let surfaceID = try XCTUnwrap(controller.tabSurfaceMap[teamTabID])
+        store.update(surfaceID: surfaceID) { $0.agentState = .waitingInput }
+        try await waitForAgentTeamPrompt(in: bridge)
 
         XCTAssertEqual(bridge.sentTexts.last?.text, "Review the implementation\r")
+    }
+
+    func testAgentTeamPromptWaitsForReadinessSignal() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        var readinessChecks = 0
+        var isReady = false
+        controller.agentTeamPromptReadinessOverride = { _ in
+            readinessChecks += 1
+            return isReady
+        }
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "ship",
+            teammateID: "ship-reviewer",
+            teammateName: "Reviewer",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": "ship"],
+            workingDirectory: NSTemporaryDirectory()
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(
+            launchSpec: spec,
+            initialPrompt: "Review the implementation",
+            targetTabID: nil
+        ))
+        try await waitUntil(timeout: .seconds(1)) { readinessChecks > 0 }
+        XCTAssertEqual(bridge.sentTexts.count, 1)
+
+        isReady = true
+        try await waitForAgentTeamPrompt(in: bridge)
+        XCTAssertEqual(bridge.sentTexts.last?.text, "Review the implementation\r")
+    }
+
+    private func waitForAgentTeamPrompt(in bridge: MockTerminalEngine) async throws {
+        try await waitUntil(timeout: .seconds(1)) { bridge.sentTexts.count == 2 }
+    }
+
+    private func waitUntil(
+        timeout: Duration,
+        condition: () -> Bool
+    ) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        while !condition() {
+            guard clock.now < deadline else {
+                XCTFail("Timed out waiting for the agent-team prompt signal")
+                return
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
     }
 
     func testAgentTeamLaunchCreatesAndStopsOneTerminalPerTeammate() {

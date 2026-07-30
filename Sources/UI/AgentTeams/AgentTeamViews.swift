@@ -21,8 +21,9 @@ struct AgentTeamTerminalEnd: Sendable, Equatable {
 }
 
 extension MainWindowController: AgentTeamPaneLaunching {
-    private static let multilinePromptReadyAttempts = 150
-    private static let multilinePromptReadyDelay = Duration.milliseconds(100)
+    private static let promptReadyAttempts = 150
+    private static let promptReadyDelay = Duration.milliseconds(100)
+    private static let promptFinalRetryDelay = Duration.milliseconds(250)
 
     func spawnAgentTeamPane(launchSpec: AgentTeamProviderLaunchSpec) -> Bool {
         spawnAgentTeamPane(
@@ -188,48 +189,72 @@ extension MainWindowController: AgentTeamPaneLaunching {
         guard !normalizedPrompt.isEmpty else { return }
 
         Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(500))
-            let requiresBracketedPaste = normalizedPrompt.contains("\n")
-            for attempt in 0..<Self.multilinePromptReadyAttempts {
+            for attempt in 0..<Self.promptReadyAttempts {
                 guard let self,
-                      self.agentTeamTabIDsByTeamID[teamID]?.contains(tabID) == true,
-                      let surfaceID = self.tabSurfaceMap[tabID] else {
+                      let surfaceID = self.activeAgentTeamPromptSurface(
+                        teamID: teamID,
+                        tabID: tabID
+                      ) else {
                     return
                 }
-                if !requiresBracketedPaste {
+                let readiness = self.agentTeamPromptReadiness(for: surfaceID)
+                if readiness.isReady {
                     self.terminalEngine(for: surfaceID).sendText(
                         Self.agentTeamPromptPayload(
                             normalizedPrompt,
-                            usesBracketedPaste: false
+                            usesBracketedPaste: readiness.usesBracketedPaste
                         ),
                         to: surfaceID
                     )
                     return
                 }
-                if let bridge = self.cocxyCoreBridge(forSurface: surfaceID),
-                   bridge.modeDiagnostics(for: surfaceID)?.bracketedPasteMode == true {
-                    bridge.sendText(
-                        Self.agentTeamPromptPayload(
-                            normalizedPrompt,
-                            usesBracketedPaste: true
-                        ),
-                        to: surfaceID
-                    )
-                    return
+                guard attempt + 1 < Self.promptReadyAttempts else {
+                    break
                 }
-                guard attempt + 1 < Self.multilinePromptReadyAttempts else {
-                    self.terminalEngine(for: surfaceID).sendText(
-                        Self.agentTeamPromptPayload(
-                            normalizedPrompt,
-                            usesBracketedPaste: false
-                        ),
-                        to: surfaceID
-                    )
-                    return
-                }
-                try? await Task.sleep(for: Self.multilinePromptReadyDelay)
+                try? await Task.sleep(for: Self.promptReadyDelay)
             }
+
+            try? await Task.sleep(for: Self.promptFinalRetryDelay)
+            guard let self,
+                  let surfaceID = self.activeAgentTeamPromptSurface(
+                    teamID: teamID,
+                    tabID: tabID
+                  ) else {
+                return
+            }
+            let finalReadiness = self.agentTeamPromptReadiness(for: surfaceID)
+            self.terminalEngine(for: surfaceID).sendText(
+                Self.agentTeamPromptPayload(
+                    normalizedPrompt,
+                    usesBracketedPaste: finalReadiness.usesBracketedPaste
+                ),
+                to: surfaceID
+            )
         }
+    }
+
+    private func activeAgentTeamPromptSurface(
+        teamID: String,
+        tabID: TabID
+    ) -> SurfaceID? {
+        guard agentTeamTabIDsByTeamID[teamID]?.contains(tabID) == true else {
+            return nil
+        }
+        return tabSurfaceMap[tabID]
+    }
+
+    private func agentTeamPromptReadiness(
+        for surfaceID: SurfaceID
+    ) -> (isReady: Bool, usesBracketedPaste: Bool) {
+        let usesBracketedPaste = cocxyCoreBridge(forSurface: surfaceID)?
+            .modeDiagnostics(for: surfaceID)?
+            .bracketedPasteMode == true
+        let detectedPrompt = injectedPerSurfaceStore?
+            .state(for: surfaceID)
+            .agentState == .waitingInput
+        let isReady = agentTeamPromptReadinessOverride?(surfaceID)
+            ?? (usesBracketedPaste || detectedPrompt)
+        return (isReady, usesBracketedPaste)
     }
 
     nonisolated static func agentTeamPromptPayload(

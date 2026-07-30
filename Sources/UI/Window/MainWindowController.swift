@@ -575,6 +575,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// teardown paths guard for `nil` and skip the reset.
     var injectedPerSurfaceStore: AgentStatePerSurfaceStore?
 
+    /// Deterministic override for agent-team prompt readiness checks.
+    var agentTeamPromptReadinessOverride: ((SurfaceID) -> Bool)?
+
     /// Aurora chrome controller instantiated lazily the first time the
     /// `appearance.aurora-enabled` flag is observed to be true. Stays
     /// `nil` while the flag is off so the classic chrome path allocates
