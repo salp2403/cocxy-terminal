@@ -52,17 +52,7 @@ extension MainWindowController {
         viewModel.updateLocalizer(appLocalizer())
 
         remoteWorkspaceHostingView?.removeFromSuperview()
-        var swiftUIView = RemoteConnectionView(
-            viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
-            localizer: appLocalizer(),
-            sshKeyManager: sshKeyManager,
-            sftpExecutor: SystemSFTPExecutor(),
-            remotePortScanner: remotePortScanner,
-            onOpenRemoteBrowser: { [weak self] profile, suggestion in
-                await self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
-            }
-        )
+        var swiftUIView = makeRemoteConnectionView(viewModel: viewModel)
         swiftUIView.vibrancyAppearanceOverride = resolveVibrancyAppearanceOverride()
         let hostingView = NSHostingView(rootView: swiftUIView)
         hostingView.wantsLayer = true
@@ -82,6 +72,37 @@ extension MainWindowController {
 
         overlayContainer.addSubview(hostingView)
         isRemoteWorkspaceVisible = true
+    }
+
+    func makeRemoteConnectionView(viewModel: RemoteConnectionViewModel) -> RemoteConnectionView {
+        RemoteConnectionView(
+            viewModel: viewModel,
+            onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
+            localizer: appLocalizer(),
+            sshKeyManager: sshKeyManager,
+            sftpExecutor: SystemSFTPExecutor(),
+            remotePortScanner: remotePortScanner,
+            onOpenRemoteBrowser: { [weak self] profile, suggestion in
+                await self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
+            },
+            onAttachTmuxSession: { [weak self] profileID, session in
+                self?.openRemoteTmuxSession(profileID: profileID, session: session) ?? false
+            },
+            onAttachDaemonSession: { [weak self] profileID, session in
+                guard let self else { throw CancellationError() }
+                _ = try await self.openRemoteDaemonSession(
+                    profileID: profileID,
+                    session: session
+                )
+            },
+            onCreateDaemonSession: { [weak self] profileID, title in
+                guard let self else { throw CancellationError() }
+                _ = try await self.createRemoteDaemonSession(
+                    profileID: profileID,
+                    title: title
+                )
+            }
+        )
     }
 
     func dismissRemoteWorkspacePanel() {

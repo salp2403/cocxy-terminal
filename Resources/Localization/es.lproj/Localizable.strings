@@ -3007,6 +3007,9 @@
 "remoteWorkspace.sessions.empty.message" = "Crea una sesión para conservar tu trabajo remoto durante desconexiones SSH.";
 "remoteWorkspace.sessions.copyAttach.help" = "Copiar comando de conexión";
 "remoteWorkspace.sessions.kill.help" = "Finalizar sesión";
+"remoteWorkspace.sessions.attach.help" = "Abrir sesión en una pestaña de terminal";
+"remoteWorkspace.sessions.attach.failed" = "No se pudo abrir la sesión. Vuelve a conectar el perfil e inténtalo de nuevo.";
+"remoteWorkspace.sessions.tabTitle" = "Sesión remota";
 
 "remoteWorkspace.portForward.title" = "Redirecciones de puerto";
 "remoteWorkspace.portForward.activeCount" = "%d activos";
@@ -3100,6 +3103,10 @@
 "remoteWorkspace.daemon.remoteSessions" = "Sesiones remotas";
 "remoteWorkspace.daemon.pid" = "PID %d";
 "remoteWorkspace.daemon.deploySessions" = "Despliega el daemon para gestionar sesiones persistentes.";
+"remoteWorkspace.daemon.session.attach.help" = "Abrir sesión en una pestaña de terminal";
+"remoteWorkspace.daemon.session.disconnected" = "La sesión remota se desconectó. Vuelve a conectarla desde Espacios remotos.";
+"remoteWorkspace.daemon.session.surfaceUnavailable" = "No hay una superficie de terminal disponible para esta sesión remota.";
+"remoteWorkspace.daemon.session.connectionUnavailable" = "Vuelve a conectar este perfil antes de abrir una sesión remota.";
 "remoteWorkspace.daemon.persistentForwards" = "Redirecciones persistentes";
 "remoteWorkspace.daemon.forwardSpec.placeholder" = "local:remoto";
 "remoteWorkspace.daemon.noPersistentForwards" = "No hay redirecciones persistentes";

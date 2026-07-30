@@ -84,6 +84,8 @@ struct DaemonControlView: View {
     @ObservedObject var viewModel: RemoteConnectionViewModel
     @ObservedObject var daemonManager: DaemonManagerImpl
     var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+    var onAttachSession: ((DaemonSessionInfo) async throws -> Void)?
+    var onCreateSession: ((String) async throws -> Void)?
     @StateObject private var operationScope: RemoteWorkspaceProfileTaskScope
 
     @State private var errorMessage: String?
@@ -100,12 +102,16 @@ struct DaemonControlView: View {
         profileID: UUID,
         viewModel: RemoteConnectionViewModel,
         daemonManager: DaemonManagerImpl,
-        localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
+        onAttachSession: ((DaemonSessionInfo) async throws -> Void)? = nil,
+        onCreateSession: ((String) async throws -> Void)? = nil
     ) {
         self.profileID = profileID
         self.viewModel = viewModel
         self.daemonManager = daemonManager
         self.localizer = localizer
+        self.onAttachSession = onAttachSession
+        self.onCreateSession = onCreateSession
         _operationScope = StateObject(
             wrappedValue: RemoteWorkspaceProfileTaskScope(profileID: profileID)
         )
@@ -305,6 +311,19 @@ struct DaemonControlView: View {
                 .font(.system(size: 9))
                 .foregroundColor(Color(nsColor: CocxyColors.overlay1))
             Spacer()
+            if onAttachSession != nil {
+                Button(action: { attachSession(session) }) {
+                    Image(systemName: "arrow.right.circle")
+                        .font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(Color(nsColor: CocxyColors.mauve))
+                .disabled(isLoadingSessions)
+                .help(localized("remoteWorkspace.daemon.session.attach.help", fallback: "Open session in a terminal tab"))
+                .accessibilityLabel(
+                    localized("remoteWorkspace.daemon.session.attach.help", fallback: "Open session in a terminal tab")
+                )
+            }
             Button(action: { killSession(session.id) }) {
                 Image(systemName: "xmark.circle")
                     .font(.system(size: 10))
@@ -543,10 +562,7 @@ struct DaemonControlView: View {
         isLoadingSessions = true
         operationScope.start(.sessions) { token in
             do {
-                let bridge = DaemonSessionBridge(
-                    connection: try daemonManager.connection(for: expectedProfileID)
-                )
-                let refreshedSessions = try await bridge.listSessions()
+                let refreshedSessions = try await loadSessions(profileID: expectedProfileID)
                 guard operationScope.isCurrent(token) else { return }
                 sessions = refreshedSessions
             } catch {
@@ -559,39 +575,74 @@ struct DaemonControlView: View {
     }
 
     private func createSession() {
-        let expectedProfileID = profileID
-        let title = newSessionTitle.isEmpty ? "cocxy-session" : newSessionTitle
+        let normalizedTitle = newSessionTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let title = normalizedTitle.isEmpty ? "cocxy-session" : normalizedTitle
+        guard let onCreateSession else {
+            errorMessage = localized(
+                "remoteWorkspace.daemon.session.surfaceUnavailable",
+                fallback: "A terminal surface is not available for this remote session."
+            )
+            return
+        }
+        isLoadingSessions = true
+        errorMessage = nil
         operationScope.start(.sessions) { token in
             do {
-                let bridge = DaemonSessionBridge(
-                    connection: try daemonManager.connection(for: expectedProfileID)
-                )
-                _ = try await bridge.createAndAttach(title: title)
+                try await onCreateSession(title)
                 guard operationScope.isCurrent(token) else { return }
                 newSessionTitle = ""
-                refreshSessions()
             } catch {
                 guard operationScope.isCurrent(token) else { return }
                 errorMessage = error.localizedDescription
             }
+            guard operationScope.isCurrent(token) else { return }
+            isLoadingSessions = false
+        }
+    }
+
+    private func attachSession(_ session: DaemonSessionInfo) {
+        guard let onAttachSession else { return }
+        isLoadingSessions = true
+        errorMessage = nil
+        operationScope.start(.sessions) { token in
+            do {
+                try await onAttachSession(session)
+            } catch {
+                guard operationScope.isCurrent(token) else { return }
+                errorMessage = error.localizedDescription
+            }
+            guard operationScope.isCurrent(token) else { return }
+            isLoadingSessions = false
         }
     }
 
     private func killSession(_ sessionID: String) {
         let expectedProfileID = profileID
+        isLoadingSessions = true
+        errorMessage = nil
         operationScope.start(.sessions) { token in
             do {
                 let bridge = DaemonSessionBridge(
                     connection: try daemonManager.connection(for: expectedProfileID)
                 )
                 try await bridge.killSession(sessionID: sessionID)
+                let refreshedSessions = try await bridge.listSessions()
                 guard operationScope.isCurrent(token) else { return }
-                refreshSessions()
+                sessions = refreshedSessions
             } catch {
                 guard operationScope.isCurrent(token) else { return }
                 errorMessage = error.localizedDescription
             }
+            guard operationScope.isCurrent(token) else { return }
+            isLoadingSessions = false
         }
+    }
+
+    private func loadSessions(profileID: UUID) async throws -> [DaemonSessionInfo] {
+        let bridge = DaemonSessionBridge(
+            connection: try daemonManager.connection(for: profileID)
+        )
+        return try await bridge.listSessions()
     }
 
     private func refreshForwards() {

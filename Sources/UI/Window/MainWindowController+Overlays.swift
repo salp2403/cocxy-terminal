@@ -2878,17 +2878,7 @@ extension MainWindowController {
         guard isRemoteWorkspaceVisible,
               let hostingView = remoteWorkspaceHostingView as? NSHostingView<RemoteConnectionView>,
               let viewModel = remoteConnectionViewModel else { return }
-        var view = RemoteConnectionView(
-            viewModel: viewModel,
-            onDismiss: { [weak self] in self?.dismissRemoteWorkspacePanel() },
-            localizer: appLocalizer(),
-            sshKeyManager: sshKeyManager,
-            sftpExecutor: SystemSFTPExecutor(),
-            remotePortScanner: remotePortScanner,
-            onOpenRemoteBrowser: { [weak self] profile, suggestion in
-                await self?.openRemoteBrowser(profile: profile, suggestion: suggestion) ?? false
-            }
-        )
+        var view = makeRemoteConnectionView(viewModel: viewModel)
         viewModel.updateLocalizer(appLocalizer())
         view.vibrancyAppearanceOverride = override
         hostingView.rootView = view

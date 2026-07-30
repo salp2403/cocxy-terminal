@@ -391,6 +391,8 @@ struct AppLocalizationSwiftTestingTests {
         #expect(spanish.string("remoteWorkspace.profileEditor.section.jumpHosts", fallback: "Jump Hosts") == "Hosts de salto")
         #expect(spanish.string("remoteWorkspace.proxy.systemWide.detail", fallback: "Routes all macOS traffic through the SSH tunnel. Requires admin password.") == "Enruta todo el tráfico de macOS por el túnel SSH. Requiere contraseña de administrador.")
         #expect(spanish.string("remoteWorkspace.daemon.controls", fallback: "Controls") == "Controles")
+        #expect(spanish.string("remoteWorkspace.sessions.attach.help", fallback: "Open session in a terminal tab") == "Abrir sesión en una pestaña de terminal")
+        #expect(spanish.string("remoteWorkspace.daemon.session.disconnected", fallback: "Remote session disconnected. Reconnect from Remote Workspaces.") == "La sesión remota se desconectó. Vuelve a conectarla desde Espacios remotos.")
         #expect(spanish.string("remoteWorkspace.relay.activeChannels", fallback: "Active Channels") == "Canales activos")
         #expect(spanish.string("remoteWorkspace.relay.hosts", fallback: "Hosts:") == "Servidores:")
         #expect(spanish.string("remoteWorkspace.relay.processes", fallback: "Procs:") == "Procesos:")

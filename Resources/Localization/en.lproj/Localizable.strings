@@ -3007,6 +3007,9 @@
 "remoteWorkspace.sessions.empty.message" = "Create a session to persist your remote work across SSH disconnects.";
 "remoteWorkspace.sessions.copyAttach.help" = "Copy attach command";
 "remoteWorkspace.sessions.kill.help" = "Kill session";
+"remoteWorkspace.sessions.attach.help" = "Open session in a terminal tab";
+"remoteWorkspace.sessions.attach.failed" = "The session could not be opened. Reconnect the profile and try again.";
+"remoteWorkspace.sessions.tabTitle" = "Remote Session";
 
 "remoteWorkspace.portForward.title" = "Port Forwards";
 "remoteWorkspace.portForward.activeCount" = "%d active";
@@ -3100,6 +3103,10 @@
 "remoteWorkspace.daemon.remoteSessions" = "Remote Sessions";
 "remoteWorkspace.daemon.pid" = "PID %d";
 "remoteWorkspace.daemon.deploySessions" = "Deploy the daemon to manage persistent sessions.";
+"remoteWorkspace.daemon.session.attach.help" = "Open session in a terminal tab";
+"remoteWorkspace.daemon.session.disconnected" = "Remote session disconnected. Reconnect from Remote Workspaces.";
+"remoteWorkspace.daemon.session.surfaceUnavailable" = "A terminal surface is not available for this remote session.";
+"remoteWorkspace.daemon.session.connectionUnavailable" = "Reconnect this profile before opening a remote session.";
 "remoteWorkspace.daemon.persistentForwards" = "Persistent Forwards";
 "remoteWorkspace.daemon.forwardSpec.placeholder" = "local:remote";
 "remoteWorkspace.daemon.noPersistentForwards" = "No persistent forwards";
