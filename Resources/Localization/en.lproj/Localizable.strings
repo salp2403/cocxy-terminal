@@ -3437,6 +3437,7 @@
 "taskQueue.detail.lastError" = "Last error";
 "taskQueue.composer.title" = "New Task";
 "taskQueue.composer.id" = "Task ID";
+"taskQueue.composer.taskIDPlaceholder" = "task-id";
 "taskQueue.composer.source" = "Source";
 "taskQueue.composer.provider" = "Provider";
 "taskQueue.composer.prompt" = "Task prompt";
@@ -3445,6 +3446,7 @@
 "taskQueue.composer.trigger" = "Trigger";
 "taskQueue.composer.cron" = "Cron expression";
 "taskQueue.composer.timeZone" = "Time zone";
+"taskQueue.composer.timeZonePlaceholder" = "America/Tegucigalpa";
 "taskQueue.composer.event" = "Plugin event";
 "taskQueue.composer.retries" = "Retries";
 "taskQueue.composer.concurrency" = "Step concurrency";

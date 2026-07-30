@@ -513,8 +513,14 @@ private struct TaskQueueComposerView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(localizer.string("taskQueue.composer.id", fallback: "Task ID"))
                             .font(.headline)
-                        TextField("task-id", text: $viewModel.draft.taskID)
-                            .textFieldStyle(.roundedBorder)
+                        TextField(
+                            localizer.string(
+                                "taskQueue.composer.taskIDPlaceholder",
+                                fallback: "task-id"
+                            ),
+                            text: $viewModel.draft.taskID
+                        )
+                        .textFieldStyle(.roundedBorder)
                     }
 
                     Picker(
@@ -616,8 +622,14 @@ private struct TaskQueueComposerView: View {
                                     fallback: "Time zone"
                                 ))
                                 .font(.headline)
-                                TextField("America/Tegucigalpa", text: $viewModel.draft.timeZoneIdentifier)
-                                    .textFieldStyle(.roundedBorder)
+                                TextField(
+                                    localizer.string(
+                                        "taskQueue.composer.timeZonePlaceholder",
+                                        fallback: "America/Tegucigalpa"
+                                    ),
+                                    text: $viewModel.draft.timeZoneIdentifier
+                                )
+                                .textFieldStyle(.roundedBorder)
                             }
                         }
                     case .event:

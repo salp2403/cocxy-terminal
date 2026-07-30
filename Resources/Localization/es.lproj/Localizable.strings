@@ -3437,6 +3437,7 @@
 "taskQueue.detail.lastError" = "Último error";
 "taskQueue.composer.title" = "Nueva tarea";
 "taskQueue.composer.id" = "ID de tarea";
+"taskQueue.composer.taskIDPlaceholder" = "id-de-tarea";
 "taskQueue.composer.source" = "Origen";
 "taskQueue.composer.provider" = "Proveedor";
 "taskQueue.composer.prompt" = "Instrucción de la tarea";
@@ -3445,6 +3446,7 @@
 "taskQueue.composer.trigger" = "Disparador";
 "taskQueue.composer.cron" = "Expresión cron";
 "taskQueue.composer.timeZone" = "Zona horaria";
+"taskQueue.composer.timeZonePlaceholder" = "America/Tegucigalpa";
 "taskQueue.composer.event" = "Evento de plugin";
 "taskQueue.composer.retries" = "Reintentos";
 "taskQueue.composer.concurrency" = "Concurrencia de pasos";
