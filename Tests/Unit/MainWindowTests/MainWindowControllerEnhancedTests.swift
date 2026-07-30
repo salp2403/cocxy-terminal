@@ -566,6 +566,8 @@ final class MainWindowConfigIntegrationTests: XCTestCase {
             durationNs: 1,
             startRow: 4,
             endRow: 5,
+            visibleStartRow: 4,
+            visibleEndRow: 5,
             streamID: 1,
             blockType: 3
         )
