@@ -3332,6 +3332,13 @@
 "command.taskRun.fanOut.description" = "Ejecutar una tarea en worktrees aislados con varios agentes locales";
 "command.taskRun.compare.name" = "Comparar tarea paralela...";
 "command.taskRun.compare.description" = "Revisar estado, costo, ramas y diffs de los candidatos";
+"command.handoff.passTask.name" = "Pasar esta tarea a...";
+"command.handoff.passTask.description" = "Continuar la tarea activa en otro agente local";
+"handoff.destination.description" = "Abrir %@ en una pestaña nueva con el contexto acotado de esta tarea";
+"handoff.error.title" = "No se pudo pasar la tarea";
+"handoff.error.noSource" = "No hay una tarea de terminal activa para pasar.";
+"handoff.error.noDestination" = "No hay otro ejecutable de agente local compatible disponible.";
+"handoff.error.unavailable" = "El traspaso de tareas no está disponible en el contexto actual de la app.";
 "quickSwitch.project.session.one" = "%d sesión";
 "quickSwitch.project.session.many" = "%d sesiones";
 

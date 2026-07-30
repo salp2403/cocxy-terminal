@@ -1089,6 +1089,7 @@ extension MainWindowController {
                     }
                 }
             ),
+            commandPaletteTaskHandoffAction(),
             CommandAction(
                 id: "worktree.create",
                 name: "Create Agent Worktree Tab",

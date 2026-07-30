@@ -3332,6 +3332,13 @@
 "command.taskRun.fanOut.description" = "Run one task in isolated worktrees with multiple local agents";
 "command.taskRun.compare.name" = "Compare Parallel Task...";
 "command.taskRun.compare.description" = "Review candidate status, cost, branches, and diffs";
+"command.handoff.passTask.name" = "Pass This Task To...";
+"command.handoff.passTask.description" = "Continue the active task in another local agent";
+"handoff.destination.description" = "Open %@ in a new tab with this task's bounded context";
+"handoff.error.title" = "Task Handoff Failed";
+"handoff.error.noSource" = "No active terminal task is available to pass.";
+"handoff.error.noDestination" = "No other supported local agent executable is available.";
+"handoff.error.unavailable" = "Task handoff is unavailable in the current app context.";
 "quickSwitch.project.session.one" = "%d session";
 "quickSwitch.project.session.many" = "%d sessions";
 

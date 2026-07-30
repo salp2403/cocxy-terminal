@@ -19,18 +19,18 @@ enum AgentTeamProvider: String, CaseIterable, Codable, Sendable, Equatable {
 
     static func resolve(named rawName: String) -> AgentTeamProvider? {
         switch rawName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "claude", "claude-code": return .claudeCode
-        case "codex": return .codex
-        case "open-code", "opencode": return .opencode
+        case "claude", "claude-code", "claude code": return .claudeCode
+        case "codex", "codex-cli", "codex cli": return .codex
+        case "open-code", "open code", "opencode": return .opencode
         case "pi": return .pi
-        case "cursor": return .cursor
-        case "gemini": return .gemini
-        case "rovo", "rovo-dev": return .rovoDev
-        case "copilot": return .copilot
+        case "cursor", "cursor-agent", "cursor agent": return .cursor
+        case "gemini", "gemini-cli", "gemini cli": return .gemini
+        case "rovo", "rovo-dev", "rovo dev", "rovodev": return .rovoDev
+        case "copilot", "github-copilot", "github copilot": return .copilot
         case "codebuddy": return .codebuddy
-        case "factory": return .factory
-        case "qoder": return .qoder
-        case "kiro": return .kiro
+        case "factory", "droid": return .factory
+        case "qoder", "qodercli": return .qoder
+        case "kiro", "kiro-cli", "kiro cli": return .kiro
         default: return nil
         }
     }
