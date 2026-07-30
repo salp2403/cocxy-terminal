@@ -51,36 +51,17 @@ extension AppDelegate {
                 .standardizedFileURL.path == approvedContext.workingDirectory else {
             return (false, ["error": "Approved agent team target is no longer available"])
         }
-        let rawProvider = params["provider"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let providerName: String
-        if let rawProvider, !rawProvider.isEmpty {
-            providerName = rawProvider
-        } else {
-            providerName = AgentTeamProvider.claudeCode.rawValue
-        }
-        guard let provider = AgentTeamProvider(rawValue: providerName) else {
-            return (false, ["error": "Unsupported agent team provider: \(providerName)"])
-        }
-
         do {
-            let config: AgentTeamConfig
-            if let templateID = params["template"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !templateID.isEmpty {
-                config = try AgentTeamTemplateCatalog.builtin.makeConfig(
-                    templateID: templateID,
-                    teamID: params["team-id"],
-                    provider: provider
-                )
-            } else if let teammates = params["teammates"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-                      !teammates.isEmpty {
-                config = try AgentTeamConfig.from(
-                    teammates: teammates,
-                    teamID: params["team-id"],
-                    provider: provider
-                )
-            } else {
-                return (false, ["error": "Missing required param: teammates"])
+            let plan = try AgentTeamCLILaunchPlanner.make(
+                params: params,
+                workingDirectory: approvedContext.workingDirectory,
+                fallbackTeamID: approvedContext.authorityDetails["team-id"],
+                adapterRegistry: agentTeamProviderAdapterRegistry
+            )
+            guard plan.authorityDetails == approvedContext.authorityDetails else {
+                return (false, ["error": "Approved agent team launch plan changed"])
             }
+            let config = plan.config
             guard activeAgentTeamCoordinators[config.id] == nil else {
                 return (false, ["error": "Agent team is already running: \(config.id)"])
             }
@@ -88,7 +69,8 @@ extension AppDelegate {
                 config,
                 controller: controller,
                 targetTabID: rawTabID,
-                workingDirectory: approvedContext.workingDirectory
+                workingDirectory: approvedContext.workingDirectory,
+                authorizedLaunchSpecs: plan.launchSpecs
             )
             let result = appResult.launchResult
 
@@ -287,6 +269,7 @@ extension AppDelegate {
         controller: MainWindowController,
         targetTabID: UUID,
         workingDirectory: String,
+        authorizedLaunchSpecs: [AgentTeamProviderLaunchSpec]? = nil,
         persist: Bool = true,
         syncDashboard: Bool = true,
         excludesTaskQueueLifecycleEvents: Bool = false
@@ -306,7 +289,15 @@ extension AppDelegate {
                 AgentTeamLaunchProfile(workingDirectory: workingDirectory)
             }
         )
-        let result = try launcher.launch(config: config)
+        let result: AgentTeamLaunchResult
+        if let authorizedLaunchSpecs {
+            result = try launcher.launch(
+                config: config,
+                preparedLaunchSpecs: authorizedLaunchSpecs
+            )
+        } else {
+            result = try launcher.launch(config: config)
+        }
         guard paneLauncher.launchedTabIDs.count == result.launchedCount else {
             paneLauncher.closeAgentTeamPanes(teamID: config.id)
             throw AgentTeamError.paneLaunchFailed(config.id)

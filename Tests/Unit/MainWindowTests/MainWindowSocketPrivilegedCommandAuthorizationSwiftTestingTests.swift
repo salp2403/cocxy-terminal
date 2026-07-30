@@ -301,6 +301,69 @@ struct MainWindowSocketPrivilegedCommandAuthorizationSwiftTestingTests {
         ])
     }
 
+    @Test("agent team approval displays exact commands and rejects resolver drift")
+    func agentTeamApprovalBindsExactLaunchPlan() throws {
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            deferContentSetup: true
+        )
+        _ = controller.tabManager.addTab(
+            workingDirectory: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        )
+        let delegate = AppDelegate()
+        delegate.agentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry(
+            executableResolver: { executable in
+                executable == "codex" ? "/approved/bin/codex" : nil
+            }
+        )
+        delegate.installWindowControllerForTesting(controller)
+        let request = try #require(SocketPrivilegedCommandAuthorizationRequest(
+            socketRequest: SocketRequest(
+                id: "agent-team-launch",
+                command: "agent-team-launch",
+                params: [
+                    "provider": "codex",
+                    "team-id": "review",
+                    "teammates": "Plan, Review",
+                ]
+            )
+        ))
+
+        let target = try #require(
+            delegate.privilegedSocketCommandPresentationTarget(for: request)
+        )
+        #expect(target.context.authorityDetails["team-id"] == "review")
+        #expect(target.context.authorityDetails["teammate.1.executable"] == "/approved/bin/codex")
+        #expect(target.context.authorityDetails["teammate.1.arguments"] == "[]")
+        #expect(
+            target.context.authorityDetails["teammate.1.working-directory"]
+                == target.context.workingDirectory
+        )
+        let preview = MainWindowController.privilegedSocketCommandApprovalPreview(
+            request: request,
+            context: target.context
+        )
+        #expect(preview.contains("authority.teammate.1.executable: /approved/bin/codex"))
+        #expect(preview.contains("authority.teammate.1.arguments: []"))
+        #expect(preview.contains("authority.teammate.1.working-directory:"))
+
+        let initialTabCount = controller.tabManager.tabs.count
+        delegate.agentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry(
+            executableResolver: { executable in
+                executable == "codex" ? "/changed/bin/codex" : nil
+            }
+        )
+        let result = delegate.handleAgentTeamCLIRequest(
+            kind: "launch",
+            params: request.params,
+            approvedContext: target.context
+        )
+
+        #expect(!result.success)
+        #expect(result.data["error"] == "Approved agent team launch plan changed")
+        #expect(controller.tabManager.tabs.count == initialTabCount)
+    }
+
     @Test("cell cloud-init reads and binds bytes only after approval")
     func cellCloudInitApprovalBindsPathAndDigest() throws {
         let root = FileManager.default.temporaryDirectory

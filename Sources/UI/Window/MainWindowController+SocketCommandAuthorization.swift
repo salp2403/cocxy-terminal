@@ -670,7 +670,15 @@ extension AppDelegate {
                         for: launchContext
                     )
                 } else {
-                    authorityDetails = [:]
+                    guard let plan = try? AgentTeamCLILaunchPlanner.make(
+                        params: request.params,
+                        workingDirectory: workingDirectory,
+                        fallbackTeamID: "team-\(request.id.uuidString.prefix(8))",
+                        adapterRegistry: agentTeamProviderAdapterRegistry
+                    ) else {
+                        return nil
+                    }
+                    authorityDetails = plan.authorityDetails
                 }
                 let targetName = request.command == .taskRun
                     ? "Parallel task in \(tab.displayTitle)"

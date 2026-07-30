@@ -215,6 +215,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Active local agent-team coordinators keyed by team ID.
     var activeAgentTeamCoordinators: [String: AgentTeamCoordinator] = [:]
 
+    /// Provider resolution used to build and later revalidate exact team launch plans.
+    var agentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry()
+
     /// Runtime Agent Team hook projections keyed by team ID.
     var activeAgentTeamRuns: [String: AgentTeamRunState] = [:]
 

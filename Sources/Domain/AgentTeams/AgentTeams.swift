@@ -107,6 +107,7 @@ enum AgentTeamError: Error, Equatable, Sendable {
     case unknownTeammate(String)
     case alreadyRunning(String)
     case paneLaunchFailed(String)
+    case launchPlanMismatch(String)
     case persistenceFailed(String)
 }
 
@@ -267,26 +268,42 @@ final class AgentTeamLauncher {
     }
 
     func launch(config: AgentTeamConfig) throws -> AgentTeamLaunchResult {
-        guard let paneLauncher else {
-            throw AgentTeamError.paneLaunchFailed("missing pane launcher")
-        }
+        try launch(
+            config: config,
+            preparedLaunchSpecs: prepareLaunchSpecs(config: config)
+        )
+    }
+
+    func prepareLaunchSpecs(config: AgentTeamConfig) throws -> [AgentTeamProviderLaunchSpec] {
         guard let adapter = adapterRegistry.adapter(for: config.provider) else {
             throw AgentTeamProviderAdapterError.executableUnavailable(
                 provider: config.provider,
                 candidates: config.provider.executableCandidates
             )
         }
+        return try config.teammates.map { teammate in
+            try adapter.makeLaunchSpec(
+                config: config,
+                teammate: teammate,
+                profile: launchProfileProvider(teammate)
+            )
+        }
+    }
+
+    func launch(
+        config: AgentTeamConfig,
+        preparedLaunchSpecs: [AgentTeamProviderLaunchSpec]
+    ) throws -> AgentTeamLaunchResult {
+        guard let paneLauncher else {
+            throw AgentTeamError.paneLaunchFailed("missing pane launcher")
+        }
+        try validatePreparedLaunchSpecs(preparedLaunchSpecs, for: config)
 
         var hasLaunchedPane = false
         do {
             var launchedIDs: [String] = []
             var launchSpecs: [AgentTeamProviderLaunchSpec] = []
-            for teammate in config.teammates {
-                let launchSpec = try adapter.makeLaunchSpec(
-                    config: config,
-                    teammate: teammate,
-                    profile: launchProfileProvider(teammate)
-                )
+            for (teammate, launchSpec) in zip(config.teammates, preparedLaunchSpecs) {
                 let didLaunch = paneLauncher.spawnAgentTeamPane(
                     launchSpec: launchSpec,
                     initialPrompt: teammate.prompt
@@ -310,6 +327,28 @@ final class AgentTeamLauncher {
                 paneLauncher.closeAgentTeamPanes(teamID: config.id)
             }
             throw error
+        }
+    }
+
+    private func validatePreparedLaunchSpecs(
+        _ launchSpecs: [AgentTeamProviderLaunchSpec],
+        for config: AgentTeamConfig
+    ) throws {
+        guard launchSpecs.count == config.teammates.count else {
+            throw AgentTeamError.launchPlanMismatch(config.id)
+        }
+        for (teammate, spec) in zip(config.teammates, launchSpecs) {
+            guard spec.provider == config.provider,
+                  spec.teamID == config.id,
+                  spec.teammateID == teammate.id,
+                  spec.teammateName == teammate.name.trimmingCharacters(in: .whitespacesAndNewlines),
+                  spec.environment["COCXY_AGENT_TEAM_ID"] == config.id,
+                  spec.environment["COCXY_AGENT_TEAMMATE_ID"] == teammate.id,
+                  spec.environment["COCXY_AGENT_TEAMMATE_NAME"] == spec.teammateName,
+                  spec.environment["COCXY_AGENT_PROVIDER"] == config.provider.rawValue,
+                  AgentTeamLaunchCommand.makeShellCommand(for: spec) != nil else {
+                throw AgentTeamError.launchPlanMismatch(teammate.id)
+            }
         }
     }
 }

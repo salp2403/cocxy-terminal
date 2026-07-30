@@ -133,6 +133,42 @@ struct AgentTeamSwiftTestingTests {
         #expect(shellCalls.withValue { $0 } == 2)
     }
 
+    @Test("CLI launch plans expose and bind each resolved provider command")
+    func cliLaunchPlanBindsResolvedProviderCommands() throws {
+        let plan = try AgentTeamCLILaunchPlanner.make(
+            params: [
+                "provider": "codex",
+                "team-id": "ship",
+                "teammates": "Plan, Review",
+            ],
+            workingDirectory: "/tmp/project",
+            fallbackTeamID: nil,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { executable in
+                executable == "codex" ? "/opt/tools/codex" : nil
+            })
+        )
+
+        #expect(plan.config.id == "ship")
+        #expect(plan.launchSpecs.map(\.executable) == ["/opt/tools/codex", "/opt/tools/codex"])
+        #expect(plan.authorityDetails["operation"] == "launch")
+        #expect(plan.authorityDetails["provider"] == "codex")
+        #expect(plan.authorityDetails["team-id"] == "ship")
+        #expect(plan.authorityDetails["teammate-count"] == "2")
+        #expect(plan.authorityDetails["teammate.1.id"] == "ship-plan")
+        #expect(plan.authorityDetails["teammate.1.executable"] == "/opt/tools/codex")
+        #expect(plan.authorityDetails["teammate.1.arguments"] == "[]")
+        #expect(plan.authorityDetails["teammate.1.working-directory"] == "/tmp/project")
+
+        let encodedEnvironment = try #require(
+            plan.authorityDetails["teammate.1.environment"]?.data(using: .utf8)
+        )
+        let environment = try JSONDecoder().decode(
+            [String: String].self,
+            from: encodedEnvironment
+        )
+        #expect(environment == plan.launchSpecs[0].environment)
+    }
+
     @Test("provider adapters build preview-only launch specs without config mutation")
     func providerAdaptersBuildPreviewOnlyLaunchSpecs() throws {
         let config = try AgentTeamConfig.from(
@@ -684,6 +720,36 @@ struct AgentTeamSwiftTestingTests {
         }
         #expect(paneLauncher.requests.isEmpty)
         #expect(paneLauncher.closedTeamIDs.isEmpty)
+    }
+
+    @Test("launcher executes prepared specs without resolving a different command")
+    @MainActor
+    func launcherExecutesPreparedSpecsExactly() throws {
+        let plan = try AgentTeamCLILaunchPlanner.make(
+            params: [
+                "provider": "codex",
+                "team-id": "ship",
+                "teammates": "Plan",
+            ],
+            workingDirectory: "/tmp/project",
+            fallbackTeamID: nil,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { _ in
+                "/approved/codex"
+            })
+        )
+        let paneLauncher = RecordingAgentTeamPaneLauncher()
+        let launcher = AgentTeamLauncher(
+            paneLauncher: paneLauncher,
+            adapterRegistry: AgentTeamProviderAdapterRegistry(executableResolver: { _ in nil })
+        )
+
+        let result = try launcher.launch(
+            config: plan.config,
+            preparedLaunchSpecs: plan.launchSpecs
+        )
+
+        #expect(result.launchSpecs == plan.launchSpecs)
+        #expect(paneLauncher.requests.map(\.launchSpec) == plan.launchSpecs)
     }
 
     @Test("coordinator keeps teammate notifications isolated")
