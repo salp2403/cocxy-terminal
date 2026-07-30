@@ -1758,6 +1758,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // are published so other windows can update their UI.
         sessionRegistry?.removeWindow(windowID)
 
+        // A whole-window close bypasses the per-tab close path. Mirror its
+        // agent cleanup for every remaining tab so hook-native dashboard rows,
+        // task bindings, and the dock badge cannot outlive the window.
+        for tabID in tabManager.tabs.map(\.id) {
+            injectedDashboardViewModel?.removeSessions(forTabID: tabID.rawValue)
+            onAgentTabClosed?(tabID)
+        }
+
         processMonitor?.stop()
 
         // Nil-ify all overlay ViewModels to break closure retain cycles.
