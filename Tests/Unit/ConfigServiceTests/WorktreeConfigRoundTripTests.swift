@@ -36,10 +36,10 @@ struct WorktreeConfigRoundTripTests {
 
     // MARK: - Defaults
 
-    @Test("default CocxyConfig has worktree feature disabled")
-    func defaultConfigHasWorktreeDisabled() {
+    @Test("default CocxyConfig has worktree feature enabled")
+    func defaultConfigHasWorktreeEnabled() {
         let defaults = CocxyConfig.defaults
-        #expect(defaults.worktree.enabled == false)
+        #expect(defaults.worktree.enabled == true)
         #expect(defaults.worktree.basePath == "~/.cocxy/worktrees")
         #expect(defaults.worktree.branchTemplate == "cocxy/{agent}/{id}")
         #expect(defaults.worktree.baseRef == "HEAD")
@@ -51,10 +51,15 @@ struct WorktreeConfigRoundTripTests {
     }
 
     @Test("default TOML template contains [worktree] section with safe defaults")
-    func defaultTomlTemplateContainsWorktreeSection() {
+    func defaultTomlTemplateContainsWorktreeSection() throws {
         let generated = ConfigService.generateDefaultToml()
-        #expect(generated.contains("[worktree]"))
-        #expect(generated.contains("enabled = false"))
+        let worktreeHeader = try #require(generated.range(of: "[worktree]"))
+        let remainingTables = generated[worktreeHeader.upperBound...]
+        let sectionEnd = remainingTables.range(of: "\n[")?.lowerBound
+            ?? remainingTables.endIndex
+        let worktreeSection = remainingTables[..<sectionEnd]
+
+        #expect(worktreeSection.contains("enabled = true"))
         #expect(generated.contains("base-path = \"~/.cocxy/worktrees\""))
         #expect(generated.contains("branch-template = \"cocxy/{agent}/{id}\""))
         #expect(generated.contains("base-ref = \"HEAD\""))
@@ -63,6 +68,9 @@ struct WorktreeConfigRoundTripTests {
         #expect(generated.contains("id-length = 6"))
         #expect(generated.contains("inherit-project-config = true"))
         #expect(generated.contains("show-badge = true"))
+
+        let config = try loadConfig(from: generated)
+        #expect(config.worktree.enabled == true)
     }
 
     // MARK: - Round-trip with all fields set
@@ -161,7 +169,7 @@ struct WorktreeConfigRoundTripTests {
         #expect(config.worktree.idLength == WorktreeConfig.maxIDLength)
     }
 
-    @Test("non-boolean enabled value falls back to default (false)")
+    @Test("non-boolean enabled value falls back to default (true)")
     func invalidEnabledTypeFallsBackToDefault() throws {
         // Mirrors the tolerant contract used by every other parser.
         let toml = """
@@ -170,29 +178,30 @@ struct WorktreeConfigRoundTripTests {
         """
         let config = try loadConfig(from: toml)
 
-        #expect(config.worktree.enabled == false)
+        #expect(config.worktree.enabled == true)
     }
 
     // MARK: - Template round-trip
 
-    @Test("generated default TOML toggled on disk round-trips the enabled flag")
-    func generatedTomlWithEnabledToggleRoundTrips() throws {
-        // Simulates Preferences writing an opt-in config back to disk.
-        // Flip every disabled feature gate in the default template, then
-        // assert the worktree section still round-trips its own fields.
-        // Other disabled-by-default sections, such as [lsp], are allowed
-        // to opt in as part of this broad generated-template smoke.
-        let base = ConfigService.generateDefaultToml()
-        let toggled = base.replacingOccurrences(
-            of: "enabled = false",
-            with: "enabled = true"
-        )
-        let config = try loadConfig(from: toggled)
+    @Test("generated default TOML round-trips enabled worktrees")
+    func generatedDefaultTomlRoundTrips() throws {
+        let generated = ConfigService.generateDefaultToml()
+        let config = try loadConfig(from: generated)
 
         #expect(config.worktree.enabled == true)
         // Other fields stay at their template defaults.
         #expect(config.worktree.onClose == .keep)
         #expect(config.worktree.idLength == 6)
+    }
+
+    @Test("explicit false disables worktree feature")
+    func explicitFalseDisablesWorktreeFeature() throws {
+        let config = try loadConfig(from: """
+        [worktree]
+        enabled = false
+        """)
+
+        #expect(config.worktree.enabled == false)
     }
 
     // MARK: - Codable backwards compatibility

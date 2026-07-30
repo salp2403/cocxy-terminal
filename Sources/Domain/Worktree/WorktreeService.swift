@@ -58,8 +58,8 @@ enum WorktreeBatchCleanupSkipReason: Codable, Equatable, Sendable {
 /// Errors surfaced by `WorktreeService`. Typed so CLI and UI layers can
 /// render actionable messages without parsing stderr themselves.
 enum WorktreeServiceError: Error, Equatable, Sendable {
-    /// `config.worktree.enabled == false`. The user must opt in via
-    /// Preferences or `~/.config/cocxy/config.toml`.
+    /// `config.worktree.enabled == false`. The user can re-enable the
+    /// feature via Preferences or `~/.config/cocxy/config.toml`.
     case featureDisabled
     /// No usable `git` binary found on PATH or in the known fallbacks.
     case gitUnavailable

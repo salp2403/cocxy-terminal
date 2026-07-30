@@ -575,9 +575,9 @@ final class ConfigService: ConfigProviding {
 
         [worktree]
         # Per-agent git worktree feature (v0.1.81).
-        # When false (default), all `cocxy worktree` CLI verbs and palette
-        # actions refuse with a helpful message instead of mutating state.
-        # Opt in to get per-agent isolated worktrees without leaving Cocxy.
+        # Enabled by default, but Cocxy does not mutate repository state until
+        # an explicit worktree or parallel-task action is requested. Set this
+        # to false to disable all worktree CLI verbs and palette actions.
         enabled = \(defaults.worktree.enabled)
         # Base directory for worktree storage. Final path is
         # `<base-path>/<repo-hash>/<worktree-id>/`. Tilde is expanded at

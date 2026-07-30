@@ -2442,10 +2442,9 @@ enum WorktreeOnClose: String, Codable, Sendable, Equatable {
 /// `[worktree]` section of the configuration.
 ///
 /// Controls the per-agent git worktree feature introduced in v0.1.81.
-/// Every field has a safe default so existing users see no behavioural
-/// change after the upgrade — in particular, `enabled` defaults to
-/// `false`, which causes every worktree CLI verb to refuse with an
-/// actionable error until the user opts in.
+/// Every field has a conservative default. The feature is available by
+/// default, but no repository or filesystem mutation occurs until the user
+/// explicitly creates a worktree or launches a task that requests one.
 struct WorktreeConfig: Codable, Sendable, Equatable {
     /// Master toggle for the worktree feature. When `false`, CLI verbs
     /// and palette actions refuse with a message pointing the user to
@@ -2499,7 +2498,7 @@ struct WorktreeConfig: Codable, Sendable, Equatable {
 
     static var defaults: WorktreeConfig {
         WorktreeConfig(
-            enabled: false,
+            enabled: true,
             basePath: "~/.cocxy/worktrees",
             branchTemplate: "cocxy/{agent}/{id}",
             baseRef: "HEAD",
