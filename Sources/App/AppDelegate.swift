@@ -227,6 +227,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// In-memory, HMAC-bound authorization sessions for directed TaskRun input.
     var taskOrchestrationSessionManager = TaskOrchestrationSessionManager()
 
+    /// Persistent scheduled agent pipelines and their runtime rendezvous state.
+    var taskQueue: TaskQueue?
+    var taskQueueTimer: Timer?
+    let agentPipelineCompletionBroker = AgentPipelineCompletionBroker()
+    var taskQueueAgentTeamContexts: [String: TaskQueueAgentTeamContext] = [:]
+
     /// The agent config service for agents.toml hot-reload.
     /// Internal setter: extensions (+AgentWiring) assign during engine init.
     var agentConfigService: AgentConfigService?
@@ -452,6 +458,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Remove menu bar item.
         menuBarItem?.uninstall()
         menuBarItem = nil
+
+        taskQueueTimer?.invalidate()
+        taskQueueTimer = nil
+        let terminatingTaskQueue = taskQueue
+        taskQueue = nil
+        Task { [agentPipelineCompletionBroker] in
+            await terminatingTaskQueue?.shutdown()
+            await agentPipelineCompletionBroker.cancelAll()
+        }
 
         // Release plugins, remote workspace, browser, and update services.
         pluginManager = nil
@@ -1903,6 +1918,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let manager = PluginManager()
         manager.scanPlugins()
         self.pluginManager = manager
+        setupTaskQueueRuntime()
     }
 
     // MARK: - Socket Server Initialization

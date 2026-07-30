@@ -27,9 +27,10 @@ extension MainWindowController {
             return
         }
 
-        (NSApp.delegate as? AppDelegate)?
-            .pluginManager?
-            .dispatchEvent(event, environment: environment)
+        (NSApp.delegate as? AppDelegate)?.dispatchApplicationPluginEvent(
+            event,
+            environment: environment
+        )
     }
 
     func dispatchRichInputSubmitEvents(

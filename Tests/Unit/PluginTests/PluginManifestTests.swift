@@ -91,6 +91,8 @@ struct PluginManifestTests {
         #expect(PluginEvent.commandComplete.scriptName == "on-command-complete.sh")
         #expect(PluginEvent.directoryChanged.scriptName == "on-directory-changed.sh")
         #expect(PluginEvent.richInputSubmit.scriptName == "on-rich-input-submit.sh")
+        #expect(PluginEvent.taskRunStarted.scriptName == "on-task-run-started.sh")
+        #expect(PluginEvent.taskRunFinished.scriptName == "on-task-run-finished.sh")
     }
 
     @Test func allPluginEventsHaveScriptNames() {

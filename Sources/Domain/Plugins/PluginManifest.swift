@@ -154,6 +154,8 @@ enum PluginEvent: String, Codable, Sendable, CaseIterable {
     case tabCreated = "tab-created"
     case tabClosed = "tab-closed"
     case directoryChanged = "directory-changed"
+    case taskRunStarted = "task-run-started"
+    case taskRunFinished = "task-run-finished"
 
     /// The expected script filename for this event.
     var scriptName: String {

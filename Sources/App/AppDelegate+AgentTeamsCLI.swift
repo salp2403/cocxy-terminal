@@ -143,6 +143,16 @@ extension AppDelegate {
         guard activeAgentTeamCoordinators[teamID] != nil else {
             return (false, ["error": "Agent team not found: \(teamID)"])
         }
+        if taskQueueAgentTeamContexts[teamID] != nil {
+            completeQueuedAgentTeam(
+                teamID: teamID,
+                outcome: .failed("Provider process stopped")
+            )
+            return (true, [
+                "status": "stopped",
+                "team-id": teamID,
+            ])
+        }
         let taskRunID = taskRunIDByTeamID[teamID]
         _ = removeAgentTeamRuntime(
             teamID: teamID,
@@ -171,6 +181,10 @@ extension AppDelegate {
 
         for teamID in candidateTeamIDs {
             guard var run = activeAgentTeamRuns[teamID] else { continue }
+            let isQueuedAgentTeam = taskQueueAgentTeamContexts[teamID] != nil
+            let queueOutcome = isQueuedAgentTeam
+                ? AgentPipelineHookOutcome.resolve(event)
+                : nil
             do {
                 let result = try run.apply(event)
                 guard result.accepted else { continue }
@@ -182,6 +196,11 @@ extension AppDelegate {
                         teamID: teamID,
                         from: run
                     )
+                } else if isQueuedAgentTeam {
+                    let tabID = agentDashboardViewModel?.tabIdForSession(teamID)
+                        ?? focusedWindowController()?.visibleTabID?.rawValue
+                        ?? focusedWindowController()?.tabManager.activeTabID?.rawValue
+                    syncAgentTeamRunToDashboard(run, tabID: tabID)
                 } else {
                     let tabID = agentDashboardViewModel?.tabIdForSession(teamID)
                         ?? focusedWindowController()?.visibleTabID?.rawValue
@@ -192,7 +211,16 @@ extension AppDelegate {
                 if let request = result.reviewBeforeShipRequest {
                     requestAgentTeamReviewBeforeShip(request)
                 }
+                if let queueOutcome {
+                    completeQueuedAgentTeam(teamID: teamID, outcome: queueOutcome)
+                }
             } catch {
+                if isQueuedAgentTeam, queueOutcome != nil {
+                    completeQueuedAgentTeam(
+                        teamID: teamID,
+                        outcome: .failed("Agent lifecycle event could not be applied")
+                    )
+                }
                 continue
             }
         }
@@ -263,6 +291,7 @@ extension AppDelegate {
         let removedRun = activeAgentTeamRuns.removeValue(forKey: teamID)
         let existed = removedCoordinator != nil || removedRun != nil
         taskRunIDByTeamID.removeValue(forKey: teamID)
+        taskQueueAgentTeamContexts.removeValue(forKey: teamID)
 
         if removeDashboardRow {
             agentDashboardViewModel?.removeAgentTeamRun(teamID: teamID)
