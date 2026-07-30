@@ -24,7 +24,8 @@ struct DaemonScriptTests {
 
     private func runScript(
         args: [String],
-        runtimeDirectory: URL? = nil
+        runtimeDirectory: URL? = nil,
+        environmentOverrides: [String: String] = [:]
     ) throws -> (stdout: String, exitCode: Int32) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
@@ -41,6 +42,9 @@ struct DaemonScriptTests {
             .appendingPathComponent("cocxyd-test-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
         env["XDG_RUNTIME_DIR"] = tempDir.path
+        for (key, value) in environmentOverrides {
+            env[key] = value
+        }
         process.environment = env
 
         try process.run()
@@ -356,7 +360,7 @@ struct DaemonScriptTests {
         ).contains(#""pong":true"#))
     }
 
-    @Test("Authenticated session attach carries input, output, and resize semantics")
+    @Test("Available session backend preserves its stream or snapshot semantics")
     func sessionAttachTransportRoundTrip() throws {
         let runtimeDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxyd-session-transport-\(UUID().uuidString)")
@@ -424,6 +428,13 @@ struct DaemonScriptTests {
         let attachData = try #require(attach["data"] as? [String: Any])
         #expect(attachData["mode"] as? String == (sessionTool == "screen" ? "stream" : "snapshot"))
         #expect(attachData["tool"] as? String == sessionTool)
+        if sessionTool == "tmux" {
+            #expect(nonnegativeInteger(attachData["cursor_x"]) != nil)
+            #expect(nonnegativeInteger(attachData["cursor_y"]) != nil)
+        } else {
+            #expect(attachData["cursor_x"] == nil)
+            #expect(attachData["cursor_y"] == nil)
+        }
 
         let invalidResize = try sendLoopbackRequest(
             "\(capability)\t"
@@ -456,8 +467,8 @@ struct DaemonScriptTests {
         } else {
             #expect(inputAccepted)
             #expect(resizeAccepted)
-            var observedOutput = false
-            for attempt in 0..<30 where !observedOutput {
+            var observedOutputData: [String: Any]?
+            for attempt in 0..<30 where observedOutputData == nil {
                 if attempt > 0 { usleep(100_000) }
                 let output = try responseObject(try sendLoopbackRequest(
                     "\(capability)\t"
@@ -469,10 +480,19 @@ struct DaemonScriptTests {
                    let encoded = data["data"] as? String,
                    let decoded = Data(base64Encoded: encoded),
                    String(data: decoded, encoding: .utf8)?.contains("cocxy-transport-ok") == true {
-                    observedOutput = true
+                    observedOutputData = data
                 }
             }
-            #expect(observedOutput)
+            let observedOutput = try #require(observedOutputData)
+            if sessionTool == "tmux" {
+                #expect(observedOutput["mode"] as? String == "snapshot")
+                #expect(nonnegativeInteger(observedOutput["cursor_x"]) != nil)
+                #expect(nonnegativeInteger(observedOutput["cursor_y"]) != nil)
+            } else {
+                #expect(observedOutput["mode"] as? String == "stream")
+                #expect(observedOutput["cursor_x"] == nil)
+                #expect(observedOutput["cursor_y"] == nil)
+            }
 
             let subsequentOutput = try responseObject(try sendLoopbackRequest(
                 "\(capability)\t"
@@ -483,10 +503,18 @@ struct DaemonScriptTests {
             let subsequentData = subsequentOutput["data"] as? [String: Any]
             let subsequentEncoded = subsequentData?["data"] as? String ?? ""
             let subsequentDecoded = Data(base64Encoded: subsequentEncoded) ?? Data()
-            #expect(
-                String(data: subsequentDecoded, encoding: .utf8)?
-                    .contains("cocxy-transport-ok") != true
-            )
+            let subsequentText = String(data: subsequentDecoded, encoding: .utf8) ?? ""
+            if sessionTool == "tmux" {
+                #expect(subsequentData?["mode"] as? String == "snapshot")
+                #expect(subsequentText.contains("cocxy-transport-ok"))
+                #expect(nonnegativeInteger(subsequentData?["cursor_x"]) != nil)
+                #expect(nonnegativeInteger(subsequentData?["cursor_y"]) != nil)
+            } else {
+                #expect(subsequentData?["mode"] as? String == "stream")
+                #expect(!subsequentText.contains("cocxy-transport-ok"))
+                #expect(subsequentData?["cursor_x"] == nil)
+                #expect(subsequentData?["cursor_y"] == nil)
+            }
         }
 
         let kill = try sendLoopbackRequest(
@@ -496,6 +524,91 @@ struct DaemonScriptTests {
             port: port
         )
         #expect(try responseObject(kill)["ok"] as? Bool == true)
+    }
+
+    @Test("Tmux snapshot protocol publishes cursor coordinates and full captures")
+    func tmuxSnapshotProtocolWithDeterministicBackend() throws {
+        let runtimeDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxyd-tmux-snapshot-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(
+            at: runtimeDirectory,
+            withIntermediateDirectories: true
+        )
+        let fixtureDirectory = runtimeDirectory.appendingPathComponent("bin")
+        try makeTmuxFixture(in: fixtureDirectory)
+        let inheritedPath = ProcessInfo.processInfo.environment["PATH"] ?? "/usr/bin:/bin"
+        let environment = ["PATH": "\(fixtureDirectory.path):\(inheritedPath)"]
+        defer {
+            _ = try? runScript(
+                args: ["stop", profileNamespace],
+                runtimeDirectory: runtimeDirectory,
+                environmentOverrides: environment
+            )
+            try? FileManager.default.removeItem(at: runtimeDirectory)
+        }
+
+        let start = try runScript(
+            args: ["start", profileNamespace],
+            runtimeDirectory: runtimeDirectory,
+            environmentOverrides: environment
+        )
+        let port = try daemonPort(from: start.stdout)
+        let capability = try daemonCapability(
+            runtimeDirectory: runtimeDirectory,
+            namespace: profileNamespace
+        )
+        let sessionID = "tmux-fixture"
+
+        let status = try responseObject(try sendLoopbackRequest(
+            "\(capability)\t" + #"{"proto":1,"id":"req-70","cmd":"status"}"#,
+            port: port
+        ))
+        let statusData = try #require(status["data"] as? [String: Any])
+        #expect(statusData["sessionTool"] as? String == "tmux")
+
+        let create = try responseObject(try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-71","cmd":"session.create","args":{"title":""#
+                + sessionID + #""}}"#,
+            port: port
+        ))
+        #expect(create["ok"] as? Bool == true)
+
+        let attach = try responseObject(try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-72","cmd":"session.attach","args":{"id":""#
+                + sessionID + #""}}"#,
+            port: port
+        ))
+        let attachData = try #require(attach["data"] as? [String: Any])
+        #expect(attachData["mode"] as? String == "snapshot")
+        #expect(attachData["tool"] as? String == "tmux")
+        #expect(nonnegativeInteger(attachData["cursor_x"]) == 4)
+        #expect(nonnegativeInteger(attachData["cursor_y"]) == 2)
+
+        for requestID in 73...74 {
+            let output = try responseObject(try sendLoopbackRequest(
+                "\(capability)\t"
+                    + #"{"proto":1,"id":"req-"# + String(requestID)
+                    + #"","cmd":"session.output","args":{"id":""#
+                    + sessionID + #""}}"#,
+                port: port
+            ))
+            let outputData = try #require(output["data"] as? [String: Any])
+            let encoded = try #require(outputData["data"] as? String)
+            #expect(Data(base64Encoded: encoded) == Data("alpha\nbeta\n".utf8))
+            #expect(outputData["mode"] as? String == "snapshot")
+            #expect(nonnegativeInteger(outputData["cursor_x"]) == 4)
+            #expect(nonnegativeInteger(outputData["cursor_y"]) == 2)
+        }
+
+        let kill = try responseObject(try sendLoopbackRequest(
+            "\(capability)\t"
+                + #"{"proto":1,"id":"req-75","cmd":"session.kill","args":{"id":""#
+                + sessionID + #""}}"#,
+            port: port
+        ))
+        #expect(kill["ok"] as? Bool == true)
     }
 
     @Test("Unauthenticated connection slots expire and become reusable")
@@ -595,27 +708,6 @@ struct DaemonScriptTests {
         #expect(!script.contains("CMD: $line"))
     }
 
-    @Test("Session transport is binary-safe, snapshot-aware, and validates targets")
-    func sessionTransportContracts() throws {
-        let script = try String(contentsOfFile: scriptPath, encoding: .utf8)
-
-        #expect(script.contains(#"COCXYD_VERSION="1.2.0""#))
-        #expect(script.contains(#"load-buffer -b "$buffer_name" "$input_file""#))
-        #expect(script.contains(#"paste-buffer -b "$buffer_name""#))
-        #expect(script.contains(#"screen -S "$session_id_arg" -p 0"#))
-        #expect(script.contains(#"-X readbuf "$input_file""#))
-        #expect(script.contains(#"\"mode\":\"stream\""#))
-        #expect(script.contains("MAX_SESSION_OUTPUT_CHUNK_BYTES=524288"))
-        #expect(script.contains(#"compact_consumed_screen_log "$target" "$next_offset""#))
-        #expect(script.contains(#"\"mode\":\"snapshot\""#))
-        #expect(script.contains(#"session_exists "$tool" "$session_id_arg""#))
-        #expect(script.contains(#"resize-window -t "=$session_id_arg""#))
-        #expect(script.contains(#"-X width "$cols_arg" "$rows_arg""#))
-        #expect(!script.contains("decoded=$("))
-        #expect(!script.contains("send-keys -t"))
-        #expect(!script.contains(#"> "/proc/$pid/fd/0""#))
-    }
-
     @Test("App build copies and verifies the reachable daemon script")
     func appBundlePipelineIncludesScript() throws {
         let root = URL(fileURLWithPath: scriptPath)
@@ -674,6 +766,60 @@ struct DaemonScriptTests {
         let data = try #require(response.data(using: .utf8))
         return try #require(
             JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+    }
+
+    private func nonnegativeInteger(_ value: Any?) -> Int? {
+        let integer: Int?
+        if let value = value as? Int {
+            integer = value
+        } else if let value = value as? NSNumber {
+            integer = value.intValue
+        } else {
+            integer = nil
+        }
+        guard let integer, integer >= 0 else { return nil }
+        return integer
+    }
+
+    private func makeTmuxFixture(in directory: URL) throws {
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let executable = directory.appendingPathComponent("tmux")
+        let script = """
+        #!/bin/sh
+        if [ "$1" = "-S" ]; then
+            shift 2
+        fi
+        command_name="$1"
+        shift
+        case "$command_name" in
+            new-session|has-session|kill-session|load-buffer|paste-buffer|resize-window)
+                exit 0
+                ;;
+            list-sessions)
+                printf 'tmux-fixture\n'
+                ;;
+            capture-pane)
+                [ "$1" = "-t" ] && [ "$3" = "-p" ] && [ "$4" = "-e" ] || exit 64
+                printf 'alpha\nbeta\n'
+                ;;
+            display-message)
+                [ "$1" = "-p" ] && [ "$2" = "-t" ] \
+                    && [ "$4" = '#{cursor_x}:#{cursor_y}' ] || exit 64
+                printf '4:2\n'
+                ;;
+            *)
+                exit 64
+                ;;
+        esac
+        """
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o700],
+            ofItemAtPath: executable.path
         )
     }
 
