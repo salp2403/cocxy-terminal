@@ -607,6 +607,7 @@ final class CocxyCoreBridge: TerminalEngine {
     /// not copy command output from CocxyCore.
     var commandBlockOutputCopyObserver: (() -> Void)?
     var commandBlockMetadataLoadObserver: (() -> Void)?
+    var commandBlockVisibleRowMapObserver: ((UInt32) -> Void)?
 
     /// Semantic adapter that converts CocxyCore events to HookEvent/TimelineEvent
     /// format for the existing agent detection and timeline systems.
@@ -2882,7 +2883,8 @@ final class CocxyCoreBridge: TerminalEngine {
     func commandBlocks(
         for surface: SurfaceID,
         limit: UInt32,
-        includeOutput: Bool = true
+        includeOutput: Bool = true,
+        includeVisibleMapping: Bool = true
     ) -> [TerminalCommandBlock] {
         withTerminalLock(surface) { state in
             let blockIDs = Self.latestCommandBlockIDs(
@@ -2894,11 +2896,51 @@ final class CocxyCoreBridge: TerminalEngine {
                     from: state.terminal,
                     blockID: blockID,
                     includeOutput: includeOutput,
+                    includeVisibleMapping: includeVisibleMapping,
                     metadataLoadObserver: self.commandBlockMetadataLoadObserver,
                     outputCopyObserver: includeOutput ? self.commandBlockOutputCopyObserver : nil
                 )
             }
         } ?? []
+    }
+
+    /// Refreshes only the viewport-relative row mapping for cached command
+    /// block metadata. This deliberately avoids metadata and output reads so
+    /// geometry/display refreshes stay bounded to two core calls per block.
+    func remapCommandBlocksForOverlay(
+        _ blocks: [TerminalCommandBlock],
+        liveBlockIDs: Set<UInt64>,
+        for surface: SurfaceID
+    ) -> [TerminalCommandBlock] {
+        withTerminalLock(surface) { state in
+            blocks.prefix(32).map { block in
+                guard liveBlockIDs.contains(block.id) else {
+                    return block.withoutVisibleMapping()
+                }
+
+                var mappedStartRow: UInt32 = 0
+                var mappedEndRow: UInt32 = 0
+                self.commandBlockVisibleRowMapObserver?(block.startRow)
+                let hasMappedStart = cocxycore_block_visible_row(
+                    state.terminal,
+                    block.startRow,
+                    &mappedStartRow
+                )
+                self.commandBlockVisibleRowMapObserver?(block.endRow)
+                let hasMappedEnd = cocxycore_block_visible_row(
+                    state.terminal,
+                    block.endRow,
+                    &mappedEndRow
+                )
+                guard hasMappedStart, hasMappedEnd else {
+                    return block.withoutVisibleMapping()
+                }
+                return block.withVisibleMapping(
+                    startRow: mappedStartRow,
+                    endRow: mappedEndRow
+                )
+            }
+        } ?? blocks.map { $0.withoutVisibleMapping() }
     }
 
     private static func latestCommandBlockIDs(
@@ -2975,6 +3017,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 from: state.terminal,
                 blockID: blockID,
                 includeOutput: true,
+                includeVisibleMapping: true,
                 metadataLoadObserver: self.commandBlockMetadataLoadObserver,
                 outputCopyObserver: self.commandBlockOutputCopyObserver
             )
@@ -3001,6 +3044,7 @@ final class CocxyCoreBridge: TerminalEngine {
         from terminal: OpaquePointer,
         blockID: UInt64,
         includeOutput: Bool,
+        includeVisibleMapping: Bool,
         metadataLoadObserver: (() -> Void)?,
         outputCopyObserver: (() -> Void)?
     ) -> TerminalCommandBlock? {
@@ -3015,15 +3059,17 @@ final class CocxyCoreBridge: TerminalEngine {
 
         var mappedStartRow: UInt32 = 0
         var mappedEndRow: UInt32 = 0
-        let hasVisibleRows = cocxycore_block_visible_row(
-            terminal,
-            metadata.start_row,
-            &mappedStartRow
-        ) && cocxycore_block_visible_row(
-            terminal,
-            metadata.end_row,
-            &mappedEndRow
-        )
+        let hasVisibleRows = includeVisibleMapping
+            && cocxycore_block_visible_row(
+                terminal,
+                metadata.start_row,
+                &mappedStartRow
+            )
+            && cocxycore_block_visible_row(
+                terminal,
+                metadata.end_row,
+                &mappedEndRow
+            )
         let output: String
         if includeOutput {
             outputCopyObserver?()

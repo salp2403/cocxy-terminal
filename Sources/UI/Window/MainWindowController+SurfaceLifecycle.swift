@@ -1022,7 +1022,12 @@ extension MainWindowController {
             return
         }
 
-        let liveBlocks = cocxyBridge.commandBlocks(for: surfaceID, limit: 32)
+        let liveBlocks = cocxyBridge.commandBlocks(
+            for: surfaceID,
+            limit: 32,
+            includeOutput: false,
+            includeVisibleMapping: false
+        )
         guard let block = liveBlocks.last else { return }
 
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()

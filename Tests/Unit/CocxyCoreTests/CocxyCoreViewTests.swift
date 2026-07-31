@@ -2210,40 +2210,49 @@ struct CocxyCoreViewTests {
         #expect(toggledIDs == [41])
     }
 
-    @Test("command block overlay caches data across geometry-only refreshes")
+    @Test("command block overlay caches metadata but always refreshes row mappings")
     func commandBlockOverlayCachesDataAcrossGeometryRefreshes() throws {
         let harness = try makeViewHarness(command: "/bin/cat")
         defer { harness.bridge.destroySurface(harness.surfaceID) }
-        let block = makeCommandBlock(
-            id: 51,
-            command: "cached-overlay",
-            output: "cached output",
-            startRow: 0,
-            endRow: 1
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(
+            "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}echo cached-overlay\r\n" +
+                "\u{001B}]133;C\u{0007}cached output\r\n\u{001B}]133;D;0\u{0007}",
+            into: state.terminal
         )
         var restoredReadCount = 0
+        var metadataReadCount = 0
+        var rowMappingCount = 0
         harness.view.restoredCommandBlocksProvider = {
             restoredReadCount += 1
-            return [block]
+            return []
         }
+        harness.bridge.commandBlockMetadataLoadObserver = { metadataReadCount += 1 }
+        harness.bridge.commandBlockVisibleRowMapObserver = { _ in rowMappingCount += 1 }
 
         harness.view.invalidateCommandBlockOverlayData()
         let reloadCount = harness.view.commandBlockDataReloadCount
         let providerReadCount = restoredReadCount
+        let cachedMetadataReadCount = metadataReadCount
+        let initialRowMappingCount = rowMappingCount
 
         harness.view.refreshCommandBlockOverlay()
+        #expect(rowMappingCount == initialRowMappingCount + 2)
         harness.view.refreshCommandBlockOverlay()
 
         #expect(harness.view.commandBlockDataReloadCount == reloadCount)
         #expect(restoredReadCount == providerReadCount)
+        #expect(metadataReadCount == cachedMetadataReadCount)
+        #expect(rowMappingCount == initialRowMappingCount + 4)
 
         harness.view.setNeedsTerminalDisplay()
         harness.view.refreshCommandBlockOverlay()
 
         #expect(harness.view.commandBlockDataReloadCount == reloadCount)
         #expect(restoredReadCount == providerReadCount)
+        #expect(metadataReadCount == cachedMetadataReadCount)
+        #expect(rowMappingCount == initialRowMappingCount + 6)
 
-        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
         feed(
             "\u{001B}]133;A\u{0007}\u{001B}]133;B\u{0007}echo marker\r\n" +
                 "\u{001B}]133;C\u{0007}marker\r\n\u{001B}]133;D;0\u{0007}",
@@ -2253,6 +2262,8 @@ struct CocxyCoreViewTests {
 
         #expect(harness.view.commandBlockDataReloadCount == reloadCount + 1)
         #expect(restoredReadCount == providerReadCount + 1)
+        #expect(metadataReadCount > cachedMetadataReadCount)
+        #expect(rowMappingCount > initialRowMappingCount + 6)
     }
 
     @Test("command block dismissal survives alternate screen and resets on teardown")

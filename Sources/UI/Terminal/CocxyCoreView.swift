@@ -151,18 +151,11 @@ final class CocxyCoreView: NSView {
     private(set) var historyPillView: TerminalHistoryPillView?
     private var commandBlockConfiguration: CommandBlocksConfig = .defaults
     private var cachedCommandBlocks: [TerminalCommandBlock] = []
+    private var cachedLiveCommandBlockIDs: Set<UInt64> = []
     private var cachedCommandBlockSurfaceID: SurfaceID?
     private var commandBlockDataNeedsRefresh = true
-    private var lastCommandBlockViewport: CommandBlockViewport?
     private var lastCommandBlockMarker: TerminalCommandBlockOverlayMarker?
-    private var lastCommandBlockPadding: CGPoint?
     internal private(set) var commandBlockDataReloadCount = 0
-
-    private struct CommandBlockViewport: Equatable {
-        let visibleStartRow: UInt32
-        let visibleRowCount: UInt16
-        let cellHeight: CGFloat
-    }
 
     // MARK: - Command Corrections
 
@@ -2563,45 +2556,41 @@ final class CocxyCoreView: NSView {
 
         guard commandBlockConfiguration.enabled else {
             overlay.clear()
-            lastCommandBlockViewport = nil
             lastCommandBlockMarker = nil
-            lastCommandBlockPadding = nil
             return
         }
 
         guard let bridge, let sid = surfaceID,
               let overlaySnapshot = bridge.commandBlockOverlaySnapshot(for: sid) else {
             overlay.clear()
-            lastCommandBlockViewport = nil
             lastCommandBlockMarker = nil
-            lastCommandBlockPadding = nil
             return
         }
         let snapshot = overlaySnapshot.viewport
 
         guard !snapshot.isAltScreen else {
             overlay.clear()
-            lastCommandBlockViewport = nil
             lastCommandBlockMarker = nil
-            lastCommandBlockPadding = nil
             return
         }
 
         let scale = currentBackingScale()
         let cellHeight = CGFloat(snapshot.cellHeight) / scale
-        let viewport = CommandBlockViewport(
-            visibleStartRow: snapshot.visibleStartRow,
-            visibleRowCount: snapshot.visibleRowCount,
-            cellHeight: cellHeight
-        )
         let padding = CGPoint(x: contentPadding.x, y: contentPadding.y)
         let shouldReloadData = commandBlockDataNeedsRefresh
             || cachedCommandBlockSurfaceID != sid
             || lastCommandBlockMarker != overlaySnapshot.marker
 
         if shouldReloadData {
+            let liveBlocks = bridge.commandBlocks(
+                for: sid,
+                limit: 32,
+                includeOutput: false,
+                includeVisibleMapping: false
+            )
+            cachedLiveCommandBlockIDs = Set(liveBlocks.map(\.id))
             cachedCommandBlocks = TerminalBlockRestoration.blocksForDisplay(
-                live: bridge.commandBlocks(for: sid, limit: 32, includeOutput: false),
+                live: liveBlocks,
                 restored: restoredCommandBlocksProvider?() ?? [],
                 limit: 32
             )
@@ -2611,22 +2600,20 @@ final class CocxyCoreView: NSView {
             commandBlockDataReloadCount += 1
         }
 
-        guard shouldReloadData
-                || viewport != lastCommandBlockViewport
-                || padding != lastCommandBlockPadding else {
-            return
-        }
+        let mappedBlocks = bridge.remapCommandBlocksForOverlay(
+            cachedCommandBlocks,
+            liveBlockIDs: cachedLiveCommandBlockIDs,
+            for: sid
+        )
 
         overlay.update(
-            blocks: cachedCommandBlocks,
+            blocks: mappedBlocks,
             visibleStartRow: snapshot.visibleStartRow,
             visibleRowCount: snapshot.visibleRowCount,
             cellHeight: cellHeight,
             padding: padding,
             showOnlyOnHover: commandBlockConfiguration.showOnlyOnHover
         )
-        lastCommandBlockViewport = viewport
-        lastCommandBlockPadding = padding
     }
 
     func invalidateCommandBlockOverlayData() {
@@ -2641,8 +2628,6 @@ final class CocxyCoreView: NSView {
         if enabledChanged && configuration.enabled {
             commandBlockDataNeedsRefresh = true
         }
-        lastCommandBlockViewport = nil
-        lastCommandBlockPadding = nil
         refreshCommandBlockOverlay()
     }
 
@@ -2651,9 +2636,7 @@ final class CocxyCoreView: NSView {
         cachedCommandBlocks.removeAll(keepingCapacity: false)
         cachedCommandBlockSurfaceID = nil
         commandBlockDataNeedsRefresh = true
-        lastCommandBlockViewport = nil
         lastCommandBlockMarker = nil
-        lastCommandBlockPadding = nil
     }
 
     @discardableResult

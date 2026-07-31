@@ -90,6 +90,13 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
     }
 
     func withoutVisibleMapping() -> TerminalCommandBlock {
+        withVisibleMapping(startRow: nil, endRow: nil)
+    }
+
+    func withVisibleMapping(
+        startRow visibleStartRow: UInt32?,
+        endRow visibleEndRow: UInt32?
+    ) -> TerminalCommandBlock {
         TerminalCommandBlock(
             schemaVersion: Self.currentSchemaVersion,
             id: id,
@@ -102,8 +109,8 @@ struct TerminalCommandBlock: Codable, Equatable, Sendable, Identifiable {
             durationNs: durationNs,
             startRow: startRow,
             endRow: endRow,
-            visibleStartRow: nil,
-            visibleEndRow: nil,
+            visibleStartRow: visibleStartRow,
+            visibleEndRow: visibleEndRow,
             streamID: streamID,
             blockType: blockType,
             isBookmarked: isBookmarked
