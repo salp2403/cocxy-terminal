@@ -6,8 +6,8 @@ import CocxyShared
 import Foundation
 
 extension PTYDaemonSurface {
-    /// Registers CocxyCore callbacks that forward title/CWD/bell events to
-    /// the daemon's JSONL `surface_osc` stream.
+    /// Registers CocxyCore callbacks that forward terminal and root-process
+    /// events to the daemon's JSONL `surface_osc` stream.
     func registerCallbacks() {
         let context = PTYDaemonSurfaceCallbackContext(surface: self)
         let unmanaged = Unmanaged.passRetained(context)
@@ -44,6 +44,21 @@ extension PTYDaemonSurface {
                 .fromOpaque(context)
                 .takeUnretainedValue()
             box.surface?.emitOSC(.init(kind: .notification, title: "Bell", body: "Terminal bell"))
+        }, opaque)
+
+        cocxycore_terminal_set_process_callback(terminal, { event, context in
+            guard let event, let context else { return }
+            let box = Unmanaged<PTYDaemonSurfaceCallbackContext>
+                .fromOpaque(context)
+                .takeUnretainedValue()
+            guard let surface = box.surface,
+                  event.pointee.event_type == 1,
+                  event.pointee.pid == surface.shellPID else {
+                return
+            }
+            surface.emitProcessExitIfNeeded(
+                exitCode: event.pointee.exit_code >= 0 ? Int(event.pointee.exit_code) : nil
+            )
         }, opaque)
     }
 }

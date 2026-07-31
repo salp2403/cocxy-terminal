@@ -215,17 +215,19 @@ extension AppDelegate {
         in controller: MainWindowController
     ) {
         let teamID = terminalEnd.context.teamID
-        let processFailed = terminalEnd.reason == .processExited
-            && terminalEnd.exitCode.map { $0 != 0 } == true
-        let status: AgentTeamStatus = terminalEnd.reason == .processExited && !processFailed
+        let processSucceeded = terminalEnd.reason == .processExited
+            && terminalEnd.exitCode == 0
+        let status: AgentTeamStatus = processSucceeded
             ? .finished
             : .error
         let message: String
         if terminalEnd.reason == .processExited, let exitCode = terminalEnd.exitCode,
            exitCode != 0 {
             message = "Provider process exited with status \(exitCode)"
-        } else if terminalEnd.reason == .processExited {
+        } else if terminalEnd.reason == .processExited, terminalEnd.exitCode == 0 {
             message = "Provider process exited"
+        } else if terminalEnd.reason == .processExited {
+            message = "Provider process exited without a status"
         } else {
             message = "Provider terminal tab closed"
         }
@@ -241,7 +243,7 @@ extension AppDelegate {
         }
 
         if taskQueueAgentTeamContexts[teamID] != nil {
-            let outcome: AgentPipelineHookOutcome = terminalEnd.reason == .processExited && !processFailed
+            let outcome: AgentPipelineHookOutcome = processSucceeded
                 ? .succeeded(message)
                 : .failed(message)
             completeQueuedAgentTeam(teamID: teamID, outcome: outcome)

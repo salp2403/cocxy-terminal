@@ -57,6 +57,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
     private var frameSubscribed = false
     private var closed = false
     private var cleanupSucceeded = true
+    private var processExitReported = false
 
     private init(
         surfaceID: String,
@@ -620,6 +621,16 @@ final class PTYDaemonSurface: @unchecked Sendable {
         )
     }
 
+    func emitProcessExitIfNeeded(exitCode: Int?) {
+        let shouldEmit = stateLock.withLock {
+            guard processExitReported == false else { return false }
+            processExitReported = true
+            return true
+        }
+        guard shouldEmit else { return }
+        emitOSC(.init(kind: .processExited, exitCode: exitCode))
+    }
+
     private func startReadSource(onClosed: @escaping @Sendable (String) -> Void) {
         guard ptyMasterFD >= 0 else { return }
         let source = DispatchSource.makeReadSource(
@@ -679,10 +690,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     private func pollChildExit() {
-        guard isClosed() == false else { return }
-        var waitResult = cocxycore_pty_wait_result()
-        guard cocxycore_pty_wait_check(pty, &waitResult),
-              cocxycore_pty_is_alive(pty) == false else { return }
+        guard isClosed() == false, pollPTYExit() else { return }
 
         // A final readable notification is not guaranteed after the child
         // exits. Drain one pending chunk on each timer tick; the first empty
@@ -695,7 +703,7 @@ final class PTYDaemonSurface: @unchecked Sendable {
         var buffer = [UInt8](repeating: 0, count: Self.readBufferSize)
         let bytesRead = cocxycore_pty_read(pty, &buffer, buffer.count)
         guard bytesRead > 0 else {
-            if !cocxycore_pty_is_alive(pty) {
+            if pollPTYExit() {
                 close(waitForCleanup: false)
             }
             return
@@ -718,6 +726,25 @@ final class PTYDaemonSurface: @unchecked Sendable {
         if let frame {
             writer.write(PTYDaemonEvent(event: .surfaceFrame, surfaceID: surfaceID, frame: frame))
         }
+    }
+
+    private func pollTrackedProcesses() {
+        terminalLock.withLock {
+            cocxycore_terminal_poll_processes(terminal)
+        }
+    }
+
+    private func pollPTYExit() -> Bool {
+        pollTrackedProcesses()
+        var waitResult = cocxycore_pty_wait_result()
+        guard cocxycore_pty_wait_check(pty, &waitResult),
+              cocxycore_pty_is_alive(pty) == false else {
+            return false
+        }
+        emitProcessExitIfNeeded(
+            exitCode: waitResult.status == 1 ? Int(waitResult.exit_code) : nil
+        )
+        return true
     }
 
     private func drainTerminalResponses() {

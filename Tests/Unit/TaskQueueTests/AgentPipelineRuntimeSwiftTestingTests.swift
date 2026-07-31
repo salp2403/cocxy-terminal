@@ -197,90 +197,99 @@ struct AgentPipelineRuntimeSwiftTestingTests {
 
     @Test("provider exit completes queued work without hook infrastructure")
     func providerExitCompletesQueuedWorkWithoutHooks() async throws {
-        _ = NSApplication.shared
-        let bridge = MockTerminalEngine()
-        let controller = MainWindowController(bridge: bridge)
-        controller.showWindow(nil)
-        let delegate = AppDelegate()
-        delegate.installWindowControllerForTesting(controller)
-        delegate.configureSharedServices(for: controller, registerWindow: false)
-        let fixture = try installTeamRuntime(
-            teamID: "queue-process-exit",
-            bridge: bridge,
-            controller: controller,
-            delegate: delegate,
-            queued: true
-        )
-        #expect(delegate.hookEventReceiver == nil)
-        #expect(controller.taskQueueLifecycleExcludedTabIDs.contains(fixture.tabID))
-
-        let waiter = Task {
-            try await delegate.agentPipelineCompletionBroker.launchAndWait(
-                teamID: fixture.teamID
-            ) {}
-        }
-        #expect(await waitUntil {
-            await delegate.agentPipelineCompletionBroker.pendingTeamIDs == [fixture.teamID]
+        let fixture = try launchRealQueuedProvider(teamID: "queue-process-exit", exitCode: 0)
+        defer { fixture.controller.close() }
+        #expect(fixture.delegate.hookEventReceiver == nil)
+        #expect(await waitUntil(attempts: 1_000) {
+            fixture.tabID.withValue { $0 != nil }
         })
+        let completedBeforeWatchdog = await waitUntil(attempts: 1_000) {
+            await fixture.delegate.agentPipelineCompletionBroker.pendingTeamIDs.isEmpty
+        }
+        guard completedBeforeWatchdog else {
+            fixture.waiter.cancel()
+            Issue.record("Provider exit 0 did not complete before the production watchdog")
+            return
+        }
 
-        controller.handleOSCNotification(
-            .processExited(exitCode: 0),
-            fromTabID: fixture.tabID,
-            surfaceID: fixture.surfaceID
-        )
-
-        #expect(try await waiter.value == AgentPipelineStepExecutionOutput(
+        #expect(try await fixture.waiter.value == AgentPipelineStepExecutionOutput(
             summary: "Provider process exited"
         ))
         let didCleanQueueRuntime = await waitUntilOnMainActor {
-            delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil
-                && delegate.activeAgentTeamRuns[fixture.teamID] == nil
-                && controller.tabManager.tab(for: fixture.tabID) == nil
+            fixture.delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil
+                && fixture.delegate.activeAgentTeamRuns[fixture.teamID] == nil
+                && fixture.tabID.withValue {
+                    $0.map { fixture.controller.tabManager.tab(for: $0) == nil } ?? false
+                }
         }
         #expect(didCleanQueueRuntime)
     }
 
     @Test("nonzero provider exit fails queued work and clears runtime state")
     func nonzeroProviderExitFailsQueuedWork() async throws {
+        let fixture = try launchRealQueuedProvider(teamID: "queue-process-failure", exitCode: 3)
+        defer { fixture.controller.close() }
+        #expect(await waitUntil(attempts: 1_000) {
+            fixture.tabID.withValue { $0 != nil }
+        })
+        let completedBeforeWatchdog = await waitUntil(attempts: 1_000) {
+            await fixture.delegate.agentPipelineCompletionBroker.pendingTeamIDs.isEmpty
+        }
+        guard completedBeforeWatchdog else {
+            fixture.waiter.cancel()
+            Issue.record("Provider exit 3 did not fail before the production watchdog")
+            return
+        }
+
+        await #expect(throws: AgentPipelineRuntimeError.agentFailed(
+            "Provider process exited with status 3"
+        )) {
+            _ = try await fixture.waiter.value
+        }
+        #expect(await waitUntilOnMainActor {
+            fixture.delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil
+                && fixture.delegate.activeAgentTeamRuns[fixture.teamID] == nil
+                && fixture.tabID.withValue {
+                    $0.map { fixture.controller.tabManager.tab(for: $0) == nil } ?? false
+                }
+        })
+    }
+
+    @Test("unknown provider exit status fails queued work")
+    func unknownProviderExitStatusFailsQueuedWork() async throws {
         _ = NSApplication.shared
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        defer { controller.close() }
         let delegate = AppDelegate()
         delegate.installWindowControllerForTesting(controller)
         delegate.configureSharedServices(for: controller, registerWindow: false)
         let fixture = try installTeamRuntime(
-            teamID: "queue-process-failure",
+            teamID: "queue-process-unknown",
             bridge: bridge,
             controller: controller,
             delegate: delegate,
             queued: true
         )
         let waiter = Task {
-            try await delegate.agentPipelineCompletionBroker.launchAndWait(
-                teamID: fixture.teamID
-            ) {}
+            try await delegate.agentPipelineCompletionBroker.launchAndWait(teamID: fixture.teamID) {}
         }
         #expect(await waitUntil {
             await delegate.agentPipelineCompletionBroker.pendingTeamIDs == [fixture.teamID]
         })
 
         controller.handleOSCNotification(
-            .processExited(exitCode: 7),
+            .processExited(exitCode: nil),
             fromTabID: fixture.tabID,
             surfaceID: fixture.surfaceID
         )
 
         await #expect(throws: AgentPipelineRuntimeError.agentFailed(
-            "Provider process exited with status 7"
+            "Provider process exited without a status"
         )) {
             _ = try await waiter.value
         }
-        #expect(await waitUntilOnMainActor {
-            delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil
-                && delegate.activeAgentTeamRuns[fixture.teamID] == nil
-                && controller.tabManager.tab(for: fixture.tabID) == nil
-        })
     }
 
     @Test("closing a queued provider tab fails its step and clears runtime state")
@@ -470,6 +479,71 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         #expect(throws: AgentPipelineRuntimeError.worktreeUnavailable(missing)) {
             _ = try AppDelegate.canonicalTaskQueueWorktree(missing)
         }
+    }
+
+    private func launchRealQueuedProvider(
+        teamID: String,
+        exitCode: Int32
+    ) throws -> (
+        teamID: String,
+        controller: MainWindowController,
+        delegate: AppDelegate,
+        tabID: LockedBox<TabID?>,
+        waiter: Task<AgentPipelineStepExecutionOutput, Error>
+    ) {
+        _ = NSApplication.shared
+        let bridge = try makeBridge()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.configureSharedServices(for: controller, registerWindow: false)
+
+        let teammateID = "\(teamID)-agent"
+        let config = AgentTeamConfig(
+            id: teamID,
+            provider: .codex,
+            teammates: [AgentTeammateConfig(
+                id: teammateID,
+                name: "agent",
+                prompt: "Run"
+            )]
+        )
+        let launchSpec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: teamID,
+            teammateID: teammateID,
+            teammateName: "agent",
+            executable: "/bin/sh",
+            arguments: ["-c", "exit \(exitCode)"],
+            environment: ["COCXY_AGENT_TEAM_ID": teamID],
+            workingDirectory: NSTemporaryDirectory()
+        )
+        delegate.activeAgentTeamCoordinators[teamID] = AgentTeamCoordinator(config: config)
+        delegate.activeAgentTeamRuns[teamID] = AgentTeamRunState(
+            config: config,
+            launchSpecs: [launchSpec]
+        )
+        delegate.taskQueueAgentTeamContexts[teamID] = TaskQueueAgentTeamContext(
+            taskID: "scheduled-task",
+            pipelineID: "pipeline",
+            stepID: "step"
+        )
+
+        let tabID = LockedBox<TabID?>(nil)
+        let waiter = Task {
+            try await delegate.agentPipelineCompletionBroker.launchAndWait(teamID: teamID) {
+                guard let launchedTabID = controller.spawnAgentTeamTerminal(
+                    launchSpec: launchSpec,
+                    targetTabID: nil,
+                    excludesTaskQueueLifecycleEvents: true
+                ) else {
+                    throw RuntimeTestError.launch
+                }
+                tabID.withValue { $0 = launchedTabID }
+            }
+        }
+        return (teamID, controller, delegate, tabID, waiter)
     }
 
     private func waitUntil(

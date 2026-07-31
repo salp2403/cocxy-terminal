@@ -584,6 +584,7 @@ final class CocxyCoreBridge: TerminalEngine {
 
     private var surfaces: [SurfaceID: SurfaceState] = [:]
     private var reapedPTYChildren = Set<SurfaceID>()
+    private var reportedPTYChildExits = Set<SurfaceID>()
     private var lastPTYExitPollAt: TimeInterval = 0
     private var exitReapTimer: DispatchSourceTimer?
     private var config: TerminalEngineConfig?
@@ -822,6 +823,7 @@ final class CocxyCoreBridge: TerminalEngine {
             externalTransport: nil
         )
         reapedPTYChildren.remove(surfaceID)
+        reportedPTYChildExits.remove(surfaceID)
 
         applyFont(family: config.fontFamily, size: config.fontSize, to: surfaceID)
         readSource.resume()
@@ -887,6 +889,7 @@ final class CocxyCoreBridge: TerminalEngine {
     func destroySurface(_ id: SurfaceID) {
         guard let state = surfaces.removeValue(forKey: id) else { return }
         reapedPTYChildren.remove(id)
+        reportedPTYChildExits.remove(id)
 
         state.terminalLock.withLock {
             cocxycore_terminal_preedit_clear(state.terminal)
@@ -1394,15 +1397,24 @@ final class CocxyCoreBridge: TerminalEngine {
         lastPTYExitPollAt = now
 
         for surfaceID in Array(surfaces.keys) where !reapedPTYChildren.contains(surfaceID) {
-            let didReap = withTerminalLock(surfaceID) { state -> Bool in
-                guard let pty = state.pty else { return false }
+            let outcome = withTerminalLock(surfaceID) { state -> (didExit: Bool, didReap: Bool, exitCode: Int32?) in
+                guard let pty = state.pty else { return (false, false, nil) }
                 cocxycore_terminal_poll_processes(state.terminal)
                 var waitResult = cocxycore_pty_wait_result()
                 _ = cocxycore_pty_wait_check(pty, &waitResult)
-                guard cocxycore_pty_is_alive(pty) == false else { return false }
-                return TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID)
+                guard cocxycore_pty_is_alive(pty) == false else { return (false, false, nil) }
+                let exitCode = waitResult.status == 1 ? Int32(waitResult.exit_code) : nil
+                return (
+                    true,
+                    TerminalProcessBoundary.terminateAndReapPTYChild(state.childPID),
+                    exitCode
+                )
             }
-            if didReap == true {
+            guard let outcome else { continue }
+            if outcome.didExit {
+                reportRootProcessExitIfNeeded(surfaceID: surfaceID, exitCode: outcome.exitCode)
+            }
+            if outcome.didReap {
                 reapedPTYChildren.insert(surfaceID)
             }
         }
@@ -4655,17 +4667,20 @@ final class CocxyCoreBridge: TerminalEngine {
             // `state.childPID` is the shell's PID captured in createSurface;
             // `event.pid` is the PID of the process that just exited.
             if let state = surfaces[surfaceID], event.pid == state.childPID {
-                dispatchOSC(
-                    .processExited(
-                        exitCode: event.exit_code >= 0 ? Int32(event.exit_code) : nil
-                    ),
-                    for: surfaceID
+                reportRootProcessExitIfNeeded(
+                    surfaceID: surfaceID,
+                    exitCode: event.exit_code >= 0 ? Int32(event.exit_code) : nil
                 )
             }
         }
 
         let cwd = currentWorkingDirectory(for: surfaceID)
         semanticAdapter.processProcessEvent(event, for: surfaceID, cwd: cwd)
+    }
+
+    private func reportRootProcessExitIfNeeded(surfaceID: SurfaceID, exitCode: Int32?) {
+        guard reportedPTYChildExits.insert(surfaceID).inserted else { return }
+        dispatchOSC(.processExited(exitCode: exitCode), for: surfaceID)
     }
 
     private func handleProtocolV2Message(type: String, payload: String, for surfaceID: SurfaceID) {
