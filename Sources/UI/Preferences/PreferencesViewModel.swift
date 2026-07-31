@@ -973,6 +973,9 @@ final class PreferencesViewModel: ObservableObject {
     /// Updated after each successful save so `hasUnsavedChanges` resets to false.
     private var savedConfig: CocxyConfig
 
+    /// Internal acknowledgement state preserved by Preferences without exposing a control.
+    private var voiceConsentPrompted: Bool
+
     /// Pending keybindings applied via `applyKeybindings(_:)` but not yet
     /// persisted. When `nil` the writer emits `savedConfig.keybindings`.
     private var pendingKeybindings: KeybindingsConfig?
@@ -1054,6 +1057,7 @@ final class PreferencesViewModel: ObservableObject {
         appLocalizationBundle: Bundle = .main
     ) {
         self.savedConfig = config
+        self.voiceConsentPrompted = config.voice.consentPrompted
         self.fileProvider = fileProvider
         self.voiceLocaleResolver = voiceLocaleResolver
         self.agentSecrets = agentSecrets
@@ -2114,8 +2118,13 @@ final class PreferencesViewModel: ObservableObject {
         VoiceConfig(
             enabled: voiceEnabled,
             localeIdentifier: voiceLocaleIdentifier,
-            autoSendToAgent: voiceAutoSendToAgent
+            autoSendToAgent: voiceAutoSendToAgent,
+            consentPrompted: voiceConsentPrompted
         )
+    }
+
+    func updateVoiceConsentPrompted(_ consentPrompted: Bool) {
+        voiceConsentPrompted = consentPrompted
     }
 
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
@@ -2863,6 +2872,7 @@ final class PreferencesViewModel: ObservableObject {
         enabled = \(voice.enabled)
         locale = "\(voice.localeIdentifier)"
         auto-send-to-agent = \(voice.autoSendToAgent)
+        consent-prompted = \(voice.consentPrompted)
 
         [completions]
         inline-ai = \(completions.inlineAIEnabled)

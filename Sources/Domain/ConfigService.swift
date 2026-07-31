@@ -214,7 +214,42 @@ final class ConfigService: ConfigProviding {
         try reload()
     }
 
+    func updateVoiceConsent(enabled: Bool?, consentPrompted: Bool) throws {
+        var content = fileProvider.readConfigFile()
+            ?? Self.generateDefaultToml(updateChannel: fallbackUpdatesChannel)
+        if let enabled {
+            content = Self.upsertingTomlValue(
+                table: "voice",
+                key: "enabled",
+                value: String(enabled),
+                in: content
+            )
+        }
+        content = Self.upsertingTomlValue(
+            table: "voice",
+            key: "consent-prompted",
+            value: String(consentPrompted),
+            in: content
+        )
+        try fileProvider.writeConfigFile(content)
+        try reload()
+    }
+
     private static func upsertingAppearanceValue(
+        key: String,
+        value: String,
+        in content: String
+    ) -> String {
+        upsertingTomlValue(
+            table: "appearance",
+            key: key,
+            value: value,
+            in: content
+        )
+    }
+
+    private static func upsertingTomlValue(
+        table: String,
         key: String,
         value: String,
         in content: String
@@ -223,22 +258,22 @@ final class ConfigService: ConfigProviding {
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map(String.init)
 
-        guard let appearanceIndex = lines.firstIndex(where: {
-            $0.trimmingCharacters(in: .whitespacesAndNewlines) == "[appearance]"
+        guard let tableIndex = lines.firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines) == "[\(table)]"
         }) else {
             if !lines.isEmpty, lines.last?.isEmpty == false {
                 lines.append("")
             }
-            lines.append("[appearance]")
+            lines.append("[\(table)]")
             lines.append("\(key) = \(value)")
             return lines.joined(separator: "\n") + "\n"
         }
 
-        let sectionEnd = lines[(appearanceIndex + 1)...].firstIndex(where: {
+        let sectionEnd = lines[(tableIndex + 1)...].firstIndex(where: {
             isTomlTableHeader($0)
         }) ?? lines.endIndex
 
-        if let keyIndex = lines[(appearanceIndex + 1)..<sectionEnd].firstIndex(where: {
+        if let keyIndex = lines[(tableIndex + 1)..<sectionEnd].firstIndex(where: {
             tomlKey(in: $0) == key
         }) {
             lines[keyIndex] = "\(key) = \(value)"
@@ -474,6 +509,8 @@ final class ConfigService: ConfigProviding {
         locale = "\(defaults.voice.localeIdentifier)"
         # Keep false to place dictated text at the detected agent prompt for review.
         auto-send-to-agent = \(defaults.voice.autoSendToAgent)
+        # Internal one-time acknowledgement state; managed by Cocxy.
+        consent-prompted = \(defaults.voice.consentPrompted)
 
         [backup]
         # Local-only automatic backups. Enabled by default and stored on
@@ -1336,7 +1373,9 @@ final class ConfigService: ConfigProviding {
         return VoiceConfig(
             enabled: boolValue(table["enabled"]) ?? defaults.enabled,
             localeIdentifier: stringValue(table["locale"]) ?? defaults.localeIdentifier,
-            autoSendToAgent: boolValue(table["auto-send-to-agent"]) ?? defaults.autoSendToAgent
+            autoSendToAgent: boolValue(table["auto-send-to-agent"]) ?? defaults.autoSendToAgent,
+            consentPrompted: boolValue(table["consent-prompted"])
+                ?? defaults.consentPrompted
         )
     }
 

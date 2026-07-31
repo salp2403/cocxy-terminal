@@ -38,6 +38,9 @@ protocol ConfigProviding: AnyObject, Sendable {
     /// Useful after programmatic config changes or for testing.
     /// - Throws: `ConfigError` if the file cannot be read or parsed.
     func reload() throws
+
+    /// Persists the user's one-time Voice consent response atomically.
+    func updateVoiceConsent(enabled: Bool?, consentPrompted: Bool) throws
 }
 
 // MARK: - Configuration Model
@@ -2279,29 +2282,35 @@ struct VoiceConfig: Codable, Sendable, Equatable {
     let localeIdentifier: String
     /// Whether a transcript routed to a detected terminal agent also sends Return.
     let autoSendToAgent: Bool
+    /// Whether the one-time local Voice notice has received a response.
+    let consentPrompted: Bool
 
     static var defaults: VoiceConfig {
         VoiceConfig(
             enabled: true,
             localeIdentifier: systemLocaleIdentifier,
-            autoSendToAgent: false
+            autoSendToAgent: false,
+            consentPrompted: false
         )
     }
 
     init(
         enabled: Bool = true,
         localeIdentifier: String = systemLocaleIdentifier,
-        autoSendToAgent: Bool = false
+        autoSendToAgent: Bool = false,
+        consentPrompted: Bool = false
     ) {
         self.enabled = enabled
         self.localeIdentifier = Self.normalizedLocaleIdentifier(localeIdentifier)
         self.autoSendToAgent = autoSendToAgent
+        self.consentPrompted = consentPrompted
     }
 
     private enum CodingKeys: String, CodingKey {
         case enabled
         case localeIdentifier
         case autoSendToAgent
+        case consentPrompted
     }
 
     init(from decoder: Decoder) throws {
@@ -2312,7 +2321,9 @@ struct VoiceConfig: Codable, Sendable, Equatable {
             localeIdentifier: try container.decodeIfPresent(String.self, forKey: .localeIdentifier)
                 ?? defaults.localeIdentifier,
             autoSendToAgent: try container.decodeIfPresent(Bool.self, forKey: .autoSendToAgent)
-                ?? defaults.autoSendToAgent
+                ?? defaults.autoSendToAgent,
+            consentPrompted: try container.decodeIfPresent(Bool.self, forKey: .consentPrompted)
+                ?? defaults.consentPrompted
         )
     }
 

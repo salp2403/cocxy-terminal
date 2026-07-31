@@ -41,7 +41,8 @@ struct VoicePreferencesSwiftTestingTests {
             voice: VoiceConfig(
                 enabled: true,
                 localeIdentifier: "es-ES",
-                autoSendToAgent: true
+                autoSendToAgent: true,
+                consentPrompted: true
             ),
             notifications: .defaults,
             quickTerminal: .defaults,
@@ -96,6 +97,30 @@ struct VoicePreferencesSwiftTestingTests {
         #expect(service.current.voice.enabled == true)
         #expect(service.current.voice.localeIdentifier == "es-ES")
         #expect(service.current.voice.autoSendToAgent == true)
+        #expect(service.current.voice.consentPrompted == false)
         #expect(vm.hasUnsavedChanges == false)
+    }
+
+    @Test("save preserves internal Voice consent state")
+    func savePreservesInternalVoiceConsentState() throws {
+        let config = CocxyConfig(
+            general: .defaults,
+            appearance: .defaults,
+            terminal: .defaults,
+            agentDetection: .defaults,
+            voice: VoiceConfig(consentPrompted: true),
+            notifications: .defaults,
+            quickTerminal: .defaults,
+            keybindings: .defaults,
+            sessions: .defaults
+        )
+        let (vm, provider) = makeViewModel(config: config)
+
+        vm.voiceLocaleIdentifier = "es-ES"
+        try vm.save()
+
+        let service = ConfigService(fileProvider: InMemoryProvider(provider.content))
+        try service.reload()
+        #expect(service.current.voice.consentPrompted == true)
     }
 }
