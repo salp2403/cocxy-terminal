@@ -273,6 +273,25 @@ struct CocxyCoreBridgeTests {
         #expect(results[0].matchText == "cd")
     }
 
+    @Test("literal scrollback search returns multiple non-overlapping occurrences")
+    func literalScrollbackSearchReturnsNonOverlappingOccurrences() throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge)
+        defer { bridge.destroySurface(surfaceID) }
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+
+        feed("aaaa\r\n", to: state.terminal)
+
+        let results = try #require(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "aa", caseSensitive: true, useRegex: false)
+        ))
+
+        #expect(results.map(\.lineNumber) == [0, 0])
+        #expect(results.map(\.column) == [0, 2])
+        #expect(results.map(\.matchText) == ["aa", "aa"])
+    }
+
     @Test("regex scrollback search remains on the native regex path")
     func regexScrollbackSearchRemainsAvailable() throws {
         let bridge = try makeBridge()
@@ -291,6 +310,10 @@ struct CocxyCoreBridgeTests {
         #expect(results[0].lineNumber == 0)
         #expect(results[0].column == 0)
         #expect(results[0].matchText == "alpha-123")
+        #expect(bridge.searchScrollback(
+            surfaceID: SurfaceID(),
+            options: SearchOptions(query: ".+", caseSensitive: true, useRegex: true)
+        ) == nil)
     }
 
     @Test("historyVisibleStart reports the live bottom before scrolling")

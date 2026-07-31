@@ -1605,14 +1605,15 @@ final class CocxyCoreBridge: TerminalEngine {
                     fallbackMatchText: spansRows ? "" : options.query
                 ))
 
-                // Advance one cell after the match start so overlapping
-                // literal matches remain discoverable without repeating one.
-                if range.start_col < columnCount - 1 {
-                    fromRow = range.start_row
-                    fromColumn = range.start_col + 1
+                // CocxyCore reports an inclusive end coordinate. Resume one
+                // cell after it so literal results never overlap.
+                let matchEndColumn = min(range.end_col, columnCount - 1)
+                if matchEndColumn < columnCount - 1 {
+                    fromRow = range.end_row
+                    fromColumn = matchEndColumn + 1
                 } else {
-                    guard range.start_row < historyRowCount - 1 else { break }
-                    fromRow = range.start_row + 1
+                    guard range.end_row < historyRowCount - 1 else { break }
+                    fromRow = range.end_row + 1
                     fromColumn = 0
                 }
             }
