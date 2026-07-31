@@ -167,7 +167,7 @@ extension AgentDashboardViewModel {
                 sessionData.lastActivityTime = max(previousActivity, change.latestTimestamp)
             }
 
-            Self.pruneFileImpacts(&sessionData.fileImpacts)
+            Self.pruneFileTracking(&sessionData)
             sessionDataStore[sessionId] = sessionData
             didChange = true
         }

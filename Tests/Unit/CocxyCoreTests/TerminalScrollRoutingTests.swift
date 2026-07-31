@@ -13,7 +13,7 @@ struct TerminalScrollRoutingTests {
         expectDestination(.localViewport, localRange: 12, prefersLocal: true, tracking: 2)
         expectDestination(.terminalApplication, localRange: 0, prefersLocal: true, tracking: 2, modifiers: [.shift])
         expectDestination(
-            .localViewport,
+            .terminalApplication,
             localRange: 12,
             prefersLocal: false,
             tracking: 2,
@@ -44,6 +44,15 @@ struct TerminalScrollRoutingTests {
             isAltScreen: true,
             alternateScrollMode: true,
             modifiers: [.option]
+        )
+        expectDestination(
+            .alternateScreenApplication,
+            localRange: 12,
+            prefersLocal: true,
+            tracking: 0,
+            isAltScreen: true,
+            alternateScrollMode: true,
+            modifiers: [.shift]
         )
         expectDestination(
             .localViewport,

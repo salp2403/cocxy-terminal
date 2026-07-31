@@ -214,6 +214,7 @@ struct AgentDashboardFileChangedSwiftTests {
     func fileChangedImpactsUseBoundedLRU() {
         let viewModel = AgentDashboardViewModel()
         seedSession(viewModel, sessionId: "sess-lru", cwd: "/tmp/proj")
+        seedActiveSubagent(viewModel, sessionId: "sess-lru", subagentId: "sub-lru")
 
         for index in 0..<600 {
             viewModel.processHookEvent(fileChangedEvent(
@@ -231,6 +232,10 @@ struct AgentDashboardFileChangedSwiftTests {
         #expect(impacts?.first?.fileName == "file-599.swift")
         #expect(impacts?.last?.fileName == "file-88.swift")
         #expect(impacts?.contains { $0.fileName == "file-87.swift" } == false)
+        let touchedPaths = viewModel.sessions.first?.subagents.first?.touchedFilePaths
+        #expect(touchedPaths?.count == AgentDashboardViewModel.maxFileImpactsPerSession)
+        #expect(touchedPaths?.contains("/tmp/proj/file-599.swift") == true)
+        #expect(touchedPaths?.contains("/tmp/proj/file-87.swift") == false)
     }
 
     // MARK: - Helpers

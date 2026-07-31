@@ -348,7 +348,11 @@ final class DaemonSessionBridge: ObservableObject {
         lastSnapshotState = state
 
         var framed = Data("\u{1B}[2J\u{1B}[H".utf8)
-        framed.append(Self.normalizedSnapshotLineEndings(bytes))
+        var snapshot = Self.normalizedSnapshotLineEndings(bytes)
+        if snapshot.last == 0x0A {
+            snapshot.removeLast()
+        }
+        framed.append(snapshot)
         if let cursor {
             framed.append(Data("\u{1B}[\(cursor.y + 1);\(cursor.x + 1)H".utf8))
         }

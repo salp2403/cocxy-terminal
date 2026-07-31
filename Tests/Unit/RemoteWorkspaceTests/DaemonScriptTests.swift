@@ -105,6 +105,21 @@ struct DaemonScriptTests {
         #expect(process.terminationStatus == 0)
     }
 
+    @Test("Script version matches the bundled daemon version")
+    @MainActor
+    func scriptVersionMatchesBundledVersion() throws {
+        let script = try String(contentsOfFile: scriptPath, encoding: .utf8)
+        let prefix = "COCXYD_VERSION="
+        let assignment = try #require(script.split(separator: "\n").first {
+            $0.hasPrefix(prefix)
+        })
+        let version = assignment
+            .dropFirst(prefix.count)
+            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+
+        #expect(version == DaemonDeployer.bundledVersion)
+    }
+
     @Test("Start reports a bound loopback port and serves a real request")
     func startServesLoopbackRequest() throws {
         let runtimeDirectory = FileManager.default.temporaryDirectory

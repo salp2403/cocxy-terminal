@@ -1876,8 +1876,8 @@ struct CocxyCoreViewTests {
         #expect(output.data == down)
     }
 
-    @Test("shift forwards wheel input when local history is empty")
-    func shiftForwardsWheelWhenHistoryIsEmpty() async throws {
+    @Test("shift forwards wheel input when local history is available")
+    func shiftForwardsWheelWhenHistoryIsAvailable() async throws {
         let rawCat = try makeRawCatScript()
         defer { try? FileManager.default.removeItem(at: rawCat.rootDirectory) }
         let harness = try makeViewHarness(command: rawCat.scriptURL.path)
@@ -1888,13 +1888,15 @@ struct CocxyCoreViewTests {
             output.data.append(data)
         }
         try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
-        feed("\u{001B}[3J\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
+        feed(numberedTerminalLines(100), into: state.terminal)
+        feed("\u{001B}[?1000h\u{001B}[?1006h", into: state.terminal)
         harness.view.prefersLocalScrollInMouseTrackingMode = { true }
 
         let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
-        #expect(snapshot.historyMaxVisibleStart == 0)
+        #expect(snapshot.historyMaxVisibleStart > 0)
         #expect(snapshot.mouseTrackingMode > 0)
 
+        output.data.removeAll()
         harness.view.scrollWheel(with: makeScrollEvent(deltaY: 24, modifiers: [.shift]))
 
         let expected = Data("\u{001B}[<64;1;1M".utf8)

@@ -859,7 +859,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         sessionDataStore[sessionId]?.subagents[idx].toolUseCount += 1
 
         // Track file path for conflict detection.
-        if let path = filePath {
+        if let path = filePath,
+           sessionDataStore[sessionId]?.fileImpacts[path] != nil {
             sessionDataStore[sessionId]?.subagents[idx].touchedFilePaths.insert(path)
         }
 
@@ -934,8 +935,16 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         impact.operations.insert(operation)
         impact.lastChangedAt = max(impact.lastChangedAt, timestamp)
         sessionData.fileImpacts[filePath] = impact
-        Self.pruneFileImpacts(&sessionData.fileImpacts)
+        Self.pruneFileTracking(&sessionData)
         sessionDataStore[sessionId] = sessionData
+    }
+
+    static func pruneFileTracking(_ sessionData: inout MutableSessionData) {
+        pruneFileImpacts(&sessionData.fileImpacts)
+        let retainedPaths = Set(sessionData.fileImpacts.keys)
+        for index in sessionData.subagents.indices {
+            sessionData.subagents[index].touchedFilePaths.formIntersection(retainedPaths)
+        }
     }
 
     static func pruneFileImpacts(_ impacts: inout [String: FileImpact]) {
