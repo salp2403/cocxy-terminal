@@ -8,12 +8,14 @@ import SwiftUI
 extension MainWindowController {
     @objc func startVoiceInputAction(_ sender: Any?) {
         guard voiceTriggerHandler?.isRunning != true else { return }
+        presentVoiceConsentIfNeeded()
         voiceInputTask = Task { @MainActor [weak self] in
             await self?.startVoiceInput()
         }
     }
 
     func startVoiceInput() async {
+        presentVoiceConsentIfNeeded()
         let handler = resolveVoiceTriggerHandler()
         showVoiceIndicator(handler)
         await handler.start(config: configService?.current.voice ?? .defaults)
@@ -81,6 +83,87 @@ extension MainWindowController {
         let trimmedExisting = existing.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedExisting.isEmpty else { return transcript }
         return "\(trimmedExisting) \(transcript)"
+    }
+
+    func presentVoiceConsentIfNeeded() {
+        guard voiceConsentBannerHostingView == nil,
+              let overlayContainer = overlayContainerView,
+              let configService,
+              voiceConsentCoordinator.claimPresentation(for: configService.current.voice) else {
+            return
+        }
+
+        voiceConsentErrorMessage = nil
+        let hostingView = NSHostingView(rootView: makeVoiceConsentBanner())
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
+        hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+        voiceConsentBannerHostingView = hostingView
+        overlayContainer.addSubview(hostingView)
+        layoutVoiceConsentBanner()
+    }
+
+    func updateVoiceConsentPresentation(for config: VoiceConfig) {
+        if let preferences = preferencesWindow?.contentViewController
+            as? NSHostingController<PreferencesView> {
+            preferences.rootView.viewModel.updateVoiceConsentPrompted(config.consentPrompted)
+        }
+
+        guard config.enabled, !config.consentPrompted else {
+            dismissVoiceConsentBanner()
+            return
+        }
+        presentVoiceConsentIfNeeded()
+    }
+
+    func resolveVoiceConsent(keepEnabled: Bool) {
+        guard let configService else { return }
+        do {
+            try configService.updateVoiceConsent(
+                enabled: keepEnabled ? nil : false,
+                consentPrompted: true
+            )
+            dismissVoiceConsentBanner()
+        } catch {
+            voiceConsentErrorMessage = VoiceConsentBanner.localizedSaveFailed(using: appLocalizer())
+            voiceConsentBannerHostingView?.rootView = makeVoiceConsentBanner()
+            layoutVoiceConsentBanner()
+        }
+    }
+
+    func layoutVoiceConsentBanner() {
+        guard let overlayContainer = overlayContainerView,
+              let hostingView = voiceConsentBannerHostingView else { return }
+        let width = min(680, max(420, overlayContainer.bounds.width - 48))
+        let height: CGFloat = voiceConsentErrorMessage == nil ? 134 : 154
+        hostingView.frame = NSRect(
+            x: (overlayContainer.bounds.width - width) * 0.5,
+            y: max(16, overlayContainer.bounds.height - height - 16),
+            width: width,
+            height: height
+        )
+    }
+
+    private func makeVoiceConsentBanner() -> VoiceConsentBanner {
+        VoiceConsentBanner(
+            localizer: appLocalizer(),
+            errorMessage: voiceConsentErrorMessage,
+            onKeepEnabled: { [weak self] in
+                self?.resolveVoiceConsent(keepEnabled: true)
+            },
+            onDisable: { [weak self] in
+                self?.resolveVoiceConsent(keepEnabled: false)
+            },
+            onOpenPreferences: { [weak self] in
+                self?.openPreferences(section: .voice)
+            }
+        )
+    }
+
+    private func dismissVoiceConsentBanner() {
+        voiceConsentBannerHostingView?.removeFromSuperview()
+        voiceConsentBannerHostingView = nil
+        voiceConsentErrorMessage = nil
     }
 
     private func showVoiceIndicator(_ handler: VoiceTriggerHandler) {

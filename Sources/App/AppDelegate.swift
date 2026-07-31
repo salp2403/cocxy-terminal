@@ -59,6 +59,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Exposed for testing purposes.
     private(set) var configService: ConfigService?
 
+    let voiceConsentCoordinator = VoiceConsentCoordinator()
+
     /// The macOS notification adapter. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var notificationAdapter: MacOSNotificationAdapter?
@@ -1648,6 +1650,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             terminalEngineFactory: { [weak self] preference in
                 self?.makeInitializedTerminalEngine(preference: preference)
             },
+            voiceConsentCoordinator: voiceConsentCoordinator,
             deferContentSetup: deferContentSetup
         )
         configureSharedServices(for: controller, registerWindow: true)

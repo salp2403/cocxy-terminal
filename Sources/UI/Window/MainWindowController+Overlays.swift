@@ -2432,7 +2432,19 @@ extension MainWindowController {
     // MARK: - Preferences Window (Cmd+,)
 
     @objc func openPreferences(_ sender: Any?) {
+        openPreferences(section: nil)
+    }
+
+    func openPreferences(section: PreferencesSection?) {
         if let existingWindow = preferencesWindow, existingWindow.isVisible {
+            if let section,
+               let hostingController = existingWindow.contentViewController
+                as? NSHostingController<PreferencesView> {
+                hostingController.rootView = makePreferencesView(
+                    viewModel: hostingController.rootView.viewModel,
+                    initialSection: section
+                )
+            }
             existingWindow.makeKeyAndOrderFront(nil)
             return
         }
@@ -2446,18 +2458,9 @@ extension MainWindowController {
             // toggles, and bridge restart when needed.
             try? self?.configService?.reload()
         }
-        let prefsView = PreferencesView(
+        let prefsView = makePreferencesView(
             viewModel: viewModel,
-            onGitHubSignIn: { [weak self] in
-                guard let self else { return }
-                let directory = self.currentGitHubPaneWorkingDirectory()
-                    ?? FileManager.default.homeDirectoryForCurrentUser
-                self.startGitHubAuthentication(in: directory)
-            },
-            onOpenGitHubCLIInstallGuide: { [weak self] in
-                self?.openInternalBrowser(to: "https://cli.github.com/")
-            },
-            pluginManager: (NSApp.delegate as? AppDelegate)?.pluginManager
+            initialSection: section ?? .general
         )
         let hostingController = NSHostingController(rootView: prefsView)
         let prefsWindow = NSWindow(contentViewController: hostingController)
@@ -2491,6 +2494,26 @@ extension MainWindowController {
 
         prefsWindow.makeKeyAndOrderFront(nil)
         self.preferencesWindow = prefsWindow
+    }
+
+    private func makePreferencesView(
+        viewModel: PreferencesViewModel,
+        initialSection: PreferencesSection
+    ) -> PreferencesView {
+        PreferencesView(
+            viewModel: viewModel,
+            initialSection: initialSection,
+            onGitHubSignIn: { [weak self] in
+                guard let self else { return }
+                let directory = self.currentGitHubPaneWorkingDirectory()
+                    ?? FileManager.default.homeDirectoryForCurrentUser
+                self.startGitHubAuthentication(in: directory)
+            },
+            onOpenGitHubCLIInstallGuide: { [weak self] in
+                self?.openInternalBrowser(to: "https://cli.github.com/")
+            },
+            pluginManager: (NSApp.delegate as? AppDelegate)?.pluginManager
+        )
     }
 
     // MARK: - About Panel

@@ -61,7 +61,7 @@ struct PreferencesView: View {
     private let pluginManager: PluginManager?
 
     /// Currently selected section in the sidebar.
-    @State private var selectedSection: PreferencesSection = .general
+    @State private var selectedSection: PreferencesSection
 
     /// Status message shown after save attempts.
     @State private var saveStatus: String?
@@ -71,11 +71,13 @@ struct PreferencesView: View {
     /// Backwards-compatible initializer that wraps a read-only config in a view model.
     init(
         config: CocxyConfig,
+        initialSection: PreferencesSection = .general,
         onGitHubSignIn: (() -> Void)? = nil,
         onOpenGitHubCLIInstallGuide: (() -> Void)? = nil,
         pluginManager: PluginManager? = nil
     ) {
         self.viewModel = PreferencesViewModel(config: config)
+        self._selectedSection = State(initialValue: initialSection)
         self.onGitHubSignIn = onGitHubSignIn
         self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
         self.pluginManager = pluginManager
@@ -84,11 +86,13 @@ struct PreferencesView: View {
     /// Primary initializer with an editable view model.
     init(
         viewModel: PreferencesViewModel,
+        initialSection: PreferencesSection = .general,
         onGitHubSignIn: (() -> Void)? = nil,
         onOpenGitHubCLIInstallGuide: (() -> Void)? = nil,
         pluginManager: PluginManager? = nil
     ) {
         self.viewModel = viewModel
+        self._selectedSection = State(initialValue: initialSection)
         self.onGitHubSignIn = onGitHubSignIn
         self.onOpenGitHubCLIInstallGuide = onOpenGitHubCLIInstallGuide
         self.pluginManager = pluginManager

@@ -7,6 +7,58 @@ import Testing
 
 @Suite("MainWindowController Voice input")
 struct MainWindowVoiceInputSwiftTestingTests {
+    @Test("Voice consent is presented once per app session")
+    @MainActor
+    func voiceConsentIsPresentedOncePerSession() throws {
+        let coordinator = VoiceConsentCoordinator()
+        let configService = try voiceConsentConfigService(consentPrompted: false)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService,
+            voiceConsentCoordinator: coordinator
+        )
+        defer { controller.close() }
+
+        #expect(controller.voiceConsentBannerHostingView != nil)
+        #expect(coordinator.presentationCount == 1)
+
+        controller.presentVoiceConsentIfNeeded()
+
+        #expect(coordinator.presentationCount == 1)
+    }
+
+    @Test("disabling Voice from consent persists both decisions")
+    @MainActor
+    func disablingVoiceFromConsentPersistsBothDecisions() throws {
+        let configService = try voiceConsentConfigService(consentPrompted: false)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+        defer { controller.close() }
+
+        controller.resolveVoiceConsent(keepEnabled: false)
+
+        #expect(configService.current.voice.enabled == false)
+        #expect(configService.current.voice.consentPrompted == true)
+        #expect(controller.voiceConsentBannerHostingView == nil)
+    }
+
+    @Test("previous Voice acknowledgement never prompts again")
+    @MainActor
+    func previousVoiceAcknowledgementDoesNotPromptAgain() throws {
+        let coordinator = VoiceConsentCoordinator()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: try voiceConsentConfigService(consentPrompted: true),
+            voiceConsentCoordinator: coordinator
+        )
+        defer { controller.close() }
+
+        #expect(controller.voiceConsentBannerHostingView == nil)
+        #expect(coordinator.presentationCount == 0)
+    }
+
     @Test("Voice transcript writes to a detected terminal agent without submitting")
     @MainActor
     func voiceTranscriptWritesToDetectedAgentForReview() throws {
@@ -161,6 +213,17 @@ struct MainWindowVoiceInputSwiftTestingTests {
         enabled = true
         locale = "system"
         auto-send-to-agent = \(autoSendToAgent)
+        """))
+        try service.reload()
+        return service
+    }
+
+    @MainActor
+    private func voiceConsentConfigService(consentPrompted: Bool) throws -> ConfigService {
+        let service = ConfigService(fileProvider: VoiceInputConfigProvider(content: """
+        [voice]
+        enabled = true
+        consent-prompted = \(consentPrompted)
         """))
         try service.reload()
         return service

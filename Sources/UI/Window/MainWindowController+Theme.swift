@@ -211,6 +211,8 @@ extension MainWindowController {
         if old?.completions != config.completions {
             rewireVisibleEditorCompletions()
         }
+
+        updateVoiceConsentPresentation(for: config.voice)
     }
 
     private func updateMarkdownPanelLocalizers(_ localizer: AppLocalizer) {

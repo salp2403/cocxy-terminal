@@ -156,6 +156,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Optional reference to the configuration service.
     let configService: ConfigService?
 
+    let voiceConsentCoordinator: VoiceConsentCoordinator
+
     var lspServerDiscoveryFactory: () -> LSPServerDiscovery = {
         LSPServerDiscovery()
     }
@@ -284,6 +286,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     var voiceTriggerHandler: VoiceTriggerHandler?
     var voiceIndicatorHostingView: NSHostingView<VoiceIndicator>?
+    var voiceConsentBannerHostingView: NSHostingView<VoiceConsentBanner>?
+    var voiceConsentErrorMessage: String?
     var voiceInputTask: Task<Void, Never>?
     var injectedVoiceSessionFactory: VoiceTriggerHandler.SessionFactory?
     var touchBarController: CocxyTouchBarController?
@@ -756,11 +760,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         tabManager: TabManager? = nil,
         auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
         terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil,
+        voiceConsentCoordinator: VoiceConsentCoordinator = VoiceConsentCoordinator(),
         deferContentSetup: Bool = false
     ) {
         self.bridge = bridge
         self.terminalEngineFactory = terminalEngineFactory
         self.configService = configService
+        self.voiceConsentCoordinator = voiceConsentCoordinator
         self.tabManager = tabManager ?? TabManager()
         self.auroraWorkspaceTitleStore = auroraWorkspaceTitleStore ?? AuroraWorkspaceTitleStore()
         self.terminalViewModel = TerminalViewModel(engine: bridge)
@@ -915,6 +921,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         subscribeToRateLimitProbeChanges()
         startProcessMonitor()
         installInputDropMonitorObserver()
+        presentVoiceConsentIfNeeded()
     }
 
     // MARK: - Window Configuration Helpers
@@ -1814,6 +1821,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         welcomeHostingView = nil
         onboardingHostingView?.removeFromSuperview()
         onboardingHostingView = nil
+        voiceConsentBannerHostingView?.removeFromSuperview()
+        voiceConsentBannerHostingView = nil
 
         // Clean stored closures on the sidebar and tab strip to prevent leaks.
         tabBarView?.onCommandPalette = nil
@@ -1884,6 +1893,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     func windowDidResize(_ notification: Notification) {
         adjustLayoutForWindowSize()
+        layoutVoiceConsentBanner()
     }
 
     // MARK: - Display / Backing Safety Net
