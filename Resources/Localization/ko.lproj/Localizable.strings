@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "작업 제거";
 "taskQueue.remove.confirmTitle" = "작업을 제거할까요?";
 "taskQueue.remove.confirmMessage" = "%@을(를) 대기열에서 영구적으로 제거할까요? 이 작업은 되돌릴 수 없습니다.";
+
+/* 음성 입력 동의 */
+"voice.consent.title" = "음성 받아쓰기가 켜져 있습니다";
+"voice.consent.message" = "모든 처리는 기기에서 이루어지며 Mac 밖으로 전송되는 정보는 없습니다. 계속 사용할까요?";
+"voice.consent.keepEnabled" = "계속 사용";
+"voice.consent.disable" = "사용 안 함";
+"voice.consent.openPreferences" = "음성 설정";
+"voice.consent.saveFailed" = "이 선택을 저장할 수 없습니다. 다시 시도하십시오.";

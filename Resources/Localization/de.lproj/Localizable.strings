@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Aufgabe entfernen";
 "taskQueue.remove.confirmTitle" = "Aufgabe entfernen?";
 "taskQueue.remove.confirmMessage" = "%@ dauerhaft aus der Warteschlange entfernen? Dies kann nicht rückgängig gemacht werden.";
+
+/* Zustimmung zur Spracheingabe */
+"voice.consent.title" = "Sprachdiktat ist aktiviert";
+"voice.consent.message" = "Die Verarbeitung erfolgt vollständig auf dem Gerät; nichts verlässt deinen Mac. Aktiviert lassen?";
+"voice.consent.keepEnabled" = "Aktiviert lassen";
+"voice.consent.disable" = "Deaktivieren";
+"voice.consent.openPreferences" = "Spracheinstellungen";
+"voice.consent.saveFailed" = "Diese Auswahl konnte nicht gespeichert werden. Versuche es erneut.";

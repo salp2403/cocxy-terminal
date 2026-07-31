@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Rimuovi attività";
 "taskQueue.remove.confirmTitle" = "Rimuovere l’attività?";
 "taskQueue.remove.confirmMessage" = "Rimuovere definitivamente %@ dalla coda? Questa azione non può essere annullata.";
+
+/* Consenso vocale */
+"voice.consent.title" = "La dettatura vocale è attiva";
+"voice.consent.message" = "L’elaborazione avviene interamente sul dispositivo; nulla lascia il Mac. Vuoi mantenerla attiva?";
+"voice.consent.keepEnabled" = "Mantieni attiva";
+"voice.consent.disable" = "Disattiva";
+"voice.consent.openPreferences" = "Impostazioni voce";
+"voice.consent.saveFailed" = "Impossibile salvare questa scelta. Riprova.";

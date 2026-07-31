@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "إزالة المهمة";
 "taskQueue.remove.confirmTitle" = "إزالة المهمة؟";
 "taskQueue.remove.confirmMessage" = "إزالة %@ نهائيًا من قائمة الانتظار؟ لا يمكن التراجع عن هذا الإجراء.";
+
+/* الموافقة على الصوت */
+"voice.consent.title" = "الإملاء الصوتي مفعّل";
+"voice.consent.message" = "تتم المعالجة بالكامل على الجهاز؛ لا يغادر شيء جهاز Mac. هل تريد إبقاءه مفعّلًا؟";
+"voice.consent.keepEnabled" = "إبقاؤه مفعّلًا";
+"voice.consent.disable" = "تعطيل";
+"voice.consent.openPreferences" = "إعدادات الصوت";
+"voice.consent.saveFailed" = "تعذر حفظ هذا الاختيار. حاول مرة أخرى.";

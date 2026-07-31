@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "យកភារកិច្ចចេញ";
 "taskQueue.remove.confirmTitle" = "យកភារកិច្ចចេញ?";
 "taskQueue.remove.confirmMessage" = "យក %@ ចេញពីជួររង់ចាំជាអចិន្ត្រៃយ៍? សកម្មភាពនេះមិនអាចមិនធ្វើវិញបានទេ។";
+
+/* ការយល់ព្រមសម្រាប់សំឡេង */
+"voice.consent.title" = "ការបញ្ចូលសំឡេងត្រូវបានបើក";
+"voice.consent.message" = "ដំណើរការទាំងអស់ធ្វើឡើងនៅលើឧបករណ៍; គ្មានអ្វីចាកចេញពី Mac របស់អ្នកទេ។ ទុកឱ្យវាបើកទេ?";
+"voice.consent.keepEnabled" = "ទុកឱ្យបើក";
+"voice.consent.disable" = "បិទ";
+"voice.consent.openPreferences" = "ការកំណត់សំឡេង";
+"voice.consent.saveFailed" = "មិនអាចរក្សាទុកជម្រើសនេះបានទេ។ សូមព្យាយាមម្ដងទៀត។";

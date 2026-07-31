@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Usuń zadanie";
 "taskQueue.remove.confirmTitle" = "Usunąć zadanie?";
 "taskQueue.remove.confirmMessage" = "Trwale usunąć %@ z kolejki? Tej operacji nie można cofnąć.";
+
+/* Zgoda na funkcję głosową */
+"voice.consent.title" = "Dyktowanie głosowe jest włączone";
+"voice.consent.message" = "Przetwarzanie odbywa się w całości na urządzeniu; nic nie opuszcza Twojego Maca. Pozostawić włączone?";
+"voice.consent.keepEnabled" = "Pozostaw włączone";
+"voice.consent.disable" = "Wyłącz";
+"voice.consent.openPreferences" = "Ustawienia głosu";
+"voice.consent.saveFailed" = "Nie udało się zapisać tego wyboru. Spróbuj ponownie.";

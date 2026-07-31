@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "タスクを削除";
 "taskQueue.remove.confirmTitle" = "タスクを削除しますか？";
 "taskQueue.remove.confirmMessage" = "%@ をキューから完全に削除しますか？この操作は取り消せません。";
+
+/* 音声入力の確認 */
+"voice.consent.title" = "音声入力がオンです";
+"voice.consent.message" = "処理はすべてデバイス上で行われ、Mac の外部には何も送信されません。有効のままにしますか？";
+"voice.consent.keepEnabled" = "オンのままにする";
+"voice.consent.disable" = "無効にする";
+"voice.consent.openPreferences" = "音声設定";
+"voice.consent.saveFailed" = "この選択を保存できませんでした。もう一度お試しください。";

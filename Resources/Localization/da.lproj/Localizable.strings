@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Fjern opgave";
 "taskQueue.remove.confirmTitle" = "Fjern opgave?";
 "taskQueue.remove.confirmMessage" = "Fjern %@ permanent fra køen? Dette kan ikke fortrydes.";
+
+/* Samtykke til stemme */
+"voice.consent.title" = "Stemmediktering er slået til";
+"voice.consent.message" = "Behandlingen foregår 100 % på enheden; intet forlader din Mac. Vil du beholde det slået til?";
+"voice.consent.keepEnabled" = "Behold slået til";
+"voice.consent.disable" = "Slå fra";
+"voice.consent.openPreferences" = "Stemmeindstillinger";
+"voice.consent.saveFailed" = "Valget kunne ikke gemmes. Prøv igen.";

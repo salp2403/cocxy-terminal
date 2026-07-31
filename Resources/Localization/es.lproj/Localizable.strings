@@ -3477,3 +3477,11 @@
 "taskQueue.validation.event" = "Elige un evento disparador.";
 "taskQueue.validation.retries" = "Los reintentos deben estar entre 0 y 5.";
 "taskQueue.validation.concurrency" = "La concurrencia de pasos debe estar entre 1 y 8.";
+
+/* Consentimiento de voz */
+"voice.consent.title" = "El dictado por voz está activado";
+"voice.consent.message" = "El procesamiento es 100 % local; nada sale de tu Mac. ¿Quieres mantenerlo activado?";
+"voice.consent.keepEnabled" = "Mantener activado";
+"voice.consent.disable" = "Desactivar";
+"voice.consent.openPreferences" = "Ajustes de voz";
+"voice.consent.saveFailed" = "No se pudo guardar esta elección. Inténtalo de nuevo.";

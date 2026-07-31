@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Görevi kaldır";
 "taskQueue.remove.confirmTitle" = "Görev kaldırılsın mı?";
 "taskQueue.remove.confirmMessage" = "%@ kuyruktan kalıcı olarak kaldırılsın mı? Bu işlem geri alınamaz.";
+
+/* Ses onayı */
+"voice.consent.title" = "Sesli dikte açık";
+"voice.consent.message" = "İşlemlerin tamamı aygıtta gerçekleşir; Mac’inizden hiçbir veri çıkmaz. Açık kalsın mı?";
+"voice.consent.keepEnabled" = "Açık Tut";
+"voice.consent.disable" = "Devre Dışı Bırak";
+"voice.consent.openPreferences" = "Ses Ayarları";
+"voice.consent.saveFailed" = "Bu seçim kaydedilemedi. Yeniden deneyin.";

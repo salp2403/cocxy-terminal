@@ -3477,3 +3477,11 @@
 "taskQueue.validation.event" = "Choose an event trigger.";
 "taskQueue.validation.retries" = "Retries must be between 0 and 5.";
 "taskQueue.validation.concurrency" = "Step concurrency must be between 1 and 8.";
+
+/* Voice consent */
+"voice.consent.title" = "Voice dictation is on";
+"voice.consent.message" = "Processing is 100% on-device; nothing leaves your Mac. Keep it enabled?";
+"voice.consent.keepEnabled" = "Keep Enabled";
+"voice.consent.disable" = "Disable";
+"voice.consent.openPreferences" = "Voice Settings";
+"voice.consent.saveFailed" = "This choice could not be saved. Try again.";

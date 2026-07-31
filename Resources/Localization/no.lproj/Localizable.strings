@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Fjern oppgave";
 "taskQueue.remove.confirmTitle" = "Fjerne oppgaven?";
 "taskQueue.remove.confirmMessage" = "Fjerne %@ permanent fra køen? Dette kan ikke angres.";
+
+/* Samtykke til tale */
+"voice.consent.title" = "Stemmediktering er på";
+"voice.consent.message" = "All behandling skjer på enheten; ingenting forlater Macen. Vil du la den være på?";
+"voice.consent.keepEnabled" = "La være på";
+"voice.consent.disable" = "Slå av";
+"voice.consent.openPreferences" = "Taleinnstillinger";
+"voice.consent.saveFailed" = "Valget kunne ikke lagres. Prøv igjen.";

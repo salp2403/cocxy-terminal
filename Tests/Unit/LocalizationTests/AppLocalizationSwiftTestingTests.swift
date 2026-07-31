@@ -1126,6 +1126,71 @@ struct AppLocalizationSwiftTestingTests {
         }
     }
 
+    @MainActor
+    @Test
+    func voiceConsentIsLocalizedInEverySupportedResource() throws {
+        let bundle = try #require(localizationBundle())
+        let english = AppLocalizer(languagePreference: .english, bundle: bundle)
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(VoiceConsentBanner.localizedTitle(using: english) == "Voice dictation is on")
+        #expect(
+            VoiceConsentBanner.localizedMessage(using: english)
+                == "Processing is 100% on-device; nothing leaves your Mac. Keep it enabled?"
+        )
+        #expect(VoiceConsentBanner.localizedKeepEnabled(using: english) == "Keep Enabled")
+        #expect(VoiceConsentBanner.localizedDisable(using: english) == "Disable")
+        #expect(VoiceConsentBanner.localizedOpenPreferences(using: english) == "Voice Settings")
+        #expect(
+            VoiceConsentBanner.localizedSaveFailed(using: english)
+                == "This choice could not be saved. Try again."
+        )
+
+        #expect(VoiceConsentBanner.localizedTitle(using: spanish) == "El dictado por voz está activado")
+        #expect(
+            VoiceConsentBanner.localizedMessage(using: spanish)
+                == "El procesamiento es 100 % local; nada sale de tu Mac. ¿Quieres mantenerlo activado?"
+        )
+        #expect(VoiceConsentBanner.localizedKeepEnabled(using: spanish) == "Mantener activado")
+        #expect(VoiceConsentBanner.localizedDisable(using: spanish) == "Desactivar")
+        #expect(VoiceConsentBanner.localizedOpenPreferences(using: spanish) == "Ajustes de voz")
+
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let resourcesRoot = root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        let expectedKeys: Set<String> = [
+            "voice.consent.title",
+            "voice.consent.message",
+            "voice.consent.keepEnabled",
+            "voice.consent.disable",
+            "voice.consent.openPreferences",
+            "voice.consent.saveFailed",
+        ]
+
+        #expect(AppLocalizationResolver.supportedLanguages.count == 21)
+        for language in AppLocalizationResolver.supportedLanguages {
+            let strings = try localizationStrings(
+                at: resourcesRoot.appendingPathComponent(
+                    "\(language.rawValue).lproj/Localizable.strings"
+                )
+            )
+            let missingKeys = expectedKeys.subtracting(strings.keys).sorted()
+            let emptyKeys = expectedKeys.filter { strings[$0]?.isEmpty != false }.sorted()
+
+            #expect(
+                missingKeys.isEmpty,
+                Comment(
+                    rawValue: "\(language.rawValue).lproj is missing Voice consent keys: \(missingKeys.joined(separator: ", "))"
+                )
+            )
+            #expect(
+                emptyKeys.isEmpty,
+                Comment(
+                    rawValue: "\(language.rawValue).lproj has empty Voice consent values: \(emptyKeys.joined(separator: ", "))"
+                )
+            )
+        }
+    }
+
     @Test
     func agentWorkspaceLocalizationResourcesExposeCellsAndAgentTeamKeys() throws {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)

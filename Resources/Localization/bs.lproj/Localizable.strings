@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Ukloni zadatak";
 "taskQueue.remove.confirmTitle" = "Ukloniti zadatak?";
 "taskQueue.remove.confirmMessage" = "Trajno ukloniti %@ iz reda čekanja? Ova radnja se ne može poništiti.";
+
+/* Saglasnost za glas */
+"voice.consent.title" = "Glasovno diktiranje je uključeno";
+"voice.consent.message" = "Obrada se u potpunosti odvija na uređaju; ništa ne napušta vaš Mac. Želite li ga zadržati uključenim?";
+"voice.consent.keepEnabled" = "Zadrži uključeno";
+"voice.consent.disable" = "Isključi";
+"voice.consent.openPreferences" = "Postavke glasa";
+"voice.consent.saveFailed" = "Ovaj izbor nije moguće sačuvati. Pokušajte ponovo.";

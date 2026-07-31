@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Удалить задачу";
 "taskQueue.remove.confirmTitle" = "Удалить задачу?";
 "taskQueue.remove.confirmMessage" = "Навсегда удалить %@ из очереди? Это действие нельзя отменить.";
+
+/* Согласие на голосовой ввод */
+"voice.consent.title" = "Голосовой ввод включён";
+"voice.consent.message" = "Обработка полностью выполняется на устройстве; данные не покидают ваш Mac. Оставить включённым?";
+"voice.consent.keepEnabled" = "Оставить включённым";
+"voice.consent.disable" = "Отключить";
+"voice.consent.openPreferences" = "Настройки голоса";
+"voice.consent.saveFailed" = "Не удалось сохранить выбор. Повторите попытку.";

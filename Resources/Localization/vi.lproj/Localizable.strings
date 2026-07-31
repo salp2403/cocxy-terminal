@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Xóa tác vụ";
 "taskQueue.remove.confirmTitle" = "Xóa tác vụ?";
 "taskQueue.remove.confirmMessage" = "Xóa vĩnh viễn %@ khỏi hàng đợi? Không thể hoàn tác thao tác này.";
+
+/* Đồng ý sử dụng giọng nói */
+"voice.consent.title" = "Đọc chính tả bằng giọng nói đang bật";
+"voice.consent.message" = "Toàn bộ quá trình xử lý diễn ra trên thiết bị; không có dữ liệu nào rời khỏi máy Mac. Bạn có muốn tiếp tục bật không?";
+"voice.consent.keepEnabled" = "Tiếp tục bật";
+"voice.consent.disable" = "Tắt";
+"voice.consent.openPreferences" = "Cài đặt giọng nói";
+"voice.consent.saveFailed" = "Không thể lưu lựa chọn này. Hãy thử lại.";

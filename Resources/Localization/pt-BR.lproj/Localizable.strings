@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Remover tarefa";
 "taskQueue.remove.confirmTitle" = "Remover tarefa?";
 "taskQueue.remove.confirmMessage" = "Remover %@ permanentemente da fila? Esta ação não pode ser desfeita.";
+
+/* Consentimento de voz */
+"voice.consent.title" = "O ditado por voz está ativado";
+"voice.consent.message" = "O processamento ocorre 100% no dispositivo; nada sai do seu Mac. Deseja mantê-lo ativado?";
+"voice.consent.keepEnabled" = "Manter ativado";
+"voice.consent.disable" = "Desativar";
+"voice.consent.openPreferences" = "Ajustes de voz";
+"voice.consent.saveFailed" = "Não foi possível salvar esta escolha. Tente novamente.";

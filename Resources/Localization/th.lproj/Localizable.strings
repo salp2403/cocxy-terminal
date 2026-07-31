@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "นำงานออก";
 "taskQueue.remove.confirmTitle" = "นำงานออกหรือไม่";
 "taskQueue.remove.confirmMessage" = "นำ %@ ออกจากคิวอย่างถาวรหรือไม่ การดำเนินการนี้ย้อนกลับไม่ได้";
+
+/* ความยินยอมสำหรับเสียง */
+"voice.consent.title" = "การป้อนตามคำบอกด้วยเสียงเปิดอยู่";
+"voice.consent.message" = "การประมวลผลทั้งหมดเกิดขึ้นบนอุปกรณ์ ไม่มีข้อมูลใดออกจาก Mac ของคุณ ต้องการเปิดไว้หรือไม่";
+"voice.consent.keepEnabled" = "เปิดไว้";
+"voice.consent.disable" = "ปิดใช้งาน";
+"voice.consent.openPreferences" = "การตั้งค่าเสียง";
+"voice.consent.saveFailed" = "บันทึกตัวเลือกนี้ไม่ได้ โปรดลองอีกครั้ง";

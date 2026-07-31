@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Видалити завдання";
 "taskQueue.remove.confirmTitle" = "Видалити завдання?";
 "taskQueue.remove.confirmMessage" = "Назавжди видалити %@ з черги? Цю дію не можна скасувати.";
+
+/* Згода на голосове введення */
+"voice.consent.title" = "Голосове введення ввімкнено";
+"voice.consent.message" = "Обробка повністю відбувається на пристрої; дані не залишають ваш Mac. Залишити ввімкненим?";
+"voice.consent.keepEnabled" = "Залишити ввімкненим";
+"voice.consent.disable" = "Вимкнути";
+"voice.consent.openPreferences" = "Налаштування голосу";
+"voice.consent.saveFailed" = "Не вдалося зберегти вибір. Спробуйте ще раз.";

@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "移除任务";
 "taskQueue.remove.confirmTitle" = "移除任务？";
 "taskQueue.remove.confirmMessage" = "要从队列中永久移除 %@ 吗？此操作无法撤销。";
+
+/* 语音同意提示 */
+"voice.consent.title" = "语音听写已开启";
+"voice.consent.message" = "所有处理均在设备端完成，不会有任何数据离开你的 Mac。要保持开启吗？";
+"voice.consent.keepEnabled" = "保持开启";
+"voice.consent.disable" = "关闭";
+"voice.consent.openPreferences" = "语音设置";
+"voice.consent.saveFailed" = "无法保存此选择，请重试。";

@@ -95,3 +95,11 @@
 "taskQueue.remove.action" = "Supprimer la tâche";
 "taskQueue.remove.confirmTitle" = "Supprimer la tâche ?";
 "taskQueue.remove.confirmMessage" = "Supprimer définitivement %@ de la file d’attente ? Cette action est irréversible.";
+
+/* Consentement vocal */
+"voice.consent.title" = "La dictée vocale est activée";
+"voice.consent.message" = "Le traitement s’effectue entièrement sur l’appareil ; rien ne quitte votre Mac. La laisser activée ?";
+"voice.consent.keepEnabled" = "Laisser activée";
+"voice.consent.disable" = "Désactiver";
+"voice.consent.openPreferences" = "Réglages vocaux";
+"voice.consent.saveFailed" = "Impossible d’enregistrer ce choix. Réessayez.";
