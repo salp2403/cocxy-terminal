@@ -87,6 +87,47 @@ struct CocxyCoreHostWiringTests {
         #expect(visibleStart < liveBottom)
     }
 
+    @Test("command finish reloads output for shell corrections and JSONL persistence")
+    func commandFinishReloadsOutputForCorrectionsAndPersistence() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-command-finish-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let bridge = try makeBridge()
+        let controller = MainWindowController(bridge: bridge)
+        controller.commandBlockStore = TerminalBlockStore(rootDirectory: root)
+        controller.showWindow(nil)
+        defer { controller.close() }
+
+        if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
+            controller.createTerminalSurface()
+        }
+
+        let tabID = try #require(controller.tabManager.activeTabID)
+        let surfaceID = try #require(controller.tabSurfaceMap[tabID])
+        let coreView = try #require(controller.surfaceViewForTab(tabID) as? CocxyCoreView)
+        let state = try #require(bridge.surfaceState(for: surfaceID))
+        let sessionID = controller.sessionIDForTab(tabID).rawValue.uuidString
+        let shellHint = "zsh: correct 'cocxytst' to 'cocxytest' [nyae]?"
+
+        feed(
+            "\u{1B}]133;A\u{7}$ " +
+                "\u{1B}]133;B\u{7}cocxytst --version\r\n" +
+                "\u{1B}]133;C\u{7}\(shellHint)\r\n" +
+                "\u{1B}]133;D;127\u{7}",
+            into: state.terminal
+        )
+
+        try await waitUntil {
+            coreView.pendingCommandCorrection?.source == .shellHint
+                && (try? controller.commandBlockStore.load(sessionID: sessionID).last?.output)
+                    == shellHint
+        }
+
+        #expect(coreView.pendingCommandCorrection?.suggestion == "cocxytest --version")
+        #expect(try controller.commandBlockStore.load(sessionID: sessionID).last?.output == shellHint)
+    }
+
     @Test("daemon host receives its initial localizer and supports live updates through the shared contract")
     func daemonHostReceivesAndUpdatesLocalizer() throws {
         let bundle = try #require(localizationBundle())

@@ -983,7 +983,7 @@ extension MainWindowController {
         in surfaceView: TerminalHostView
     ) {
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
-        let restored = (try? TerminalBlockStore().load(sessionID: sessionID)) ?? []
+        let restored = (try? commandBlockStore.load(sessionID: sessionID)) ?? []
         let blocks = TerminalBlockRestoration.blocksForDisplay(
             live: [],
             restored: restored,
@@ -1032,7 +1032,10 @@ extension MainWindowController {
             includeOutput: false,
             includeVisibleMapping: false
         )
-        guard let block = liveBlocks.last else { return }
+        guard let blockID = liveBlocks.last?.id,
+              let block = cocxyBridge.commandBlock(for: surfaceID, blockID: blockID) else {
+            return
+        }
 
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
         updateCommandCorrectionSuggestion(for: block, tabID: tabID, surfaceID: surfaceID)
@@ -1043,8 +1046,9 @@ extension MainWindowController {
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         recordCommandBlockActivity(block, tabID: tabID, surfaceID: surfaceID)
         let spotlightConfig = configService?.current.spotlight ?? .defaults
+        let commandBlockStore = commandBlockStore
         Task.detached(priority: .utility) {
-            try? TerminalBlockStore().append(block, sessionID: sessionID)
+            try? commandBlockStore.append(block, sessionID: sessionID)
             if spotlightConfig.enabled {
                 _ = try? await SpotlightIncrementalIndexer.indexCommandBlock(
                     block,

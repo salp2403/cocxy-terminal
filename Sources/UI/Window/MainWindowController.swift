@@ -495,6 +495,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// semantic finish event is delivered through more than one path.
     var persistedCommandBlockKeys: Set<String> = []
 
+    /// Store used for live command-block persistence and restoration.
+    var commandBlockStore = TerminalBlockStore()
+
     /// Persisted command blocks reattached to restored primary surfaces.
     ///
     /// CocxyCore owns live block state for the current process. This map
