@@ -922,7 +922,7 @@ extension MainWindowController {
             let position = surfaceView.bounds.height - 20
             renderer.renderImage(imageData, at: position)
 
-        case .processExited:
+        case .processExited(let exitCode):
             // Shell process exited. Run the same teardown we'd run on
             // surface destroy, but in-place because the surface object
             // can outlive its backing shell (e.g. user keeps the pane
@@ -967,7 +967,11 @@ extension MainWindowController {
             auroraChromeController?.refreshSources()
             let isPrimarySurface = sourceSurfaceID == nil || tabSurfaceMap[tabID] == sourceSurfaceID
             if isPrimarySurface,
-               let terminalEnd = unregisterAgentTeamTab(tabID, reason: .processExited) {
+               let terminalEnd = unregisterAgentTeamTab(
+                   tabID,
+                   reason: .processExited,
+                   exitCode: exitCode
+               ) {
                 notifyAgentTeamTerminalEnded(terminalEnd)
             }
         }

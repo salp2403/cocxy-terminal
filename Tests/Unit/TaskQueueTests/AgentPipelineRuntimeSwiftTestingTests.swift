@@ -69,10 +69,16 @@ struct AgentPipelineRuntimeSwiftTestingTests {
     @Test("watchdog fails a stalled step and releases broker state")
     func watchdogTimeout() async {
         let broker = AgentPipelineCompletionBroker(stepTimeout: .milliseconds(20))
+        var didCleanRuntime = false
 
         await #expect(throws: AgentPipelineRuntimeError.stepTimedOut("queue-timeout")) {
-            _ = try await broker.launchAndWait(teamID: "queue-timeout") {}
+            _ = try await broker.launchAndWait(
+                teamID: "queue-timeout",
+                launch: {},
+                onTimeout: { didCleanRuntime = true }
+            )
         }
+        #expect(didCleanRuntime)
         #expect(await broker.pendingTeamIDs.isEmpty)
     }
 
@@ -151,6 +157,44 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         #expect(delegate.activeAgentTeamRuns[teamID] == nil)
     }
 
+    @Test("handoff hook events never persist resumable team snapshots")
+    func handoffHooksDoNotPersistSnapshots() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-handoff-snapshots-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let teamID = "handoff-\(UUID().uuidString.lowercased())"
+        let teammateID = "\(teamID)-agent"
+        let config = AgentTeamConfig(
+            id: teamID,
+            provider: .codex,
+            teammates: [AgentTeammateConfig(
+                id: teammateID,
+                name: "handoff",
+                prompt: "Continue"
+            )]
+        )
+        let delegate = AppDelegate()
+        delegate.agentTeamSessionSnapshotStore = AgentTeamSessionSnapshotStore(directory: root)
+        delegate.activeAgentTeamCoordinators[teamID] = AgentTeamCoordinator(config: config)
+        delegate.activeAgentTeamRuns[teamID] = AgentTeamRunState(
+            config: config,
+            launchSpecs: []
+        )
+
+        delegate.applyAgentTeamHookEvent(HookEvent(
+            type: .sessionStart,
+            sessionId: teamID,
+            teamID: teamID,
+            teammateID: teammateID,
+            teammateName: "handoff"
+        ))
+
+        #expect(delegate.activeAgentTeamRuns[teamID]?.graph.node(id: teammateID)?.status == .working)
+        #expect(!FileManager.default.fileExists(
+            atPath: delegate.agentTeamSessionSnapshotStore.fileURL(teamID: teamID).path
+        ))
+    }
+
     @Test("provider exit completes queued work without hook infrastructure")
     func providerExitCompletesQueuedWorkWithoutHooks() async throws {
         _ = NSApplication.shared
@@ -180,7 +224,7 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         })
 
         controller.handleOSCNotification(
-            .processExited,
+            .processExited(exitCode: 0),
             fromTabID: fixture.tabID,
             surfaceID: fixture.surfaceID
         )
@@ -194,6 +238,49 @@ struct AgentPipelineRuntimeSwiftTestingTests {
                 && controller.tabManager.tab(for: fixture.tabID) == nil
         }
         #expect(didCleanQueueRuntime)
+    }
+
+    @Test("nonzero provider exit fails queued work and clears runtime state")
+    func nonzeroProviderExitFailsQueuedWork() async throws {
+        _ = NSApplication.shared
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.configureSharedServices(for: controller, registerWindow: false)
+        let fixture = try installTeamRuntime(
+            teamID: "queue-process-failure",
+            bridge: bridge,
+            controller: controller,
+            delegate: delegate,
+            queued: true
+        )
+        let waiter = Task {
+            try await delegate.agentPipelineCompletionBroker.launchAndWait(
+                teamID: fixture.teamID
+            ) {}
+        }
+        #expect(await waitUntil {
+            await delegate.agentPipelineCompletionBroker.pendingTeamIDs == [fixture.teamID]
+        })
+
+        controller.handleOSCNotification(
+            .processExited(exitCode: 7),
+            fromTabID: fixture.tabID,
+            surfaceID: fixture.surfaceID
+        )
+
+        await #expect(throws: AgentPipelineRuntimeError.agentFailed(
+            "Provider process exited with status 7"
+        )) {
+            _ = try await waiter.value
+        }
+        #expect(await waitUntilOnMainActor {
+            delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil
+                && delegate.activeAgentTeamRuns[fixture.teamID] == nil
+                && controller.tabManager.tab(for: fixture.tabID) == nil
+        })
     }
 
     @Test("closing a queued provider tab fails its step and clears runtime state")
@@ -230,6 +317,44 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         }
         #expect(delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil)
         #expect(delegate.activeAgentTeamRuns[fixture.teamID] == nil)
+    }
+
+    @Test("closing a provider window fails its queued step and clears runtime state")
+    func closingQueuedProviderWindowFailsStep() async throws {
+        _ = NSApplication.shared
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        let delegate = AppDelegate()
+        delegate.installWindowControllerForTesting(controller)
+        delegate.configureSharedServices(for: controller, registerWindow: false)
+        let fixture = try installTeamRuntime(
+            teamID: "queue-window-close",
+            bridge: bridge,
+            controller: controller,
+            delegate: delegate,
+            queued: true
+        )
+        let waiter = Task {
+            try await delegate.agentPipelineCompletionBroker.launchAndWait(
+                teamID: fixture.teamID
+            ) {}
+        }
+        #expect(await waitUntil {
+            await delegate.agentPipelineCompletionBroker.pendingTeamIDs == [fixture.teamID]
+        })
+
+        controller.window?.close()
+
+        await #expect(throws: AgentPipelineRuntimeError.agentFailed(
+            "Provider terminal tab closed"
+        )) {
+            _ = try await waiter.value
+        }
+        #expect(delegate.taskQueueAgentTeamContexts[fixture.teamID] == nil)
+        #expect(delegate.activeAgentTeamRuns[fixture.teamID] == nil)
+        #expect(delegate.activeAgentTeamCoordinators[fixture.teamID] == nil)
+        #expect(!controller.taskQueueLifecycleExcludedTabIDs.contains(fixture.tabID))
     }
 
     @Test("queue-origin plugin events cannot retrigger event tasks")
@@ -298,7 +423,7 @@ struct AgentPipelineRuntimeSwiftTestingTests {
         )
 
         controller.handleOSCNotification(
-            .processExited,
+            .processExited(exitCode: 0),
             fromTabID: fixture.tabID,
             surfaceID: fixture.surfaceID
         )

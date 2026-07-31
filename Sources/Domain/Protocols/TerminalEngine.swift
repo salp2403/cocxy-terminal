@@ -445,9 +445,10 @@ enum OSCNotification: Sendable {
     /// Inline image data from an OSC 1337 sequence (iTerm2 protocol).
     /// Contains the raw payload after "1337;" for parsing by the UI layer.
     case inlineImage(String)
-    /// The shell process exited.
+    /// The shell process exited. The status is nil when the backend cannot
+    /// report one.
     /// Used to transition the agent detection engine to idle state.
-    case processExited
+    case processExited(exitCode: Int32?)
 }
 
 /// Configuration passed to `TerminalEngine.initialize(config:)`.

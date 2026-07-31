@@ -95,10 +95,12 @@ enum AgentPipelineHookOutcome: Equatable, Sendable {
 
 actor AgentPipelineCompletionBroker {
     typealias LaunchOperation = @MainActor @Sendable () throws -> Void
+    typealias TimeoutOperation = @MainActor @Sendable () -> Void
 
     private struct PendingLaunch {
         let token: UUID
         let continuation: CheckedContinuation<AgentPipelineStepExecutionOutput, Error>
+        let timeoutOperation: TimeoutOperation?
         var watchdog: Task<Void, Never>?
     }
 
@@ -111,7 +113,8 @@ actor AgentPipelineCompletionBroker {
 
     func launchAndWait(
         teamID: String,
-        launch: @escaping LaunchOperation
+        launch: @escaping LaunchOperation,
+        onTimeout: TimeoutOperation? = nil
     ) async throws -> AgentPipelineStepExecutionOutput {
         try Task.checkCancellation()
         let token = UUID()
@@ -126,6 +129,7 @@ actor AgentPipelineCompletionBroker {
                 pendingLaunches[teamID] = PendingLaunch(
                     token: token,
                     continuation: continuation,
+                    timeoutOperation: onTimeout,
                     watchdog: nil
                 )
                 pendingLaunches[teamID]?.watchdog = Task { [weak self] in
@@ -225,11 +229,12 @@ actor AgentPipelineCompletionBroker {
         )
     }
 
-    private func timeout(teamID: String, token: UUID) {
+    private func timeout(teamID: String, token: UUID) async {
         guard let pending = pendingLaunches[teamID], pending.token == token else {
             return
         }
         pendingLaunches.removeValue(forKey: teamID)
+        await pending.timeoutOperation?()
         pending.continuation.resume(
             throwing: AgentPipelineRuntimeError.stepTimedOut(teamID)
         )

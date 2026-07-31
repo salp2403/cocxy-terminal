@@ -861,7 +861,7 @@ final class PTYDaemonClient: TerminalEngine {
         case .inlineImage:
             return .inlineImage(osc.text ?? "")
         case .processExited:
-            return .processExited
+            return .processExited(exitCode: osc.exitCode.flatMap(Int32.init(exactly:)))
         }
     }
 

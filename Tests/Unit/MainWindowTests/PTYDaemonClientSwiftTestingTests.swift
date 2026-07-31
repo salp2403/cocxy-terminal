@@ -515,6 +515,11 @@ struct PTYDaemonClientSwiftTestingTests {
                     surfaceID: surfaceID.uuidString,
                     osc: PTYDaemonOSCNotification(kind: .titleChange, text: "Daemon Shell")
                 ),
+                PTYDaemonEvent(
+                    event: .surfaceOSC,
+                    surfaceID: surfaceID.uuidString,
+                    osc: PTYDaemonOSCNotification(kind: .processExited, exitCode: 9)
+                ),
             ]
         )
         let client = PTYDaemonClient(connection: connection)
@@ -522,6 +527,7 @@ struct PTYDaemonClientSwiftTestingTests {
         let surface = try client.createSurface(in: NSView(), workingDirectory: nil, command: nil)
         let output = LockedBox(Data())
         let title = LockedBox<String?>(nil)
+        let processExitCode = LockedBox<Int32?>(nil)
 
         client.setOutputHandler(for: surface) { chunk in
             output.withValue { $0.append(chunk) }
@@ -530,12 +536,16 @@ struct PTYDaemonClientSwiftTestingTests {
             if case .titleChange(let value) = notification {
                 title.withValue { $0 = value }
             }
+            if case .processExited(let exitCode) = notification {
+                processExitCode.withValue { $0 = exitCode }
+            }
         }
 
         client.tick()
 
         #expect(String(data: output.withValue { $0 }, encoding: .utf8) == "ready\n")
         #expect(title.withValue { $0 } == "Daemon Shell")
+        #expect(processExitCode.withValue { $0 } == 9)
     }
 
     @Test("frame subscription requests an initial frame and tick forwards frame events")

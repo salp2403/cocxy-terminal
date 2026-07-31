@@ -4655,7 +4655,12 @@ final class CocxyCoreBridge: TerminalEngine {
             // `state.childPID` is the shell's PID captured in createSurface;
             // `event.pid` is the PID of the process that just exited.
             if let state = surfaces[surfaceID], event.pid == state.childPID {
-                dispatchOSC(.processExited, for: surfaceID)
+                dispatchOSC(
+                    .processExited(
+                        exitCode: event.exit_code >= 0 ? Int32(event.exit_code) : nil
+                    ),
+                    for: surfaceID
+                )
             }
         }
 

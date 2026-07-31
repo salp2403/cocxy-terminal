@@ -188,7 +188,9 @@ extension AppDelegate {
                         ?? focusedWindowController()?.visibleTabID?.rawValue
                         ?? focusedWindowController()?.tabManager.activeTabID?.rawValue
                     syncAgentTeamRunToDashboard(run, tabID: tabID)
-                    try? AgentTeamSessionSnapshotStore().save(run.snapshot())
+                    if !teamID.hasPrefix("handoff-") {
+                        try? agentTeamSessionSnapshotStore.save(run.snapshot())
+                    }
                 }
                 if let request = result.reviewBeforeShipRequest {
                     requestAgentTeamReviewBeforeShip(request)
@@ -213,12 +215,20 @@ extension AppDelegate {
         in controller: MainWindowController
     ) {
         let teamID = terminalEnd.context.teamID
-        let status: AgentTeamStatus = terminalEnd.reason == .processExited
+        let processFailed = terminalEnd.reason == .processExited
+            && terminalEnd.exitCode.map { $0 != 0 } == true
+        let status: AgentTeamStatus = terminalEnd.reason == .processExited && !processFailed
             ? .finished
             : .error
-        let message = terminalEnd.reason == .processExited
-            ? "Provider process exited"
-            : "Provider terminal tab closed"
+        let message: String
+        if terminalEnd.reason == .processExited, let exitCode = terminalEnd.exitCode,
+           exitCode != 0 {
+            message = "Provider process exited with status \(exitCode)"
+        } else if terminalEnd.reason == .processExited {
+            message = "Provider process exited"
+        } else {
+            message = "Provider terminal tab closed"
+        }
 
         if var run = activeAgentTeamRuns[teamID] {
             try? run.markTeammateTerminated(
@@ -231,7 +241,7 @@ extension AppDelegate {
         }
 
         if taskQueueAgentTeamContexts[teamID] != nil {
-            let outcome: AgentPipelineHookOutcome = terminalEnd.reason == .processExited
+            let outcome: AgentPipelineHookOutcome = terminalEnd.reason == .processExited && !processFailed
                 ? .succeeded(message)
                 : .failed(message)
             completeQueuedAgentTeam(teamID: teamID, outcome: outcome)
@@ -317,7 +327,7 @@ extension AppDelegate {
         }
         if persistSnapshot {
             if let snapshot = activeAgentTeamRuns[config.id]?.snapshot() {
-                try? AgentTeamSessionSnapshotStore().save(snapshot)
+                try? agentTeamSessionSnapshotStore.save(snapshot)
             }
         }
 

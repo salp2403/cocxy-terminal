@@ -18,6 +18,7 @@ struct AgentTeamTerminalEnd: Sendable, Equatable {
     let tabID: TabID
     let remainingTabCount: Int
     let reason: AgentTeamTerminalEndReason
+    let exitCode: Int32?
 }
 
 extension MainWindowController: AgentTeamPaneLaunching {
@@ -128,7 +129,8 @@ extension MainWindowController: AgentTeamPaneLaunching {
     @discardableResult
     func unregisterAgentTeamTab(
         _ tabID: TabID,
-        reason: AgentTeamTerminalEndReason
+        reason: AgentTeamTerminalEndReason,
+        exitCode: Int32? = nil
     ) -> AgentTeamTerminalEnd? {
         guard let context = agentTeamTabContextByTabID.removeValue(forKey: tabID) else {
             return nil
@@ -142,7 +144,8 @@ extension MainWindowController: AgentTeamPaneLaunching {
             context: context,
             tabID: tabID,
             remainingTabCount: remainingTabCount,
-            reason: reason
+            reason: reason,
+            exitCode: exitCode
         )
     }
 
@@ -189,9 +192,11 @@ extension MainWindowController: AgentTeamPaneLaunching {
         guard !normalizedPrompt.isEmpty else { return }
 
         Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: self.agentTeamPromptMinimumDelay)
+            guard !Task.isCancelled else { return }
             for attempt in 0..<Self.promptReadyAttempts {
-                guard let self,
-                      let surfaceID = self.activeAgentTeamPromptSurface(
+                guard let surfaceID = self.activeAgentTeamPromptSurface(
                         teamID: teamID,
                         tabID: tabID
                       ) else {
@@ -215,8 +220,7 @@ extension MainWindowController: AgentTeamPaneLaunching {
             }
 
             try? await Task.sleep(for: Self.promptFinalRetryDelay)
-            guard let self,
-                  let surfaceID = self.activeAgentTeamPromptSurface(
+            guard let surfaceID = self.activeAgentTeamPromptSurface(
                     teamID: teamID,
                     tabID: tabID
                   ) else {

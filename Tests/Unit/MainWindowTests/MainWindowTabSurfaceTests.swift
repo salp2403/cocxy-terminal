@@ -1510,6 +1510,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        controller.agentTeamPromptMinimumDelay = .milliseconds(20)
         let store = AgentStatePerSurfaceStore()
         controller.injectedPerSurfaceStore = store
         let spec = AgentTeamProviderLaunchSpec(
@@ -1540,6 +1541,7 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         let bridge = MockTerminalEngine()
         let controller = MainWindowController(bridge: bridge)
         controller.showWindow(nil)
+        controller.agentTeamPromptMinimumDelay = .milliseconds(20)
         var readinessChecks = 0
         var isReady = false
         controller.agentTeamPromptReadinessOverride = { _ in
@@ -1568,6 +1570,35 @@ final class TabNavigationSurfaceSwitchTests: XCTestCase {
         isReady = true
         try await waitForAgentTeamPrompt(in: bridge)
         XCTAssertEqual(bridge.sentTexts.last?.text, "Review the implementation\r")
+    }
+
+    func testAgentTeamPromptHonorsMinimumReadinessDelay() async throws {
+        let bridge = MockTerminalEngine()
+        let controller = MainWindowController(bridge: bridge)
+        controller.showWindow(nil)
+        controller.agentTeamPromptMinimumDelay = .milliseconds(150)
+        controller.agentTeamPromptReadinessOverride = { _ in true }
+        let spec = AgentTeamProviderLaunchSpec(
+            provider: .codex,
+            teamID: "delayed",
+            teammateID: "delayed-reviewer",
+            teammateName: "Reviewer",
+            executable: "/usr/local/bin/codex",
+            arguments: [],
+            environment: ["COCXY_AGENT_TEAM_ID": "delayed"],
+            workingDirectory: NSTemporaryDirectory()
+        )
+
+        XCTAssertTrue(controller.spawnAgentTeamPane(
+            launchSpec: spec,
+            initialPrompt: "Review after startup",
+            targetTabID: nil
+        ))
+        try await Task.sleep(for: .milliseconds(60))
+        XCTAssertEqual(bridge.sentTexts.count, 1)
+
+        try await waitForAgentTeamPrompt(in: bridge)
+        XCTAssertEqual(bridge.sentTexts.last?.text, "Review after startup\r")
     }
 
     private func waitForAgentTeamPrompt(in bridge: MockTerminalEngine) async throws {

@@ -135,16 +135,22 @@ extension AppDelegate {
         }
 
         return try await withTaskCancellationHandler {
-            try await agentPipelineCompletionBroker.launchAndWait(teamID: teamID) { [weak self] in
-                guard let self else {
-                    throw AgentPipelineRuntimeError.runtimeUnavailable
+            try await agentPipelineCompletionBroker.launchAndWait(
+                teamID: teamID,
+                launch: { [weak self] in
+                    guard let self else {
+                        throw AgentPipelineRuntimeError.runtimeUnavailable
+                    }
+                    try self.launchQueuedAgentTeam(
+                        config: config,
+                        context: context,
+                        workingDirectory: worktree
+                    )
+                },
+                onTimeout: { [weak self] in
+                    self?.cleanupQueuedAgentTeamRuntime(teamID: teamID)
                 }
-                try self.launchQueuedAgentTeam(
-                    config: config,
-                    context: context,
-                    workingDirectory: worktree
-                )
-            }
+            )
         } onCancel: {
             Task { @MainActor [weak self] in
                 self?.cancelQueuedAgentTeam(teamID: teamID)
@@ -207,17 +213,20 @@ extension AppDelegate {
 
     func cancelQueuedAgentTeam(teamID rawTeamID: String) {
         let teamID = AgentTeamConfig.slug(rawTeamID)
-        let wasQueuedAgentTeam = taskQueueAgentTeamContexts[teamID] != nil
-        if wasQueuedAgentTeam {
-            _ = removeAgentTeamRuntime(
-                teamID: teamID,
-                worktreeClosePolicyOverride: .keep,
-                removeDashboardRow: true
-            )
-        }
+        cleanupQueuedAgentTeamRuntime(teamID: teamID)
         Task { [agentPipelineCompletionBroker] in
             _ = await agentPipelineCompletionBroker.cancel(teamID: teamID)
         }
+    }
+
+    private func cleanupQueuedAgentTeamRuntime(teamID rawTeamID: String) {
+        let teamID = AgentTeamConfig.slug(rawTeamID)
+        guard taskQueueAgentTeamContexts[teamID] != nil else { return }
+        _ = removeAgentTeamRuntime(
+            teamID: teamID,
+            worktreeClosePolicyOverride: .keep,
+            removeDashboardRow: true
+        )
     }
 
     func dispatchApplicationPluginEvent(

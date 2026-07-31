@@ -222,6 +222,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Provider resolution used to build and later revalidate exact team launch plans.
     var agentTeamProviderAdapterRegistry = AgentTeamProviderAdapterRegistry()
 
+    /// Persistence endpoint for resumable team runs. Injectable so handoff
+    /// exclusion and storage behavior can be verified without user data.
+    var agentTeamSessionSnapshotStore = AgentTeamSessionSnapshotStore()
+
     /// Runtime Agent Team hook projections keyed by team ID.
     var activeAgentTeamRuns: [String: AgentTeamRunState] = [:]
 

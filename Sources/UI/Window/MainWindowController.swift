@@ -577,6 +577,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Deterministic override for agent-team prompt readiness checks.
     var agentTeamPromptReadinessOverride: ((SurfaceID) -> Bool)?
+    var agentTeamPromptMinimumDelay = Duration.milliseconds(500)
 
     /// Aurora chrome controller instantiated lazily the first time the
     /// `appearance.aurora-enabled` flag is observed to be true. Stays
@@ -1762,8 +1763,16 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // agent cleanup for every remaining tab so hook-native dashboard rows,
         // task bindings, and the dock badge cannot outlive the window.
         for tabID in tabManager.tabs.map(\.id) {
+            let terminalEnd = unregisterAgentTeamTab(tabID, reason: .tabClosed)
+            taskQueueLifecycleExcludedTabIDs.remove(tabID)
             injectedDashboardViewModel?.removeSessions(forTabID: tabID.rawValue)
             onAgentTabClosed?(tabID)
+            if let terminalEnd {
+                // Window teardown can release this controller before an
+                // asynchronously queued notification runs. Deliver directly
+                // so the broker and team runtime are always retired.
+                onAgentTeamTerminalEnded?(terminalEnd)
+            }
         }
 
         processMonitor?.stop()
