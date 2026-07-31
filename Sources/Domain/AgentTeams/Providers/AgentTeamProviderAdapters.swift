@@ -126,6 +126,7 @@ protocol AgentTeamProviderAdapter: Sendable {
 }
 
 typealias AgentTeamExecutableResolver = @Sendable (String) -> String?
+typealias AgentTeamAsyncExecutableResolver = @Sendable (String) async -> String?
 
 private struct AgentTeamProviderAdapterCore: Sendable {
     let provider: AgentTeamProvider
@@ -192,16 +193,11 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
     typealias ExecutableCheck = @Sendable (String) -> Bool
     typealias ShellLookup = @Sendable (String) -> String?
 
-    private enum CacheEntry {
-        case found(String)
-        case missing
-    }
-
     private let lock = NSLock()
     private let candidateDirectories: [String]
     private let isExecutable: ExecutableCheck
     private let shellLookup: ShellLookup
-    private var cache: [String: CacheEntry] = [:]
+    private var cache: [String: String] = [:]
 
     init(
         candidateDirectories: [String],
@@ -220,10 +216,14 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
         lock.lock()
         let cached = cache[normalized]
         lock.unlock()
-        switch cached {
-        case .found(let path): return path
-        case .missing: return nil
-        case nil: break
+        if let cached {
+            if isExecutable(cached) {
+                return cached
+            } else {
+                lock.lock()
+                cache.removeValue(forKey: normalized)
+                lock.unlock()
+            }
         }
 
         let resolved: String?
@@ -236,22 +236,37 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
                 .standardizedFileURL.path })
             .first(where: isExecutable) {
             resolved = candidate
-        } else if let shellPath = shellLookup(normalized)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(whereSeparator: { $0.isNewline })
-            .first
-            .map(String.init),
-                  shellPath.hasPrefix("/"),
-                  isExecutable(shellPath) {
-            resolved = URL(fileURLWithPath: shellPath).standardizedFileURL.path
         } else {
             resolved = nil
         }
 
-        lock.lock()
-        cache[normalized] = resolved.map(CacheEntry.found) ?? .missing
-        lock.unlock()
+        if let resolved {
+            cacheResolvedPath(resolved, for: normalized)
+        }
         return resolved
+    }
+
+    func resolveForLaunch(_ executable: String) async -> String? {
+        let normalized = executable.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty, !normalized.contains("\0") else { return nil }
+        return await Task.detached(priority: .userInitiated) { [self] in
+            if let resolved = resolve(normalized) { return resolved }
+            guard let shellPath = Self.lastNonemptyLine(in: shellLookup(normalized)),
+                  shellPath.hasPrefix("/") else {
+                return nil
+            }
+            let resolved = URL(fileURLWithPath: shellPath).standardizedFileURL.path
+            guard isExecutable(resolved) else { return nil }
+            cacheResolvedPath(resolved, for: normalized)
+            return resolved
+        }.value
+    }
+
+    static func lastNonemptyLine(in output: String?) -> String? {
+        output?
+            .split(whereSeparator: { $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .last(where: { !$0.isEmpty })
     }
 
     static func userCandidateDirectories(
@@ -303,6 +318,8 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
         process.standardOutput = output
         process.standardError = FileHandle.nullDevice
         let exited = DispatchSemaphore(value: 0)
+        let outputDrained = DispatchSemaphore(value: 0)
+        let capturedOutput = LockedBox((data: Data(), exceededLimit: false))
         process.terminationHandler = { _ in exited.signal() }
 
         do {
@@ -310,18 +327,41 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
         } catch {
             return nil
         }
+        DispatchQueue.global(qos: .userInitiated).async {
+            defer { outputDrained.signal() }
+            while let chunk = try? output.fileHandleForReading.read(upToCount: 4_096),
+                  !chunk.isEmpty {
+                capturedOutput.withValue { capture in
+                    guard !capture.exceededLimit else { return }
+                    guard capture.data.count + chunk.count <= 4_096 else {
+                        capture.data.removeAll(keepingCapacity: false)
+                        capture.exceededLimit = true
+                        return
+                    }
+                    capture.data.append(chunk)
+                }
+            }
+        }
         guard exited.wait(timeout: .now() + max(0.1, timeout)) == .success else {
             process.terminate()
             if exited.wait(timeout: .now() + 0.25) != .success {
                 Darwin.kill(process.processIdentifier, SIGKILL)
                 _ = exited.wait(timeout: .now() + 0.25)
             }
+            _ = outputDrained.wait(timeout: .now() + 0.25)
             return nil
         }
+        guard outputDrained.wait(timeout: .now() + 0.25) == .success else { return nil }
         guard process.terminationStatus == 0 else { return nil }
-        let data = output.fileHandleForReading.readDataToEndOfFile()
-        guard data.count <= 4_096 else { return nil }
-        return String(data: data, encoding: .utf8)
+        let capture = capturedOutput.withValue { $0 }
+        guard !capture.exceededLimit else { return nil }
+        return String(data: capture.data, encoding: .utf8)
+    }
+
+    private func cacheResolvedPath(_ path: String, for executable: String) {
+        lock.lock()
+        cache[executable] = path
+        lock.unlock()
     }
 
     private static func deduplicated(_ values: [String]) -> [String] {
@@ -575,6 +615,7 @@ struct KiroTeamProviderAdapter: AgentTeamProviderAdapter {
 
 struct AgentTeamProviderAdapterRegistry: Sendable {
     private let adaptersByProvider: [AgentTeamProvider: any AgentTeamProviderAdapter]
+    private let launchExecutableResolver: AgentTeamAsyncExecutableResolver
     private static let defaultExecutableLocator = AgentTeamExecutableLocator(
         candidateDirectories: AgentTeamExecutableLocator.userCandidateDirectories(
             pathValue: ProcessInfo.processInfo.environment["PATH"],
@@ -584,7 +625,20 @@ struct AgentTeamProviderAdapterRegistry: Sendable {
         shellLookup: { AgentTeamExecutableLocator.loginShellLookup(executable: $0) }
     )
 
-    init(executableResolver: @escaping AgentTeamExecutableResolver = Self.defaultExecutableResolver) {
+    init() {
+        self.init(
+            executableResolver: Self.defaultExecutableResolver,
+            launchExecutableResolver: Self.defaultLaunchExecutableResolver
+        )
+    }
+
+    init(
+        executableResolver: @escaping AgentTeamExecutableResolver,
+        launchExecutableResolver: AgentTeamAsyncExecutableResolver? = nil
+    ) {
+        let launchExecutableResolver = launchExecutableResolver ?? { executable in
+            executableResolver(executable)
+        }
         let adapters: [any AgentTeamProviderAdapter] = [
             ClaudeCodeTeamProviderAdapter(executableResolver: executableResolver),
             CodexTeamProviderAdapter(executableResolver: executableResolver),
@@ -600,6 +654,7 @@ struct AgentTeamProviderAdapterRegistry: Sendable {
             KiroTeamProviderAdapter(executableResolver: executableResolver),
         ]
         self.adaptersByProvider = Dictionary(uniqueKeysWithValues: adapters.map { ($0.provider, $0) })
+        self.launchExecutableResolver = launchExecutableResolver
     }
 
     var providers: [AgentTeamProvider] {
@@ -610,7 +665,20 @@ struct AgentTeamProviderAdapterRegistry: Sendable {
         adaptersByProvider[provider]
     }
 
+    func prepareExecutableForLaunch(for provider: AgentTeamProvider) async -> String? {
+        for candidate in provider.executableCandidates {
+            if let executable = await launchExecutableResolver(candidate) {
+                return executable
+            }
+        }
+        return nil
+    }
+
     static let defaultExecutableResolver: AgentTeamExecutableResolver = { executable in
         defaultExecutableLocator.resolve(executable)
+    }
+
+    static let defaultLaunchExecutableResolver: AgentTeamAsyncExecutableResolver = { executable in
+        await defaultExecutableLocator.resolveForLaunch(executable)
     }
 }

@@ -285,6 +285,7 @@ extension AppDelegate {
         )
         let launcher = AgentTeamLauncher(
             paneLauncher: paneLauncher,
+            adapterRegistry: agentTeamProviderAdapterRegistry,
             launchProfileProvider: { _ in
                 AgentTeamLaunchProfile(workingDirectory: workingDirectory)
             }

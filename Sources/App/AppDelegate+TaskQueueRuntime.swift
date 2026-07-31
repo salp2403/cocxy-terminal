@@ -125,6 +125,14 @@ extension AppDelegate {
                 prompt: step.prompt
             )]
         )
+        guard await agentTeamProviderAdapterRegistry.prepareExecutableForLaunch(
+            for: config.provider
+        ) != nil else {
+            throw AgentTeamProviderAdapterError.executableUnavailable(
+                provider: config.provider,
+                candidates: config.provider.executableCandidates
+            )
+        }
 
         return try await withTaskCancellationHandler {
             try await agentPipelineCompletionBroker.launchAndWait(teamID: teamID) { [weak self] in

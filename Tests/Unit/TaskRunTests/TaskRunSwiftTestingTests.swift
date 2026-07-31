@@ -190,7 +190,7 @@ struct TaskRunSwiftTestingTests {
     }
 
     @Test("launch planning preflights every provider and preserves the prompt")
-    func launchPlanningPreflightsEveryProvider() throws {
+    func launchPlanningPreflightsEveryProvider() async throws {
         let request = try TaskRunRequest.make(
             prompt: "Implement, test, and report",
             agents: "claude,codex",
@@ -203,10 +203,11 @@ struct TaskRunSwiftTestingTests {
             baseCommit: "abc123"
         )
 
-        let plans = try TaskRunAgentLaunchPlan.make(
+        let plans = try await TaskRunAgentLaunchPlan.make(
             run: run,
             preflightWorkingDirectory: URL(fileURLWithPath: "/tmp/repo"),
-            executableResolver: { "/resolved/\($0)" }
+            executableResolver: { "/resolved/\($0)" },
+            launchExecutableResolver: { "/resolved/\($0)" }
         )
 
         #expect(plans.map(\.candidateID) == run.candidates.map(\.id))

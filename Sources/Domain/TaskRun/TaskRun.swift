@@ -272,11 +272,21 @@ struct TaskRunAgentLaunchPlan: Sendable, Equatable {
     static func make(
         run: TaskRun,
         preflightWorkingDirectory: URL,
-        executableResolver: @escaping AgentTeamExecutableResolver = AgentTeamProviderAdapterRegistry.defaultExecutableResolver
-    ) throws -> [TaskRunAgentLaunchPlan] {
+        executableResolver: @escaping AgentTeamExecutableResolver = AgentTeamProviderAdapterRegistry.defaultExecutableResolver,
+        launchExecutableResolver: @escaping AgentTeamAsyncExecutableResolver = AgentTeamProviderAdapterRegistry.defaultLaunchExecutableResolver
+    ) async throws -> [TaskRunAgentLaunchPlan] {
         let registry = AgentTeamProviderAdapterRegistry(
-            executableResolver: executableResolver
+            executableResolver: executableResolver,
+            launchExecutableResolver: launchExecutableResolver
         )
+        for provider in Set(run.candidates.map(\.provider)) {
+            guard await registry.prepareExecutableForLaunch(for: provider) != nil else {
+                throw AgentTeamProviderAdapterError.executableUnavailable(
+                    provider: provider,
+                    candidates: provider.executableCandidates
+                )
+            }
+        }
         return try run.candidates.enumerated().map { index, candidate in
             let teammate = AgentTeammateConfig(
                 id: "\(candidate.teamID)-provider",

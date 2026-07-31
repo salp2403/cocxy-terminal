@@ -138,22 +138,32 @@ extension MainWindowController {
             return
         }
 
-        do {
-            let artifact = try delegate.exportTaskHandoffArtifact(
-                controller: self,
-                tabID: sourceTabID
-            )
-            let destination = try TaskHandoffDestination.make(
-                agent: provider.rawValue,
-                artifact: artifact.markdown
-            )
-            _ = try delegate.launchTaskHandoff(
-                destination,
-                sourceController: self,
-                sourceTabID: sourceTabID
-            )
-        } catch {
-            presentTaskHandoffAlert(message: String(describing: error))
+        Task { @MainActor [weak self, weak delegate] in
+            guard let self, let delegate else { return }
+            do {
+                guard await delegate.agentTeamProviderAdapterRegistry
+                    .prepareExecutableForLaunch(for: provider) != nil else {
+                    throw AgentTeamProviderAdapterError.executableUnavailable(
+                        provider: provider,
+                        candidates: provider.executableCandidates
+                    )
+                }
+                let artifact = try delegate.exportTaskHandoffArtifact(
+                    controller: self,
+                    tabID: sourceTabID
+                )
+                let destination = try TaskHandoffDestination.make(
+                    agent: provider.rawValue,
+                    artifact: artifact.markdown
+                )
+                _ = try delegate.launchTaskHandoff(
+                    destination,
+                    sourceController: self,
+                    sourceTabID: sourceTabID
+                )
+            } catch {
+                self.presentTaskHandoffAlert(message: String(describing: error))
+            }
         }
     }
 

@@ -67,7 +67,7 @@ extension AppDelegate {
         )
 
         // Resolve every provider executable before creating the first worktree.
-        let launchPlans = try TaskRunAgentLaunchPlan.make(
+        let launchPlans = try await TaskRunAgentLaunchPlan.make(
             run: run,
             preflightWorkingDirectory: originRepoPath
         )

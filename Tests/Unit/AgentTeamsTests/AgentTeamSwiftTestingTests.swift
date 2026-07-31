@@ -107,9 +107,10 @@ struct AgentTeamSwiftTestingTests {
         ])
     }
 
-    @Test("executable lookup prefers direct candidates and caches shell fallback")
-    func executableLookupUsesCandidateAndCachedShellFallback() {
+    @Test("executable lookup keeps listings fast and retries failed launch lookups")
+    func executableLookupUsesCandidateAndCachedShellFallback() async {
         let shellCalls = LockedBox(0)
+        let shellRanOnMainThread = LockedBox(false)
         let executablePaths: Set<String> = [
             "/Users/test/.local/bin/codex",
             "/Users/test/tools/claude",
@@ -119,18 +120,35 @@ struct AgentTeamSwiftTestingTests {
             isExecutable: { executablePaths.contains($0) },
             shellLookup: { executable in
                 shellCalls.withValue { $0 += 1 }
-                return executable == "claude" ? "/Users/test/tools/claude\n" : nil
+                shellRanOnMainThread.withValue { $0 = $0 || Thread.isMainThread }
+                return executable == "claude"
+                    ? "login banner\nplugin warning\n\n/Users/test/tools/claude\n"
+                    : nil
             }
         )
 
         #expect(locator.resolve("codex") == "/Users/test/.local/bin/codex")
         #expect(shellCalls.withValue { $0 } == 0)
-        #expect(locator.resolve("claude") == "/Users/test/tools/claude")
+        #expect(locator.resolve("claude") == nil)
+        #expect(shellCalls.withValue { $0 } == 0)
+        let firstLaunchLookup = await locator.resolveForLaunch("claude")
+        #expect(firstLaunchLookup == "/Users/test/tools/claude")
         #expect(locator.resolve("claude") == "/Users/test/tools/claude")
         #expect(shellCalls.withValue { $0 } == 1)
-        #expect(locator.resolve("missing") == nil)
-        #expect(locator.resolve("missing") == nil)
-        #expect(shellCalls.withValue { $0 } == 2)
+        let firstMissingLookup = await locator.resolveForLaunch("missing")
+        let secondMissingLookup = await locator.resolveForLaunch("missing")
+        #expect(firstMissingLookup == nil)
+        #expect(secondMissingLookup == nil)
+        #expect(shellCalls.withValue { $0 } == 3)
+        #expect(shellRanOnMainThread.withValue { $0 } == false)
+    }
+
+    @Test("verbose shell output resolves the last nonempty stdout line")
+    func executableLookupParsesLastNonemptyLine() {
+        #expect(AgentTeamExecutableLocator.lastNonemptyLine(
+            in: "profile notice\nwarning: plugin output\n\n/opt/tools/codex\n\n"
+        ) == "/opt/tools/codex")
+        #expect(AgentTeamExecutableLocator.lastNonemptyLine(in: "\n \n") == nil)
     }
 
     @Test("CLI launch plans expose and bind each resolved provider command")

@@ -1944,6 +1944,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let delegateRef = WeakReference(self)
         let configServiceRef = WeakReference(configService)
         let sessionManagerRef = WeakReference(self.sessionManager)
+        let agentTeamProviderRegistry = agentTeamProviderAdapterRegistry
         let coldStartStatusTimeout: DispatchTimeInterval = .milliseconds(25)
         let liveConfigProvider: (@Sendable () -> CocxyConfig)?
         if configService != nil {
@@ -1964,6 +1965,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let handler = AppSocketCommandHandler(
             privilegedCommandAuthorizationProvider: { request in
                 guard !Thread.isMainThread else { return nil }
+                let providerToPreflight: AgentTeamProvider?
+                switch request.command {
+                case .agentTeamLaunch:
+                    let provider = (request.params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    providerToPreflight = AgentTeamProvider(rawValue: provider)
+                case .handoffImport:
+                    providerToPreflight = request.params["agent"]
+                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .flatMap(AgentTeamProvider.init(rawValue:))
+                default:
+                    providerToPreflight = nil
+                }
+                if let providerToPreflight {
+                    let preflightFinished = DispatchSemaphore(value: 0)
+                    let executableResolved = LockedBox(false)
+                    Task.detached(priority: .userInitiated) {
+                        let executable = await agentTeamProviderRegistry
+                            .prepareExecutableForLaunch(for: providerToPreflight)
+                        executableResolved.withValue { $0 = executable != nil }
+                        preflightFinished.signal()
+                    }
+                    let timeout = min(
+                        max(0.1, request.expiresAt.timeIntervalSinceNow),
+                        5
+                    )
+                    guard preflightFinished.wait(timeout: .now() + timeout) == .success,
+                          executableResolved.withValue({ $0 }) else {
+                        return nil
+                    }
+                }
                 let semaphore = DispatchSemaphore(value: 0)
                 let result = LockedBox<SocketPrivilegedCommandAuthorizationGrant?>(nil)
                 DispatchQueue.main.async {
