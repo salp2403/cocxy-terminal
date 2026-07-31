@@ -32,12 +32,12 @@ struct RenameSheetControllerTests {
         )
         defer { parent.close() }
 
-        var completionCount = 0
+        var results: [RenameSheetResult] = []
         let panel = RenameSheetController.present(
             on: parent,
             currentName: "Session"
-        ) { _ in
-            completionCount += 1
+        ) { result in
+            results.append(result)
         }
 
         #expect(panel.hidesOnDeactivate == false)
@@ -52,7 +52,49 @@ struct RenameSheetControllerTests {
 
         #expect(parent.childWindows?.contains { $0 === panel } == false)
         #expect(RenameSheetController.hasRetainedCoordinator(for: panel) == false)
-        #expect(completionCount == 1)
+        #expect(results == [.cancelled])
+    }
+
+    @Test(
+        "cancel preserves the name while Done with blank input clears it",
+        .disabled(
+            if: ProcessInfo.processInfo.environment["CI"] != nil,
+            "Allocates real AppKit windows; CI runners without a window server abort the suite."
+        )
+    )
+    func cancelAndBlankConfirmationAreDistinct() throws {
+        let parent = NSWindow(
+            contentRect: NSRect(x: 120, y: 120, width: 900, height: 600),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        defer { parent.close() }
+        var results: [RenameSheetResult] = []
+
+        let cancelPanel = RenameSheetController.present(
+            on: parent,
+            currentName: "Custom"
+        ) { results.append($0) }
+        let cancelButton = try #require(cancelPanel.contentView?.subviews.compactMap {
+            $0 as? NSButton
+        }.first { $0.keyEquivalent == "\u{1b}" })
+        cancelButton.performClick(nil)
+
+        let confirmPanel = RenameSheetController.present(
+            on: parent,
+            currentName: "Custom"
+        ) { results.append($0) }
+        let textField = try #require(confirmPanel.contentView?.subviews.compactMap {
+            $0 as? NSTextField
+        }.first { $0.isEditable })
+        textField.stringValue = "   "
+        let doneButton = try #require(confirmPanel.contentView?.subviews.compactMap {
+            $0 as? NSButton
+        }.first { $0.keyEquivalent == "\r" })
+        doneButton.performClick(nil)
+
+        #expect(results == [.cancelled, .confirmed(nil)])
     }
 
     @Test(

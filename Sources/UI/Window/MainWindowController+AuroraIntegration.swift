@@ -870,7 +870,8 @@ extension MainWindowController {
             placeholder: TabItemView.localizedRenamePlaceholder(using: localizer),
             icon: "terminal.fill",
             localizer: localizer,
-            onComplete: { [weak self] newTitle in
+            onComplete: { [weak self] result in
+                guard case .confirmed(let newTitle) = result else { return }
                 self?.applyAuroraSessionRename(tabID: tabID, newTitle: newTitle)
             }
         )
@@ -893,7 +894,8 @@ extension MainWindowController {
             placeholder: Self.localizedAuroraWorkspaceRenamePlaceholder(using: localizer),
             icon: "square.stack.3d.up",
             localizer: localizer,
-            onComplete: { [weak self] newTitle in
+            onComplete: { [weak self] result in
+                guard case .confirmed(let newTitle) = result else { return }
                 guard let self else { return }
                 let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                 self.applyAuroraWorkspaceRename(

@@ -5,6 +5,11 @@ import AppKit
 
 // MARK: - Rename Sheet Controller
 
+enum RenameSheetResult: Equatable {
+    case confirmed(String?)
+    case cancelled
+}
+
 /// Presents a translucent floating panel for renaming tabs and panels.
 ///
 /// The panel uses `NSVisualEffectView` with `.popover` material for a
@@ -22,7 +27,7 @@ final class RenameSheetController {
         placeholder: String? = nil,
         icon: String = "pencil.line",
         localizer: AppLocalizer = AppLocalizer(languagePreference: .system),
-        onComplete: @escaping (String?) -> Void
+        onComplete: @escaping (RenameSheetResult) -> Void
     ) -> NSPanel {
         let panelWidth: CGFloat = 300
         let panelHeight: CGFloat = 130
@@ -223,7 +228,7 @@ final class RenameSheetController {
 private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
     let panel: NSPanel
     let textField: NSTextField
-    let onComplete: (String?) -> Void
+    let onComplete: (RenameSheetResult) -> Void
     private var hasFinished = false
     private var isParentWindowClosing = false
 
@@ -231,7 +236,7 @@ private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
         parentWindow: NSWindow,
         panel: NSPanel,
         textField: NSTextField,
-        onComplete: @escaping (String?) -> Void
+        onComplete: @escaping (RenameSheetResult) -> Void
     ) {
         self.panel = panel
         self.textField = textField
@@ -247,16 +252,16 @@ private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
 
     @objc func confirm() {
         let value = textField.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        finish(with: value.isEmpty ? nil : value)
+        finish(with: .confirmed(value.isEmpty ? nil : value))
     }
 
     @objc func dismiss() {
-        finish(with: nil)
+        finish(with: .cancelled)
     }
 
     func windowWillClose(_ notification: Notification) {
         finish(
-            with: nil,
+            with: .cancelled,
             orderOut: false,
             notifyCompletion: !isParentWindowClosing
         )
@@ -267,7 +272,7 @@ private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
     }
 
     private func finish(
-        with value: String?,
+        with result: RenameSheetResult,
         orderOut: Bool = true,
         notifyCompletion: Bool = true
     ) {
@@ -282,7 +287,7 @@ private final class FloatingPanelCoordinator: NSObject, NSWindowDelegate {
             panel.orderOut(nil)
         }
         if notifyCompletion && !isParentWindowClosing {
-            onComplete(value)
+            onComplete(result)
         }
     }
 }

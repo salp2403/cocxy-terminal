@@ -870,8 +870,9 @@ final class TabItemView: NSView {
             placeholder: Self.localizedRenamePlaceholder(using: localizer),
             icon: "terminal.fill",
             localizer: localizer,
-            onComplete: { [weak self] newTitle in
+            onComplete: { [weak self] result in
                 self?.isEditing = false
+                guard case .confirmed(let newTitle) = result else { return }
                 self?.onRename?(tabID, newTitle ?? "")
             }
         )

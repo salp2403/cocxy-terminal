@@ -1269,6 +1269,37 @@ struct CocxyCoreViewTests {
         #expect(output.data == expected)
     }
 
+    @Test("cursor click snapshot uses the live history base while scrolled back")
+    func cursorClickSnapshotUsesLiveHistoryBaseWhileScrolledBack() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        #expect(cocxycore_terminal_resize(state.terminal, 24, 4))
+        feed(numberedTerminalLines(20), into: state.terminal)
+
+        let liveSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        #expect(liveSnapshot.historyMaxVisibleStart > 0)
+        #expect(harness.bridge.setHistoryVisibleStart(0, for: harness.surfaceID))
+
+        let scrolledSnapshot = try #require(
+            harness.bridge.terminalCursorClickSnapshot(for: harness.surfaceID)
+        )
+        #expect(scrolledSnapshot.visibleStartRow < scrolledSnapshot.historyMaxVisibleStart)
+        #expect(
+            scrolledSnapshot.cursorAbsoluteRow
+                == scrolledSnapshot.historyMaxVisibleStart
+                    + UInt32(scrolledSnapshot.cursorScreenRow)
+        )
+        #expect(
+            scrolledSnapshot.cursorAbsoluteRow
+                != scrolledSnapshot.visibleStartRow
+                    + UInt32(scrolledSnapshot.cursorScreenRow)
+        )
+        #expect(scrolledSnapshot.rows.last?.absoluteRow == scrolledSnapshot.cursorAbsoluteRow)
+    }
+
     @Test("soft-wrapped input click emits the semantic arrow distance through the PTY")
     func softWrappedInputClickEmitsSemanticArrowDistance() async throws {
         let rawCat = try makeRawCatScript()

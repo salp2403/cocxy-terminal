@@ -12,11 +12,15 @@ extension MainWindowController: NSMenuItemValidation {
     ]
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        validateMenuItem(menuItem, keyWindow: NSApp.keyWindow)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem, keyWindow: NSWindow?) -> Bool {
         guard let action = menuItem.action,
               Self.terminalScrollMenuActions.contains(action) else {
             return true
         }
 
-        return window?.firstResponder is TerminalHostView
+        return keyWindow?.firstResponder is TerminalHostView
     }
 }
