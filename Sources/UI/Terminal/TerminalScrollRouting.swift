@@ -140,7 +140,10 @@ enum TerminalScrollRouter {
             if isAltScreen, alternateScrollMode, mouseTrackingMode == 0 {
                 return .alternateScreenApplication
             }
-            return mouseTrackingMode > 0 ? .terminalApplication : .none
+            if mouseTrackingMode > 0 {
+                return .terminalApplication
+            }
+            return localRange > 0 ? .localViewport : .none
         }
         if isAltScreen, alternateScrollMode, mouseTrackingMode == 0 {
             return .alternateScreenApplication

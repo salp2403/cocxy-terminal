@@ -311,6 +311,10 @@ struct CocxyCoreBridgeTests {
         #expect(results[0].column == 0)
         #expect(results[0].matchText == "alpha-123")
         #expect(bridge.searchScrollback(
+            surfaceID: surfaceID,
+            options: SearchOptions(query: "(", caseSensitive: true, useRegex: true)
+        ) == nil)
+        #expect(bridge.searchScrollback(
             surfaceID: SurfaceID(),
             options: SearchOptions(query: ".+", caseSensitive: true, useRegex: true)
         ) == nil)

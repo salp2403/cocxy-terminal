@@ -2123,10 +2123,6 @@ final class PreferencesViewModel: ObservableObject {
         )
     }
 
-    func updateVoiceConsentPrompted(_ consentPrompted: Bool) {
-        voiceConsentPrompted = consentPrompted
-    }
-
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
         voiceEnabled != config.enabled
             || VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier) != config.localeIdentifier

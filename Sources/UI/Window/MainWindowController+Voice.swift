@@ -104,11 +104,6 @@ extension MainWindowController {
     }
 
     func updateVoiceConsentPresentation(for config: VoiceConfig) {
-        if let preferences = preferencesWindow?.contentViewController
-            as? NSHostingController<PreferencesView> {
-            preferences.rootView.viewModel.updateVoiceConsentPrompted(config.consentPrompted)
-        }
-
         guard config.enabled, !config.consentPrompted else {
             dismissVoiceConsentBanner()
             return

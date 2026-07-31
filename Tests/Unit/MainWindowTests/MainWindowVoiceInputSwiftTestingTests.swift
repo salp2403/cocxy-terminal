@@ -39,9 +39,13 @@ struct MainWindowVoiceInputSwiftTestingTests {
 
         controller.resolveVoiceConsent(keepEnabled: false)
 
+        #expect(controller.preferencesWindow == nil)
         #expect(configService.current.voice.enabled == false)
         #expect(configService.current.voice.consentPrompted == true)
         #expect(controller.voiceConsentBannerHostingView == nil)
+        let reopenedPreferences = PreferencesViewModel(config: configService.current)
+        #expect(reopenedPreferences.voiceEnabled == false)
+        #expect(reopenedPreferences.hasUnsavedChanges == false)
     }
 
     @Test("previous Voice acknowledgement never prompts again")

@@ -1944,6 +1944,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Socket Server Initialization
 
+    nonisolated static func agentTeamProviderForPreflight(
+        command: CLICommandName,
+        params: [String: String]
+    ) -> AgentTeamProvider? {
+        switch command {
+        case .agentTeamLaunch:
+            let provider = (params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return AgentTeamProvider(rawValue: provider)
+        case .handoffImport:
+            return params["agent"].flatMap(AgentTeamProvider.resolve(named:))
+        default:
+            return nil
+        }
+    }
+
     /// Starts the CLI companion socket server and schedules a health check timer.
     private func initializeSocketServer() {
         try? CellCloudInitFileStager.removeAbandonedDefaultStaging()
@@ -1972,19 +1988,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let handler = AppSocketCommandHandler(
             privilegedCommandAuthorizationProvider: { request in
                 guard !Thread.isMainThread else { return nil }
-                let providerToPreflight: AgentTeamProvider?
-                switch request.command {
-                case .agentTeamLaunch:
-                    let provider = (request.params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
-                        .trimmingCharacters(in: .whitespacesAndNewlines)
-                    providerToPreflight = AgentTeamProvider(rawValue: provider)
-                case .handoffImport:
-                    providerToPreflight = request.params["agent"]
-                        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                        .flatMap(AgentTeamProvider.init(rawValue:))
-                default:
-                    providerToPreflight = nil
-                }
+                let providerToPreflight = Self.agentTeamProviderForPreflight(
+                    command: request.command,
+                    params: request.params
+                )
                 if let providerToPreflight {
                     let preflightFinished = DispatchSemaphore(value: 0)
                     let executableResolved = LockedBox(false)

@@ -108,15 +108,14 @@ struct DaemonScriptTests {
     @Test("Script version matches the bundled daemon version")
     @MainActor
     func scriptVersionMatchesBundledVersion() throws {
-        let script = try String(contentsOfFile: scriptPath, encoding: .utf8)
-        let prefix = "COCXYD_VERSION="
-        let assignment = try #require(script.split(separator: "\n").first {
+        let result = try runScript(args: ["--version"])
+        let prefix = "cocxyd.sh v"
+        let versionLine = try #require(result.stdout.split(separator: "\n").first {
             $0.hasPrefix(prefix)
         })
-        let version = assignment
-            .dropFirst(prefix.count)
-            .trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+        let version = versionLine.dropFirst(prefix.count).split(separator: " ").first.map(String.init)
 
+        #expect(result.exitCode == 0)
         #expect(version == DaemonDeployer.bundledVersion)
     }
 

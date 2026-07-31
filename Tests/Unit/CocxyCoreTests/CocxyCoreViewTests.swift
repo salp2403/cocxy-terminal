@@ -1937,6 +1937,25 @@ struct CocxyCoreViewTests {
         #expect(output.data.containsSubsequence(expected))
     }
 
+    @Test("shift scrolls the main-screen viewport when tracking is disabled")
+    func shiftScrollsMainScreenWithoutTracking() throws {
+        let harness = try makeViewHarness()
+        defer { harness.bridge.destroySurface(harness.surfaceID) }
+        let state = try #require(harness.bridge.surfaceState(for: harness.surfaceID))
+        feed(numberedTerminalLines(100), into: state.terminal)
+
+        let snapshot = try #require(harness.bridge.terminalViewportSnapshot(for: harness.surfaceID))
+        #expect(snapshot.isAltScreen == false)
+        #expect(snapshot.mouseTrackingMode == 0)
+        #expect(snapshot.historyMaxVisibleStart > 0)
+        #expect(snapshot.visibleStartRow == snapshot.historyMaxVisibleStart)
+
+        harness.view.scrollWheel(with: makeScrollEvent(deltaY: 120, modifiers: [.shift]))
+
+        let after = try #require(harness.bridge.historyVisibleStart(for: harness.surfaceID))
+        #expect(after < snapshot.visibleStartRow)
+    }
+
     @Test("scroll wheel is a clean no-op when neither history nor tracking is available")
     func scrollWheelIsNoOpWithoutDestination() async throws {
         let rawCat = try makeRawCatScript()

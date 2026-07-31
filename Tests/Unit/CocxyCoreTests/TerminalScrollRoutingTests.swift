@@ -21,6 +21,20 @@ struct TerminalScrollRoutingTests {
         )
         expectDestination(.terminalApplication, localRange: 12, prefersLocal: false, tracking: 2)
         expectDestination(.localViewport, localRange: 12, prefersLocal: false, tracking: 0)
+        expectDestination(
+            .localViewport,
+            localRange: 12,
+            prefersLocal: false,
+            tracking: 0,
+            modifiers: [.shift]
+        )
+        expectDestination(
+            .none,
+            localRange: 0,
+            prefersLocal: false,
+            tracking: 0,
+            modifiers: [.shift]
+        )
         expectDestination(.none, localRange: 0, prefersLocal: false, tracking: 0)
         expectDestination(.none, localRange: 0, prefersLocal: false, tracking: 2, modifiers: [.option])
         expectDestination(.localViewport, localRange: 12, prefersLocal: false, tracking: 2, modifiers: [.option])

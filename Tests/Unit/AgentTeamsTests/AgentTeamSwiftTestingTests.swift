@@ -33,6 +33,22 @@ struct AgentTeamSwiftTestingTests {
         #expect(AgentTeamProvider.resolve(named: "unknown") == nil)
     }
 
+    @Test("handoff aliases resolve before provider executable preflight")
+    func handoffAliasesResolveBeforePreflight() {
+        #expect(AppDelegate.agentTeamProviderForPreflight(
+            command: .handoffImport,
+            params: ["agent": " droid "]
+        ) == .factory)
+        #expect(AppDelegate.agentTeamProviderForPreflight(
+            command: .handoffImport,
+            params: ["agent": "open-code"]
+        ) == .opencode)
+        #expect(AppDelegate.agentTeamProviderForPreflight(
+            command: .agentTeamLaunch,
+            params: ["provider": "codex"]
+        ) == .codex)
+    }
+
     @Test("config parses teammate lists with stable IDs and isolated notifications")
     func configParsesTeammateLists() throws {
         let config = try AgentTeamConfig.from(
