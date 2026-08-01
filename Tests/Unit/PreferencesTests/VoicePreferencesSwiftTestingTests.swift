@@ -81,6 +81,29 @@ struct VoicePreferencesSwiftTestingTests {
         #expect(vm.hasUnsavedChanges == false)
     }
 
+    @Test("external Voice changes refresh the baseline without erasing pending edits")
+    func externalVoiceChangesPreservePendingEdits() {
+        let (vm, _) = makeViewModel()
+        vm.voiceEnabled = false
+        vm.voiceLocaleIdentifier = "es-ES"
+        vm.voiceAutoSendToAgent = true
+
+        vm.applyExternalVoiceConfig(VoiceConfig(consentPrompted: true))
+
+        #expect(vm.voiceEnabled == false)
+        #expect(vm.voiceLocaleIdentifier == "es-ES")
+        #expect(vm.voiceAutoSendToAgent == true)
+        #expect(vm.hasUnsavedChanges == true)
+
+        vm.applyExternalVoiceConfig(VoiceConfig(enabled: false, consentPrompted: true))
+        vm.discardChanges()
+
+        #expect(vm.voiceEnabled == false)
+        #expect(vm.voiceLocaleIdentifier == VoiceConfig.systemLocaleIdentifier)
+        #expect(vm.voiceAutoSendToAgent == false)
+        #expect(vm.hasUnsavedChanges == false)
+    }
+
     @Test("save then reload preserves Voice fields")
     func saveReloadRoundTrip() throws {
         let (vm, provider) = makeViewModel()

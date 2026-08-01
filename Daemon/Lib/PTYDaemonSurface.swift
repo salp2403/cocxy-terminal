@@ -735,8 +735,8 @@ final class PTYDaemonSurface: @unchecked Sendable {
     }
 
     private func pollPTYExit() -> Bool {
-        pollTrackedProcesses()
         var waitResult = cocxycore_pty_wait_result()
+        defer { pollTrackedProcesses() }
         guard cocxycore_pty_wait_check(pty, &waitResult),
               cocxycore_pty_is_alive(pty) == false else {
             return false

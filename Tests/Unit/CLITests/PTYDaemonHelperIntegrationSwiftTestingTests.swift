@@ -29,19 +29,22 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
         #expect(decoded.hello?.supportsTerminalSemanticNavigation == true)
     }
 
-    @Test("daemon emits the root process exit code before closing the surface")
-    func daemonEmitsRootProcessExitCode() throws {
+    @Test(
+        "daemon emits the authoritative root process exit code before closing the surface",
+        arguments: [0, 3]
+    )
+    func daemonEmitsRootProcessExitCode(_ exitCode: Int) throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-pty-exit-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: root) }
-        let script = root.appendingPathComponent("exit-three.sh")
-        try writeExecutableTestScript("#!/bin/sh\nexit 3\n", to: script)
+        let script = root.appendingPathComponent("exit-\(exitCode).sh")
+        try writeExecutableTestScript("#!/bin/sh\nexit \(exitCode)\n", to: script)
 
         let helper = try RunningHelperProcess()
         defer { helper.shutdownIfNeeded() }
         let create = try helper.sendAndWait(PTYDaemonRequest(
-            id: "create-exit-three",
+            id: "create-exit-\(exitCode)",
             command: .surfaceCreate,
             payload: [
                 "command": script.path,
@@ -58,7 +61,7 @@ struct PTYDaemonHelperIntegrationSwiftTestingTests {
                 && event.osc?.kind == .processExited
         }
 
-        #expect(event.osc?.exitCode == 3)
+        #expect(event.osc?.exitCode == exitCode)
     }
 
     @Test("daemon frames carry engine-detected paths and URLs")

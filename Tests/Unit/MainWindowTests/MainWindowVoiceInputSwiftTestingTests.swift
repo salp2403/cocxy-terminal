@@ -2,6 +2,7 @@
 // MainWindowVoiceInputSwiftTestingTests.swift - MainWindow Voice wiring coverage.
 
 import Foundation
+import SwiftUI
 import Testing
 @testable import CocxyTerminal
 
@@ -46,6 +47,40 @@ struct MainWindowVoiceInputSwiftTestingTests {
         let reopenedPreferences = PreferencesViewModel(config: configService.current)
         #expect(reopenedPreferences.voiceEnabled == false)
         #expect(reopenedPreferences.hasUnsavedChanges == false)
+    }
+
+    @Test("disabling Voice from consent refreshes open Preferences without reverting")
+    @MainActor
+    func disablingVoiceFromConsentRefreshesOpenPreferences() async throws {
+        let configService = try voiceConsentConfigService(consentPrompted: false)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            configService: configService
+        )
+        defer {
+            controller.preferencesWindow?.close()
+            controller.close()
+        }
+
+        controller.openPreferences(section: .voice)
+        let hostingController = try #require(
+            controller.preferencesWindow?.contentViewController
+                as? NSHostingController<PreferencesView>
+        )
+        let viewModel = hostingController.rootView.viewModel
+        #expect(viewModel.voiceEnabled == true)
+
+        controller.resolveVoiceConsent(keepEnabled: false)
+        for _ in 0..<100 where viewModel.voiceEnabled {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        #expect(configService.current.voice.enabled == false)
+        #expect(configService.current.voice.consentPrompted == true)
+        #expect(viewModel.voiceEnabled == false)
+        #expect(viewModel.hasUnsavedChanges == false)
+        viewModel.discardChanges()
+        #expect(viewModel.voiceEnabled == false)
     }
 
     @Test("previous Voice acknowledgement never prompts again")

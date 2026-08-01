@@ -699,7 +699,7 @@ final class PreferencesViewModel: ObservableObject {
             || agentModeHasUnsavedChanges(comparedTo: c.agent)
             || vaultHasUnsavedChanges(comparedTo: c.vault)
             || hooksHasUnsavedChanges(comparedTo: c.hooks)
-            || voiceHasUnsavedChanges(comparedTo: c.voice)
+            || voiceHasUnsavedChanges(comparedTo: savedVoiceConfig)
             || completionHasUnsavedChanges(comparedTo: c.completions)
             || spotlightHasUnsavedChanges(comparedTo: c.spotlight)
             || activityHasUnsavedChanges(comparedTo: c.activity)
@@ -826,6 +826,7 @@ final class PreferencesViewModel: ObservableObject {
     /// Reverts all editable properties to the original config snapshot.
     func discardChanges() {
         let c = savedConfig
+        let voice = savedVoiceConfig
         shell = c.general.shell
         workingDirectory = c.general.workingDirectory
         confirmCloseProcess = c.general.confirmCloseProcess
@@ -891,9 +892,9 @@ final class PreferencesViewModel: ObservableObject {
         hooksIntegrationEnabled = c.hooks.enabled
         hooksDebugLogEnabled = c.hooks.debugLog
         hookAgents = c.hooks.agents
-        voiceEnabled = c.voice.enabled
-        voiceLocaleIdentifier = c.voice.localeIdentifier
-        voiceAutoSendToAgent = c.voice.autoSendToAgent
+        voiceEnabled = voice.enabled
+        voiceLocaleIdentifier = voice.localeIdentifier
+        voiceAutoSendToAgent = voice.autoSendToAgent
         completionInlineAIEnabled = c.completions.inlineAIEnabled
         completionIdleDelaySeconds = c.completions.idleDelaySeconds
         completionMaxContextUTF16Length = c.completions.maxContextUTF16Length
@@ -972,6 +973,9 @@ final class PreferencesViewModel: ObservableObject {
     /// sections not exposed in the UI (terminal, quick-terminal, keybindings, sessions).
     /// Updated after each successful save so `hasUnsavedChanges` resets to false.
     private var savedConfig: CocxyConfig
+
+    /// Voice baseline updated independently when consent changes outside Preferences.
+    private var savedVoiceConfig: VoiceConfig
 
     /// Internal acknowledgement state preserved by Preferences without exposing a control.
     private var voiceConsentPrompted: Bool
@@ -1057,6 +1061,7 @@ final class PreferencesViewModel: ObservableObject {
         appLocalizationBundle: Bundle = .main
     ) {
         self.savedConfig = config
+        self.savedVoiceConfig = config.voice
         self.voiceConsentPrompted = config.voice.consentPrompted
         self.fileProvider = fileProvider
         self.voiceLocaleResolver = voiceLocaleResolver
@@ -2009,6 +2014,7 @@ final class PreferencesViewModel: ObservableObject {
             vim: buildVimConfigFromViewModel(),
             experimental: savedConfig.experimental
         )
+        savedVoiceConfig = voice
         rateLimitEnabledProviders = Set(savedConfig.rateLimit.enabledProviders)
         rateLimitAutoDetect = savedConfig.rateLimit.autoDetect
         rateLimitOAuthRefreshIntervalMinutes = savedConfig.rateLimit.oauthRefreshIntervalMinutes
@@ -2121,6 +2127,25 @@ final class PreferencesViewModel: ObservableObject {
             autoSendToAgent: voiceAutoSendToAgent,
             consentPrompted: voiceConsentPrompted
         )
+    }
+
+    func applyExternalVoiceConfig(_ config: VoiceConfig) {
+        let enabledChangedExternally = config.enabled != savedVoiceConfig.enabled
+        let localeWasEdited = VoiceConfig.normalizedLocaleIdentifier(voiceLocaleIdentifier)
+            != savedVoiceConfig.localeIdentifier
+        let autoSendWasEdited = voiceAutoSendToAgent != savedVoiceConfig.autoSendToAgent
+
+        savedVoiceConfig = config
+        voiceConsentPrompted = config.consentPrompted
+        if enabledChangedExternally {
+            voiceEnabled = config.enabled
+        }
+        if !localeWasEdited {
+            voiceLocaleIdentifier = config.localeIdentifier
+        }
+        if !autoSendWasEdited {
+            voiceAutoSendToAgent = config.autoSendToAgent
+        }
     }
 
     private func voiceHasUnsavedChanges(comparedTo config: VoiceConfig) -> Bool {
@@ -2496,6 +2521,7 @@ final class PreferencesViewModel: ObservableObject {
         let service = ConfigService(fileProvider: fileProvider)
         try service.reload()
         savedConfig = service.current
+        savedVoiceConfig = service.current.voice
         discardChanges()
     }
 

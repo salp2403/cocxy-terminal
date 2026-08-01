@@ -212,6 +212,10 @@ extension MainWindowController {
             rewireVisibleEditorCompletions()
         }
 
+        if let hostingController = preferencesWindow?.contentViewController
+            as? NSHostingController<PreferencesView> {
+            hostingController.rootView.viewModel.applyExternalVoiceConfig(config.voice)
+        }
         updateVoiceConsentPresentation(for: config.voice)
     }
 
