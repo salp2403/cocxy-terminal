@@ -736,14 +736,25 @@ final class PTYDaemonSurface: @unchecked Sendable {
 
     private func pollPTYExit() -> Bool {
         var waitResult = cocxycore_pty_wait_result()
-        defer { pollTrackedProcesses() }
-        guard cocxycore_pty_wait_check(pty, &waitResult),
-              cocxycore_pty_is_alive(pty) == false else {
-            return false
-        }
-        emitProcessExitIfNeeded(
-            exitCode: waitResult.status == 1 ? Int(waitResult.exit_code) : nil
+        let didExit = cocxycore_pty_wait_check(pty, &waitResult)
+            && cocxycore_pty_is_alive(pty) == false
+        return Self.completePTYExitPoll(
+            didExit: didExit,
+            exitCode: waitResult.status == 1 ? Int(waitResult.exit_code) : nil,
+            emitProcessExit: { [self] in emitProcessExitIfNeeded(exitCode: $0) },
+            pollTrackedProcesses: { [self] in pollTrackedProcesses() }
         )
+    }
+
+    static func completePTYExitPoll(
+        didExit: Bool,
+        exitCode: Int?,
+        emitProcessExit: (Int?) -> Void,
+        pollTrackedProcesses: () -> Void
+    ) -> Bool {
+        defer { pollTrackedProcesses() }
+        guard didExit else { return false }
+        emitProcessExit(exitCode)
         return true
     }
 
