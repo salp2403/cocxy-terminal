@@ -1549,12 +1549,13 @@ final class CocxyCoreBridge: TerminalEngine {
     }
 
     func searchScrollback(surfaceID: SurfaceID, options: SearchOptions) -> [SearchResult]? {
+        guard surfaces[surfaceID] != nil else { return nil }
+        guard !options.query.isEmpty else { return [] }
         if options.useRegex,
            (try? NSRegularExpression(pattern: options.query)) == nil {
             return nil
         }
         return withTerminalLock(surfaceID) { state in
-            guard !options.query.isEmpty else { return [] }
             if options.useRegex {
                 return searchRegexScrollback(terminal: state.terminal, options: options)
             }

@@ -3,7 +3,7 @@
 # cocxyd.sh — Cocxy remote daemon. POSIX shell with a bounded Python listener.
 # Manages persistent terminal sessions and provides a JSON-lines control interface.
 #
-# Usage: cocxyd.sh {start|stop|status|ping} <profile-namespace>
+# Usage: cocxyd.sh {--version|start|stop|status|ping} <profile-namespace>
 # Protocol: JSON lines over Unix socket, bridged to TCP for SSH reverse tunnel.
 # Version: 1.2.0
 
@@ -1644,6 +1644,9 @@ do_ping() {
 # --- Entry Point ---
 
 case "${1:-help}" in
+    --version)
+        printf '%s\n' "$COCXYD_VERSION"
+        ;;
     start|stop|status|ping)
         configure_namespace "${2:-}" || {
             echo "A 32-character lowercase hexadecimal profile namespace is required" >&2
@@ -1665,6 +1668,6 @@ case "${1:-help}" in
         ;;
     help|*)
         echo "cocxyd.sh v$COCXYD_VERSION — Cocxy remote daemon"
-        echo "Usage: $0 {start|stop|status|ping} <profile-namespace>"
+        echo "Usage: $0 {--version|start|stop|status|ping} <profile-namespace>"
         ;;
 esac
