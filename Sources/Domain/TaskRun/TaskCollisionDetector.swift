@@ -129,10 +129,9 @@ enum TaskCollisionDetector {
             if trimmed.hasPrefix("/") {
                 absolute = URL(fileURLWithPath: trimmed).standardizedFileURL.path
             } else {
-                absolute = URL(
-                    fileURLWithPath: trimmed,
-                    relativeTo: projectRoot.standardizedFileURL
-                ).standardizedFileURL.path
+                absolute = projectRoot.standardizedFileURL
+                    .appendingPathComponent(trimmed)
+                    .standardizedFileURL.path
             }
             guard absolute.hasPrefix(rootPrefix), absolute.count > rootPrefix.count else {
                 return nil

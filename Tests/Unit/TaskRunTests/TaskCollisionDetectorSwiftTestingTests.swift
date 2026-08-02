@@ -92,6 +92,16 @@ struct TaskCollisionDetectorSwiftTestingTests {
         ], projectRoot: root) == ["Sources/B.swift", "Tests/A.swift"])
     }
 
+    @Test("relative paths do not depend on a directory URL hint")
+    func normalizationWithoutDirectoryHint() {
+        let rootWithoutDirectoryHint = URL(fileURLWithPath: "/tmp/cocxy-project")
+
+        #expect(TaskCollisionDetector.normalize(
+            ["Sources/A.swift"],
+            projectRoot: rootWithoutDirectoryHint
+        ) == ["Sources/A.swift"])
+    }
+
     @Test("legacy candidate payload defaults new touched file metadata")
     func legacyCandidatePayload() throws {
         let data = Data(#"{"id":"old","provider":"codex","teamID":"old-team","status":"finished","estimatedCostMicros":0}"#.utf8)
