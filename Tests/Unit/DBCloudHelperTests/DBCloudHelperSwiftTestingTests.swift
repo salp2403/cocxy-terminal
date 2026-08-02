@@ -289,6 +289,8 @@ struct DBCloudHelperSwiftTestingTests {
             )
         }
         try await waitForFile(pidFile)
+        let pid = try processID(from: pidFile)
+        let identity = try #require(LaunchdProcessSnapshot.current(for: pid)?.identity)
 
         do {
             _ = try await task.value
@@ -297,8 +299,7 @@ struct DBCloudHelperSwiftTestingTests {
             #expect(error == .timedOut(seconds: 1))
         }
 
-        let pid = try processID(from: pidFile)
-        #expect(!processExists(pid))
+        #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
     }
 
     @Test("continuous output cannot starve cancellation enforcement")
@@ -336,6 +337,8 @@ struct DBCloudHelperSwiftTestingTests {
             )
         }
         try await waitForFile(pidFile)
+        let pid = try processID(from: pidFile)
+        let identity = try #require(LaunchdProcessSnapshot.current(for: pid)?.identity)
         try await Task.sleep(nanoseconds: 50_000_000)
         task.cancel()
 
@@ -346,8 +349,7 @@ struct DBCloudHelperSwiftTestingTests {
             // Expected after the flood process has been terminated and reaped.
         }
 
-        let pid = try processID(from: pidFile)
-        #expect(!processExists(pid))
+        #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
     }
 
     @Test("task cancellation terminates the child and removes credential artifacts")
@@ -386,6 +388,8 @@ struct DBCloudHelperSwiftTestingTests {
         let task = Task { try await runner.run(command) }
         try await waitForFile(pidFile)
         try await waitForFile(passfilePathFile)
+        let pid = try processID(from: pidFile)
+        let identity = try #require(LaunchdProcessSnapshot.current(for: pid)?.identity)
         task.cancel()
 
         do {
@@ -395,9 +399,8 @@ struct DBCloudHelperSwiftTestingTests {
             // Expected after the runner has terminated and reaped the child.
         }
 
-        let pid = try processID(from: pidFile)
         let passfilePath = try String(contentsOf: passfilePathFile, encoding: .utf8)
-        #expect(!processExists(pid))
+        #expect(LaunchdProcessSnapshot.current(for: pid)?.identity != identity)
         #expect(!FileManager.default.fileExists(atPath: passfilePath))
         #expect(try FileManager.default.contentsOfDirectory(atPath: credentialRoot.path).isEmpty)
     }
@@ -763,12 +766,6 @@ private func processID(from file: URL) throws -> pid_t {
         throw DBCloudHelperTestError.invalidProcessID
     }
     return pid
-}
-
-private func processExists(_ pid: pid_t) -> Bool {
-    errno = 0
-    if Darwin.kill(pid, 0) == 0 { return true }
-    return errno != ESRCH
 }
 
 private func repositoryRoot() -> URL {
