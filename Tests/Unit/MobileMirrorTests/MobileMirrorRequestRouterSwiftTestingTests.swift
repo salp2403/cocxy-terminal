@@ -62,6 +62,18 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             .split(separator: "=", maxSplits: 1).last
             .map(String.init))
 
+        let foreignBootstrap = await router.route(
+            request: request(
+                path: "/mobile/api/bootstrap",
+                headers: ["cookie": "cocxy_mobile=\(cookie)"]
+            ),
+            identity: MobileMirrorClientIdentity(
+                remoteAddress: "192.168.1.25",
+                userAgent: "Mobile Browser"
+            )
+        )
+        #expect(try response(from: foreignBootstrap).status == 401)
+
         let bootstrapResult = await router.route(
             request: request(
                 path: "/mobile/api/bootstrap",

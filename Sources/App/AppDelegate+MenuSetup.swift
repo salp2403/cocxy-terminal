@@ -348,10 +348,13 @@ extension AppDelegate {
         )
         viewMenu.addItem(smartRoutingItem)
 
-        viewMenu.addItem(withTitle: menuString("menu.view.remoteWorkspaces", "Remote Workspaces...", localizer),
-                         action: #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)),
-                         keyEquivalent: "")
-
+        viewMenu.addItem(withTitle: menuString("menu.view.remoteWorkspaces", "Remote Workspaces...", localizer), action: #selector(MainWindowController.toggleRemoteWorkspacePanelAction(_:)), keyEquivalent: "")
+        let mobileMirrorItem = NSMenuItem(
+            title: menuString("menu.view.pairPhone", "Pair Phone...", localizer),
+            action: #selector(showMobileMirrorAction(_:)), keyEquivalent: ""
+        )
+        mobileMirrorItem.target = self
+        viewMenu.addItem(mobileMirrorItem)
         let timelineItem = NSMenuItem(
             title: menuString("menu.view.agentTimeline", "Agent Timeline", localizer),
             action: #selector(MainWindowController.toggleTimelineAction(_:)),
@@ -359,7 +362,6 @@ extension AppDelegate {
         )
         MenuKeybindingsBinder.tag(timelineItem, with: KeybindingActionCatalog.reviewTimeline)
         viewMenu.addItem(timelineItem)
-
         let notificationPanelItem = NSMenuItem(
             title: menuString("menu.view.notifications", "Notifications", localizer),
             action: #selector(MainWindowController.toggleNotificationPanelAction(_:)),
@@ -384,9 +386,7 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(browserItem, with: KeybindingActionCatalog.markdownBrowser)
         viewMenu.addItem(browserItem)
 
-        viewMenu.addItem(withTitle: menuString("menu.view.openMarkdownPanel", "Open Markdown Panel", localizer),
-                         action: #selector(MainWindowController.splitWithMarkdownAction(_:)),
-                         keyEquivalent: "")
+        viewMenu.addItem(withTitle: menuString("menu.view.openMarkdownPanel", "Open Markdown Panel", localizer), action: #selector(MainWindowController.splitWithMarkdownAction(_:)), keyEquivalent: "")
 
         viewMenu.addItem(withTitle: menuString("menu.view.openTextEditorPanel", "Open Text Editor Panel", localizer),
                          action: #selector(MainWindowController.splitWithEditorAction(_:)),

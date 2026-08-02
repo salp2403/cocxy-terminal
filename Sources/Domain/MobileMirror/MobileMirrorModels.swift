@@ -6,9 +6,14 @@ import Foundation
 struct MobileMirrorProjectSnapshot: Codable, Equatable, Sendable, Identifiable {
     let id: String
     let name: String
-    let path: String
     let isPinned: Bool
     let accent: String?
+}
+
+enum MobileMirrorTerminalControl {
+    static let supportedKeys: Set<String> = [
+        "backspace", "down", "enter", "escape", "left", "right", "tab", "up",
+    ]
 }
 
 struct MobileMirrorAgentSnapshot: Codable, Equatable, Sendable, Identifiable {
@@ -181,40 +186,64 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
         case .terminalControl:
             guard let sessionID, UUID(uuidString: sessionID) != nil,
                   controlType == "key",
+                  (key == nil) != (text == nil),
                   mouseAction == nil,
                   row == nil,
                   col == nil,
                   button == nil,
                   scrollDelta == nil,
-                  (key != nil || text != nil),
+                  approvalID == nil,
+                  name == nil,
                   key?.utf8.count ?? 0 <= 32,
+                  (key.map {
+                      MobileMirrorTerminalControl.supportedKeys.contains($0.lowercased())
+                  } ?? true),
                   text?.utf8.count ?? 0 <= 8_192 else {
                 throw MobileMirrorError.invalidAction
             }
-        case .selectSession, .agentRespond:
+        case .selectSession:
             guard let sessionID, UUID(uuidString: sessionID) != nil else {
                 throw MobileMirrorError.invalidAction
             }
-            if kind == .agentRespond {
-                guard let text,
-                      !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                      text.utf8.count <= 8_192 else {
-                    throw MobileMirrorError.invalidAction
-                }
+            guard controlType == nil, key == nil, text == nil, mouseAction == nil,
+                  row == nil, col == nil, button == nil, scrollDelta == nil,
+                  !shift, !alt, !ctrl, approvalID == nil, name == nil else {
+                throw MobileMirrorError.invalidAction
+            }
+        case .agentRespond:
+            guard let sessionID, UUID(uuidString: sessionID) != nil,
+                  let text,
+                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  text.utf8.count <= 8_192,
+                  controlType == nil, key == nil, mouseAction == nil,
+                  row == nil, col == nil, button == nil, scrollDelta == nil,
+                  !shift, !alt, !ctrl, approvalID == nil, name == nil else {
+                throw MobileMirrorError.invalidAction
             }
         case .approvalApprove, .approvalReject:
             guard let approvalID, approvalID.utf8.count <= 256,
                   !approvalID.isEmpty,
-                  text?.utf8.count ?? 0 <= 8_192 else {
+                  text?.utf8.count ?? 0 <= 8_192,
+                  actionAllowsApprovalText,
+                  sessionID == nil, controlType == nil, key == nil, mouseAction == nil,
+                  row == nil, col == nil, button == nil, scrollDelta == nil,
+                  !shift, !alt, !ctrl, name == nil else {
                 throw MobileMirrorError.invalidAction
             }
         case .projectCreate:
             guard let name,
                   !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  name.utf8.count <= 160 else {
+                  name.utf8.count <= 160,
+                  sessionID == nil, controlType == nil, key == nil, text == nil,
+                  mouseAction == nil, row == nil, col == nil, button == nil,
+                  scrollDelta == nil, !shift, !alt, !ctrl, approvalID == nil else {
                 throw MobileMirrorError.invalidAction
             }
         }
+    }
+
+    private var actionAllowsApprovalText: Bool {
+        kind == .approvalApprove || text == nil
     }
 }
 

@@ -51,7 +51,10 @@ final class MobileMirrorEventHub: @unchecked Sendable {
               !data.contains("\n") else {
             return
         }
-        send(Data("event: \(event)\ndata: \(data)\n\n".utf8))
+        let payload = Data("event: \(event)\ndata: \(data)\n\n".utf8)
+        heartbeatQueue.async { [weak self] in
+            self?.send(payload)
+        }
     }
 
     func stop() {
@@ -205,20 +208,16 @@ final class MobileMirrorGateway: @unchecked Sendable {
 
     func stop() {
         let source: DispatchSourceRead?
-        let clients: [Int32]
         stateLock.lock()
         source = listenerSource
         listenerSource = nil
         listenerDescriptor = -1
         port = nil
-        clients = Array(clientDescriptors)
-        clientDescriptors.removeAll()
+        for descriptor in clientDescriptors {
+            Darwin.shutdown(descriptor, SHUT_RDWR)
+        }
         stateLock.unlock()
         source?.cancel()
-        clients.forEach {
-            Darwin.shutdown($0, SHUT_RDWR)
-            Darwin.close($0)
-        }
         eventHub.stop()
     }
 
@@ -400,13 +399,34 @@ final class MobileMirrorGateway: @unchecked Sendable {
         var noTimeout = timeval(tv_sec: 0, tv_usec: 0)
         setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &noTimeout, socklen_t(MemoryLayout.size(ofValue: noTimeout)))
         setsockopt(upstream, SOL_SOCKET, SO_RCVTIMEO, &noTimeout, socklen_t(MemoryLayout.size(ofValue: noTimeout)))
+        let clientInput = Darwin.dup(client)
+        let upstreamOutput = Darwin.dup(upstream)
+        let upstreamInput = Darwin.dup(upstream)
+        let clientOutput = Darwin.dup(client)
+        let pumpDescriptors = [clientInput, upstreamOutput, upstreamInput, clientOutput]
+        guard pumpDescriptors.allSatisfy({ $0 >= 0 }) else {
+            pumpDescriptors.filter { $0 >= 0 }.forEach { Darwin.close($0) }
+            Darwin.close(upstream)
+            respond(.error("Terminal stream is unavailable.", status: 503), to: client)
+            return
+        }
+        pumpDescriptors.forEach { _ = fcntl($0, F_SETFD, FD_CLOEXEC) }
         let lifetime = MobileMirrorProxyLifetime(
-            client: client,
             upstream: upstream,
             closeClient: { [weak self] in self?.finish(client) }
         )
-        workerQueue.async { Self.pump(from: client, to: upstream); lifetime.close() }
-        workerQueue.async { Self.pump(from: upstream, to: client); lifetime.close() }
+        workerQueue.async {
+            Self.pump(from: clientInput, to: upstreamOutput)
+            Darwin.close(clientInput)
+            Darwin.close(upstreamOutput)
+            lifetime.close()
+        }
+        workerQueue.async {
+            Self.pump(from: upstreamInput, to: clientOutput)
+            Darwin.close(upstreamInput)
+            Darwin.close(clientOutput)
+            lifetime.close()
+        }
     }
 
     private func rewrittenRequest(
@@ -488,13 +508,11 @@ final class MobileMirrorGateway: @unchecked Sendable {
 
 private final class MobileMirrorProxyLifetime: @unchecked Sendable {
     private let lock = NSLock()
-    private let client: Int32
     private let upstream: Int32
     private let closeClient: @Sendable () -> Void
     private var closed = false
 
-    init(client: Int32, upstream: Int32, closeClient: @escaping @Sendable () -> Void) {
-        self.client = client
+    init(upstream: Int32, closeClient: @escaping @Sendable () -> Void) {
         self.upstream = upstream
         self.closeClient = closeClient
     }
@@ -507,7 +525,6 @@ private final class MobileMirrorProxyLifetime: @unchecked Sendable {
         }
         closed = true
         lock.unlock()
-        Darwin.shutdown(client, SHUT_RDWR)
         Darwin.shutdown(upstream, SHUT_RDWR)
         Darwin.close(upstream)
         closeClient()

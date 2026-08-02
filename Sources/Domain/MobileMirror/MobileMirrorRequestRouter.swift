@@ -71,9 +71,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         guard let cookie = request.cookie(named: Self.cookieName) else {
             return .response(.error("Pair this device from Cocxy Terminal.", status: 401))
         }
-        do {
-            _ = try authority.credentials(cookie: cookie)
-        } catch {
+        guard authority.activePairing(cookie: cookie)?.identity.fingerprint == identity.fingerprint else {
             return .response(.error(
                 MobileMirrorError.sessionExpired.localizedDescription,
                 status: 401

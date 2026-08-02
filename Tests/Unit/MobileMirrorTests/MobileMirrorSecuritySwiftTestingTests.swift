@@ -18,6 +18,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let offer = authority.makeOffer()
         let pending = try authority.consumeOffer(token: offer.token, identity: identity)
 
+        #expect(pending.channelID == offer.id)
         #expect(throws: MobileMirrorError.invalidPairingToken) {
             try authority.consumeOffer(token: offer.token, identity: identity)
         }
@@ -147,6 +148,26 @@ struct MobileMirrorSecuritySwiftTestingTests {
         )
         #expect(throws: MobileMirrorError.invalidAction) {
             try action.validate()
+        }
+
+        let ambiguous = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "key",
+            key: "enter",
+            text: "unexpected"
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try ambiguous.validate()
+        }
+
+        let pollutedSelection = MobileMirrorAction(
+            kind: .selectSession,
+            sessionID: UUID().uuidString,
+            text: "unexpected"
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try pollutedSelection.validate()
         }
     }
 

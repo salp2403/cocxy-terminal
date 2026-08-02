@@ -73,13 +73,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }()
 
     let auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
-
-    /// The session manager for persistence and restoration.
-    /// Internal setter: extensions (+SessionManagement) assign during init.
+    let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
+    var mobileMirrorCoordinator: MobileMirrorCoordinator?
+    var mobileMirrorWindowController: MobileMirrorWindowController?
+    /// Session persistence owner, assigned during initialization.
     var sessionManager: SessionManagerImpl?
 
-    /// Restorable launch snapshot loaded by the deferred restore preflight.
-    /// Keeps launch restore from decoding `last.json` more than once.
+    /// Restorable launch snapshot decoded once by deferred restore preflight.
     var pendingRestorableLaunchSession: Session?
 
     /// Subscription for hot-reloading the periodic session auto-save timer
@@ -428,6 +428,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        shutdownMobileMirror()
         crashRecoveryOfferWindowController?.close()
         crashRecoveryOfferWindowController = nil
         stopCrashRecoverySnapshots()
@@ -449,7 +450,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         appearanceObserver?.stopObserving()
         appearanceObserver = nil
 
-        // Remove menu bar item.
         menuBarItem?.uninstall()
         menuBarItem = nil
 

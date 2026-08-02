@@ -90,7 +90,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         let id = UUID()
         let value = Offer(
             id: id,
-            channelID: UUID(),
+            channelID: id,
             tokenDigest: Self.digest(Data(token.utf8)),
             expiresAt: now.addingTimeInterval(max(1, ttl))
         )
@@ -241,6 +241,17 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
     func selectedSessionID(cookie: String) -> String? {
         let now = clock()
         return lock.withLock { validSession(cookie: cookie, now: now)?.selectedSessionID }
+    }
+
+    func selectedSessionID() -> String? {
+        let now = clock()
+        return lock.withLock {
+            guard let current = session, current.expiresAt > now else {
+                session = nil
+                return nil
+            }
+            return current.selectedSessionID
+        }
     }
 
     @discardableResult

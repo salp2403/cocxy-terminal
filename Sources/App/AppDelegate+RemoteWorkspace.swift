@@ -48,7 +48,6 @@ extension AppDelegate {
         connectionManager.proxyManager = proxyManager
 
         // Relay manager — optional, zero overhead when unused.
-        let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
         let relayManager = RelayManagerImpl(
             tunnelManager: tunnelManager,
             forwarder: connectionManager,
@@ -158,6 +157,7 @@ extension AppDelegate {
                 }
             }
             .store(in: &hookCancellables)
+        setupMobileMirror()
     }
 }
 
