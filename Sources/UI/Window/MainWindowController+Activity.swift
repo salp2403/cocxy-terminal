@@ -139,7 +139,7 @@ extension MainWindowController {
             let event = ActivityEvent(
                 kind: kind,
                 sessionID: sessionID,
-                project: workingDirectory.map(ActivityProjectRef.workingDirectory(_:)),
+                project: workingDirectory.map(activityProjectRef(for:)),
                 summary: summary,
                 metadata: metadata
             )
@@ -259,7 +259,7 @@ extension MainWindowController {
                 provider: usage.provider,
                 model: usage.model,
                 sessionID: sessionIDForTab(tabID).rawValue.uuidString,
-                project: workingDirectory.map(ActivityProjectRef.workingDirectory(_:)),
+                project: workingDirectory.map(activityProjectRef(for:)),
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 rate: rate
@@ -339,6 +339,13 @@ extension MainWindowController {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let trimmed, !trimmed.isEmpty else { return nil }
         return trimmed
+    }
+
+    private func activityProjectRef(for workingDirectory: URL) -> ActivityProjectRef {
+        ActivityProjectRef.resolvedProject(
+            projectResolver.resolveProject(for: workingDirectory),
+            workingDirectory: workingDirectory
+        )
     }
 
     func projectSwitchActivitySummary(_ directory: URL) -> String {

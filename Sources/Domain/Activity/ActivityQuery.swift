@@ -72,16 +72,22 @@ struct ActivityQueryService {
         matching query: ActivityStoreQuery = ActivityStoreQuery()
     ) throws -> [ProjectTimeBreakdown] {
         let events = try store.events(matching: query)
-        let durations = events.reduce(into: [ActivityProjectRef: Int64]()) { partial, event in
+        let durations = events.reduce(
+            into: [String: (project: ActivityProjectRef, duration: Int64)]()
+        ) { partial, event in
             guard let project = event.project,
                   let duration = commandDurationMilliseconds(for: event) else {
                 return
             }
-            partial[project, default: 0] += duration
+            let current = partial[project.id]
+            partial[project.id] = (project, (current?.duration ?? 0) + duration)
         }
         return durations
-            .map { project, duration in
-                ProjectTimeBreakdown(project: project, durationMilliseconds: duration)
+            .map { _, value in
+                ProjectTimeBreakdown(
+                    project: value.project,
+                    durationMilliseconds: value.duration
+                )
             }
             .sorted { lhs, rhs in
                 if lhs.durationMilliseconds == rhs.durationMilliseconds {

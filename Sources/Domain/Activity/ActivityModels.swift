@@ -16,10 +16,19 @@ enum ActivityEventKind: String, Codable, Sendable, CaseIterable, Equatable {
 struct ActivityProjectRef: Codable, Sendable, Equatable, Hashable {
     let id: String
     let name: String
+    let legacyID: String?
+    let projectIdentity: ProjectID?
 
-    init(id: String, name: String) {
+    init(
+        id: String,
+        name: String,
+        legacyID: String? = nil,
+        projectIdentity: ProjectID? = nil
+    ) {
         self.id = id
         self.name = name
+        self.legacyID = legacyID
+        self.projectIdentity = projectIdentity
     }
 
     static func workingDirectory(_ url: URL) -> ActivityProjectRef {
@@ -31,6 +40,37 @@ struct ActivityProjectRef: Codable, Sendable, Equatable, Hashable {
             id: "local-\(StableActivityHash.hexDigest(for: standardized.path))",
             name: name
         )
+    }
+
+    static func resolvedProject(
+        _ descriptor: ProjectDescriptor,
+        workingDirectory: URL
+    ) -> ActivityProjectRef {
+        let groupingID = descriptor.groupingID
+        let legacy = ActivityProjectRef.workingDirectory(workingDirectory)
+        return ActivityProjectRef(
+            id: groupingID.rawValue,
+            name: descriptor.parent == nil
+                ? descriptor.displayName
+                : descriptor.groupingAutomaticName,
+            legacyID: legacy.id,
+            projectIdentity: groupingID
+        )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case legacyID
+        case projectIdentity
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        legacyID = try container.decodeIfPresent(String.self, forKey: .legacyID)
+        projectIdentity = try container.decodeIfPresent(ProjectID.self, forKey: .projectIdentity)
     }
 }
 

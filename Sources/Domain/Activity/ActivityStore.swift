@@ -88,21 +88,24 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         try queue.sync {
             let statement = try prepareStatement("""
                 INSERT INTO activity_events (
-                    id, timestamp, kind, session_id, project_id, project_name, summary, metadata_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    id, timestamp, kind, session_id, project_id, project_identity,
+                    project_name, summary, metadata_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)
             defer { sqlite3_finalize(statement) }
 
+            try backfillProjectIdentityInQueue(event.project)
             sqlite3_bind_text(statement, 1, event.id.uuidString, -1, Self.sqliteTransient)
             sqlite3_bind_double(statement, 2, event.timestamp.timeIntervalSince1970)
             sqlite3_bind_text(statement, 3, event.kind.rawValue, -1, Self.sqliteTransient)
             bindOptionalText(event.sessionID, to: statement, index: 4)
-            bindOptionalText(event.project?.id, to: statement, index: 5)
-            bindOptionalText(event.project?.name, to: statement, index: 6)
-            sqlite3_bind_text(statement, 7, event.summary, -1, Self.sqliteTransient)
+            bindOptionalText(persistedLegacyID(for: event.project), to: statement, index: 5)
+            bindOptionalText(event.project?.projectIdentity?.rawValue, to: statement, index: 6)
+            bindOptionalText(event.project?.name, to: statement, index: 7)
+            sqlite3_bind_text(statement, 8, event.summary, -1, Self.sqliteTransient)
             sqlite3_bind_text(
                 statement,
-                8,
+                9,
                 try encodedMetadata(event.metadata),
                 -1,
                 Self.sqliteTransient
@@ -118,22 +121,24 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         try queue.sync {
             let statement = try prepareStatement("""
                 INSERT INTO token_usage (
-                    id, timestamp, provider, model, session_id, project_id, project_name,
-                    input_tokens, output_tokens, cost_micros
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    id, timestamp, provider, model, session_id, project_id, project_identity,
+                    project_name, input_tokens, output_tokens, cost_micros
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """)
             defer { sqlite3_finalize(statement) }
 
+            try backfillProjectIdentityInQueue(record.project)
             sqlite3_bind_text(statement, 1, record.id.uuidString, -1, Self.sqliteTransient)
             sqlite3_bind_double(statement, 2, record.timestamp.timeIntervalSince1970)
             sqlite3_bind_text(statement, 3, record.provider, -1, Self.sqliteTransient)
             sqlite3_bind_text(statement, 4, record.model, -1, Self.sqliteTransient)
             bindOptionalText(record.sessionID, to: statement, index: 5)
-            bindOptionalText(record.project?.id, to: statement, index: 6)
-            bindOptionalText(record.project?.name, to: statement, index: 7)
-            sqlite3_bind_int64(statement, 8, Int64(record.inputTokens))
-            sqlite3_bind_int64(statement, 9, Int64(record.outputTokens))
-            sqlite3_bind_int64(statement, 10, record.estimatedCostMicros)
+            bindOptionalText(persistedLegacyID(for: record.project), to: statement, index: 6)
+            bindOptionalText(record.project?.projectIdentity?.rawValue, to: statement, index: 7)
+            bindOptionalText(record.project?.name, to: statement, index: 8)
+            sqlite3_bind_int64(statement, 9, Int64(record.inputTokens))
+            sqlite3_bind_int64(statement, 10, Int64(record.outputTokens))
+            sqlite3_bind_int64(statement, 11, record.estimatedCostMicros)
 
             guard sqlite3_step(statement) == SQLITE_DONE else {
                 throw ActivityStoreError.executionFailed(lastErrorMessage)
@@ -145,7 +150,8 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         try queue.sync {
             let selection = Self.selectionSQL(for: query)
             let statement = try prepareStatement("""
-                SELECT id, timestamp, kind, session_id, project_id, project_name, summary, metadata_json
+                SELECT id, timestamp, kind, session_id, project_id, project_identity,
+                       project_name, summary, metadata_json
                 FROM activity_events
                 \(selection.whereClause)
                 ORDER BY timestamp ASC, id ASC
@@ -162,8 +168,8 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         try queue.sync {
             let selection = Self.selectionSQL(for: query)
             let statement = try prepareStatement("""
-                SELECT id, timestamp, provider, model, session_id, project_id, project_name,
-                       input_tokens, output_tokens, cost_micros
+                SELECT id, timestamp, provider, model, session_id, project_id, project_identity,
+                       project_name, input_tokens, output_tokens, cost_micros
                 FROM token_usage
                 \(selection.whereClause)
                 ORDER BY timestamp ASC, id ASC
@@ -194,6 +200,7 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
                 kind TEXT NOT NULL,
                 session_id TEXT,
                 project_id TEXT,
+                project_identity TEXT,
                 project_name TEXT,
                 summary TEXT NOT NULL,
                 metadata_json TEXT NOT NULL
@@ -207,17 +214,43 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
                 model TEXT NOT NULL,
                 session_id TEXT,
                 project_id TEXT,
+                project_identity TEXT,
                 project_name TEXT,
                 input_tokens INTEGER NOT NULL,
                 output_tokens INTEGER NOT NULL,
                 cost_micros INTEGER NOT NULL
             )
             """)
+        try addColumnIfNeeded(
+            table: "activity_events",
+            column: "project_identity",
+            declaration: "TEXT"
+        )
+        try addColumnIfNeeded(
+            table: "token_usage",
+            column: "project_identity",
+            declaration: "TEXT"
+        )
         try execute("CREATE INDEX IF NOT EXISTS idx_activity_events_timestamp ON activity_events(timestamp)")
         try execute("CREATE INDEX IF NOT EXISTS idx_activity_events_project ON activity_events(project_id)")
+        try execute("CREATE INDEX IF NOT EXISTS idx_activity_events_identity ON activity_events(project_identity)")
         try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_timestamp ON token_usage(timestamp)")
         try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_project ON token_usage(project_id)")
+        try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_identity ON token_usage(project_identity)")
         try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_provider_model ON token_usage(provider, model)")
+    }
+
+    private func addColumnIfNeeded(
+        table: String,
+        column: String,
+        declaration: String
+    ) throws {
+        let statement = try prepareStatement("PRAGMA table_info(\(table))")
+        defer { sqlite3_finalize(statement) }
+        while sqlite3_step(statement) == SQLITE_ROW {
+            if textColumn(statement, index: 1) == column { return }
+        }
+        try execute("ALTER TABLE \(table) ADD COLUMN \(column) \(declaration)")
     }
 
     private func prepareStatement(_ sql: String) throws -> OpaquePointer {
@@ -269,7 +302,8 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
             bindings.append(.double(dateInterval.end.timeIntervalSince1970))
         }
         if let projectID = query.projectID {
-            clauses.append("project_id = ?")
+            clauses.append("(project_identity = ? OR project_id = ?)")
+            bindings.append(.string(projectID))
             bindings.append(.string(projectID))
         }
         if let sessionID = query.sessionID {
@@ -302,19 +336,26 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
             let timestamp = Date(timeIntervalSince1970: sqlite3_column_double(statement, 1))
             let kindRaw = textColumn(statement, index: 2) ?? ""
             let sessionID = textColumn(statement, index: 3)
-            let projectID = textColumn(statement, index: 4)
-            let projectName = textColumn(statement, index: 5)
-            let summary = textColumn(statement, index: 6) ?? ""
-            let metadataJSON = textColumn(statement, index: 7) ?? "{}"
+            let legacyProjectID = textColumn(statement, index: 4)
+            let projectIdentity = textColumn(statement, index: 5)
+            let projectName = textColumn(statement, index: 6)
+            let summary = textColumn(statement, index: 7) ?? ""
+            let metadataJSON = textColumn(statement, index: 8) ?? "{}"
 
             guard let id = UUID(uuidString: idRaw),
                   let kind = ActivityEventKind(rawValue: kindRaw) else {
                 continue
             }
 
-            let project = projectID.flatMap { id -> ActivityProjectRef? in
+            let project = legacyProjectID.flatMap { legacyID -> ActivityProjectRef? in
                 guard let projectName else { return nil }
-                return ActivityProjectRef(id: id, name: projectName)
+                let identity = projectIdentity.map(ProjectID.init(rawValue:))
+                return ActivityProjectRef(
+                    id: identity?.rawValue ?? legacyID,
+                    name: projectName,
+                    legacyID: identity == nil ? nil : legacyID,
+                    projectIdentity: identity
+                )
             }
 
             events.append(ActivityEvent(
@@ -336,11 +377,18 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
             let idRaw = textColumn(statement, index: 0) ?? ""
             guard let id = UUID(uuidString: idRaw) else { continue }
 
-            let projectID = textColumn(statement, index: 5)
-            let projectName = textColumn(statement, index: 6)
-            let project = projectID.flatMap { id -> ActivityProjectRef? in
+            let legacyProjectID = textColumn(statement, index: 5)
+            let projectIdentity = textColumn(statement, index: 6)
+            let projectName = textColumn(statement, index: 7)
+            let project = legacyProjectID.flatMap { legacyID -> ActivityProjectRef? in
                 guard let projectName else { return nil }
-                return ActivityProjectRef(id: id, name: projectName)
+                let identity = projectIdentity.map(ProjectID.init(rawValue:))
+                return ActivityProjectRef(
+                    id: identity?.rawValue ?? legacyID,
+                    name: projectName,
+                    legacyID: identity == nil ? nil : legacyID,
+                    projectIdentity: identity
+                )
             }
 
             records.append(TokenUsageRecord(
@@ -350,12 +398,36 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
                 model: textColumn(statement, index: 3) ?? "",
                 sessionID: textColumn(statement, index: 4),
                 project: project,
-                inputTokens: Int(sqlite3_column_int64(statement, 7)),
-                outputTokens: Int(sqlite3_column_int64(statement, 8)),
-                estimatedCostMicros: sqlite3_column_int64(statement, 9)
+                inputTokens: Int(sqlite3_column_int64(statement, 8)),
+                outputTokens: Int(sqlite3_column_int64(statement, 9)),
+                estimatedCostMicros: sqlite3_column_int64(statement, 10)
             ))
         }
         return records
+    }
+
+    private func persistedLegacyID(for project: ActivityProjectRef?) -> String? {
+        project.map { $0.legacyID ?? $0.id }
+    }
+
+    private func backfillProjectIdentityInQueue(_ project: ActivityProjectRef?) throws {
+        guard let project,
+              let projectIdentity = project.projectIdentity?.rawValue else { return }
+        let legacyID = project.legacyID ?? project.id
+        for table in ["activity_events", "token_usage"] {
+            let statement = try prepareStatement("""
+                UPDATE \(table)
+                SET project_identity = ?, project_name = ?
+                WHERE project_id = ? AND project_identity IS NULL
+                """)
+            defer { sqlite3_finalize(statement) }
+            sqlite3_bind_text(statement, 1, projectIdentity, -1, Self.sqliteTransient)
+            sqlite3_bind_text(statement, 2, project.name, -1, Self.sqliteTransient)
+            sqlite3_bind_text(statement, 3, legacyID, -1, Self.sqliteTransient)
+            guard sqlite3_step(statement) == SQLITE_DONE else {
+                throw ActivityStoreError.executionFailed(lastErrorMessage)
+            }
+        }
     }
 
     private func encodedMetadata(_ metadata: [String: String]) throws -> String {

@@ -2,6 +2,7 @@
 // ActivityDomainSwiftTestingTests.swift - Local activity and usage foundation.
 
 import Foundation
+import SQLite3
 import Testing
 @testable import CocxyTerminal
 
@@ -64,6 +65,133 @@ struct ActivityDomainSwiftTestingTests {
         try store.deleteAll()
         #expect(try store.events().isEmpty)
         #expect(try store.tokenUsage().isEmpty)
+    }
+
+    @Test("canonical project identity unifies activity from nested directories")
+    func canonicalProjectIdentityUnifiesNestedDirectories() throws {
+        let root = URL(fileURLWithPath: "/Users/local/private/project-a", isDirectory: true)
+        let descriptor = ProjectDescriptor(
+            id: ProjectID(rootURL: root),
+            rootURL: root,
+            automaticName: "project-a",
+            displayName: "Project A",
+            parent: nil
+        )
+        let rootRef = ActivityProjectRef.resolvedProject(descriptor, workingDirectory: root)
+        let nestedRef = ActivityProjectRef.resolvedProject(
+            descriptor,
+            workingDirectory: root.appendingPathComponent("Sources", isDirectory: true)
+        )
+
+        #expect(rootRef.id == descriptor.id.rawValue)
+        #expect(nestedRef.id == descriptor.id.rawValue)
+        #expect(rootRef.legacyID != nestedRef.legacyID)
+        #expect(rootRef.projectIdentity == descriptor.id)
+
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        try store.recordEvent(ActivityEvent(
+            kind: .commandExecuted,
+            project: rootRef,
+            summary: "root",
+            metadata: ["duration_ms": "1000"]
+        ))
+        try store.recordEvent(ActivityEvent(
+            kind: .commandExecuted,
+            project: nestedRef,
+            summary: "nested",
+            metadata: ["duration_ms": "2000"]
+        ))
+        let query = ActivityStoreQuery(projectID: descriptor.id.rawValue)
+        #expect(try store.events(matching: query).count == 2)
+        #expect(try ActivityQueryService(store: store)
+            .projectTimeBreakdown(matching: query)
+            .map(\.durationMilliseconds) == [3_000])
+
+        let legacy = try JSONDecoder().decode(
+            ActivityProjectRef.self,
+            from: Data(#"{"id":"legacy-id","name":"Legacy"}"#.utf8)
+        )
+        #expect(legacy.legacyID == nil)
+        #expect(legacy.projectIdentity == nil)
+    }
+
+    @Test("dual writes backfill legacy activity and token aliases")
+    func dualWritesBackfillLegacyActivityAndTokenAliases() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let root = URL(fileURLWithPath: "/tmp/project-a", isDirectory: true)
+        let nested = root.appendingPathComponent("Sources", isDirectory: true)
+        let legacy = ActivityProjectRef.workingDirectory(nested)
+        try store.recordEvent(ActivityEvent(
+            kind: .commandExecuted,
+            project: legacy,
+            summary: "legacy",
+            metadata: ["duration_ms": "1000"]
+        ))
+        try store.recordTokenUsage(TokenUsageRecord(
+            provider: "local",
+            model: "model",
+            project: legacy,
+            inputTokens: 2,
+            outputTokens: 3,
+            estimatedCostMicros: 4
+        ))
+
+        let identity = ProjectID(rootURL: root)
+        let canonical = ActivityProjectRef(
+            id: identity.rawValue,
+            name: "Project A",
+            legacyID: legacy.id,
+            projectIdentity: identity
+        )
+        try store.recordEvent(ActivityEvent(
+            kind: .commandExecuted,
+            project: canonical,
+            summary: "current",
+            metadata: ["duration_ms": "2000"]
+        ))
+
+        let query = ActivityStoreQuery(projectID: identity.rawValue)
+        let events = try store.events(matching: query)
+        let usage = try store.tokenUsage(matching: query)
+        #expect(events.map(\.summary) == ["legacy", "current"])
+        #expect(events.allSatisfy { $0.project?.projectIdentity == identity })
+        #expect(usage.count == 1)
+        #expect(usage.first?.project?.projectIdentity == identity)
+        #expect(try ActivityQueryService(store: store)
+            .projectTimeBreakdown(matching: query)
+            .map(\.durationMilliseconds) == [3_000])
+    }
+
+    @Test("legacy SQLite schema migrates before canonical dual writes")
+    func legacySQLiteSchemaMigratesBeforeCanonicalDualWrites() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-legacy-\(UUID().uuidString)", isDirectory: true)
+        let databaseURL = directory.appendingPathComponent("activity.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try createLegacyActivityDatabase(at: databaseURL)
+
+        let store = try SQLiteActivityStore(databasePath: databaseURL.path)
+        let root = URL(fileURLWithPath: "/tmp/legacy-project", isDirectory: true)
+        let identity = ProjectID(rootURL: root)
+        let project = ActivityProjectRef(
+            id: identity.rawValue,
+            name: "Legacy Project",
+            legacyID: "legacy-project",
+            projectIdentity: identity
+        )
+        try store.recordEvent(ActivityEvent(kind: .tabOpened, project: project, summary: "migrated"))
+        try store.recordTokenUsage(TokenUsageRecord(
+            provider: "local",
+            model: "model",
+            project: project,
+            inputTokens: 1,
+            outputTokens: 1,
+            estimatedCostMicros: 1
+        ))
+
+        #expect(try store.events(matching: ActivityStoreQuery(projectID: identity.rawValue)).count == 1)
+        #expect(try store.tokenUsage(matching: ActivityStoreQuery(projectID: identity.rawValue)).count == 1)
     }
 
     @Test("cost tracker uses caller supplied rates and rounds to micro units")
@@ -245,5 +373,29 @@ struct ActivityDomainSwiftTestingTests {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         return calendar
+    }
+
+    private func createLegacyActivityDatabase(at url: URL) throws {
+        var database: OpaquePointer?
+        guard sqlite3_open(url.path, &database) == SQLITE_OK, let database else {
+            throw ActivityStoreError.databaseOpenFailed("Legacy test database")
+        }
+        defer { sqlite3_close(database) }
+        let sql = """
+        CREATE TABLE activity_events (
+            id TEXT PRIMARY KEY, timestamp REAL NOT NULL, kind TEXT NOT NULL,
+            session_id TEXT, project_id TEXT, project_name TEXT,
+            summary TEXT NOT NULL, metadata_json TEXT NOT NULL
+        );
+        CREATE TABLE token_usage (
+            id TEXT PRIMARY KEY, timestamp REAL NOT NULL, provider TEXT NOT NULL,
+            model TEXT NOT NULL, session_id TEXT, project_id TEXT, project_name TEXT,
+            input_tokens INTEGER NOT NULL, output_tokens INTEGER NOT NULL,
+            cost_micros INTEGER NOT NULL
+        );
+        """
+        guard sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK else {
+            throw ActivityStoreError.executionFailed("Legacy test schema")
+        }
     }
 }
