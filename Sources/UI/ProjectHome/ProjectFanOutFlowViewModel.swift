@@ -105,6 +105,9 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             && selectedCandidate?.worktree != nil
             && !isBusy
     }
+    var canRecycleSelectedCandidate: Bool {
+        selectedCandidate?.status == .discarded && !isBusy
+    }
 
     func handle(_ destination: ProjectFanOutDestination) async {
         switch destination {
