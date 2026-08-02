@@ -1399,10 +1399,11 @@ final class CocxyCoreBridge: TerminalEngine {
         for surfaceID in Array(surfaces.keys) where !reapedPTYChildren.contains(surfaceID) {
             let outcome = withTerminalLock(surfaceID) { state -> (didExit: Bool, didReap: Bool, exitCode: Int32?) in
                 guard let pty = state.pty else { return (false, false, nil) }
-                cocxycore_terminal_poll_processes(state.terminal)
                 var waitResult = cocxycore_pty_wait_result()
-                _ = cocxycore_pty_wait_check(pty, &waitResult)
-                guard cocxycore_pty_is_alive(pty) == false else { return (false, false, nil) }
+                let didExit = cocxycore_pty_wait_check(pty, &waitResult)
+                    && cocxycore_pty_is_alive(pty) == false
+                cocxycore_terminal_poll_processes(state.terminal)
+                guard didExit else { return (false, false, nil) }
                 let exitCode = waitResult.status == 1 ? Int32(waitResult.exit_code) : nil
                 return (
                     true,
@@ -4648,33 +4649,22 @@ final class CocxyCoreBridge: TerminalEngine {
         surfaces[surfaceID]?.accessibilityNotificationHandler?(notification)
     }
 
-    /// Handle process tracking events from CocxyCore.
-    ///
-    /// Routes the ROOT shell exit as `OSCNotification.processExited` and
-    /// feeds ALL events (including subprocess exits) to the semantic
-    /// adapter for subagent visualization.
-    ///
-    /// **Critical**: `OSCNotification.processExited` is ONLY emitted when
-    /// the root PTY child (the shell itself) terminates. Subprocess exits
-    /// — `git status`, `cat`, `bash -c ...`, or any tool that an AI agent
-    /// like Claude Code spawns while it runs — are delivered to the
-    /// semantic adapter only. The window controller treats `processExited`
-    /// as "the session is over, reset the tab to idle", so forwarding
-    /// every subprocess exit would wipe the detected agent every time the
-    /// agent used a tool. That is the v0.1.52 "sidebar stays Ready while
-    /// Claude Code is clearly running" bug.
+    /// Routes authoritative root PTY exits while keeping subprocess events
+    /// available to the semantic adapter without ending the session.
     private func handleProcessEvent(
         _ event: cocxycore_process_event,
         for surfaceID: SurfaceID
     ) {
-        if event.event_type == 1 { // CHILD_EXITED
-            // Only the shell's root process exit counts as a session end.
-            // `state.childPID` is the shell's PID captured in createSurface;
-            // `event.pid` is the PID of the process that just exited.
-            if let state = surfaces[surfaceID], event.pid == state.childPID {
+        if event.event_type == 1, // CHILD_EXITED
+           let state = surfaces[surfaceID], event.pid == state.childPID,
+           let pty = state.pty {
+            var waitResult = cocxycore_pty_wait_result()
+            let didExit = cocxycore_pty_wait_check(pty, &waitResult)
+                && cocxycore_pty_is_alive(pty) == false
+            if didExit {
                 reportRootProcessExitIfNeeded(
                     surfaceID: surfaceID,
-                    exitCode: event.exit_code >= 0 ? Int32(event.exit_code) : nil
+                    exitCode: waitResult.status == 1 ? Int32(waitResult.exit_code) : nil
                 )
             }
         }
