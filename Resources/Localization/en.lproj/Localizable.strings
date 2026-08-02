@@ -2794,8 +2794,6 @@
 "command.editor.zoomOut.description" = "Decrease the terminal font size";
 "command.editor.resetZoom.name" = "Reset Zoom";
 "command.editor.resetZoom.description" = "Restore the configured terminal font size";
-"command.editor.openDefault.name" = "Open Workspace in Editor";
-"command.editor.openDefault.description" = "Open the active tab's workspace in the default editor";
 "command.gitAssistant.commitMessage.name" = "Draft Commit Message";
 "command.gitAssistant.commitMessage.description" = "Draft a local commit message from the current git diff";
 "command.preferences.show.name" = "Show Preferences";
