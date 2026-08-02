@@ -12,7 +12,7 @@ struct TaskHandoffSemanticBlock: Equatable, Sendable {
 }
 
 struct TaskHandoffArtifactInput: Equatable, Sendable {
-    let tabID: UUID
+    let tabID: UUID?
     let workingDirectory: String
     let branch: String?
     let worktreeID: String?
@@ -55,7 +55,7 @@ enum TaskHandoffArtifactBuilder {
 
         ## Context
 
-        - Tab: `\(input.tabID.uuidString)`
+        - Tab: `\(input.tabID?.uuidString ?? "(unavailable)")`
         - Working directory: `\(workingDirectory)`
         - Branch: `\(branch)`
         - Worktree: `\(worktreeID)`

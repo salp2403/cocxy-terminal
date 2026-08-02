@@ -5,8 +5,10 @@ import Foundation
 
 struct TaskRunComparisonService: Sendable {
     typealias GitRunner = @Sendable (URL, [String]) throws -> CodeReviewGitResult
+    typealias DirectoryExists = @Sendable (URL) -> Bool
 
     private let gitRunner: GitRunner
+    private let directoryExists: DirectoryExists
     private static let gitSafetyOverrides = [
         "-c", "core.hooksPath=/dev/null",
         "-c", "core.fsmonitor=false",
@@ -16,12 +18,30 @@ struct TaskRunComparisonService: Sendable {
         try CodeReviewGit.run(workingDirectory: directory, arguments: arguments)
     }) {
         self.gitRunner = gitRunner
+        self.directoryExists = { directory in
+            var isDirectory: ObjCBool = false
+            return FileManager.default.fileExists(
+                atPath: directory.path,
+                isDirectory: &isDirectory
+            ) && isDirectory.boolValue
+        }
+    }
+
+    init(
+        gitRunner: @escaping GitRunner,
+        directoryExists: @escaping DirectoryExists
+    ) {
+        self.gitRunner = gitRunner
+        self.directoryExists = directoryExists
     }
 
     func load(run: TaskRun) throws -> [TaskRunCandidateComparison] {
         try run.candidates.compactMap { candidate in
             guard candidate.status != .orphaned,
                   let worktree = candidate.worktree else { return nil }
+            guard directoryExists(worktree.path) else {
+                return TaskRunCandidateComparison(candidate: candidate, diffs: [])
+            }
             return TaskRunCandidateComparison(
                 candidate: candidate,
                 diffs: try loadDiffs(

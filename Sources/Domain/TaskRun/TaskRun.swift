@@ -12,6 +12,7 @@ enum TaskRunError: Error, Equatable, Sendable, CustomStringConvertible {
     case candidateLimitExceeded(maximum: Int)
     case runNotFound(String)
     case candidateNotFound(String)
+    case candidateNotRecyclable(String)
     case runAlreadyFinished(String)
 
     var description: String {
@@ -32,6 +33,8 @@ enum TaskRunError: Error, Equatable, Sendable, CustomStringConvertible {
             return "Task run not found: \(runID)"
         case .candidateNotFound(let candidateID):
             return "Task candidate not found: \(candidateID)"
+        case .candidateNotRecyclable(let candidateID):
+            return "Task candidate cannot be recycled: \(candidateID)"
         case .runAlreadyFinished(let runID):
             return "Task run is already finished: \(runID)"
         }
@@ -381,7 +384,10 @@ struct TaskRunCandidateComparison: Identifiable, Equatable, Sendable {
     var id: String { candidate.id }
     var additions: Int { diffs.reduce(0) { $0 + $1.additions } }
     var deletions: Int { diffs.reduce(0) { $0 + $1.deletions } }
-    var changedFileCount: Int { diffs.count }
+    var touchedFiles: [String] {
+        Array(Set(diffs.map(\.filePath) + candidate.touchedFiles)).sorted()
+    }
+    var changedFileCount: Int { touchedFiles.count }
 }
 
 private extension String {
