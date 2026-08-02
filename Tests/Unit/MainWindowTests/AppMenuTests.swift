@@ -105,6 +105,9 @@ final class AppMenuStructureTests: XCTestCase {
         let helpMenu = try XCTUnwrap(mainMenu.items.first(where: { $0.submenu?.title == "Ayuda" })?.submenu)
 
         XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Nueva pestaña" }))
+        XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Abrir proyecto..." }))
+        XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Abrir reciente" }))
+        XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Clonar proyecto..." }))
         XCTAssertNotNil(fileMenu.items.first(where: { $0.title == "Importar desde iPhone o iPad..." }))
         XCTAssertNotNil(viewMenu.items.first(where: { $0.title == "Abrir panel Notebook" }))
         XCTAssertEqual(
@@ -178,6 +181,18 @@ final class FileMenuItemTests: XCTestCase {
     func testFileMenuHasNewWindowItem() {
         let newWindow = fileMenu.items.first(where: { $0.title == "New Window" })
         XCTAssertNotNil(newWindow, "File menu must have 'New Window' item")
+    }
+
+    func testFileMenuExposesProjectActions() throws {
+        let open = try XCTUnwrap(fileMenu.items.first { $0.title == "Open Project..." })
+        let recent = try XCTUnwrap(fileMenu.items.first { $0.title == "Open Recent" })
+        let clone = try XCTUnwrap(fileMenu.items.first { $0.title == "Clone Project..." })
+
+        XCTAssertEqual(open.action, #selector(AppDelegate.openProjectMenuAction(_:)))
+        XCTAssertTrue(open.target === appDelegate)
+        XCTAssertEqual(recent.submenu?.identifier, .projectOpenRecentMenu)
+        XCTAssertEqual(clone.action, #selector(AppDelegate.cloneProjectMenuAction(_:)))
+        XCTAssertTrue(clone.target === appDelegate)
     }
 
     func testNewWindowHasCorrectShortcut() {

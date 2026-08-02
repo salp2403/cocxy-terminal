@@ -3,28 +3,6 @@
 
 import AppKit
 
-// MARK: - Menu Setup
-
-/// Extension that constructs the application menu bar with all standard
-/// menus: Application, File, Edit, View, Window, and Help.
-///
-/// Extracted from AppDelegate to keep the main file focused on
-/// lifecycle management and service initialization.
-///
-/// ## Rebindable shortcuts
-///
-/// Menu items whose shortcut is surfaced in the Keybindings editor are
-/// registered via `MenuKeybindingsBinder.tag(_:with:)`. That helper both
-/// stores the catalog id on the item (via `NSUserInterfaceItemIdentifier`)
-/// and applies the catalog default `keyEquivalent`. `AppDelegate` then
-/// overlays the user's live `ConfigService.current.keybindings` on top via
-/// `MenuKeybindingsBinder.apply(_:to:)`, and re-applies whenever the config
-/// changes on disk.
-///
-/// Items that are not user-rebindable (About, Hide, Quit, Cut/Copy/Paste,
-/// Undo/Redo, Services, Bring All to Front, the hidden Escape handler,
-/// etc.) keep hardcoded `keyEquivalent` values and are never touched by the
-/// binder.
 extension AppDelegate {
 
     /// Creates the application menu bar with standard menus.
@@ -123,6 +101,26 @@ extension AppDelegate {
         MenuKeybindingsBinder.tag(newWindowItem, with: KeybindingActionCatalog.windowNewWindow)
         fileMenu.addItem(newWindowItem)
 
+        let openProjectItem = fileMenu.addItem(
+            withTitle: menuString("menu.file.openProject", "Open Project...", localizer),
+            action: #selector(AppDelegate.openProjectMenuAction(_:)), keyEquivalent: ""
+        )
+        openProjectItem.target = self
+
+        let recentTitle = menuString("menu.file.openRecent", "Open Recent", localizer)
+        let openRecentItem = NSMenuItem(title: recentTitle, action: nil, keyEquivalent: "")
+        let openRecentMenu = NSMenu(title: recentTitle)
+        openRecentMenu.identifier = .projectOpenRecentMenu
+        openRecentMenu.delegate = self
+        openRecentItem.submenu = openRecentMenu
+        fileMenu.addItem(openRecentItem)
+
+        let cloneProjectItem = fileMenu.addItem(
+            withTitle: menuString("menu.file.cloneProject", "Clone Project...", localizer),
+            action: #selector(AppDelegate.cloneProjectMenuAction(_:)), keyEquivalent: ""
+        )
+        cloneProjectItem.target = self
+
         let moveTabItem = NSMenuItem(
             title: menuString("menu.file.moveTabToNewWindow", "Move Tab to New Window", localizer),
             action: #selector(MainWindowController.moveActiveTabToNewWindowAction(_:)),
@@ -183,10 +181,12 @@ extension AppDelegate {
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
+        updateProjectMenus(in: menu)
         localizeContinuityCameraItems(in: menu)
     }
 
     func menuWillOpen(_ menu: NSMenu) {
+        updateProjectMenus(in: menu)
         localizeContinuityCameraItems(in: menu)
     }
 

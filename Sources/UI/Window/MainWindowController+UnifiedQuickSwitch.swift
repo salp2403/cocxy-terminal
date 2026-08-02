@@ -6,14 +6,6 @@ import CocxyShared
 import Foundation
 import SwiftUI
 
-struct ProjectQuickSwitchTarget: Identifiable, Equatable, Sendable {
-    let id: String
-    let name: String
-    let branch: String?
-    let sessionID: String
-    let sessionCount: Int
-}
-
 @MainActor
 extension MainWindowController {
 
@@ -37,46 +29,24 @@ extension MainWindowController {
         showTransientCommandPaletteOverlay(engine: StaticCommandPaletteEngine(actions: actions))
     }
 
-    /// Opens a project-only palette whose search surface is built from
-    /// the canonical Aurora workspace names. This remains available when
-    /// Aurora chrome is disabled by deriving the same workspace model from
-    /// live tabs without mounting any additional chrome.
+    /// Opens a project-only palette backed by the persistent registry.
+    /// Both live and dormant projects remain available without Aurora chrome.
     func showProjectQuickSwitchOverlay() {
-        let workspaces = projectQuickSwitchWorkspaces()
-        let targets = Self.projectQuickSwitchTargets(
-            from: workspaces,
-            activeSessionID: tabManager.activeTabID?.rawValue.uuidString
-        )
-        guard !targets.isEmpty else {
+        let items = unifiedQuickSwitchProjectItems(localizer: appLocalizer())
+        guard !items.isEmpty, projectActivationHandler != nil else {
             NSSound.beep()
             return
         }
-        let localizer = appLocalizer()
-        let actions = targets.map { target in
-            let sessionLabel = String(
-                format: localizer.string(
-                    target.sessionCount == 1
-                        ? "quickSwitch.project.session.one"
-                        : "quickSwitch.project.session.many",
-                    fallback: target.sessionCount == 1
-                        ? "%d session"
-                        : "%d sessions"
-                ),
-                target.sessionCount
-            )
-            let details = [target.branch, sessionLabel]
-                .compactMap { $0 }
-                .joined(separator: " | ")
+        let actions = items.map { item in
             return CommandAction(
-                id: "project.quickswitch.\(target.id)",
-                name: target.name,
-                description: details,
+                id: "project.quickswitch.\(item.id)",
+                name: item.title,
+                description: item.subtitle ?? "",
                 shortcut: nil,
                 category: .navigation,
-                handler: { [weak self, sessionID = target.sessionID] in
+                handler: { [weak self, projectID = item.id] in
                     self?.dismissCommandPalette()
-                    guard let uuid = UUID(uuidString: sessionID) else { return }
-                    _ = self?.focusTab(id: TabID(rawValue: uuid))
+                    self?.projectActivationHandler?(ProjectID(rawValue: projectID))
                 }
             )
         }
@@ -158,54 +128,11 @@ extension MainWindowController {
         let localizer = appLocalizer()
         var items: [UnifiedQuickSwitchItem] = []
         items.append(contentsOf: unifiedQuickSwitchTabItems(localizer: localizer))
+        items.append(contentsOf: unifiedQuickSwitchProjectItems(localizer: localizer))
         items.append(contentsOf: unifiedQuickSwitchBrowserItems(now: now, localizer: localizer))
         items.append(contentsOf: unifiedQuickSwitchWorktreeItems(localizer: localizer))
         items.append(contentsOf: unifiedQuickSwitchNoteItems(localizer: localizer))
         return items
-    }
-
-    static func projectQuickSwitchTargets(
-        from workspaces: [Design.AuroraWorkspace],
-        activeSessionID: String?
-    ) -> [ProjectQuickSwitchTarget] {
-        workspaces.compactMap { workspace in
-            guard let session = workspace.sessions.first(where: {
-                $0.id == activeSessionID
-            }) ?? workspace.sessions.first else {
-                return nil
-            }
-            return ProjectQuickSwitchTarget(
-                id: workspace.id,
-                name: workspace.name,
-                branch: workspace.branch,
-                sessionID: session.id,
-                sessionCount: workspace.sessions.count
-            )
-        }
-    }
-
-    private func projectQuickSwitchWorkspaces() -> [Design.AuroraWorkspace] {
-        if let controller = auroraChromeController {
-            controller.refreshSources()
-            return controller.workspaces
-        }
-        let store = injectedPerSurfaceStore ?? AgentStatePerSurfaceStore()
-        let sources = AuroraSourceBuilder.buildSources(
-            tabs: tabManager.tabs,
-            surfaceIDsByTab: [:],
-            store: store,
-            projectResolver: projectResolver,
-            gitInfoProvider: gitInfoProvider,
-            workspaceTitlesByIdentity: auroraWorkspaceTitleStore.snapshot,
-            worktreeBadgeVisibleProvider: { [weak self] tab in
-                guard let self else { return true }
-                return Self.effectiveWorktreeConfig(
-                    for: tab,
-                    globalConfig: self.configService?.current ?? .defaults
-                ).showBadge
-            }
-        )
-        return Design.AuroraWorkspaceAdapter.workspaces(from: sources)
     }
 
     private func unifiedQuickSwitchTabItems(localizer: AppLocalizer) -> [UnifiedQuickSwitchItem] {
@@ -223,6 +150,39 @@ extension MainWindowController {
                 ],
                 lastUsedAt: tab.lastActivityAt,
                 priority: tab.isActive ? -20 : 0
+            )
+        }
+    }
+
+    private func unifiedQuickSwitchProjectItems(
+        localizer: AppLocalizer
+    ) -> [UnifiedQuickSwitchItem] {
+        guard let projectRegistry else { return [] }
+        let liveIDs = projectLiveIDsProvider?() ?? Set(tabManager.tabs.map {
+            projectResolver.resolveProject(for: $0.workingDirectory).groupingID.rawValue
+        })
+        let projects = ProjectPresentationBuilder.makeItems(
+            records: projectRegistry.records,
+            aliases: auroraWorkspaceTitleStore.snapshot,
+            liveProjectIDs: liveIDs,
+            availability: { url in
+                var isDirectory: ObjCBool = false
+                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+                    && isDirectory.boolValue
+            }
+        )
+        return projects.filter(\.isAvailable).map { project in
+            UnifiedQuickSwitchItem(
+                id: project.id,
+                kind: .project,
+                title: Self.localizedUnifiedQuickSwitchProjectTitle(
+                    project.name,
+                    using: localizer
+                ),
+                subtitle: project.id,
+                keywords: [project.name, project.id, project.parentPath],
+                lastUsedAt: project.lastOpenedAt,
+                priority: project.isPinned ? 25 : (project.isLive ? 15 : 0)
             )
         }
     }
@@ -288,6 +248,8 @@ extension MainWindowController {
         case .tab:
             guard let uuid = UUID(uuidString: item.id) else { return }
             _ = focusTab(id: TabID(rawValue: uuid))
+        case .project:
+            projectActivationHandler?(ProjectID(rawValue: item.id))
         case .browserTab:
             guard let uuid = UUID(uuidString: item.id),
                   let viewModel = browserViewModel else { return }
@@ -313,6 +275,10 @@ extension MainWindowController {
         String(format: localizer.string("quickSwitch.item.browser.title", fallback: "Browser: %@"), title)
     }
 
+    static func localizedUnifiedQuickSwitchProjectTitle(_ title: String, using localizer: AppLocalizer) -> String {
+        String(format: localizer.string("quickSwitch.item.project.title", fallback: "Project: %@"), title)
+    }
+
     static func localizedUnifiedQuickSwitchWorktreeTitle(_ branch: String, using localizer: AppLocalizer) -> String {
         String(format: localizer.string("quickSwitch.item.worktree.title", fallback: "Worktree: %@"), branch)
     }
@@ -331,6 +297,8 @@ private extension UnifiedQuickSwitchItemKind {
         switch self {
         case .tab:
             return localizer.string("quickSwitch.kind.tab", fallback: "Terminal tab")
+        case .project:
+            return localizer.string("quickSwitch.kind.project", fallback: "Project")
         case .browserTab:
             return localizer.string("quickSwitch.kind.browserTab", fallback: "Browser tab")
         case .worktree:

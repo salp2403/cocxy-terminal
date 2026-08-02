@@ -156,14 +156,6 @@ extension MainWindowController {
         controller.refreshNotesSummaries()
     }
 
-    /// Applies the Aurora chrome state using the current `ConfigService`
-    /// snapshot. Invoked by `AppDelegate.configureSharedServices(...)`
-    /// after every service has been injected, which is the earliest
-    /// moment the integration has the per-surface store it needs to
-    /// build Aurora source data.
-    ///
-    /// Safe no-op when no config service is wired (tests, fallback
-    /// windows) or when the flag is off.
     func applyInitialAuroraChromeStateIfNeeded() {
         guard let appearance = configService?.current.appearance else { return }
         applyAuroraChromeIfNeeded(for: appearance)
@@ -194,6 +186,7 @@ extension MainWindowController {
         controller.workspaceTitlesProvider = { [weak self] in
             self?.auroraWorkspaceTitleStore.snapshot ?? [:]
         }
+        controller.projectLiveIDsProvider = { [weak self] in self?.projectLiveIDsProvider?() ?? [] }
         if let variant = (NSApp.delegate as? AppDelegate)?.themeEngine?.activeTheme.metadata.variant {
             controller.themeIdentity = Self.auroraThemeIdentity(for: variant)
         }
@@ -233,6 +226,12 @@ extension MainWindowController {
         }
         controller.onSetWorkspaceCollapsed = { [weak self] workspaceID, collapsed in
             self?.setProjectCollapsed(collapsed, projectID: ProjectID(rawValue: workspaceID))
+        }
+        controller.onActivateProject = { [weak self] projectID in
+            self?.projectActivationHandler?(ProjectID(rawValue: projectID))
+        }
+        controller.onSetProjectPinned = { [weak self] projectID, pinned in
+            self?.setProjectPinned(pinned, projectID: ProjectID(rawValue: projectID))
         }
         controller.onCloseOtherSessions = { [weak self] tabID in
             guard let self else { return }

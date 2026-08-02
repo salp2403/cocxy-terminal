@@ -30,7 +30,15 @@ extension MainWindowController {
         }
     }
 
+    func setProjectPinned(_ pinned: Bool, projectID: ProjectID) {
+        do {
+            try projectRegistry?.setPinned(pinned, projectID: projectID)
+        } catch {
+            NSLog("[ProjectRegistry] Pin update failed")
+        }
+    }
+
     func refreshProjectPresentation() {
-        auroraChromeController?.refreshSources()
+        auroraChromeController?.refreshProjects()
     }
 }

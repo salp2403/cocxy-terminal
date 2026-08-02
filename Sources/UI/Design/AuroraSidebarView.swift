@@ -6,23 +6,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension Design {
-
-    /// Redesigned sidebar view. Accepts a list of workspaces plus a
-    /// handful of callbacks the host wires to real actions.
-    ///
-    /// `paletteShortcutLabel` / `newTabShortcutLabel` are caller-supplied
-    /// so the header tray reflects the live keybindings. Defaults match
-    /// `KeybindingActionCatalog.windowCommandPalette.defaultShortcut`
-    /// (⌘⇧P) and `.tabNew.defaultShortcut` (⌘T) so previews / tests
-    /// render with the catalog baseline without booting the binder.
     struct AuroraSidebarView: View {
         let workspaces: [AuroraWorkspace]
+        var projects: [ProjectPresentationItem] = []
+        var projectRegistryAvailable: Bool = true
         let activeSessionID: String?
-        /// Per-workspace notes summaries keyed by
-        /// `NoteWorkspaceID.rawValue`. Empty (`[:]`) hides every notes
-        /// section so the sidebar stays bit-for-bit identical to the
-        /// pre-notes layout when the feature is disabled, the provider
-        /// is unwired, or no workspace currently has notes.
         var notesByWorkspace: [String: AuroraWorkspaceNotesSummary] = [:]
         @State private var query: String = ""
         @State private var hoveredSession: HoveredSessionContext?
@@ -40,6 +28,8 @@ extension Design {
         var onRenameSession: ((String, String?) -> Void)? = nil
         var onRenameWorkspace: ((String, String?) -> Void)? = nil
         var onSetWorkspaceCollapsed: ((String, Bool) -> Void)? = nil
+        var onActivateProject: ((String) -> Void)? = nil
+        var onSetProjectPinned: ((String, Bool) -> Void)? = nil
         var renameRequest: AuroraSidebarRenameRequest? = nil
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
@@ -103,6 +93,13 @@ extension Design {
 
                     ScrollView(.vertical, showsIndicators: false) {
                         VStack(alignment: .leading, spacing: Spacing.hairline) {
+                            AuroraProjectRegistrySection(
+                                projects: projects,
+                                registryAvailable: projectRegistryAvailable,
+                                onActivate: onActivateProject,
+                                onSetPinned: projectRegistryAvailable ? onSetProjectPinned : nil,
+                                localizer: localizer
+                            )
                             ForEach(workspaces) { workspace in
                                 workspaceBlock(for: workspace)
                             }

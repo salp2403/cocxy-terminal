@@ -13,10 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Properties
 
-    /// The terminal engine. Created during app launch.
     private(set) var bridge: (any TerminalEngine)?
 
-    /// The main window controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var windowController: MainWindowController?
 
@@ -50,8 +48,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Exposed for testing purposes.
     private(set) var quickTerminalController: QuickTerminalController?
 
-    /// The shared theme engine. Created once and injected where needed
-    /// to avoid redundant file system scanning.
     private(set) var themeEngine: ThemeEngineImpl?
 
     let gitInfoProvider = GitInfoProviderImpl()
@@ -1549,6 +1545,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self, let controller else { return }
             self.handleAgentTeamTerminalEnd(terminalEnd, in: controller)
         }
+        controller.projectActivationHandler = { [weak self] projectID in
+            self?.activateProjectForUser(projectID)
+        }
+        controller.projectLiveIDsProvider = { [weak self] in self?.liveProjectIDs() ?? [] }
         controller.windowEventBus = windowEventBus
         controller.notificationAggregator = notificationAggregator
         controller.portScanner = portScanner

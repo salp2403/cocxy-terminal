@@ -88,10 +88,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var windowEventBus: (any WindowEventBroadcasting)? {
         didSet { subscribeToWindowEvents() }
     }
+    var projectActivationHandler: ((ProjectID) -> Void)?
+    var projectLiveIDsProvider: (() -> Set<String>)?
 
-    /// Cancellable for the window event bus subscription.
     private var eventBusCancellable: AnyCancellable?
-
     /// Periodic Aurora-only safety net that reconciles visible terminal
     /// buffers back into the per-surface agent store. The live semantic
     /// callbacks remain the primary path; this timer covers missed launch

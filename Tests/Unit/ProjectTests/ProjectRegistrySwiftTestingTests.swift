@@ -201,6 +201,34 @@ struct ProjectRegistrySwiftTestingTests {
         _ = cancellable
     }
 
+    @Test("presentation projects aliases and distinguishes unavailable roots")
+    func presentationProjection() {
+        let first = ProjectRecord(
+            id: ProjectID(rawValue: "/tmp/one/html"),
+            lastOpenedAt: Date(timeIntervalSince1970: 10),
+            isPinned: true
+        )
+        let second = ProjectRecord(
+            id: ProjectID(rawValue: "/tmp/two/html"),
+            lastOpenedAt: Date(timeIntervalSince1970: 9)
+        )
+
+        let items = ProjectPresentationBuilder.makeItems(
+            records: [first, second],
+            aliases: [first.id.rawValue: "Frontend"],
+            liveProjectIDs: [first.id.rawValue],
+            availability: { $0.path == first.id.rawValue }
+        )
+
+        #expect(items.map(\.name) == ["Frontend", "html"])
+        #expect(items.map(\.parentPath) == ["/tmp/one", "/tmp/two"])
+        #expect(items[0].isPinned)
+        #expect(items[0].isLive)
+        #expect(items[0].isAvailable)
+        #expect(!items[1].isLive)
+        #expect(!items[1].isAvailable)
+    }
+
     @Test("encoded records do not claim ownership of aliases")
     func aliasesAreNotPersisted() throws {
         let data = try JSONEncoder().encode(ProjectRecord(id: ProjectID(rawValue: "/tmp/a")))

@@ -12,32 +12,20 @@ final class AuroraChromeController: ObservableObject {
     // MARK: - Published state
 
     @Published var workspaces: [Design.AuroraWorkspace] = []
-
-    /// Session id matching `Tab.id.uuidString`, used by the sidebar to
-    /// highlight the active row.
+    @Published var projects: [ProjectPresentationItem] = []
+    @Published var projectRegistryErrorDescription: String?
     @Published var activeSessionID: String?
 
-    /// One-shot request used by palette actions to focus an inline rename
-    /// field in the sidebar. The UUID lets repeated requests for the same
-    /// target remain observable.
     @Published var sidebarRenameRequest: Design.AuroraSidebarRenameRequest?
 
-    /// Port bindings surfaced on the Aurora status bar. Mirrored from the
-    /// live `PortScannerImpl` whenever the integration layer wires one in.
     @Published var ports: [Design.AuroraPortBinding] = []
 
-    /// Timeline scrubber snapshot. Default "live / now" until the
-    /// command-duration store feeds a real replay window.
     @Published var timeline: Design.AuroraTimelineState = .init(progress: 1)
 
-    /// Clock label rendered at the far right of the Aurora status bar.
-    /// Updated once per second by the integration layer.
     @Published var clockLabel: String = ""
 
-    /// Whether the focused terminal application currently captures mouse input.
     @Published var isTerminalMouseCaptured: Bool = false
 
-    /// Palette data mirrored from the production engine.
     @Published var paletteActions: [Design.AuroraPaletteAction] = []
     @Published var paletteStrings: Design.AuroraPaletteStrings = .english
     @Published var isPaletteVisible: Bool = false
@@ -55,31 +43,16 @@ final class AuroraChromeController: ObservableObject {
     @Published var paletteShortcutLabel: String = "⇧⌘P"
     @Published var newTabShortcutLabel: String = "⌘T"
 
-    /// Available Cocxy update detected by the Sparkle bridge. Nil hides
-    /// the sidebar update affordance.
     @Published var availableUpdate: CocxyUpdateAvailability?
 
-    /// Live Aurora visual theme. The host keeps this aligned with the
-    /// terminal theme so the sidebar/status/palette do not stay dark when
-    /// the user switches the shell to a light palette.
     @Published var themeIdentity: Design.ThemeIdentity = .aurora
 
-    /// User-selected density for the Aurora vertical sidebar.
     @Published var sidebarDisplayMode: AuroraSidebarDisplayMode = .detailed
 
-    /// User-selected metadata signal shown in Aurora session rows.
     @Published var sidebarPrimaryInfo: AuroraSidebarPrimaryInfo = .state
 
-    /// Local app-language resolver mirrored from the window controller.
-    /// Aurora hosts are SwiftUI overlays, so publishing this value lets
-    /// language config reloads repaint sidebar chrome without rebuilding
-    /// the AppKit mount points.
     @Published var localizer: AppLocalizer = AppLocalizer(languagePreference: .system)
 
-    /// Sidebar hover inspector rendered by a separate passthrough host
-    /// on the window overlay layer. Keeping it outside the sidebar's
-    /// hosting view prevents the card from covering rows while the user
-    /// navigates or opens context menus.
     @Published var sidebarTooltip: Design.AuroraSidebarTooltipSnapshot?
     @Published var sidebarTooltipSidebarFrameInOverlay: CGRect = .zero
 
@@ -91,27 +64,18 @@ final class AuroraChromeController: ObservableObject {
 
     // MARK: - Host callbacks
 
-    /// Invoked when the user picks a session row in the Aurora sidebar.
-    /// The host resolves the session id back to the owning tab and
-    /// activates it through the existing focus path.
     var onActivateSession: ((TabID) -> Void)?
 
-    /// Invoked when the user taps the "+" button in the Aurora sidebar
-    /// header. Wired to the controller's `createTab()` path so the new
-    /// tab goes through the standard lifecycle hooks.
     var onCreateTab: (() -> Void)?
 
-    /// Invoked when the user clicks a session-row close affordance in
-    /// the Aurora sidebar. The host routes this through the same
-    /// `closeTab(_:)` lifecycle as the classic tab strip, including
-    /// pinned-tab guards, close confirmation, split teardown and store
-    /// cleanup.
     var onCloseSession: ((TabID) -> Void)?
 
     var onTogglePinSession: ((TabID) -> Void)?
     var onRenameSession: ((TabID, String?) -> Void)?
     var onRenameWorkspace: ((String, String?) -> Void)?
     var onSetWorkspaceCollapsed: ((String, Bool) -> Void)?
+    var onActivateProject: ((String) -> Void)?
+    var onSetProjectPinned: ((String, Bool) -> Void)?
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
@@ -120,19 +84,11 @@ final class AuroraChromeController: ObservableObject {
     var onSidebarPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)?
 
     var workspaceTitlesProvider: (() -> [String: String])?
-
-    /// Invoked when the user presses the palette hotkey inside an
-    /// Aurora view (sidebar header button, palette-trigger keyboard
-    /// shortcut). Delegates to `toggleCommandPalette()` on the host.
+    var projectLiveIDsProvider: (() -> Set<String>)?
     var onTogglePalette: (() -> Void)?
 
-    /// Invoked when a palette action is executed. Uses the action id
-    /// so the host can forward to the shared engine without leaking
-    /// engine types into the design module.
     var onExecutePaletteAction: ((String) -> Void)?
 
-    /// Invoked when the palette overlay is dismissed without picking
-    /// an action (escape key, backdrop tap).
     var onDismissPalette: (() -> Void)?
 
     /// Invoked when the user clicks the bell glyph in the Aurora
@@ -228,6 +184,14 @@ final class AuroraChromeController: ObservableObject {
     /// arrives so a slow provider cannot race a faster follow-up and
     /// publish stale data on top.
     private var notesSummariesTask: Task<Void, Never>?
+    private var projectRecordsSnapshot: [ProjectRecord] = []
+    private var liveProjectIDs: Set<String> = []
+
+    var projectAvailabilityProvider: (URL) -> Bool = { url in
+        var isDirectory: ObjCBool = false
+        return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            && isDirectory.boolValue
+    }
 
     /// Live provider for each tab's effective `[worktree].show-badge`
     /// config flag. The controller reads it on every refresh so
@@ -304,7 +268,16 @@ final class AuroraChromeController: ObservableObject {
 
         projectRegistry?.$records
             .sink { [weak self] records in
-                self?.refreshSources(projectRecordsSnapshot: records)
+                guard let self else { return }
+                projectRecordsSnapshot = records
+                refreshSources(projectRecordsSnapshot: records)
+                refreshRegisteredProjects()
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$persistenceErrorDescription
+            .sink { [weak self] errorDescription in
+                self?.projectRegistryErrorDescription = errorDescription
             }
             .store(in: &cancellables)
 
@@ -436,6 +409,11 @@ final class AuroraChromeController: ObservableObject {
         )
     }
 
+    func refreshProjects() {
+        refreshSources()
+        refreshRegisteredProjects()
+    }
+
     /// Explicit snapshots avoid rereading stale `@Published` values during `willSet`.
     private func refreshSources(
         tabsSnapshot: [Tab]? = nil,
@@ -465,11 +443,25 @@ final class AuroraChromeController: ObservableObject {
             from: sources,
             collapsedWorkspaceIDs: collapsedIDs
         )
+        let updatedLiveProjectIDs = projectLiveIDsProvider?() ?? Set(workspaces.map(\.id))
+        if updatedLiveProjectIDs != liveProjectIDs {
+            liveProjectIDs = updatedLiveProjectIDs
+            refreshRegisteredProjects()
+        }
         // Re-fetch notes summaries when the visible workspace IDs
         // change (tab opened/closed, project switched). Internal dedup
         // makes this safe to call on every refresh — agent state churn
         // does not retrigger a fetch.
         refreshNotesSummariesIfWorkspacesChanged()
+    }
+
+    private func refreshRegisteredProjects() {
+        projects = ProjectPresentationBuilder.makeItems(
+            records: projectRecordsSnapshot,
+            aliases: workspaceTitlesProvider?() ?? [:],
+            liveProjectIDs: liveProjectIDs,
+            availability: projectAvailabilityProvider
+        )
     }
 
     // MARK: - Palette
@@ -716,6 +708,8 @@ struct AuroraSidebarHost: View {
         // derived from `TabManager`.
         Design.AuroraSidebarView(
             workspaces: controller.workspaces,
+            projects: controller.projects,
+            projectRegistryAvailable: controller.projectRegistryErrorDescription == nil,
             activeSessionID: controller.activeSessionID,
             notesByWorkspace: controller.notesByWorkspace,
             onTogglePalette: { controller.onTogglePalette?() },
@@ -743,7 +737,13 @@ struct AuroraSidebarHost: View {
             onRenameWorkspace: { workspaceID, title in
                 controller.onRenameWorkspace?(workspaceID, title)
             },
-            onSetWorkspaceCollapsed: controller.onSetWorkspaceCollapsed,
+            onSetWorkspaceCollapsed: controller.projectRegistryErrorDescription == nil
+                ? controller.onSetWorkspaceCollapsed
+                : nil,
+            onActivateProject: controller.onActivateProject,
+            onSetProjectPinned: controller.projectRegistryErrorDescription == nil
+                ? controller.onSetProjectPinned
+                : nil,
             renameRequest: controller.sidebarRenameRequest,
             onCloseOtherSessions: { sessionID in
                 if let tabID = controller.tabID(forSessionID: sessionID) {
