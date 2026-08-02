@@ -92,12 +92,19 @@ struct AllLocaleParitySwiftTestingTests {
             "codeReview.panel.empty.title",
         ]
         let maximumTechnicalClones = english.count / 8
+        let maximumLongEnglishClones = 25
 
         for locale in Self.localeCodes where locale != "en" {
             let localized = try localizationStrings(locale: locale, resources: resources)
             let identicalKeys = english.keys.filter { key in
                 localized[key] == english[key]
             }.sorted()
+            let longEnglishClones = identicalKeys.filter { key in
+                english[key]?.range(
+                    of: #"[A-Za-z]{2,} [A-Za-z]{2,}"#,
+                    options: .regularExpression
+                ) != nil
+            }
             let representativeClones = representativeKeys.filter { key in
                 localized[key] == english[key]
             }
@@ -106,6 +113,12 @@ struct AllLocaleParitySwiftTestingTests {
                 identicalKeys.count <= maximumTechnicalClones,
                 Comment(
                     rawValue: "\(locale) retains \(identicalKeys.count) English values; sample: \(identicalKeys.prefix(20).joined(separator: ", "))"
+                )
+            )
+            #expect(
+                longEnglishClones.count <= maximumLongEnglishClones,
+                Comment(
+                    rawValue: "\(locale) retains English prose: \(longEnglishClones.prefix(20).joined(separator: ", "))"
                 )
             )
             #expect(
