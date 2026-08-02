@@ -651,6 +651,45 @@ struct CocxyCoreBridgeTests {
         #expect(bridge.webTerminalStatus(for: surfaceID)?.connectionCount == 1)
     }
 
+    @Test("read-only web terminal streams but rejects browser input")
+    func readOnlyWebTerminalRejectsBrowserInput() async throws {
+        let bridge = try makeBridge()
+        let (surfaceID, _) = try createSurface(using: bridge, command: "/bin/cat")
+        defer { bridge.destroySurface(surfaceID) }
+        let received = TestDataSink()
+        bridge.setOutputHandler(for: surfaceID) { data in
+            received.data.append(data)
+        }
+
+        let status = try #require(bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: "127.0.0.1",
+                port: 0,
+                authToken: "read-only-token",
+                maxConnections: 1,
+                maxFrameRate: 30,
+                allowsInput: false
+            )
+        ))
+        #expect(status.allowsInput == false)
+
+        let probe = try WebSocketTestProbe(port: status.port, bearerToken: "read-only-token")
+        defer { probe.close() }
+        _ = try await probe.receive(containing: "\"type\":\"auth_ok\"")
+        try await probe.send(
+            "{\"type\":\"clipboard_paste\",\"data\":\"browser-write-blocked\\n\"}"
+        )
+        try await Task.sleep(nanoseconds: 150_000_000)
+        #expect(String(decoding: received.data, as: UTF8.self).contains("browser-write-blocked") == false)
+
+        bridge.sendText("native-write-ok\n", to: surfaceID)
+        try await waitUntil {
+            String(decoding: received.data, as: UTF8.self).contains("native-write-ok")
+        }
+        #expect(String(decoding: received.data, as: UTF8.self).contains("native-write-ok"))
+    }
+
     @Test("TUI status glyphs stay narrow so incremental redraws do not smear text")
     func tuiStatusGlyphsStayNarrow() throws {
         let bridge = try makeBridge()
@@ -2446,6 +2485,10 @@ private final class WebSocketTestProbe: @unchecked Sendable {
             group.cancelAll()
             return value
         }
+    }
+
+    func send(_ text: String) async throws {
+        try await task.send(.string(text))
     }
 
     func close() {

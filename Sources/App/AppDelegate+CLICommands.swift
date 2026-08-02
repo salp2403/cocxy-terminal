@@ -753,6 +753,7 @@ extension AppDelegate {
             "connections": "\(status.connectionCount)",
             "auth_required": status.authRequired ? "true" : "false",
             "max_fps": "\(status.maxFrameRate)",
+            "input_allowed": status.allowsInput ? "true" : "false",
             "one_shot": status.oneShot ? "true" : "false",
         ]
         if let eventType = status.lastEventType {

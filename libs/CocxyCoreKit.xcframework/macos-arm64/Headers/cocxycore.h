@@ -2719,7 +2719,7 @@ void cocxycore_plugin_unregister(
 /* ===================================================================== */
 
 /** Web terminal API version. */
-#define COCXYCORE_WEB_API_VERSION 1
+#define COCXYCORE_WEB_API_VERSION 2
 
 /** Server configuration. */
 typedef struct {
@@ -2730,6 +2730,7 @@ typedef struct {
     uint32_t auth_token_len;     /**< Required length of auth_token (1..128) */
     uint16_t max_connections;    /**< Max simultaneous connections (default: 4) */
     uint32_t max_frame_rate;     /**< Max frame rate in fps (default: 60) */
+    uint8_t read_only;            /**< Non-zero rejects input while streaming frames */
 } cocxycore_web_config;
 
 /** Opaque web server handle. */

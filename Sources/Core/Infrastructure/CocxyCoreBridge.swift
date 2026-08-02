@@ -410,6 +410,7 @@ struct WebTerminalConfiguration: Equatable, Sendable {
     let authToken: String
     let maxConnections: UInt16
     let maxFrameRate: UInt32
+    let allowsInput: Bool
     let stopAfterFirstConnection: Bool
     let firstConnectionHandler: (@Sendable () -> Void)?
 
@@ -419,6 +420,7 @@ struct WebTerminalConfiguration: Equatable, Sendable {
         authToken: String,
         maxConnections: UInt16,
         maxFrameRate: UInt32,
+        allowsInput: Bool = true,
         stopAfterFirstConnection: Bool = false,
         firstConnectionHandler: (@Sendable () -> Void)? = nil
     ) {
@@ -427,6 +429,7 @@ struct WebTerminalConfiguration: Equatable, Sendable {
         self.authToken = authToken
         self.maxConnections = maxConnections
         self.maxFrameRate = maxFrameRate
+        self.allowsInput = allowsInput
         self.stopAfterFirstConnection = stopAfterFirstConnection
         self.firstConnectionHandler = firstConnectionHandler
     }
@@ -462,6 +465,7 @@ struct WebTerminalConfiguration: Equatable, Sendable {
             && lhs.authToken == rhs.authToken
             && lhs.maxConnections == rhs.maxConnections
             && lhs.maxFrameRate == rhs.maxFrameRate
+            && lhs.allowsInput == rhs.allowsInput
             && lhs.stopAfterFirstConnection == rhs.stopAfterFirstConnection
     }
 }
@@ -473,6 +477,7 @@ struct WebTerminalStatus: Equatable, Sendable {
     let connectionCount: UInt16
     let authRequired: Bool
     let maxFrameRate: UInt32
+    let allowsInput: Bool
     let oneShot: Bool
     let lastEventType: String?
     let lastEventConnectionID: UInt16?
@@ -523,6 +528,7 @@ final class CocxyCoreBridge: TerminalEngine {
             let handle: OpaquePointer
             let bindAddress: String
             let authToken: String
+            let allowsInput: Bool
             let stopAfterFirstConnection: Bool
             let firstConnectionHandler: (@Sendable () -> Void)?
             var maxFrameRate: UInt32
@@ -3407,6 +3413,7 @@ final class CocxyCoreBridge: TerminalEngine {
         if let existing = state.webServer {
             if existing.bindAddress != configuration.bindAddress
                 || existing.authToken != configuration.authToken
+                || existing.allowsInput != configuration.allowsInput
                 || existing.stopAfterFirstConnection != configuration.stopAfterFirstConnection {
                 destroyWebServer(existing)
                 state.webServer = nil
@@ -3433,6 +3440,7 @@ final class CocxyCoreBridge: TerminalEngine {
         webConfig.auth_token_len = UInt32(configuration.authToken.utf8.count)
         webConfig.max_connections = configuration.maxConnections
         webConfig.max_frame_rate = configuration.maxFrameRate
+        webConfig.read_only = configuration.allowsInput ? 0 : 1
 
         guard let server = cocxycore_web_create(&webConfig) else { return nil }
         cocxycore_web_set_event_callback(server, { eventType, connectionID, ctx in
@@ -3462,6 +3470,7 @@ final class CocxyCoreBridge: TerminalEngine {
             handle: server,
             bindAddress: configuration.bindAddress,
             authToken: configuration.authToken,
+            allowsInput: configuration.allowsInput,
             stopAfterFirstConnection: configuration.stopAfterFirstConnection,
             firstConnectionHandler: configuration.firstConnectionHandler,
             maxFrameRate: configuration.maxFrameRate,
@@ -4873,6 +4882,7 @@ final class CocxyCoreBridge: TerminalEngine {
             connectionCount: cocxycore_web_connection_count(webState.handle),
             authRequired: !webState.authToken.isEmpty,
             maxFrameRate: webState.maxFrameRate,
+            allowsInput: webState.allowsInput,
             oneShot: webState.stopAfterFirstConnection,
             lastEventType: webState.lastEventType,
             lastEventConnectionID: webState.lastEventConnectionID
