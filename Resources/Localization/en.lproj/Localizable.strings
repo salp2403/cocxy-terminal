@@ -1226,7 +1226,6 @@
 "preferences.about.updates" = "Updates";
 "preferences.about.checkForUpdates" = "Check for Updates";
 "preferences.about.autoUpdates" = "Cocxy checks for updates automatically.";
-
 "commandPalette.accessibilityLabel" = "Command Palette";
 "commandPalette.search.placeholder" = "Type a command...";
 "commandPalette.search.accessibilityLabel" = "Command palette search";
@@ -1236,7 +1235,6 @@
 "commandPalette.footer.close" = "Close";
 "commandPalette.footer.action.singular" = "action";
 "commandPalette.footer.action.plural" = "actions";
-
 "app.crashRecovery.restore.title" = "Restore Previous Session?";
 "app.crashRecovery.restore.message" = "Cocxy did not shut down cleanly last time. A local crash-recovery snapshot is available.";
 "app.crashRecovery.restore.button" = "Restore";
