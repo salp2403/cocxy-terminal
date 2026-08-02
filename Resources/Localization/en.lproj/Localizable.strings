@@ -1975,9 +1975,6 @@
 "codeReview.panel.empty.tip" = "Tip: use Cmd+Option+R to reopen this panel quickly.";
 "codeReview.panel.empty.refresh" = "Refresh Review";
 "codeReview.panel.empty.refreshHint" = "Reload the current agent diff";
-"codeReview.panel.rounds.title" = "Review Rounds";
-"codeReview.panel.rounds.round" = "Round %d";
-"codeReview.panel.rounds.summary" = "%d comments · %d files · %@";
 "codeReview.panel.timeline.title" = "Diff Timeline";
 "codeReview.panel.timeline.current" = "Current diff";
 "codeReview.panel.timeline.round" = "Round %d";
@@ -2097,7 +2094,6 @@
 "codeReview.suggestions.none" = "No pending suggestions to apply.";
 "codeReview.suggestions.editorDirty" = "Save or discard inline editor changes before applying suggestions.";
 "codeReview.suggestions.rollbackFailed" = "A suggestion write failed and an earlier file could not be restored safely. Reload the review before retrying.";
-"codeReview.suggestions.conflicts" = "Suggestions could not be applied: %d conflicts.";
 "codeReview.suggestions.applied.one" = "Applied 1 suggestion.";
 "codeReview.suggestions.applied.many" = "Applied %d suggestions.";
 "codeReview.suggestions.conflict.none" = "No suggestion conflicts.";
@@ -2137,7 +2133,6 @@
 "codeReview.github.createPR.created" = "Pull request created: %@";
 "codeReview.prMerge.noPullRequest" = "No pull request is attached to this review.";
 "codeReview.prMerge.merged" = "Merged PR #%d via %@.";
-"codeReview.prMerge.error.default" = "Pull request could not be merged.";
 "codeReview.prMerge.error.actionFailed" = "Pull request action failed.";
 "codeReview.prMerge.aftermath.failed" = "Post-merge auto-pull failed.";
 "codeReview.prMerge.aftermath.error.gitUnavailable" = "Could not auto-pull: git binary not found on PATH.";
@@ -3337,7 +3332,6 @@
 "richInput.send" = "Send";
 "richInput.cancel" = "Cancel";
 "agentTeams.panel.title" = "Agent Team";
-"agentTeams.creator.title" = "Agent Team";
 "agentTeams.creator.placeholder" = "Design, Build, Review";
 "agentTeams.creator.launch" = "Launch";
 "agentTeams.graph.title" = "Team Graph";
@@ -3369,20 +3363,15 @@
 "socket.privilegedApproval.approveOnce" = "Approve Once";
 "socket.privilegedApproval.cancel" = "Cancel";
 "socket.privilegedApproval.preview.accessibility" = "Exact local CLI action for approval";
-"cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No cells";
 "cells.sidebar.empty.message" = "Create a local or user-owned cloud cell.";
-"cells.toolbar.title" = "Cells";
 "cells.toolbar.running" = "%d running";
 "cells.toolbar.refresh" = "Refresh cells";
 "cells.toolbar.create" = "Create cell";
 "cells.card.destroy" = "Destroy cell";
-"cells.card.destroy.accessibility" = "Destroy %@";
-"cells.create.title" = "Create Cell";
 "cells.create.provider" = "Provider";
 "cells.create.profile" = "Profile";
 "cells.create.image" = "Image or template";
-"cells.create.host" = "SSH host";
 "cells.create.launch" = "Create";
 "command.navigation.jumpProject.name" = "Jump to Project...";
 "command.navigation.jumpProject.description" = "Switch to a live project by its workspace name";

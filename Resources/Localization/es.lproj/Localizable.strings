@@ -1975,9 +1975,6 @@
 "codeReview.panel.empty.tip" = "Consejo: usa Cmd+Option+R para reabrir este panel rápidamente.";
 "codeReview.panel.empty.refresh" = "Refrescar revisión";
 "codeReview.panel.empty.refreshHint" = "Recargar el diff actual del agente";
-"codeReview.panel.rounds.title" = "Rondas de revisión";
-"codeReview.panel.rounds.round" = "Ronda %d";
-"codeReview.panel.rounds.summary" = "%d comentarios · %d archivos · %@";
 "codeReview.panel.timeline.title" = "Línea de tiempo del diff";
 "codeReview.panel.timeline.current" = "Diff actual";
 "codeReview.panel.timeline.round" = "Ronda %d";
@@ -2097,7 +2094,6 @@
 "codeReview.suggestions.none" = "No hay sugerencias pendientes para aplicar.";
 "codeReview.suggestions.editorDirty" = "Guarda o descarta los cambios del editor en línea antes de aplicar sugerencias.";
 "codeReview.suggestions.rollbackFailed" = "Falló una escritura de sugerencias y no se pudo restaurar de forma segura un archivo anterior. Recarga la revisión antes de volver a intentarlo.";
-"codeReview.suggestions.conflicts" = "No se pudieron aplicar las sugerencias: %d conflictos.";
 "codeReview.suggestions.applied.one" = "1 sugerencia aplicada.";
 "codeReview.suggestions.applied.many" = "%d sugerencias aplicadas.";
 "codeReview.suggestions.conflict.none" = "No hay conflictos de sugerencias.";
@@ -2137,7 +2133,6 @@
 "codeReview.github.createPR.created" = "Solicitud creada: %@";
 "codeReview.prMerge.noPullRequest" = "No hay una solicitud adjunta a esta revisión.";
 "codeReview.prMerge.merged" = "PR #%d fusionado con %@.";
-"codeReview.prMerge.error.default" = "No se pudo fusionar la solicitud.";
 "codeReview.prMerge.error.actionFailed" = "La acción de la solicitud falló.";
 "codeReview.prMerge.aftermath.failed" = "Falló la sincronización automática posterior a la fusión.";
 "codeReview.prMerge.aftermath.error.gitUnavailable" = "No se pudo ejecutar auto-pull: no se encontró el binario git en PATH.";
@@ -3337,7 +3332,6 @@
 "richInput.send" = "Enviar";
 "richInput.cancel" = "Cancelar";
 "agentTeams.panel.title" = "Equipo de agentes";
-"agentTeams.creator.title" = "Equipo de agentes";
 "agentTeams.creator.placeholder" = "Diseño, Construcción, Revisión";
 "agentTeams.creator.launch" = "Lanzar";
 "agentTeams.graph.title" = "Grafo del equipo";
@@ -3369,20 +3363,15 @@
 "socket.privilegedApproval.approveOnce" = "Autorizar una vez";
 "socket.privilegedApproval.cancel" = "Cancelar";
 "socket.privilegedApproval.preview.accessibility" = "Acción local exacta del CLI para autorizar";
-"cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No hay cells";
 "cells.sidebar.empty.message" = "Crea una cell local o cloud propia.";
-"cells.toolbar.title" = "Cells";
 "cells.toolbar.running" = "%d en ejecución";
 "cells.toolbar.refresh" = "Refrescar cells";
 "cells.toolbar.create" = "Crear cell";
 "cells.card.destroy" = "Destruir cell";
-"cells.card.destroy.accessibility" = "Destruir %@";
-"cells.create.title" = "Crear Cell";
 "cells.create.provider" = "Proveedor";
 "cells.create.profile" = "Perfil";
 "cells.create.image" = "Imagen o plantilla";
-"cells.create.host" = "Host SSH";
 "cells.create.launch" = "Crear";
 "command.navigation.jumpProject.name" = "Saltar a proyecto...";
 "command.navigation.jumpProject.description" = "Cambiar a un proyecto activo por el nombre de su espacio";
