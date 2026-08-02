@@ -76,19 +76,10 @@
 "agentTeams.feed.accessibility" = "Feed tima agenata";
 
 "cells.sidebar.accessibility" = "Cocxy ćelije";
-"cells.sidebar.empty.message" = "Kreiraj lokalnu ili korisničku cloud ćeliju.";
 "cells.toolbar.title" = "Ćelije";
-"cells.toolbar.running" = "%d pokrenuto";
-"cells.toolbar.refresh" = "Osvježi ćelije";
-"cells.toolbar.create" = "Kreiraj ćeliju";
-"cells.card.destroy" = "Uništi ćeliju";
 "cells.card.destroy.accessibility" = "Uništi %@";
 "cells.create.title" = "Kreiraj ćeliju";
-"cells.create.provider" = "Pružalac usluge";
-"cells.create.profile" = "Profil";
-"cells.create.image" = "Slika ili predložak";
 "cells.create.host" = "SSH host";
-"cells.create.launch" = "Kreiraj";
 
 "taskQueue.rerun.action" = "Pokreni ponovo";
 "taskQueue.remove.action" = "Ukloni zadatak";

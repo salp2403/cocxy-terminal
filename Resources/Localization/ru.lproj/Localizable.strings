@@ -76,19 +76,10 @@
 "agentTeams.feed.accessibility" = "Лента команды агентов";
 
 "cells.sidebar.accessibility" = "Ячейки Cocxy";
-"cells.sidebar.empty.message" = "Создайте локальную или принадлежащую пользователю облачную ячейку.";
 "cells.toolbar.title" = "Ячейки";
-"cells.toolbar.running" = "%d запущено";
-"cells.toolbar.refresh" = "Обновить ячейки";
-"cells.toolbar.create" = "Создать ячейку";
-"cells.card.destroy" = "Удалить ячейку";
 "cells.card.destroy.accessibility" = "Удалить %@";
 "cells.create.title" = "Создать ячейку";
-"cells.create.provider" = "Провайдер";
-"cells.create.profile" = "Профиль";
-"cells.create.image" = "Образ или шаблон";
 "cells.create.host" = "SSH-хост";
-"cells.create.launch" = "Создать";
 
 "taskQueue.rerun.action" = "Запустить снова";
 "taskQueue.remove.action" = "Удалить задачу";

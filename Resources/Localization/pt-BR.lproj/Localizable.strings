@@ -76,19 +76,10 @@
 "agentTeams.feed.accessibility" = "Feed da equipe de agentes";
 
 "cells.sidebar.accessibility" = "Células Cocxy";
-"cells.sidebar.empty.message" = "Crie uma célula local ou em nuvem de propriedade do usuário.";
 "cells.toolbar.title" = "Células";
-"cells.toolbar.running" = "%d em execução";
-"cells.toolbar.refresh" = "Atualizar células";
-"cells.toolbar.create" = "Criar célula";
-"cells.card.destroy" = "Destruir célula";
 "cells.card.destroy.accessibility" = "Destruir %@";
 "cells.create.title" = "Criar célula";
-"cells.create.provider" = "Provedor";
-"cells.create.profile" = "Perfil";
-"cells.create.image" = "Imagem ou modelo";
 "cells.create.host" = "Host SSH";
-"cells.create.launch" = "Criar";
 
 "taskQueue.rerun.action" = "Executar novamente";
 "taskQueue.remove.action" = "Remover tarefa";

@@ -76,19 +76,10 @@
 "agentTeams.feed.accessibility" = "Стрічка команди агентів";
 
 "cells.sidebar.accessibility" = "Комірки Cocxy";
-"cells.sidebar.empty.message" = "Створіть локальну або користувацьку хмарну комірку.";
 "cells.toolbar.title" = "Комірки";
-"cells.toolbar.running" = "%d виконується";
-"cells.toolbar.refresh" = "Оновити комірки";
-"cells.toolbar.create" = "Створити комірку";
-"cells.card.destroy" = "Знищити комірку";
 "cells.card.destroy.accessibility" = "Знищити %@";
 "cells.create.title" = "Створити комірку";
-"cells.create.provider" = "Провайдер";
-"cells.create.profile" = "Профіль";
-"cells.create.image" = "Образ або шаблон";
 "cells.create.host" = "Хост SSH";
-"cells.create.launch" = "Створити";
 
 "taskQueue.rerun.action" = "Запустити знову";
 "taskQueue.remove.action" = "Видалити завдання";

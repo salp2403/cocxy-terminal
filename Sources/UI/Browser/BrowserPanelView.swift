@@ -26,7 +26,7 @@ import Combine
 ///
 /// ## Behavior
 ///
-/// - Toggle with Cmd+Shift+B.
+/// - Toggle with Cmd+Option+B.
 /// - Fixed width: 480pt when used as the slide-over panel.
 /// - Flexible width when embedded as a workspace split pane.
 /// - Slides in from the right edge.

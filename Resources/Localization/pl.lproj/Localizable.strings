@@ -76,19 +76,10 @@
 "agentTeams.feed.accessibility" = "Kanał zespołu agentów";
 
 "cells.sidebar.accessibility" = "Komórki Cocxy";
-"cells.sidebar.empty.message" = "Utwórz lokalną lub należącą do użytkownika komórkę chmurową.";
 "cells.toolbar.title" = "Komórki";
-"cells.toolbar.running" = "%d działa";
-"cells.toolbar.refresh" = "Odśwież komórki";
-"cells.toolbar.create" = "Utwórz komórkę";
-"cells.card.destroy" = "Usuń komórkę";
 "cells.card.destroy.accessibility" = "Usuń %@";
 "cells.create.title" = "Utwórz komórkę";
-"cells.create.provider" = "Dostawca";
-"cells.create.profile" = "Profil";
-"cells.create.image" = "Obraz lub szablon";
 "cells.create.host" = "Host SSH";
-"cells.create.launch" = "Utwórz";
 
 "taskQueue.rerun.action" = "Uruchom ponownie";
 "taskQueue.remove.action" = "Usuń zadanie";

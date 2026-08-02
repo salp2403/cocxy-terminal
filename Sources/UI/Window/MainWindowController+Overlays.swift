@@ -2328,7 +2328,7 @@ extension MainWindowController {
         focusActiveTerminalSurface()
     }
 
-    // MARK: - Browser Panel (Cmd+Shift+B)
+    // MARK: - Browser Panel (Cmd+Option+B)
 
     func toggleBrowser() {
         if isBrowserVisible {

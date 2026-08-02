@@ -3364,15 +3364,6 @@
 "socket.privilegedApproval.approveOnce" = "Approve Once";
 "socket.privilegedApproval.cancel" = "Cancel";
 "socket.privilegedApproval.preview.accessibility" = "Exact local CLI action for approval";
-"cells.sidebar.empty.message" = "Create a local or user-owned cloud cell.";
-"cells.toolbar.running" = "%d running";
-"cells.toolbar.refresh" = "Refresh cells";
-"cells.toolbar.create" = "Create cell";
-"cells.card.destroy" = "Destroy cell";
-"cells.create.provider" = "Provider";
-"cells.create.profile" = "Profile";
-"cells.create.image" = "Image or template";
-"cells.create.launch" = "Create";
 "command.navigation.jumpProject.name" = "Jump to Project...";
 "command.navigation.jumpProject.description" = "Switch to a live project by its workspace name";
 "command.taskRun.fanOut.name" = "Fan Out Task...";

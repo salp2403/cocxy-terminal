@@ -76,19 +76,10 @@
 "agentTeams.feed.accessibility" = "ព័ត៌មានក្រុមភ្នាក់ងារ";
 
 "cells.sidebar.accessibility" = "Cells របស់ Cocxy";
-"cells.sidebar.empty.message" = "បង្កើត cell មូលដ្ឋាន ឬ cell cloud ដែលអ្នកកាន់កាប់។";
 "cells.toolbar.title" = "Cells";
-"cells.toolbar.running" = "%d កំពុងដំណើរការ";
-"cells.toolbar.refresh" = "ធ្វើឱ្យ cells ថ្មី";
-"cells.toolbar.create" = "បង្កើត cell";
-"cells.card.destroy" = "លុប cell";
 "cells.card.destroy.accessibility" = "លុប %@";
 "cells.create.title" = "បង្កើត Cell";
-"cells.create.provider" = "អ្នកផ្តល់សេវា";
-"cells.create.profile" = "ប្រវត្តិរូប";
-"cells.create.image" = "រូបភាព ឬ ពុម្ព";
 "cells.create.host" = "ម៉ាស៊ីន SSH";
-"cells.create.launch" = "បង្កើត";
 
 "taskQueue.rerun.action" = "ដំណើរការម្តងទៀត";
 "taskQueue.remove.action" = "យកភារកិច្ចចេញ";

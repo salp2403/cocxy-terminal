@@ -3364,15 +3364,6 @@
 "socket.privilegedApproval.approveOnce" = "Autorizar una vez";
 "socket.privilegedApproval.cancel" = "Cancelar";
 "socket.privilegedApproval.preview.accessibility" = "Acción local exacta del CLI para autorizar";
-"cells.sidebar.empty.message" = "Crea una cell local o cloud propia.";
-"cells.toolbar.running" = "%d en ejecución";
-"cells.toolbar.refresh" = "Refrescar cells";
-"cells.toolbar.create" = "Crear cell";
-"cells.card.destroy" = "Destruir cell";
-"cells.create.provider" = "Proveedor";
-"cells.create.profile" = "Perfil";
-"cells.create.image" = "Imagen o plantilla";
-"cells.create.launch" = "Crear";
 "command.navigation.jumpProject.name" = "Saltar a proyecto...";
 "command.navigation.jumpProject.description" = "Cambiar a un proyecto activo por el nombre de su espacio";
 "command.taskRun.fanOut.name" = "Distribuir tarea...";

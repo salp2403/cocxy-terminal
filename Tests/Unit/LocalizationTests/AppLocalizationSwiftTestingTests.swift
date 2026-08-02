@@ -1246,15 +1246,6 @@ struct AppLocalizationSwiftTestingTests {
             "agentTeams.creator.launch",
             "agentTeams.graph.title",
             "agentTeams.feed.empty",
-            "cells.sidebar.empty.message",
-            "cells.toolbar.running",
-            "cells.toolbar.refresh",
-            "cells.toolbar.create",
-            "cells.card.destroy",
-            "cells.create.provider",
-            "cells.create.profile",
-            "cells.create.image",
-            "cells.create.launch",
         ]
         let plannedLanguageCodes = [
             "ar", "bs", "da", "de", "fr", "it", "ja", "km", "ko", "no",
