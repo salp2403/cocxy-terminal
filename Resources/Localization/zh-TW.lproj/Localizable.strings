@@ -46,7 +46,7 @@
 "vault.export.markdown" = "Markdown";
 "vault.export.text" = "純文字";
 "vault.suggestion.title" = "找到工作區工作階段";
-"vault.suggestion.workspace" = "%@ 中有 %d 個先前工作階段";
+"vault.suggestion.workspace" = "%2$@ 中有 %1$d 個先前工作階段";
 "vault.compare.workspace" = "工作區";
 "vault.compare.arguments" = "引數";
 "command.vault.toggle.name" = "切換 Vault";

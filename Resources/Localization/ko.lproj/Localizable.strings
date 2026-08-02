@@ -46,7 +46,7 @@
 "vault.export.markdown" = "Markdown";
 "vault.export.text" = "일반 텍스트";
 "vault.suggestion.title" = "작업 공간 세션 발견";
-"vault.suggestion.workspace" = "%@의 이전 세션 %d개";
+"vault.suggestion.workspace" = "%2$@의 이전 세션 %1$d개";
 "vault.compare.workspace" = "작업 공간";
 "vault.compare.arguments" = "인수";
 "command.vault.toggle.name" = "Vault 전환";

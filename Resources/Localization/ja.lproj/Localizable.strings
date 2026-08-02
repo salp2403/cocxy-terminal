@@ -46,7 +46,7 @@
 "vault.export.markdown" = "Markdown";
 "vault.export.text" = "プレーンテキスト";
 "vault.suggestion.title" = "ワークスペースのセッションが見つかりました";
-"vault.suggestion.workspace" = "%@ に以前のセッション %d 件";
+"vault.suggestion.workspace" = "%2$@ に以前のセッション %1$d 件";
 "vault.compare.workspace" = "ワークスペース";
 "vault.compare.arguments" = "引数";
 "command.vault.toggle.name" = "Vault を切り替え";

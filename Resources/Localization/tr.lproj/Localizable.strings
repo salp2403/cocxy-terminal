@@ -46,7 +46,7 @@
 "vault.export.markdown" = "Markdown";
 "vault.export.text" = "Düz Metin";
 "vault.suggestion.title" = "Çalışma alanı oturumları bulundu";
-"vault.suggestion.workspace" = "%@ içinde %d önceki oturum";
+"vault.suggestion.workspace" = "%2$@ içinde önceki %1$d oturum";
 "vault.compare.workspace" = "Çalışma alanı";
 "vault.compare.arguments" = "Argümanlar";
 "command.vault.toggle.name" = "Vault’u aç/kapat";

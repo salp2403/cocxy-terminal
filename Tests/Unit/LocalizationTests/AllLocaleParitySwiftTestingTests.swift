@@ -54,8 +54,8 @@ struct AllLocaleParitySwiftTestingTests {
             let localized = try localizationStrings(locale: locale, resources: resources)
             let mismatches = english.keys.compactMap { key -> String? in
                 guard let value = localized[key] else { return nil }
-                let expected = formatPlaceholders(in: english[key] ?? "")
-                let actual = formatPlaceholders(in: value)
+                let expected = formatContract(in: english[key] ?? "")
+                let actual = formatContract(in: value)
                 return expected == actual ? nil : "\(key): \(expected) != \(actual)"
             }.sorted()
 
@@ -101,12 +101,31 @@ struct AllLocaleParitySwiftTestingTests {
         return try #require(propertyList as? [String: String])
     }
 
-    private func formatPlaceholders(in value: String) -> [String] {
-        let pattern = #"%(?:\d+\$)?[-+#0']*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:hh|h|ll|l|L|q|z|t|j)?(?:@|[diuoxXfFeEgGaAcCsSpn%])"#
+    private func formatContract(in value: String) -> [String] {
+        let pattern = #"%(?:(\d+)\$)?([-+#0']*(?:\d+|\*)?(?:\.(?:\d+|\*))?(?:hh|h|ll|l|L|q|z|t|j)?(?:@|[diuoxXfFeEgGaAcCsSpn%]))"#
         guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(value.startIndex..<value.endIndex, in: value)
-        return expression.matches(in: value, range: range).compactMap { match in
-            Range(match.range, in: value).map { String(value[$0]) }
+        var nextPosition = 1
+        var sawPositioned = false
+        var sawUnpositioned = false
+        var contract = expression.matches(in: value, range: range).compactMap { match -> String? in
+            guard let bodyRange = Range(match.range(at: 2), in: value) else { return nil }
+            let body = String(value[bodyRange])
+            if body == "%" { return "literal:%%" }
+
+            let position: Int
+            if let range = Range(match.range(at: 1), in: value),
+               let explicitPosition = Int(value[range]) {
+                position = explicitPosition
+                sawPositioned = true
+            } else {
+                position = nextPosition
+                nextPosition += 1
+                sawUnpositioned = true
+            }
+            return "\(position):%\(body)"
         }
+        if sawPositioned && sawUnpositioned { contract.append("invalid:mixed-positioning") }
+        return contract.sorted()
     }
 }
