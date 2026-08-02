@@ -133,6 +133,10 @@ typealias TaskQueueLifecycleHandler = @Sendable (
     _ event: TaskQueueLifecycleEvent
 ) async -> Void
 
+typealias TaskQueueSnapshotHandler = @Sendable (
+    _ items: [TaskQueueItem]
+) async -> Void
+
 actor TaskQueue {
     private let store: TaskQueueStore
     private let maximumConcurrentRuns: Int
@@ -141,6 +145,7 @@ actor TaskQueue {
     private let clock: @Sendable () -> Date
     private let runHandler: TaskQueueRunHandler
     private let lifecycleHandler: TaskQueueLifecycleHandler
+    private let snapshotHandler: TaskQueueSnapshotHandler
 
     private var itemsByID: [String: TaskQueueItem] = [:]
     private var activeRuns: [String: Task<Void, Never>] = [:]
@@ -154,7 +159,8 @@ actor TaskQueue {
         eventRetriggerMinimumInterval: TimeInterval = 5,
         clock: @escaping @Sendable () -> Date = { Date() },
         runHandler: @escaping TaskQueueRunHandler,
-        lifecycleHandler: @escaping TaskQueueLifecycleHandler = { _ in }
+        lifecycleHandler: @escaping TaskQueueLifecycleHandler = { _ in },
+        snapshotHandler: @escaping TaskQueueSnapshotHandler = { _ in }
     ) throws {
         guard (1...8).contains(maximumConcurrentRuns) else {
             throw TaskQueueError.invalidConcurrency(maximumConcurrentRuns)
@@ -166,10 +172,11 @@ actor TaskQueue {
         self.clock = clock
         self.runHandler = runHandler
         self.lifecycleHandler = lifecycleHandler
+        self.snapshotHandler = snapshotHandler
     }
 
     @discardableResult
-    func start() throws -> TaskQueueStoreLoadReport {
+    func start() async throws -> TaskQueueStoreLoadReport {
         let report = try store.loadAll()
         loadWarnings = report.rejectedFiles
         itemsByID = Dictionary(uniqueKeysWithValues: report.items.map { ($0.id, $0) })
@@ -191,17 +198,19 @@ actor TaskQueue {
             try store.save(item)
         }
         drainEligibleRuns(at: now)
+        await publishSnapshot()
         return report
     }
 
     @discardableResult
-    func enqueue(_ item: TaskQueueItem) throws -> TaskQueueItem {
+    func enqueue(_ item: TaskQueueItem) async throws -> TaskQueueItem {
         guard itemsByID[item.id] == nil else {
             throw TaskQueueError.duplicateTask(item.id)
         }
         try store.save(item)
         itemsByID[item.id] = item
         drainEligibleRuns(at: clock())
+        await publishSnapshot()
         return item
     }
 
@@ -217,7 +226,7 @@ actor TaskQueue {
     }
 
     @discardableResult
-    func cancel(id rawID: String) throws -> TaskQueueItem {
+    func cancel(id rawID: String) async throws -> TaskQueueItem {
         let taskID = AgentTeamConfig.slug(rawID)
         guard var item = itemsByID[taskID] else {
             throw TaskQueueError.taskNotFound(taskID)
@@ -253,11 +262,12 @@ actor TaskQueue {
         if !wasRunning {
             drainEligibleRuns(at: now)
         }
+        await publishSnapshot()
         return item
     }
 
     @discardableResult
-    func rerun(id rawID: String) throws -> TaskQueueItem {
+    func rerun(id rawID: String) async throws -> TaskQueueItem {
         let taskID = AgentTeamConfig.slug(rawID)
         guard var item = itemsByID[taskID] else {
             throw TaskQueueError.taskNotFound(taskID)
@@ -277,11 +287,12 @@ actor TaskQueue {
         try store.save(item)
         itemsByID[taskID] = item
         drainEligibleRuns(at: now)
+        await publishSnapshot()
         return item
     }
 
     @discardableResult
-    func remove(id rawID: String) throws -> TaskQueueItem {
+    func remove(id rawID: String) async throws -> TaskQueueItem {
         let taskID = AgentTeamConfig.slug(rawID)
         guard let item = itemsByID[taskID] else {
             throw TaskQueueError.taskNotFound(taskID)
@@ -292,10 +303,11 @@ actor TaskQueue {
 
         try store.remove(taskID: taskID)
         itemsByID.removeValue(forKey: taskID)
+        await publishSnapshot()
         return item
     }
 
-    func handlePluginEvent(_ event: PluginEvent, at date: Date? = nil) {
+    func handlePluginEvent(_ event: PluginEvent, at date: Date? = nil) async {
         guard TaskQueueTrigger.supportedEvents.contains(event) else {
             return
         }
@@ -319,9 +331,10 @@ actor TaskQueue {
             itemsByID[taskID] = item
         }
         drainEligibleRuns(at: now)
+        await publishSnapshot()
     }
 
-    func tick(at date: Date? = nil) {
+    func tick(at date: Date? = nil) async {
         let now = date ?? clock()
         for taskID in itemsByID.keys.sorted() {
             guard var item = itemsByID[taskID], !item.status.isFinished else { continue }
@@ -340,6 +353,7 @@ actor TaskQueue {
             }
         }
         drainEligibleRuns(at: now)
+        await publishSnapshot()
     }
 
     func shutdown() {
@@ -401,6 +415,7 @@ actor TaskQueue {
         activeRuns.removeValue(forKey: taskID)
         guard var item = itemsByID[taskID], item.status == .running else {
             drainEligibleRuns(at: clock())
+            await publishSnapshot()
             return
         }
 
@@ -454,6 +469,7 @@ actor TaskQueue {
             occurredAt: now
         ))
         drainEligibleRuns(at: now)
+        await publishSnapshot()
     }
 
     private func rescheduleRecurringItem(_ item: inout TaskQueueItem, after now: Date) {
@@ -498,6 +514,10 @@ actor TaskQueue {
         } catch {
             lastPersistenceError = String(describing: error)
         }
+    }
+
+    private func publishSnapshot() async {
+        await snapshotHandler(list())
     }
 }
 

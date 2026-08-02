@@ -366,6 +366,42 @@ struct TaskQueueSwiftTestingTests {
         }
     }
 
+    @Test("publishes a complete ordered snapshot after every mutation")
+    func publishesSnapshotsAfterEveryMutation() async throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let recorder = QueueSnapshotRecorder()
+        let queue = try TaskQueue(
+            store: TaskQueueStore(rootDirectory: root),
+            runHandler: { item in
+                AgentPipelineRunSummary(
+                    pipelineID: item.pipeline.id,
+                    status: .succeeded,
+                    stepResults: [],
+                    startedAt: Date(),
+                    finishedAt: Date()
+                )
+            },
+            snapshotHandler: { items in
+                await recorder.record(items)
+            }
+        )
+
+        _ = try await queue.start()
+        let item = try makeQueueItem(id: "observable", trigger: .event(.tabCreated))
+        _ = try await queue.enqueue(item)
+        _ = try await queue.cancel(id: item.id)
+        _ = try await queue.remove(id: item.id)
+
+        let snapshots = await recorder.snapshots
+        #expect(snapshots.count == 4)
+        #expect(snapshots[0].isEmpty)
+        #expect(snapshots[1].map(\.id) == [item.id])
+        #expect(snapshots[1].first?.status == .scheduled)
+        #expect(snapshots[2].first?.status == .cancelled)
+        #expect(snapshots[3].isEmpty)
+    }
+
     private func makeQueueItem(
         id: String,
         trigger: TaskQueueTrigger = .manual,
@@ -446,6 +482,14 @@ private actor QueueLifecycleRecorder {
 
     func record(_ event: TaskQueueLifecycleEvent) {
         events.append(event)
+    }
+}
+
+private actor QueueSnapshotRecorder {
+    private(set) var snapshots: [[TaskQueueItem]] = []
+
+    func record(_ items: [TaskQueueItem]) {
+        snapshots.append(items)
     }
 }
 
