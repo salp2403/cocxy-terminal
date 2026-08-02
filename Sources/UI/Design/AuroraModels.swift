@@ -1,14 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraModels.swift - Minimal mock models for the Aurora chrome views.
-//
-// These structs mirror the state shapes in the design-reference
-// prototype (`src/data.jsx` — `INITIAL_WORKSPACES`, `SESSION_LOGS`).
-// They are used by `AuroraSidebarView` and `AuroraStatusBarView` so the
-// redesigned chrome can render from either previews/tests or the live
-// adapter layer. Production mapping from `TabManager` +
-// `AgentStatePerSurfaceStore` happens in `AuroraSourceBuilder` and
-// `AuroraWorkspaceAdapter`, keeping these models zero-dependency on
-// AppKit and decoupled from the current domain objects.
+// AuroraModels.swift - Presentation-only snapshots populated by
+// AuroraSourceBuilder and AuroraWorkspaceAdapter.
 
 import Foundation
 
@@ -81,6 +73,7 @@ extension Design {
         let name: String
         let agent: AgentAccent
         let state: AgentStateRole
+        let branch: String?
         let isPinned: Bool
         let panes: [AuroraPane]
         let workingDirectory: String?
@@ -98,6 +91,7 @@ extension Design {
             name: String,
             agent: AgentAccent,
             state: AgentStateRole,
+            branch: String? = nil,
             isPinned: Bool = false,
             panes: [AuroraPane],
             workingDirectory: String? = nil,
@@ -109,6 +103,7 @@ extension Design {
             self.name = name
             self.agent = agent
             self.state = state
+            self.branch = branch
             self.isPinned = isPinned
             self.panes = panes
             self.workingDirectory = workingDirectory
@@ -270,6 +265,7 @@ extension Design {
                 lastCommandSummary,
                 workspaceName,
                 branch,
+                self.branch,
             ]
             .compactMap(Self.cleaned)
             .map { $0.lowercased() }

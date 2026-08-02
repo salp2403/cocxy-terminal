@@ -1,24 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraSidebarView.swift - Redesigned sidebar for the Aurora chrome.
-//
-// Renders the workspaces → sessions → panes tree that replaces the
-// current flat tab list. Consumes `Design.AuroraWorkspace` snapshots
-// so the view stays decoupled from the production `TabManager`
-// during the migration phase.
-//
-// Composition:
-//
-//     Design.GlassSurface
-//         VStack
-//             sidebarHeader (title + command palette + notification + new-tab buttons)
-//             searchField
-//             ScrollView { workspaceTree }
-//             sidebarFooter (palette kbd hint)
-//
-// In production this view is mounted by `AuroraChromeController` when
-// `appearance.aurora-enabled` is true. The controller supplies live
-// `TabManager` + `AgentStatePerSurfaceStore` snapshots through
-// `AuroraSourceBuilder` / `AuroraWorkspaceAdapter`.
+// AuroraSidebarView.swift - Project, session, and pane tree rendered from
+// presentation snapshots supplied by AuroraChromeController.
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -445,7 +427,7 @@ extension Design {
                                         hoveredSession = HoveredSessionContext(
                                             session: session,
                                             workspaceName: workspace.name,
-                                            workspaceBranch: workspace.branch
+                                            workspaceBranch: session.branch ?? workspace.branch
                                         )
                                         publishHoveredSessionIfPossible()
                                     } else if hoveredSession?.session.id == session.id {
@@ -902,6 +884,15 @@ extension Design {
                             .foregroundStyle(palette.accent.resolvedColor())
                             .help(Self.localizedWorktreeHelp(using: localizer))
                             .accessibilityLabel(TabItemView.localizedWorktree(using: localizer))
+                    }
+                    if let branch = session.branch,
+                       !branch.isEmpty,
+                       branch != workspaceBranch {
+                        Text(branch)
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(palette.textLow.resolvedColor())
+                            .lineLimit(1)
+                            .truncationMode(.middle)
                     }
                     Spacer(minLength: Spacing.xxSmall)
                 }

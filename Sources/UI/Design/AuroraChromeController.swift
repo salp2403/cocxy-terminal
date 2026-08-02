@@ -1,25 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraChromeController.swift - Integration seam between the live
-// production domain (TabManager + AgentStatePerSurfaceStore) and the
-// Aurora presentation module.
-//
-// This is the only file in `Sources/UI/Design/` that imports AppKit and
-// domain types. The rest of the design module stays presentation-only;
-// here we bridge the two without leaking SwiftUI internals into the
-// domain or AppKit mount points into the views.
-//
-// Responsibilities:
-//   - Own the `@ObservableObject` state consumed by Aurora views.
-//   - Build the Aurora input list through `AuroraSourceBuilder` and feed
-//     the adapter so the sidebar/status bar always reflect live data.
-//   - Hand the host view controller ready-to-mount `NSHostingView`
-//     instances for sidebar, status bar and palette overlay.
-//   - Route SwiftUI callbacks (activate session, create tab, execute
-//     palette action) to injectable closures so the host stays in
-//     control of every mutation.
-//
-// The controller is additive: while the feature flag is off it is never
-// instantiated, so the classic chrome path stays bit-for-bit unchanged.
+// AuroraChromeController.swift - Bridges live domain snapshots into Aurora
+// hosting views and routes presentation callbacks back to the window host.
 
 import AppKit
 import Combine
@@ -108,6 +89,8 @@ final class AuroraChromeController: ObservableObject {
 
     private weak var tabManager: TabManager?
     private weak var store: AgentStatePerSurfaceStore?
+    private let projectResolver: (any ProjectResolving)?
+    private let gitInfoProvider: (any GitInfoProviding)?
 
     // MARK: - Host callbacks
 
@@ -267,10 +250,14 @@ final class AuroraChromeController: ObservableObject {
 
     init(
         tabManager: TabManager,
-        store: AgentStatePerSurfaceStore
+        store: AgentStatePerSurfaceStore,
+        projectResolver: (any ProjectResolving)? = nil,
+        gitInfoProvider: (any GitInfoProviding)? = nil
     ) {
         self.tabManager = tabManager
         self.store = store
+        self.projectResolver = projectResolver
+        self.gitInfoProvider = gitInfoProvider
         updateClockLabel()
     }
 
@@ -474,6 +461,8 @@ final class AuroraChromeController: ObservableObject {
             surfaceIDsByTab: surfaceMap,
             store: store,
             stateSnapshot: stateSnapshot,
+            projectResolver: projectResolver,
+            gitInfoProvider: gitInfoProvider,
             workspaceTitlesByIdentity: workspaceTitlesProvider?(),
             worktreeBadgeVisibleProvider: worktreeBadgeVisibleProvider
         )

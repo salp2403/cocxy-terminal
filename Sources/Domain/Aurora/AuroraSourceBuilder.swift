@@ -140,6 +140,8 @@ enum AuroraSourceBuilder {
         store: AgentStatePerSurfaceStore,
         stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil,
         workspaceRootResolver: AuroraWorkspaceRootResolver = GitAncestorWorkspaceRootResolver(),
+        projectResolver: (any ProjectResolving)? = nil,
+        gitInfoProvider: (any GitInfoProviding)? = nil,
         workspaceTitlesByIdentity: [String: String]? = nil,
         worktreeBadgeVisibleProvider: (Tab) -> Bool = { _ in true }
     ) -> [Design.AuroraSourceTab] {
@@ -160,16 +162,24 @@ enum AuroraSourceBuilder {
             // Apply the config gate at source-build time so the adapter
             // can stay pure and the view layer does not read config.
             let hasWorktree = tab.worktreeID != nil && worktreeBadgeVisibleProvider(tab)
-            let workspace = AuroraWorkspacePlanner.descriptor(
+            let workspace = projectResolver.map {
+                AuroraWorkspacePlanner.descriptor(for: tab, projectResolver: $0)
+            } ?? AuroraWorkspacePlanner.descriptor(
                 for: tab,
                 resolver: workspaceRootResolver
             )
             let workspaceTitle: String?
-            if let storedValue = workspaceTitlesByIdentity?[workspace.identity] {
+            if workspace.unfoldedIdentity != workspace.identity,
+               let storedValue = workspaceTitlesByIdentity?[workspace.unfoldedIdentity] {
+                workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(storedValue)
+            } else if let storedValue = workspaceTitlesByIdentity?[workspace.identity] {
                 workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(storedValue)
             } else {
                 workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(tab.workspaceCustomTitle)
             }
+            let workspaceBranch = gitInfoProvider?.currentBranch(
+                at: URL(fileURLWithPath: workspace.rootPath, isDirectory: true)
+            ) ?? (workspace.unfoldedIdentity == workspace.identity ? tab.gitBranch : nil)
             // Workspace root path used by the Aurora notes section so
             // the sidebar can compute the same `NoteWorkspaceID` the
             // Notes store uses on disk. Falls back to the tab's own
@@ -181,6 +191,7 @@ enum AuroraSourceBuilder {
                 workspaceGroup: workspace.identity,
                 workspaceTitle: workspaceTitle,
                 workspaceDefaultName: workspace.automaticName,
+                workspaceBranch: workspaceBranch,
                 branch: tab.gitBranch,
                 isPinned: tab.isPinned,
                 surfaces: surfaces,

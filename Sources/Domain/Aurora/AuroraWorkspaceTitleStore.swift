@@ -30,8 +30,15 @@ final class AuroraWorkspaceTitleStore {
         AuroraWorkspacePlanner.normalizedTitle(storedValues[identity])
     }
 
-    func setTitle(_ title: String?, for identity: String) {
+    func setTitle(
+        _ title: String?,
+        for identity: String,
+        migrating legacyIdentities: Set<String> = []
+    ) {
         storedValues[identity] = AuroraWorkspacePlanner.normalizedTitle(title) ?? ""
+        for legacyIdentity in legacyIdentities where legacyIdentity != identity {
+            storedValues.removeValue(forKey: legacyIdentity)
+        }
         persist()
     }
 

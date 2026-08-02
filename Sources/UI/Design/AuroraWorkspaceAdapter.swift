@@ -68,6 +68,7 @@ extension Design {
         let workspaceGroup: String
         let workspaceTitle: String?
         let workspaceDefaultName: String?
+        let workspaceBranch: String?
         let branch: String?
         let isPinned: Bool
         let surfaces: [AuroraSourceSurface]
@@ -94,6 +95,7 @@ extension Design {
             workspaceGroup: String,
             workspaceTitle: String? = nil,
             workspaceDefaultName: String? = nil,
+            workspaceBranch: String? = nil,
             branch: String? = nil,
             isPinned: Bool = false,
             surfaces: [AuroraSourceSurface],
@@ -108,6 +110,7 @@ extension Design {
             self.workspaceGroup = workspaceGroup
             self.workspaceTitle = workspaceTitle
             self.workspaceDefaultName = workspaceDefaultName
+            self.workspaceBranch = workspaceBranch
             self.branch = branch
             self.isPinned = isPinned
             self.surfaces = surfaces
@@ -132,9 +135,8 @@ extension Design {
     /// 3. `workspaceGroup` values are compared verbatim; two tabs with
     ///    the same value end up in the same workspace regardless of
     ///    case. This mirrors how the live chrome groups paths.
-    /// 4. The first tab's `branch` wins when several tabs in the same
-    ///    workspace carry different values — matches "primary branch"
-    ///    semantics in the reference prototype.
+    /// 4. `workspaceBranch` identifies the origin branch while each
+    ///    session retains its own checkout branch.
     /// 5. A tab without surfaces degrades to a single synthetic pane
     ///    named "shell" so the sidebar still has something to render
     ///    (prevents the first tab from disappearing during bootstrap).
@@ -161,7 +163,8 @@ extension Design {
 
             return order.map { group -> AuroraWorkspace in
                 let tabs = grouped[group] ?? []
-                let branch = tabs.lazy.compactMap(\.branch).first
+                let branch = tabs.lazy.compactMap(\.workspaceBranch).first
+                    ?? tabs.lazy.compactMap(\.branch).first
                 let sessions = tabs.map(session(from:))
                 let notesWorkspaceID = notesWorkspaceID(forTabs: tabs)
                 let workspaceName = tabs.lazy
@@ -228,6 +231,7 @@ extension Design {
                 name: tab.name,
                 agent: primary.agent,
                 state: primary.state,
+                branch: tab.branch,
                 isPinned: tab.isPinned,
                 panes: panes,
                 workingDirectory: tab.workingDirectory,

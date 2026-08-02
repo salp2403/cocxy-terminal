@@ -194,6 +194,8 @@ extension MainWindowController {
             tabs: tabManager.tabs,
             surfaceIDsByTab: [:],
             store: store,
+            projectResolver: projectResolver,
+            gitInfoProvider: gitInfoProvider,
             workspaceTitlesByIdentity: auroraWorkspaceTitleStore.snapshot,
             worktreeBadgeVisibleProvider: { [weak self] tab in
                 guard let self else { return true }

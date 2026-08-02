@@ -1,20 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// MainWindowController+AuroraIntegration.swift - Mounts and toggles the
-// Aurora chrome side-by-side with the classic chrome based on the
-// `appearance.aurora-enabled` feature flag.
-//
-// Strategy: dual-mount. Aurora's `NSHostingView`s live alongside the
-// classic `TabBarView` and `statusBarHostingView` as siblings in the
-// same containers. Neither hierarchy is torn down or rebuilt on toggle
-// — we only flip `isHidden` so bindings, first responder and scroll
-// state survive the switch. While the flag is off, the Aurora hosting
-// views are never instantiated so the classic path incurs zero extra
-// work.
-//
-// The Aurora chrome is presentation-only. Every side effect the user
-// triggers from an Aurora view (activate session, create tab, toggle
-// palette, execute a palette action) is routed back to the controller's
-// existing handlers, so behaviour is identical across both chromes.
+// MainWindowController+AuroraIntegration.swift - Dual-mounts Aurora with
+// classic chrome and routes every action through existing window handlers.
 
 import AppKit
 import Combine
@@ -24,22 +10,10 @@ import SwiftUI
 
 extension MainWindowController {
 
-    /// Fallback height for the Aurora status bar used only when the
-    /// classic `statusBarHostingView` has not been built yet (extremely
-    /// rare — essentially tests without a full window boot). Matches
-    /// the classic `statusBarHeight` so both chromes share the same
-    /// vertical budget and the split view never shifts when the user
-    /// toggles the feature flag at runtime.
+    /// Matches the classic status bar when its host has not been built yet.
     private static var auroraStatusBarFallbackHeight: CGFloat { 24 }
 
-    /// How often Aurora audits visible panes while the redesign is active.
-    ///
-    /// Semantic callbacks still update the store immediately. This loop is
-    /// intentionally a slow safety net for launch banners that were already
-    /// visible before the callback wiring existed or for panes whose state
-    /// was reset by shell-prompt recovery while a full-screen TUI remains on
-    /// screen. Keep this slower than live semantic callbacks: it is a recovery
-    /// safety net, not the primary source of truth.
+    /// Slow recovery audit; semantic callbacks remain the primary source.
     private static var auroraAgentReconciliationInterval: TimeInterval { 5.0 }
 
     private static var auroraAgentVisibleRowScanLimit: Int { 80 }
@@ -211,13 +185,14 @@ extension MainWindowController {
 
         let controller = AuroraChromeController(
             tabManager: tabManager,
-            store: agentStore
+            store: agentStore,
+            projectResolver: projectResolver,
+            gitInfoProvider: gitInfoProvider
         )
-        let workspaceResolver = GitAncestorWorkspaceRootResolver()
         auroraWorkspaceTitleStore.mergeMissing(
             AuroraWorkspacePlanner.legacyTitlesByIdentity(
                 from: tabManager.tabs,
-                resolver: workspaceResolver
+                projectResolver: projectResolver
             )
         )
         controller.workspaceTitlesProvider = { [weak self] in
@@ -907,15 +882,26 @@ extension MainWindowController {
     }
 
     func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
-        let resolver = GitAncestorWorkspaceRootResolver()
         let matchingIDs = AuroraWorkspacePlanner.matchingTabIDs(
-            workspaceID: workspaceID,
+            projectID: workspaceID,
             in: tabManager.tabs,
-            resolver: resolver
+            projectResolver: projectResolver
         )
         guard !matchingIDs.isEmpty else { return }
 
-        auroraWorkspaceTitleStore.setTitle(newTitle, for: workspaceID)
+        let legacyIdentities = Set(matchingIDs.compactMap { tabID in
+            tabManager.tab(for: tabID).map {
+                AuroraWorkspacePlanner.descriptor(
+                    for: $0,
+                    projectResolver: projectResolver
+                ).unfoldedIdentity
+            }
+        })
+        auroraWorkspaceTitleStore.setTitle(
+            newTitle,
+            for: workspaceID,
+            migrating: legacyIdentities
+        )
         refreshAuroraChromeAfterTabMutation()
     }
 
@@ -1006,11 +992,17 @@ extension MainWindowController {
             return
         }
 
-        let resolver = GitAncestorWorkspaceRootResolver()
-        let workspace = AuroraWorkspacePlanner.descriptor(for: tab, resolver: resolver)
+        let workspace = AuroraWorkspacePlanner.descriptor(
+            for: tab,
+            projectResolver: projectResolver
+        )
         let storedValues = auroraWorkspaceTitleStore.snapshot
         let currentName: String
-        if let storedValue = storedValues[workspace.identity] {
+        if workspace.unfoldedIdentity != workspace.identity,
+           let storedValue = storedValues[workspace.unfoldedIdentity] {
+            currentName = AuroraWorkspacePlanner.normalizedTitle(storedValue)
+                ?? workspace.automaticName
+        } else if let storedValue = storedValues[workspace.identity] {
             currentName = AuroraWorkspacePlanner.normalizedTitle(storedValue)
                 ?? workspace.automaticName
         } else {

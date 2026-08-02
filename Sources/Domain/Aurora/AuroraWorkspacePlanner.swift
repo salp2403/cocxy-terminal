@@ -4,6 +4,7 @@ import Foundation
 
 struct AuroraWorkspaceDescriptor: Equatable, Sendable {
     let identity: String
+    let unfoldedIdentity: String
     let automaticName: String
     let rootPath: String
 }
@@ -32,8 +33,23 @@ enum AuroraWorkspacePlanner {
 
         return AuroraWorkspaceDescriptor(
             identity: identity,
+            unfoldedIdentity: identity,
             automaticName: automaticName,
             rootPath: path
+        )
+    }
+
+    @MainActor
+    static func descriptor(
+        for tab: Tab,
+        projectResolver: any ProjectResolving
+    ) -> AuroraWorkspaceDescriptor {
+        let project = projectResolver.resolveProject(for: tab.workingDirectory)
+        return AuroraWorkspaceDescriptor(
+            identity: project.groupingID.rawValue,
+            unfoldedIdentity: project.id.rawValue,
+            automaticName: project.groupingAutomaticName,
+            rootPath: project.groupingRootURL.path
         )
     }
 
@@ -55,6 +71,19 @@ enum AuroraWorkspacePlanner {
         }
     }
 
+    @MainActor
+    static func matchingTabIDs(
+        projectID: String,
+        in tabs: [Tab],
+        projectResolver: any ProjectResolving
+    ) -> [TabID] {
+        tabs.compactMap { tab in
+            descriptor(for: tab, projectResolver: projectResolver).identity == projectID
+                ? tab.id
+                : nil
+        }
+    }
+
     static func legacyTitlesByIdentity(
         from tabs: [Tab],
         resolver: AuroraWorkspaceRootResolver
@@ -63,6 +92,22 @@ enum AuroraWorkspacePlanner {
         for tab in tabs {
             guard let title = normalizedTitle(tab.workspaceCustomTitle) else { continue }
             let identity = descriptor(for: tab, resolver: resolver).identity
+            if result[identity] == nil {
+                result[identity] = title
+            }
+        }
+        return result
+    }
+
+    @MainActor
+    static func legacyTitlesByIdentity(
+        from tabs: [Tab],
+        projectResolver: any ProjectResolving
+    ) -> [String: String] {
+        var result: [String: String] = [:]
+        for tab in tabs {
+            guard let title = normalizedTitle(tab.workspaceCustomTitle) else { continue }
+            let identity = descriptor(for: tab, projectResolver: projectResolver).identity
             if result[identity] == nil {
                 result[identity] = title
             }
