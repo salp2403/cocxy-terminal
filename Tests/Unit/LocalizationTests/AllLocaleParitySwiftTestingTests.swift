@@ -16,14 +16,17 @@ struct AllLocaleParitySwiftTestingTests {
         let resources = localizationResourcesURL()
         let english = try localizationStrings(locale: "en", resources: resources)
         let expectedKeys = Set(english.keys)
+        let supportedCodes = Set(AppLocalizationResolver.supportedLanguages.map(\.rawValue))
 
         #expect(Self.localeCodes.count == 21)
         #expect(Set(Self.localeCodes).count == Self.localeCodes.count)
+        #expect(Set(Self.localeCodes) == supportedCodes)
         #expect(expectedKeys.isEmpty == false)
 
         for locale in Self.localeCodes {
             let localized = try localizationStrings(locale: locale, resources: resources)
             let localizedKeys = Set(localized.keys)
+            let duplicateKeys = try duplicateLocalizationKeys(locale: locale, resources: resources)
             let missing = expectedKeys.subtracting(localizedKeys).sorted()
             let orphaned = localizedKeys.subtracting(expectedKeys).sorted()
             let empty = localized.compactMap { key, value in
@@ -37,6 +40,10 @@ struct AllLocaleParitySwiftTestingTests {
             #expect(
                 orphaned.isEmpty,
                 Comment(rawValue: "\(locale) has orphaned keys: \(orphaned.prefix(20).joined(separator: ", "))")
+            )
+            #expect(
+                duplicateKeys.isEmpty,
+                Comment(rawValue: "\(locale) has duplicate keys: \(duplicateKeys.prefix(20).joined(separator: ", "))")
             )
             #expect(
                 empty.isEmpty,
@@ -99,6 +106,26 @@ struct AllLocaleParitySwiftTestingTests {
             format: nil
         )
         return try #require(propertyList as? [String: String])
+    }
+
+    private func duplicateLocalizationKeys(
+        locale: String,
+        resources: URL
+    ) throws -> [String] {
+        let url = resources
+            .appendingPathComponent("\(locale).lproj", isDirectory: true)
+            .appendingPathComponent("Localizable.strings")
+        let source = try String(contentsOf: url, encoding: .utf8)
+        let expression = try NSRegularExpression(
+            pattern: #"(?m)^\"((?:\\.|[^\"\\])*)\"\s*="#
+        )
+        let range = NSRange(source.startIndex..<source.endIndex, in: source)
+        var counts: [String: Int] = [:]
+        for match in expression.matches(in: source, range: range) {
+            guard let keyRange = Range(match.range(at: 1), in: source) else { continue }
+            counts[String(source[keyRange]), default: 0] += 1
+        }
+        return counts.compactMap { key, count in count > 1 ? key : nil }.sorted()
     }
 
     private func formatContract(in value: String) -> [String] {
