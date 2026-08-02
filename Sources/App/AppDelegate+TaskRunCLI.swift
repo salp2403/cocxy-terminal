@@ -208,6 +208,11 @@ extension AppDelegate {
               let selectedEntry = candidate.worktree else {
             throw TaskRunError.candidateNotFound(candidateID)
         }
+        guard candidate.status != .orphaned else {
+            throw TaskRunExecutionError.promotionUnavailable(
+                "candidate \(candidateID) has no available worktree"
+            )
+        }
         guard run.status == .running else {
             throw TaskRunExecutionError.promotionUnavailable(
                 "task run \(run.id) is \(run.status.rawValue)"
@@ -461,8 +466,9 @@ extension AppDelegate {
     }
 
     @MainActor
-    private func publishTaskRun(_ run: TaskRun, fallbackTabID: UUID) {
+    func publishTaskRun(_ run: TaskRun, fallbackTabID: UUID) {
         activeTaskRuns[run.id] = run
+        taskRunPersistenceCoordinator?.enqueue(run)
         agentDashboardViewModel?.syncTaskRun(run, fallbackTabId: fallbackTabID)
         for controller in allWindowControllers {
             guard controller.dashboardViewModel !== agentDashboardViewModel else { continue }

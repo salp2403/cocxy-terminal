@@ -1258,7 +1258,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             return .working
         case .finished, .promoted:
             return .finished
-        case .failed:
+        case .failed, .orphaned:
             return .error
         case .discarded:
             return .idle

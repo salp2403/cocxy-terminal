@@ -20,7 +20,8 @@ struct TaskRunComparisonService: Sendable {
 
     func load(run: TaskRun) throws -> [TaskRunCandidateComparison] {
         try run.candidates.compactMap { candidate in
-            guard let worktree = candidate.worktree else { return nil }
+            guard candidate.status != .orphaned,
+                  let worktree = candidate.worktree else { return nil }
             return TaskRunCandidateComparison(
                 candidate: candidate,
                 diffs: try loadDiffs(

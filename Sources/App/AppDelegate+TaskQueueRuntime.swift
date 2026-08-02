@@ -17,6 +17,7 @@ extension AppDelegate {
     )
 
     func setupTaskQueueRuntime() {
+        setupTaskRunDurability()
         guard taskQueue == nil else { return }
         taskQueueIsReady = false
 

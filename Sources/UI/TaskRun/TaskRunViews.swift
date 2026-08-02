@@ -242,7 +242,7 @@ final class TaskRunComparisonSheetViewModel: ObservableObject {
 
     init(run: TaskRun) {
         self.run = run
-        self.selectedCandidateID = run.candidates.first?.id
+        self.selectedCandidateID = Self.firstAvailableCandidate(in: run)?.id
     }
 
     var selectedComparison: TaskRunCandidateComparison? {
@@ -251,13 +251,14 @@ final class TaskRunComparisonSheetViewModel: ObservableObject {
     }
 
     var selectedCandidate: TaskRunCandidate? {
-        guard let selectedCandidateID else { return run.candidates.first }
+        guard let selectedCandidateID else { return Self.firstAvailableCandidate(in: run) }
         return run.candidates.first { $0.id == selectedCandidateID }
     }
 
     var canPromote: Bool {
         run.status == .running
             && selectedCandidate?.worktree != nil
+            && selectedCandidate?.status != .orphaned
             && !isLoading
             && !isPromoting
     }
@@ -279,10 +280,12 @@ final class TaskRunComparisonSheetViewModel: ObservableObject {
         self.run = run
         self.comparisons = comparisons
         if let selectedCandidateID,
-           run.candidates.contains(where: { $0.id == selectedCandidateID }) {
+           run.candidates.contains(where: {
+               $0.id == selectedCandidateID && $0.status != .orphaned
+           }) {
             self.selectedCandidateID = selectedCandidateID
         } else {
-            selectedCandidateID = run.candidates.first?.id
+            selectedCandidateID = Self.firstAvailableCandidate(in: run)?.id
         }
         isLoading = false
         errorMessage = nil
@@ -309,6 +312,10 @@ final class TaskRunComparisonSheetViewModel: ObservableObject {
     static func costLabel(micros: Int64, unavailable: String) -> String {
         guard micros > 0 else { return unavailable }
         return String(format: "$%.4f", Double(micros) / 1_000_000)
+    }
+
+    private static func firstAvailableCandidate(in run: TaskRun) -> TaskRunCandidate? {
+        run.candidates.first { $0.status != .orphaned && $0.worktree != nil }
     }
 }
 
@@ -536,7 +543,7 @@ struct TaskRunComparisonSheet: View {
             return .blue
         case .finished, .promoted:
             return .green
-        case .failed:
+        case .failed, .orphaned:
             return .red
         case .discarded:
             return .orange

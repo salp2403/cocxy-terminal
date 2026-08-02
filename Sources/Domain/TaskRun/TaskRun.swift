@@ -112,6 +112,7 @@ enum TaskRunCandidateStatus: String, Codable, Sendable, Equatable {
     case failed
     case promoted
     case discarded
+    case orphaned
 }
 
 struct TaskRunCandidate: Identifiable, Codable, Sendable, Equatable {
@@ -156,6 +157,10 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
     var promotedCandidateID: String?
     var failureMessage: String?
     var completionWarning: String?
+
+    var projectID: ProjectID {
+        ProjectID(rootURL: originRepoPath)
+    }
 
     init(
         id: String,
@@ -236,7 +241,10 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
             candidates[index].worktree?.tabID = nil
         }
         let hasAlternative = candidates.contains {
-            $0.id != candidateID && $0.status != .failed && $0.status != .discarded
+            $0.id != candidateID
+                && $0.status != .failed
+                && $0.status != .discarded
+                && $0.status != .orphaned
         }
         status = hasAlternative ? .running : .failed
         promotedCandidateID = nil

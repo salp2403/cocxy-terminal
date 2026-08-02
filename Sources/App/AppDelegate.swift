@@ -211,6 +211,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Parallel task runs retained for comparison and winner promotion.
     var activeTaskRuns: [String: TaskRun] = [:]
 
+    /// App-wide durable storage for parallel task runs.
+    var taskRunStore = TaskRunStore()
+    var taskRunPersistenceCoordinator: TaskRunPersistenceCoordinator?
+    var taskRunRestorationTask: Task<Void, Never>?
+
     /// Reverse lookup used to fold provider hook events into one TaskRun row.
     var taskRunIDByTeamID: [String: String] = [:]
 
@@ -452,6 +457,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         taskQueueTimer?.invalidate()
         taskQueueTimer = nil
+        taskRunPersistenceCoordinator?.flush()
+        taskRunPersistenceCoordinator = nil
+        taskRunRestorationTask?.cancel()
+        taskRunRestorationTask = nil
         let terminatingTaskQueue = taskQueue
         taskQueue = nil
         taskQueueIsReady = false

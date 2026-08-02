@@ -3415,6 +3415,7 @@
 "taskRun.status.completed" = "Completado";
 "taskRun.status.failed" = "Fallido";
 "taskRun.status.discarded" = "Descartado";
+"taskRun.status.orphaned" = "Huerfano";
 "taskRun.status.cancelled" = "Cancelado";
 
 "command.taskQueue.manage.name" = "Cola de tareas...";

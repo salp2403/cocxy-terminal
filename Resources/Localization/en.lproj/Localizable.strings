@@ -3415,6 +3415,7 @@
 "taskRun.status.completed" = "Completed";
 "taskRun.status.failed" = "Failed";
 "taskRun.status.discarded" = "Discarded";
+"taskRun.status.orphaned" = "Orphaned";
 "taskRun.status.cancelled" = "Cancelled";
 
 "command.taskQueue.manage.name" = "Task Queue...";
