@@ -18,10 +18,9 @@ extension AppDelegate {
     nonisolated static let worktreeEnablementErrorMessage =
         "Set [worktree].enabled = true in ~/.config/cocxy/config.toml or the active repository's .cocxy.toml."
 
-    /// Process-wide worktree service. A single actor is enough —
-    /// concurrent CLI calls serialise at the actor boundary and the
-    /// per-repo state lives inside the manifest store, not here.
-    nonisolated static let sharedWorktreeService = WorktreeService()
+    nonisolated func worktreeServiceSnapshot() async -> WorktreeService {
+        await MainActor.run { sharedWorktreeService }
+    }
 
     // MARK: - CLI entry point (called from the socket queue)
 
@@ -121,7 +120,7 @@ extension AppDelegate {
             basePath: context.config.worktree.basePath,
             originRepoPath: context.originRepoPath
         )
-        let service = Self.sharedWorktreeService
+        let service = await worktreeServiceSnapshot()
 
         do {
             switch kind {
@@ -187,7 +186,7 @@ extension AppDelegate {
             basePath: basePath,
             originRepoPath: origin
         )
-        let service = Self.sharedWorktreeService
+        let service = await worktreeServiceSnapshot()
         let effectiveBaseRef = baseRef.nilIfEmpty ?? WorktreeConfig.defaults.baseRef
 
         do {

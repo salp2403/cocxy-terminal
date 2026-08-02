@@ -39,19 +39,11 @@ struct SurfaceAgentSemanticVerdictCacheEntry: Equatable {
 
 // MARK: - Surface Lifecycle
 
-/// Extension that manages the lifecycle of terminal surfaces:
-/// creation, destruction, handler wiring, and OSC notification processing.
-///
-/// Extracted from MainWindowController to isolate terminal engine
-/// interactions from window layout and UI concerns.
+/// Terminal surface lifecycle and OSC notification handling.
 extension MainWindowController {
-
     // MARK: - Surface Creation
 
-    /// Creates a terminal surface in the view and spawns the shell.
-    ///
-    /// Called after the window is displayed and the view has a valid
-    /// frame for Metal rendering.
+    /// Creates the first surface after the window has a renderable frame.
     func createTerminalSurface() {
         guard let surfaceView = terminalSurfaceView else { return }
         let firstTabWorkingDirectory = tabManager.tabs.first.flatMap { tab in
@@ -68,8 +60,7 @@ extension MainWindowController {
             surfaceView.configureSurfaceIfNeeded(bridge: bridge, surfaceID: surfaceID)
             surfaceView.syncSizeWithTerminal()
 
-            // Register the first tab's surface in all tracking dictionaries.
-            // This ensures destroyAllSurfaces can find it without special-casing.
+            // Register every owner map before installing event handlers.
             if let firstTabID = tabManager.tabs.first?.id {
                 tabSurfaceMap[firstTabID] = surfaceID
                 tabSurfaceViews[firstTabID] = surfaceView
@@ -831,8 +822,17 @@ extension MainWindowController {
             if let sourceSurfaceID {
                 surfaceWorkingDirectories[sourceSurfaceID] = directoryURL
             }
-            let gitProvider = GitInfoProviderImpl()
-            let branch = gitProvider.currentBranch(at: directoryURL)
+            if let previousDirectory {
+                projectResolver.invalidate(directory: previousDirectory)
+                if let provider = gitInfoProvider as? GitInfoProviderImpl {
+                    provider.invalidateCache(for: previousDirectory)
+                }
+            }
+            projectResolver.invalidate(directory: standardizedDirectory)
+            if let provider = gitInfoProvider as? GitInfoProviderImpl {
+                provider.invalidateCache(for: standardizedDirectory)
+            }
+            let branch = gitInfoProvider.currentBranch(at: directoryURL)
             tabManager.updateTab(id: tabID) { tab in
                 tab.workingDirectory = directoryURL
                 tab.gitBranch = branch

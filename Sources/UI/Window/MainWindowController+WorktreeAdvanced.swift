@@ -66,7 +66,7 @@ extension MainWindowController {
             basePath: config.basePath,
             originRepoPath: origin
         )
-        let service = AppDelegate.sharedWorktreeService
+        let service = worktreeService
         Task { [weak self, weak window] in
             do {
                 let plan = try await service.mergedCleanupPlan(

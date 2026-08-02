@@ -439,7 +439,6 @@ extension AppDelegate {
             self.restoreSurfaces(for: restoredTab, in: controller)
         }
 
-        let gitProvider = GitInfoProviderImpl()
         let projectConfigService = ProjectConfigService()
         let safeActiveIndex = min(max(result.activeTabIndex, 0), result.restoredTabs.count - 1)
         let activeTabID = result.restoredTabs[safeActiveIndex].tabID
@@ -447,7 +446,7 @@ extension AppDelegate {
         for restoredTab in result.restoredTabs {
             let isActiveRestoredTab = restoredTab.tabID == activeTabID
             let gitBranch = isActiveRestoredTab
-                ? gitProvider.currentBranch(at: restoredTab.workingDirectory)
+                ? gitInfoProvider.currentBranch(at: restoredTab.workingDirectory)
                 : nil
             let restoredModel = Tab(
                 id: restoredTab.tabID,

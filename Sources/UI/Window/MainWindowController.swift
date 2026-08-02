@@ -8,43 +8,8 @@ import SwiftUI
 
 // MARK: - Main Window Controller
 
-/// Controls the main application window layout.
-///
-/// The window contains a `CocxyCoreView` as its content view,
-/// connected to a `TerminalViewModel` that manages the terminal state.
-///
-/// ## Window configuration
-///
-/// - Transparent titlebar for a clean terminal appearance.
-/// - Full size content view so the terminal extends behind the titlebar.
-/// - Default size calculated from config (columns x rows x font metrics).
-/// - Minimum size (320x240) to prevent unusably small windows.
-/// - Frame autosave for position persistence between sessions.
-///
-/// ## Lifecycle
-///
-/// ```
-/// MainWindowController(bridge:configService:)  -- Creates window + view + viewModel
-///   .showWindow(nil)                           -- Shows the window and makes it key
-///   window close                               -- Cleanup via windowWillClose
-/// ```
-///
-/// ## Extensions
-///
-/// Responsibilities are distributed across focused extension files:
-/// - `+Overlays.swift` — SwiftUI overlay lifecycle (Command Palette, Dashboard, etc.)
-/// - `+TabLifecycle.swift` — Tab creation, destruction, and surface wiring.
-/// - `+SplitActions.swift` — Split pane creation, navigation, and management.
-/// - `+SurfaceLifecycle.swift` — Terminal surface creation/destruction/OSC handling.
-/// - `+StatusBar.swift` — Status bar content and refresh.
-/// - `+Theme.swift` — Theme cycling and config application.
-/// - `+TabStrip.swift` — Horizontal tab strip refresh logic.
-/// - `+RemoteWorkspace.swift` — Remote workspace panel lifecycle.
-/// - `+BrowserPro.swift` — Browser Pro overlay panels (history, bookmarks).
-///
-/// - SeeAlso: `CocxyCoreView`
-/// - SeeAlso: `TerminalViewModel`
-/// - SeeAlso: `ConfigService`
+/// Owns one application window and coordinates its terminal, tabs, layout,
+/// overlays, and injected app-scoped services through focused extensions.
 @MainActor
 final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitViewDelegate, DashboardTabNavigating {
     static let codeReviewPanelWidthDefaultsKey = "agentCodeReviewPanelWidth"
@@ -176,6 +141,10 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// Manages the lifecycle and ordering of tabs.
     let tabManager: TabManager
+
+    let gitInfoProvider: any GitInfoProviding
+    let projectResolver: any ProjectResolving
+    let worktreeService: WorktreeService
 
     /// Presentation logic for the tab bar sidebar.
     private(set) var tabBarViewModel: TabBarViewModel?
@@ -762,6 +731,9 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         configService: ConfigService? = nil,
         tabManager: TabManager? = nil,
         auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
+        gitInfoProvider: (any GitInfoProviding)? = nil,
+        projectResolver: (any ProjectResolving)? = nil,
+        worktreeService: WorktreeService? = nil,
         terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil,
         voiceConsentCoordinator: VoiceConsentCoordinator = VoiceConsentCoordinator(),
         deferContentSetup: Bool = false
@@ -770,7 +742,12 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.terminalEngineFactory = terminalEngineFactory
         self.configService = configService
         self.voiceConsentCoordinator = voiceConsentCoordinator
-        self.tabManager = tabManager ?? TabManager()
+        let resolvedGitInfoProvider = gitInfoProvider ?? GitInfoProviderImpl()
+        self.gitInfoProvider = resolvedGitInfoProvider
+        self.projectResolver = projectResolver ?? CachedProjectResolver()
+        self.worktreeService = worktreeService
+            ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
+        self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
         self.auroraWorkspaceTitleStore = auroraWorkspaceTitleStore ?? AuroraWorkspaceTitleStore()
         self.terminalViewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
@@ -2533,8 +2510,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             return
         }
 
-        let gitProvider = GitInfoProviderImpl()
-        let branch = gitProvider.currentBranch(at: tab.workingDirectory)
+        let branch = gitInfoProvider.currentBranch(at: tab.workingDirectory)
         let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
         let originRepo = inheritProjectConfig ? tab.worktreeOriginRepo : nil
         let projectConfig = ProjectConfigService().loadConfig(
@@ -2566,18 +2542,18 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             }
         guard !snapshots.isEmpty else { return }
 
-        Task.detached(priority: .utility) { [snapshots, delay] in
+        let gitInfoProvider = self.gitInfoProvider
+        Task.detached(priority: .utility) { [snapshots, delay, gitInfoProvider] in
             if delay > 0 {
                 let nanoseconds = UInt64(delay * 1_000_000_000)
                 try? await Task.sleep(nanoseconds: nanoseconds)
             }
 
-            let gitProvider = GitInfoProviderImpl()
             let projectConfigService = ProjectConfigService()
             let results = snapshots.map { snapshot in
                 (
                     tabID: snapshot.tabID,
-                    branch: gitProvider.currentBranch(at: snapshot.workingDirectory),
+                    branch: gitInfoProvider.currentBranch(at: snapshot.workingDirectory),
                     projectConfig: projectConfigService.loadConfig(
                         for: snapshot.workingDirectory,
                         originRepo: snapshot.originRepo

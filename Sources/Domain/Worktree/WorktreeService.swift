@@ -91,24 +91,8 @@ enum WorktreeServiceError: Error, Equatable, Sendable {
 
 // MARK: - WorktreeService
 
-/// Actor that owns all `git worktree` side effects for a user session.
-///
-/// Every public method is `async` so the caller never blocks the main
-/// thread on a git invocation that can take seconds on a large repo.
-/// The actor boundary also serialises concurrent requests — two
-/// simultaneous `add` calls for the same origin repo never race past
-/// each other when generating unique IDs, choosing branch names, or
-/// persisting the manifest.
-///
-/// The service does **not** own a manifest store. Each operation
-/// receives the store that matches its origin repository so one service
-/// instance can be reused across multiple repos without re-instantiation.
-/// `WorktreeManifestStore.forRepo(basePath:originRepoPath:)` is the
-/// canonical way to construct the matching store.
-///
-/// Git discovery is delegated to `CodeReviewGit.resolveGitExecutableURL`
-/// so there is a single source of truth for the binary path across the
-/// code review workflow and the worktree workflow.
+/// Serializes git worktree side effects. Callers supply the per-repository
+/// manifest store; executable discovery remains centralized in `CodeReviewGit`.
 actor WorktreeService {
 
     /// Maximum number of id generations attempted before `add(...)`
@@ -128,6 +112,7 @@ actor WorktreeService {
     private let clock: @Sendable () -> Date
     private let randomIDProvider: @Sendable (Int) -> String
     private let isGitRepository: @Sendable (URL) -> Bool
+    private let mutationObserver: @Sendable ([URL]) async -> Void
 
     init(
         gitExecutableURLProvider: @escaping @Sendable () -> URL? = {
@@ -137,19 +122,20 @@ actor WorktreeService {
         randomIDProvider: @escaping @Sendable (Int) -> String = { length in
             WorktreeID.generate(length: length)
         },
-        isGitRepository: (@Sendable (URL) -> Bool)? = nil
+        isGitRepository: (@Sendable (URL) -> Bool)? = nil,
+        gitInfoProvider: (any GitInfoProviding)? = nil,
+        mutationObserver: @escaping @Sendable ([URL]) async -> Void = { _ in }
     ) {
         self.gitExecutableURLProvider = gitExecutableURLProvider
         self.clock = clock
         self.randomIDProvider = randomIDProvider
+        self.mutationObserver = mutationObserver
         if let isGitRepository {
             self.isGitRepository = isGitRepository
         } else {
-            // Default to a freshly constructed provider per call so tests
-            // that swap the filesystem contents between operations get
-            // accurate answers without cache pollution.
+            let provider = gitInfoProvider ?? GitInfoProviderImpl()
             self.isGitRepository = { url in
-                GitInfoProviderImpl().isGitRepository(at: url)
+                provider.isGitRepository(at: url)
             }
         }
     }
@@ -240,6 +226,7 @@ actor WorktreeService {
             )
             throw WorktreeServiceError.manifestError(error)
         }
+        await mutationObserver([originRepoPath, candidate.path])
         return entry
     }
 
@@ -314,6 +301,7 @@ actor WorktreeService {
         } catch let error as WorktreeManifestStoreError {
             throw WorktreeServiceError.manifestError(error)
         }
+        await mutationObserver([originRepoPath, entry.path])
         return entry
     }
 
@@ -358,6 +346,7 @@ actor WorktreeService {
             } catch let error as WorktreeManifestStoreError {
                 throw WorktreeServiceError.manifestError(error)
             }
+            await mutationObserver([originRepoPath] + pruned.map(\.path))
         }
         return pruned
     }
@@ -609,12 +598,14 @@ actor WorktreeService {
             )
         }
 
-        return WorktreePromotionResult(
+        let promotion = WorktreePromotionResult(
             entry: entry,
             candidateCommit: candidateCommit,
             mergedCommit: try revision("HEAD", at: originRepoPath),
             createdCandidateCommit: hasCandidateChanges
         )
+        await mutationObserver([originRepoPath, entry.path])
+        return promotion
     }
 
     // MARK: - Private helpers

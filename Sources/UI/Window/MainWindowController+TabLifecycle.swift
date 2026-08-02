@@ -115,8 +115,7 @@ extension MainWindowController {
         sendShellDirectoryChange: Bool = false
     ) {
         let worktreeRoot = entry.path
-        let gitProvider = GitInfoProviderImpl()
-        let branch = gitProvider.currentBranch(at: worktreeRoot)
+        let branch = gitInfoProvider.currentBranch(at: worktreeRoot)
 
         tabManager.updateTab(id: tabID) { tab in
             tab.workingDirectory = worktreeRoot
@@ -396,9 +395,10 @@ extension MainWindowController {
             }
 
         case .remove:
+            let worktreeService = self.worktreeService
             Task.detached {
                 do {
-                    _ = try await AppDelegate.sharedWorktreeService.remove(
+                    _ = try await worktreeService.remove(
                         id: worktreeID,
                         force: false,
                         originRepoPath: originRepo,

@@ -56,7 +56,7 @@ extension AppDelegate {
         }
 
         let originRepoPath = Self.resolveOriginRepoRoot(from: context.originRepoPath)
-        let service = Self.sharedWorktreeService
+        let service = await worktreeServiceSnapshot()
         let baseCommit = try await service.revision(request.baseRef, at: originRepoPath)
         var run = TaskRun(
             id: "task-\(UUID().uuidString.lowercased())",
@@ -214,7 +214,7 @@ extension AppDelegate {
             )
         }
 
-        let service = Self.sharedWorktreeService
+        let service = await worktreeServiceSnapshot()
         let store = WorktreeManifestStore.forRepo(
             basePath: run.worktreeBasePath,
             originRepoPath: run.originRepoPath

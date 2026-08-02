@@ -6,43 +6,8 @@ import Combine
 import CocxyShared
 import UserNotifications
 
-/// Main application delegate for Cocxy Terminal.
-///
-/// Responsibilities:
-/// - Initialize the terminal engine at launch.
-/// - Create and manage the main window via `MainWindowController`.
-/// - Coordinate app lifecycle events (launch, terminate, activate).
-/// - Trigger session save/restore at appropriate lifecycle points.
-///
-/// ## Extensions
-///
-/// Responsibilities are distributed across focused extension files:
-/// - `+MenuSetup.swift` — Application menu bar construction.
-/// - `+SessionManagement.swift` — Session persistence and restoration.
-/// - `+AgentWiring.swift` — Agent detection engine setup and event wiring.
-/// - `+RemoteWorkspace.swift` — Remote workspace service initialization.
-/// - `+BrowserPro.swift` — Browser Pro service initialization.
-///
-/// This delegate is intentionally thin. Business logic belongs in services
-/// and view models, not here.
-///
-/// ## Lifecycle
-///
-/// ```
-/// applicationDidFinishLaunching
-///   -> Create CocxyCoreBridge
-///   -> Initialize bridge with config
-///   -> Initialize agent detection engine (before window!)
-///   -> Create MainWindowController
-///   -> Show window
-///   -> Create terminal surface (engine already available)
-///   -> Wire agent detection to window
-///
-/// applicationWillTerminate
-///   -> Destroy terminal surface
-///   -> MainWindowController = nil
-///   -> Bridge = nil (deinit frees terminal resources)
-/// ```
+/// Coordinates app lifecycle and app-scoped services. Focused extension
+/// files own menu, session, agent, remote, and browser wiring.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
@@ -88,6 +53,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// The shared theme engine. Created once and injected where needed
     /// to avoid redundant file system scanning.
     private(set) var themeEngine: ThemeEngineImpl?
+
+    /// Shared filesystem-backed project dependencies. Keeping one provider
+    /// preserves its branch cache across tabs and windows.
+    let gitInfoProvider = GitInfoProviderImpl()
+    let projectResolver = CachedProjectResolver()
+
+    lazy var sharedWorktreeService: WorktreeService = {
+        let gitInfoProvider = self.gitInfoProvider
+        let projectResolver = self.projectResolver
+        return WorktreeService(
+            gitInfoProvider: gitInfoProvider,
+            mutationObserver: { directories in
+                for directory in directories {
+                    gitInfoProvider.invalidateCache(for: directory)
+                }
+                await MainActor.run {
+                    for directory in directories {
+                        projectResolver.invalidate(directory: directory)
+                    }
+                }
+            }
+        )
+    }()
 
     /// Workspace aliases are app-scoped so concurrent windows never persist
     /// divergent snapshots of the same identity map.
@@ -1647,6 +1635,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             bridge: bridge,
             configService: configService,
             auroraWorkspaceTitleStore: auroraWorkspaceTitleStore,
+            gitInfoProvider: gitInfoProvider,
+            projectResolver: projectResolver,
+            worktreeService: sharedWorktreeService,
             terminalEngineFactory: { [weak self] preference in
                 self?.makeInitializedTerminalEngine(preference: preference)
             },
