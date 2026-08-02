@@ -120,6 +120,44 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let replayResult = await router.route(request: signedRequest, identity: identity)
         #expect(try response(from: replayResult).status == 403)
         #expect(await actionRecorder.values == [action])
+
+        let terminalAction = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "viewport-scroll",
+            scrollDelta: 3
+        )
+        let terminalBody = try JSONEncoder().encode(terminalAction)
+        let terminalTimestamp = String(UInt64(Date().timeIntervalSince1970))
+        let terminalNonce = UUID().uuidString
+        let terminalResult = await router.route(
+            request: request(
+                method: "POST",
+                path: "/mobile/api/action",
+                headers: [
+                    "cookie": "cocxy_mobile=\(cookie)",
+                    "origin": "http://192.168.1.10:43120",
+                    "content-type": "application/json",
+                    "x-cocxy-timestamp": terminalTimestamp,
+                    "x-cocxy-nonce": terminalNonce,
+                    "x-cocxy-signature": try self.signature(
+                        body: terminalBody,
+                        timestamp: terminalTimestamp,
+                        nonce: terminalNonce,
+                        secret: bootstrap.actionSecret
+                    ),
+                ],
+                body: terminalBody
+            ),
+            identity: identity
+        )
+        let terminalResponse = try JSONDecoder().decode(
+            MobileMirrorActionResponse.self,
+            from: try response(from: terminalResult).body
+        )
+        #expect(terminalResponse.ok)
+        #expect(terminalResponse.snapshot == nil)
+        #expect(await actionRecorder.values == [action, terminalAction])
     }
 
     @Test("unpaired and internal test assets are not proxied")

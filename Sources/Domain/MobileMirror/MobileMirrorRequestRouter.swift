@@ -179,7 +179,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             let action = try JSONDecoder().decode(MobileMirrorAction.self, from: request.body)
             try action.validate()
             let snapshot = try await actionHandler(action, cookie, channelID, identity)
-            return .response(.json(MobileMirrorActionResponse.success(snapshot: snapshot)))
+            let responseSnapshot = action.kind == .terminalControl ? nil : snapshot
+            return .response(.json(MobileMirrorActionResponse.success(
+                snapshot: responseSnapshot
+            )))
         } catch {
             return errorResponse(error)
         }
@@ -209,7 +212,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         }
 
         let allowedStaticPaths = Set([
-            "/", "/index.html", "/terminal.js", "/mobile.js", "/protocol.js",
+            "/", "/index.html", "/terminal.js", "/mobile.js", "/mobile_crypto.js",
+            "/protocol.js",
             "/decoder.js", "/input.js", "/atlas.js", "/renderer.js", "/shaders.js",
             "/style.css",
         ])

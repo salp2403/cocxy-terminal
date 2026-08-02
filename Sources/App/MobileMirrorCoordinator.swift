@@ -302,6 +302,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             throw MobileMirrorError.sessionExpired
         }
         refreshSnapshot()
+        var publishesState = true
         switch action.kind {
         case .selectSession:
             guard let sessionID = action.sessionID,
@@ -312,11 +313,21 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
         case .terminalControl:
             let entry = try terminalEntry(for: action.sessionID)
-            guard routeRegistry.contains(sessionID: entry.sessionID.rawValue.uuidString),
-                  let writer = makeTerminalWriter(channelID: active.channelID) else {
+            guard routeRegistry.contains(sessionID: entry.sessionID.rawValue.uuidString) else {
                 throw MobileMirrorError.targetUnavailable
             }
-            try await writer.write(action: action, to: entry.tabID)
+            if action.controlType == "viewport-scroll" {
+                guard let scrollDelta = action.scrollDelta else {
+                    throw MobileMirrorError.invalidAction
+                }
+                try scrollTerminal(entry, deltaRows: scrollDelta)
+            } else {
+                guard let writer = makeTerminalWriter(channelID: active.channelID) else {
+                    throw MobileMirrorError.targetUnavailable
+                }
+                try await writer.write(action: action, to: entry.tabID)
+            }
+            publishesState = false
         case .agentRespond:
             let entry = try terminalEntry(for: action.sessionID)
             guard entry.agentState == .waitingInput,
@@ -332,7 +343,9 @@ final class MobileMirrorCoordinator: ObservableObject {
             guard let name = action.name else { throw MobileMirrorError.invalidAction }
             try await createProject(named: name, identity: identity)
         }
-        refreshSnapshotAndPublish()
+        if publishesState {
+            refreshSnapshotAndPublish()
+        }
         return snapshot
     }
 
@@ -344,6 +357,17 @@ final class MobileMirrorCoordinator: ObservableObject {
             throw MobileMirrorError.targetUnavailable
         }
         return entry
+    }
+
+    private func scrollTerminal(_ entry: SessionEntry, deltaRows: Int) throws {
+        guard let controller = appDelegate?.allWindowControllers.first(where: {
+            $0.windowID == entry.ownerWindowID
+        }), controller.tabManager.tab(for: entry.tabID) != nil,
+              let surfaceID = preferredSurfaceID(for: entry.tabID, controller: controller),
+              let bridge = controller.cocxyCoreBridge(forSurface: surfaceID) else {
+            throw MobileMirrorError.targetUnavailable
+        }
+        bridge.scrollViewport(surfaceID: surfaceID, deltaRows: deltaRows)
     }
 
     private func makeTerminalWriter(channelID: UUID) -> MobileMirrorTerminalWriter? {

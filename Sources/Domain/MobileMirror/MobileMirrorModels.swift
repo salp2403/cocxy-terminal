@@ -63,7 +63,7 @@ struct MobileMirrorActionResponse: Codable, Equatable, Sendable {
     let error: String?
     let snapshot: MobileMirrorSnapshot?
 
-    static func success(snapshot: MobileMirrorSnapshot) -> Self {
+    static func success(snapshot: MobileMirrorSnapshot?) -> Self {
         Self(ok: true, error: nil, snapshot: snapshot)
     }
 
@@ -184,23 +184,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
     func validate() throws {
         switch kind {
         case .terminalControl:
-            guard let sessionID, UUID(uuidString: sessionID) != nil,
-                  controlType == "key",
-                  (key == nil) != (text == nil),
-                  mouseAction == nil,
-                  row == nil,
-                  col == nil,
-                  button == nil,
-                  scrollDelta == nil,
-                  approvalID == nil,
-                  name == nil,
-                  key?.utf8.count ?? 0 <= 32,
-                  (key.map {
-                      MobileMirrorTerminalControl.supportedKeys.contains($0.lowercased())
-                  } ?? true),
-                  text?.utf8.count ?? 0 <= 8_192 else {
-                throw MobileMirrorError.invalidAction
-            }
+            try validateTerminalControl()
         case .selectSession:
             guard let sessionID, UUID(uuidString: sessionID) != nil else {
                 throw MobileMirrorError.invalidAction
@@ -244,6 +228,35 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
 
     private var actionAllowsApprovalText: Bool {
         kind == .approvalApprove || text == nil
+    }
+
+    private func validateTerminalControl() throws {
+        guard let sessionID, UUID(uuidString: sessionID) != nil,
+              approvalID == nil, name == nil else {
+            throw MobileMirrorError.invalidAction
+        }
+        switch controlType {
+        case "key":
+            guard (key == nil) != (text == nil),
+                  mouseAction == nil, row == nil, col == nil, button == nil,
+                  scrollDelta == nil,
+                  key?.utf8.count ?? 0 <= 32,
+                  (key.map {
+                      MobileMirrorTerminalControl.supportedKeys.contains($0.lowercased())
+                  } ?? true),
+                  text?.utf8.count ?? 0 <= 8_192 else {
+                throw MobileMirrorError.invalidAction
+            }
+        case "viewport-scroll":
+            guard key == nil, text == nil, mouseAction == nil,
+                  row == nil, col == nil, button == nil,
+                  let scrollDelta, scrollDelta != 0, (-64...64).contains(scrollDelta),
+                  !shift, !alt, !ctrl else {
+                throw MobileMirrorError.invalidAction
+            }
+        default:
+            throw MobileMirrorError.invalidAction
+        }
     }
 }
 

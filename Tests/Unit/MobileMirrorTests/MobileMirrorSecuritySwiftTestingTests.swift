@@ -135,8 +135,8 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
     }
 
-    @Test("terminal action rejects browser mouse controls")
-    func terminalActionRejectsMouseControl() {
+    @Test("terminal action permits bounded viewport scroll but rejects browser mouse controls")
+    func terminalActionValidatesViewportNavigation() throws {
         let action = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
@@ -148,6 +148,24 @@ struct MobileMirrorSecuritySwiftTestingTests {
         )
         #expect(throws: MobileMirrorError.invalidAction) {
             try action.validate()
+        }
+
+        let viewportScroll = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "viewport-scroll",
+            scrollDelta: 4
+        )
+        try viewportScroll.validate()
+
+        let unboundedScroll = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "viewport-scroll",
+            scrollDelta: 65
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try unboundedScroll.validate()
         }
 
         let ambiguous = MobileMirrorAction(
