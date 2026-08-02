@@ -744,7 +744,6 @@ extension AppDelegate {
                 "connections": "0",
             ]
         }
-
         var data: [String: String] = [
             "status": status.running ? "running" : "stopped",
             "running": status.running ? "true" : "false",
