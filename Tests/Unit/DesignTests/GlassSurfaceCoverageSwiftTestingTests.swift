@@ -98,6 +98,8 @@ struct GlassSurfaceCoverageSwiftTestingTests {
         "Sources/UI/Onboarding/OnboardingFlowView.swift",
         "Sources/UI/PluginMarketplace/PluginMarketplaceView.swift",
         "Sources/UI/Preferences/PreferencesView.swift",
+        "Sources/UI/ProjectHome/ProjectHomePanelView.swift",
+        "Sources/UI/ProjectHome/ProjectHomeUnavailablePanelView.swift",
         "Sources/UI/RemoteWorkspace/RemoteConnectionView.swift",
         "Sources/UI/RemoteWorkspace/RemoteProfileEditor.swift",
         "Sources/UI/RemoteWorkspace/SSHKeyManagerView.swift",

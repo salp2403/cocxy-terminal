@@ -48,7 +48,7 @@ struct ProjectHomePanelView: View {
                 }
             }
         }
-        .background(palette.backgroundPrimary.resolvedColor())
+        .glassPanelBackground()
         .task { viewModel.loadContext() }
         .sheet(isPresented: $viewModel.isTeamSheetPresented) {
             ProjectHomeTeamLaunchSheet(

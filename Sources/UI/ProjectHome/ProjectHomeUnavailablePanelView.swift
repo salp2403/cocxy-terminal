@@ -29,6 +29,6 @@ struct ProjectHomeUnavailablePanelView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(palette.backgroundPrimary.resolvedColor())
+        .glassPanelBackground()
     }
 }
