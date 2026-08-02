@@ -1,17 +1,19 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
+import Combine
 import Foundation
 
 /// Local workspace aliases keyed by canonical Aurora workspace identity.
 /// An empty stored value is an intentional reset to the automatic folder
 /// name, preventing a legacy per-tab alias from reappearing after restart.
 @MainActor
-final class AuroraWorkspaceTitleStore {
+final class AuroraWorkspaceTitleStore: ObservableObject {
     private static let defaultStorageKey = "aurora.workspace-titles.v1"
 
     private let defaults: UserDefaults
     private let storageKey: String
     private var storedValues: [String: String]
+    @Published private(set) var revision: UInt64 = 0
 
     init(
         defaults: UserDefaults = .standard,
@@ -56,5 +58,6 @@ final class AuroraWorkspaceTitleStore {
 
     private func persist() {
         defaults.set(storedValues, forKey: storageKey)
+        revision &+= 1
     }
 }

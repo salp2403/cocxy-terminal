@@ -832,6 +832,7 @@ extension MainWindowController {
             if let provider = gitInfoProvider as? GitInfoProviderImpl {
                 provider.invalidateCache(for: standardizedDirectory)
             }
+            observeProjectDirectory(standardizedDirectory, previousDirectory: previousDirectory)
             let branch = gitInfoProvider.currentBranch(at: directoryURL)
             tabManager.updateTab(id: tabID) { tab in
                 tab.workingDirectory = directoryURL
@@ -860,7 +861,6 @@ extension MainWindowController {
             }
 
             // Reload project config for the new working directory.
-            //
             // When the tab belongs to a cocxy-managed worktree and the
             // user has `inherit-project-config = true` (default), allow
             // the service to fall back to the origin repo's

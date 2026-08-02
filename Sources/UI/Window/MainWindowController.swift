@@ -144,6 +144,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     let gitInfoProvider: any GitInfoProviding
     let projectResolver: any ProjectResolving
+    let projectRegistry: ProjectRegistry?
     let worktreeService: WorktreeService
 
     /// Presentation logic for the tab bar sidebar.
@@ -562,8 +563,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// for the install / visibility helpers.
     var auroraChromeController: AuroraChromeController?
 
-    /// Workspace aliases are keyed by full project identity rather than
-    /// copied onto every tab in the group.
     let auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore
 
     /// Watchdog that guards against surfaces that enter `.launched`
@@ -731,6 +730,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         configService: ConfigService? = nil,
         tabManager: TabManager? = nil,
         auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
+        projectRegistry: ProjectRegistry? = nil,
         gitInfoProvider: (any GitInfoProviding)? = nil,
         projectResolver: (any ProjectResolving)? = nil,
         worktreeService: WorktreeService? = nil,
@@ -745,6 +745,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let resolvedGitInfoProvider = gitInfoProvider ?? GitInfoProviderImpl()
         self.gitInfoProvider = resolvedGitInfoProvider
         self.projectResolver = projectResolver ?? CachedProjectResolver()
+        self.projectRegistry = projectRegistry
         self.worktreeService = worktreeService
             ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
         self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
@@ -1647,7 +1648,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             }
     }
 
-    /// Processes a single event from the window event bus.
     private func handleWindowEvent(_ event: WindowEvent) {
         switch event {
         case .focusSession(let sessionID):
@@ -1659,11 +1659,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             window?.makeKeyAndOrderFront(nil)
             _ = focusTab(id: entry.tabID)
 
+        case .custom(let name, _) where name == "project.changed":
+            refreshProjectPresentation()
+
         case .themeChanged, .fontChanged, .configReloaded,
              .globalShortcut, .custom:
-            // These are handled at the AppDelegate level which already
-            // iterates all window controllers. Individual windows do not
-            // need to react to these bus events directly.
             break
         }
     }

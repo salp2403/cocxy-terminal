@@ -169,11 +169,6 @@ extension MainWindowController {
         applyAuroraChromeIfNeeded(for: appearance)
     }
 
-    /// Creates the controller, wires its callbacks to the live window
-    /// controller state and mounts the hosting views into the existing
-    /// containers. Called lazily so zero allocations happen while the
-    /// flag is off.
-    ///
     /// The function is a no-op after the first successful install so
     /// config reloads that leave `auroraEnabled` true do not rebuild
     /// subviews and lose scroll / focus state.
@@ -187,6 +182,7 @@ extension MainWindowController {
             tabManager: tabManager,
             store: agentStore,
             projectResolver: projectResolver,
+            projectRegistry: projectRegistry,
             gitInfoProvider: gitInfoProvider
         )
         auroraWorkspaceTitleStore.mergeMissing(
@@ -234,6 +230,9 @@ extension MainWindowController {
         }
         controller.onRenameWorkspace = { [weak self] workspaceID, newTitle in
             self?.applyAuroraWorkspaceRename(workspaceID: workspaceID, newTitle: newTitle)
+        }
+        controller.onSetWorkspaceCollapsed = { [weak self] workspaceID, collapsed in
+            self?.setProjectCollapsed(collapsed, projectID: ProjectID(rawValue: workspaceID))
         }
         controller.onCloseOtherSessions = { [weak self] tabID in
             guard let self else { return }
@@ -902,7 +901,6 @@ extension MainWindowController {
             for: workspaceID,
             migrating: legacyIdentities
         )
-        refreshAuroraChromeAfterTabMutation()
     }
 
     private static func localizedAuroraWorkspaceRenamePlaceholder(using localizer: AppLocalizer) -> String {

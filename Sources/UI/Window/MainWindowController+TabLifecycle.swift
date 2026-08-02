@@ -72,6 +72,7 @@ extension MainWindowController {
             title: newTab.displayTitle,
             workingDirectory: dir
         ))
+        observeProjectDirectory(dir)
 
         // Load project config from .cocxy.toml if present in the tab's directory.
         let projectConfigService = ProjectConfigService()

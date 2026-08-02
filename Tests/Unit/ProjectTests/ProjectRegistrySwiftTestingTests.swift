@@ -1,5 +1,6 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 
+import Combine
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -7,6 +8,18 @@ import Testing
 @MainActor
 @Suite("Project registry", .serialized)
 struct ProjectRegistrySwiftTestingTests {
+    private final class RootResolver: AuroraWorkspaceRootResolver, @unchecked Sendable {
+        let roots: [String: URL]
+
+        init(roots: [String: URL]) {
+            self.roots = roots
+        }
+
+        func workspaceRoot(for directory: URL) -> URL? {
+            roots[directory.standardizedFileURL.path]
+        }
+    }
+
     @Test("legacy records decode optional fields with stable defaults")
     func legacyDecodeDefaults() throws {
         let data = Data(#"[{"id":"/tmp/legacy-project"}]"#.utf8)
@@ -120,6 +133,72 @@ struct ProjectRegistrySwiftTestingTests {
         #expect(record.isPinned)
         #expect(record.isCollapsed)
         #expect(record.lastOpenedAt == Date(timeIntervalSince1970: 300))
+    }
+
+    @Test("persisted collapse drives the Aurora workspace snapshot")
+    func collapseProjectsIntoAurora() throws {
+        let source = Design.AuroraSourceTab(
+            id: "tab",
+            name: "Shell",
+            workspaceGroup: "/tmp/project",
+            workspaceTitle: nil,
+            workspaceDefaultName: "project",
+            workspaceBranch: "main",
+            branch: "main",
+            surfaces: [],
+            workingDirectory: "/tmp/project",
+            workspaceRootPath: "/tmp/project"
+        )
+
+        let workspace = try #require(Design.AuroraWorkspaceAdapter.workspaces(
+            from: [source],
+            collapsedWorkspaceIDs: ["/tmp/project"]
+        ).first)
+
+        #expect(workspace.isCollapsed)
+    }
+
+    @Test("directory changes inside one project do not count repeated opens")
+    func sameProjectDirectoryChangesAreDeduplicated() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let project = URL(fileURLWithPath: "/tmp/project")
+        let first = project.appendingPathComponent("Sources")
+        let second = project.appendingPathComponent("Tests")
+        let registry = ProjectRegistry(
+            store: ProjectRegistryStore(fileURL: sandbox.appendingPathComponent("registry.json"))
+        )
+        let resolver = CachedProjectResolver(rootResolver: RootResolver(roots: [
+            first.path: project,
+            second.path: project,
+        ]))
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            projectRegistry: registry,
+            projectResolver: resolver,
+            deferContentSetup: true
+        )
+
+        controller.observeProjectDirectory(first)
+        controller.observeProjectDirectory(second, previousDirectory: first)
+
+        #expect(registry.records.count == 1)
+        #expect(registry.records.first?.openCount == 1)
+    }
+
+    @Test("workspace alias persistence publishes a project refresh signal")
+    func aliasPublishesRefreshSignal() throws {
+        let suiteName = "ProjectAliasSignalTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let store = AuroraWorkspaceTitleStore(defaults: defaults, storageKey: "titles")
+        var revisions: [UInt64] = []
+        let cancellable = store.$revision.dropFirst().sink { revisions.append($0) }
+
+        store.setTitle("Backend", for: "/tmp/project")
+
+        #expect(revisions == [1])
+        _ = cancellable
     }
 
     @Test("encoded records do not claim ownership of aliases")

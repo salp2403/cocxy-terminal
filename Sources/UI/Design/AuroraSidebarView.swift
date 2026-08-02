@@ -17,11 +17,6 @@ extension Design {
     /// render with the catalog baseline without booting the binder.
     struct AuroraSidebarView: View {
         let workspaces: [AuroraWorkspace]
-        /// Session id of the currently active tab. This is a plain
-        /// snapshot value instead of a child-owned binding because the
-        /// sidebar never mutates selection directly; it only renders the
-        /// active row that the controller resolved from the live tab
-        /// manager snapshot.
         let activeSessionID: String?
         /// Per-workspace notes summaries keyed by
         /// `NoteWorkspaceID.rawValue`. Empty (`[:]`) hides every notes
@@ -33,7 +28,6 @@ extension Design {
         @State private var hoveredSession: HoveredSessionContext?
         @State private var hoveredWorkspaceID: String?
         @State private var sessionFrames: [String: CGRect] = [:]
-        @State private var workspaceDisclosure = AuroraWorkspaceDisclosureOverrides()
         @State private var notesExpansion: [String: Bool] = [:]
         @State private var renameState = AuroraInlineRenameState()
         @FocusState private var focusedWorkspaceRenameID: String?
@@ -45,6 +39,7 @@ extension Design {
         var onTogglePinSession: ((String) -> Void)? = nil
         var onRenameSession: ((String, String?) -> Void)? = nil
         var onRenameWorkspace: ((String, String?) -> Void)? = nil
+        var onSetWorkspaceCollapsed: ((String, Bool) -> Void)? = nil
         var renameRequest: AuroraSidebarRenameRequest? = nil
         var onCloseOtherSessions: ((String) -> Void)? = nil
         var onMoveSessionUp: ((String) -> Void)? = nil
@@ -130,8 +125,7 @@ extension Design {
                 sessionFrames = frames
                 publishHoveredSessionIfPossible()
             }
-            .onChange(of: workspaces.map(\.id)) { _, workspaceIDs in
-                workspaceDisclosure.prune(validWorkspaceIDs: workspaceIDs)
+            .onChange(of: workspaces.map(\.id)) { _, _ in
                 cancelRenameIfTargetDisappeared()
             }
             .onChange(of: workspaces.flatMap { $0.sessions.map(\.id) }) { _, _ in
@@ -371,7 +365,7 @@ extension Design {
         @ViewBuilder
         private func workspaceBlock(for workspace: AuroraWorkspace) -> some View {
             let filtered = workspace.filteringSessions(by: query)
-            let isCollapsed = workspaceDisclosure.isCollapsed(workspace)
+            let isCollapsed = workspace.isCollapsed
             VStack(alignment: .leading, spacing: Spacing.hairline) {
                 workspaceRow(workspace, isCollapsed: isCollapsed)
                 if !isCollapsed {
@@ -484,7 +478,7 @@ extension Design {
                         isCollapsed: isCollapsed,
                         isRenaming: true
                     )
-                } else {
+                } else if onSetWorkspaceCollapsed != nil {
                     Button(action: { toggleCollapsed(workspace) }) {
                         workspaceLeadingContent(
                             workspace,
@@ -493,6 +487,12 @@ extension Design {
                         )
                     }
                     .buttonStyle(.plain)
+                } else {
+                    workspaceLeadingContent(
+                        workspace,
+                        isCollapsed: isCollapsed,
+                        isRenaming: false
+                    )
                 }
 
                 if onRenameWorkspace != nil {
@@ -599,7 +599,7 @@ extension Design {
                 if let workspace = workspaces.first(where: { workspace in
                     workspace.sessions.contains { $0.id == sessionID }
                 }) {
-                    workspaceDisclosure.setCollapsed(false, for: workspace)
+                    onSetWorkspaceCollapsed?(workspace.id, false)
                 }
             }
         }
@@ -647,7 +647,7 @@ extension Design {
         }
 
         private func toggleCollapsed(_ workspace: AuroraWorkspace) {
-            workspaceDisclosure.toggle(workspace)
+            onSetWorkspaceCollapsed?(workspace.id, !workspace.isCollapsed)
         }
 
         // MARK: - Footer

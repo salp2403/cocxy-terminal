@@ -464,36 +464,6 @@ extension Design {
         }
     }
 
-    /// Presentation-only disclosure overrides for the Aurora sidebar.
-    ///
-    /// Live workspace snapshots are rebuilt as tabs, branches, panes, and
-    /// agent states change. Keeping the user's expanded/collapsed choice in
-    /// this small view-state helper prevents those refreshes from reopening a
-    /// workspace immediately after the user closes it.
-    struct AuroraWorkspaceDisclosureOverrides: Equatable, Sendable {
-        private var collapsedByWorkspaceID: [String: Bool]
-
-        init(collapsedByWorkspaceID: [String: Bool] = [:]) {
-            self.collapsedByWorkspaceID = collapsedByWorkspaceID
-        }
-
-        func isCollapsed(_ workspace: AuroraWorkspace) -> Bool {
-            collapsedByWorkspaceID[workspace.id] ?? workspace.isCollapsed
-        }
-
-        mutating func toggle(_ workspace: AuroraWorkspace) {
-            collapsedByWorkspaceID[workspace.id] = !isCollapsed(workspace)
-        }
-
-        mutating func setCollapsed(_ collapsed: Bool, for workspace: AuroraWorkspace) {
-            collapsedByWorkspaceID[workspace.id] = collapsed
-        }
-
-        mutating func prune(validWorkspaceIDs: [String]) {
-            let validIDs = Set(validWorkspaceIDs)
-            collapsedByWorkspaceID = collapsedByWorkspaceID.filter { validIDs.contains($0.key) }
-        }
-    }
 }
 
 // MARK: - Status bar models

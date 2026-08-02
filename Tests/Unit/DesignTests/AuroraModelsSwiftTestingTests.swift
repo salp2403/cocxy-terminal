@@ -47,50 +47,27 @@ struct AuroraWorkspaceModelTests {
 
     // MARK: - Collapsed state
 
-    @Test("Disclosure overrides fall back to the workspace snapshot until the user toggles")
-    func disclosureOverridesUseWorkspaceDefaultUntilToggle() {
+    @Test("Workspace collapse is carried by the presentation snapshot")
+    func collapsedStateUsesWorkspaceSnapshot() {
         let expanded = Design.sampleWorkspaces.first { !$0.isCollapsed }!
         let collapsed = Design.sampleWorkspaces.first { $0.isCollapsed }!
-        var overrides = Design.AuroraWorkspaceDisclosureOverrides()
 
-        #expect(overrides.isCollapsed(expanded) == false)
-        #expect(overrides.isCollapsed(collapsed) == true)
-
-        overrides.toggle(expanded)
-        overrides.toggle(collapsed)
-
-        #expect(overrides.isCollapsed(expanded) == true)
-        #expect(overrides.isCollapsed(collapsed) == false)
+        #expect(expanded.isCollapsed == false)
+        #expect(collapsed.isCollapsed == true)
     }
 
-    @Test("Disclosure override survives refreshed workspace snapshots with the same identity")
-    func disclosureOverrideSurvivesSnapshotRefresh() {
+    @Test("Filtering preserves persisted collapse state")
+    func filteringPreservesCollapseState() {
         let workspace = Design.sampleWorkspaces.first { !$0.isCollapsed }!
-        var overrides = Design.AuroraWorkspaceDisclosureOverrides()
-
-        overrides.toggle(workspace)
-
-        let refreshed = Design.AuroraWorkspace(
+        let collapsed = Design.AuroraWorkspace(
             id: workspace.id,
             name: workspace.name,
             branch: workspace.branch,
-            isCollapsed: false,
+            isCollapsed: true,
             sessions: workspace.sessions
         )
 
-        #expect(overrides.isCollapsed(refreshed) == true)
-    }
-
-    @Test("Disclosure pruning drops overrides for workspaces that no longer exist")
-    func disclosurePruneDropsMissingWorkspaceOverrides() {
-        let workspace = Design.sampleWorkspaces.first { !$0.isCollapsed }!
-        var overrides = Design.AuroraWorkspaceDisclosureOverrides()
-        overrides.toggle(workspace)
-        #expect(overrides.isCollapsed(workspace) == true)
-
-        overrides.prune(validWorkspaceIDs: ["another-workspace"])
-
-        #expect(overrides.isCollapsed(workspace) == workspace.isCollapsed)
+        #expect(collapsed.filteringSessions(by: "").isCollapsed)
     }
 
     // MARK: - Filter

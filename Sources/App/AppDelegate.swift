@@ -54,10 +54,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// to avoid redundant file system scanning.
     private(set) var themeEngine: ThemeEngineImpl?
 
-    /// Shared filesystem-backed project dependencies. Keeping one provider
-    /// preserves its branch cache across tabs and windows.
     let gitInfoProvider = GitInfoProviderImpl()
     let projectResolver = CachedProjectResolver()
+    let projectRegistry = ProjectRegistry()
+    var projectRegistryChangeCancellable: AnyCancellable?
 
     lazy var sharedWorktreeService: WorktreeService = {
         let gitInfoProvider = self.gitInfoProvider
@@ -77,8 +77,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
     }()
 
-    /// Workspace aliases are app-scoped so concurrent windows never persist
-    /// divergent snapshots of the same identity map.
     let auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
 
     /// The session manager for persistence and restoration.
@@ -157,13 +155,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Menu bar status item showing agent count.
     private(set) var menuBarItem: MenuBarStatusItem?
 
-    /// Central session registry for multi-window synchronization.
-    /// Tracks all terminal sessions across all windows, enabling
-    /// cross-window tab drag, synchronized badges, and shared agent state.
     private(set) var sessionRegistry: SessionRegistryImpl?
 
-    /// Event bus for cross-window communication (theme sync, config
-    /// reload, focus session). Created alongside the session registry.
     private(set) var windowEventBus: WindowEventBusImpl?
 
     /// Aggregates notification unread counts across all windows.
@@ -518,6 +511,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         additionalWindowControllers.removeAll()
         windowController?.destroyAllSurfaces()
         windowController = nil
+        projectRegistryChangeCancellable?.cancel()
+        projectRegistryChangeCancellable = nil
         agentStateAggregator = nil
         notificationAggregator = nil
         windowEventBus = nil
@@ -669,6 +664,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let registry = SessionRegistryImpl()
         sessionRegistry = registry
         windowEventBus = WindowEventBusImpl()
+        startProjectChangeBroadcasting()
         notificationAggregator = GlobalNotificationAggregatorImpl(registry: registry)
         agentStateAggregator = AgentStateAggregatorImpl(registry: registry)
     }
@@ -1635,6 +1631,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             bridge: bridge,
             configService: configService,
             auroraWorkspaceTitleStore: auroraWorkspaceTitleStore,
+            projectRegistry: projectRegistry,
             gitInfoProvider: gitInfoProvider,
             projectResolver: projectResolver,
             worktreeService: sharedWorktreeService,
@@ -1647,6 +1644,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         configureSharedServices(for: controller, registerWindow: true)
 
         if registerInitialSession, let initialTab = controller.tabManager.tabs.first {
+            controller.observeProjectDirectory(initialTab.workingDirectory)
             registerSession(for: initialTab, in: controller)
         }
 

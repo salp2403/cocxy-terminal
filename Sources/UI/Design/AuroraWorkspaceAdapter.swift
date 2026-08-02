@@ -146,7 +146,10 @@ extension Design {
     ///    live pane dominates the user's attention.
     enum AuroraWorkspaceAdapter {
 
-        static func workspaces(from sources: [AuroraSourceTab]) -> [AuroraWorkspace] {
+        static func workspaces(
+            from sources: [AuroraSourceTab],
+            collapsedWorkspaceIDs: Set<String> = []
+        ) -> [AuroraWorkspace] {
             guard !sources.isEmpty else { return [] }
 
             // Preserve insertion order across groups by tracking the
@@ -176,7 +179,7 @@ extension Design {
                     id: group,
                     name: workspaceName,
                     branch: branch,
-                    isCollapsed: false,
+                    isCollapsed: collapsedWorkspaceIDs.contains(group),
                     sessions: sessions,
                     notesWorkspaceID: notesWorkspaceID
                 )

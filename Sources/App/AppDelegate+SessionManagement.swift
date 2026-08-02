@@ -335,6 +335,7 @@ extension AppDelegate {
         }
 
         if let initialTab = controller.tabManager.tabs.first {
+            controller.observeProjectDirectory(initialTab.workingDirectory)
             registerSession(for: initialTab, in: controller)
         }
 
@@ -466,6 +467,7 @@ extension AppDelegate {
                 terminalEnginePreference: restoredTab.terminalEnginePreference
             )
             controller.tabManager.insertExternalTab(restoredModel, activate: false)
+            controller.observeProjectDirectory(restoredModel.workingDirectory)
             registerSession(
                 for: restoredModel,
                 in: controller,
@@ -473,10 +475,6 @@ extension AppDelegate {
                 titleOverride: restoredTab.title
             )
 
-            // Apply origin-repo fallback when the user opted in and the
-            // tab actually has a worktree origin. For tabs without a
-            // worktree the gate short-circuits to nil, preserving the
-            // legacy single-walk behaviour.
             let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
             let originRepo = inheritProjectConfig ? restoredTab.worktreeOriginRepo : nil
             if isActiveRestoredTab {

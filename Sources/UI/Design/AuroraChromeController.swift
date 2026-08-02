@@ -11,8 +11,6 @@ final class AuroraChromeController: ObservableObject {
 
     // MARK: - Published state
 
-    /// Aurora workspace tree consumed by the sidebar and the status-bar
-    /// agent matrix. Rebuilt on every snapshot update.
     @Published var workspaces: [Design.AuroraWorkspace] = []
 
     /// Session id matching `Tab.id.uuidString`, used by the sidebar to
@@ -85,11 +83,10 @@ final class AuroraChromeController: ObservableObject {
     @Published var sidebarTooltip: Design.AuroraSidebarTooltipSnapshot?
     @Published var sidebarTooltipSidebarFrameInOverlay: CGRect = .zero
 
-    // MARK: - Dependencies (weak)
-
     private weak var tabManager: TabManager?
     private weak var store: AgentStatePerSurfaceStore?
     private let projectResolver: (any ProjectResolving)?
+    private let projectRegistry: ProjectRegistry?
     private let gitInfoProvider: (any GitInfoProviding)?
 
     // MARK: - Host callbacks
@@ -111,13 +108,10 @@ final class AuroraChromeController: ObservableObject {
     /// cleanup.
     var onCloseSession: ((TabID) -> Void)?
 
-    /// Context-menu parity with the classic sidebar. Aurora rows are
-    /// SwiftUI, not `TabItemView`, so pinning / close-others / movement
-    /// are routed through explicit callbacks instead of reusing AppKit's
-    /// `NSMenuItem` target-action handlers.
     var onTogglePinSession: ((TabID) -> Void)?
     var onRenameSession: ((TabID, String?) -> Void)?
     var onRenameWorkspace: ((String, String?) -> Void)?
+    var onSetWorkspaceCollapsed: ((String, Bool) -> Void)?
     var onCloseOtherSessions: ((TabID) -> Void)?
     var onMoveSessionUp: ((TabID) -> Void)?
     var onMoveSessionDown: ((TabID) -> Void)?
@@ -125,9 +119,6 @@ final class AuroraChromeController: ObservableObject {
     var onSidebarDisplayModeChange: ((AuroraSidebarDisplayMode) -> Void)?
     var onSidebarPrimaryInfoChange: ((AuroraSidebarPrimaryInfo) -> Void)?
 
-    /// Supplies the latest aliases keyed by full workspace identity.
-    /// A closure keeps refreshes aligned with local persistence without
-    /// making the presentation controller own storage policy.
     var workspaceTitlesProvider: (() -> [String: String])?
 
     /// Invoked when the user presses the palette hotkey inside an
@@ -252,11 +243,13 @@ final class AuroraChromeController: ObservableObject {
         tabManager: TabManager,
         store: AgentStatePerSurfaceStore,
         projectResolver: (any ProjectResolving)? = nil,
+        projectRegistry: ProjectRegistry? = nil,
         gitInfoProvider: (any GitInfoProviding)? = nil
     ) {
         self.tabManager = tabManager
         self.store = store
         self.projectResolver = projectResolver
+        self.projectRegistry = projectRegistry
         self.gitInfoProvider = gitInfoProvider
         updateClockLabel()
     }
@@ -286,9 +279,6 @@ final class AuroraChromeController: ObservableObject {
 
     // MARK: - Subscriptions
 
-    /// Starts observing domain changes. Called by the host after the
-    /// controller is installed. Safe to call multiple times; prior
-    /// subscriptions are dropped so reinstalls do not accumulate sinks.
     func beginObservingDomain() {
         cancellables.removeAll()
 
@@ -309,6 +299,12 @@ final class AuroraChromeController: ObservableObject {
         store.$states
             .sink { [weak self] states in
                 self?.refreshSources(stateSnapshot: states)
+            }
+            .store(in: &cancellables)
+
+        projectRegistry?.$records
+            .sink { [weak self] records in
+                self?.refreshSources(projectRecordsSnapshot: records)
             }
             .store(in: &cancellables)
 
@@ -440,17 +436,12 @@ final class AuroraChromeController: ObservableObject {
         )
     }
 
-    /// Rebuilds the workspace tree while using an explicit active tab
-    /// and domain snapshots. `@Published` emits during `willSet`, so
-    /// sinks must use the value Combine just delivered instead of
-    /// reading the source object again. Otherwise the terminal/agent can
-    /// update correctly while Aurora repaints from the previous tab list,
-    /// previous active tab, or previous per-surface agent state until
-    /// some unrelated refresh happens.
+    /// Explicit snapshots avoid rereading stale `@Published` values during `willSet`.
     private func refreshSources(
         tabsSnapshot: [Tab]? = nil,
         activeTabID: TabID? = nil,
-        stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil
+        stateSnapshot: [SurfaceID: SurfaceAgentState]? = nil,
+        projectRecordsSnapshot: [ProjectRecord]? = nil
     ) {
         guard let tabManager, let store else { return }
 
@@ -468,7 +459,12 @@ final class AuroraChromeController: ObservableObject {
         )
         let resolvedActiveTabID = activeTabID ?? tabManager.activeTabID
         activeSessionID = resolvedActiveTabID?.rawValue.uuidString
-        workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: sources)
+        let records = projectRecordsSnapshot ?? projectRegistry?.records ?? []
+        let collapsedIDs = Set(records.lazy.filter(\.isCollapsed).map { $0.id.rawValue })
+        workspaces = Design.AuroraWorkspaceAdapter.workspaces(
+            from: sources,
+            collapsedWorkspaceIDs: collapsedIDs
+        )
         // Re-fetch notes summaries when the visible workspace IDs
         // change (tab opened/closed, project switched). Internal dedup
         // makes this safe to call on every refresh — agent state churn
@@ -747,6 +743,7 @@ struct AuroraSidebarHost: View {
             onRenameWorkspace: { workspaceID, title in
                 controller.onRenameWorkspace?(workspaceID, title)
             },
+            onSetWorkspaceCollapsed: controller.onSetWorkspaceCollapsed,
             renameRequest: controller.sidebarRenameRequest,
             onCloseOtherSessions: { sessionID in
                 if let tabID = controller.tabID(forSessionID: sessionID) {
