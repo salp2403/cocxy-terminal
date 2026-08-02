@@ -2569,6 +2569,8 @@
 "timeline.title" = "Línea de tiempo de agentes";
 "timeline.scope.all" = "Todas las ventanas";
 "timeline.scope.current" = "Esta ventana";
+"timeline.project.all" = "Todos los proyectos";
+"timeline.project.filter.accessibility" = "Filtrar por proyecto";
 "timeline.export.json" = "Exportar JSON";
 "timeline.export.markdown" = "Exportar Markdown";
 "timeline.export.accessibility" = "Exportar línea de tiempo";

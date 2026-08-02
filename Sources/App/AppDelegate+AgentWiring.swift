@@ -615,12 +615,9 @@ extension AppDelegate {
             self?.bindDroppedHookSessionToFocusedTab(context) ?? false
         }
 
-        // Timeline: subscribes to hook events.
         let timelineStore = AgentTimelineStoreImpl()
         self.agentTimelineStore = timelineStore
 
-        // Inject the timeline store into all windows so timeline panels
-        // share a single event stream across the app.
         for controller in allWindowControllers {
             controller.injectedTimelineStore = timelineStore
         }
@@ -649,7 +646,8 @@ extension AppDelegate {
                 let timelineEvent = TimelineEvent.from(
                     hookEvent: hookEvent,
                     windowID: eventWindowID,
-                    windowLabel: self.windowDisplayName(for: eventWindowID)
+                    windowLabel: self.windowDisplayName(for: eventWindowID),
+                    projectIdentity: self.timelineProjectIdentity(cwd: hookEvent.cwd, resolved: resolved)
                 )
                 store.addEvent(timelineEvent)
             }
@@ -785,8 +783,9 @@ extension AppDelegate {
 
         cocxyBridge.semanticAdapter.timelinePublisher
             .receive(on: DispatchQueue.main)
-            .sink { [weak timelineStore] event in
-                timelineStore?.addEvent(event)
+            .sink { [weak self, weak timelineStore] event in
+                let identity = self?.timelineProjectIdentity(forSessionID: event.sessionId)
+                timelineStore?.addEvent(event.assigningProjectIdentity(identity))
             }
             .store(in: &hookCancellables)
     }

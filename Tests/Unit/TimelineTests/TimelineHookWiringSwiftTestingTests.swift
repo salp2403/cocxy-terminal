@@ -38,4 +38,43 @@ struct TimelineHookWiringSwiftTestingTests {
         #expect(events?.count == 1)
         #expect(events?.first?.type == .userPrompt)
     }
+
+    @Test("Hook timeline events resolve nested directories to the canonical project")
+    func hookTimelineEventsCarryCanonicalProjectIdentity() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-timeline-project-\(UUID().uuidString)", isDirectory: true)
+        let nested = root.appendingPathComponent("Sources", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+
+        let delegate = AppDelegate()
+        let controller = MainWindowController(bridge: MockTerminalEngine())
+        let tabID = controller.createTab(workingDirectory: nested)
+        delegate.installWindowControllerForTesting(controller)
+        let receiver = HookEventReceiverImpl()
+        delegate.hookEventReceiver = receiver
+        delegate.wireAgentDashboardAndTimeline(
+            AgentDetectionEngineImpl(compiledConfigs: [], debounceInterval: 0)
+        )
+
+        receiver.receive(HookEvent(
+            type: .userPromptSubmit,
+            sessionId: "timeline-project",
+            timestamp: Date(),
+            cwd: nested.path
+        ))
+        try await Task.sleep(for: .milliseconds(100))
+
+        let event = delegate.agentTimelineStore?.events(for: "timeline-project").first
+        #expect(event?.projectIdentity == ProjectID(rootURL: root))
+        delegate.bindHookSession("timeline-project", to: tabID)
+        #expect(
+            delegate.timelineProjectIdentity(forSessionID: "timeline-project")
+                == ProjectID(rootURL: root)
+        )
+    }
 }

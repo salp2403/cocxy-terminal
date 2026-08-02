@@ -2569,6 +2569,8 @@
 "timeline.title" = "Agent Timeline";
 "timeline.scope.all" = "All Windows";
 "timeline.scope.current" = "This Window";
+"timeline.project.all" = "All Projects";
+"timeline.project.filter.accessibility" = "Filter by project";
 "timeline.export.json" = "Export JSON";
 "timeline.export.markdown" = "Export Markdown";
 "timeline.export.accessibility" = "Export timeline";
