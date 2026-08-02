@@ -56,6 +56,34 @@ struct TaskInboxStoreSwiftTestingTests {
         #expect(issues == [TaskInboxIssue(source: .queue, message: "Queue unavailable")])
         #expect(store.entries(for: project).count == 2)
     }
+
+    @Test("observes live sessions registered by any window")
+    func observesCrossWindowSessionRegistryChanges() throws {
+        let project = ProjectID(rawValue: "/tmp/cross-window-project")
+        let store = TaskInboxStore(projectResolver: FixedProjectResolver(projectID: project))
+        let registry = SessionRegistryImpl()
+        store.connect(sessionRegistry: registry, dashboard: nil)
+
+        let ownerWindowID = WindowID()
+        let tabID = TabID()
+        let session = SessionEntry(
+            ownerWindowID: ownerWindowID,
+            tabID: tabID,
+            title: "Cross-window implementation",
+            workingDirectory: URL(fileURLWithPath: project.rawValue, isDirectory: true),
+            agentState: .working,
+            detectedAgentName: "Codex"
+        )
+        registry.registerSession(session)
+
+        let entry = try #require(store.entries(for: project).first)
+        #expect(entry.kind == .liveAgent)
+        #expect(entry.navigation?.windowID == ownerWindowID)
+        #expect(entry.navigation?.tabID == tabID)
+
+        registry.updateAgentState(session.sessionID, state: .finished, agentName: "Codex")
+        #expect(store.entries(for: project).isEmpty)
+    }
 }
 
 @MainActor

@@ -90,16 +90,10 @@ struct ProjectHomePanelView: View {
                     .truncationMode(.middle)
 
                 HStack(spacing: 12) {
-                    metadataLabel(
-                        icon: "arrow.triangle.branch",
-                        text: viewModel.gitMetadata?.branch
-                            ?? localizer.string("projectHome.git.loading", fallback: "Git status pending")
-                    )
-                    if let summary = viewModel.gitMetadata?.statusSummary {
-                        metadataLabel(icon: "circle.lefthalf.filled", text: summary)
-                    }
-                    if let remote = viewModel.gitMetadata?.remoteOrigin {
-                        metadataLabel(icon: "network", text: remote)
+                    ViewThatFits(in: .horizontal) {
+                        projectMetadata(includeRemote: true, includeStatus: true)
+                        projectMetadata(includeRemote: false, includeStatus: true)
+                        projectMetadata(includeRemote: false, includeStatus: false)
                     }
                 }
             }
@@ -113,30 +107,95 @@ struct ProjectHomePanelView: View {
     }
 
     private var quickActions: some View {
-        HStack(spacing: 8) {
-            actionButton(
-                title: localizer.string("projectHome.action.newSession", fallback: "New Session"),
-                icon: "plus.square",
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                quickActionButtons(compact: false)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            HStack(spacing: 6) {
+                quickActionButtons(compact: true)
+            }
+            .fixedSize(horizontal: true, vertical: false)
+            quickActionsMenu
+        }
+    }
+
+    @ViewBuilder
+    private func quickActionButtons(compact: Bool) -> some View {
+        projectAction(
+            title: localizer.string("projectHome.action.newSession", fallback: "New Session"),
+            icon: "plus.square",
+            compact: compact,
+            action: viewModel.actions.createSession
+        )
+        if let createWorktree = viewModel.actions.createWorktree {
+            projectAction(
+                title: localizer.string("projectHome.action.newWorktree", fallback: "New Worktree"),
+                icon: "arrow.triangle.branch",
+                compact: compact,
+                action: createWorktree
+            )
+        }
+        projectAction(
+            title: localizer.string("projectHome.action.launchTeam", fallback: "Launch Team"),
+            icon: "person.3",
+            compact: compact,
+            action: { viewModel.isTeamSheetPresented = true }
+        )
+        projectAction(
+            title: localizer.string("projectHome.action.codeReview", fallback: "Code Review"),
+            icon: "doc.text.magnifyingglass",
+            compact: compact,
+            action: viewModel.actions.openCodeReview
+        )
+    }
+
+    @ViewBuilder
+    private func projectAction(
+        title: String,
+        icon: String,
+        compact: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        if compact {
+            Button(action: action) {
+                Image(systemName: icon).frame(width: 24, height: 22)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .help(title)
+            .accessibilityLabel(title)
+        } else {
+            actionButton(title: title, icon: icon, action: action)
+        }
+    }
+
+    private var quickActionsMenu: some View {
+        Menu {
+            Button(
+                localizer.string("projectHome.action.newSession", fallback: "New Session"),
                 action: viewModel.actions.createSession
             )
             if let createWorktree = viewModel.actions.createWorktree {
-                actionButton(
-                    title: localizer.string("projectHome.action.newWorktree", fallback: "New Worktree"),
-                    icon: "arrow.triangle.branch",
+                Button(
+                    localizer.string("projectHome.action.newWorktree", fallback: "New Worktree"),
                     action: createWorktree
                 )
             }
-            actionButton(
-                title: localizer.string("projectHome.action.launchTeam", fallback: "Launch Team"),
-                icon: "person.3",
-                action: { viewModel.isTeamSheetPresented = true }
-            )
-            actionButton(
-                title: localizer.string("projectHome.action.codeReview", fallback: "Code Review"),
-                icon: "doc.text.magnifyingglass",
+            Button(localizer.string("projectHome.action.launchTeam", fallback: "Launch Team")) {
+                viewModel.isTeamSheetPresented = true
+            }
+            Button(
+                localizer.string("projectHome.action.codeReview", fallback: "Code Review"),
                 action: viewModel.actions.openCodeReview
             )
+        } label: {
+            Image(systemName: "ellipsis.circle").frame(width: 24, height: 22)
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help(localizer.string("projectHome.action.menu", fallback: "Project Actions"))
+        .accessibilityLabel(localizer.string("projectHome.action.menu", fallback: "Project Actions"))
     }
 
     private func actionButton(title: String, icon: String, action: @escaping () -> Void) -> some View {
@@ -160,6 +219,22 @@ struct ProjectHomePanelView: View {
         }
         .font(.system(size: 10.5))
         .foregroundStyle(palette.textMedium.resolvedColor())
+    }
+
+    private func projectMetadata(includeRemote: Bool, includeStatus: Bool) -> some View {
+        HStack(spacing: 12) {
+            metadataLabel(
+                icon: "arrow.triangle.branch",
+                text: viewModel.gitMetadata?.branch
+                    ?? localizer.string("projectHome.git.loading", fallback: "Git status pending")
+            )
+            if includeStatus, let summary = viewModel.gitMetadata?.statusSummary {
+                metadataLabel(icon: "circle.lefthalf.filled", text: summary)
+            }
+            if includeRemote, let remote = viewModel.gitMetadata?.remoteOrigin {
+                metadataLabel(icon: "network", text: remote)
+            }
+        }
     }
 
     @ViewBuilder

@@ -200,7 +200,7 @@ extension AppDelegate {
         return (true, data)
     }
 
-    nonisolated private func projectTasksForCLI(
+    nonisolated func projectTasksForCLI(
         projectReference: String?
     ) async throws -> (Bool, [String: String]) {
         let filter = try await MainActor.run {

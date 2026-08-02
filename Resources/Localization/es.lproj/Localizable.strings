@@ -467,6 +467,37 @@
 "projectSidebar.pin" = "Fijar proyecto";
 "projectSidebar.unpin" = "Dejar de fijar proyecto";
 "projectSidebar.unavailable" = "Lista de proyectos no disponible";
+"projectSidebar.taskBadge.accessibility.one" = "%@, %d tarea";
+"projectSidebar.taskBadge.accessibility.many" = "%@, %d tareas";
+"workspaceToolbar.panel.projectHome" = "Inicio del proyecto";
+"window.pane.projectHomePanel" = "panel de inicio del proyecto";
+"projectHome.action.codeReview" = "Revisión de código";
+"projectHome.action.error.title" = "No se pudo completar la acción";
+"projectHome.action.launchTeam" = "Iniciar equipo";
+"projectHome.action.menu" = "Acciones del proyecto";
+"projectHome.action.newSession" = "Nueva sesión";
+"projectHome.action.newWorktree" = "Nuevo worktree";
+"projectHome.context.title" = "Contexto del proyecto";
+"projectHome.diff.recent" = "Abrir diff reciente";
+"projectHome.git.loading" = "Estado de Git pendiente";
+"projectHome.inbox.empty" = "No hay tareas del proyecto";
+"projectHome.inbox.failed" = "La actividad del proyecto no está disponible.";
+"projectHome.inbox.loading" = "Cargando tareas del proyecto";
+"projectHome.inbox.partial" = "Parte de la actividad del proyecto no está disponible temporalmente.";
+"projectHome.inbox.title" = "Bandeja de tareas";
+"projectHome.team.defaultTeammates" = "implementación, revisión";
+"projectHome.team.launch" = "Iniciar";
+"projectHome.team.name" = "Nombre del equipo";
+"projectHome.team.provider" = "Proveedor";
+"projectHome.team.task" = "Tarea";
+"projectHome.team.teammates" = "Integrantes";
+"projectHome.team.title" = "Iniciar equipo";
+"projectHome.unavailable.folder" = "La carpeta del proyecto ya no está disponible.";
+"projectHome.unavailable.message" = "Los servicios del proyecto no están listos para este panel restaurado.";
+"projectHome.unavailable.title" = "Inicio del proyecto no disponible";
+"projectHome.worktrees.empty" = "No hay worktrees administrados";
+"projectHome.worktrees.failed" = "Los datos de worktrees no están disponibles.";
+"projectHome.worktrees.title" = "Worktrees";
 "project.open.title" = "Abrir proyecto";
 "project.open.button" = "Abrir";
 "project.clone.title" = "Clonar proyecto";
@@ -2519,7 +2550,6 @@
 "notes.delete.confirm.title" = "¿Eliminar nota?";
 "notes.delete.confirm.message" = "Esto elimina la nota de este espacio.";
 "notes.delete.confirm.button" = "Eliminar nota";
-
 "timeline.accessibility" = "Línea de tiempo de agentes";
 "timeline.title" = "Línea de tiempo de agentes";
 "timeline.scope.all" = "Todas las ventanas";
@@ -2564,7 +2594,6 @@
 "timeline.event.fileChanged" = "Archivo modificado";
 "timeline.event.fileChangedNamed" = "Archivo modificado: %@";
 "timeline.event.fileAction" = "Archivo %@";
-
 "notifications.panel.accessibility" = "Panel de notificaciones";
 "notifications.panel.title" = "Notificaciones";
 "notifications.panel.markAllRead" = "Marcar todo como leído";
@@ -2579,7 +2608,6 @@
 "notifications.state.finished.body" = "La pestaña \"%@\" finalizó.";
 "notifications.state.error.title" = "%@ encontró un error";
 "notifications.state.error.body" = "La pestaña \"%@\" tiene un error.";
-
 "aiEditHistory.title" = "Historial de ediciones";
 "aiEditHistory.refresh" = "Actualizar";
 "aiEditHistory.revert" = "Revertir";
@@ -2599,7 +2627,6 @@
 "aiEditHistory.revertSheet.message" = "Esto restaura la edición local seleccionada solo si los archivos todavía coinciden con la salida registrada.";
 "aiEditHistory.error.noSession" = "No hay una sesión de ediciones de agente seleccionada.";
 "aiEditHistory.error.noSelection" = "No hay una edición seleccionada.";
-
 "welcome.accessibilityLabel" = "Bienvenida a Cocxy Terminal";
 "welcome.title" = "Cocxy Terminal";
 "welcome.subtitle" = "Terminal para macOS con conciencia de agentes";
@@ -2626,7 +2653,6 @@
 "welcome.shortcut.dismissOverlay" = "Cerrar overlay";
 "welcome.getStarted" = "Comenzar";
 "welcome.dismiss.accessibilityLabel" = "Cerrar bienvenida";
-
 "onboarding.accessibilityLabel" = "Configuración guiada de Cocxy";
 "onboarding.title" = "Configuración de Cocxy";
 "onboarding.subtitle" = "Elige valores predeterminados locales para esta Mac";
@@ -2647,7 +2673,6 @@
 "onboarding.step.starterTabConfig" = "Configuración inicial de pestaña";
 "onboarding.step.primerSkill" = "Habilidad inicial";
 "onboarding.step.firstWorkflow" = "Primer flujo";
-
 "command.category.tabs" = "Pestañas";
 "command.category.splits" = "Paneles";
 "command.category.navigation" = "Navegación";
@@ -2659,7 +2684,6 @@
 "command.category.cli" = "CLI";
 "command.category.worktree" = "Git";
 "command.category.editor" = "Editor";
-
 "command.window.new.name" = "Nueva ventana";
 "command.window.new.description" = "Abrir una nueva ventana de Cocxy Terminal";
 "command.window.minimize.name" = "Minimizar ventana";
@@ -2674,10 +2698,8 @@
 "command.browser.focusLocation.name" = "Enfocar ubicación";
 "command.browser.focusLocation.description" = "Enfocar la barra de dirección del navegador o abrir un split de navegador";
 "pip.window.title" = "Cocxy PIP - %@";
-
 "command.voice.input.name" = "Entrada por voz";
 "command.voice.input.description" = "Dictar localmente en la superficie de comandos activa";
-
 "command.tabs.new.name" = "Nueva pestaña";
 "command.tabs.new.description" = "Abrir una nueva pestaña de terminal";
 "command.tabs.close.name" = "Cerrar pestaña";
@@ -2714,7 +2736,6 @@
 "command.tabs.goto8.description" = "Cambiar a la octava pestaña";
 "command.tabs.goto9.name" = "Ir a pestaña 9";
 "command.tabs.goto9.description" = "Cambiar a la novena pestaña";
-
 "command.splits.vertical.name" = "Dividir apilado";
 "command.splits.vertical.description" = "Dividir el panel actual en una pila superior/inferior";
 "command.splits.horizontal.name" = "Dividir lado a lado";
@@ -2725,7 +2746,6 @@
 "command.splits.equalize.description" = "Ajustar todos los paneles divididos al mismo tamaño";
 "command.splits.zoom.name" = "Alternar zoom de división";
 "command.splits.zoom.description" = "Maximizar el panel con foco o restaurar tamaños iguales";
-
 "command.dashboard.toggle.name" = "Alternar panel de agentes";
 "command.dashboard.toggle.description" = "Mostrar u ocultar el panel de agentes";
 "command.activity.toggle.name" = "Alternar actividad";
@@ -2774,7 +2794,6 @@
 "command.theme.cycle.description" = "Cambiar entre los temas claro y oscuro configurados";
 "command.sidebar.transparency.name" = "Alternar transparencia lateral";
 "command.sidebar.transparency.description" = "Cambiar entre fondo lateral transparente y sólido";
-
 "command.workspace.browser.name" = "Abrir panel de navegador";
 "command.workspace.browser.description" = "Abrir un panel de navegador junto al terminal";
 "command.workspace.markdown.name" = "Abrir panel Markdown";
@@ -2795,7 +2814,6 @@
 "command.workspace.macros.description" = "Abrir macros, fragmentos, alias e historial del portapapeles locales";
 "command.workspace.dbCloud.name" = "Abrir ayudantes DB/Cloud";
 "command.workspace.dbCloud.description" = "Abrir consultas locales para DB y CLI de nube";
-
 "command.remote.toggle.name" = "Alternar espacios remotos";
 "command.remote.toggle.description" = "Mostrar u ocultar el panel de espacios remotos";
 "command.browser.history.name" = "Historial del navegador";
@@ -2814,7 +2832,6 @@
 "command.navigation.quickswitch.description" = "Abrir el selector rápido de pestañas";
 "command.navigation.quickterminal.name" = "Alternar terminal rápido";
 "command.navigation.quickterminal.description" = "Mostrar u ocultar el terminal rápido desplegable";
-
 "command.worktree.create.name" = "Crear pestaña de worktree de agente";
 "command.worktree.create.description" = "Crear un worktree git gestionado por Cocxy desde el repo origen de la pestaña activa y adjuntarlo a la pestaña";
 "command.worktree.remove.name" = "Eliminar worktree actual";
@@ -2855,9 +2872,7 @@
 "command.editor.openDefault.description" = "Abrir el espacio de la pestaña activa con el editor predeterminado del sistema";
 "command.editor.openNamed.name" = "Abrir espacio en %@";
 "command.editor.openNamed.description" = "Abrir el espacio de la pestaña activa usando %@";
-
 "common.search" = "Buscar";
-
 "macros.title" = "Macros";
 "macros.close" = "Cerrar macros";
 "macros.refresh" = "Refrescar";
@@ -2928,13 +2943,11 @@
 "macros.status.clipboard.one" = "%d elemento del portapapeles";
 "macros.status.clipboard.many" = "%d elementos del portapapeles";
 "macros.status.clipboardCleared" = "Portapapeles limpiado";
-
 "common.add" = "Agregar";
 "common.create" = "Crear";
 "common.retry" = "Reintentar";
 "common.generate" = "Generar";
 "common.refresh" = "Refrescar";
-
 "remoteWorkspace.title" = "Espacios remotos";
 "remoteWorkspace.accessibility" = "Espacios remotos";
 "remoteWorkspace.addProfile.accessibility" = "Agregar nuevo perfil remoto";
@@ -2993,7 +3006,6 @@
 "remoteWorkspace.status.reconnecting" = "Reconectando, intento %d";
 "remoteWorkspace.status.disconnected" = "Desconectado";
 "remoteWorkspace.status.failed" = "Conexión falló: %@";
-
 "remoteWorkspace.profileEditor.title.new" = "Nuevo perfil";
 "remoteWorkspace.profileEditor.title.edit" = "Editar perfil";
 "remoteWorkspace.profileEditor.identityPanel.title" = "Seleccionar archivo de identidad SSH";
@@ -3027,7 +3039,6 @@
 "remoteWorkspace.profileEditor.validation.portForward" = "Ingresa puertos válidos y un host de destino.";
 "remoteWorkspace.profileEditor.validation.duplicateEnvironment" = "Las claves de variables de entorno deben ser únicas.";
 "remoteWorkspace.profileEditor.validation.environmentKey" = "Ingresa una clave o elimina esta fila.";
-
 "remoteWorkspace.sessions.title" = "Sesiones persistentes";
 "remoteWorkspace.sessions.refresh.help" = "Refrescar sesiones";
 "remoteWorkspace.sessions.name.placeholder" = "Nombre de sesión";
@@ -3038,7 +3049,6 @@
 "remoteWorkspace.sessions.attach.help" = "Abrir sesión en una pestaña de terminal";
 "remoteWorkspace.sessions.attach.failed" = "No se pudo abrir la sesión. Vuelve a conectar el perfil e inténtalo de nuevo.";
 "remoteWorkspace.sessions.tabTitle" = "Sesión remota";
-
 "remoteWorkspace.portForward.title" = "Redirecciones de puerto";
 "remoteWorkspace.portForward.activeCount" = "%d activos";
 "remoteWorkspace.portForward.empty.title" = "No hay túneles activos";
@@ -3056,7 +3066,6 @@
 "remoteWorkspace.forwardType.local" = "Local";
 "remoteWorkspace.forwardType.remote" = "Remoto";
 "remoteWorkspace.forwardType.dynamic" = "Dinámico";
-
 "remoteWorkspace.proxy.connectFirst" = "Conecta primero al perfil para activar proxy";
 "remoteWorkspace.proxy.updating" = "Actualizando proxy";
 "remoteWorkspace.proxy.status.otherProfile" = "La sesión de proxy pertenece a otro perfil";
@@ -3099,7 +3108,6 @@
 "remoteWorkspace.proxy.error.copyFailed" = "No se pudo copiar la credencial";
 "remoteWorkspace.proxy.error.systemProxy" = "Proxy del sistema: %@";
 "remoteWorkspace.proxy.error.systemProxyRestore" = "Restauración de proxy del sistema: %@";
-
 "remoteWorkspace.keys.title" = "Llaves SSH";
 "remoteWorkspace.keys.generate.accessibility" = "Generar nueva llave SSH";
 "remoteWorkspace.keys.empty.title" = "No se encontraron llaves SSH";
@@ -3115,7 +3123,6 @@
 "remoteWorkspace.keys.importKeychain.help" = "Importar a Keychain de macOS";
 "remoteWorkspace.keys.importKeychain.accessibility" = "Importar %@ a Keychain de macOS";
 "remoteWorkspace.keys.error.nameRequired" = "El nombre de la llave es obligatorio.";
-
 "remoteWorkspace.daemon.connectFirst" = "Conecta primero al perfil para gestionar el daemon";
 "remoteWorkspace.daemon.status.notDeployed" = "No desplegado";
 "remoteWorkspace.daemon.status.deploying" = "Desplegando...";
@@ -3144,7 +3151,6 @@
 "remoteWorkspace.daemon.syncPath.placeholder" = "Ruta remota a observar";
 "remoteWorkspace.daemon.noRecentChanges" = "No se detectaron cambios recientes";
 "remoteWorkspace.daemon.deploySync" = "Despliega el daemon para usar sincronización de archivos.";
-
 "remoteWorkspace.relay.connectFirst" = "Conecta primero al perfil para gestionar canales relay";
 "remoteWorkspace.relay.activeChannels" = "Canales activos";
 "remoteWorkspace.relay.noActiveChannels" = "No hay canales activos";
@@ -3182,7 +3188,6 @@
 "remoteWorkspace.relay.error.invalidConnectionLimit" = "El límite de conexiones debe ser un número entero positivo";
 "remoteWorkspace.relay.error.invalidName" = "El nombre del canal es obligatorio";
 "remoteWorkspace.relay.error.invalidPorts" = "Números de puerto inválidos";
-
 "remoteWorkspace.sftp.currentPath.accessibility" = "Ruta actual: %@";
 "remoteWorkspace.sftp.navigateParent.accessibility" = "Navegar al directorio padre";
 "remoteWorkspace.sftp.loading" = "Cargando...";
@@ -3270,7 +3275,6 @@
 "remoteWorkspace.browserSuggestions.error.noLocalPort" = "No hay un puerto local seguro disponible para este servicio.";
 "remoteWorkspace.browserSuggestions.error.forwardFailed" = "No se pudo abrir el servicio remoto.";
 "remoteWorkspace.browserSuggestions.error.stopFailed" = "No se pudo detener el reenvío SSH.";
-
 "shortcuts.open-app.title" = "Abrir Cocxy";
 "shortcuts.open-app.summary" = "Traer al frente la ventana local de terminal.";
 "shortcuts.open-app.privacy" = "Solo activa la app local; ningún contenido de terminal sale de la Mac.";
@@ -3286,7 +3290,6 @@
 "shortcuts.error.appDelegateUnavailable" = "Cocxy aún no está listo.";
 "shortcuts.error.noActiveTerminal" = "No hay una superficie de terminal activa disponible.";
 "shortcuts.error.noWindow" = "No hay una ventana de Cocxy disponible.";
-
 /* AppIntent literals used by Shortcuts.app metadata. */
 "Open Cocxy" = "Abrir Cocxy";
 "Bring the local Cocxy Terminal window forward." = "Traer al frente la ventana local de Cocxy Terminal.";
@@ -3301,15 +3304,12 @@
 "Run Command" = "Ejecutar comando";
 "Open Notebook" = "Abrir notebook";
 "List Skills" = "Listar habilidades";
-
 "handoff.activity.title" = "Continuar Cocxy Terminal";
-
 "richInput.accessibility" = "Compositor de entrada enriquecida";
 "richInput.title" = "Entrada enriquecida";
 "richInput.placeholder" = "Escribe o pega un prompt largo...";
 "richInput.send" = "Enviar";
 "richInput.cancel" = "Cancelar";
-
 "agentTeams.panel.title" = "Equipo de agentes";
 "agentTeams.creator.title" = "Equipo de agentes";
 "agentTeams.creator.placeholder" = "Diseño, Construcción, Revisión";

@@ -49,7 +49,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var quickTerminalController: QuickTerminalController?
 
     private(set) var themeEngine: ThemeEngineImpl?
-
     let gitInfoProvider = GitInfoProviderImpl()
     let projectResolver = CachedProjectResolver()
     let projectRegistry = ProjectRegistry()
