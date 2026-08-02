@@ -60,6 +60,7 @@ struct ProjectHomePanelView: View {
             }
         }
         .glassPanelBackground()
+        .environment(\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)
         .task {
             viewModel.loadContext()
             await consumePendingFanOutRequest()

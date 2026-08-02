@@ -98,5 +98,6 @@ struct ProjectHomeTeamLaunchSheet: View {
         }
         .padding(20)
         .frame(width: 500, height: 430)
+        .environment(\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)
     }
 }

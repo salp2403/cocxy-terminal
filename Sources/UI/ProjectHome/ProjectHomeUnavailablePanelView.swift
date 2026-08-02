@@ -30,5 +30,6 @@ struct ProjectHomeUnavailablePanelView: View {
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .glassPanelBackground()
+        .environment(\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)
     }
 }

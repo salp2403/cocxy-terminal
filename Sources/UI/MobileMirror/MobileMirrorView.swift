@@ -24,6 +24,7 @@ struct MobileMirrorView: View {
         }
         .frame(minWidth: 480, idealWidth: 520, minHeight: 540, idealHeight: 650)
         .background(Color(nsColor: .windowBackgroundColor))
+        .environment(\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)
     }
 
     private var header: some View {

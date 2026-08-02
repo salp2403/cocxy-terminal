@@ -57,6 +57,10 @@ struct AppLocalizer {
         Locale(identifier: language == .system ? AppLanguage.english.rawValue : language.rawValue)
     }
 
+    var isRightToLeft: Bool {
+        Locale.Language(identifier: locale.identifier).characterDirection == .rightToLeft
+    }
+
     func string(_ key: AppLocalizationKey) -> String {
         let fallback = fallbackStrings[key] ?? key.rawValue
         return string(key.rawValue, fallback: fallback)
