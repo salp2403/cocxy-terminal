@@ -473,6 +473,7 @@
 "window.pane.projectHomePanel" = "panel de inicio del proyecto";
 "projectHome.action.codeReview" = "Revisión de código";
 "projectHome.action.error.title" = "No se pudo completar la acción";
+"projectHome.action.fanOut" = "Distribuir";
 "projectHome.action.launchTeam" = "Iniciar equipo";
 "projectHome.action.menu" = "Acciones del proyecto";
 "projectHome.action.newSession" = "Nueva sesión";
@@ -485,6 +486,20 @@
 "projectHome.inbox.loading" = "Cargando tareas del proyecto";
 "projectHome.inbox.partial" = "Parte de la actividad del proyecto no está disponible temporalmente.";
 "projectHome.inbox.title" = "Bandeja de tareas";
+"projectHome.fanOut.addPath" = "Agregar archivo previsto";
+"projectHome.fanOut.back" = "Volver a la bandeja de tareas";
+"projectHome.fanOut.cleanup.discard" = "Descartar candidato";
+"projectHome.fanOut.cleanup.remove" = "Eliminar después de fusionar";
+"projectHome.fanOut.cleanup.retain" = "Conservar ganador";
+"projectHome.fanOut.cleanupEmpty" = "Ningún worktree administrado de la tarea se puede limpiar.";
+"projectHome.fanOut.cleanupPlan" = "Plan de limpieza confirmado";
+"projectHome.fanOut.collision" = "Posible colisión de archivos";
+"projectHome.fanOut.confirmPromotion" = "Fusionar y limpiar";
+"projectHome.fanOut.pathPlaceholder" = "Sources/Feature.swift";
+"projectHome.fanOut.paths" = "Archivos previstos";
+"projectHome.fanOut.promotion" = "Vista previa de promoción";
+"projectHome.fanOut.recycle" = "Reciclar";
+"projectHome.fanOut.removePath" = "Quitar archivo previsto";
 "projectHome.team.defaultTeammates" = "implementación, revisión";
 "projectHome.team.launch" = "Iniciar";
 "projectHome.team.name" = "Nombre del equipo";
@@ -3319,7 +3334,6 @@
 "agentTeams.feed.title" = "Feed de agentes";
 "agentTeams.feed.empty" = "No hay eventos del equipo";
 "agentTeams.feed.accessibility" = "Feed del equipo de agentes";
-
 "browser.dialog.ok" = "OK";
 "browser.dialog.cancel" = "Cancelar";
 "browser.dialog.alert.title" = "Alerta de JavaScript";
@@ -3334,7 +3348,6 @@
 "browser.initScriptApproval.profile.default" = "Predeterminado";
 "browser.initScriptApproval.profile.unknown" = "Perfil %@";
 "browser.initScriptApproval.remote.local" = "Local";
-
 "github.socketApproval.title" = "¿Autorizar acción de GitHub?";
 "github.socketApproval.message" = "Repositorio: %@\nPull request: #%d\nHuella: %@\n\nUna solicitud local del CLI quiere ejecutar la acción exacta de GitHub que se muestra abajo. Autorízala solo si tú iniciaste esta solicitud.";
 "github.socketApproval.approveOnce" = "Autorizar una vez";
@@ -3345,7 +3358,6 @@
 "socket.privilegedApproval.approveOnce" = "Autorizar una vez";
 "socket.privilegedApproval.cancel" = "Cancelar";
 "socket.privilegedApproval.preview.accessibility" = "Acción local exacta del CLI para autorizar";
-
 "cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No hay cells";
 "cells.sidebar.empty.message" = "Crea una cell local o cloud propia.";
@@ -3361,7 +3373,6 @@
 "cells.create.image" = "Imagen o plantilla";
 "cells.create.host" = "Host SSH";
 "cells.create.launch" = "Crear";
-
 "command.navigation.jumpProject.name" = "Saltar a proyecto...";
 "command.navigation.jumpProject.description" = "Cambiar a un proyecto activo por el nombre de su espacio";
 "command.taskRun.fanOut.name" = "Distribuir tarea...";
@@ -3377,13 +3388,11 @@
 "handoff.error.unavailable" = "El traspaso de tareas no está disponible en el contexto actual de la app.";
 "quickSwitch.project.session.one" = "%d sesión";
 "quickSwitch.project.session.many" = "%d sesiones";
-
 "taskRun.launch.title" = "Distribuir tarea";
 "taskRun.launch.prompt" = "Instrucción de la tarea";
 "taskRun.launch.providers" = "Proveedores";
 "taskRun.launch.candidates" = "Candidatos";
 "taskRun.launch.baseRef" = "Referencia base";
-"taskRun.launch.progress" = "Iniciando candidatos...";
 "taskRun.launch.action" = "Iniciar";
 "taskRun.compare.title" = "Comparar candidatos";
 "taskRun.compare.refresh" = "Actualizar comparaciones";
@@ -3391,14 +3400,7 @@
 "taskRun.compare.file.one" = "%d archivo";
 "taskRun.compare.file.many" = "%d archivos";
 "taskRun.compare.costUnavailable" = "N/D";
-"taskRun.compare.promoting" = "Promoviendo candidato...";
 "taskRun.compare.promote" = "Promover";
-"taskRun.compare.confirmTitle" = "¿Promover %@?";
-"taskRun.compare.confirmMessage.one" = "Fusionar la rama %@ en el checkout de origen y luego eliminar todos los directorios de worktree de la tarea. Cualquier cambio sin commit del %d candidato no seleccionado se descartará permanentemente.";
-"taskRun.compare.confirmMessage.many" = "Fusionar la rama %@ en el checkout de origen y luego eliminar todos los directorios de worktree de la tarea. Cualquier cambio sin commit de los %d candidatos no seleccionados se descartará permanentemente.";
-"taskRun.promote.successTitle" = "Candidato promovido";
-"taskRun.promote.successMessage" = "Se fusionó el candidato %@ en el checkout de origen.";
-"taskRun.promote.cleanupTitle" = "Candidato promovido con avisos de limpieza";
 "taskRun.alert.title" = "Tarea paralela";
 "taskRun.error.noTarget" = "No hay una terminal activa respaldada por un repositorio.";
 "taskRun.error.disabled" = "Activa los worktrees en Ajustes o en la configuración del proyecto antes de iniciar una tarea paralela.";
@@ -3415,7 +3417,6 @@
 "taskRun.status.discarded" = "Descartado";
 "taskRun.status.orphaned" = "Huerfano";
 "taskRun.status.cancelled" = "Cancelado";
-
 "command.taskQueue.manage.name" = "Cola de tareas...";
 "command.taskQueue.manage.description" = "Programar y administrar pipelines persistentes de agentes locales";
 "taskQueue.title" = "Cola de tareas";
@@ -3499,7 +3500,6 @@
 "taskQueue.validation.event" = "Elige un evento disparador.";
 "taskQueue.validation.retries" = "Los reintentos deben estar entre 0 y 5.";
 "taskQueue.validation.concurrency" = "La concurrencia de pasos debe estar entre 1 y 8.";
-
 /* Consentimiento de voz */
 "voice.consent.title" = "El dictado por voz está activado";
 "voice.consent.message" = "El procesamiento es 100 % local; nada sale de tu Mac. ¿Quieres mantenerlo activado?";

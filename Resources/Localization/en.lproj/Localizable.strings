@@ -473,6 +473,7 @@
 "window.pane.projectHomePanel" = "project home panel";
 "projectHome.action.codeReview" = "Code Review";
 "projectHome.action.error.title" = "Action Failed";
+"projectHome.action.fanOut" = "Fan Out";
 "projectHome.action.launchTeam" = "Launch Team";
 "projectHome.action.menu" = "Project Actions";
 "projectHome.action.newSession" = "New Session";
@@ -485,6 +486,20 @@
 "projectHome.inbox.loading" = "Loading project tasks";
 "projectHome.inbox.partial" = "Some project activity is temporarily unavailable.";
 "projectHome.inbox.title" = "Task Inbox";
+"projectHome.fanOut.addPath" = "Add planned file";
+"projectHome.fanOut.back" = "Back to Task Inbox";
+"projectHome.fanOut.cleanup.discard" = "Discard candidate";
+"projectHome.fanOut.cleanup.remove" = "Remove after merge";
+"projectHome.fanOut.cleanup.retain" = "Retain winner";
+"projectHome.fanOut.cleanupEmpty" = "No managed task worktree is eligible for cleanup.";
+"projectHome.fanOut.cleanupPlan" = "Confirmed cleanup plan";
+"projectHome.fanOut.collision" = "Potential file collision";
+"projectHome.fanOut.confirmPromotion" = "Merge and Clean Up";
+"projectHome.fanOut.pathPlaceholder" = "Sources/Feature.swift";
+"projectHome.fanOut.paths" = "Planned files";
+"projectHome.fanOut.promotion" = "Promotion Preview";
+"projectHome.fanOut.recycle" = "Recycle";
+"projectHome.fanOut.removePath" = "Remove planned file";
 "projectHome.team.defaultTeammates" = "implementation, review";
 "projectHome.team.launch" = "Launch";
 "projectHome.team.name" = "Team name";
@@ -3319,7 +3334,6 @@
 "agentTeams.feed.title" = "Agent Feed";
 "agentTeams.feed.empty" = "No team events";
 "agentTeams.feed.accessibility" = "Agent team feed";
-
 "browser.dialog.ok" = "OK";
 "browser.dialog.cancel" = "Cancel";
 "browser.dialog.alert.title" = "JavaScript Alert";
@@ -3334,7 +3348,6 @@
 "browser.initScriptApproval.profile.default" = "Default";
 "browser.initScriptApproval.profile.unknown" = "Profile %@";
 "browser.initScriptApproval.remote.local" = "Local";
-
 "github.socketApproval.title" = "Approve GitHub Action?";
 "github.socketApproval.message" = "Repository: %@\nPull request: #%d\nFingerprint: %@\n\nA local CLI request wants to perform the exact GitHub action shown below. Approve it only if you initiated this request.";
 "github.socketApproval.approveOnce" = "Approve Once";
@@ -3345,7 +3358,6 @@
 "socket.privilegedApproval.approveOnce" = "Approve Once";
 "socket.privilegedApproval.cancel" = "Cancel";
 "socket.privilegedApproval.preview.accessibility" = "Exact local CLI action for approval";
-
 "cells.sidebar.accessibility" = "Cocxy Cells";
 "cells.sidebar.empty.title" = "No cells";
 "cells.sidebar.empty.message" = "Create a local or user-owned cloud cell.";
@@ -3361,7 +3373,6 @@
 "cells.create.image" = "Image or template";
 "cells.create.host" = "SSH host";
 "cells.create.launch" = "Create";
-
 "command.navigation.jumpProject.name" = "Jump to Project...";
 "command.navigation.jumpProject.description" = "Switch to a live project by its workspace name";
 "command.taskRun.fanOut.name" = "Fan Out Task...";
@@ -3377,13 +3388,11 @@
 "handoff.error.unavailable" = "Task handoff is unavailable in the current app context.";
 "quickSwitch.project.session.one" = "%d session";
 "quickSwitch.project.session.many" = "%d sessions";
-
 "taskRun.launch.title" = "Fan Out Task";
 "taskRun.launch.prompt" = "Task prompt";
 "taskRun.launch.providers" = "Providers";
 "taskRun.launch.candidates" = "Candidates";
 "taskRun.launch.baseRef" = "Base ref";
-"taskRun.launch.progress" = "Launching candidates...";
 "taskRun.launch.action" = "Launch";
 "taskRun.compare.title" = "Compare Task Candidates";
 "taskRun.compare.refresh" = "Refresh comparisons";
@@ -3391,14 +3400,7 @@
 "taskRun.compare.file.one" = "%d file";
 "taskRun.compare.file.many" = "%d files";
 "taskRun.compare.costUnavailable" = "N/A";
-"taskRun.compare.promoting" = "Promoting candidate...";
 "taskRun.compare.promote" = "Promote";
-"taskRun.compare.confirmTitle" = "Promote %@?";
-"taskRun.compare.confirmMessage.one" = "Merge branch %@ into the origin checkout, then remove all task worktree directories. Any uncommitted changes in the %d unselected candidate will be permanently discarded.";
-"taskRun.compare.confirmMessage.many" = "Merge branch %@ into the origin checkout, then remove all task worktree directories. Any uncommitted changes in the %d unselected candidates will be permanently discarded.";
-"taskRun.promote.successTitle" = "Candidate Promoted";
-"taskRun.promote.successMessage" = "Merged candidate %@ into the origin checkout.";
-"taskRun.promote.cleanupTitle" = "Candidate Promoted with Cleanup Warnings";
 "taskRun.alert.title" = "Parallel Task";
 "taskRun.error.noTarget" = "No active repository-backed terminal is available.";
 "taskRun.error.disabled" = "Enable worktrees in Settings or the project configuration before starting a parallel task.";
@@ -3415,7 +3417,6 @@
 "taskRun.status.discarded" = "Discarded";
 "taskRun.status.orphaned" = "Orphaned";
 "taskRun.status.cancelled" = "Cancelled";
-
 "command.taskQueue.manage.name" = "Task Queue...";
 "command.taskQueue.manage.description" = "Schedule and manage persistent local agent pipelines";
 "taskQueue.title" = "Task Queue";
@@ -3499,7 +3500,6 @@
 "taskQueue.validation.event" = "Choose an event trigger.";
 "taskQueue.validation.retries" = "Retries must be between 0 and 5.";
 "taskQueue.validation.concurrency" = "Step concurrency must be between 1 and 8.";
-
 /* Voice consent */
 "voice.consent.title" = "Voice dictation is on";
 "voice.consent.message" = "Processing is 100% on-device; nothing leaves your Mac. Keep it enabled?";
