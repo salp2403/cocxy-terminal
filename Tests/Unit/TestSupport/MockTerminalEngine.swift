@@ -43,6 +43,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var tickCount: Int = 0
 
     var createSurfaceError: Error?
+    var createSurfaceFailureAfterSuccessCount: Int?
     var sendKeyEventReturnValue: Bool = true
     var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
     var detectedContents: [SurfaceID: [TerminalDetectedContent]] = [:]
@@ -62,6 +63,14 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
+        if let failureCount = createSurfaceFailureAfterSuccessCount,
+           createSurfaceRequests.count >= failureCount {
+            throw NSError(
+                domain: "MockTerminalEngine",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Injected surface creation failure"]
+            )
+        }
         if let createSurfaceError {
             throw createSurfaceError
         }

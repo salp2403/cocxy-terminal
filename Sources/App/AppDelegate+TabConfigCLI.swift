@@ -9,24 +9,29 @@ extension AppDelegate {
         name: String,
         command: String?,
         theme: String?,
-        environment: [String: String]
+        environment: [String: String],
+        store: TabConfigStore = TabConfigStore()
     ) -> (name: String, path: String)? {
         guard let controller = focusedWindowController(),
               let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID,
-              let tab = controller.tabManager.tab(for: tabID) else {
+              controller.tabManager.tab(for: tabID) != nil,
+              let projectDirectory = controller.tabConfigProjectDirectory(for: tabID) else {
             return nil
         }
 
-        let store = TabConfigStore()
-        let config = TabConfig(
-            name: name,
-            workingDirectory: tab.workingDirectory.standardizedFileURL.path,
-            command: command,
-            environment: environment,
-            theme: theme ?? configService?.current.appearance.theme
-        )
-
         do {
+            let layout = try controller.captureTabConfigLayout(
+                for: tabID,
+                projectDirectory: projectDirectory
+            )
+            let config = TabConfig(
+                name: name,
+                workingDirectory: projectDirectory.standardizedFileURL.path,
+                command: command,
+                environment: environment,
+                theme: theme ?? configService?.current.appearance.theme,
+                layout: layout
+            )
             try store.save(config)
             let path = try store.fileURL(forName: name).path
             return (name: name, path: path)
@@ -61,22 +66,35 @@ extension AppDelegate {
             let snapshot = try store.loadSnapshot(named: name)
             let config = snapshot.config
             let path = try store.fileURL(forName: name).path
-            let directory = resolveTabConfigDirectory(config.workingDirectory)
-
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else {
-                return nil
+            let requestedDirectory = resolveTabConfigDirectory(config.workingDirectory)
+            let resolver = TabConfigLayoutRuntimeResolver()
+            let projectDirectory = try resolver.canonicalProjectDirectory(requestedDirectory)
+            let resolvedLayout = try config.layout.map {
+                try resolver.resolve($0, projectDirectory: projectDirectory)
             }
+            let primaryDirectory = resolvedLayout?.firstPane.workingDirectory ?? projectDirectory
 
-            let tabID = controller.createTab(workingDirectory: directory)
+            let tabID = controller.createTab(workingDirectory: primaryDirectory)
+            guard controller.tabSurfaceMap[tabID] != nil else {
+                controller.performCloseTab(tabID)
+                throw TabConfigLayoutRuntimeError.inconsistentLayout("primary terminal could not be created")
+            }
+            do {
+                if let resolvedLayout {
+                    try controller.installTabConfigLayout(resolvedLayout, in: tabID)
+                }
+            } catch {
+                controller.performCloseTab(tabID)
+                throw error
+            }
+            controller.bindTabConfigProjectDirectory(projectDirectory, to: tabID)
             controller.tabManager.renameTab(id: tabID, newTitle: config.name)
             controller.tabManager.setActive(id: tabID)
 
             applyTabConfigTheme(config.theme, to: tabID, in: controller)
             if let authorization = TabConfigStartupSecurity.makeAuthorizationRequest(
                 snapshot: snapshot,
-                workingDirectory: directory,
+                workingDirectory: primaryDirectory,
                 destinationTabID: tabID,
                 launchOrigin: launchOrigin
             ),
@@ -133,13 +151,14 @@ extension AppDelegate {
         in controller: MainWindowController
     ) {
         guard let themeName,
-              let surfaceID = controller.tabSurfaceMap[tabID],
               let engine = themeEngine,
               let theme = try? engine.themeByName(themeName) else {
             return
         }
-        controller.terminalEngine(for: surfaceID).cocxyCoreBridge?
-            .applyTheme(theme.palette, to: surfaceID)
+        for surfaceID in controller.surfaceIDs(for: tabID) {
+            controller.terminalEngine(for: surfaceID).cocxyCoreBridge?
+                .applyTheme(theme.palette, to: surfaceID)
+        }
     }
 
     private func sendTabConfigStartupInput(
@@ -151,8 +170,9 @@ extension AppDelegate {
             guard let controller,
                   Date() < authorization.expiresAt,
                   controller.tabManager.activeTabID == authorization.destinationTabID,
-                  let tab = controller.tabManager.tab(for: authorization.destinationTabID),
-                  tab.workingDirectory.standardizedFileURL.path == authorization.workingDirectory,
+                  controller.tabConfigAuthorizationWorkingDirectory(
+                    for: authorization.destinationTabID
+                  )?.standardizedFileURL.path == authorization.workingDirectory,
                   let surfaceID = controller.tabSurfaceMap[authorization.destinationTabID] else {
                 return
             }

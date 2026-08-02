@@ -174,10 +174,12 @@ extension MainWindowController {
     ) -> Bool {
         guard request.launchOrigin == .userInterface,
               Date() < request.expiresAt,
-              let tab = tabManager.tab(for: request.destinationTabID) else {
+              tabManager.tab(for: request.destinationTabID) != nil else {
             return false
         }
-        return tab.workingDirectory.standardizedFileURL.path == request.workingDirectory
+        return tabConfigAuthorizationWorkingDirectory(
+            for: request.destinationTabID
+        )?.standardizedFileURL.path == request.workingDirectory
     }
 
     @MainActor

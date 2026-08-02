@@ -41,7 +41,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
 
         #expect(result != nil)
         #expect(approvedRequest?.launchOrigin == .userInterface)
-        #expect(approvedRequest?.workingDirectory == fixture.workspace.path)
+        #expect(approvedRequest?.workingDirectory == fixture.apiDirectory.path)
         #expect(fixture.engine.sentTexts.map(\.text) == ["MODE='test' npm run dev\r"])
     }
 
@@ -61,35 +61,165 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         #expect(fixture.engine.sentTexts.isEmpty)
     }
 
+    @Test("stored layout creates real panes, ratios, and terminal directories")
+    func storedLayoutMaterializesEndToEnd() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+
+        let result = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+        let tabID = try #require(fixture.controller.tabManager.activeTabID)
+        let splitManager = fixture.controller.tabSplitCoordinator.splitManager(for: tabID)
+        let requests = Array(
+            fixture.engine.createSurfaceRequests.dropFirst(fixture.baselineCreateSurfaceCount)
+        )
+
+        #expect(result != nil)
+        #expect(requests.map { $0.workingDirectory?.standardizedFileURL } == [
+            fixture.apiDirectory.standardizedFileURL,
+            fixture.workerDirectory.standardizedFileURL,
+        ])
+        #expect(fixture.controller.tabManager.tab(for: tabID)?.workingDirectory.standardizedFileURL
+            == fixture.workspace.standardizedFileURL)
+        #expect(fixture.controller.collectLeafViews().count == 3)
+
+        guard case .split(_, .horizontal, let first, let second, let rootRatio) = splitManager.rootNode,
+              case .leaf(_, let primaryContentID) = first,
+              case .split(_, .vertical, let markdown, let worker, let nestedRatio) = second,
+              case .leaf(_, let markdownContentID) = markdown,
+              case .leaf(_, let workerContentID) = worker else {
+            Issue.record("The materialized split tree did not preserve the stored topology")
+            return
+        }
+        #expect(abs(rootRatio - 0.62) < 0.000_001)
+        #expect(abs(nestedRatio - 0.4) < 0.000_001)
+        #expect(splitManager.panelType(for: primaryContentID) == .terminal)
+        #expect(splitManager.panelType(for: markdownContentID) == .markdown)
+        #expect(splitManager.panelType(for: workerContentID) == .terminal)
+        #expect(fixture.controller.panelContentViews[markdownContentID] != nil)
+        #expect(fixture.engine.sentTexts.isEmpty)
+    }
+
+    @Test("saving a materialized layout captures the same project-relative topology")
+    func materializedLayoutRoundTripsThroughSave() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+        let tabID = try #require(fixture.controller.tabManager.activeTabID)
+        fixture.controller.tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = fixture.apiDirectory
+        }
+
+        let saved = fixture.delegate.saveFocusedTabConfigForCLI(
+            name: "captured",
+            command: nil,
+            theme: nil,
+            environment: [:],
+            store: fixture.store
+        )
+        let captured = try fixture.store.load(named: "captured")
+
+        #expect(saved != nil)
+        #expect(captured.workingDirectory == fixture.workspace.path)
+        #expect(captured.layout == fixture.layout)
+    }
+
+    @Test("partial layout creation failure releases every created resource")
+    func partialCreationFailureCleansUp() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let originalTabIDs = Set(fixture.controller.tabManager.tabs.map(\.id))
+        let originalSurfaceIDs = Set(fixture.engine.createdSurfaces.keys)
+        fixture.engine.createSurfaceFailureAfterSuccessCount =
+            fixture.baselineCreateSurfaceCount + 1
+
+        let result = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+
+        #expect(result == nil)
+        #expect(Set(fixture.controller.tabManager.tabs.map(\.id)) == originalTabIDs)
+        #expect(Set(fixture.engine.createdSurfaces.keys) == originalSurfaceIDs)
+        #expect(fixture.engine.destroyedSurfaces.count == 1)
+        #expect(fixture.controller.panelContentViews.isEmpty)
+        #expect(fixture.controller.splitSurfaceViews.isEmpty)
+    }
+
+    @Test("closing a configured tab releases its app-scoped project context")
+    func closingTabReleasesProjectContext() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+        let tabID = try #require(fixture.controller.tabManager.activeTabID)
+
+        #expect(TabConfigProjectContextStore.shared.projectRoot(for: tabID)
+            == fixture.workspace.standardizedFileURL)
+        fixture.controller.performCloseTab(tabID)
+        #expect(TabConfigProjectContextStore.shared.projectRoot(for: tabID) == nil)
+    }
+
     private func makeFixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-tab-config-launch-tests")
             .appendingPathComponent(UUID().uuidString)
         let workspace = root.appendingPathComponent("workspace")
+        let apiDirectory = workspace.appendingPathComponent("api")
+        let workerDirectory = workspace.appendingPathComponent("worker")
+        let readme = workspace.appendingPathComponent("README.md")
         try FileManager.default.createDirectory(
-            at: workspace,
+            at: apiDirectory,
             withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
         )
+        try FileManager.default.createDirectory(
+            at: workerDirectory,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        try Data("# Project\n".utf8).write(to: readme)
         let store = TabConfigStore(
             rootDirectory: root.appendingPathComponent("configs"),
             socketExportDirectory: root.appendingPathComponent("exports")
+        )
+        let layout = TabConfigLayout.split(
+            direction: .horizontal,
+            ratio: 0.62,
+            first: .pane(TabConfigPane(
+                workingDirectory: "api",
+                title: "API"
+            )),
+            second: .split(
+                direction: .vertical,
+                ratio: 0.4,
+                first: .pane(TabConfigPane(
+                    type: .markdown,
+                    filePath: "README.md",
+                    title: "README"
+                )),
+                second: .pane(TabConfigPane(
+                    workingDirectory: "worker",
+                    title: "Worker"
+                ))
+            )
         )
         try store.save(TabConfig(
             name: "api",
             workingDirectory: workspace.path,
             command: "npm run dev",
-            environment: ["MODE": "test"]
+            environment: ["MODE": "test"],
+            layout: layout
         ))
 
         let engine = MockTerminalEngine()
         let controller = MainWindowController(bridge: engine)
+        let baselineCreateSurfaceCount = engine.createSurfaceRequests.count
         let delegate = AppDelegate()
         delegate.installWindowControllerForTesting(controller)
         return Fixture(
             root: root,
             workspace: workspace,
+            apiDirectory: apiDirectory,
+            workerDirectory: workerDirectory,
             store: store,
+            layout: layout,
+            baselineCreateSurfaceCount: baselineCreateSurfaceCount,
             engine: engine,
             controller: controller,
             delegate: delegate
@@ -107,13 +237,20 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
     private struct Fixture {
         let root: URL
         let workspace: URL
+        let apiDirectory: URL
+        let workerDirectory: URL
         let store: TabConfigStore
+        let layout: TabConfigLayout
+        let baselineCreateSurfaceCount: Int
         let engine: MockTerminalEngine
         let controller: MainWindowController
         let delegate: AppDelegate
 
         @MainActor
         func cleanup() {
+            for tab in controller.tabManager.tabs {
+                TabConfigProjectContextStore.shared.removeProjectRoot(for: tab.id)
+            }
             controller.window?.orderOut(nil)
             try? FileManager.default.removeItem(at: root)
         }
