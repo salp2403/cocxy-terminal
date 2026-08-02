@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Agentteamfeed";
 
 "cells.sidebar.accessibility" = "Cocxy-celler";
-"cells.sidebar.empty.title" = "Ingen celler";
 "cells.sidebar.empty.message" = "Opprett en lokal eller brukereid skycelle.";
 "cells.toolbar.title" = "Celler";
 "cells.toolbar.running" = "%d kjører";

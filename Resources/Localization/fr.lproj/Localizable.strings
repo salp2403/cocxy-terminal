@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Flux de l’équipe d’agents";
 
 "cells.sidebar.accessibility" = "Cellules Cocxy";
-"cells.sidebar.empty.title" = "Aucune cellule";
 "cells.sidebar.empty.message" = "Créez une cellule locale ou cloud dont vous êtes propriétaire.";
 "cells.toolbar.title" = "Cellules";
 "cells.toolbar.running" = "%d en cours";

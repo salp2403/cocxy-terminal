@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Лента команды агентов";
 
 "cells.sidebar.accessibility" = "Ячейки Cocxy";
-"cells.sidebar.empty.title" = "Нет ячеек";
 "cells.sidebar.empty.message" = "Создайте локальную или принадлежащую пользователю облачную ячейку.";
 "cells.toolbar.title" = "Ячейки";
 "cells.toolbar.running" = "%d запущено";

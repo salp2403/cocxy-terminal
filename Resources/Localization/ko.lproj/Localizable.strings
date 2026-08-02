@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "에이전트 팀 피드";
 
 "cells.sidebar.accessibility" = "Cocxy 셀";
-"cells.sidebar.empty.title" = "셀 없음";
 "cells.sidebar.empty.message" = "로컬 또는 사용자 소유 클라우드 셀을 만듭니다.";
 "cells.toolbar.title" = "셀";
 "cells.toolbar.running" = "%d개 실행 중";

@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Стрічка команди агентів";
 
 "cells.sidebar.accessibility" = "Комірки Cocxy";
-"cells.sidebar.empty.title" = "Немає комірок";
 "cells.sidebar.empty.message" = "Створіть локальну або користувацьку хмарну комірку.";
 "cells.toolbar.title" = "Комірки";
 "cells.toolbar.running" = "%d виконується";

@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Ajan ekibi akışı";
 
 "cells.sidebar.accessibility" = "Cocxy Hücreleri";
-"cells.sidebar.empty.title" = "Hücre yok";
 "cells.sidebar.empty.message" = "Yerel veya kullanıcıya ait bir bulut hücresi oluşturun.";
 "cells.toolbar.title" = "Hücreler";
 "cells.toolbar.running" = "%d çalışıyor";

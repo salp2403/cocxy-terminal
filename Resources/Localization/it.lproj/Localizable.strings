@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Feed del team di agenti";
 
 "cells.sidebar.accessibility" = "Celle Cocxy";
-"cells.sidebar.empty.title" = "Nessuna cella";
 "cells.sidebar.empty.message" = "Crea una cella locale o cloud di proprietà dell’utente.";
 "cells.toolbar.title" = "Celle";
 "cells.toolbar.running" = "%d in esecuzione";

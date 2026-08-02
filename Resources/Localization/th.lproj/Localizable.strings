@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "ฟีดทีมเอเจนต์";
 
 "cells.sidebar.accessibility" = "เซลล์ Cocxy";
-"cells.sidebar.empty.title" = "ไม่มีเซลล์";
 "cells.sidebar.empty.message" = "สร้างเซลล์ภายในเครื่องหรือเซลล์คลาวด์ที่ผู้ใช้เป็นเจ้าของ";
 "cells.toolbar.title" = "เซลล์";
 "cells.toolbar.running" = "กำลังทำงาน %d รายการ";

@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "ព័ត៌មានក្រុមភ្នាក់ងារ";
 
 "cells.sidebar.accessibility" = "Cells របស់ Cocxy";
-"cells.sidebar.empty.title" = "មិនមាន cell";
 "cells.sidebar.empty.message" = "បង្កើត cell មូលដ្ឋាន ឬ cell cloud ដែលអ្នកកាន់កាប់។";
 "cells.toolbar.title" = "Cells";
 "cells.toolbar.running" = "%d កំពុងដំណើរការ";

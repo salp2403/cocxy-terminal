@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Bảng tin nhóm tác nhân";
 
 "cells.sidebar.accessibility" = "Ô Cocxy";
-"cells.sidebar.empty.title" = "Không có ô";
 "cells.sidebar.empty.message" = "Tạo một ô cục bộ hoặc ô cloud do người dùng sở hữu.";
 "cells.toolbar.title" = "Ô";
 "cells.toolbar.running" = "%d đang chạy";

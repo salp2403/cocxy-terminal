@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "موجز فريق الوكلاء";
 
 "cells.sidebar.accessibility" = "خلايا Cocxy";
-"cells.sidebar.empty.title" = "لا توجد خلايا";
 "cells.sidebar.empty.message" = "أنشئ خلية محلية أو خلية سحابية تملكها.";
 "cells.toolbar.title" = "الخلايا";
 "cells.toolbar.running" = "%d قيد التشغيل";

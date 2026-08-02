@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "智能体团队动态";
 
 "cells.sidebar.accessibility" = "Cocxy 单元";
-"cells.sidebar.empty.title" = "没有单元";
 "cells.sidebar.empty.message" = "创建本地或用户拥有的云端单元。";
 "cells.toolbar.title" = "单元";
 "cells.toolbar.running" = "%d 个运行中";

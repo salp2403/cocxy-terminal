@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "エージェントチームフィード";
 
 "cells.sidebar.accessibility" = "Cocxyセル";
-"cells.sidebar.empty.title" = "セルはありません";
 "cells.sidebar.empty.message" = "ローカルまたはユーザー所有のクラウドセルを作成します。";
 "cells.toolbar.title" = "セル";
 "cells.toolbar.running" = "%d件実行中";

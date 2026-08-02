@@ -1246,7 +1246,6 @@ struct AppLocalizationSwiftTestingTests {
             "agentTeams.creator.launch",
             "agentTeams.graph.title",
             "agentTeams.feed.empty",
-            "cells.sidebar.empty.title",
             "cells.sidebar.empty.message",
             "cells.toolbar.running",
             "cells.toolbar.refresh",

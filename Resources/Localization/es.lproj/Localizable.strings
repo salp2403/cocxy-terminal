@@ -371,6 +371,7 @@
 "scrollbackSearch.nextMatch" = "Siguiente coincidencia";
 "scrollbackSearch.caseSensitive" = "Distinguir mayúsculas";
 "scrollbackSearch.regex" = "Expresión regular";
+"scrollbackSearch.invalidRegex" = "Expresión regular no válida";
 "scrollbackSearch.close" = "Cerrar búsqueda";
 "agentDashboard.title" = "Panel de agentes";
 "agentDashboard.accessibility" = "Panel de agentes";
@@ -3363,7 +3364,6 @@
 "socket.privilegedApproval.approveOnce" = "Autorizar una vez";
 "socket.privilegedApproval.cancel" = "Cancelar";
 "socket.privilegedApproval.preview.accessibility" = "Acción local exacta del CLI para autorizar";
-"cells.sidebar.empty.title" = "No hay cells";
 "cells.sidebar.empty.message" = "Crea una cell local o cloud propia.";
 "cells.toolbar.running" = "%d en ejecución";
 "cells.toolbar.refresh" = "Refrescar cells";

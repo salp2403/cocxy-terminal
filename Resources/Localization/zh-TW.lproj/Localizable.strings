@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "代理團隊動態";
 
 "cells.sidebar.accessibility" = "Cocxy 單元";
-"cells.sidebar.empty.title" = "沒有單元";
 "cells.sidebar.empty.message" = "建立本機或使用者擁有的雲端單元。";
 "cells.toolbar.title" = "單元";
 "cells.toolbar.running" = "%d 個執行中";

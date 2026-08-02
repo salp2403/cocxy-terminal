@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Kanał zespołu agentów";
 
 "cells.sidebar.accessibility" = "Komórki Cocxy";
-"cells.sidebar.empty.title" = "Brak komórek";
 "cells.sidebar.empty.message" = "Utwórz lokalną lub należącą do użytkownika komórkę chmurową.";
 "cells.toolbar.title" = "Komórki";
 "cells.toolbar.running" = "%d działa";

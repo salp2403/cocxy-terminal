@@ -1714,7 +1714,7 @@ extension MainWindowController {
                 lhs.0 == rhs.0 && lhs.1 == rhs.1 && lhs.2 == rhs.2
             })
             .sink { [weak self, weak viewModel] query, caseSensitive, useRegex in
-                guard let self, let viewModel else { return }
+                guard let self, let viewModel, viewModel.validate(query: query, useRegex: useRegex) else { return }
                 let options = SearchOptions(
                     query: query,
                     caseSensitive: caseSensitive,

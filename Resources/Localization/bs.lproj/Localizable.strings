@@ -76,7 +76,6 @@
 "agentTeams.feed.accessibility" = "Feed tima agenata";
 
 "cells.sidebar.accessibility" = "Cocxy ćelije";
-"cells.sidebar.empty.title" = "Nema ćelija";
 "cells.sidebar.empty.message" = "Kreiraj lokalnu ili korisničku cloud ćeliju.";
 "cells.toolbar.title" = "Ćelije";
 "cells.toolbar.running" = "%d pokrenuto";
