@@ -11,30 +11,7 @@ enum DashboardHookConnectionIssue: Equatable, Sendable {
 
 // MARK: - Agent Dashboard ViewModel
 
-/// ViewModel that aggregates agent sessions from hook events and detection signals.
-///
-/// Subscribes to:
-/// - `HookEventReceiver.eventPublisher` for Claude Code lifecycle events.
-/// - `AgentDetectionEngine.stateChanged` for pattern-based agent detection.
-///
-/// Maintains a sorted list of `AgentSessionInfo` instances and publishes
-/// changes via Combine for reactive UI binding.
-///
-/// ## Sorting
-///
-/// Sessions are sorted by:
-/// 1. Priority (focus > priority > standard)
-/// 2. State urgency (error > blocked > waitingForInput > working > launching > idle > finished)
-/// 3. Last activity time (oldest first within the same group)
-///
-/// ## Thread Safety
-///
-/// All state mutations happen on the main thread via `@MainActor`.
-/// The `HookEventReceiver` publishes from background threads; this ViewModel
-/// uses `receive(on: DispatchQueue.main)` to ensure thread safety.
-///
-/// - SeeAlso: ADR-008 Section 5.1 (Dashboard)
-/// - SeeAlso: `AgentDashboardProviding` protocol
+/// Aggregates hook and pattern sessions into the main-actor dashboard model.
 @MainActor
 final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
@@ -141,6 +118,7 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     var patternContextProvider: ((SurfaceID?) -> (tabId: UUID, surfaceID: SurfaceID?, workingDirectory: String?)?)?
 
     private let hookSilenceInterval: TimeInterval
+    private let projectResolver: (any ProjectResolving)?
     private var hookSilenceTasks: [UUID: Task<Void, Never>] = [:]
     private var tabsWithObservedHooks = Set<UUID>()
 
@@ -161,9 +139,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
     init(
         hookEventReceiver: HookEventReceiving? = nil,
         detectionEngine: AgentDetectionEngineImpl? = nil,
+        projectResolver: (any ProjectResolving)? = nil,
         hookSilenceInterval: TimeInterval = 20
     ) {
         self.hookSilenceInterval = hookSilenceInterval
+        self.projectResolver = projectResolver
         self.hookConnectionIssue = nil
         self.hookRepairSucceeded = nil
         self.droppedByCwdCount = 0
@@ -356,13 +336,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             liveSurfaceSessionIDs.insert(sessionID)
 
             let dashboardState = mapAgentState(surfaceState.agentState)
-            let projectName = extractProjectName(from: context.workingDirectory)
+            let project = resolveProject(from: context.workingDirectory, fallbackName: agentName)
             let activity = surfaceState.agentActivity
 
             if sessionDataStore[sessionID] == nil {
                 sessionDataStore[sessionID] = MutableSessionData(
                     id: sessionID,
-                    projectName: projectName != "Unknown" ? projectName : agentName,
+                    projectName: project.name,
+                    projectIdentity: project.identity,
                     tabId: context.tabId,
                     state: dashboardState,
                     agentName: agentName,
@@ -373,6 +354,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
                 )
             } else {
                 sessionDataStore[sessionID]?.state = dashboardState
+                sessionDataStore[sessionID]?.projectName = project.name
+                sessionDataStore[sessionID]?.projectIdentity = project.identity
                 sessionDataStore[sessionID]?.agentName = agentName
                 sessionDataStore[sessionID]?.lastActivity = activity
                 sessionDataStore[sessionID]?.lastActivityTime = Date()
@@ -416,9 +399,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         let state = aggregateAgentTeamState(subagents.map(\.state))
         let teammateNames = run.config.teammates.map(\.name).joined(separator: ", ")
 
+        let project = resolveProject(from: resolvedWorkingDirectory)
         sessionDataStore[run.config.id] = MutableSessionData(
             id: run.config.id,
-            projectName: extractProjectName(from: resolvedWorkingDirectory),
+            projectName: project.name,
+            projectIdentity: project.identity,
             tabId: tabId,
             state: state,
             agentName: run.config.provider.displayName,
@@ -470,9 +455,11 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             activity = "Task run cancelled"
         }
 
+        let project = resolveProject(from: run.originRepoPath.path)
         sessionDataStore[run.id] = MutableSessionData(
             id: run.id,
-            projectName: extractProjectName(from: run.originRepoPath.path),
+            projectName: project.name,
+            projectIdentity: project.identity,
             tabId: tabId,
             state: mapTaskRunStatus(run),
             agentName: "Parallel Task",
@@ -588,12 +575,13 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         let syntheticSessionId = patternSessionID(tabId: tabId, surfaceID: surfaceID)
         let dashboardState = mapStateMachineState(state)
         let previousState = sessionDataStore[syntheticSessionId]?.state
+        let project = resolveProject(from: workingDirectory, fallbackName: agentName)
 
         if sessionDataStore[syntheticSessionId] == nil {
-            let projectName = extractProjectName(from: workingDirectory)
             let data = MutableSessionData(
                 id: syntheticSessionId,
-                projectName: projectName != "Unknown" ? projectName : agentName,
+                projectName: project.name,
+                projectIdentity: project.identity,
                 tabId: tabId,
                 state: dashboardState,
                 agentName: agentName
@@ -601,6 +589,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             sessionDataStore[syntheticSessionId] = data
         } else {
             sessionDataStore[syntheticSessionId]?.state = dashboardState
+            sessionDataStore[syntheticSessionId]?.projectName = project.name
+            sessionDataStore[syntheticSessionId]?.projectIdentity = project.identity
             sessionDataStore[syntheticSessionId]?.lastActivityTime = Date()
             sessionDataStore[syntheticSessionId]?.agentName = agentName
         }
@@ -632,14 +622,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
             workingDirectory = startData.workingDirectory
         }
 
-        let projectName = extractProjectName(from: workingDirectory)
+        let project = resolveProject(from: workingDirectory)
         let resolvedTabId = tabIdResolver?(event.sessionId, workingDirectory)
             ?? workingDirectory.flatMap { tabIdForCwdProvider?($0) }
             ?? UUID()
 
         let data = MutableSessionData(
             id: event.sessionId,
-            projectName: projectName,
+            projectName: project.name,
+            projectIdentity: project.identity,
             tabId: resolvedTabId,
             state: .launching,
             agentName: agentType,
@@ -681,13 +672,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
         // Auto-create session if it doesn't exist. Claude Code may not always
         // send SessionStart before tool use events (e.g., hooks installed mid-session).
         if sessionDataStore[event.sessionId] == nil {
-            let projectName = extractProjectName(from: event.cwd)
+            let project = resolveProject(from: event.cwd)
             let resolvedTabId = tabIdResolver?(event.sessionId, event.cwd)
                 ?? event.cwd.flatMap { tabIdForCwdProvider?($0) }
                 ?? UUID()
             let data = MutableSessionData(
                 id: event.sessionId,
-                projectName: projectName,
+                projectName: project.name,
+                projectIdentity: project.identity,
                 tabId: resolvedTabId,
                 state: .working,
                 agentName: "Claude Code"
@@ -758,13 +750,14 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     private func handleSubagentStart(_ event: HookEvent) {
         if sessionDataStore[event.sessionId] == nil {
-            let projectName = extractProjectName(from: event.cwd)
+            let project = resolveProject(from: event.cwd)
             let resolvedTabId = tabIdResolver?(event.sessionId, event.cwd)
                 ?? event.cwd.flatMap { tabIdForCwdProvider?($0) }
                 ?? UUID()
             let data = MutableSessionData(
                 id: event.sessionId,
-                projectName: projectName,
+                projectName: project.name,
+                projectIdentity: project.identity,
                 tabId: resolvedTabId,
                 state: .working,
                 agentName: "Claude Code"
@@ -1164,10 +1157,15 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 
     // MARK: - Private: Helpers
 
-    /// Extracts the project name from a working directory path.
-    private func extractProjectName(from path: String?) -> String {
-        guard let path = path else { return "Unknown" }
-        return URL(fileURLWithPath: path).lastPathComponent
+    private func resolveProject(from path: String?, fallbackName: String = "Unknown")
+        -> (name: String, identity: ProjectID?) {
+        guard let path else { return (fallbackName, nil) }
+        let directory = URL(fileURLWithPath: path, isDirectory: true)
+        guard let projectResolver else {
+            return (ProjectDescriptor.automaticName(for: directory), ProjectID(rootURL: directory))
+        }
+        let project = projectResolver.resolveProject(for: directory)
+        return (project.groupingAutomaticName, project.groupingID)
     }
 
     /// Formats a tool use event into a human-readable activity string.
@@ -1293,7 +1291,8 @@ final class AgentDashboardViewModel: AgentDashboardProviding, ObservableObject {
 /// the mutable state that gets rebuilt into `AgentSessionInfo` on every change.
 struct MutableSessionData {
     let id: String
-    let projectName: String
+    var projectName: String
+    var projectIdentity: ProjectID? = nil
     let tabId: UUID
     var state: AgentDashboardState
     var agentName: String?
@@ -1324,6 +1323,7 @@ struct MutableSessionData {
         return AgentSessionInfo(
             id: id,
             projectName: projectName,
+            projectIdentity: projectIdentity,
             windowID: windowID,
             windowLabel: windowLabel,
             gitBranch: gitBranch,

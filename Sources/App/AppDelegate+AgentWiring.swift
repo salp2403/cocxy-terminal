@@ -460,8 +460,8 @@ extension AppDelegate {
     func wireAgentDashboardAndTimeline(_ engine: AgentDetectionEngineImpl) {
         // Dashboard: subscribes to both hook events and detection engine signals.
         let dashboardVM = AgentDashboardViewModel(
-            hookEventReceiver: hookEventReceiver,
-            detectionEngine: engine
+            hookEventReceiver: hookEventReceiver, detectionEngine: engine,
+            projectResolver: projectResolver
         )
         self.agentDashboardViewModel = dashboardVM
 

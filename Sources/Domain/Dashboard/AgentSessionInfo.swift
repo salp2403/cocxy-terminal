@@ -195,6 +195,8 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
     let id: String
     /// Name of the project directory where the agent is working.
     let projectName: String
+    /// Canonical project identity, folded to the origin for linked worktrees.
+    let projectIdentity: ProjectID?
     /// The window currently owning the tab for this session, when known.
     let windowID: WindowID?
     /// Human-readable window label for dashboard display.
@@ -231,6 +233,7 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
     init(
         id: String,
         projectName: String,
+        projectIdentity: ProjectID? = nil,
         windowID: WindowID? = nil,
         windowLabel: String? = nil,
         gitBranch: String?,
@@ -249,6 +252,7 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
     ) {
         self.id = id
         self.projectName = projectName
+        self.projectIdentity = projectIdentity
         self.windowID = windowID
         self.windowLabel = windowLabel
         self.gitBranch = gitBranch
@@ -264,5 +268,12 @@ struct AgentSessionInfo: Identifiable, Equatable, Sendable {
         self.fileConflicts = fileConflicts
         self.totalToolCalls = totalToolCalls
         self.totalErrors = totalErrors
+    }
+
+    var projectLocationLabel: String? {
+        guard let projectIdentity else { return nil }
+        let abbreviated = (projectIdentity.rawValue as NSString).abbreviatingWithTildeInPath
+        let parent = (abbreviated as NSString).deletingLastPathComponent
+        return parent.isEmpty ? "/" : parent
     }
 }

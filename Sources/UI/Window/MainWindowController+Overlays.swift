@@ -1188,7 +1188,7 @@ extension MainWindowController {
         guard let overlayContainer = overlayContainerView else { return }
 
         if dashboardViewModel == nil {
-            dashboardViewModel = injectedDashboardViewModel ?? AgentDashboardViewModel()
+            dashboardViewModel = injectedDashboardViewModel ?? AgentDashboardViewModel(projectResolver: projectResolver)
         }
 
         guard let viewModel = dashboardViewModel else { return }
@@ -1791,7 +1791,7 @@ extension MainWindowController {
         guard let overlayContainer = overlayContainerView else { return }
 
         if smartRoutingViewModel == nil {
-            let dashVM = dashboardViewModel ?? AgentDashboardViewModel()
+            let dashVM = dashboardViewModel ?? AgentDashboardViewModel(projectResolver: projectResolver)
             if dashboardViewModel == nil { dashboardViewModel = dashVM }
             let router = SmartAgentRouterImpl(dashboard: dashVM, tabNavigator: self)
             smartRoutingViewModel = SmartRoutingOverlayViewModel(router: router)

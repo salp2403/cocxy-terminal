@@ -222,10 +222,20 @@ struct DashboardSessionRow: View {
                     .foregroundColor(CocxyColors.swiftUI(CocxyColors.peach))
             }
 
-            Text(session.projectName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.primary)
-                .lineLimit(1)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(session.projectName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                if let location = session.projectLocationLabel {
+                    Text(location)
+                        .font(.system(size: 8.5, design: .monospaced))
+                        .foregroundColor(CocxyColors.swiftUI(CocxyColors.overlay1))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+            .help(session.projectIdentity?.rawValue ?? session.projectName)
 
             if let agent = session.agentName, !agent.isEmpty {
                 Text(agent)
@@ -506,6 +516,7 @@ struct DashboardSessionRow: View {
 
     private var accessibilityDescription: String {
         var parts = [session.projectName]
+        if let identity = session.projectIdentity { parts.append(identity.rawValue) }
         if let windowLabel = session.windowLabel { parts.append(windowLabel) }
         if let agent = session.agentName { parts.append(agent) }
         if let branch = session.gitBranch {
