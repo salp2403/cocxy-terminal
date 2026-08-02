@@ -62,6 +62,8 @@ struct TaskInboxProjectorSwiftTestingTests {
 
         #expect(projectEntries.map(\.kind) == [.handoff, .fanOut, .queuedTask, .liveAgent])
         #expect(Set(projectEntries.map(\.id)).count == projectEntries.count)
+        let fanOut = try #require(projectEntries.first { $0.kind == .fanOut })
+        #expect(fanOut.navigation?.sessionID == run.id)
         let agent = try #require(projectEntries.first { $0.kind == .liveAgent })
         #expect(agent.status == AgentDashboardState.waitingForInput.rawValue)
         #expect(agent.touchedFiles == ["Sources/App.swift"])

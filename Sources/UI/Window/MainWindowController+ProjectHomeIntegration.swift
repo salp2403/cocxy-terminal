@@ -17,7 +17,8 @@ extension MainWindowController {
 
     func makeProjectHomePanelView(panel: PanelInfo, tabID: TabID?) -> NSView {
         let localizer = appLocalizer()
-        guard let store = injectedTaskInboxStore else {
+        guard let store = injectedTaskInboxStore,
+              let fanOutCoordinator = injectedProjectFanOutCoordinator else {
             return NSHostingView(rootView: ProjectHomeUnavailablePanelView(localizer: localizer))
         }
         let fallbackRoot = tabID.flatMap { tabManager.tab(for: $0)?.workingDirectory }
@@ -116,9 +117,18 @@ extension MainWindowController {
             },
             actions: actions
         )
+        let fanOutViewModel = makeProjectFanOutViewModel(
+            projectID: projectID,
+            projectRoot: projectRoot,
+            preferredSourceTabID: sourceTab?.id,
+            record: record,
+            worktreeConfig: worktreeConfig
+        )
         return NSHostingView(rootView: ProjectHomePanelView(
             viewModel: viewModel,
+            fanOutViewModel: fanOutViewModel,
             inboxStore: store,
+            fanOutCoordinator: fanOutCoordinator,
             localizer: localizer
         ))
     }

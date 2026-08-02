@@ -37,7 +37,16 @@ final class ProjectFanOutCoordinator: ObservableObject {
 
     func consume(for projectID: ProjectID) -> ProjectFanOutDestination? {
         guard let request, request.projectID == projectID else { return nil }
+        return consume(request, for: projectID)
+    }
+
+    func consume(
+        _ deliveredRequest: ProjectFanOutRequest,
+        for projectID: ProjectID
+    ) -> ProjectFanOutDestination? {
+        guard deliveredRequest.projectID == projectID,
+              request?.id == deliveredRequest.id else { return nil }
         self.request = nil
-        return request.destination
+        return deliveredRequest.destination
     }
 }

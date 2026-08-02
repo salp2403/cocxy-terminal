@@ -47,13 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Manages the global dropdown terminal panel and hotkey.
     /// Exposed for testing purposes.
     private(set) var quickTerminalController: QuickTerminalController?
-
     private(set) var themeEngine: ThemeEngineImpl?
     let gitInfoProvider = GitInfoProviderImpl()
     let projectResolver = CachedProjectResolver()
     let projectRegistry = ProjectRegistry()
     var projectRegistryChangeCancellable: AnyCancellable?
     lazy var taskInboxStore = TaskInboxStore(projectResolver: projectResolver)
+    let projectFanOutCoordinator = ProjectFanOutCoordinator()
     lazy var sharedWorktreeService: WorktreeService = {
         let gitInfoProvider = self.gitInfoProvider
         let projectResolver = self.projectResolver
@@ -1522,7 +1522,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return HookPathNormalizer.normalize(surfacePath) == normalizedPath
         }
     }
-
     func configureSharedServices(
         for controller: MainWindowController,
         registerWindow: Bool = true
@@ -1532,6 +1531,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedSessionDiffTracker = sessionDiffTracker
         controller.injectedDashboardViewModel = agentDashboardViewModel
         controller.injectedTaskInboxStore = taskInboxStore
+        controller.injectedProjectFanOutCoordinator = projectFanOutCoordinator
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedNotificationManager = notificationManager
         controller.onAgentTabClosed = { [weak self] tabID in

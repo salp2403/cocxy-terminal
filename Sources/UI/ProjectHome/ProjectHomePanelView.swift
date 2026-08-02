@@ -5,18 +5,24 @@ import SwiftUI
 
 struct ProjectHomePanelView: View {
     @StateObject private var viewModel: ProjectHomePanelViewModel
+    @StateObject private var fanOutViewModel: ProjectFanOutFlowViewModel
     @ObservedObject private var inboxStore: TaskInboxStore
+    @ObservedObject private var fanOutCoordinator: ProjectFanOutCoordinator
     let localizer: AppLocalizer
 
     @Environment(\.designThemePalette) private var palette
 
     init(
         viewModel: ProjectHomePanelViewModel,
+        fanOutViewModel: ProjectFanOutFlowViewModel,
         inboxStore: TaskInboxStore,
+        fanOutCoordinator: ProjectFanOutCoordinator,
         localizer: AppLocalizer
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
+        _fanOutViewModel = StateObject(wrappedValue: fanOutViewModel)
         self.inboxStore = inboxStore
+        self.fanOutCoordinator = fanOutCoordinator
         self.localizer = localizer
     }
 
@@ -28,28 +34,41 @@ struct ProjectHomePanelView: View {
         VStack(spacing: 0) {
             projectHeader
             Divider().overlay(palette.divider.resolvedColor())
-            GeometryReader { proxy in
-                if proxy.size.width >= 760 {
-                    HStack(spacing: 0) {
-                        taskInbox(scrolls: true)
-                            .frame(minWidth: 430, maxWidth: .infinity)
-                        Divider().overlay(palette.divider.resolvedColor())
-                        projectContext
-                            .frame(width: min(310, max(250, proxy.size.width * 0.31)))
-                    }
-                } else {
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            taskInbox(scrolls: false)
+            if fanOutViewModel.mode == .inbox {
+                GeometryReader { proxy in
+                    if proxy.size.width >= 760 {
+                        HStack(spacing: 0) {
+                            taskInbox(scrolls: true)
+                                .frame(minWidth: 430, maxWidth: .infinity)
                             Divider().overlay(palette.divider.resolvedColor())
                             projectContext
+                                .frame(width: min(310, max(250, proxy.size.width * 0.31)))
+                        }
+                    } else {
+                        ScrollView {
+                            VStack(spacing: 0) {
+                                taskInbox(scrolls: false)
+                                Divider().overlay(palette.divider.resolvedColor())
+                                projectContext
+                            }
                         }
                     }
                 }
+            } else {
+                ProjectFanOutFlowView(viewModel: fanOutViewModel, localizer: localizer)
             }
         }
         .glassPanelBackground()
-        .task { viewModel.loadContext() }
+        .task {
+            viewModel.loadContext()
+            await consumePendingFanOutRequest()
+        }
+        .onReceive(fanOutCoordinator.$request.compactMap { $0 }) { request in
+            Task { @MainActor in
+                await Task.yield()
+                await consumeFanOutRequest(request)
+            }
+        }
         .sheet(isPresented: $viewModel.isTeamSheetPresented) {
             ProjectHomeTeamLaunchSheet(
                 projectName: viewModel.displayName,
@@ -142,6 +161,14 @@ struct ProjectHomePanelView: View {
             compact: compact,
             action: { viewModel.isTeamSheetPresented = true }
         )
+        if viewModel.worktreeConfig.enabled {
+            projectAction(
+                title: localizer.string("projectHome.action.fanOut", fallback: "Fan Out"),
+                icon: "square.stack.3d.up",
+                compact: compact,
+                action: { fanOutViewModel.showLaunch() }
+            )
+        }
         projectAction(
             title: localizer.string("projectHome.action.codeReview", fallback: "Code Review"),
             icon: "doc.text.magnifyingglass",
@@ -184,6 +211,11 @@ struct ProjectHomePanelView: View {
             }
             Button(localizer.string("projectHome.action.launchTeam", fallback: "Launch Team")) {
                 viewModel.isTeamSheetPresented = true
+            }
+            if viewModel.worktreeConfig.enabled {
+                Button(localizer.string("projectHome.action.fanOut", fallback: "Fan Out")) {
+                    fanOutViewModel.showLaunch()
+                }
             }
             Button(
                 localizer.string("projectHome.action.codeReview", fallback: "Code Review"),
@@ -308,14 +340,38 @@ struct ProjectHomePanelView: View {
 
     @ViewBuilder
     private func taskRow(_ entry: TaskInboxEntry) -> some View {
-        if let navigation = entry.navigation {
-            Button { viewModel.actions.activateEntry(navigation) } label: {
+        if let navigation = entry.navigation,
+           entry.kind != .fanOut || viewModel.worktreeConfig.enabled {
+            Button { activate(entry, navigation: navigation) } label: {
                 taskRowContent(entry)
             }
             .buttonStyle(.plain)
         } else {
             taskRowContent(entry)
         }
+    }
+
+    private func activate(_ entry: TaskInboxEntry, navigation: TaskInboxNavigation) {
+        if entry.kind == .fanOut,
+           viewModel.worktreeConfig.enabled,
+           let runID = navigation.sessionID {
+            Task { await fanOutViewModel.showComparison(runID: runID) }
+            return
+        }
+        viewModel.actions.activateEntry(navigation)
+    }
+
+    private func consumePendingFanOutRequest() async {
+        guard let destination = fanOutCoordinator.consume(for: viewModel.projectID) else { return }
+        await fanOutViewModel.handle(destination)
+    }
+
+    private func consumeFanOutRequest(_ request: ProjectFanOutRequest) async {
+        guard let destination = fanOutCoordinator.consume(
+            request,
+            for: viewModel.projectID
+        ) else { return }
+        await fanOutViewModel.handle(destination)
     }
 
     private func taskRowContent(_ entry: TaskInboxEntry) -> some View {

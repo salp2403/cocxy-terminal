@@ -45,7 +45,14 @@ struct ProjectHomeIntegrationSwiftTestingTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let cliEntries = try decoder.decode([TaskInboxEntry].self, from: data)
-        #expect(cliEntries == visibleEntries)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        let visibleContract = try decoder.decode(
+            [TaskInboxEntry].self,
+            from: encoder.encode(visibleEntries)
+        )
+        #expect(cliEntries == visibleContract)
+        #expect(visibleEntries.first?.navigation?.sessionID == run.id)
     }
 
     @Test("restored factory is non-nil and duplicate opens reuse one panel")
@@ -61,6 +68,7 @@ struct ProjectHomeIntegrationSwiftTestingTests {
             projectResolver: resolver
         )
         controller.injectedTaskInboxStore = TaskInboxStore(projectResolver: resolver)
+        controller.injectedProjectFanOutCoordinator = ProjectFanOutCoordinator()
 
         let restored = controller.makeProjectHomePanelView(
             panel: .projectHome(projectRoot: root),

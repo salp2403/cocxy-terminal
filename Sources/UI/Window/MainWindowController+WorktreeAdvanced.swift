@@ -164,7 +164,7 @@ extension MainWindowController {
     }
 
     @MainActor
-    private func availableWorktreeBaseRefs(for projectRoot: URL?) -> [String] {
+    func availableWorktreeBaseRefs(for projectRoot: URL?) -> [String] {
         guard let repo = projectRoot ?? currentWorktreeOriginRepo() else {
             return ["HEAD"]
         }

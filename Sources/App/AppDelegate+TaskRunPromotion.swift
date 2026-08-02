@@ -81,7 +81,7 @@ extension AppDelegate {
             mergedPlan: mergedPlan
         )
         let excludedRuntimeIDs = Set(run.candidates.flatMap { [$0.id, $0.teamID] })
-        let dashboardSessions = await MainActor.run { self.taskCollisionSessionsSnapshot() }
+        let dashboardSessions = await MainActor.run { self.taskRunLiveSessionsSnapshot() }
         let collisionReport = TaskCollisionDetector.beforePromotion(
             candidate: selectedComparison,
             liveSessions: dashboardSessions,
@@ -118,7 +118,7 @@ extension AppDelegate {
         guard freshComparisons.first(where: { $0.id == candidateID }) == preview.selectedComparison else {
             throw stalePromotionError()
         }
-        let dashboardSessions = await MainActor.run { self.taskCollisionSessionsSnapshot() }
+        let dashboardSessions = await MainActor.run { self.taskRunLiveSessionsSnapshot() }
         let excludedRuntimeIDs = Set(run.candidates.flatMap { [$0.id, $0.teamID] })
         let freshCollisionReport = TaskCollisionDetector.beforePromotion(
             candidate: preview.selectedComparison,
@@ -302,7 +302,7 @@ extension AppDelegate {
     }
 
     @MainActor
-    private func taskCollisionSessionsSnapshot() -> [AgentSessionInfo] {
+    func taskRunLiveSessionsSnapshot() -> [AgentSessionInfo] {
         var sessions = agentDashboardViewModel?.sessions ?? []
         for controller in allWindowControllers {
             guard let model = controller.dashboardViewModel,
@@ -315,5 +315,18 @@ extension AppDelegate {
         return grouped.values.compactMap { values in
             values.max { ($0.lastActivityTime ?? .distantPast) < ($1.lastActivityTime ?? .distantPast) }
         }
+    }
+
+    func taskLaunchCollisionReport(
+        plannedPaths: [String],
+        projectID: ProjectID,
+        projectRoot: URL
+    ) -> TaskCollisionReport {
+        TaskCollisionDetector.beforeLaunch(
+            plannedPaths: plannedPaths,
+            liveSessions: taskRunLiveSessionsSnapshot(),
+            projectID: projectID,
+            projectRoot: projectRoot
+        )
     }
 }

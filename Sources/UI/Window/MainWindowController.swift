@@ -520,11 +520,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// The container view for full-window overlays.
     private(set) var overlayContainerView: NSView?
-
     /// Dashboard ViewModel injected by AppDelegate for real agent data.
     /// When set, the dashboard panel shows live agent sessions instead of an empty view.
     var injectedDashboardViewModel: AgentDashboardViewModel?
     var injectedTaskInboxStore: TaskInboxStore?
+    var injectedProjectFanOutCoordinator: ProjectFanOutCoordinator?
     /// Lets AppDelegate release hook routing bindings after a tab is removed.
     var onAgentTabClosed: ((TabID) -> Void)?
 
