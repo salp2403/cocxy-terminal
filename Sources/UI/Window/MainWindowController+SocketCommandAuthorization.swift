@@ -374,8 +374,8 @@ extension AppDelegate {
               let focusedController = focusedWindowController() ?? windowController else {
             return nil
         }
-
         switch request.category {
+        case .project: return projectSocketPresentationTarget(for: request, controller: focusedController)
         case .terminalInput, .terminalRead, .terminalSharing:
             if request.command == .timelineShow || request.command == .timelineExport {
                 if let rawTabID = request.params["tabId"] {

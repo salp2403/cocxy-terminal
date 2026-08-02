@@ -8,14 +8,7 @@ import CocxyCommandSignatures
 import CocxyCommandCorrections
 import CocxyVault
 
-// MARK: - Command Runner
-
 /// Orchestrates the full CLI lifecycle: parse arguments, send to server, format output.
-///
-/// This is the top-level coordination layer. It delegates:
-/// - Argument parsing to `CLIArgumentParser`.
-/// - Socket communication to `SocketClient`.
-/// - Output formatting to `OutputFormatter`.
 public struct CommandRunner {
     static let extendedGitHubReadSocketTimeoutSeconds: TimeInterval = 25
     // Worst-case approved merge path is 265s: repo/branch/PR resolution,
@@ -33,7 +26,6 @@ public struct CommandRunner {
     static let maximumBrowserWaitTimeoutMilliseconds = 30_000
     static let browserActionSocketGraceSeconds: TimeInterval = 3
 
-    /// The socket client to use for communication.
     public let socketClient: SocketClient
     public let signatureKeyStore: SignatureKeychainStore
     public let trustedAuthorRegistryURL: URL
@@ -41,10 +33,6 @@ public struct CommandRunner {
     public let vaultUserStateStore: VaultUserStateStore
     public let vaultSearchIndexFactory: () throws -> VaultSearchIndex
 
-    /// Creates a command runner with a socket client.
-    ///
-    /// - Parameter socketClient: The socket client. Defaults to a new instance
-    ///   with the default socket path.
     public init(
         socketClient: SocketClient = SocketClient(),
         signatureKeyStore: SignatureKeychainStore = SignatureKeychainStore(),
@@ -2072,6 +2060,14 @@ public struct CommandRunner {
         case .skillUninstall(let id):
             return CLISocketRequest(id: requestID, command: "skill-uninstall", params: ["id": id])
 
+        case .projectOpen, .projectList, .projectPin, .projectUnpin,
+             .projectAlias, .projectForget, .projectClone, .projectTasks:
+            return ProjectCLIRequestBuilder.request(
+                for: command,
+                id: requestID,
+                currentDirectory: FileManager.default.currentDirectoryPath
+            )
+
         case .worktreeAdd(let agent, let branch, let baseRef):
             var params: [String: String] = [:]
             if let agent { params["agent"] = agent }
@@ -2234,6 +2230,8 @@ public struct CommandRunner {
              .gitAssistantPRDraft,
              .gitAssistantReleaseNotes:
             return extendedGitAssistantSocketTimeoutSeconds
+        case .projectClone:
+            return extendedCellSocketTimeoutSeconds
         case .cellCreate,
              .cellList,
              .cellExec,

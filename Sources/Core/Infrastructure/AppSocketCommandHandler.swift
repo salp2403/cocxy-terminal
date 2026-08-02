@@ -386,28 +386,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     /// Opens an SSH session in a new tab. Params: (destination, port?, identityFile?).
     let sshProvider: (@Sendable (String, Int?, String?) -> (id: String, title: String)?)?
 
-    /// Handles every `cocxy worktree-*` CLI verb. The closure receives
-    /// the verb kind ("add" / "list" / "remove" / "prune") plus a flat
-    /// params dictionary the handler extracted from the socket
-    /// request, and returns a boolean success flag along with a data
-    /// dictionary. When `success == false`, the `data["error"]` value
-    /// is surfaced as the socket-level error message.
-    ///
-    /// Synchronous by contract so the handler method can remain
-    /// synchronous; the AppDelegate-side implementation bridges the
-    /// async `WorktreeService` via a `DispatchSemaphore`, which is
-    /// acceptable because the handler already runs on a background
-    /// socket queue.
     let worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
+    let projectCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
-    /// Routes `cocxy github-*` verbs through the AppDelegate-side
-    /// bridge. Same sync `kind` + `params` shape as the worktree
-    /// provider so both CLI surfaces share one mental model.
     let githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
-
-    /// Routes `cocxy git-assistant-*` verbs through the AppDelegate-side
-    /// bridge so generation can use app config, Keychain-backed provider
-    /// secrets, and the active tab's repository.
     let gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))?
 
     /// Routes local agent-team CLI verbs through AppDelegate so the handler
@@ -727,6 +709,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         imageDeleteProvider: (@Sendable (UInt32) -> [String: String]?)? = nil,
         imageClearProvider: (@Sendable () -> [String: String]?)? = nil,
         worktreeCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
+        projectCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         githubCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         gitAssistantCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
         agentTeamCLIProvider: (@Sendable (String, [String: String]) -> (success: Bool, data: [String: String]))? = nil,
@@ -816,6 +799,18 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.imageDeleteProvider = Self.approvalGated(imageDeleteProvider, denied: nil)
         self.imageClearProvider = Self.approvalGated(imageClearProvider, denied: nil)
         self.worktreeCLIProvider = worktreeCLIProvider
+        if let projectCLIProvider {
+            self.projectCLIProvider = { kind, params in
+                if kind == "open" {
+                    guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
+                        return (false, ["error": "Authorization denied"])
+                    }
+                }
+                return projectCLIProvider(kind, params)
+            }
+        } else {
+            self.projectCLIProvider = nil
+        }
         self.githubCLIProvider = githubCLIProvider
         self.gitAssistantCLIProvider = Self.approvalGated(
             gitAssistantCLIProvider,
@@ -1373,6 +1368,9 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return handleTaskQueue(kind: "rerun", request: request)
         case .taskRemove:
             return handleTaskQueue(kind: "remove", request: request)
+        case .projectOpen, .projectList, .projectPin, .projectUnpin,
+             .projectAlias, .projectForget, .projectClone, .projectTasks:
+            return handleProject(kind: Self.projectKind(commandName), request: request)
         case .handoffExport:
             return handleTaskHandoff(kind: "export", request: request)
         case .handoffImport:

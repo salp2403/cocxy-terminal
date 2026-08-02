@@ -13,6 +13,7 @@ public enum CocxyPrivilegedSocketCommandCategory: String, Equatable, Sendable {
     case localExecution = "local-execution"
     case computeControl = "compute-control"
     case remoteConnection = "remote-connection"
+    case project
 }
 
 public enum CocxyPrivilegedSocketCommandPolicy {
@@ -164,6 +165,9 @@ public enum CocxyPrivilegedSocketCommandPolicy {
 
         case "ssh":
             return .remoteConnection
+
+        case "project-open":
+            return .project
 
         default:
             return nil

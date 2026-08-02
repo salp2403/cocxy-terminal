@@ -1037,6 +1037,14 @@ public enum ParsedCommand: Equatable {
 
     /// `cocxy task-remove <task-id>`
     case taskRemove(taskID: String)
+    case projectOpen(path: String)
+    case projectList(json: Bool)
+    case projectPin(reference: String)
+    case projectUnpin(reference: String)
+    case projectAlias(reference: String, alias: String)
+    case projectForget(reference: String)
+    case projectClone(remote: String, parentDirectory: String)
+    case projectTasks(project: String?, json: Bool)
 
     // MARK: - SSH (v4)
 
@@ -1168,22 +1176,11 @@ public enum ParsedCommand: Equatable {
     /// `cocxy skill uninstall <id>`
     case skillUninstall(id: String)
 
-    /// `cocxy worktree add [--agent <name>] [--branch <template>] [--base-ref <ref>]`
     case worktreeAdd(agent: String?, branch: String?, baseRef: String?)
-
-    /// `cocxy worktree list`
     case worktreeList
-
-    /// `cocxy worktree remove <id>`
     case worktreeRemove(id: String, force: Bool)
-
-    /// `cocxy worktree focus <id>`
     case worktreeFocus(id: String)
-
-    /// `cocxy worktree prune`
     case worktreePrune
-
-    /// `cocxy worktree cleanup-merged --dry-run [--base-ref <ref>]`
     case worktreeCleanupMerged(baseRef: String?, force: Bool, dryRun: Bool)
 
     /// `cocxy github status` — auth + repository summary JSON.
@@ -1259,7 +1256,6 @@ public enum CLIArgumentParser {
         "tab-created",
         "tab-closed",
     ]
-
 
     /// The current CLI version string.
     ///
@@ -1582,6 +1578,10 @@ public enum CLIArgumentParser {
                 arguments: Array(arguments.dropFirst()),
                 makeCommand: ParsedCommand.taskRemove
             )
+
+        case "project-open", "project-list", "project-pin", "project-unpin",
+             "project-alias", "project-forget", "project-clone", "project-tasks":
+            return try parseProjectCommand(firstArg, arguments: Array(arguments.dropFirst()))
 
         case "web":
             return try parseWeb(arguments: Array(arguments.dropFirst()))

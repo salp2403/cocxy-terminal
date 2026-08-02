@@ -413,6 +413,10 @@ enum CLICommandName: String, CaseIterable, Sendable {
     case taskRerun = "task-rerun"
     /// Remove a terminal task and its persisted record.
     case taskRemove = "task-remove"
+    case projectOpen = "project-open", projectList = "project-list"
+    case projectPin = "project-pin", projectUnpin = "project-unpin"
+    case projectAlias = "project-alias", projectForget = "project-forget"
+    case projectClone = "project-clone", projectTasks = "project-tasks"
 
     // MARK: - Window Management (v3)
 
@@ -594,16 +598,7 @@ enum CLICommandName: String, CaseIterable, Sendable {
     /// `cocxy github-refresh` — force a refresh of the pane data.
     case githubRefresh = "github-refresh"
 
-    // MARK: - GitHub PR merge (v0.1.86)
-
-    /// `cocxy github-pr-merge --squash|--merge|--rebase [--pr <n>]` —
-    /// merges a pull request through `gh pr merge`. Without `--pr` the
-    /// verb resolves the PR from the current branch (same default as
-    /// `gh pr merge` itself). Returns the merged PR JSON.
     case githubPRMerge = "github-pr-merge"
-
-    // MARK: - Git Assistant
-
     /// `cocxy git-assistant commit-message` — generate a commit message
     /// from the active tab's staged diff.
     case gitAssistantCommitMessage = "git-assistant-commit-message"

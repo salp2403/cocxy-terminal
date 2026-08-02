@@ -3,10 +3,7 @@
 
 import Foundation
 
-// MARK: - Output Formatter
-
 /// Formats `CLISocketResponse` data for human-readable terminal output.
-///
 /// Different commands produce different output formats:
 /// - `list-tabs`, `split-list`: Pretty-printed JSON array.
 /// - `status`, `dashboard-status`: Human-readable summary.
@@ -536,6 +533,9 @@ public enum OutputFormatter {
             return formatDataOrJSON(response: response)
         case .skillUninstall:
             return "Skill uninstalled."
+        case .projectOpen, .projectList, .projectPin, .projectUnpin,
+             .projectAlias, .projectForget, .projectClone, .projectTasks:
+            return ProjectCLIOutputFormatter.format(command: command, response: response)
         case .worktreeAdd:
             guard let data = response.data,
                   let id = data["id"],

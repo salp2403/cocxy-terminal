@@ -2992,13 +2992,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 }
             },
             worktreeCLIProvider: { kind, params in
-                // Socket queue thread → detached task → semaphore wait.
-                // The inner bridge lives in AppDelegate+WorktreeCLI so
-                // this closure stays a one-liner.
-                let fallback: (Bool, [String: String]) = (
-                    false,
-                    ["error": "Cocxy process has shut down"]
-                )
+                let fallback = (false, ["error": "Cocxy process has shut down"])
                 guard let delegate = delegateRef.value else {
                     return fallback
                 }
@@ -3007,15 +3001,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     params: params
                 )
             },
-            githubCLIProvider: { kind, params in
-                // Mirror of the worktree provider: route every
-                // `github-*` verb through the AppDelegate-side
-                // GitHub bridge which wraps the `GitHubService`
-                // actor in the same semaphore idiom.
-                let fallback: (Bool, [String: String]) = (
-                    false,
-                    ["error": "Cocxy process has shut down"]
+            projectCLIProvider: { kind, params in
+                let context = SocketPrivilegedCommandExecutionContext.currentGrant?.context
+                guard let delegate = delegateRef.value else {
+                    return (false, ["error": "Cocxy process has shut down"])
+                }
+                return delegate.handleProjectCLIRequest(
+                    kind: kind,
+                    params: params,
+                    approvedContext: context
                 )
+            },
+            githubCLIProvider: { kind, params in
+                let fallback = (false, ["error": "Cocxy process has shut down"])
                 guard let delegate = delegateRef.value else {
                     return fallback
                 }

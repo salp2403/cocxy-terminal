@@ -85,6 +85,7 @@ struct SocketPrivilegedCommandContext: Equatable, @unchecked Sendable {
         case localExecution = "local-execution"
         case computeCell = "compute-cell"
         case remoteConnection = "remote-connection"
+        case project
         case internalTrusted = "internal-trusted"
     }
 
@@ -368,7 +369,6 @@ enum SocketPrivilegedCommandExecutionContext {
     private static var currentSession: SocketPrivilegedCommandExecutionSession? {
         (Thread.current.threadDictionary[threadKey] as? SessionBox)?.session
     }
-
     private final class SessionBox: NSObject {
         let session: SocketPrivilegedCommandExecutionSession
 
@@ -384,7 +384,6 @@ enum SocketPrivilegedCommandSecurity {
     static let maxParameterValueBytes = 32_768
     static let maxApprovalPreviewBytes = 49_152
     static let maxBoundLocalResourceBytes = 1 * 1_024 * 1_024
-
     static func policy(for command: CLICommandName) -> SocketCommandAuthorizationPolicy {
         switch command {
         case .send,
@@ -514,7 +513,8 @@ enum SocketPrivilegedCommandSecurity {
              .workflowRun,
              .gitAssistantCommitMessage,
              .gitAssistantPRDraft,
-             .gitAssistantReleaseNotes:
+             .gitAssistantReleaseNotes,
+             .projectOpen:
             guard let category = CocxyPrivilegedSocketCommandPolicy.category(
                 forRawCommand: command.rawValue
             ) else {
@@ -582,6 +582,13 @@ enum SocketPrivilegedCommandSecurity {
              .agentTeamList,
              .taskRunList,
              .taskList,
+             .projectList,
+             .projectPin,
+             .projectUnpin,
+             .projectAlias,
+             .projectForget,
+             .projectClone,
+             .projectTasks,
              .windowNew,
              .windowList,
              .windowFocus,
@@ -620,12 +627,10 @@ enum SocketPrivilegedCommandSecurity {
             return .ordinary
         }
     }
-
     static func category(for command: CLICommandName) -> SocketPrivilegedCommandCategory? {
         guard case .privileged(let category) = policy(for: command) else { return nil }
         return category
     }
-
     static func hasBoundedParameters(_ params: [String: String]) -> Bool {
         guard params.count <= maxParameterCount else { return false }
         return params.allSatisfy { key, value in
@@ -636,7 +641,6 @@ enum SocketPrivilegedCommandSecurity {
                 && !value.contains("\0")
         }
     }
-
     static func approvalPreview(_ request: SocketPrivilegedCommandAuthorizationRequest) -> String {
         approvalPreview(
             command: request.command,
@@ -644,7 +648,6 @@ enum SocketPrivilegedCommandSecurity {
             params: request.params
         )
     }
-
     static func approvalPreview(
         command: CLICommandName,
         category: SocketPrivilegedCommandCategory,
@@ -682,7 +685,6 @@ enum SocketPrivilegedCommandSecurity {
         }
         return lines.joined(separator: "\n")
     }
-
     static func digest(
         command: CLICommandName,
         category: SocketPrivilegedCommandCategory,
@@ -702,13 +704,11 @@ enum SocketPrivilegedCommandSecurity {
             .map { String(format: "%02x", $0) }
             .joined()
     }
-
     static func digest(data: Data) -> String {
         SHA256.hash(data: data)
             .map { String(format: "%02x", $0) }
             .joined()
     }
-
     static func boundedFileDigest(
         at url: URL,
         maximumBytes: Int = maxBoundLocalResourceBytes,
