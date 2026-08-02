@@ -52,8 +52,8 @@ struct DaemonSessionBridgeSwiftTestingTests {
         try await bridge.attach(sessionID: "session-a")
         try await waitForDaemonBridgeCondition { outputs.count == 2 }
 
-        #expect(outputs[0] == Data("\u{1B}[2J\u{1B}[Hprompt\r\nready\r\u{1B}[2;5H".utf8))
-        #expect(outputs[1] == Data("\u{1B}[2J\u{1B}[Hprompt\r\nready\r\u{1B}[2;6H".utf8))
+        #expect(outputs[0] == Data("\u{1B}[2J\u{1B}[Hprompt\r\nready\u{1B}[2;5H".utf8))
+        #expect(outputs[1] == Data("\u{1B}[2J\u{1B}[Hprompt\r\nready\u{1B}[2;6H".utf8))
         #expect(!outputs[0].starts(with: Data("\u{1B}[3J".utf8)))
         #expect(bridge.enqueueInput(Data("a".utf8)))
         #expect(bridge.enqueueInput(Data("b".utf8)))

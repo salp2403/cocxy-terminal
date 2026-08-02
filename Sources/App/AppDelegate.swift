@@ -1940,7 +1940,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             return AgentTeamProvider(rawValue: provider)
         case .handoffImport:
-            return params["agent"].flatMap(AgentTeamProvider.resolve(named:))
+            let requestedProvider = (params["agent"] ?? AgentTeamProvider.claudeCode.rawValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedProvider = requestedProvider.isEmpty
+                ? AgentTeamProvider.claudeCode.rawValue
+                : requestedProvider
+            return AgentTeamProvider.resolve(named: normalizedProvider)
         default:
             return nil
         }

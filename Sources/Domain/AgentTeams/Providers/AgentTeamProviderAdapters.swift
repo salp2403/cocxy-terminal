@@ -319,7 +319,7 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
         process.standardError = FileHandle.nullDevice
         let exited = DispatchSemaphore(value: 0)
         let outputDrained = DispatchSemaphore(value: 0)
-        let capturedOutput = LockedBox((data: Data(), exceededLimit: false))
+        let capturedOutput = LockedBox(Data())
         process.terminationHandler = { _ in exited.signal() }
 
         do {
@@ -332,13 +332,7 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
             while let chunk = try? output.fileHandleForReading.read(upToCount: 4_096),
                   !chunk.isEmpty {
                 capturedOutput.withValue { capture in
-                    guard !capture.exceededLimit else { return }
-                    guard capture.data.count + chunk.count <= 4_096 else {
-                        capture.data.removeAll(keepingCapacity: false)
-                        capture.exceededLimit = true
-                        return
-                    }
-                    capture.data.append(chunk)
+                    Self.appendBoundedTail(chunk, to: &capture, limit: 4_096)
                 }
             }
         }
@@ -354,8 +348,23 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
         guard outputDrained.wait(timeout: .now() + 0.25) == .success else { return nil }
         guard process.terminationStatus == 0 else { return nil }
         let capture = capturedOutput.withValue { $0 }
-        guard !capture.exceededLimit else { return nil }
-        return String(data: capture.data, encoding: .utf8)
+        return String(decoding: capture, as: UTF8.self)
+    }
+
+    static func appendBoundedTail(_ chunk: Data, to capture: inout Data, limit: Int) {
+        guard limit > 0 else {
+            capture.removeAll(keepingCapacity: false)
+            return
+        }
+        if chunk.count >= limit {
+            capture = Data(chunk.suffix(limit))
+            return
+        }
+        let overflow = capture.count + chunk.count - limit
+        if overflow > 0 {
+            capture.removeFirst(overflow)
+        }
+        capture.append(chunk)
     }
 
     private func cacheResolvedPath(_ path: String, for executable: String) {
