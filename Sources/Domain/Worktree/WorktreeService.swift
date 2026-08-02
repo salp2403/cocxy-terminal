@@ -384,11 +384,12 @@ actor WorktreeService {
     func mergedCleanupPlan(
         originRepoPath: URL,
         baseRef: String,
-        force: Bool = false,
+        force: Bool = false, restrictingToIDs: Set<String>?,
         store: WorktreeManifestStore
     ) async throws -> WorktreeBatchCleanupPlan {
         let manifest = try await loadManifest(store)
-        let entries = manifest.entries
+        let allEntries = manifest.entries
+        let entries = allEntries.filter { restrictingToIDs?.contains($0.id) ?? true }
         guard !entries.isEmpty else {
             return WorktreeBatchCleanupPlan(removable: [], blocked: [], skipped: [])
         }
@@ -404,7 +405,7 @@ actor WorktreeService {
             if force { return entry.id }
             return statusByID[entry.id]?.isClean == true ? entry.id : nil
         })
-        let dependencies = WorktreeDependencyTracker().graph(for: entries)
+        let dependencies = WorktreeDependencyTracker().graph(for: allEntries)
 
         var removable: [WorktreeManifest.WorktreeEntry] = []
         var blocked: [WorktreeBatchCleanupBlock] = []
@@ -449,13 +450,13 @@ actor WorktreeService {
     func cleanupMergedWorktrees(
         originRepoPath: URL,
         baseRef: String,
-        force: Bool = false,
+        force: Bool = false, restrictingToIDs: Set<String>?,
         store: WorktreeManifestStore
     ) async throws -> WorktreeBatchCleanupResult {
         let plan = try await mergedCleanupPlan(
             originRepoPath: originRepoPath,
             baseRef: baseRef,
-            force: force,
+            force: force, restrictingToIDs: restrictingToIDs,
             store: store
         )
         var removed: [WorktreeManifest.WorktreeEntry] = []
@@ -472,7 +473,6 @@ actor WorktreeService {
     }
 
     // MARK: - Task candidate promotion
-
     func revision(
         _ rawRevision: String,
         at workingDirectory: URL

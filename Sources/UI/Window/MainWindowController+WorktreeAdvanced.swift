@@ -91,6 +91,7 @@ extension MainWindowController {
                 let plan = try await service.mergedCleanupPlan(
                     originRepoPath: origin,
                     baseRef: config.baseRef,
+                    restrictingToIDs: nil,
                     store: store
                 )
                 await MainActor.run {

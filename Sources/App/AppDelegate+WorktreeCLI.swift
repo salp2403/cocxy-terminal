@@ -195,6 +195,7 @@ extension AppDelegate {
                     originRepoPath: origin,
                     baseRef: effectiveBaseRef,
                     force: force,
+                    restrictingToIDs: nil,
                     store: store
                 )
                 return (true, Self.cleanupMergedPayload(
@@ -208,6 +209,7 @@ extension AppDelegate {
                 originRepoPath: origin,
                 baseRef: effectiveBaseRef,
                 force: force,
+                restrictingToIDs: nil,
                 store: store
             )
             await clearWorktreeTabBindings(ids: Set(result.removed.map(\.id)))
@@ -295,6 +297,7 @@ extension AppDelegate {
             originRepoPath: context.originRepoPath,
             baseRef: baseRef,
             force: false,
+            restrictingToIDs: nil,
             store: store
         )
         return (true, Self.cleanupMergedPayload(
