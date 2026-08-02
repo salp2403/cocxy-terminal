@@ -123,6 +123,7 @@ struct TaskRunCandidate: Identifiable, Codable, Sendable, Equatable {
     var status: TaskRunCandidateStatus
     var estimatedCostMicros: Int64
     var failureMessage: String?
+    var touchedFiles: [String]
 
     init(
         id: String,
@@ -131,7 +132,8 @@ struct TaskRunCandidate: Identifiable, Codable, Sendable, Equatable {
         worktree: WorktreeManifest.WorktreeEntry? = nil,
         status: TaskRunCandidateStatus = .preparing,
         estimatedCostMicros: Int64 = 0,
-        failureMessage: String? = nil
+        failureMessage: String? = nil,
+        touchedFiles: [String] = []
     ) {
         self.id = id
         self.provider = provider
@@ -140,6 +142,50 @@ struct TaskRunCandidate: Identifiable, Codable, Sendable, Equatable {
         self.status = status
         self.estimatedCostMicros = max(0, estimatedCostMicros)
         self.failureMessage = failureMessage
+        self.touchedFiles = Array(Set(touchedFiles.filter { !$0.isEmpty })).sorted()
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case provider
+        case teamID
+        case worktree
+        case status
+        case estimatedCostMicros
+        case failureMessage
+        case touchedFiles
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            id: try container.decode(String.self, forKey: .id),
+            provider: try container.decode(AgentTeamProvider.self, forKey: .provider),
+            teamID: try container.decode(String.self, forKey: .teamID),
+            worktree: try container.decodeIfPresent(
+                WorktreeManifest.WorktreeEntry.self,
+                forKey: .worktree
+            ),
+            status: try container.decode(TaskRunCandidateStatus.self, forKey: .status),
+            estimatedCostMicros: try container.decodeIfPresent(
+                Int64.self,
+                forKey: .estimatedCostMicros
+            ) ?? 0,
+            failureMessage: try container.decodeIfPresent(String.self, forKey: .failureMessage),
+            touchedFiles: try container.decodeIfPresent([String].self, forKey: .touchedFiles) ?? []
+        )
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(provider, forKey: .provider)
+        try container.encode(teamID, forKey: .teamID)
+        try container.encodeIfPresent(worktree, forKey: .worktree)
+        try container.encode(status, forKey: .status)
+        try container.encode(estimatedCostMicros, forKey: .estimatedCostMicros)
+        try container.encodeIfPresent(failureMessage, forKey: .failureMessage)
+        try container.encode(touchedFiles, forKey: .touchedFiles)
     }
 }
 
