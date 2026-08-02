@@ -67,9 +67,9 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         self.projectID = projectID
         self.projectRoot = projectRoot
         self.availableProviders = availableProviders
-        let configuredProviders = Self.uniqueProviders(defaultAgentNames.compactMap {
+        let configuredProviders = Array(Self.uniqueProviders(defaultAgentNames.compactMap {
             AgentTeamProvider.resolve(named: $0)
-        }).filter(availableProviders.contains)
+        }).filter(availableProviders.contains).prefix(TaskRunRequest.maximumCandidateCount))
         let fallbackProviders = [AgentTeamProvider.claudeCode, .codex]
             .filter(availableProviders.contains)
         self.defaultProviders = configuredProviders.isEmpty
@@ -135,10 +135,15 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         promotionPreview = nil
         if let draft {
             prompt = draft.prompt
-            selectedProviders = Self.uniqueProviders(draft.providers)
+            selectedProviders = Array(Self.uniqueProviders(draft.providers)
+                .filter(availableProviders.contains)
+                .prefix(TaskRunRequest.maximumCandidateCount))
             candidateCount = max(
                 TaskRunRequest.minimumCandidateCount,
-                min(TaskRunRequest.maximumCandidateCount, draft.candidateCount)
+                min(
+                    TaskRunRequest.maximumCandidateCount,
+                    max(draft.candidateCount, selectedProviders.count)
+                )
             )
             baseRef = availableBaseRefs.contains(draft.baseRef) ? draft.baseRef : defaultBaseRef
             plannedPaths = normalizedPaths(draft.plannedPaths)

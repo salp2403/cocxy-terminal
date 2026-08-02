@@ -357,6 +357,9 @@ struct ProjectFanOutFlowView: View {
                         .font(.system(size: 11))
                         .foregroundStyle(palette.textMedium.resolvedColor())
                     }
+                    if let preview = viewModel.promotionPreview {
+                        cleanupPlanExceptions(preview)
+                    }
                     messageBanner
                 }
                 .padding(18)
@@ -407,6 +410,34 @@ struct ProjectFanOutFlowView: View {
         .padding(10)
         .background(palette.backgroundSecondary.resolvedColor())
         .clipShape(RoundedRectangle(cornerRadius: 6))
+    }
+
+    @ViewBuilder
+    private func cleanupPlanExceptions(_ preview: TaskRunPromotionPreview) -> some View {
+        let model = WorktreeBatchCleanupSheetViewModel(
+            plan: preview.mergedCleanupPlan,
+            baseRef: preview.selectedComparison.candidate.worktree?.branch ?? preview.run.baseRef
+        )
+        let blocked = model.localizedBlockedDetails(using: localizer)
+        let skipped = model.localizedSkippedDetails(using: localizer)
+        if !blocked.isEmpty {
+            fieldLabel(WorktreeBatchCleanupSheet.localizedBlockedSectionTitle(using: localizer))
+            ForEach(blocked, id: \.self) { cleanupExceptionRow($0, icon: "exclamationmark.octagon") }
+        }
+        if !skipped.isEmpty {
+            fieldLabel(WorktreeBatchCleanupSheet.localizedSkippedSectionTitle(using: localizer))
+            ForEach(skipped, id: \.self) { cleanupExceptionRow($0, icon: "forward") }
+        }
+    }
+
+    private func cleanupExceptionRow(_ detail: String, icon: String) -> some View {
+        Label(detail, systemImage: icon)
+            .font(.system(size: 10, design: .monospaced))
+            .foregroundStyle(palette.textMedium.resolvedColor())
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(palette.backgroundSecondary.resolvedColor())
+            .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     @ViewBuilder

@@ -20,6 +20,23 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         #expect(model.candidateCount == 2)
     }
 
+    @Test("legacy project defaults are bounded to the supported candidate limit")
+    func legacyDefaultsAreBounded() throws {
+        let harness = try Harness()
+        let providers = Array(AgentTeamProvider.allCases.prefix(10))
+        let model = harness.makeModel(
+            defaultAgents: providers.map(\.rawValue),
+            availableProviders: providers
+        )
+
+        model.showLaunch()
+        model.prompt = "Implement"
+
+        #expect(model.selectedProviders.count == TaskRunRequest.maximumCandidateCount)
+        #expect(model.candidateCount == TaskRunRequest.maximumCandidateCount)
+        #expect(try model.makeRequest().candidateCount == TaskRunRequest.maximumCandidateCount)
+    }
+
     @Test("collision warning is visible and does not disable launch")
     func collisionWarningIsNonblocking() async throws {
         let harness = try Harness()
@@ -162,12 +179,13 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
 
         func makeModel(
             defaultAgents: [String] = ["codex", "claude"],
-            defaultBaseRef: String? = "HEAD"
+            defaultBaseRef: String? = "HEAD",
+            availableProviders: [AgentTeamProvider] = [.claudeCode, .codex, .gemini]
         ) -> ProjectFanOutFlowViewModel {
             ProjectFanOutFlowViewModel(
                 projectID: run.projectID,
                 projectRoot: run.originRepoPath,
-                availableProviders: [.claudeCode, .codex, .gemini],
+                availableProviders: availableProviders,
                 availableBaseRefs: ["HEAD", "main"],
                 defaultBaseRef: defaultBaseRef,
                 defaultAgentNames: defaultAgents,
