@@ -101,6 +101,7 @@ extension MainWindowController {
     }
 
     func refreshActivityDashboardPrivacyState(_ config: ActivityConfig) {
+        (injectedActivityStore as? ActivityStoreCoordinator)?.configure(for: config)
         if injectedActivityStore == nil,
            let activityStorePath,
            activityStorePath != activityDatabaseURL(for: config).path {
@@ -346,6 +347,23 @@ extension MainWindowController {
             projectResolver.resolveProject(for: workingDirectory),
             workingDirectory: workingDirectory
         )
+    }
+
+    func loadProjectActivitySummary(for projectID: ProjectID) async -> ProjectActivitySummaryState {
+        let policy = configService?.current.activity.privacyPolicy ?? .disabled
+        guard policy.activityTrackingEnabled else { return .disabled }
+        do {
+            let store = try resolveActivityStore()
+            let summary = try await Task.detached(priority: .utility) {
+                try ActivityQueryService(store: store).projectSummary(projectID: projectID)
+            }.value
+            return .available(
+                summary,
+                costTrackingEnabled: policy.tokenCostTrackingEnabled
+            )
+        } catch {
+            return .unavailable
+        }
     }
 
     func projectSwitchActivitySummary(_ directory: URL) -> String {

@@ -112,6 +112,10 @@ extension MainWindowController {
             accent: record?.accent,
             fallbackRemote: record?.remoteOrigin,
             worktreeConfig: worktreeConfig,
+            activitySummaryLoader: { [weak self] projectID in
+                guard let self else { return .unavailable }
+                return await self.loadProjectActivitySummary(for: projectID)
+            },
             recentDiffProvider: { [weak self] in
                 self?.injectedSessionDiffTracker?.latestSessionId(for: projectRoot)
             },

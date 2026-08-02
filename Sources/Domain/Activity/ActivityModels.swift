@@ -200,6 +200,23 @@ struct ProjectTimeBreakdown: Sendable, Equatable {
     let durationMilliseconds: Int64
 }
 
+struct ProjectActivityMetrics: Sendable, Equatable {
+    let durationMilliseconds: Int64
+    let totalTokens: Int
+    let totalCostMicros: Int64
+
+    static let zero = ProjectActivityMetrics(
+        durationMilliseconds: 0,
+        totalTokens: 0,
+        totalCostMicros: 0
+    )
+}
+
+struct ProjectActivitySummary: Sendable, Equatable {
+    let week: ProjectActivityMetrics
+    let month: ProjectActivityMetrics
+}
+
 struct ProductivityInsights: Sendable, Equatable {
     let mostUsedCommands: [String]
     let peakHour: Int?

@@ -473,6 +473,15 @@
 "window.pane.projectHomePanel" = "panel de inicio del proyecto";
 "projectHome.action.codeReview" = "Revisión de código";
 "projectHome.action.error.title" = "No se pudo completar la acción";
+"projectHome.activity.loading" = "Cargando actividad";
+"projectHome.activity.disabled" = "El registro de actividad local está desactivado";
+"projectHome.activity.unavailable" = "La actividad del proyecto no está disponible";
+"projectHome.activity.time" = "Tiempo";
+"projectHome.activity.tokens" = "Tokens";
+"projectHome.activity.cost" = "Costo";
+"projectHome.activity.week" = "Semana";
+"projectHome.activity.month" = "Mes";
+"projectHome.activity.costDisabled" = "Seguimiento de costos desactivado";
 "projectHome.action.fanOut" = "Distribuir";
 "projectHome.action.launchTeam" = "Iniciar equipo";
 "projectHome.action.menu" = "Acciones del proyecto";

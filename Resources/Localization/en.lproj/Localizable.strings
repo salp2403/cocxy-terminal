@@ -473,6 +473,15 @@
 "window.pane.projectHomePanel" = "project home panel";
 "projectHome.action.codeReview" = "Code Review";
 "projectHome.action.error.title" = "Action Failed";
+"projectHome.activity.loading" = "Loading activity";
+"projectHome.activity.disabled" = "Local activity tracking is off";
+"projectHome.activity.unavailable" = "Project activity is unavailable";
+"projectHome.activity.time" = "Time";
+"projectHome.activity.tokens" = "Tokens";
+"projectHome.activity.cost" = "Cost";
+"projectHome.activity.week" = "Week";
+"projectHome.activity.month" = "Month";
+"projectHome.activity.costDisabled" = "Cost tracking off";
 "projectHome.action.fanOut" = "Fan Out";
 "projectHome.action.launchTeam" = "Launch Team";
 "projectHome.action.menu" = "Project Actions";

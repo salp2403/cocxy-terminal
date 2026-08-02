@@ -194,6 +194,23 @@ struct ActivityDomainSwiftTestingTests {
         #expect(try store.tokenUsage(matching: ActivityStoreQuery(projectID: identity.rawValue)).count == 1)
     }
 
+    @Test("app activity coordinator switches databases without mixing records")
+    func appActivityCoordinatorSwitchesDatabasesWithoutMixingRecords() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-coordinator-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let firstPath = root.appendingPathComponent("first/activity.sqlite").path
+        let secondPath = root.appendingPathComponent("second/activity.sqlite").path
+        let coordinator = ActivityStoreCoordinator(databasePath: firstPath)
+
+        try coordinator.recordEvent(ActivityEvent(kind: .tabOpened, summary: "first"))
+        coordinator.configure(databasePath: secondPath)
+        try coordinator.recordEvent(ActivityEvent(kind: .tabOpened, summary: "second"))
+
+        #expect(try SQLiteActivityStore(databasePath: firstPath).events().map(\.summary) == ["first"])
+        #expect(try SQLiteActivityStore(databasePath: secondPath).events().map(\.summary) == ["second"])
+    }
+
     @Test("cost tracker uses caller supplied rates and rounds to micro units")
     func costTrackerUsesCallerSuppliedRatesAndRoundsToMicroUnits() {
         let rate = TokenCostRate(
@@ -324,6 +341,89 @@ struct ActivityDomainSwiftTestingTests {
         #expect(rows.map(\.durationMilliseconds) == [90_000, 30_000])
     }
 
+    @Test("project summary separates current week and month by canonical identity")
+    func projectSummarySeparatesWeekAndMonthByCanonicalIdentity() throws {
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let calendar = utcCalendar()
+        let now = date(month: 5, day: 20, hour: 12)
+        let projectID = ProjectID(rawValue: "/tmp/project-a")
+        let otherProjectID = ProjectID(rawValue: "/tmp/project-b")
+        let project = ActivityProjectRef(
+            id: projectID.rawValue,
+            name: "Project A",
+            legacyID: "project-a",
+            projectIdentity: projectID
+        )
+        let otherProject = ActivityProjectRef(
+            id: otherProjectID.rawValue,
+            name: "Project B",
+            legacyID: "project-b",
+            projectIdentity: otherProjectID
+        )
+        try [
+            ActivityEvent(
+                timestamp: date(month: 5, day: 19, hour: 9),
+                kind: .commandExecuted,
+                project: project,
+                summary: "week",
+                metadata: ["duration_ms": "2000"]
+            ),
+            ActivityEvent(
+                timestamp: date(month: 5, day: 2, hour: 9),
+                kind: .commandExecuted,
+                project: project,
+                summary: "month",
+                metadata: ["duration_ms": "3000"]
+            ),
+            ActivityEvent(
+                timestamp: date(month: 5, day: 19, hour: 9),
+                kind: .commandExecuted,
+                project: otherProject,
+                summary: "other",
+                metadata: ["duration_ms": "9000"]
+            ),
+        ].forEach { try store.recordEvent($0) }
+        try [
+            TokenUsageRecord(
+                timestamp: date(month: 5, day: 19, hour: 10),
+                provider: "local",
+                model: "model",
+                project: project,
+                inputTokens: 10,
+                outputTokens: 20,
+                estimatedCostMicros: 40
+            ),
+            TokenUsageRecord(
+                timestamp: date(month: 5, day: 2, hour: 10),
+                provider: "local",
+                model: "model",
+                project: project,
+                inputTokens: 30,
+                outputTokens: 40,
+                estimatedCostMicros: 70
+            ),
+            TokenUsageRecord(
+                timestamp: date(month: 5, day: 19, hour: 10),
+                provider: "local",
+                model: "model",
+                project: otherProject,
+                inputTokens: 100,
+                outputTokens: 100,
+                estimatedCostMicros: 500
+            ),
+        ].forEach { try store.recordTokenUsage($0) }
+
+        let summary = try ActivityQueryService(store: store, calendar: calendar)
+            .projectSummary(projectID: projectID, at: now)
+
+        #expect(summary.week.durationMilliseconds == 2_000)
+        #expect(summary.week.totalTokens == 30)
+        #expect(summary.week.totalCostMicros == 40)
+        #expect(summary.month.durationMilliseconds == 5_000)
+        #expect(summary.month.totalTokens == 100)
+        #expect(summary.month.totalCostMicros == 110)
+    }
+
     @Test("manual exporters produce deterministic JSON and escaped CSV")
     func manualExportersProduceDeterministicJSONAndEscapedCSV() throws {
         let event = ActivityEvent(
@@ -357,12 +457,17 @@ struct ActivityDomainSwiftTestingTests {
         #expect(usageCSV.contains(",10,5,15,2"))
     }
 
-    private func date(day: Int = 1, hour: Int, minute: Int = 0) -> Date {
+    private func date(
+        month: Int = 5,
+        day: Int = 1,
+        hour: Int,
+        minute: Int = 0
+    ) -> Date {
         DateComponents(
             calendar: utcCalendar(),
             timeZone: TimeZone(secondsFromGMT: 0),
             year: 2026,
-            month: 5,
+            month: month,
             day: day,
             hour: hour,
             minute: minute

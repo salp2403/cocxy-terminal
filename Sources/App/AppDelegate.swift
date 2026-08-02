@@ -186,12 +186,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Cancellables for hook-to-engine wiring and agent-to-tab wiring.
     var hookCancellables = Set<AnyCancellable>()
 
-    /// The timeline store for agent events. Created alongside the engine.
-    /// Internal setter: extensions (+AgentWiring) assign during engine init.
+    /// App-wide timeline store, assigned during agent engine initialization.
     var agentTimelineStore: AgentTimelineStoreImpl?
-
-    /// The dashboard ViewModel for agent sessions. Created alongside the engine.
-    /// Internal setter: extensions (+AgentWiring) assign during engine init.
+    /// App-wide owner for the local activity database used by every window.
+    let activityStoreCoordinator = ActivityStoreCoordinator()
+    /// App-wide dashboard model, assigned during agent engine initialization.
     var agentDashboardViewModel: AgentDashboardViewModel?
 
     /// Active local agent-team coordinators keyed by team ID.
@@ -1533,6 +1532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedTaskInboxStore = taskInboxStore
         controller.injectedProjectFanOutCoordinator = projectFanOutCoordinator
         controller.injectedTimelineStore = agentTimelineStore
+        controller.injectedActivityStore = configuredActivityStore()
         controller.injectedNotificationManager = notificationManager
         controller.onAgentTabClosed = { [weak self] tabID in
             self?.unbindHookSessions(for: tabID)

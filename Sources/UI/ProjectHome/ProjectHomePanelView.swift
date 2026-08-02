@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ProjectHomePanelView.swift - Dense project context with a unified task inbox.
 
+import Combine
 import SwiftUI
 
 struct ProjectHomePanelView: View {
@@ -69,6 +70,12 @@ struct ProjectHomePanelView: View {
                 await consumeFanOutRequest(request)
             }
         }
+        .onReceive(
+            NotificationCenter.default.publisher(for: .activityStoreDidChange)
+                .receive(on: DispatchQueue.main)
+        ) { _ in
+            viewModel.reloadActivitySummary(after: .milliseconds(150))
+        }
         .sheet(isPresented: $viewModel.isTeamSheetPresented) {
             ProjectHomeTeamLaunchSheet(
                 projectName: viewModel.displayName,
@@ -96,29 +103,36 @@ struct ProjectHomePanelView: View {
     }
 
     private var projectHeader: some View {
-        HStack(spacing: 14) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(projectAccent)
-                .frame(width: 4, height: 46)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(projectAccent)
+                    .frame(width: 4, height: 46)
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(viewModel.displayName)
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(palette.textHigh.resolvedColor())
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(viewModel.displayName)
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(palette.textHigh.resolvedColor())
+                        .lineLimit(1)
+                        .truncationMode(.middle)
 
-                HStack(spacing: 12) {
-                    ViewThatFits(in: .horizontal) {
-                        projectMetadata(includeRemote: true, includeStatus: true)
-                        projectMetadata(includeRemote: false, includeStatus: true)
-                        projectMetadata(includeRemote: false, includeStatus: false)
+                    HStack(spacing: 12) {
+                        ViewThatFits(in: .horizontal) {
+                            projectMetadata(includeRemote: true, includeStatus: true)
+                            projectMetadata(includeRemote: false, includeStatus: true)
+                            projectMetadata(includeRemote: false, includeStatus: false)
+                        }
                     }
                 }
+
+                Spacer(minLength: 12)
+                quickActions
             }
 
-            Spacer(minLength: 12)
-            quickActions
+            ProjectActivityMetricsView(
+                state: viewModel.activitySummaryState,
+                localizer: localizer
+            )
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)

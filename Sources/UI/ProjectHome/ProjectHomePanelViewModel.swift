@@ -28,6 +28,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
     @Published private(set) var recentDiffSessionID: String?
     @Published private(set) var gitContextFailed = false
     @Published private(set) var worktreeContextFailed = false
+    @Published private(set) var activitySummaryState: ProjectActivitySummaryState = .loading
     @Published private(set) var isLoadingContext = true
     @Published private(set) var isLaunchingTeam = false
     @Published var isTeamSheetPresented = false
@@ -35,8 +36,10 @@ final class ProjectHomePanelViewModel: ObservableObject {
 
     private let fallbackRemote: String?
     private let contextLoader: ProjectHomeContextLoader
+    private let activitySummaryLoader: @MainActor (ProjectID) async -> ProjectActivitySummaryState
     private let recentDiffProvider: () -> String?
     private var loadTask: Task<Void, Never>?
+    private var activityLoadTask: Task<Void, Never>?
 
     init(
         projectID: ProjectID,
@@ -46,6 +49,9 @@ final class ProjectHomePanelViewModel: ObservableObject {
         fallbackRemote: String?,
         worktreeConfig: WorktreeConfig,
         contextLoader: ProjectHomeContextLoader = .live,
+        activitySummaryLoader: @escaping @MainActor (
+            ProjectID
+        ) async -> ProjectActivitySummaryState = { _ in .disabled },
         recentDiffProvider: @escaping () -> String?,
         actions: ProjectHomeActions
     ) {
@@ -56,6 +62,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
         self.fallbackRemote = fallbackRemote
         self.worktreeConfig = worktreeConfig
         self.contextLoader = contextLoader
+        self.activitySummaryLoader = activitySummaryLoader
         self.recentDiffProvider = recentDiffProvider
         self.actions = actions
     }
@@ -64,6 +71,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
         loadTask?.cancel()
         isLoadingContext = true
         recentDiffSessionID = recentDiffProvider()
+        reloadActivitySummary()
         let root = projectRoot
         let remote = fallbackRemote
         let config = worktreeConfig
@@ -90,6 +98,23 @@ final class ProjectHomePanelViewModel: ObservableObject {
                 worktreeContextFailed = config.enabled
             }
             isLoadingContext = false
+        }
+    }
+
+    func reloadActivitySummary(after delay: Duration = .zero) {
+        activityLoadTask?.cancel()
+        activitySummaryState = .loading
+        let projectID = projectID
+        let loader = activitySummaryLoader
+        activityLoadTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+            let state = await loader(projectID)
+            guard !Task.isCancelled else { return }
+            self?.activitySummaryState = state
         }
     }
 

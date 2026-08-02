@@ -97,6 +97,20 @@ struct ActivityQueryService {
             }
     }
 
+    func projectSummary(
+        projectID: ProjectID,
+        at date: Date = Date()
+    ) throws -> ProjectActivitySummary {
+        guard let week = calendar.dateInterval(of: .weekOfYear, for: date),
+              let month = calendar.dateInterval(of: .month, for: date) else {
+            return ProjectActivitySummary(week: .zero, month: .zero)
+        }
+        return ProjectActivitySummary(
+            week: try projectMetrics(projectID: projectID, interval: week),
+            month: try projectMetrics(projectID: projectID, interval: month)
+        )
+    }
+
     func productivityInsights(
         matching query: ActivityStoreQuery = ActivityStoreQuery()
     ) throws -> ProductivityInsights {
@@ -139,6 +153,25 @@ struct ActivityQueryService {
             return nil
         }
         return duration
+    }
+
+    private func projectMetrics(
+        projectID: ProjectID,
+        interval: DateInterval
+    ) throws -> ProjectActivityMetrics {
+        let query = ActivityStoreQuery(
+            dateInterval: interval,
+            projectID: projectID.rawValue
+        )
+        let duration = try store.events(matching: query).reduce(Int64(0)) { total, event in
+            total + (commandDurationMilliseconds(for: event) ?? 0)
+        }
+        let usage = try store.tokenUsage(matching: query)
+        return ProjectActivityMetrics(
+            durationMilliseconds: duration,
+            totalTokens: usage.reduce(0) { $0 + $1.totalTokens },
+            totalCostMicros: usage.reduce(0) { $0 + $1.estimatedCostMicros }
+        )
     }
 }
 

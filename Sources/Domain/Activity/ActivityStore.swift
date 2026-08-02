@@ -4,7 +4,7 @@
 import Foundation
 import SQLite3
 
-protocol ActivityStoring: AnyObject {
+protocol ActivityStoring: AnyObject, Sendable {
     func recordEvent(_ event: ActivityEvent) throws
     func recordTokenUsage(_ record: TokenUsageRecord) throws
     func events(matching query: ActivityStoreQuery) throws -> [ActivityEvent]
@@ -115,6 +115,7 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
                 throw ActivityStoreError.executionFailed(lastErrorMessage)
             }
         }
+        NotificationCenter.default.post(name: .activityStoreDidChange, object: self)
     }
 
     func recordTokenUsage(_ record: TokenUsageRecord) throws {
@@ -144,6 +145,7 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
                 throw ActivityStoreError.executionFailed(lastErrorMessage)
             }
         }
+        NotificationCenter.default.post(name: .activityStoreDidChange, object: self)
     }
 
     func events(matching query: ActivityStoreQuery = ActivityStoreQuery()) throws -> [ActivityEvent] {
@@ -185,6 +187,7 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
             try executeInQueue("DELETE FROM activity_events")
             try executeInQueue("DELETE FROM token_usage")
         }
+        NotificationCenter.default.post(name: .activityStoreDidChange, object: self)
     }
 
     private func enableWALModeIfNeeded(databasePath: String) throws {
@@ -456,4 +459,8 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
     }
 
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+}
+
+extension Notification.Name {
+    static let activityStoreDidChange = Notification.Name("com.cocxy.activity-store.did-change")
 }
