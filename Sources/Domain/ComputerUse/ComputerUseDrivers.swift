@@ -5,6 +5,7 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 import ImageIO
+import ScreenCaptureKit
 import UniformTypeIdentifiers
 
 struct AccessibilityComputerUsePermissionChecker: ComputerUsePermissionChecking {
@@ -77,39 +78,69 @@ struct CoreGraphicsComputerUseKeyboardController: ComputerUseKeyboardControlling
     }
 }
 
-struct CoreGraphicsComputerUseScreenshotCapture: ComputerUseScreenshotCapturing {
+struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCapturing {
     let directory: URL
 
-    init(directory: URL = CoreGraphicsComputerUseScreenshotCapture.defaultDirectory()) {
+    init(directory: URL = ScreenCaptureKitComputerUseScreenshotCapture.defaultDirectory()) {
         self.directory = directory
     }
 
     func capture(_ request: ComputerUseScreenshotRequest) async throws -> ComputerUseScreenshot {
         switch request {
         case .mainDisplay:
-            guard let image = CGDisplayCreateImage(CGMainDisplayID()) else {
+            let content: SCShareableContent
+            do {
+                content = try await SCShareableContent.excludingDesktopWindows(
+                    false,
+                    onScreenWindowsOnly: true
+                )
+            } catch {
                 throw ComputerUseError.screenshotCaptureFailed
             }
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let fileURL = directory.appendingPathComponent("screenshot-\(Self.fileTimestamp())-\(UUID().uuidString).png")
-            guard let destination = CGImageDestinationCreateWithURL(
-                fileURL as CFURL,
-                UTType.png.identifier as CFString,
-                1,
-                nil
-            ) else {
-                throw ComputerUseError.screenshotWriteFailed(fileURL.path)
+
+            guard let display = content.displays.first(where: { $0.displayID == CGMainDisplayID() }) else {
+                throw ComputerUseError.screenshotCaptureFailed
             }
-            CGImageDestinationAddImage(destination, image, nil)
-            guard CGImageDestinationFinalize(destination) else {
-                throw ComputerUseError.screenshotWriteFailed(fileURL.path)
+
+            let filter = SCContentFilter(display: display, excludingWindows: [])
+            let configuration = SCStreamConfiguration()
+            configuration.width = display.width
+            configuration.height = display.height
+            configuration.showsCursor = true
+
+            let image: CGImage
+            do {
+                image = try await SCScreenshotManager.captureImage(
+                    contentFilter: filter,
+                    configuration: configuration
+                )
+            } catch {
+                throw ComputerUseError.screenshotCaptureFailed
             }
-            return ComputerUseScreenshot(
-                fileURL: fileURL,
-                width: image.width,
-                height: image.height
-            )
+            return try write(image)
         }
+    }
+
+    func write(_ image: CGImage) throws -> ComputerUseScreenshot {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("screenshot-\(Self.fileTimestamp())-\(UUID().uuidString).png")
+        guard let destination = CGImageDestinationCreateWithURL(
+            fileURL as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil
+        ) else {
+            throw ComputerUseError.screenshotWriteFailed(fileURL.path)
+        }
+        CGImageDestinationAddImage(destination, image, nil)
+        guard CGImageDestinationFinalize(destination) else {
+            throw ComputerUseError.screenshotWriteFailed(fileURL.path)
+        }
+        return ComputerUseScreenshot(
+            fileURL: fileURL,
+            width: image.width,
+            height: image.height
+        )
     }
 
     static func defaultDirectory() -> URL {
@@ -130,7 +161,7 @@ extension ComputerUseActor {
             permissionChecker: AccessibilityComputerUsePermissionChecker(),
             mouseController: CoreGraphicsComputerUseMouseController(),
             keyboardController: CoreGraphicsComputerUseKeyboardController(),
-            screenshotCapture: CoreGraphicsComputerUseScreenshotCapture()
+            screenshotCapture: ScreenCaptureKitComputerUseScreenshotCapture()
         )
     }
 }

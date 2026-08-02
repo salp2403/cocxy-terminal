@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ComputerUseSwiftTestingTests.swift - Local Computer Use domain contracts.
 
+import CoreGraphics
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -162,6 +163,34 @@ struct ComputerUseSwiftTestingTests {
         let log = try String(contentsOf: logURL, encoding: .utf8)
         #expect(log.contains("\"action\":\"screenshot.main_display\""))
         #expect(log.contains("\"outcome\":\"success\""))
+    }
+
+    @Test("ScreenCaptureKit screenshots persist as local PNG files")
+    func screenCaptureKitScreenshotsPersistAsPNG() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-screen-capture-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = try #require(CGContext(
+            data: nil,
+            width: 3,
+            height: 2,
+            bitsPerComponent: 8,
+            bytesPerRow: 12,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        let image = try #require(context.makeImage())
+        let capture = ScreenCaptureKitComputerUseScreenshotCapture(directory: directory)
+
+        let screenshot = try capture.write(image)
+
+        #expect(screenshot.width == 3)
+        #expect(screenshot.height == 2)
+        #expect(screenshot.fileURL.pathExtension == "png")
+        #expect(FileManager.default.fileExists(atPath: screenshot.fileURL.path))
+        #expect(try Data(contentsOf: screenshot.fileURL).starts(with: [0x89, 0x50, 0x4E, 0x47]))
     }
 
     private func temporaryLogURL() -> URL {
