@@ -53,6 +53,55 @@ struct TaskQueueSwiftTestingTests {
         }
     }
 
+    @Test("legacy queue snapshots without project fields still load")
+    func legacySnapshotWithoutProjectLoads() throws {
+        let root = temporaryQueueDirectory()
+        defer { try? FileManager.default.removeItem(at: root.deletingLastPathComponent()) }
+        let store = TaskQueueStore(rootDirectory: root)
+        let pipeline = try AgentPipeline(
+            id: "legacy-project",
+            steps: [AgentPipelineStep(
+                id: "run",
+                provider: .codex,
+                prompt: "Run",
+                worktree: "/tmp/legacy-project",
+                project: "/tmp/legacy-project"
+            )]
+        )
+        let item = try TaskQueueItem(
+            id: "legacy-project",
+            pipeline: pipeline,
+            project: "/tmp/legacy-project",
+            trigger: .manual,
+            now: Date(timeIntervalSince1970: 1_000)
+        )
+        try store.save(item)
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoder.encode(item)) as? [String: Any]
+        )
+        object.removeValue(forKey: "project")
+        var pipelineObject = try #require(object["pipeline"] as? [String: Any])
+        var steps = try #require(pipelineObject["steps"] as? [[String: Any]])
+        for index in steps.indices {
+            steps[index].removeValue(forKey: "project")
+        }
+        pipelineObject["steps"] = steps
+        object["pipeline"] = pipelineObject
+        try JSONSerialization.data(withJSONObject: object).write(
+            to: store.fileURL(taskID: item.id),
+            options: .atomic
+        )
+
+        let loaded = try #require(store.loadAll().items.first)
+        #expect(loaded.project == nil)
+        #expect(loaded.pipeline.steps.first?.project == nil)
+        #expect(loaded.id == item.id)
+        #expect(loaded.status == item.status)
+    }
+
     @Test("rejects unusable and oversized task identifiers before persistence")
     func rejectsInvalidTaskIdentifiers() throws {
         let pipeline = try AgentPipeline(
@@ -68,6 +117,14 @@ struct TaskQueueSwiftTestingTests {
             _ = try TaskQueueItem(
                 id: String(repeating: "t", count: TaskQueueItem.maximumIDBytes + 1),
                 pipeline: pipeline,
+                trigger: .manual
+            )
+        }
+        #expect(throws: TaskQueueError.invalidPersistedState("invalid project path")) {
+            _ = try TaskQueueItem(
+                id: "relative-project",
+                pipeline: pipeline,
+                project: "relative/project",
                 trigger: .manual
             )
         }

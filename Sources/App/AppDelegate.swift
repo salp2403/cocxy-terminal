@@ -455,19 +455,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menuBarItem?.uninstall()
         menuBarItem = nil
 
-        taskQueueTimer?.invalidate()
-        taskQueueTimer = nil
-        taskRunPersistenceCoordinator?.flush()
-        taskRunPersistenceCoordinator = nil
-        taskRunRestorationTask?.cancel()
-        taskRunRestorationTask = nil
-        let terminatingTaskQueue = taskQueue
-        taskQueue = nil
-        taskQueueIsReady = false
-        Task { [agentPipelineCompletionBroker] in
-            await terminatingTaskQueue?.shutdown()
-            await agentPipelineCompletionBroker.cancelAll()
-        }
+        shutdownTaskRuntimesForTermination()
 
         // Release plugins, remote workspace, browser, and update services.
         pluginManager = nil

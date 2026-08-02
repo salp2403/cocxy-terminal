@@ -49,7 +49,7 @@ extension AppDelegate {
                       ),
                       let boundParams = approvedContext.bindingLocalResourcePaths(
                         in: params,
-                        keys: ["input", "cwd"],
+                        keys: ["input", "cwd", "project"],
                         requiredScope: .localExecution
                       ) else {
                     return (false, ["error": "Approved task enqueue context is unavailable"])
@@ -71,6 +71,9 @@ extension AppDelegate {
                 ]
                 if let nextRunAt = enqueued.nextRunAt {
                     data["next-run-at"] = Self.taskQueueDateString(nextRunAt)
+                }
+                if let project = enqueued.project {
+                    data["project"] = project
                 }
                 return (true, data)
 
@@ -166,6 +169,20 @@ extension AppDelegate {
         guard workingDirectory == approvedContext.workingDirectory else {
             throw TaskQueueCLIRequestError.approvedResourceChanged
         }
+        let project: String?
+        if let rawProject = params["project"] {
+            guard let approvedProject = approvedContext.localResourcePaths["project"],
+                  approvedProject == rawProject else {
+                throw TaskQueueCLIRequestError.approvedResourceChanged
+            }
+            let resolvedProject = try canonicalTaskQueueWorktree(rawProject)
+            guard resolvedProject == approvedProject else {
+                throw TaskQueueCLIRequestError.approvedResourceChanged
+            }
+            project = resolvedProject
+        } else {
+            project = nil
+        }
 
         let pipeline: AgentPipeline
         if let inputPath = params["input"] {
@@ -194,19 +211,22 @@ extension AppDelegate {
                     id: "run",
                     provider: provider,
                     prompt: prompt,
-                    worktree: workingDirectory
+                    worktree: workingDirectory,
+                    project: project
                 )]
             )
         }
 
         let normalizedPipeline = try normalizedTaskQueuePipeline(
             pipeline,
-            defaultWorktree: workingDirectory
+            defaultWorktree: workingDirectory,
+            defaultProject: project
         )
         let trigger = try AppSocketCommandHandler.taskQueueTrigger(params: params)
         return try TaskQueueItem(
             id: rawTaskID,
             pipeline: normalizedPipeline,
+            project: project,
             trigger: trigger,
             maximumRetries: Int(params["retries"] ?? "0") ?? 0,
             maximumParallelSteps: Int(params["concurrency"] ?? "2") ?? 2
@@ -215,7 +235,8 @@ extension AppDelegate {
 
     nonisolated static func normalizedTaskQueuePipeline(
         _ pipeline: AgentPipeline,
-        defaultWorktree: String
+        defaultWorktree: String,
+        defaultProject: String? = nil
     ) throws -> AgentPipeline {
         let baseURL = URL(fileURLWithPath: defaultWorktree, isDirectory: true)
         let steps = try pipeline.steps.map { step in
@@ -228,11 +249,15 @@ extension AppDelegate {
                 candidate = baseURL.appendingPathComponent(expanded, isDirectory: true)
             }
             let worktree = try canonicalTaskQueueWorktree(candidate.path)
+            let project = try (step.project ?? defaultProject).map {
+                try canonicalTaskQueueWorktree($0)
+            }
             return AgentPipelineStep(
                 id: step.id,
                 provider: step.provider,
                 prompt: step.prompt,
                 worktree: worktree,
+                project: project,
                 dependsOn: step.dependsOn
             )
         }

@@ -80,6 +80,7 @@ struct TaskQueueSocketSwiftTestingTests {
             "provider": "codex",
             "prompt": "Review and test",
             "cwd": "/tmp/project",
+            "project": "/tmp/project",
             "trigger": "cron",
             "cron": "0 2 * * *",
             "timezone": "UTC",
@@ -113,6 +114,47 @@ struct TaskQueueSocketSwiftTestingTests {
         #expect(response.success)
         #expect(providerCalls.value == 1)
         #expect(approvals.value == 1)
+    }
+
+    @Test("enqueue rejects a relative project before requesting approval")
+    func enqueueRejectsRelativeProject() {
+        for project in [
+            "relative/project",
+            "/tmp/project\0swapped",
+            "/" + String(repeating: "p", count: AgentPipelineStep.maximumWorktreePathBytes),
+        ] {
+            let approvals = TaskQueueLockedCounter()
+            let providerCalls = TaskQueueLockedCounter()
+            let handler = AppSocketCommandHandler(
+                privilegedCommandAuthorizationProvider: { request in
+                    approvals.increment()
+                    return .internalTrusted(for: request)
+                },
+                tabManager: nil,
+                hookEventReceiver: nil,
+                taskQueueCLIProvider: { _, _ in
+                    providerCalls.increment()
+                    return (true, [:])
+                }
+            )
+
+            let response = handler.handleCommand(SocketRequest(
+                id: "task-enqueue-invalid-project",
+                command: "task-enqueue",
+                params: [
+                    "task-id": "review",
+                    "provider": "codex",
+                    "prompt": "Review",
+                    "cwd": "/tmp/project",
+                    "project": project,
+                    "trigger": "manual",
+                ]
+            ))
+
+            #expect(!response.success)
+            #expect(approvals.value == 0)
+            #expect(providerCalls.value == 0)
+        }
     }
 
     @Test("only emitted plugin events can trigger queued tasks")

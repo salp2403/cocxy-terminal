@@ -36,6 +36,55 @@ struct TaskRunSocketSwiftTestingTests {
         #expect(approvalCalls.value == 0)
     }
 
+    @Test("list forwards an absolute project filter without approval")
+    func listForwardsProjectFilter() {
+        let approvals = TaskRunLockedCounter()
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                approvals.increment()
+                return .internalTrusted(for: request)
+            },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            taskRunCLIProvider: { kind, params in
+                #expect(kind == "list")
+                #expect(params == ["project": "/tmp/project-a"])
+                return (true, ["status": "listed", "count": "0", "runs": "[]"])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "task-run-project-list",
+            command: "task-run-list",
+            params: ["project": "/tmp/project-a"]
+        ))
+
+        #expect(response.success)
+        #expect(approvals.value == 0)
+    }
+
+    @Test("list rejects relative project filters before provider work")
+    func listRejectsRelativeProjectFilter() {
+        let providerCalls = TaskRunLockedCounter()
+        let handler = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            taskRunCLIProvider: { _, _ in
+                providerCalls.increment()
+                return (true, [:])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "task-run-relative-project",
+            command: "task-run-list",
+            params: ["project": "relative/project"]
+        ))
+
+        #expect(!response.success)
+        #expect(providerCalls.value == 0)
+    }
+
     @Test("invalid launch is rejected before approval or provider work")
     func invalidLaunchPrecedesApproval() {
         let approvalCalls = TaskRunLockedCounter()

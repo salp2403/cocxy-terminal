@@ -15,6 +15,8 @@ enum AgentPipelineError: Error, Equatable, Sendable, CustomStringConvertible {
     case promptTooLarge(stepID: String, maximumBytes: Int)
     case nameTooLong(maximumBytes: Int)
     case worktreePathTooLong(stepID: String, maximumBytes: Int)
+    case invalidProjectPath(stepID: String)
+    case projectPathTooLong(stepID: String, maximumBytes: Int)
     case unknownDependency(stepID: String, dependencyID: String)
     case selfDependency(stepID: String)
     case dependencyCycle([String])
@@ -44,6 +46,10 @@ enum AgentPipelineError: Error, Equatable, Sendable, CustomStringConvertible {
             return "Agent pipeline name cannot exceed \(maximumBytes) UTF-8 bytes"
         case .worktreePathTooLong(let stepID, let maximumBytes):
             return "Agent pipeline step \(stepID) worktree cannot exceed \(maximumBytes) UTF-8 bytes"
+        case .invalidProjectPath(let stepID):
+            return "Agent pipeline step \(stepID) project must be an absolute local path"
+        case .projectPathTooLong(let stepID, let maximumBytes):
+            return "Agent pipeline step \(stepID) project cannot exceed \(maximumBytes) UTF-8 bytes"
         case .unknownDependency(let stepID, let dependencyID):
             return "Agent pipeline step \(stepID) depends on unknown step \(dependencyID)"
         case .selfDependency(let stepID):
@@ -65,6 +71,7 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
     let provider: AgentTeamProvider
     let prompt: String
     let worktree: String?
+    let project: String?
     let dependsOn: [String]
 
     init(
@@ -72,6 +79,7 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
         provider: AgentTeamProvider,
         prompt: String,
         worktree: String? = nil,
+        project: String? = nil,
         dependsOn: [String] = []
     ) {
         self.id = Self.normalizedID(id)
@@ -79,6 +87,8 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
         self.prompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedWorktree = worktree?.trimmingCharacters(in: .whitespacesAndNewlines)
         self.worktree = normalizedWorktree?.isEmpty == false ? normalizedWorktree : nil
+        let normalizedProject = project?.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.project = normalizedProject?.isEmpty == false ? normalizedProject : nil
         self.dependsOn = Self.uniqueNormalizedIDs(dependsOn)
     }
 
@@ -87,6 +97,7 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
         case provider
         case prompt
         case worktree
+        case project
         case dependsOn
     }
 
@@ -97,6 +108,7 @@ struct AgentPipelineStep: Identifiable, Codable, Sendable, Equatable {
             provider: try container.decode(AgentTeamProvider.self, forKey: .provider),
             prompt: try container.decode(String.self, forKey: .prompt),
             worktree: try container.decodeIfPresent(String.self, forKey: .worktree),
+            project: try container.decodeIfPresent(String.self, forKey: .project),
             dependsOn: try container.decodeIfPresent([String].self, forKey: .dependsOn) ?? []
         )
     }
@@ -226,6 +238,18 @@ struct AgentPipeline: Identifiable, Codable, Sendable, Equatable {
                     stepID: step.id,
                     maximumBytes: AgentPipelineStep.maximumWorktreePathBytes
                 )
+            }
+            if let project = step.project {
+                guard NSString(string: project).isAbsolutePath,
+                      !project.contains("\0") else {
+                    throw AgentPipelineError.invalidProjectPath(stepID: step.id)
+                }
+                guard project.utf8.count <= AgentPipelineStep.maximumWorktreePathBytes else {
+                    throw AgentPipelineError.projectPathTooLong(
+                        stepID: step.id,
+                        maximumBytes: AgentPipelineStep.maximumWorktreePathBytes
+                    )
+                }
             }
         }
 

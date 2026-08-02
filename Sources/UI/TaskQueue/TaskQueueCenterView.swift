@@ -95,6 +95,9 @@ enum TaskQueuePresentation {
         case .invalidWorktree:
             key = "taskQueue.validation.worktree"
             fallback = "Choose an absolute worktree path."
+        case .invalidProject:
+            key = "taskQueue.validation.project"
+            fallback = "Choose an absolute project path."
         case .invalidCron:
             key = "taskQueue.validation.cron"
             fallback = "Enter a valid five-field cron expression."

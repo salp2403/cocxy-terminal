@@ -571,8 +571,8 @@ extension AppDelegate {
                       let run = activeTaskRuns[AgentTeamConfig.slug(rawRunID)],
                       run.status == .running,
                       let candidate = run.candidates.first(where: {
-                          $0.id == AgentTeamConfig.slug(rawCandidateID)
-                      }),
+                          $0.id == AgentTeamConfig.slug(rawCandidateID) }),
+                      candidate.status != .orphaned,
                       let entry = candidate.worktree,
                       let tabID = entry.tabID,
                       let controller = controllerContainingTab(tabID),
@@ -604,22 +604,22 @@ extension AppDelegate {
             }
             if request.command == .taskEnqueue {
                 guard let authorityDetails = TaskQueueSocketAuthority.details(
-                    operation: "enqueue",
-                    params: request.params
+                    operation: "enqueue", params: request.params
                 ),
                       let workingDirectoryURL = canonicalCLIPath(request.params["cwd"]),
-                      Self.isExistingDirectory(workingDirectoryURL) else {
-                    return nil
-                }
+                      Self.isExistingDirectory(workingDirectoryURL) else { return nil }
                 var localResourcePaths = ["cwd": workingDirectoryURL.path]
                 var localResourceDigests: [String: String] = [:]
+                if let rawProject = request.params["project"] {
+                    guard let projectURL = canonicalCLIPath(rawProject),
+                          Self.isExistingDirectory(projectURL) else { return nil }
+                    localResourcePaths["project"] = projectResolver
+                        .resolveProject(for: projectURL).groupingRootURL.path
+                }
                 if request.params["input"] != nil {
                     guard let inputURL = canonicalCLIPath(request.params["input"]),
-                          let digest = SocketPrivilegedCommandSecurity.boundedFileDigest(
-                            at: inputURL
-                          ) else {
-                        return nil
-                    }
+                          let digest = SocketPrivilegedCommandSecurity
+                            .boundedFileDigest(at: inputURL) else { return nil }
                     localResourcePaths["input"] = inputURL.path
                     localResourceDigests["input"] = digest
                 }

@@ -243,8 +243,11 @@ extension AppDelegate {
         filter: ProjectID?
     ) -> [ProjectCLITaskPayload] {
         let queued = queueItems.compactMap { item -> ProjectCLITaskPayload? in
-            let projectIDs = Set(item.pipeline.steps.compactMap { step in
-                step.worktree.map {
+            let anchoredPaths = [item.project] + item.pipeline.steps.map { step in
+                step.project ?? step.worktree
+            }
+            let projectIDs = Set(anchoredPaths.compactMap { path in
+                path.map {
                     projectResolver.resolveProject(
                         for: URL(fileURLWithPath: $0, isDirectory: true)
                     ).groupingID.rawValue
@@ -286,7 +289,7 @@ extension AppDelegate {
     }
 
     @MainActor
-    private func resolveProjectReference(
+    func resolveProjectReference(
         _ reference: String,
         registerIfAvailable: Bool
     ) throws -> ProjectID {

@@ -3495,6 +3495,7 @@
 "taskQueue.validation.promptTooLarge" = "Task prompt must be 32 KB or smaller.";
 "taskQueue.validation.pipeline" = "Choose an absolute pipeline JSON path.";
 "taskQueue.validation.worktree" = "Choose an absolute worktree path.";
+"taskQueue.validation.project" = "Choose an absolute project path.";
 "taskQueue.validation.cron" = "Enter a valid five-field cron expression.";
 "taskQueue.validation.timeZone" = "Enter a valid IANA time zone.";
 "taskQueue.validation.event" = "Choose an event trigger.";

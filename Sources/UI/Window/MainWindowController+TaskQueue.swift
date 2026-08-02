@@ -25,6 +25,9 @@ extension MainWindowController {
             .standardizedFileURL
             .resolvingSymlinksInPath()
             .path ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let defaultProject = projectResolver.resolveProject(
+            for: URL(fileURLWithPath: defaultWorktree, isDirectory: true)
+        ).groupingRootURL.path
         let operations = TaskQueueCenterOperations(
             load: { [weak delegate] in
                 guard let delegate,
@@ -72,6 +75,7 @@ extension MainWindowController {
         )
         let viewModel = TaskQueueCenterViewModel(
             defaultWorktree: defaultWorktree,
+            defaultProject: defaultProject,
             operations: operations
         )
 

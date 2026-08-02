@@ -50,7 +50,7 @@ final class TaskRunCLIArgumentParserSwiftTestingTests: XCTestCase {
 
     func testListAndPromoteBuildSocketRequests() throws {
         let list = try CLIArgumentParser.parse(["task-run", "list"])
-        XCTAssertEqual(list, .taskRunList)
+        XCTAssertEqual(list, .taskRunList(project: nil))
         XCTAssertEqual(runner.buildRequest(from: list).command, "task-run-list")
 
         let promote = try CLIArgumentParser.parse([

@@ -26,6 +26,7 @@ enum TaskQueueDraftValidationIssue: Equatable, Sendable {
     case promptTooLarge
     case missingPipeline
     case invalidWorktree
+    case invalidProject
     case invalidCron
     case invalidTimeZone
     case missingEvent
@@ -59,6 +60,7 @@ struct TaskQueueEnqueueDraft: Equatable, Sendable {
     var prompt = ""
     var pipelinePath = ""
     var worktree: String
+    var project: String?
     var triggerMode: TaskQueueDraftTriggerMode = .manual
     var cronExpression = "0 9 * * 1-5"
     var timeZoneIdentifier = TimeZone.current.identifier
@@ -68,10 +70,12 @@ struct TaskQueueEnqueueDraft: Equatable, Sendable {
 
     init(
         taskID: String = TaskQueueEnqueueDraft.makeDefaultTaskID(),
-        worktree: String
+        worktree: String,
+        project: String? = nil
     ) {
         self.taskID = taskID
         self.worktree = worktree
+        self.project = project
     }
 
     var validationIssue: TaskQueueDraftValidationIssue? {
@@ -84,6 +88,12 @@ struct TaskQueueEnqueueDraft: Equatable, Sendable {
         let expandedWorktree = (worktree as NSString).expandingTildeInPath
         guard NSString(string: expandedWorktree).isAbsolutePath else {
             return .invalidWorktree
+        }
+        if let project {
+            let expandedProject = (project as NSString).expandingTildeInPath
+            guard NSString(string: expandedProject).isAbsolutePath else {
+                return .invalidProject
+            }
         }
 
         switch sourceMode {
@@ -129,6 +139,9 @@ struct TaskQueueEnqueueDraft: Equatable, Sendable {
 
         let expandedWorktree = (worktree as NSString).expandingTildeInPath
         let canonicalWorktree = try AppDelegate.canonicalTaskQueueWorktree(expandedWorktree)
+        let canonicalProject = try project.map {
+            try AppDelegate.canonicalTaskQueueWorktree(($0 as NSString).expandingTildeInPath)
+        }
         let pipeline: AgentPipeline
 
         switch sourceMode {
@@ -139,7 +152,8 @@ struct TaskQueueEnqueueDraft: Equatable, Sendable {
                     id: "run",
                     provider: provider,
                     prompt: prompt.trimmingCharacters(in: .whitespacesAndNewlines),
-                    worktree: canonicalWorktree
+                    worktree: canonicalWorktree,
+                    project: canonicalProject
                 )]
             )
         case .pipeline:
@@ -159,11 +173,13 @@ struct TaskQueueEnqueueDraft: Equatable, Sendable {
 
         let normalizedPipeline = try AppDelegate.normalizedTaskQueuePipeline(
             pipeline,
-            defaultWorktree: canonicalWorktree
+            defaultWorktree: canonicalWorktree,
+            defaultProject: canonicalProject
         )
         return try TaskQueueItem(
             id: taskID,
             pipeline: normalizedPipeline,
+            project: canonicalProject,
             trigger: try makeTrigger(),
             maximumRetries: maximumRetries,
             maximumParallelSteps: maximumParallelSteps,
@@ -218,6 +234,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
     @Published var draft: TaskQueueEnqueueDraft
 
     private let defaultWorktree: String
+    private let defaultProject: String?
     private let operations: TaskQueueCenterOperations
     private var loadRevision = 0
     private var hasLoaded = false
@@ -225,11 +242,13 @@ final class TaskQueueCenterViewModel: ObservableObject {
 
     init(
         defaultWorktree: String,
+        defaultProject: String? = nil,
         operations: TaskQueueCenterOperations
     ) {
         self.defaultWorktree = defaultWorktree
+        self.defaultProject = defaultProject
         self.operations = operations
-        draft = TaskQueueEnqueueDraft(worktree: defaultWorktree)
+        draft = TaskQueueEnqueueDraft(worktree: defaultWorktree, project: defaultProject)
     }
 
     var selectedTask: TaskQueueItem? {
@@ -254,7 +273,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
     }
 
     func startCreating() {
-        draft = TaskQueueEnqueueDraft(worktree: defaultWorktree)
+        draft = TaskQueueEnqueueDraft(worktree: defaultWorktree, project: defaultProject)
         isCreating = true
         clearError()
     }
@@ -316,7 +335,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
             upsert(item)
             selectedTaskID = item.id
             isCreating = false
-            draft = TaskQueueEnqueueDraft(worktree: defaultWorktree)
+            draft = TaskQueueEnqueueDraft(worktree: defaultWorktree, project: defaultProject)
             isSubmitting = false
             await reload(showProgress: false)
         } catch {

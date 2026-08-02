@@ -66,7 +66,16 @@ extension AppSocketCommandHandler {
             }
 
         case "list":
-            return unexpectedParameter(allowed: [])
+            if let error = unexpectedParameter(allowed: ["project"]) {
+                return error
+            }
+            if let project = params["project"],
+               (!NSString(string: project).isAbsolutePath
+                || project.contains("\0")
+                || project.utf8.count > AgentPipelineStep.maximumWorktreePathBytes) {
+                return "Project path must be absolute"
+            }
+            return nil
 
         case "promote":
             if let error = unexpectedParameter(allowed: ["run-id", "candidate-id"]) {

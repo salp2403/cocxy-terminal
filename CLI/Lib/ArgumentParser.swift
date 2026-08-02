@@ -154,6 +154,7 @@ public struct TaskEnqueueCLIOptions: Equatable {
     public let provider: String?
     public let prompt: String?
     public let worktree: String?
+    public let project: String?
     public let trigger: TaskQueueCLITrigger
     public let maximumRetries: Int
     public let maximumParallelSteps: Int
@@ -164,6 +165,7 @@ public struct TaskEnqueueCLIOptions: Equatable {
         provider: String? = nil,
         prompt: String? = nil,
         worktree: String? = nil,
+        project: String? = nil,
         trigger: TaskQueueCLITrigger = .manual,
         maximumRetries: Int = 0,
         maximumParallelSteps: Int = 2
@@ -173,6 +175,7 @@ public struct TaskEnqueueCLIOptions: Equatable {
         self.provider = provider
         self.prompt = prompt
         self.worktree = worktree
+        self.project = project
         self.trigger = trigger
         self.maximumRetries = maximumRetries
         self.maximumParallelSteps = maximumParallelSteps
@@ -188,6 +191,7 @@ public struct TaskEnqueueCLIOptions: Equatable {
         if let provider { params["provider"] = provider }
         if let prompt { params["prompt"] = prompt }
         if let worktree { params["cwd"] = worktree }
+        if let project { params["project"] = project }
         switch trigger {
         case .manual:
             params["trigger"] = "manual"
@@ -1018,7 +1022,7 @@ public enum ParsedCommand: Equatable {
     case taskRun(TaskRunCLIOptions)
 
     /// `cocxy task-run list`
-    case taskRunList
+    case taskRunList(project: String?)
 
     /// `cocxy task-run promote <run-id> --candidate <candidate-id>`
     case taskRunPromote(runID: String, candidateID: String)
@@ -1551,6 +1555,8 @@ public enum CLIArgumentParser {
 
         case "task-run":
             return try parseTaskRun(arguments: Array(arguments.dropFirst()))
+        case "task-run-list":
+            return try parseTaskRun(arguments: ["list"] + Array(arguments.dropFirst()))
 
         case "task-enqueue":
             return try parseTaskEnqueue(arguments: Array(arguments.dropFirst()))
@@ -5462,140 +5468,13 @@ public enum CLIArgumentParser {
         ))
     }
 
-    private static func parseTaskRun(arguments: [String]) throws -> ParsedCommand {
-        if arguments.first == "list" {
-            guard arguments.count == 1 else {
-                throw CLIError.invalidArgument(
-                    command: "task-run list",
-                    argument: Array(arguments.dropFirst()).joined(separator: " "),
-                    reason: "List does not accept additional arguments."
-                )
-            }
-            return .taskRunList
-        }
-
-        if arguments.first == "promote" {
-            guard arguments.count >= 2,
-                  !arguments[1].isEmpty,
-                  !arguments[1].hasPrefix("-") else {
-                throw CLIError.missingArgument(
-                    command: "task-run promote",
-                    argument: "run-id"
-                )
-            }
-            let runID = arguments[1]
-            let rest = Array(arguments.dropFirst(2))
-            var candidateID: String?
-            var index = 0
-            while index < rest.count {
-                let argument = rest[index]
-                switch argument {
-                case "--candidate":
-                    candidateID = try value(
-                        after: argument,
-                        in: rest,
-                        at: &index,
-                        command: "task-run promote"
-                    )
-                default:
-                    throw CLIError.invalidArgument(
-                        command: "task-run promote",
-                        argument: argument,
-                        reason: "Use --candidate <candidate-id>."
-                    )
-                }
-                index += 1
-            }
-            guard let candidateID else {
-                throw CLIError.missingArgument(
-                    command: "task-run promote",
-                    argument: "--candidate <candidate-id>"
-                )
-            }
-            return .taskRunPromote(runID: runID, candidateID: candidateID)
-        }
-
-        var launchArguments = arguments
-        if launchArguments.first == "launch" {
-            launchArguments.removeFirst()
-        }
-        var prompt: String?
-        var agents: String?
-        var count: Int?
-        var baseRef: String?
-        var index = 0
-        while index < launchArguments.count {
-            let argument = launchArguments[index]
-            switch argument {
-            case "--prompt":
-                prompt = try value(
-                    after: argument,
-                    in: launchArguments,
-                    at: &index,
-                    command: "task-run"
-                )
-            case "--agents":
-                agents = try value(
-                    after: argument,
-                    in: launchArguments,
-                    at: &index,
-                    command: "task-run"
-                )
-            case "--count":
-                let rawCount = try value(
-                    after: argument,
-                    in: launchArguments,
-                    at: &index,
-                    command: "task-run"
-                )
-                guard let parsedCount = Int(rawCount), (2...8).contains(parsedCount) else {
-                    throw CLIError.invalidArgument(
-                        command: "task-run",
-                        argument: rawCount,
-                        reason: "--count must be an integer from 2 through 8."
-                    )
-                }
-                count = parsedCount
-            case "--base-ref":
-                baseRef = try value(
-                    after: argument,
-                    in: launchArguments,
-                    at: &index,
-                    command: "task-run"
-                )
-            default:
-                throw CLIError.invalidArgument(
-                    command: "task-run",
-                    argument: argument,
-                    reason: "Use --prompt <text>, --agents <provider,...>, --count <2...8>, or --base-ref <ref>."
-                )
-            }
-            index += 1
-        }
-
-        guard let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !prompt.isEmpty else {
-            throw CLIError.missingArgument(command: "task-run", argument: "--prompt <text>")
-        }
-        guard let agents = agents?.trimmingCharacters(in: .whitespacesAndNewlines),
-              !agents.isEmpty else {
-            throw CLIError.missingArgument(command: "task-run", argument: "--agents <provider,...>")
-        }
-        let normalizedBaseRef = baseRef?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return .taskRun(TaskRunCLIOptions(
-            prompt: prompt,
-            agents: agents,
-            count: count,
-            baseRef: normalizedBaseRef?.isEmpty == false ? normalizedBaseRef : nil
-        ))
-    }
-
     private static func parseTaskEnqueue(arguments: [String]) throws -> ParsedCommand {
         var taskID: String?
         var pipelinePath: String?
         var provider: String?
         var prompt: String?
         var worktree: String?
+        var project: String?
         var cronExpression: String?
         var timeZoneIdentifier: String?
         var event: String?
@@ -5616,6 +5495,8 @@ public enum CLIArgumentParser {
                 prompt = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
             case "--worktree":
                 worktree = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
+            case "--project":
+                project = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
             case "--cron":
                 cronExpression = try value(after: argument, in: arguments, at: &index, command: "task-enqueue")
             case "--timezone":
@@ -5646,7 +5527,7 @@ public enum CLIArgumentParser {
                 throw CLIError.invalidArgument(
                     command: "task-enqueue",
                     argument: argument,
-                    reason: "Use --id, --pipeline, --provider, --prompt, --worktree, --cron, --timezone, --event, --retries, or --concurrency."
+                    reason: "Use --id, --pipeline, --provider, --prompt, --worktree, --project, --cron, --timezone, --event, --retries, or --concurrency."
                 )
             }
             index += 1
@@ -5660,6 +5541,7 @@ public enum CLIArgumentParser {
         let normalizedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedProvider = provider?.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedWorktree = worktree?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedProject = project?.trimmingCharacters(in: .whitespacesAndNewlines)
         let hasPipeline = normalizedPipelinePath?.isEmpty == false
         let hasPrompt = normalizedPrompt?.isEmpty == false
         guard hasPipeline != hasPrompt else {
@@ -5688,6 +5570,13 @@ public enum CLIArgumentParser {
                 command: "task-enqueue",
                 argument: "--worktree",
                 reason: "Worktree cannot be empty."
+            )
+        }
+        if project != nil, normalizedProject?.isEmpty != false {
+            throw CLIError.invalidArgument(
+                command: "task-enqueue",
+                argument: "--project",
+                reason: "Project cannot be empty."
             )
         }
 
@@ -5758,6 +5647,7 @@ public enum CLIArgumentParser {
             provider: hasPrompt ? (normalizedProvider ?? "claude-code") : nil,
             prompt: hasPrompt ? normalizedPrompt : nil,
             worktree: normalizedWorktree,
+            project: normalizedProject,
             trigger: trigger,
             maximumRetries: maximumRetries,
             maximumParallelSteps: maximumParallelSteps
@@ -5830,7 +5720,7 @@ public enum CLIArgumentParser {
         return makeCommand(taskID)
     }
 
-    private static func value(
+    static func value(
         after flag: String,
         in arguments: [String],
         at index: inout Int,

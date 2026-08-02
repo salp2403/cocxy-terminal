@@ -13,6 +13,7 @@ private struct TaskRunCLICandidateSummary: Codable {
 
 private struct TaskRunCLISummary: Codable {
     let id: String
+    let project: String
     let origin: String
     let baseRef: String
     let baseCommit: String
@@ -29,7 +30,9 @@ extension AppDelegate {
         approvedContext: SocketPrivilegedCommandContext? = nil
     ) -> (success: Bool, data: [String: String]) {
         if kind == "list" {
-            return syncOnMainActor { self.listTaskRunsForCLI() }
+            return syncOnMainActor {
+                self.listTaskRunsForCLI(projectPath: params["project"])
+            }
         }
 
         let semaphore = DispatchSemaphore(value: 0)
@@ -175,6 +178,7 @@ extension AppDelegate {
               let run = activeTaskRuns[runID],
               run.status == .running,
               let candidate = run.candidates.first(where: { $0.id == candidateID }),
+              candidate.status != .orphaned,
               let entry = candidate.worktree,
               let tabID = entry.tabID,
               approvedContext.tabID == tabID.rawValue,
@@ -228,10 +232,26 @@ extension AppDelegate {
     }
 
     @MainActor
-    private func listTaskRunsForCLI() -> (Bool, [String: String]) {
-        let summaries = taskRunsSnapshot().map { run in
+    private func listTaskRunsForCLI(projectPath: String?) -> (Bool, [String: String]) {
+        let projectID: ProjectID?
+        if let projectPath {
+            do {
+                projectID = try resolveProjectReference(
+                    projectPath,
+                    registerIfAvailable: false
+                )
+            } catch {
+                return (false, ["error": String(describing: error)])
+            }
+        } else {
+            projectID = nil
+        }
+        let summaries = taskRunsSnapshot().filter { run in
+            projectID.map { run.projectID == $0 } ?? true
+        }.map { run in
             TaskRunCLISummary(
                 id: run.id,
+                project: run.projectID.rawValue,
                 origin: run.originRepoPath.path,
                 baseRef: run.baseRef,
                 baseCommit: run.baseCommit,

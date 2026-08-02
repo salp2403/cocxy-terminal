@@ -25,6 +25,8 @@ struct TaskQueueCLISwiftTestingTests {
         let item = try #require(await fixture.queue.item(id: "scheduled-review"))
         #expect(item.status == .scheduled)
         #expect(item.pipeline.steps.first?.worktree == fixture.root.path)
+        #expect(item.project == fixture.projectURL.path)
+        #expect(item.pipeline.steps.first?.project == fixture.projectURL.path)
 
         let listed = await Task.detached {
             fixture.delegate.handleTaskQueueCLIRequest(
@@ -127,12 +129,40 @@ struct TaskQueueCLISwiftTestingTests {
         await fixture.queue.shutdown()
     }
 
+    @Test("project replaced by a symlink after approval is rejected")
+    func projectTOCTOUIsRejected() async throws {
+        let fixture = try await makeFixture(taskID: "project-swap")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let replacement = fixture.root.appendingPathComponent("replacement", isDirectory: true)
+        try FileManager.default.createDirectory(at: replacement, withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: fixture.projectURL)
+        try FileManager.default.createSymbolicLink(
+            at: fixture.projectURL,
+            withDestinationURL: replacement
+        )
+
+        let result = await Task.detached {
+            fixture.delegate.handleTaskQueueCLIRequest(
+                kind: "enqueue",
+                params: fixture.params,
+                approvedContext: fixture.context
+            )
+        }.value
+
+        #expect(!result.success)
+        #expect(result.data["error"]?.contains("changed before execution") == true)
+        #expect(await fixture.queue.item(id: "project-swap") == nil)
+        await fixture.queue.shutdown()
+    }
+
     private func makeFixture(taskID: String) async throws -> TaskQueueCLIFixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-task-cli-\(UUID().uuidString)", isDirectory: true)
             .resolvingSymlinksInPath()
             .standardizedFileURL
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+        let projectURL = root.appendingPathComponent("project", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectURL, withIntermediateDirectories: true)
         let pipelineURL = root.appendingPathComponent("pipeline.json")
         let pipeline = try AgentPipeline(
             id: "review-pipeline",
@@ -167,6 +197,7 @@ struct TaskQueueCLISwiftTestingTests {
             "task-id": taskID,
             "input": pipelineURL.path,
             "cwd": root.path,
+            "project": projectURL.path,
             "trigger": "on-event",
             "event": "tab-created",
             "retries": "1",
@@ -181,6 +212,7 @@ struct TaskQueueCLISwiftTestingTests {
         )
         return TaskQueueCLIFixture(
             root: root,
+            projectURL: projectURL,
             pipelineURL: pipelineURL,
             params: params,
             context: context,
@@ -201,6 +233,9 @@ struct TaskQueueCLISwiftTestingTests {
         if let pipelineURL, let pipelineData {
             paths["input"] = pipelineURL.path
             digests["input"] = SocketPrivilegedCommandSecurity.digest(data: pipelineData)
+        }
+        if let project = params["project"] {
+            paths["project"] = project
         }
         return SocketPrivilegedCommandContext(
             scope: .localExecution,
@@ -228,6 +263,7 @@ struct TaskQueueCLISwiftTestingTests {
 
 private struct TaskQueueCLIFixture: @unchecked Sendable {
     let root: URL
+    let projectURL: URL
     let pipelineURL: URL
     let params: [String: String]
     let context: SocketPrivilegedCommandContext

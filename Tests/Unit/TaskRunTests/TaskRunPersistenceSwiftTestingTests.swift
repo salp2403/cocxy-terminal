@@ -99,6 +99,60 @@ struct TaskRunPersistenceSwiftTestingTests {
         #expect(probe.snapshots == [run])
     }
 
+    @Test("app startup restores persisted runs through the app-scoped store")
+    @MainActor
+    func appStartupRestoresPersistedRuns() async throws {
+        let root = temporaryDirectory("app-restore")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TaskRunStore(rootDirectory: root.appendingPathComponent("snapshots"))
+        let run = try makeRun(
+            id: "restored-at-startup",
+            origin: root.appendingPathComponent("project"),
+            count: 2
+        )
+        try store.save(run)
+        let delegate = AppDelegate()
+        delegate.taskRunStore = store
+
+        delegate.setupTaskRunDurability()
+        await delegate.taskRunRestorationTask?.value
+        delegate.taskRunPersistenceCoordinator?.flush()
+
+        #expect(delegate.activeTaskRuns[run.id] == run)
+        #expect(delegate.taskRunPersistenceCoordinator != nil)
+        delegate.shutdownTaskRuntimesForTermination()
+    }
+
+    @Test("task run list filters by canonical project")
+    @MainActor
+    func taskRunListFiltersByProject() throws {
+        let root = temporaryDirectory("project-filter")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectA = root.appendingPathComponent("project-a", isDirectory: true)
+        let projectB = root.appendingPathComponent("project-b", isDirectory: true)
+        try FileManager.default.createDirectory(at: projectA, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: projectB, withIntermediateDirectories: true)
+        let runA = try makeRun(id: "run-a", origin: projectA, count: 2)
+        let runB = try makeRun(id: "run-b", origin: projectB, count: 2)
+        let delegate = AppDelegate()
+        delegate.publishTaskRun(runA, fallbackTabID: UUID())
+        delegate.publishTaskRun(runB, fallbackTabID: UUID())
+
+        let result = delegate.handleTaskRunCLIRequest(
+            kind: "list",
+            params: ["project": projectA.path]
+        )
+        let data = try #require(result.data["runs"]?.data(using: .utf8))
+        let payload = try #require(
+            JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        )
+
+        #expect(result.success)
+        #expect(result.data["count"] == "1")
+        #expect(payload.map { $0["id"] as? String } == ["run-a"])
+        #expect(payload.first?["project"] as? String == projectA.path)
+    }
+
     @Test("restore keeps five candidates and marks a deleted worktree orphaned")
     func restoreReconcilesManifestAndDisk() async throws {
         let root = temporaryDirectory("restore")
@@ -167,6 +221,7 @@ struct TaskRunPersistenceSwiftTestingTests {
     }
 
     private func makeRun(
+        id: String = "durable-run",
         origin: URL,
         count: Int,
         worktreeBasePath: String = "/tmp/cocxy-task-run-worktrees"
@@ -178,7 +233,7 @@ struct TaskRunPersistenceSwiftTestingTests {
             baseRef: "main"
         )
         return TaskRun(
-            id: "durable-run",
+            id: id,
             request: request,
             originRepoPath: origin,
             baseCommit: "base-commit",

@@ -1790,12 +1790,8 @@ public struct CommandRunner {
                 params: options.socketParams
             )
 
-        case .taskRunList:
-            return CLISocketRequest(
-                id: requestID,
-                command: "task-run-list",
-                params: nil
-            )
+        case .taskRunList(let project):
+            return taskRunListRequest(id: requestID, project: project)
 
         case .taskRunPromote(let runID, let candidateID):
             return CLISocketRequest(
@@ -1808,23 +1804,7 @@ public struct CommandRunner {
             )
 
         case .taskEnqueue(let options):
-            let currentDirectory = FileManager.default.currentDirectoryPath
-            var params = options.socketParams
-            params["cwd"] = Self.absoluteCLIPath(
-                options.worktree ?? currentDirectory,
-                relativeTo: currentDirectory
-            )
-            if let pipelinePath = options.pipelinePath {
-                params["input"] = Self.absoluteCLIPath(
-                    pipelinePath,
-                    relativeTo: currentDirectory
-                )
-            }
-            return CLISocketRequest(
-                id: requestID,
-                command: "task-enqueue",
-                params: params
-            )
+            return taskEnqueueRequest(id: requestID, options: options)
 
         case .taskList(let options):
             return CLISocketRequest(
@@ -2183,7 +2163,7 @@ public struct CommandRunner {
         }
     }
 
-    private static func absoluteCLIPath(
+    static func absoluteCLIPath(
         _ rawPath: String,
         relativeTo currentDirectory: String
     ) -> String {

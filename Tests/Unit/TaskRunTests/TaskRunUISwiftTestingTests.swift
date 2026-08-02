@@ -100,6 +100,37 @@ struct TaskRunUISwiftTestingTests {
         ) == "N/A")
     }
 
+    @Test("comparison model skips orphaned candidates and disables promotion")
+    func comparisonModelSkipsOrphanedCandidates() throws {
+        var run = try makeRun()
+        let firstID = try #require(run.candidates.first?.id)
+        let secondID = try #require(run.candidates.last?.id)
+        let entry = WorktreeManifest.WorktreeEntry(
+            id: "missing-worktree",
+            branch: "task/missing",
+            path: URL(fileURLWithPath: "/tmp/missing-worktree"),
+            createdAt: Date(timeIntervalSince1970: 1),
+            agent: "codex",
+            tabID: nil
+        )
+        try run.updateCandidate(id: firstID) {
+            $0.worktree = entry
+            $0.status = .orphaned
+        }
+        try run.updateCandidate(id: secondID) {
+            $0.worktree = entry
+            $0.status = .finished
+        }
+        run.markRunning()
+
+        let model = TaskRunComparisonSheetViewModel(run: run)
+        #expect(model.selectedCandidateID == secondID)
+        #expect(model.canPromote)
+
+        model.selectedCandidateID = firstID
+        #expect(!model.canPromote)
+    }
+
     @Test("launch and comparison views construct with read-only diff mode")
     func viewsConstruct() throws {
         let launchModel = TaskRunLaunchSheetViewModel(

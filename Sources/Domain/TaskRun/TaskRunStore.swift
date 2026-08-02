@@ -62,7 +62,7 @@ struct TaskRunStore: Sendable {
             if fileManager.fileExists(atPath: destination.path) {
                 try rejectSymbolicLink(at: destination)
             }
-            let data = try Self.encoder.encode(run)
+            let data = try Self.makeEncoder().encode(run)
             guard data.count <= Self.maximumFileBytes else {
                 throw TaskRunStoreError.invalidRun("Encoded run exceeds the storage limit")
             }
@@ -168,7 +168,7 @@ struct TaskRunStore: Sendable {
                 guard (values.fileSize ?? 0) <= Self.maximumFileBytes else {
                     throw TaskRunStoreError.invalidRun("Run snapshot exceeds the storage limit")
                 }
-                let run = try Self.decoder.decode(
+                let run = try Self.makeDecoder().decode(
                     TaskRun.self,
                     from: Data(contentsOf: url, options: [.mappedIfSafe])
                 )
@@ -246,18 +246,18 @@ struct TaskRunStore: Sendable {
         }
     }
 
-    private static let encoder: JSONEncoder = {
+    private static func makeEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
         return encoder
-    }()
+    }
 
-    private static let decoder: JSONDecoder = {
+    private static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }()
+    }
 }
 
 final class TaskRunPersistenceCoordinator: @unchecked Sendable {

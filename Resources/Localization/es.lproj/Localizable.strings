@@ -3495,6 +3495,7 @@
 "taskQueue.validation.promptTooLarge" = "La instrucción debe ocupar 32 KB o menos.";
 "taskQueue.validation.pipeline" = "Elige una ruta absoluta a un pipeline JSON.";
 "taskQueue.validation.worktree" = "Elige una ruta absoluta al worktree.";
+"taskQueue.validation.project" = "Elige una ruta absoluta de proyecto.";
 "taskQueue.validation.cron" = "Escribe una expresión cron válida de cinco campos.";
 "taskQueue.validation.timeZone" = "Escribe una zona horaria IANA válida.";
 "taskQueue.validation.event" = "Elige un evento disparador.";

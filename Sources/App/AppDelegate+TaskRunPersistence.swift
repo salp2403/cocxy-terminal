@@ -53,6 +53,22 @@ extension AppDelegate {
         }
     }
 
+    func shutdownTaskRuntimesForTermination() {
+        taskQueueTimer?.invalidate()
+        taskQueueTimer = nil
+        taskRunPersistenceCoordinator?.flush()
+        taskRunPersistenceCoordinator = nil
+        taskRunRestorationTask?.cancel()
+        taskRunRestorationTask = nil
+        let terminatingTaskQueue = taskQueue
+        taskQueue = nil
+        taskQueueIsReady = false
+        Task { [agentPipelineCompletionBroker] in
+            await terminatingTaskQueue?.shutdown()
+            await agentPipelineCompletionBroker.cancelAll()
+        }
+    }
+
     private func installRestoredTaskRuns(_ report: TaskRunRestorationReport) {
         for run in report.runs where activeTaskRuns[run.id] == nil {
             publishTaskRun(

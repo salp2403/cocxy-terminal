@@ -71,6 +71,17 @@ struct AgentPipelineSwiftTestingTests {
                 steps: [AgentPipelineStep(id: "run", provider: .codex, prompt: "Run")]
             )
         }
+        #expect(throws: AgentPipelineError.invalidProjectPath(stepID: "run")) {
+            _ = try AgentPipeline(
+                id: "project-path",
+                steps: [AgentPipelineStep(
+                    id: "run",
+                    provider: .codex,
+                    prompt: "Run",
+                    project: "relative/project"
+                )]
+            )
+        }
         #expect(throws: AgentPipelineError.idTooLong(
             maximumBytes: AgentPipeline.maximumIDBytes
         )) {
@@ -207,7 +218,8 @@ struct AgentPipelineSwiftTestingTests {
                     id: "audit",
                     provider: .codex,
                     prompt: "Audit",
-                    worktree: "review-worktree"
+                    worktree: "review-worktree",
+                    project: "/tmp/review-project"
                 ),
             ]
         )
@@ -215,7 +227,24 @@ struct AgentPipelineSwiftTestingTests {
         let decoded = try JSONDecoder().decode(AgentPipeline.self, from: encoded)
 
         #expect(decoded == pipeline)
+        #expect(decoded.steps.first?.project == "/tmp/review-project")
         #expect(!String(decoding: encoded, as: UTF8.self).contains("command"))
+    }
+
+    @Test("legacy pipeline steps decode without a project anchor")
+    func legacyPipelineStepDecoding() throws {
+        let data = Data("""
+        {
+          "id": "legacy",
+          "steps": [
+            {"id":"run","provider":"codex","prompt":"Run","dependsOn":[]}
+          ]
+        }
+        """.utf8)
+
+        let pipeline = try JSONDecoder().decode(AgentPipeline.self, from: data)
+
+        #expect(pipeline.steps.first?.project == nil)
     }
 }
 

@@ -48,7 +48,7 @@ extension AppSocketCommandHandler {
         case "enqueue":
             if let error = unexpectedParameter(allowed: [
                 "task-id", "input", "provider", "prompt", "cwd", "trigger",
-                "cron", "timezone", "event", "retries", "concurrency",
+                "project", "cron", "timezone", "event", "retries", "concurrency",
             ]) {
                 return error
             }
@@ -64,6 +64,12 @@ extension AppSocketCommandHandler {
             }
             guard params["cwd"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
                 return "Missing required param: cwd"
+            }
+            if let project = params["project"],
+               (!NSString(string: project).isAbsolutePath
+                || project.contains("\0")
+                || project.utf8.count > AgentPipelineStep.maximumWorktreePathBytes) {
+                return "Project path must be absolute"
             }
             let hasInput = params["input"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
             let hasPrompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
