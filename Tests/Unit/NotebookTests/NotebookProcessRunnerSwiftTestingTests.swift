@@ -2209,7 +2209,7 @@ struct NotebookProcessRunnerSwiftTestingTests {
             .code(language: "swift", source: #"print("swift-ok")"#),
         ])
 
-        let summary = try NotebookExecutor().execute(
+        let summary = try NotebookExecutor(processRunner: NotebookSystemToolProcessRunner()).execute(
             document,
             workingDirectory: workspace,
             timeoutSeconds: 30,
