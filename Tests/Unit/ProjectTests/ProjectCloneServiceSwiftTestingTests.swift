@@ -1,0 +1,184 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@Suite("Project clone service", .serialized)
+struct ProjectCloneServiceSwiftTestingTests {
+    @Test("remote validation accepts HTTPS, SSH, and SCP-style URLs")
+    func validatesSupportedRemotes() throws {
+        #expect(try ProjectCloneService.validatedRemote(
+            "https://example.test/team/project.git"
+        ).absoluteString == "https://example.test/team/project.git")
+        #expect(try ProjectCloneService.validatedRemote(
+            "ssh://git@example.test/team/project.git"
+        ).absoluteString == "ssh://git@example.test/team/project.git")
+        #expect(try ProjectCloneService.validatedRemote(
+            "git@example.test:team/project.git"
+        ).absoluteString == "ssh://git@example.test/team/project.git")
+    }
+
+    @Test("remote validation rejects insecure schemes and embedded secrets")
+    func rejectsUnsafeRemotes() {
+        #expect(throws: ProjectCloneError.self) {
+            try ProjectCloneService.validatedRemote("http://example.test/project.git")
+        }
+        #expect(throws: ProjectCloneError.self) {
+            try ProjectCloneService.validatedRemote(
+                "https://user:token@example.test/project.git"
+            )
+        }
+        #expect(throws: ProjectCloneError.self) {
+            try ProjectCloneService.validatedRemote(
+                "https://example.test/project.git?token=secret"
+            )
+        }
+    }
+
+    @Test("successful clone uses argument boundaries and verifies repository")
+    func clonesVerifiedRepository() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let observedArguments = LockedArguments()
+        let service = ProjectCloneService { parent, arguments in
+            observedArguments.store(arguments)
+            let destination = URL(fileURLWithPath: try #require(arguments.last))
+            try FileManager.default.createDirectory(
+                at: destination.appendingPathComponent(".git", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+            #expect(parent == sandbox.standardizedFileURL)
+            return successResult
+        }
+
+        let result = try service.clone(
+            remote: "https://example.test/team/project.git",
+            into: sandbox
+        )
+
+        #expect(observedArguments.value == [
+            "clone", "--", "https://example.test/team/project.git",
+            sandbox.appendingPathComponent("project").path,
+        ])
+        #expect(result.rootURL == sandbox.appendingPathComponent("project"))
+        #expect(result.remoteOrigin == "https://example.test/team/project.git")
+    }
+
+    @Test("failed clone removes only its newly-created partial destination")
+    func cleansPartialClone() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let unrelated = sandbox.appendingPathComponent("keep.txt")
+        try "keep".write(to: unrelated, atomically: true, encoding: .utf8)
+        let service = ProjectCloneService { _, arguments in
+            let destination = URL(fileURLWithPath: try #require(arguments.last))
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            return BoundedProcessResult(
+                exitCode: 3,
+                stdout: "",
+                stderr: "clone rejected",
+                stdoutWasTruncated: false,
+                stderrWasTruncated: false,
+                timedOut: false
+            )
+        }
+
+        #expect(throws: ProjectCloneError.self) {
+            try service.clone(
+                remote: "https://example.test/team/project.git",
+                into: sandbox
+            )
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: sandbox.appendingPathComponent("project").path
+        ))
+        #expect(FileManager.default.fileExists(atPath: unrelated.path))
+    }
+
+    @Test("runner exceptions also remove a newly-created partial destination")
+    func cleansPartialCloneAfterRunnerError() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        let service = ProjectCloneService { _, arguments in
+            let destination = URL(fileURLWithPath: try #require(arguments.last))
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            throw BoundedProcessRunnerError.invalidInvocation
+        }
+
+        #expect(throws: BoundedProcessRunnerError.self) {
+            try service.clone(
+                remote: "https://example.test/team/project.git",
+                into: sandbox
+            )
+        }
+        #expect(!FileManager.default.fileExists(
+            atPath: sandbox.appendingPathComponent("project").path
+        ))
+    }
+
+    @Test("existing destinations and symbolic-link parents fail before Git runs")
+    func validatesDestinationBeforeClone() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let realParent = sandbox.appendingPathComponent("real")
+        let linkedParent = sandbox.appendingPathComponent("linked")
+        try FileManager.default.createDirectory(
+            at: realParent.appendingPathComponent("project"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: linkedParent,
+            withDestinationURL: realParent
+        )
+        let service = ProjectCloneService { _, _ in
+            Issue.record("Git must not run for an invalid destination")
+            return successResult
+        }
+
+        #expect(throws: ProjectCloneError.self) {
+            try service.clone(
+                remote: "https://example.test/project.git",
+                into: realParent
+            )
+        }
+        #expect(throws: ProjectCloneError.self) {
+            try service.clone(
+                remote: "https://example.test/project.git",
+                into: linkedParent
+            )
+        }
+    }
+
+    private var successResult: BoundedProcessResult {
+        BoundedProcessResult(
+            exitCode: 0,
+            stdout: "",
+            stderr: "",
+            stdoutWasTruncated: false,
+            stderrWasTruncated: false,
+            timedOut: false
+        )
+    }
+
+    private func makeSandbox() -> URL {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectCloneTests-\(UUID().uuidString)", isDirectory: true)
+    }
+}
+
+private final class LockedArguments: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String] = []
+
+    var value: [String] {
+        lock.withLock { storage }
+    }
+
+    func store(_ value: [String]) {
+        lock.withLock { storage = value }
+    }
+}
