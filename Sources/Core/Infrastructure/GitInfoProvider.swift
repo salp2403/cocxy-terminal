@@ -242,7 +242,7 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
     /// - Parameter directory: A candidate working directory.
     /// - Returns: URL to the `HEAD` file, or `nil` when neither case 1
     ///   nor case 2 applies.
-    private func resolveHeadURL(at directory: URL) -> URL? {
+    static func resolveGitDirectoryURL(at directory: URL) -> URL? {
         let dotGitURL = directory.appendingPathComponent(".git")
         var isDirectory: ObjCBool = false
         guard FileManager.default.fileExists(
@@ -253,8 +253,7 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
         }
 
         if isDirectory.boolValue {
-            // Case 1: regular `.git/` directory.
-            return dotGitURL.appendingPathComponent("HEAD")
+            return dotGitURL.standardizedFileURL
         }
 
         // Case 2: `.git` is a file — follow the `gitdir:` pointer.
@@ -278,7 +277,11 @@ final class GitInfoProviderImpl: GitInfoProviding, @unchecked Sendable {
                 .appendingPathComponent(rawPath)
                 .standardizedFileURL
         }
-        return gitdirURL.appendingPathComponent("HEAD")
+        return gitdirURL.standardizedFileURL
+    }
+
+    private func resolveHeadURL(at directory: URL) -> URL? {
+        Self.resolveGitDirectoryURL(at: directory)?.appendingPathComponent("HEAD")
     }
 
     /// Reads the branch name from `HEAD` on disk.
