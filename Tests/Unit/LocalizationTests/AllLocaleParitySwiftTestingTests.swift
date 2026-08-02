@@ -73,6 +73,50 @@ struct AllLocaleParitySwiftTestingTests {
         }
     }
 
+    @Test("supported locales do not fall back to English UI copy")
+    func supportedLocalesDoNotFallBackToEnglishUICopy() throws {
+        let resources = localizationResourcesURL()
+        let english = try localizationStrings(locale: "en", resources: resources)
+        let representativeKeys = [
+            "preferences.window.title",
+            "projectHome.inbox.title",
+            "projectHome.inbox.empty",
+            "projectHome.context.title",
+            "projectHome.action.newSession",
+            "mobile.mirror.title",
+            "mobile.mirror.start",
+            "mobile.mirror.confirm.scope",
+            "taskQueue.composer.title",
+            "common.cancel",
+            "common.refresh",
+            "codeReview.panel.empty.title",
+        ]
+        let maximumTechnicalClones = english.count / 8
+
+        for locale in Self.localeCodes where locale != "en" {
+            let localized = try localizationStrings(locale: locale, resources: resources)
+            let identicalKeys = english.keys.filter { key in
+                localized[key] == english[key]
+            }.sorted()
+            let representativeClones = representativeKeys.filter { key in
+                localized[key] == english[key]
+            }
+
+            #expect(
+                identicalKeys.count <= maximumTechnicalClones,
+                Comment(
+                    rawValue: "\(locale) retains \(identicalKeys.count) English values; sample: \(identicalKeys.prefix(20).joined(separator: ", "))"
+                )
+            )
+            #expect(
+                representativeClones.isEmpty,
+                Comment(
+                    rawValue: "\(locale) retains representative English UI copy: \(representativeClones.joined(separator: ", "))"
+                )
+            )
+        }
+    }
+
     @Test("resolved Arabic UI direction is RTL")
     func resolvedArabicUIDirectionIsRTL() {
         let arabic = AppLocalizer(languagePreference: .arabic)
