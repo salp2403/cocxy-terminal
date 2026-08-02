@@ -208,9 +208,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// The split container view for the active tab (when splits are active).
     private(set) var splitContainer: SplitContainer?
 
-    /// Watcher for the active tab's `.cocxy.toml` project config.
-    /// Stopped and recreated on every tab switch.
-    private var projectConfigWatcher: ProjectConfigWatcher?
+    let projectConfigWatcherRegistry: ProjectConfigWatcherRegistry
+    var projectConfigWatchLease: ProjectConfigWatchLease?
 
     /// Subscriptions for config change notifications.
     private var cancellables = Set<AnyCancellable>()
@@ -731,6 +730,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         tabManager: TabManager? = nil,
         auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
         projectRegistry: ProjectRegistry? = nil,
+        projectConfigWatcherRegistry: ProjectConfigWatcherRegistry = .shared,
         gitInfoProvider: (any GitInfoProviding)? = nil,
         projectResolver: (any ProjectResolving)? = nil,
         worktreeService: WorktreeService? = nil,
@@ -746,6 +746,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.gitInfoProvider = resolvedGitInfoProvider
         self.projectResolver = projectResolver ?? CachedProjectResolver()
         self.projectRegistry = projectRegistry
+        self.projectConfigWatcherRegistry = projectConfigWatcherRegistry
         self.worktreeService = worktreeService
             ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
         self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
@@ -1741,6 +1742,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     func windowWillClose(_ notification: Notification) {
+        releaseProjectConfigWatcher()
+
         // Deregister this window from the session registry. This cascades:
         // all sessions owned by this window are removed and removal events
         // are published so other windows can update their UI.
@@ -2637,7 +2640,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         // project watchers. Background tabs must not override the current UI.
         if visibleTabID == tabID {
             applyEffectiveAppearance(effective.appearance)
-            restartProjectConfigWatcher(for: tab)
+            synchronizeProjectConfigWatcher(for: tab)
         }
     }
 
@@ -2723,52 +2726,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         }
 
         return ids
-    }
-
-    /// Restarts the file watcher for the active tab's `.cocxy.toml`.
-    ///
-    /// Stops any existing watcher and starts a new one pointing to the
-    /// `.cocxy.toml` in the tab's working directory (or nearest parent).
-    private func restartProjectConfigWatcher(for tab: Tab) {
-        projectConfigWatcher?.stopWatching()
-        projectConfigWatcher = nil
-
-        // Find the .cocxy.toml path (same traversal as loadConfig).
-        // Honours the worktree origin-repo fallback so the watcher
-        // observes the file that actually drives this tab's merged
-        // config — for a tab inside a worktree without its own
-        // `.cocxy.toml`, that file lives in the origin repo.
-        let service = ProjectConfigService()
-        let inheritProjectConfig = configService?.current.worktree.inheritProjectConfig ?? true
-        let originRepo = inheritProjectConfig ? tab.worktreeOriginRepo : nil
-        let configPath = service.findConfigPath(
-            for: tab.workingDirectory,
-            originRepo: originRepo
-        )
-        guard let configPath else { return }
-
-        let watcher = ProjectConfigWatcher(configFilePath: configPath)
-        watcher.startWatching { [weak self, tabID = tab.id] in
-            // Re-load project config and re-apply. Re-resolves the
-            // worktree origin at fire time so a tab that gained or
-            // lost a worktree between watcher start and this callback
-            // still picks the correct fallback.
-            guard let self else { return }
-            let currentTab = self.tabManager.tab(for: tabID)
-            let workingDirectory = currentTab?.workingDirectory
-                ?? FileManager.default.homeDirectoryForCurrentUser
-            let liveInheritFlag = self.configService?.current.worktree.inheritProjectConfig ?? true
-            let liveOriginRepo = liveInheritFlag ? currentTab?.worktreeOriginRepo : nil
-            let newConfig = ProjectConfigService().loadConfig(
-                for: workingDirectory,
-                originRepo: liveOriginRepo
-            )
-            self.tabManager.updateTab(id: tabID) { tab in
-                tab.projectConfig = newConfig
-            }
-            self.applyProjectConfig(for: tabID)
-        }
-        self.projectConfigWatcher = watcher
     }
 
     /// Applies appearance settings to the window chrome.

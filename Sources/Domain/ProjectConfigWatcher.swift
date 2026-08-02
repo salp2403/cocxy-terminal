@@ -5,6 +5,13 @@ import Foundation
 
 // MARK: - Project Config Watcher
 
+protocol ProjectConfigWatching: AnyObject {
+    var watchedPath: String { get }
+    var isWatching: Bool { get }
+    func startWatching(onChange: @escaping () -> Void)
+    func stopWatching()
+}
+
 /// Watches a `.cocxy.toml` file for changes and notifies via callback.
 ///
 /// Uses the same `DispatchSourceFileSystemObject` pattern as `ConfigWatcher`.
@@ -13,7 +20,7 @@ import Foundation
 ///
 /// Debounces rapid changes (500ms) to avoid redundant reloads when editors
 /// perform atomic writes (delete + create).
-final class ProjectConfigWatcher {
+final class ProjectConfigWatcher: ProjectConfigWatching {
 
     /// The path to the `.cocxy.toml` file being watched.
     let watchedPath: String
