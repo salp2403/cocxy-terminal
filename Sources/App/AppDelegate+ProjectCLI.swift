@@ -21,18 +21,6 @@ private struct ProjectCLIProjectPayload: Codable {
     let defaultAgents: [String]
 }
 
-private struct ProjectCLITaskPayload: Codable {
-    let id: String
-    let kind: String
-    let title: String
-    let status: String
-    let projectIDs: [String]
-    let createdAt: Date
-    let updatedAt: Date
-    let agentCount: Int
-    let estimatedCostMicros: Int64
-}
-
 private enum ProjectCLIRequestError: Error, LocalizedError {
     case unauthorizedOpen
     case unknownProject(String)
@@ -218,11 +206,10 @@ extension AppDelegate {
         let filter = try await MainActor.run {
             try projectReference.map { try resolveProjectReference($0, registerIfAvailable: false) }
         }
-        let queue = await MainActor.run { taskQueueIsReady ? taskQueue : nil }
-        let queuedItems = await queue?.list() ?? []
-        let runs = await MainActor.run { taskRunsSnapshot() }
-        let payloads = await MainActor.run {
-            projectTaskPayloads(queueItems: queuedItems, runs: runs, filter: filter)
+        let (payloads, availability) = await MainActor.run {
+            let snapshot = taskInboxStore.snapshot
+            let entries = filter.map { taskInboxStore.entries(for: $0) } ?? snapshot.entries
+            return (entries, snapshot.availability)
         }
         var data = [
             "status": "listed",
@@ -230,62 +217,10 @@ extension AppDelegate {
             "tasks": try encodeProjectCLI(payloads),
             "summary": projectTaskSummary(payloads),
         ]
-        if queue == nil {
-            data["warning"] = "Persistent task queue is still starting or unavailable"
+        if availability != .ready {
+            data["warning"] = "Some project activity is still loading or unavailable"
         }
         return (true, data)
-    }
-
-    @MainActor
-    private func projectTaskPayloads(
-        queueItems: [TaskQueueItem],
-        runs: [TaskRun],
-        filter: ProjectID?
-    ) -> [ProjectCLITaskPayload] {
-        let queued = queueItems.compactMap { item -> ProjectCLITaskPayload? in
-            let anchoredPaths = [item.project] + item.pipeline.steps.map { step in
-                step.project ?? step.worktree
-            }
-            let projectIDs = Set(anchoredPaths.compactMap { path in
-                path.map {
-                    projectResolver.resolveProject(
-                        for: URL(fileURLWithPath: $0, isDirectory: true)
-                    ).groupingID.rawValue
-                }
-            }).sorted()
-            guard filter.map({ projectIDs.contains($0.rawValue) }) ?? true else { return nil }
-            return ProjectCLITaskPayload(
-                id: item.id,
-                kind: "queued",
-                title: item.displayName,
-                status: item.status.rawValue,
-                projectIDs: projectIDs,
-                createdAt: item.createdAt,
-                updatedAt: item.updatedAt,
-                agentCount: item.pipeline.steps.count,
-                estimatedCostMicros: 0
-            )
-        }
-        let active = runs.compactMap { run -> ProjectCLITaskPayload? in
-            let projectID = projectResolver.resolveProject(for: run.originRepoPath).groupingID
-            guard filter.map({ $0 == projectID }) ?? true else { return nil }
-            return ProjectCLITaskPayload(
-                id: run.id,
-                kind: "parallel",
-                title: run.id,
-                status: run.status.rawValue,
-                projectIDs: [projectID.rawValue],
-                createdAt: run.createdAt,
-                updatedAt: run.updatedAt,
-                agentCount: run.candidates.count,
-                estimatedCostMicros: run.candidates.reduce(0) { $0 + $1.estimatedCostMicros }
-            )
-        }
-        return (queued + active).sorted {
-            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
-            if $0.kind != $1.kind { return $0.kind < $1.kind }
-            return $0.id < $1.id
-        }
     }
 
     @MainActor
@@ -374,10 +309,10 @@ extension AppDelegate {
         }.joined(separator: "\n")
     }
 
-    nonisolated private func projectTaskSummary(_ tasks: [ProjectCLITaskPayload]) -> String {
+    nonisolated private func projectTaskSummary(_ tasks: [TaskInboxEntry]) -> String {
         guard !tasks.isEmpty else { return "No project tasks." }
         return tasks.map {
-            "[\($0.status)] \($0.title) (\($0.kind), \($0.agentCount) agents)"
+            "[\($0.status)] \($0.title) (\($0.kind.rawValue), \($0.agents.count) agents)"
         }.joined(separator: "\n")
     }
 }

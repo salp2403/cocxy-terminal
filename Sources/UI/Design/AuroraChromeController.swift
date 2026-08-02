@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraChromeController.swift - Bridges live domain snapshots into Aurora
-// hosting views and routes presentation callbacks back to the window host.
+// AuroraChromeController.swift - Bridges domain snapshots and callbacks into Aurora hosts.
 
 import AppKit
 import Combine
@@ -13,6 +12,7 @@ final class AuroraChromeController: ObservableObject {
 
     @Published var workspaces: [Design.AuroraWorkspace] = []
     @Published var projects: [ProjectPresentationItem] = []
+    @Published private(set) var projectTaskCounts: [String: Int] = [:]
     @Published var projectRegistryErrorDescription: String?
     @Published var activeSessionID: String?
 
@@ -414,6 +414,11 @@ final class AuroraChromeController: ObservableObject {
         refreshRegisteredProjects()
     }
 
+    func applyProjectTaskCountsSnapshot(_ counts: [String: Int]) {
+        guard counts != projectTaskCounts else { return }
+        projectTaskCounts = counts
+    }
+
     /// Explicit snapshots avoid rereading stale `@Published` values during `willSet`.
     private func refreshSources(
         tabsSnapshot: [Tab]? = nil,
@@ -694,21 +699,16 @@ final class AuroraChromeController: ObservableObject {
 
 // MARK: - SwiftUI host wrappers
 
-/// Wrapper view that observes the controller so SwiftUI re-renders when
-/// any published property changes. Using a dedicated wrapper avoids
-/// stashing Combine bindings on NSHostingView (which would break
-/// reactive updates) and keeps the design-module view contracts intact.
+/// Observes the controller so published snapshots keep the SwiftUI host current.
 struct AuroraSidebarHost: View {
 
     @ObservedObject var controller: AuroraChromeController
 
     var body: some View {
-        // Workspace disclosure is presentation state owned by the
-        // sidebar. The controller owns active selection because it is
-        // derived from `TabManager`.
         Design.AuroraSidebarView(
             workspaces: controller.workspaces,
             projects: controller.projects,
+            projectTaskCounts: controller.projectTaskCounts,
             projectRegistryAvailable: controller.projectRegistryErrorDescription == nil,
             activeSessionID: controller.activeSessionID,
             notesByWorkspace: controller.notesByWorkspace,

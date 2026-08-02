@@ -10,7 +10,7 @@ extension AppDelegate {
 
     // MARK: - Service singleton
 
-    nonisolated private static let worktreeLogger = Logger(
+    nonisolated static let worktreeLogger = Logger(
         subsystem: "dev.cocxy.terminal",
         category: "WorktreeCLI"
     )
@@ -225,87 +225,6 @@ extension AppDelegate {
 
     // MARK: - Per-verb handlers
 
-    nonisolated private func runAdd(
-        params: [String: String],
-        context: WorktreeCLIContext,
-        store: WorktreeManifestStore,
-        service: WorktreeService
-    ) async throws -> (Bool, [String: String]) {
-        let agent = params["agent"]?.nilIfEmpty ?? context.detectedAgent
-        let effectiveConfig = Self.worktreeConfig(
-            context.config.worktree,
-            applyingAddParams: params
-        )
-        let initialTabID = effectiveConfig.openInNewTab ? nil : context.activeTabID
-        let entry = try await service.add(
-            originRepoPath: context.originRepoPath,
-            agent: agent,
-            tabID: initialTabID,
-            config: effectiveConfig,
-            store: store
-        )
-
-        let attachedTabID: TabID? = await MainActor.run {
-            if effectiveConfig.openInNewTab {
-                let controller = self.focusedWindowController()
-                    ?? context.activeTabID.flatMap { self.controllerContainingTab($0) }
-                guard let controller else { return nil }
-                let newTabID = controller.createTab(workingDirectory: entry.path)
-                controller.attachWorktree(
-                    entry,
-                    originRepo: context.originRepoPath,
-                    to: newTabID
-                )
-                return newTabID
-            }
-
-            guard let tabID = context.activeTabID,
-                  let controller = self.controllerContainingTab(tabID) else {
-                return nil
-            }
-            controller.attachWorktree(
-                entry,
-                originRepo: context.originRepoPath,
-                to: tabID,
-                sendShellDirectoryChange: true
-            )
-            return tabID
-        }
-
-        var finalEntry = entry
-        if let attachedTabID, finalEntry.tabID != attachedTabID {
-            finalEntry.tabID = attachedTabID
-            try await store.upsert(finalEntry)
-
-            let tabStillExists = await MainActor.run {
-                self.controllerContainingTab(attachedTabID)?.tabManager.tab(for: attachedTabID) != nil
-            }
-            if !tabStillExists {
-                do {
-                    try await store.clearTabBinding(id: finalEntry.id)
-                } catch {
-                    Self.worktreeLogger.error(
-                        """
-                        Failed to clear stale worktree tab binding after the attached tab closed: \
-                        worktreeID=\(finalEntry.id, privacy: .public) \
-                        tabID=\(attachedTabID.rawValue.uuidString, privacy: .public) \
-                        error=\(String(describing: error), privacy: .private)
-                        """
-                    )
-                }
-            }
-        }
-
-        return (true, [
-            "id": finalEntry.id,
-            "branch": finalEntry.branch,
-            "path": finalEntry.path.path,
-            "origin": context.originRepoPath.path,
-            "agent": finalEntry.agent ?? "",
-            "tab-id": attachedTabID?.rawValue.uuidString ?? ""
-        ])
-    }
-
     nonisolated private func runList(
         context: WorktreeCLIContext,
         store: WorktreeManifestStore,
@@ -320,63 +239,6 @@ extension AppDelegate {
         return (true, [
             "entries": json,
             "count": String(entries.count)
-        ])
-    }
-
-    nonisolated private func runFocus(
-        params: [String: String],
-        context: WorktreeCLIContext,
-        store: WorktreeManifestStore,
-        service: WorktreeService
-    ) async throws -> (Bool, [String: String]) {
-        guard let id = params["id"]?.nilIfEmpty else {
-            return (false, ["error": "worktree-focus requires --id <worktree-id>"])
-        }
-
-        let entries = try await service.list(store: store)
-        guard let entry = entries.first(where: { $0.id == id }) else {
-            throw WorktreeServiceError.worktreeNotFound(id: id)
-        }
-
-        let attachedTabID: TabID? = await MainActor.run {
-            if let tabID = entry.tabID,
-               let controller = self.controllerContainingTab(tabID),
-               controller.focusTab(id: tabID) {
-                controller.window?.makeKeyAndOrderFront(nil)
-                return tabID
-            }
-
-            let controller = self.focusedWindowController()
-                ?? context.activeTabID.flatMap { self.controllerContainingTab($0) }
-                ?? self.windowController
-            guard let controller else { return nil }
-            let newTabID = controller.createTab(workingDirectory: entry.path)
-            controller.attachWorktree(
-                entry,
-                originRepo: context.originRepoPath,
-                to: newTabID
-            )
-            controller.window?.makeKeyAndOrderFront(nil)
-            return newTabID
-        }
-
-        guard let attachedTabID else {
-            return (false, ["error": "No window available to focus worktree \(id)."])
-        }
-
-        var focusedEntry = entry
-        if entry.tabID != attachedTabID {
-            focusedEntry.tabID = attachedTabID
-            try await store.upsert(focusedEntry)
-        }
-
-        return (true, [
-            "id": focusedEntry.id,
-            "branch": focusedEntry.branch,
-            "path": focusedEntry.path.path,
-            "origin": context.originRepoPath.path,
-            "tab-id": attachedTabID.rawValue.uuidString,
-            "status": "focused"
         ])
     }
 
@@ -446,7 +308,7 @@ extension AppDelegate {
 
     /// Snapshot of every piece of state the CLI dispatch needs. Built
     /// on the main actor and then passed into the async side.
-    private struct WorktreeCLIContext: Sendable {
+    struct WorktreeCLIContext: Sendable {
         let config: CocxyConfig
         let activeTabID: TabID?
         /// The origin repository the CLI operates against. When the
@@ -537,7 +399,7 @@ extension AppDelegate {
 
     // MARK: - Error rendering
 
-    nonisolated private static func describe(_ error: WorktreeServiceError) -> String {
+    nonisolated static func describe(_ error: WorktreeServiceError) -> String {
         switch error {
         case .featureDisabled:
             return Self.worktreeEnablementErrorMessage

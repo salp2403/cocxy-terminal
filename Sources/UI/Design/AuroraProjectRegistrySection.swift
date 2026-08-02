@@ -5,7 +5,11 @@ import SwiftUI
 
 extension Design {
     struct AuroraProjectRegistrySection: View {
+        static let taskBadgeMinimumWidth: CGFloat = 18
+        static let taskBadgeHeight: CGFloat = 16
+
         let projects: [ProjectPresentationItem]
+        let projectTaskCounts: [String: Int]
         let registryAvailable: Bool
         let onActivate: ((String) -> Void)?
         let onSetPinned: ((String, Bool) -> Void)?
@@ -83,7 +87,8 @@ extension Design {
         }
 
         private func projectLabel(_ project: ProjectPresentationItem) -> some View {
-            HStack(spacing: Spacing.xSmall) {
+            let taskCount = projectTaskCounts[project.id] ?? 0
+            return HStack(spacing: Spacing.xSmall) {
                 Image(systemName: project.isLive ? "circle.fill" : "folder")
                     .font(.system(size: project.isLive ? 7 : 11, weight: .medium))
                     .foregroundStyle(project.isLive
@@ -104,11 +109,51 @@ extension Design {
                         .truncationMode(.middle)
                 }
                 Spacer(minLength: 0)
+                if let badgeText = Self.taskBadgeText(for: taskCount) {
+                    taskBadge(badgeText)
+                }
             }
             .frame(maxWidth: .infinity, minHeight: 32, alignment: .leading)
             .contentShape(Rectangle())
-            .accessibilityLabel(project.name)
+            .accessibilityLabel(Self.localizedProjectAccessibilityLabel(
+                project.name,
+                taskCount: taskCount,
+                using: localizer
+            ))
             .accessibilityValue(project.parentPath)
+        }
+
+        private func taskBadge(_ text: String) -> some View {
+            Text(verbatim: text)
+                .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                .foregroundStyle(palette.textHigh.resolvedColor())
+                .lineLimit(1)
+                .frame(minWidth: Self.taskBadgeMinimumWidth, minHeight: Self.taskBadgeHeight)
+                .padding(.horizontal, 4)
+                .background(Capsule(style: .continuous).fill(palette.accentSoft.resolvedColor()))
+                .overlay(
+                    Capsule(style: .continuous)
+                        .strokeBorder(palette.accent.resolvedColor().opacity(0.35), lineWidth: 0.7)
+                )
+                .accessibilityHidden(true)
+        }
+
+        static func taskBadgeText(for count: Int) -> String? {
+            guard count > 0 else { return nil }
+            return count > 99 ? "99+" : String(count)
+        }
+
+        static func localizedProjectAccessibilityLabel(
+            _ projectName: String,
+            taskCount: Int,
+            using localizer: AppLocalizer
+        ) -> String {
+            guard taskCount > 0 else { return projectName }
+            let key = taskCount == 1
+                ? "projectSidebar.taskBadge.accessibility.one"
+                : "projectSidebar.taskBadge.accessibility.many"
+            let fallback = taskCount == 1 ? "%@, %d task" : "%@, %d tasks"
+            return String(format: localizer.string(key, fallback: fallback), projectName, taskCount)
         }
 
         private var unavailableRow: some View {

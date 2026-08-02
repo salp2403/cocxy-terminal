@@ -7,6 +7,7 @@ import Combine
 enum ProjectActivationError: Error, LocalizedError {
     case unavailable(String)
     case noWindow
+    case projectHomeUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ enum ProjectActivationError: Error, LocalizedError {
             return "The project folder is unavailable: \(path)"
         case .noWindow:
             return "Cocxy could not create a window for this project."
+        case .projectHomeUnavailable:
+            return "Cocxy could not open Project Home in a readable pane."
         }
     }
 }
@@ -114,7 +117,7 @@ extension AppDelegate {
 
     func activateProjectForUser(_ projectID: ProjectID) {
         do {
-            _ = try activateProject(projectID)
+            _ = try showProjectHome(projectID)
         } catch {
             presentProjectError(error)
         }

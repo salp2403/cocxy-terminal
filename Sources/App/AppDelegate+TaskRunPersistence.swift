@@ -43,6 +43,7 @@ extension AppDelegate {
             }.value
             guard !Task.isCancelled, let self else { return }
             if let failure = outcome.failure {
+                taskInboxStore.markFailed(.taskRuns, message: "Task run restoration failed")
                 Self.taskRunPersistenceLogger.error(
                     "Task run restore failed: \(failure, privacy: .private)"
                 )
@@ -87,5 +88,6 @@ extension AppDelegate {
                 "Task run restore found \(report.orphanedCandidateCount, privacy: .public) unavailable candidate worktree(s)"
             )
         }
+        taskInboxStore.updateTaskRuns(Array(activeTaskRuns.values))
     }
 }

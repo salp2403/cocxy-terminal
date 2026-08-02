@@ -464,7 +464,7 @@ extension AppDelegate {
             projectResolver: projectResolver
         )
         self.agentDashboardViewModel = dashboardVM
-
+        taskInboxStore.connect(sessionRegistry: sessionRegistry, dashboard: dashboardVM)
         // Provide tab CWDs from ALL windows so the dashboard can filter
         // out hook events from Claude sessions running outside Cocxy.
         dashboardVM.tabCwdProvider = { [weak self] in

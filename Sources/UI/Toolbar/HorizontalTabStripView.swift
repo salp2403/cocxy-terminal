@@ -1148,10 +1148,10 @@ final class HorizontalTabStripView: NSView {
                     action: #selector(handleReload)
                 )
             )
-        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory, .templates, .macros, .dbCloud, .subagent:
+        case .markdown, .editor, .notebook, .workflow, .sessionReplay, .aiEditHistory,
+             .templates, .macros, .dbCloud, .projectHome, .subagent:
             break
         }
-
         if canClose {
             actionStack.addArrangedSubview(
                 createActionButton(

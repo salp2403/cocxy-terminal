@@ -1,6 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// AuroraSidebarView.swift - Project, session, and pane tree rendered from
-// presentation snapshots supplied by AuroraChromeController.
+// AuroraSidebarView.swift - Project, session, and pane snapshots from AuroraChromeController.
 
 import SwiftUI
 import UniformTypeIdentifiers
@@ -9,6 +8,7 @@ extension Design {
     struct AuroraSidebarView: View {
         let workspaces: [AuroraWorkspace]
         var projects: [ProjectPresentationItem] = []
+        var projectTaskCounts: [String: Int] = [:]
         var projectRegistryAvailable: Bool = true
         let activeSessionID: String?
         var notesByWorkspace: [String: AuroraWorkspaceNotesSummary] = [:]
@@ -95,6 +95,7 @@ extension Design {
                         VStack(alignment: .leading, spacing: Spacing.hairline) {
                             AuroraProjectRegistrySection(
                                 projects: projects,
+                                projectTaskCounts: projectTaskCounts,
                                 registryAvailable: projectRegistryAvailable,
                                 onActivate: onActivateProject,
                                 onSetPinned: projectRegistryAvailable ? onSetProjectPinned : nil,
@@ -649,12 +650,8 @@ extension Design {
 
         // MARK: - Footer
 
-        /// Footer shown at the bottom of the sidebar. Originally carried
-        /// a second copy of the privacy badge that the Aurora
-        /// status bar already renders at the bottom of the window — one
-        /// badge per window is enough. The footer now only surfaces the
-        /// palette shortcut hint (live-resolved from the host so
-        /// rebindings propagate immediately).
+        /// Omits the privacy badge already rendered by the status bar and
+        /// surfaces only the live-resolved palette shortcut hint.
         private var sidebarFooter: some View {
             HStack(spacing: Spacing.small) {
                 Spacer()

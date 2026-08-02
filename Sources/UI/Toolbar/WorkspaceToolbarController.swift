@@ -37,6 +37,7 @@ struct PanelTabInfo: Equatable {
         case .templates: return "square.grid.2x2"
         case .macros: return "keyboard"
         case .dbCloud: return "externaldrive.connected.to.line.below"
+        case .projectHome: return "house"
         case .subagent: return "person.2"
         }
     }
@@ -306,6 +307,8 @@ final class WorkspaceToolbarController: NSObject {
             return localizer.string("workspaceToolbar.panel.macros", fallback: "Macros")
         case .dbCloud:
             return localizer.string("workspaceToolbar.panel.dbCloud", fallback: "DB/Cloud")
+        case .projectHome:
+            return localizer.string("workspaceToolbar.panel.projectHome", fallback: "Project Home")
         case .subagent:
             return localizer.string("workspaceToolbar.panel.subagent", fallback: "Agent")
         }

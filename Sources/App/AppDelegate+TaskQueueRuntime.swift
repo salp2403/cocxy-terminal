@@ -34,6 +34,9 @@ extension AppDelegate {
                 },
                 lifecycleHandler: { [weak self] event in
                     await self?.dispatchTaskQueueLifecycleEvent(event)
+                },
+                snapshotHandler: { [weak self] items in
+                    await self?.taskInboxStore.updateQueueItems(items)
                 }
             )
             taskQueue = queue
@@ -47,6 +50,7 @@ extension AppDelegate {
                 }
             }
         } catch {
+            taskInboxStore.markFailed(.queue, message: "Task queue initialization failed")
             Self.taskQueueLogger.error(
                 "Task queue initialization failed: \(String(describing: error), privacy: .private)"
             )
@@ -80,6 +84,7 @@ extension AppDelegate {
         taskQueueIsReady = false
         taskQueueTimer?.invalidate()
         taskQueueTimer = nil
+        taskInboxStore.markFailed(.queue, message: "Task queue startup failed")
         Self.taskQueueLogger.error(
             "Task queue startup failed: \(String(describing: error), privacy: .private)"
         )

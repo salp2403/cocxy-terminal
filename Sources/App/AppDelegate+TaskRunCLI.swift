@@ -468,6 +468,7 @@ extension AppDelegate {
     @MainActor
     func publishTaskRun(_ run: TaskRun, fallbackTabID: UUID) {
         activeTaskRuns[run.id] = run
+        taskInboxStore.updateTaskRuns(Array(activeTaskRuns.values))
         taskRunPersistenceCoordinator?.enqueue(run)
         agentDashboardViewModel?.syncTaskRun(run, fallbackTabId: fallbackTabID)
         for controller in allWindowControllers {

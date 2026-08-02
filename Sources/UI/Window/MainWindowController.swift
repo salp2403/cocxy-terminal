@@ -97,7 +97,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// callbacks remain the primary path; this timer covers missed launch
     /// edges after rebuilds, feature-flag toggles, or split focus churn.
     var auroraAgentReconciliationCancellable: AnyCancellable?
-
+    var projectInboxCancellable: AnyCancellable?
     /// Maps tab IDs to their corresponding session IDs in the registry.
     /// Populated when a tab is created and cleaned up when it's closed.
     var tabSessionMap: [TabID: SessionID] = [:]
@@ -524,7 +524,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// Dashboard ViewModel injected by AppDelegate for real agent data.
     /// When set, the dashboard panel shows live agent sessions instead of an empty view.
     var injectedDashboardViewModel: AgentDashboardViewModel?
-
+    var injectedTaskInboxStore: TaskInboxStore?
     /// Lets AppDelegate release hook routing bindings after a tab is removed.
     var onAgentTabClosed: ((TabID) -> Void)?
 

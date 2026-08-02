@@ -183,34 +183,6 @@ extension MainWindowController {
         )
     }
 
-    func replayMacroPlaybackPlan(
-        _ plan: MacroPlaybackPlan,
-        preferredSurfaceID: SurfaceID? = nil
-    ) throws -> Int {
-        guard let surfaceID = preferredSurfaceID
-            ?? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
-            throw MacroTerminalInputReplayError.noTargetSurface
-        }
-        let engine = terminalEngine(for: surfaceID)
-        let replayer = MacroTerminalInputReplayer { text in
-            engine.sendText(text, to: surfaceID)
-        }
-        return try replayer.replay(plan)
-    }
-
-    func sendMacroTextToTerminal(
-        _ text: String,
-        preferredSurfaceID: SurfaceID? = nil
-    ) throws {
-        guard let surfaceID = preferredSurfaceID
-            ?? focusedSplitSurfaceView?.terminalViewModel?.surfaceID
-            ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
-            throw MacroTerminalInputReplayError.noTargetSurface
-        }
-        terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
-    }
-
     // MARK: - Split with Panel
 
     func makeWorkspacePanelView(panel: PanelInfo, contentID: UUID, tabID: TabID?) -> NSView? {
@@ -365,6 +337,8 @@ extension MainWindowController {
                 self?.closePanel(contentID: contentID)
             }
             return NSHostingView(rootView: view)
+        case .projectHome:
+            return makeProjectHomePanelView(panel: panel, tabID: tabID)
         case .subagent:
             guard let dashboardVM = injectedDashboardViewModel ?? dashboardViewModel,
                   let subagentId = panel.subagentId,

@@ -54,7 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let projectResolver = CachedProjectResolver()
     let projectRegistry = ProjectRegistry()
     var projectRegistryChangeCancellable: AnyCancellable?
-
+    lazy var taskInboxStore = TaskInboxStore(projectResolver: projectResolver)
     lazy var sharedWorktreeService: WorktreeService = {
         let gitInfoProvider = self.gitInfoProvider
         let projectResolver = self.projectResolver
@@ -1532,6 +1532,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedPerSurfaceStore = agentStatePerSurfaceStore
         controller.injectedSessionDiffTracker = sessionDiffTracker
         controller.injectedDashboardViewModel = agentDashboardViewModel
+        controller.injectedTaskInboxStore = taskInboxStore
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedNotificationManager = notificationManager
         controller.onAgentTabClosed = { [weak self] tabID in

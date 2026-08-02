@@ -7,13 +7,23 @@ import SwiftUI
 extension MainWindowController {
     @MainActor
     func showWorktreeAdvancedModal() {
+        presentWorktreeAdvancedModal(projectRoot: nil)
+    }
+
+    @MainActor
+    func showWorktreeAdvancedModal(projectRoot: URL) {
+        presentWorktreeAdvancedModal(projectRoot: projectRoot)
+    }
+
+    @MainActor
+    private func presentWorktreeAdvancedModal(projectRoot: URL?) {
         guard let window else { return }
 
-        let config = configService?.current.worktree ?? WorktreeConfig.defaults
+        let config = projectWorktreeConfig(for: projectRoot)
         let localizer = appLocalizer()
         let viewModel = WorktreeAdvancedModalViewModel(
             initialBaseRef: config.baseRef,
-            availableBaseRefs: availableWorktreeBaseRefs(),
+            availableBaseRefs: availableWorktreeBaseRefs(for: projectRoot),
             detectedAgent: activeWorktreeAgentName(),
             previewID: WorktreeID.generate(length: config.idLength)
         )
@@ -29,10 +39,19 @@ extension MainWindowController {
                 if let sheet { window?.endSheet(sheet) }
                 Task { @MainActor in
                     guard let delegate = NSApp.delegate as? AppDelegate else { return }
-                    let result = await delegate.performWorktreeCLIRequest(
-                        kind: "add",
-                        params: request.cliParams
-                    )
+                    let result: (Bool, [String: String])
+                    if let projectRoot {
+                        result = await delegate.performProjectWorktreeRequest(
+                            kind: "add",
+                            projectRoot: projectRoot,
+                            params: request.cliParams
+                        )
+                    } else {
+                        result = await delegate.performWorktreeCLIRequest(
+                            kind: "add",
+                            params: request.cliParams
+                        )
+                    }
                     if !result.0 {
                         self?.presentWorktreeError(
                             result.1["error"] ?? Self.localizedWorktreeCreationFailed(using: localizer)
@@ -140,7 +159,12 @@ extension MainWindowController {
 
     @MainActor
     func availableWorktreeBaseRefs() -> [String] {
-        guard let repo = currentWorktreeOriginRepo() else {
+        availableWorktreeBaseRefs(for: nil)
+    }
+
+    @MainActor
+    private func availableWorktreeBaseRefs(for projectRoot: URL?) -> [String] {
+        guard let repo = projectRoot ?? currentWorktreeOriginRepo() else {
             return ["HEAD"]
         }
         let origin = AppDelegate.resolveOriginRepoRoot(from: repo)
@@ -156,6 +180,19 @@ extension MainWindowController {
             .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         return ["HEAD"] + branches
+    }
+
+    @MainActor
+    private func projectWorktreeConfig(for projectRoot: URL?) -> WorktreeConfig {
+        let globalConfig = configService?.current ?? .defaults
+        guard let projectRoot else { return globalConfig.worktree }
+        let projectID = projectResolver.resolveProject(for: projectRoot).groupingID
+        guard let tab = tabManager.tabs.first(where: {
+            projectResolver.resolveProject(for: $0.workingDirectory).groupingID == projectID
+        }) else {
+            return globalConfig.worktree
+        }
+        return Self.effectiveWorktreeConfig(for: tab, globalConfig: globalConfig)
     }
 
     @MainActor

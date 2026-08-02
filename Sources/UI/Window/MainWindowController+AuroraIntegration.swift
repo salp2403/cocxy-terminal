@@ -169,7 +169,6 @@ extension MainWindowController {
         guard let rootView = window?.contentView else { return }
         guard let splitView = mainSplitView else { return }
         guard let agentStore = injectedPerSurfaceStore else { return }
-
         let controller = AuroraChromeController(
             tabManager: tabManager,
             store: agentStore,
@@ -177,6 +176,7 @@ extension MainWindowController {
             projectRegistry: projectRegistry,
             gitInfoProvider: gitInfoProvider
         )
+        wireProjectHomeInbox(to: controller)
         auroraWorkspaceTitleStore.mergeMissing(
             AuroraWorkspacePlanner.legacyTitlesByIdentity(
                 from: tabManager.tabs,

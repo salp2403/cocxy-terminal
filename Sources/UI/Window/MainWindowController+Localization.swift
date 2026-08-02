@@ -171,6 +171,8 @@ extension MainWindowController {
             return localizer.string("window.pane.macrosPanel", fallback: "macros panel")
         case .dbCloud:
             return localizer.string("window.pane.dbCloudPanel", fallback: "DB/cloud helpers panel")
+        case .projectHome:
+            return localizer.string("window.pane.projectHomePanel", fallback: "project home panel")
         case .subagent:
             return localizer.string("window.pane.subagentPanel", fallback: "subagent panel")
         }
