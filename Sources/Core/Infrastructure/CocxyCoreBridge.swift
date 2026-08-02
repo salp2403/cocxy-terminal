@@ -4219,9 +4219,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
             // Serialize all C terminal mutation against the render path.
             // The renderer (main thread) calls cocxycore_terminal_build_frame
-            // which reads the same internal state we mutate here with feed,
-            // response drain, and process poll. Holding the lock across all
-            // three is cheap (per-surface, no contention outside the frame
+            // which reads the same internal state we mutate here with feed
+            // and response drain. Holding the lock across both operations
+            // is cheap (per-surface, no contention outside the frame
             // boundary) and keeps the C core consistent from the renderer's
             // point of view.
             terminalLock.lock()
@@ -4234,9 +4234,6 @@ final class CocxyCoreBridge: TerminalEngine {
             // Write back every parser-generated response before releasing the
             // terminal lock so FIFO ordering is preserved against host events.
             self?.drainTerminalResponsesLocked(terminal: terminal, pty: pty)
-
-            // Poll process tracker (non-blocking kqueue check)
-            cocxycore_terminal_poll_processes(terminal)
 
             let altScreenChanged = wasAltScreen != cocxycore_terminal_is_alt_screen(terminal)
 
@@ -4836,8 +4833,6 @@ final class CocxyCoreBridge: TerminalEngine {
     private func verifiedChildPID(for state: SurfaceState) -> pid_t? {
         guard state.childPID > 0, let pty = state.pty else { return nil }
 
-        var waitResult = cocxycore_pty_wait_result()
-        _ = cocxycore_pty_wait_check(pty, &waitResult)
         guard cocxycore_pty_is_alive(pty) else { return nil }
 
         guard let currentIdentity = processIdentity(for: state.childPID) else { return nil }

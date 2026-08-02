@@ -712,7 +712,6 @@ final class PTYDaemonSurface: @unchecked Sendable {
         let frame: PTYDaemonSurfaceFrame? = terminalLock.withLock {
             cocxycore_terminal_feed(terminal, buffer, bytesRead)
             drainTerminalResponses()
-            cocxycore_terminal_poll_processes(terminal)
             return shouldEmitFrames() ? makeFrameLocked() : nil
         }
 
