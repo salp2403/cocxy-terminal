@@ -95,13 +95,14 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
             defer { sqlite3_finalize(statement) }
 
             try backfillProjectIdentityInQueue(event.project)
+            let project = try persistedProjectColumnsInQueue(event.project)
             sqlite3_bind_text(statement, 1, event.id.uuidString, -1, Self.sqliteTransient)
             sqlite3_bind_double(statement, 2, event.timestamp.timeIntervalSince1970)
             sqlite3_bind_text(statement, 3, event.kind.rawValue, -1, Self.sqliteTransient)
             bindOptionalText(event.sessionID, to: statement, index: 4)
-            bindOptionalText(persistedLegacyID(for: event.project), to: statement, index: 5)
-            bindOptionalText(event.project?.projectIdentity?.rawValue, to: statement, index: 6)
-            bindOptionalText(event.project?.name, to: statement, index: 7)
+            bindOptionalText(project.legacyID, to: statement, index: 5)
+            bindOptionalText(project.identity, to: statement, index: 6)
+            bindOptionalText(project.name, to: statement, index: 7)
             sqlite3_bind_text(statement, 8, event.summary, -1, Self.sqliteTransient)
             sqlite3_bind_text(
                 statement,
@@ -129,14 +130,15 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
             defer { sqlite3_finalize(statement) }
 
             try backfillProjectIdentityInQueue(record.project)
+            let project = try persistedProjectColumnsInQueue(record.project)
             sqlite3_bind_text(statement, 1, record.id.uuidString, -1, Self.sqliteTransient)
             sqlite3_bind_double(statement, 2, record.timestamp.timeIntervalSince1970)
             sqlite3_bind_text(statement, 3, record.provider, -1, Self.sqliteTransient)
             sqlite3_bind_text(statement, 4, record.model, -1, Self.sqliteTransient)
             bindOptionalText(record.sessionID, to: statement, index: 5)
-            bindOptionalText(persistedLegacyID(for: record.project), to: statement, index: 6)
-            bindOptionalText(record.project?.projectIdentity?.rawValue, to: statement, index: 7)
-            bindOptionalText(record.project?.name, to: statement, index: 8)
+            bindOptionalText(project.legacyID, to: statement, index: 6)
+            bindOptionalText(project.identity, to: statement, index: 7)
+            bindOptionalText(project.name, to: statement, index: 8)
             sqlite3_bind_int64(statement, 9, Int64(record.inputTokens))
             sqlite3_bind_int64(statement, 10, Int64(record.outputTokens))
             sqlite3_bind_int64(statement, 11, record.estimatedCostMicros)
@@ -186,6 +188,7 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         try queue.sync {
             try executeInQueue("DELETE FROM activity_events")
             try executeInQueue("DELETE FROM token_usage")
+            try executeInQueue("DELETE FROM activity_project_aliases")
         }
         NotificationCenter.default.post(name: .activityStoreDidChange, object: self)
     }
@@ -224,6 +227,13 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
                 cost_micros INTEGER NOT NULL
             )
             """)
+        try execute("""
+            CREATE TABLE IF NOT EXISTS activity_project_aliases (
+                legacy_id TEXT PRIMARY KEY,
+                project_identity TEXT NOT NULL,
+                project_name TEXT NOT NULL
+            )
+            """)
         try addColumnIfNeeded(
             table: "activity_events",
             column: "project_identity",
@@ -241,6 +251,7 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_project ON token_usage(project_id)")
         try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_identity ON token_usage(project_identity)")
         try execute("CREATE INDEX IF NOT EXISTS idx_token_usage_provider_model ON token_usage(provider, model)")
+        try execute("CREATE INDEX IF NOT EXISTS idx_activity_alias_identity ON activity_project_aliases(project_identity)")
     }
 
     private func addColumnIfNeeded(
@@ -409,26 +420,85 @@ final class SQLiteActivityStore: ActivityStoring, @unchecked Sendable {
         return records
     }
 
-    private func persistedLegacyID(for project: ActivityProjectRef?) -> String? {
-        project.map { $0.legacyID ?? $0.id }
+    private struct PersistedProjectColumns {
+        let legacyID: String?
+        let identity: String?
+        let name: String?
+    }
+
+    private func persistedProjectColumnsInQueue(
+        _ project: ActivityProjectRef?
+    ) throws -> PersistedProjectColumns {
+        guard let project else {
+            return PersistedProjectColumns(legacyID: nil, identity: nil, name: nil)
+        }
+        let legacyID = project.legacyID ?? project.id
+        if let identity = project.projectIdentity?.rawValue {
+            return PersistedProjectColumns(
+                legacyID: legacyID,
+                identity: identity,
+                name: project.name
+            )
+        }
+        let statement = try prepareStatement("""
+            SELECT project_identity, project_name
+            FROM activity_project_aliases
+            WHERE legacy_id = ?
+            LIMIT 1
+            """)
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_text(statement, 1, legacyID, -1, Self.sqliteTransient)
+        guard sqlite3_step(statement) == SQLITE_ROW else {
+            return PersistedProjectColumns(
+                legacyID: legacyID,
+                identity: nil,
+                name: project.name
+            )
+        }
+        return PersistedProjectColumns(
+            legacyID: legacyID,
+            identity: textColumn(statement, index: 0),
+            name: textColumn(statement, index: 1) ?? project.name
+        )
     }
 
     private func backfillProjectIdentityInQueue(_ project: ActivityProjectRef?) throws {
         guard let project,
               let projectIdentity = project.projectIdentity?.rawValue else { return }
-        let legacyID = project.legacyID ?? project.id
-        for table in ["activity_events", "token_usage"] {
-            let statement = try prepareStatement("""
-                UPDATE \(table)
-                SET project_identity = ?, project_name = ?
-                WHERE project_id = ? AND project_identity IS NULL
+        var legacyIDs = Set(project.legacyIDs)
+        legacyIDs.insert(project.legacyID ?? project.id)
+        legacyIDs.remove(projectIdentity)
+        for legacyID in legacyIDs where !legacyID.isEmpty {
+            let aliasStatement = try prepareStatement("""
+                INSERT INTO activity_project_aliases (legacy_id, project_identity, project_name)
+                VALUES (?, ?, ?)
+                ON CONFLICT(legacy_id) DO UPDATE SET
+                    project_identity = excluded.project_identity,
+                    project_name = excluded.project_name
                 """)
-            defer { sqlite3_finalize(statement) }
-            sqlite3_bind_text(statement, 1, projectIdentity, -1, Self.sqliteTransient)
-            sqlite3_bind_text(statement, 2, project.name, -1, Self.sqliteTransient)
-            sqlite3_bind_text(statement, 3, legacyID, -1, Self.sqliteTransient)
-            guard sqlite3_step(statement) == SQLITE_DONE else {
+            sqlite3_bind_text(aliasStatement, 1, legacyID, -1, Self.sqliteTransient)
+            sqlite3_bind_text(aliasStatement, 2, projectIdentity, -1, Self.sqliteTransient)
+            sqlite3_bind_text(aliasStatement, 3, project.name, -1, Self.sqliteTransient)
+            guard sqlite3_step(aliasStatement) == SQLITE_DONE else {
+                sqlite3_finalize(aliasStatement)
                 throw ActivityStoreError.executionFailed(lastErrorMessage)
+            }
+            sqlite3_finalize(aliasStatement)
+
+            for table in ["activity_events", "token_usage"] {
+                let statement = try prepareStatement("""
+                    UPDATE \(table)
+                    SET project_identity = ?, project_name = ?
+                    WHERE project_id = ? AND project_identity IS NULL
+                    """)
+                sqlite3_bind_text(statement, 1, projectIdentity, -1, Self.sqliteTransient)
+                sqlite3_bind_text(statement, 2, project.name, -1, Self.sqliteTransient)
+                sqlite3_bind_text(statement, 3, legacyID, -1, Self.sqliteTransient)
+                guard sqlite3_step(statement) == SQLITE_DONE else {
+                    sqlite3_finalize(statement)
+                    throw ActivityStoreError.executionFailed(lastErrorMessage)
+                }
+                sqlite3_finalize(statement)
             }
         }
     }

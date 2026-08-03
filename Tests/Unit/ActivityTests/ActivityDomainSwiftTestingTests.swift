@@ -112,6 +112,7 @@ struct ActivityDomainSwiftTestingTests {
             from: Data(#"{"id":"legacy-id","name":"Legacy"}"#.utf8)
         )
         #expect(legacy.legacyID == nil)
+        #expect(legacy.legacyIDs.isEmpty)
         #expect(legacy.projectIdentity == nil)
     }
 
@@ -160,6 +161,76 @@ struct ActivityDomainSwiftTestingTests {
         #expect(try ActivityQueryService(store: store)
             .projectTimeBreakdown(matching: query)
             .map(\.durationMilliseconds) == [3_000])
+    }
+
+    @Test("known cwd aliases backfill together and remain durable across reopen")
+    func projectAliasMapIsDurable() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-aliases-\(UUID().uuidString)", isDirectory: true)
+        let databaseURL = directory.appendingPathComponent("activity.sqlite")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let root = URL(fileURLWithPath: "/tmp/activity-project", isDirectory: true)
+        let source = root.appendingPathComponent("Sources", isDirectory: true)
+        let tests = root.appendingPathComponent("Tests", isDirectory: true)
+        let legacyRefs = [root, source, tests].map(ActivityProjectRef.workingDirectory)
+        let identity = ProjectID(rootURL: root)
+        let query = ActivityStoreQuery(projectID: identity.rawValue)
+
+        do {
+            let store = try SQLiteActivityStore(databasePath: databaseURL.path)
+            for (index, legacyRef) in legacyRefs.enumerated() {
+                try store.recordEvent(ActivityEvent(
+                    kind: .commandExecuted,
+                    project: legacyRef,
+                    summary: "legacy-\(index)"
+                ))
+            }
+            let descriptor = ProjectDescriptor(
+                id: identity,
+                rootURL: root,
+                automaticName: "activity-project",
+                displayName: "Activity Project",
+                parent: nil
+            )
+            let canonical = ActivityProjectRef.resolvedProject(
+                descriptor,
+                workingDirectory: root,
+                knownWorkingDirectories: [source, tests]
+            )
+            try store.recordEvent(ActivityEvent(
+                kind: .projectSwitched,
+                project: canonical,
+                summary: "current"
+            ))
+
+            let events = try store.events(matching: query)
+            #expect(events.count == 4)
+            #expect(events.allSatisfy { $0.project?.projectIdentity == identity })
+        }
+
+        do {
+            let reopened = try SQLiteActivityStore(databasePath: databaseURL.path)
+            try reopened.recordEvent(ActivityEvent(
+                kind: .commandExecuted,
+                project: legacyRefs[1],
+                summary: "late legacy writer"
+            ))
+            try reopened.recordTokenUsage(TokenUsageRecord(
+                provider: "local",
+                model: "model",
+                project: legacyRefs[2],
+                inputTokens: 1,
+                outputTokens: 2,
+                estimatedCostMicros: 3
+            ))
+
+            let events = try reopened.events(matching: query)
+            let usage = try reopened.tokenUsage(matching: query)
+            #expect(events.count == 5)
+            #expect(events.last?.project?.projectIdentity == identity)
+            #expect(usage.count == 1)
+            #expect(usage.first?.project?.projectIdentity == identity)
+        }
     }
 
     @Test("legacy SQLite schema migrates before canonical dual writes")
