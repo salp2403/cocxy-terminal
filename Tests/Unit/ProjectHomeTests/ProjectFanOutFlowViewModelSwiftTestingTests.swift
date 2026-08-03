@@ -149,6 +149,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
             self.comparison = selectedComparison
             self.preview = TaskRunPromotionPreview(
                 run: run,
+                comparisons: [selectedComparison],
                 selectedComparison: selectedComparison,
                 collisionReport: .empty,
                 mergedCleanupPlan: WorktreeBatchCleanupPlan(removable: [], blocked: [], skipped: []),

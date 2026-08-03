@@ -19,12 +19,17 @@ struct TaskRunCleanupPreviewEntry: Identifiable, Equatable, Sendable {
 
 struct TaskRunPromotionPreview: Equatable, Sendable {
     let run: TaskRun
+    let comparisons: [TaskRunCandidateComparison]
     let selectedComparison: TaskRunCandidateComparison
     let collisionReport: TaskCollisionReport
     let mergedCleanupPlan: WorktreeBatchCleanupPlan
     let cleanupEntries: [TaskRunCleanupPreviewEntry]
 
     var selectedCandidateID: String { selectedComparison.candidate.id }
+
+    func matches(currentComparisons: [TaskRunCandidateComparison]) -> Bool {
+        currentComparisons == comparisons
+    }
 }
 
 enum TaskRunPromotionPlanner {

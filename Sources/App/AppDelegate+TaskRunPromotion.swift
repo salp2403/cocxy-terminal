@@ -91,6 +91,7 @@ extension AppDelegate {
         )
         return TaskRunPromotionPreview(
             run: run,
+            comparisons: comparisons,
             selectedComparison: selectedComparison,
             collisionReport: collisionReport,
             mergedCleanupPlan: mergedPlan,
@@ -115,7 +116,7 @@ extension AppDelegate {
             throw TaskRunError.candidateNotFound(candidateID)
         }
         let freshComparisons = try await loadTaskRunComparisons(run)
-        guard freshComparisons.first(where: { $0.id == candidateID }) == preview.selectedComparison else {
+        guard preview.matches(currentComparisons: freshComparisons) else {
             throw stalePromotionError()
         }
         let dashboardSessions = await MainActor.run { self.taskRunLiveSessionsSnapshot() }
@@ -243,7 +244,7 @@ extension AppDelegate {
             do {
                 _ = try await service.remove(
                     id: entry.worktree.id,
-                    force: true,
+                    force: false,
                     originRepoPath: preview.run.originRepoPath,
                     store: store
                 )
