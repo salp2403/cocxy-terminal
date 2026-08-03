@@ -49,6 +49,7 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
     private let tunnelManager: SSHTunnelManager
     private let portProvider: PortProvider
     private var cancellables = Set<AnyCancellable>()
+    private(set) var unresolvedLease: MobileMirrorTunnelLease?
 
     init(
         connectionManager: RemoteConnectionManager,
@@ -70,6 +71,9 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
     }
 
     func open(profileID: UUID, localPort: UInt16) async throws -> MobileMirrorTunnelLease {
+        guard unresolvedLease == nil else {
+            throw MobileMirrorTunnelError.closureUnconfirmed
+        }
         guard localPort > 0,
               targets.contains(where: { $0.id == profileID }),
               let connectionLeaseID = connectionManager.connectionLeaseID(for: profileID) else {
@@ -98,13 +102,15 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
                     throw SSHMultiplexerError.notConnected
                 }
                 let tunnel = tunnelManager.addTunnel(forward: forward, for: profileID)
-                return MobileMirrorTunnelLease(
+                let lease = MobileMirrorTunnelLease(
                     profileID: profileID,
                     connectionLeaseID: connectionLeaseID,
                     forward: forward,
                     tunnelID: tunnel.id,
                     remotePort: remotePort
                 )
+                unresolvedLease = lease
+                return lease
             } catch let error as SSHMultiplexerError {
                 lastForwardError = error
                 guard case .forwardFailed = error else { throw error }
@@ -115,9 +121,14 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
     }
 
     func close(_ lease: MobileMirrorTunnelLease) async throws {
+        guard unresolvedLease == lease else {
+            if unresolvedLease == nil { return }
+            throw MobileMirrorTunnelError.closureUnconfirmed
+        }
         guard connectionManager.connectionLeaseID(for: lease.profileID)
                 == lease.connectionLeaseID else {
             _ = tunnelManager.removeTunnel(id: lease.tunnelID)
+            unresolvedLease = nil
             return
         }
         do {
@@ -127,6 +138,7 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
                 expectedConnectionLeaseID: lease.connectionLeaseID
             )
             _ = tunnelManager.removeTunnel(id: lease.tunnelID)
+            unresolvedLease = nil
         } catch {
             let revoked = await connectionManager.revokeForwardingSession(
                 profileID: lease.profileID,
@@ -142,6 +154,7 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
                 throw MobileMirrorTunnelError.closureUnconfirmed
             }
             _ = tunnelManager.removeTunnel(id: lease.tunnelID)
+            unresolvedLease = nil
         }
     }
 

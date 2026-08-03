@@ -107,8 +107,15 @@ final class MobileMirrorCoordinator: ObservableObject {
         pairingTask = Task { [weak self] in
             await priorPairing?.value
             await pendingClosure?.value
-            guard !Task.isCancelled else { return }
-            await self?.openPairingTransport(
+            guard !Task.isCancelled, let self else { return }
+            guard self.tunnelLease == nil,
+                  self.tunnelController.unresolvedLease == nil else {
+                self.state = .failed(
+                    MobileMirrorTunnelError.closureUnconfirmed.localizedDescription
+                )
+                return
+            }
+            await self.openPairingTransport(
                 target: target,
                 generation: generation
             )
@@ -156,9 +163,10 @@ final class MobileMirrorCoordinator: ObservableObject {
                 profileID: target.id,
                 localPort: localPort
             )
+            tunnelLease = lease
             guard !Task.isCancelled, generation == transportGeneration else {
                 gateway.stop()
-                try? await tunnelController.close(lease)
+                await closeUnpublishedTunnelLease(lease)
                 return
             }
             router.updatePublicPort(lease.remotePort)
@@ -167,12 +175,11 @@ final class MobileMirrorCoordinator: ObservableObject {
                 string: "http://\(publicAddress):\(lease.remotePort)/pair?token=\(offer.token)"
             ) else {
                 gateway.stop()
-                try? await tunnelController.close(lease)
+                await closeUnpublishedTunnelLease(lease)
                 throw MobileMirrorError.unavailable
             }
             self.router = router
             self.gateway = gateway
-            tunnelLease = lease
             pairingURL = url
             pendingPairing = nil
             activePairing = nil
@@ -183,6 +190,15 @@ final class MobileMirrorCoordinator: ObservableObject {
         } catch {
             gateway.stop()
             guard generation == transportGeneration else { return }
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func closeUnpublishedTunnelLease(_ lease: MobileMirrorTunnelLease) async {
+        do {
+            try await tunnelController.close(lease)
+            if tunnelLease == lease { tunnelLease = nil }
+        } catch {
             state = .failed(error.localizedDescription)
         }
     }
@@ -218,8 +234,6 @@ final class MobileMirrorCoordinator: ObservableObject {
                 remoteHost: pendingPairing.identity.remoteAddress,
                 reason: "Desktop confirmation denied"
             ))
-            auditLog.log(.channelClosed(channelID: pendingPairing.channelID))
-            pairingChannelID = nil
             self.pendingPairing = nil
             pairingURL = nil
             state = .denied

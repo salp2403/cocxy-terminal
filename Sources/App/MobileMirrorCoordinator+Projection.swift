@@ -291,9 +291,10 @@ extension MobileMirrorCoordinator {
     }
 
     func expireOffer(id: UUID) {
-        guard activePairing == nil, state == .offering || state == .awaitingConfirmation else { return }
-        auditLog.log(.channelClosed(channelID: id))
-        stopTransport(revoke: true, logRevocation: false)
+        guard pairingChannelID == id,
+              activePairing == nil,
+              state == .offering || state == .awaitingConfirmation else { return }
+        stopTransport(revoke: true)
         state = .stopped
     }
 
@@ -309,7 +310,7 @@ extension MobileMirrorCoordinator {
         state = .stopped
     }
 
-    func stopTransport(revoke: Bool, logRevocation: Bool = true) {
+    func stopTransport(revoke: Bool) {
         transportGeneration &+= 1
         pairingTask?.cancel()
         pairingTask = nil
@@ -323,20 +324,30 @@ extension MobileMirrorCoordinator {
         if revoke {
             _ = authority.revoke()
         }
-        if logRevocation, let channelID {
-            auditLog.log(.channelClosed(channelID: channelID))
-        }
         gateway?.stop()
         gateway = nil
         router = nil
         if let lease = tunnelLease {
-            let priorClosure = tunnelClosureTask
-            tunnelClosureTask = Task { [tunnelController] in
-                await priorClosure?.value
-                try? await tunnelController.close(lease)
+            if tunnelClosureTask == nil {
+                tunnelClosureTask = Task { [weak self, tunnelController] in
+                    do {
+                        try await tunnelController.close(lease)
+                        guard let self else { return }
+                        if self.tunnelLease == lease {
+                            self.tunnelLease = nil
+                        }
+                        if let channelID {
+                            self.auditLog.log(.channelClosed(channelID: channelID))
+                        }
+                    } catch {
+                        self?.state = .failed(error.localizedDescription)
+                    }
+                    self?.tunnelClosureTask = nil
+                }
             }
+        } else if let channelID {
+            auditLog.log(.channelClosed(channelID: channelID))
         }
-        tunnelLease = nil
         for stream in ownedStreams.values { stopOwnedStream(stream) }
         ownedStreams.removeAll()
         routeRegistry.replace(routes: [], preferredSurfaceID: nil)

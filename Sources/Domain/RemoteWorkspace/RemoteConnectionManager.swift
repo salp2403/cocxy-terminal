@@ -424,12 +424,28 @@ final class RemoteConnectionManager: ObservableObject {
         else {
             throw SSHMultiplexerError.notConnected
         }
-        try await applyForward(
-            forward,
-            profile: profile,
-            expectedConnectionLeaseID: expectedConnectionLeaseID,
-            expectedControlMaster: controlMasterIdentity
-        )
+        do {
+            try await applyForward(
+                forward,
+                profile: profile,
+                expectedConnectionLeaseID: expectedConnectionLeaseID,
+                expectedControlMaster: controlMasterIdentity
+            )
+        } catch {
+            guard forwardOutcomeMayBeUncertain(error) else { throw error }
+            let cleanupConfirmed = await compensateUncertainForward(
+                forward,
+                profile: profile,
+                expectedConnectionLeaseID: expectedConnectionLeaseID,
+                expectedControlMaster: controlMasterIdentity
+            )
+            guard cleanupConfirmed else {
+                throw SSHMultiplexerError.forwardCleanupUnconfirmed(
+                    "SSH port forward cleanup and exact session revocation were not confirmed"
+                )
+            }
+            throw error
+        }
     }
 
     private func applyForward(

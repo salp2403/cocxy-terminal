@@ -134,4 +134,54 @@ struct MobileMirrorSSHTunnelControllerSwiftTestingTests {
         #expect(multiplexer.lifecycleEvents.suffix(2) == ["forward", "cancel"])
         #expect(tunnelManager.listTunnels(for: profile.id).isEmpty)
     }
+
+    @Test("unconfirmed closure retains the lease and blocks reopening")
+    func closureFailureQuarantinesLeaseUntilRevocation() async throws {
+        let profile = RemoteConnectionProfile(
+            name: "Phone",
+            host: "phone.local",
+            user: "mobile"
+        )
+        let profileStore = MockRemoteProfileStore()
+        profileStore.profiles = [profile]
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let tunnelManager = SSHTunnelManager()
+        let connectionManager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: profileStore,
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor(),
+            delaySleep: { _ in }
+        )
+        await connectionManager.connect(profile: profile)
+        let controller = MobileMirrorSSHTunnelController(
+            connectionManager: connectionManager,
+            profileStore: profileStore,
+            tunnelManager: tunnelManager,
+            portProvider: { 52_345 }
+        )
+        let lease = try await controller.open(profileID: profile.id, localPort: 41_321)
+        multiplexer.shouldThrowOnCancelForward = true
+        multiplexer.shouldThrowOnDisconnect = true
+        multiplexer.controlMasterProcessAliveResult = true
+
+        await #expect(throws: MobileMirrorTunnelError.closureUnconfirmed) {
+            try await controller.close(lease)
+        }
+        #expect(controller.unresolvedLease == lease)
+        #expect(tunnelManager.listTunnels(for: profile.id).count == 1)
+        let forwardCount = multiplexer.forwardedPorts.count
+        await #expect(throws: MobileMirrorTunnelError.closureUnconfirmed) {
+            try await controller.open(profileID: profile.id, localPort: 41_322)
+        }
+        #expect(multiplexer.forwardedPorts.count == forwardCount)
+
+        multiplexer.shouldThrowOnCancelForward = false
+        multiplexer.shouldThrowOnDisconnect = false
+        multiplexer.controlMasterProcessAliveResult = false
+        try await controller.close(lease)
+
+        #expect(controller.unresolvedLease == nil)
+        #expect(tunnelManager.listTunnels(for: profile.id).isEmpty)
+    }
 }
