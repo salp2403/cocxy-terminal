@@ -3557,3 +3557,5 @@
 "common.choose" = "เลือก";
 "common.deny" = "ปฏิเสธ";
 "common.allow" = "อนุญาต";
+"projectHome.inbox.handoffTitle" = "การส่งต่องาน";
+"codeReview.gitWorkflow.stat.clean" = "ไม่มีการเปลี่ยนแปลง";

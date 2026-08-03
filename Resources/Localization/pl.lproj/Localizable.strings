@@ -3557,3 +3557,5 @@
 "common.choose" = "Wybierz";
 "common.deny" = "Odmów";
 "common.allow" = "Zezwól";
+"projectHome.inbox.handoffTitle" = "Przekazanie zadania";
+"codeReview.gitWorkflow.stat.clean" = "czysto";

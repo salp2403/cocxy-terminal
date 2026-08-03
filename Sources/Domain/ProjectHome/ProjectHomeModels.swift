@@ -4,10 +4,11 @@
 import Foundation
 
 struct ProjectHomeGitMetadata: Equatable, Sendable {
-    let branch: String
     let remoteOrigin: String?
-    let statusSummary: String
-    let changedFileCount: Int
+    let statusSummary: CodeReviewGitSummary
+
+    var branch: String { statusSummary.branch }
+    var changedFileCount: Int { statusSummary.changedCount }
 }
 
 enum ProjectHomeContextError: Error, Equatable, Sendable {

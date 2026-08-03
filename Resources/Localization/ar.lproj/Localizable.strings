@@ -3557,3 +3557,5 @@
 "common.choose" = "اختيار";
 "common.deny" = "رفض";
 "common.allow" = "السماح";
+"projectHome.inbox.handoffTitle" = "تسليم المهمة";
+"codeReview.gitWorkflow.stat.clean" = "نظيف";

@@ -143,10 +143,8 @@ final class ProjectHomePanelViewModel: ObservableObject {
             return
         }
         gitMetadata = ProjectHomeGitMetadata(
-            branch: metadata.branch,
             remoteOrigin: state.remoteOrigin,
-            statusSummary: metadata.statusSummary,
-            changedFileCount: metadata.changedFileCount
+            statusSummary: metadata.statusSummary
         )
     }
 

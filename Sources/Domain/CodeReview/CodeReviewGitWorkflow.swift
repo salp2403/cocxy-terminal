@@ -3,6 +3,60 @@
 
 import Foundation
 
+struct CodeReviewGitSummary: Equatable, Sendable {
+    let branch: String
+    let changedCount: Int
+    let ahead: Int
+    let behind: Int
+
+    func localized(using localizer: AppLocalizer) -> String {
+        var parts = [branch]
+        if changedCount > 0 {
+            parts.append(localizedCount(
+                "codeReview.gitWorkflow.stat.changed",
+                fallback: "%d changed",
+                count: changedCount,
+                localizer: localizer
+            ))
+        } else {
+            parts.append(localizer.string(
+                "codeReview.gitWorkflow.stat.clean",
+                fallback: "clean"
+            ))
+        }
+        if ahead > 0 {
+            parts.append(localizedCount(
+                "codeReview.gitWorkflow.stat.ahead",
+                fallback: "ahead %d",
+                count: ahead,
+                localizer: localizer
+            ))
+        }
+        if behind > 0 {
+            parts.append(localizedCount(
+                "codeReview.gitWorkflow.stat.behind",
+                fallback: "behind %d",
+                count: behind,
+                localizer: localizer
+            ))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    private func localizedCount(
+        _ key: String,
+        fallback: String,
+        count: Int,
+        localizer: AppLocalizer
+    ) -> String {
+        String(
+            format: localizer.string(key, fallback: fallback),
+            locale: localizer.locale,
+            count
+        )
+    }
+}
+
 struct CodeReviewGitStatus: Equatable, Sendable {
     let branch: String
     let stagedCount: Int
@@ -15,16 +69,13 @@ struct CodeReviewGitStatus: Equatable, Sendable {
         stagedCount + unstagedCount + untrackedCount
     }
 
-    var summary: String {
-        var parts = ["\(branch)"]
-        if changedCount > 0 {
-            parts.append("\(changedCount) changed")
-        } else {
-            parts.append("clean")
-        }
-        if ahead > 0 { parts.append("ahead \(ahead)") }
-        if behind > 0 { parts.append("behind \(behind)") }
-        return parts.joined(separator: " · ")
+    var summary: CodeReviewGitSummary {
+        CodeReviewGitSummary(
+            branch: branch,
+            changedCount: changedCount,
+            ahead: ahead,
+            behind: behind
+        )
     }
 }
 

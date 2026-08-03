@@ -44,7 +44,7 @@ struct ReviewToolbarView: View {
                         )
                     }
                     if let gitStatus = viewModel.gitStatus {
-                        stat(text: gitStatus.summary, color: CocxyColors.sky)
+                        stat(text: gitStatus.summary.localized(using: localizer), color: CocxyColors.sky)
                     }
                     if !viewModel.reviewAgentSessions.isEmpty {
                         stat(

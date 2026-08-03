@@ -41,7 +41,8 @@ struct TaskInboxProjectorSwiftTestingTests {
             tabID: TabID(),
             state: .launching,
             updatedAt: Date(timeIntervalSince1970: 50),
-            files: ["Sources/Review.swift"]
+            files: ["Sources/Review.swift"],
+            activity: nil
         )
         let unrelated = SessionEntry(
             ownerWindowID: WindowID(),
@@ -67,12 +68,13 @@ struct TaskInboxProjectorSwiftTestingTests {
         #expect(fanOut.navigation?.sessionID == run.id)
         #expect(fanOut.touchedFiles == ["Sources/Restored.swift"])
         let agent = try #require(projectEntries.first { $0.kind == .liveAgent })
-        #expect(agent.status == AgentDashboardState.waitingForInput.rawValue)
+        #expect(agent.status == TaskInboxStatus(rawValue: AgentDashboardState.waitingForInput.rawValue))
         #expect(agent.touchedFiles == ["Sources/App.swift"])
         #expect(agent.navigation?.windowID == ownerWindow)
         #expect(agent.navigation?.tabID == agentTab)
         let handoffEntry = try #require(projectEntries.first { $0.kind == .handoff })
         #expect(handoffEntry.touchedFiles == ["Sources/Review.swift"])
+        #expect(handoffEntry.titleKind == .taskHandoff)
         #expect(entries.contains { $0.projectID == otherProject && $0.kind == .liveAgent })
     }
 
@@ -83,7 +85,7 @@ struct TaskInboxProjectorSwiftTestingTests {
             kind: .queuedTask,
             projectID: ProjectID(rawValue: "/tmp/inbox-project"),
             title: "Build",
-            status: "scheduled",
+            status: TaskInboxStatus(rawValue: "scheduled"),
             agents: ["Codex"],
             updatedAt: Date(timeIntervalSince1970: 100),
             navigation: TaskInboxNavigation(windowID: WindowID(), tabID: TabID(), sessionID: "private")
@@ -101,11 +103,27 @@ struct TaskInboxProjectorSwiftTestingTests {
         )
         let decoded = try JSONDecoder().decode(TaskInboxEntry.self, from: minimal)
         #expect(decoded.title == "queue:legacy")
-        #expect(decoded.status == "unknown")
+        #expect(decoded.status == TaskInboxStatus(rawValue: "unknown"))
+        #expect(decoded.titleKind == nil)
         #expect(decoded.agents.isEmpty)
         #expect(decoded.worktreePaths.isEmpty)
         #expect(decoded.touchedFiles.isEmpty)
         #expect(decoded.navigation == nil)
+    }
+
+    @Test("typed inbox statuses and fallback handoffs localize at presentation time")
+    func typedStatusAndHandoffLocalization() throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let arabic = AppLocalizer(languagePreference: .arabic, bundle: bundle)
+        let status = TaskInboxStatus(rawValue: "waitingForInput")
+
+        #expect(status.localized(for: .liveAgent, using: spanish) == "Esperando entrada")
+        #expect(status.localized(for: .handoff, using: arabic) == "بانتظار الإدخال")
+        #expect(
+            spanish.string("projectHome.inbox.handoffTitle", fallback: "Task handoff")
+                == "Traspaso de tarea"
+        )
     }
 
     private func makeRun(project: ProjectID, now: Date) throws -> TaskRun {
@@ -151,7 +169,8 @@ struct TaskInboxProjectorSwiftTestingTests {
         tabID: TabID,
         state: AgentDashboardState,
         updatedAt: Date,
-        files: [String]
+        files: [String],
+        activity: String? = "Review task"
     ) -> AgentSessionInfo {
         AgentSessionInfo(
             id: id,
@@ -161,7 +180,7 @@ struct TaskInboxProjectorSwiftTestingTests {
             gitBranch: "main",
             agentName: "Codex",
             state: state,
-            lastActivity: "Review task",
+            lastActivity: activity,
             lastActivityTime: updatedAt,
             tabId: tabID.rawValue,
             subagents: [],
@@ -169,5 +188,10 @@ struct TaskInboxProjectorSwiftTestingTests {
             model: nil,
             filesTouched: files.map { FileImpact(path: $0) }
         )
+    }
+
+    private func localizationBundle() -> Bundle? {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        return Bundle(url: root.appendingPathComponent("Resources/Localization", isDirectory: true))
     }
 }

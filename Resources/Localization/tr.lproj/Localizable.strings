@@ -3557,3 +3557,5 @@
 "common.choose" = "Seç";
 "common.deny" = "Reddet";
 "common.allow" = "İzin Ver";
+"projectHome.inbox.handoffTitle" = "Görev devri";
+"codeReview.gitWorkflow.stat.clean" = "temiz";

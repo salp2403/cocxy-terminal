@@ -3557,3 +3557,5 @@
 "common.choose" = "選択";
 "common.deny" = "拒否";
 "common.allow" = "許可";
+"projectHome.inbox.handoffTitle" = "タスクの引き継ぎ";
+"codeReview.gitWorkflow.stat.clean" = "クリーン";

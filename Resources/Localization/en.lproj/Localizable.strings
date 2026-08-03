@@ -3557,3 +3557,5 @@
 "common.choose" = "Choose";
 "common.deny" = "Deny";
 "common.allow" = "Allow";
+"projectHome.inbox.handoffTitle" = "Task handoff";
+"codeReview.gitWorkflow.stat.clean" = "clean";

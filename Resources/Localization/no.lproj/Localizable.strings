@@ -3557,3 +3557,5 @@
 "common.choose" = "Velg";
 "common.deny" = "Avvis";
 "common.allow" = "Tillat";
+"projectHome.inbox.handoffTitle" = "Oppgaveoverføring";
+"codeReview.gitWorkflow.stat.clean" = "ren";

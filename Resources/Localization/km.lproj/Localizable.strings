@@ -3557,3 +3557,5 @@
 "common.choose" = "ជ្រើសរើស";
 "common.deny" = "បដិសេធ";
 "common.allow" = "អនុញ្ញាត";
+"projectHome.inbox.handoffTitle" = "ការផ្ទេរភារកិច្ច";
+"codeReview.gitWorkflow.stat.clean" = "ស្អាត";

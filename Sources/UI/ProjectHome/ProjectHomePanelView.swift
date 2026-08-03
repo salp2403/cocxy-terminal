@@ -294,7 +294,10 @@ struct ProjectHomePanelView: View {
                 )
             }
             if includeStatus, let summary = viewModel.gitMetadata?.statusSummary {
-                metadataLabel(icon: "circle.lefthalf.filled", text: summary)
+                metadataLabel(
+                    icon: "circle.lefthalf.filled",
+                    text: summary.localized(using: localizer)
+                )
             }
             if includeRemote, let remote = viewModel.gitMetadata?.remoteOrigin {
                 metadataLabel(icon: "network", text: remote)
@@ -412,12 +415,12 @@ struct ProjectHomePanelView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(entry.title)
+                    Text(localizedTitle(entry))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(palette.textHigh.resolvedColor())
                         .lineLimit(2)
                     Spacer(minLength: 6)
-                    Text(entry.status)
+                    Text(entry.status.localized(for: entry.kind, using: localizer))
                         .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(statusColor(entry.status))
                         .lineLimit(1)
@@ -569,12 +572,24 @@ struct ProjectHomePanelView: View {
         }
     }
 
-    private func statusColor(_ status: String) -> Color {
-        switch status {
+    private func statusColor(_ status: TaskInboxStatus) -> Color {
+        switch status.rawValue {
         case "failed", "error", "blocked": return Color(nsColor: .systemRed)
         case "waiting", "waitingForInput", "waitingInput": return Color(nsColor: .systemOrange)
         case "completed", "finished", "succeeded", "promoted": return Color(nsColor: .systemGreen)
         default: return palette.accent.resolvedColor()
+        }
+    }
+
+    private func localizedTitle(_ entry: TaskInboxEntry) -> String {
+        switch entry.titleKind {
+        case .taskHandoff:
+            return localizer.string(
+                "projectHome.inbox.handoffTitle",
+                fallback: "Task handoff"
+            )
+        case nil:
+            return entry.title
         }
     }
 

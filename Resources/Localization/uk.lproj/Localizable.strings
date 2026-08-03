@@ -3557,3 +3557,5 @@
 "common.choose" = "Вибрати";
 "common.deny" = "Відхилити";
 "common.allow" = "Дозволити";
+"projectHome.inbox.handoffTitle" = "Передавання завдання";
+"codeReview.gitWorkflow.stat.clean" = "чисто";

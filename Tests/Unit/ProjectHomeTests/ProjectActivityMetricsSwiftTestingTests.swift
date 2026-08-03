@@ -106,10 +106,13 @@ struct ProjectActivityMetricsSwiftTestingTests {
             contextLoader: ProjectHomeContextLoader(
                 gitMetadata: { _, fallback in
                     .success(ProjectHomeGitMetadata(
-                        branch: "main",
                         remoteOrigin: fallback,
-                        statusSummary: "clean",
-                        changedFileCount: 0
+                        statusSummary: CodeReviewGitSummary(
+                            branch: "main",
+                            changedCount: 0,
+                            ahead: 0,
+                            behind: 0
+                        )
                     ))
                 },
                 worktrees: { _, _ in .success([]) }
@@ -152,10 +155,13 @@ struct ProjectActivityMetricsSwiftTestingTests {
                     return attempt == 1
                         ? .failure(.gitStatusUnavailable)
                         : .success(ProjectHomeGitMetadata(
-                            branch: "main",
                             remoteOrigin: nil,
-                            statusSummary: "clean",
-                            changedFileCount: 0
+                            statusSummary: CodeReviewGitSummary(
+                                branch: "main",
+                                changedCount: 0,
+                                ahead: 0,
+                                behind: 0
+                            )
                         ))
                 },
                 worktrees: { _, _ in .success([]) }

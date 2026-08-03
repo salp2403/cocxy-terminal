@@ -3557,3 +3557,5 @@
 "common.choose" = "선택";
 "common.deny" = "거부";
 "common.allow" = "허용";
+"projectHome.inbox.handoffTitle" = "작업 인계";
+"codeReview.gitWorkflow.stat.clean" = "정상";

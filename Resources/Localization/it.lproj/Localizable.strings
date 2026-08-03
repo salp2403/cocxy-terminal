@@ -3557,3 +3557,5 @@
 "common.choose" = "Scegli";
 "common.deny" = "Nega";
 "common.allow" = "Consenti";
+"projectHome.inbox.handoffTitle" = "Passaggio attività";
+"codeReview.gitWorkflow.stat.clean" = "pulito";

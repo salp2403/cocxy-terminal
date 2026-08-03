@@ -3557,3 +3557,5 @@
 "common.choose" = "Escolher";
 "common.deny" = "Negar";
 "common.allow" = "Permitir";
+"projectHome.inbox.handoffTitle" = "Transferência de tarefa";
+"codeReview.gitWorkflow.stat.clean" = "limpo";

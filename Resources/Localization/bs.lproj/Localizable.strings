@@ -3557,3 +3557,5 @@
 "common.choose" = "Odaberi";
 "common.deny" = "Odbij";
 "common.allow" = "Dozvoli";
+"projectHome.inbox.handoffTitle" = "Predaja zadatka";
+"codeReview.gitWorkflow.stat.clean" = "čisto";

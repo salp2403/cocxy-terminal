@@ -3557,3 +3557,5 @@
 "common.choose" = "Выбрать";
 "common.deny" = "Отклонить";
 "common.allow" = "Разрешить";
+"projectHome.inbox.handoffTitle" = "Передача задачи";
+"codeReview.gitWorkflow.stat.clean" = "чисто";

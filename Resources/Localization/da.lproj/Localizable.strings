@@ -3557,3 +3557,5 @@
 "common.choose" = "Vælg";
 "common.deny" = "Afvis";
 "common.allow" = "Tillad";
+"projectHome.inbox.handoffTitle" = "Opgaveoverdragelse";
+"codeReview.gitWorkflow.stat.clean" = "ren";

@@ -3557,3 +3557,5 @@
 "common.choose" = "Chọn";
 "common.deny" = "Từ chối";
 "common.allow" = "Cho phép";
+"projectHome.inbox.handoffTitle" = "Bàn giao tác vụ";
+"codeReview.gitWorkflow.stat.clean" = "sạch";

@@ -3557,3 +3557,5 @@
 "common.choose" = "选择";
 "common.deny" = "拒绝";
 "common.allow" = "允许";
+"projectHome.inbox.handoffTitle" = "任务交接";
+"codeReview.gitWorkflow.stat.clean" = "干净";

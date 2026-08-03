@@ -3557,3 +3557,5 @@
 "common.choose" = "Auswählen";
 "common.deny" = "Ablehnen";
 "common.allow" = "Erlauben";
+"projectHome.inbox.handoffTitle" = "Aufgabenübergabe";
+"codeReview.gitWorkflow.stat.clean" = "sauber";

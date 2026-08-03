@@ -27,7 +27,7 @@ enum TaskInboxProjector {
                 kind: .fanOut,
                 projectID: projectID,
                 title: run.prompt,
-                status: run.status.rawValue,
+                status: TaskInboxStatus(rawValue: run.status.rawValue),
                 agents: uniqueSorted(run.candidates.map { $0.provider.displayName }),
                 worktreePaths: uniqueSorted(run.candidates.compactMap { $0.worktree?.path.path }),
                 touchedFiles: uniqueSorted(
@@ -46,7 +46,7 @@ enum TaskInboxProjector {
                     kind: .queuedTask,
                     projectID: projectID,
                     title: item.displayName,
-                    status: item.status.rawValue,
+                    status: TaskInboxStatus(rawValue: item.status.rawValue),
                     agents: uniqueSorted(item.pipeline.steps.map { $0.provider.displayName }),
                     worktreePaths: uniqueSorted(item.pipeline.steps.compactMap(\.worktree)),
                     updatedAt: item.updatedAt
@@ -69,7 +69,9 @@ enum TaskInboxProjector {
                 kind: .liveAgent,
                 projectID: projectID,
                 title: session.title,
-                status: dashboard?.state.rawValue ?? session.agentState.rawValue,
+                status: TaskInboxStatus(
+                    rawValue: dashboard?.state.rawValue ?? session.agentState.rawValue
+                ),
                 agents: uniqueSorted([agent].compactMap { $0 }),
                 touchedFiles: dashboard.map { touchedFiles(from: [$0]) } ?? [],
                 updatedAt: dashboard?.lastActivityTime ?? session.createdAt,
@@ -90,7 +92,10 @@ enum TaskInboxProjector {
                 kind: .handoff,
                 projectID: projectID,
                 title: title,
-                status: handoff.state.rawValue,
+                titleKind: activity.flatMap { $0.isEmpty ? nil : $0 } == nil
+                    ? .taskHandoff
+                    : nil,
+                status: TaskInboxStatus(rawValue: handoff.state.rawValue),
                 agents: uniqueSorted([handoff.agentName].compactMap { $0 }),
                 touchedFiles: touchedFiles(from: [handoff]),
                 updatedAt: handoff.lastActivityTime ?? .distantPast,

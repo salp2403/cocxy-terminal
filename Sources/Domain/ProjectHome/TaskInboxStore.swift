@@ -161,11 +161,8 @@ final class TaskInboxStore: ObservableObject {
     }
 
     private static func badgeCounts(_ entries: [TaskInboxEntry]) -> [String: Int] {
-        let terminalStatuses: Set<String> = [
-            "cancelled", "completed", "error", "failed", "finished", "succeeded",
-        ]
         return entries.reduce(into: [:]) { result, entry in
-            guard entry.kind != .liveAgent, !terminalStatuses.contains(entry.status) else { return }
+            guard entry.kind != .liveAgent, !entry.status.isTerminal else { return }
             result[entry.projectID.rawValue, default: 0] += 1
         }
     }

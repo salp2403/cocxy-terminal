@@ -22,10 +22,8 @@ struct ProjectHomeContextLoader: Sendable {
                     )
                     let remote = liveRemote(projectRoot) ?? fallbackRemote
                     return .success(ProjectHomeGitMetadata(
-                        branch: status.branch,
                         remoteOrigin: remote,
-                        statusSummary: status.summary,
-                        changedFileCount: status.changedCount
+                        statusSummary: status.summary
                     ))
                 } catch {
                     return .failure(.gitStatusUnavailable)
