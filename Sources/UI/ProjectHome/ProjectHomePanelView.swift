@@ -408,7 +408,7 @@ struct ProjectHomePanelView: View {
 
     private func taskRowContent(_ entry: TaskInboxEntry) -> some View {
         HStack(alignment: .top, spacing: 11) {
-            Image(systemName: entryIcon(entry.kind))
+            Image(systemName: entry.kind.projectHomeIconName)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(statusColor(entry.status))
                 .frame(width: 18, height: 20)
@@ -561,15 +561,6 @@ struct ProjectHomePanelView: View {
         .foregroundStyle(palette.textMedium.resolvedColor())
         .padding(.horizontal, horizontalPadding)
         .padding(.vertical, 13)
-    }
-
-    private func entryIcon(_ kind: TaskInboxEntryKind) -> String {
-        switch kind {
-        case .fanOut: return "square.stack.3d.up"
-        case .queuedTask: return "calendar.badge.clock"
-        case .liveAgent: return "terminal"
-        case .handoff: return "arrow.right.arrow.left"
-        }
     }
 
     private func statusColor(_ status: TaskInboxStatus) -> Color {

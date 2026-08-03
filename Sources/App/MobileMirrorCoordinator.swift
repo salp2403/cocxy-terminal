@@ -5,26 +5,8 @@ import AppKit
 import Combine
 import Foundation
 
-enum MobileMirrorServiceState: Equatable {
-    case stopped
-    case starting
-    case offering
-    case awaitingConfirmation
-    case active
-    case denied
-    case unavailable(String)
-    case failed(String)
-}
-
 @MainActor
 final class MobileMirrorCoordinator: ObservableObject {
-    struct OwnedStream {
-        let bridge: CocxyCoreBridge
-        let surfaceID: SurfaceID
-        let port: UInt16
-        let token: String
-    }
-
     @Published var state: MobileMirrorServiceState = .stopped
     @Published var pairingURL: URL?
     @Published var pendingPairing: MobileMirrorPendingPairing?

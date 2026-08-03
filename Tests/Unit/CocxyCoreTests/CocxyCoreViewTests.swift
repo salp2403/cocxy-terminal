@@ -866,15 +866,6 @@ struct CocxyCoreViewTests {
         #expect(secondOpenRange.lowerBound < secondPayloadRange.lowerBound)
     }
 
-    @Test("terminal paste text normalizes Notes control characters")
-    func terminalPasteTextNormalizesNotesControlCharacters() {
-        let text = "alpha\rbravo\r\ncharlie\u{2028}delta\u{2029}echo\u{0000}\u{001B}[31m"
-
-        let normalized = CocxyCoreView.normalizedTerminalPasteText(text)
-
-        #expect(normalized == "alpha\nbravo\ncharlie\ndelta\necho[31m")
-    }
-
     @Test("default paste chunking uses small TUI-safe chunks")
     func defaultPasteChunkingUsesSmallTUISafeChunks() {
         let payload = String(repeating: "a", count: 1_400)
