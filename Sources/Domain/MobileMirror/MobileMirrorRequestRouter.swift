@@ -24,6 +24,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     let routeRegistry: MobileMirrorRouteRegistry
 
     private let publicAddress: String
+    private let localization: MobileMirrorWebLocalization
     private let snapshotProvider: SnapshotProvider
     private let actionHandler: ActionHandler
     private let pendingPairingHandler: PendingPairingHandler
@@ -38,6 +39,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         publicAddress: String,
         authority: MobileMirrorPairingAuthority,
         routeRegistry: MobileMirrorRouteRegistry,
+        localization: MobileMirrorWebLocalization = .english,
         connectionLimits: MobileMirrorConnectionLimits = .default,
         monotonicNow: @escaping @Sendable () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
@@ -50,6 +52,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         self.publicAddress = publicAddress
         self.authority = authority
         self.routeRegistry = routeRegistry
+        self.localization = localization
         self.monotonicNow = monotonicNow
         self.snapshotProvider = snapshotProvider
         self.actionHandler = actionHandler
@@ -112,7 +115,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 let snapshot = try await snapshotProvider(cookie)
                 return .response(.json(MobileMirrorBootstrap(
                     snapshot: snapshot,
-                    actionSecret: credentials.actionSecret
+                    actionSecret: credentials.actionSecret,
+                    locale: localization.locale,
+                    direction: localization.direction,
+                    catalog: localization.catalog
                 )))
             } catch {
                 return errorResponse(error)
@@ -350,9 +356,12 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
     private func pairingPage(pendingID: UUID) -> MobileMirrorHTTPResponse {
         let nonce = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
+        let confirmTitle = Self.htmlEscaped(localization.text("mobile.mirror.confirm.title"))
+        let waiting = Self.htmlEscaped(localization.text("mobile.mirror.status.confirmation"))
+        let denied = Self.javaScriptLiteral(localization.text("mobile.mirror.status.denied"))
         let html = """
         <!doctype html>
-        <html lang="en">
+        <html lang="\(Self.htmlEscaped(localization.locale))" dir="\(localization.direction)">
         <head>
           <meta charset="utf-8">
           <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -369,11 +378,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         </head>
         <body><main>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="4" y="2" width="16" height="20" rx="3"/><path d="M9 18h6"/></svg>
-          <h1><span class="pulse"></span>Confirm on your Mac</h1>
-          <p id="status" role="status">Waiting for approval</p>
+          <h1><span class="pulse"></span>\(confirmTitle)</h1>
+          <p id="status" role="status">\(waiting)</p>
         </main><script nonce="\(nonce)">
           const status=document.getElementById('status');
-          const poll=async()=>{try{const r=await fetch('/mobile/api/pair-status?id=\(pendingID.uuidString)',{cache:'no-store'});const v=await r.json();if(v.status==='confirmed'){location.replace(v.redirect||'/');return}if(v.status==='denied'){status.textContent='Pairing denied';return}}catch{}setTimeout(poll,900)};poll();
+          const poll=async()=>{try{const r=await fetch('/mobile/api/pair-status?id=\(pendingID.uuidString)',{cache:'no-store'});const v=await r.json();if(v.status==='confirmed'){location.replace(v.redirect||'/');return}if(v.status==='denied'){status.textContent=\(denied);return}}catch{}setTimeout(poll,900)};poll();
         </script></body></html>
         """
         return MobileMirrorHTTPResponse(
@@ -445,6 +454,23 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
     private func rateLimited() -> MobileMirrorHTTPRouteResult {
         .response(.error("Too many local requests.", status: 429))
+    }
+
+    private static func htmlEscaped(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+            .replacingOccurrences(of: "\"", with: "&quot;")
+            .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    private static func javaScriptLiteral(_ value: String) -> String {
+        guard let data = try? JSONEncoder().encode(value),
+              let literal = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return literal
     }
 
     private static func terminalSessionID(from path: String) -> String? {

@@ -127,10 +127,13 @@ final class MobileMirrorCoordinator: ObservableObject {
         generation: UInt64
     ) async {
         let publicAddress = "127.0.0.1"
+        let localizer = appDelegate?.appLocalizer()
+            ?? AppLocalizer(languagePreference: .system)
         let router = MobileMirrorRequestRouter(
             publicAddress: publicAddress,
             authority: authority,
             routeRegistry: routeRegistry,
+            localization: MobileMirrorWebLocalization(localizer: localizer),
             snapshotProvider: { [weak self] cookie in
                 guard let self else { throw MobileMirrorError.unavailable }
                 return try await self.snapshot(for: cookie)

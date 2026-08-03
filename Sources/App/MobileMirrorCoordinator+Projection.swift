@@ -16,6 +16,8 @@ extension MobileMirrorCoordinator {
             return
         }
         synchronizeTerminalStreams()
+        let localizer = appDelegate?.appLocalizer()
+            ?? AppLocalizer(languagePreference: .system)
         var projectsByID: [String: MobileMirrorProjectSnapshot] = [:]
         for record in projectRecordsSnapshot {
             projectsByID[record.id.storageKey] = projectSnapshot(
@@ -59,7 +61,7 @@ extension MobileMirrorCoordinator {
                     title: surfaces.count > 1 ? "\(entry.title) \(index + 1)" : entry.title,
                     name: agentName,
                     state: agentState.rawValue,
-                    stateLabel: Self.stateLabel(agentState),
+                    stateLabel: Self.stateLabel(agentState, using: localizer),
                     canRespond: agentState == .waitingInput && terminalAvailable,
                     terminalAvailable: terminalAvailable
                 ))
@@ -221,6 +223,8 @@ extension MobileMirrorCoordinator {
     }
 
     func publishAgentNotification(_ entry: SessionEntry) {
+        let localizer = appDelegate?.appLocalizer()
+            ?? AppLocalizer(languagePreference: .system)
         let kind: String
         switch entry.agentState {
         case .waitingInput: kind = "agent-waiting"
@@ -231,16 +235,21 @@ extension MobileMirrorCoordinator {
         publishNotification(
             kind: kind,
             title: entry.detectedAgentName ?? entry.title,
-            message: Self.stateLabel(entry.agentState),
+            message: Self.stateLabel(entry.agentState, using: localizer),
             sessionID: entry.sessionID.rawValue.uuidString
         )
     }
 
     func publishApprovalNotification(_ record: MobileMirrorApprovalRecord) {
+        let localizer = appDelegate?.appLocalizer()
+            ?? AppLocalizer(languagePreference: .system)
         publishNotification(
             kind: "approval",
             title: record.title,
-            message: "Approval requested",
+            message: localizer.string(
+                "mobile.web.notification.approvalRequested",
+                fallback: "Approval requested"
+            ),
             sessionID: record.sessionID
         )
     }
@@ -364,14 +373,23 @@ extension MobileMirrorCoordinator {
         snapshot = .empty
     }
 
-    static func stateLabel(_ state: AgentState) -> String {
+    static func stateLabel(_ state: AgentState, using localizer: AppLocalizer) -> String {
         switch state {
-        case .idle: return "Idle"
-        case .launched: return "Starting"
-        case .working: return "Working"
-        case .waitingInput: return "Waiting for input"
-        case .finished: return "Finished"
-        case .error: return "Error"
+        case .idle:
+            return localizer.string("agentDashboard.state.idle", fallback: "Idle")
+        case .launched:
+            return localizer.string("agentDashboard.state.launching", fallback: "Launching")
+        case .working:
+            return localizer.string("agentDashboard.state.working", fallback: "Working")
+        case .waitingInput:
+            return localizer.string(
+                "agentDashboard.state.waitingForInput",
+                fallback: "Waiting for input"
+            )
+        case .finished:
+            return localizer.string("agentDashboard.state.finished", fallback: "Finished")
+        case .error:
+            return localizer.string("agentDashboard.state.error", fallback: "Error")
         }
     }
 

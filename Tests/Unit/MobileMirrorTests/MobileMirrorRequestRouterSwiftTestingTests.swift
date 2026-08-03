@@ -15,10 +15,12 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let actionRecorder = MobileMirrorActionRecorder()
         let rejectionRecorder = MobileMirrorRejectionRecorder()
         let snapshot = MobileMirrorSnapshot.empty
+        let localization = try webLocalization(.spanish)
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
             authority: authority,
             routeRegistry: routes,
+            localization: localization,
             snapshotProvider: { _ in snapshot },
             actionHandler: { action, _, _, _ in
                 await actionRecorder.record(action)
@@ -90,6 +92,10 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             from: try response(from: bootstrapResult).body
         )
         #expect(bootstrap.snapshot == snapshot)
+        #expect(bootstrap.locale == "es")
+        #expect(bootstrap.direction == "ltr")
+        #expect(bootstrap.catalog["mobile.web.projects.title"] == "Proyectos")
+        #expect(bootstrap.catalog["mobile.web.terminal.input"] == "Escribe en el terminal")
 
         let action = MobileMirrorAction(
             kind: .selectSession,
@@ -283,6 +289,42 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(await actionRecorder.values.count == 34)
     }
 
+    @Test("Arabic pairing page and legacy bootstrap preserve localization contracts")
+    func arabicPairingPageAndLegacyBootstrap() async throws {
+        let authority = MobileMirrorPairingAuthority()
+        let router = MobileMirrorRequestRouter(
+            publicAddress: "127.0.0.1",
+            authority: authority,
+            routeRegistry: MobileMirrorRouteRegistry(),
+            localization: try webLocalization(.arabic),
+            snapshotProvider: { _ in .empty },
+            actionHandler: { _, _, _, _ in .empty },
+            pendingPairingHandler: { _ in }
+        )
+        router.updatePublicPort(43120)
+        let offer = authority.makeOffer()
+        let result = await router.route(
+            request: request(path: "/pair", query: ["token": offer.token]),
+            identity: MobileMirrorClientIdentity(remoteAddress: "10.0.0.4", userAgent: "Phone")
+        )
+        let html = try #require(String(data: response(from: result).body, encoding: .utf8))
+
+        #expect(html.contains("<html lang=\"ar\" dir=\"rtl\">"))
+        #expect(html.contains("تأكيد هذا الهاتف"))
+        #expect(html.contains("مطلوب تأكيد من سطح المكتب"))
+        #expect(html.contains("تم رفض الإقران"))
+
+        let legacy = try JSONDecoder().decode(
+            MobileMirrorBootstrap.self,
+            from: Data("""
+            {"snapshot":{},"actionSecret":"legacy-secret"}
+            """.utf8)
+        )
+        #expect(legacy.locale == "en")
+        #expect(legacy.direction == "ltr")
+        #expect(legacy.catalog.isEmpty)
+    }
+
     @Test("audit persistence failure blocks an unaudited action rejection")
     func auditFailureBlocksRejectedActionResponse() async throws {
         let authority = MobileMirrorPairingAuthority()
@@ -417,6 +459,17 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         return MobileMirrorPairingAuthority.base64URL(
             Data(HMAC<SHA256>.authenticationCode(for: payload, using: key))
         )
+    }
+
+    private func webLocalization(_ language: AppLanguage) throws -> MobileMirrorWebLocalization {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let bundle = try #require(Bundle(
+            url: root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        ))
+        return MobileMirrorWebLocalization(localizer: AppLocalizer(
+            languagePreference: language,
+            bundle: bundle
+        ))
     }
 }
 
