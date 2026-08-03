@@ -5,7 +5,7 @@ import AppKit
 
 extension MainWindowController {
     func tabConfigProjectDirectory(for tabID: TabID) -> URL? {
-        if let projectRoot = TabConfigProjectContextStore.shared.projectRoot(for: tabID) {
+        if let projectRoot = tabConfigProjectContextStore.projectRoot(for: tabID) {
             return projectRoot
         }
         guard let tab = tabManager.tab(for: tabID) else { return nil }
@@ -44,7 +44,7 @@ extension MainWindowController {
 
     func bindTabConfigProjectDirectory(_ projectDirectory: URL, to tabID: TabID) {
         let standardized = projectDirectory.standardizedFileURL
-        TabConfigProjectContextStore.shared.setProjectRoot(standardized, for: tabID)
+        tabConfigProjectContextStore.setProjectRoot(standardized, for: tabID)
         tabManager.updateTab(id: tabID) { tab in
             tab.workingDirectory = standardized
             tab.projectConfig = ProjectConfigService().loadConfig(for: standardized)

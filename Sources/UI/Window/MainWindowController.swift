@@ -207,13 +207,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
 
     /// The split container view for the active tab (when splits are active).
     private(set) var splitContainer: SplitContainer?
-
     let projectConfigWatcherRegistry: ProjectConfigWatcherRegistry
-    var projectConfigWatchLease: ProjectConfigWatchLease?
-
+    let tabConfigProjectContextStore: TabConfigProjectContextStore
+    var projectConfigWatchLeases: [TabID: ProjectConfigWatchLease] = [:]
     /// Subscriptions for config change notifications.
     private var cancellables = Set<AnyCancellable>()
-
     // MARK: - SwiftUI Overlay State (used by MainWindowController+Overlays.swift)
 
     var commandPaletteViewModel: CommandPaletteViewModel?
@@ -730,7 +728,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         tabManager: TabManager? = nil,
         auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
         projectRegistry: ProjectRegistry? = nil,
-        projectConfigWatcherRegistry: ProjectConfigWatcherRegistry = .shared,
+        projectConfigWatcherRegistry: ProjectConfigWatcherRegistry = ProjectConfigWatcherRegistry(),
+        tabConfigProjectContextStore: TabConfigProjectContextStore = TabConfigProjectContextStore(),
         gitInfoProvider: (any GitInfoProviding)? = nil,
         projectResolver: (any ProjectResolving)? = nil,
         worktreeService: WorktreeService? = nil,
@@ -747,6 +746,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.projectResolver = projectResolver ?? CachedProjectResolver()
         self.projectRegistry = projectRegistry
         self.projectConfigWatcherRegistry = projectConfigWatcherRegistry
+        self.tabConfigProjectContextStore = tabConfigProjectContextStore
         self.worktreeService = worktreeService
             ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
         self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
@@ -1742,7 +1742,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
 
     func windowWillClose(_ notification: Notification) {
-        releaseProjectConfigWatcher()
+        releaseProjectConfigWatchers()
 
         // Deregister this window from the session registry. This cascades:
         // all sessions owned by this window are removed and removal events
@@ -2636,11 +2636,11 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
             )
         }
 
-        // Only the visible tab is allowed to mutate window chrome and active
-        // project watchers. Background tabs must not override the current UI.
+        synchronizeProjectConfigWatcher(for: tab)
+
+        // Only the visible tab is allowed to mutate window chrome.
         if visibleTabID == tabID {
             applyEffectiveAppearance(effective.appearance)
-            synchronizeProjectConfigWatcher(for: tab)
         }
     }
 

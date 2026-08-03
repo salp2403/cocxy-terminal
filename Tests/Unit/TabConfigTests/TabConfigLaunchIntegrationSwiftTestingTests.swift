@@ -149,10 +149,10 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
         let tabID = try #require(fixture.controller.tabManager.activeTabID)
 
-        #expect(TabConfigProjectContextStore.shared.projectRoot(for: tabID)
+        #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID)
             == fixture.workspace.standardizedFileURL)
         fixture.controller.performCloseTab(tabID)
-        #expect(TabConfigProjectContextStore.shared.projectRoot(for: tabID) == nil)
+        #expect(fixture.controller.tabConfigProjectContextStore.projectRoot(for: tabID) == nil)
     }
 
     private func makeFixture() throws -> Fixture {
@@ -249,7 +249,7 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         @MainActor
         func cleanup() {
             for tab in controller.tabManager.tabs {
-                TabConfigProjectContextStore.shared.removeProjectRoot(for: tab.id)
+                controller.tabConfigProjectContextStore.removeProjectRoot(for: tab.id)
             }
             controller.window?.orderOut(nil)
             try? FileManager.default.removeItem(at: root)

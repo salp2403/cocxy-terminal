@@ -14,7 +14,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - Properties
 
     private(set) var bridge: (any TerminalEngine)?
-
     /// Exposed for testing purposes.
     private(set) var windowController: MainWindowController?
 
@@ -23,7 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var configService: ConfigService?
 
     let voiceConsentCoordinator = VoiceConsentCoordinator()
-
     /// The macOS notification adapter. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var notificationAdapter: MacOSNotificationAdapter?
@@ -51,6 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let gitInfoProvider = GitInfoProviderImpl()
     let projectResolver = CachedProjectResolver()
     let projectRegistry = ProjectRegistry()
+    let projectConfigWatcherRegistry = ProjectConfigWatcherRegistry()
+    let tabConfigProjectContextStore = TabConfigProjectContextStore()
     var projectRegistryChangeCancellable: AnyCancellable?
     lazy var taskInboxStore = TaskInboxStore(projectResolver: projectResolver)
     let projectFanOutCoordinator = ProjectFanOutCoordinator()
@@ -78,7 +78,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var mobileMirrorWindowController: MobileMirrorWindowController?
     /// Session persistence owner, assigned during initialization.
     var sessionManager: SessionManagerImpl?
-
     /// Restorable launch snapshot decoded once by deferred restore preflight.
     var pendingRestorableLaunchSession: Session?
 
@@ -93,7 +92,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// `setupMainMenu()` so menu shortcuts stay in sync with the editor
     /// without requiring an app restart.
     private var menuKeybindingsCancellable: AnyCancellable?
-
     /// Services-provider bridge for Finder contextual actions.
     var finderServiceProvider: FinderServiceProvider?
 
@@ -1629,6 +1627,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             configService: configService,
             auroraWorkspaceTitleStore: auroraWorkspaceTitleStore,
             projectRegistry: projectRegistry,
+            projectConfigWatcherRegistry: projectConfigWatcherRegistry,
+            tabConfigProjectContextStore: tabConfigProjectContextStore,
             gitInfoProvider: gitInfoProvider,
             projectResolver: projectResolver,
             worktreeService: sharedWorktreeService,

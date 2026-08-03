@@ -306,7 +306,8 @@ extension MainWindowController {
         }
         tabOutputBuffers.removeValue(forKey: tabID)
         tabCommandTrackers.removeValue(forKey: tabID)
-        TabConfigProjectContextStore.shared.removeProjectRoot(for: tabID)
+        tabConfigProjectContextStore.removeProjectRoot(for: tabID)
+        releaseProjectConfigWatcher(for: tabID)
         tabSplitCoordinator.removeSplitManager(for: tabID)
         tabSessionMap.removeValue(forKey: tabID)
         processMonitor?.unregisterTab(tabID)

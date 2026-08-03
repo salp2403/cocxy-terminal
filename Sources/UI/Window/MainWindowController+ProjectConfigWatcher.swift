@@ -17,13 +17,13 @@ extension MainWindowController {
 
         guard let configPath else {
             if !preserveCurrentLeaseWhenMissing {
-                releaseProjectConfigWatcher()
+                releaseProjectConfigWatcher(for: tab.id)
             }
             return
         }
 
         let projectID = projectResolver.resolveProject(for: tab.workingDirectory).groupingID
-        if let lease = projectConfigWatchLease,
+        if let lease = projectConfigWatchLeases[tab.id],
            projectConfigWatcherRegistry.matches(
                lease,
                projectID: projectID,
@@ -33,8 +33,8 @@ extension MainWindowController {
             return
         }
 
-        releaseProjectConfigWatcher()
-        projectConfigWatchLease = projectConfigWatcherRegistry.acquire(
+        releaseProjectConfigWatcher(for: tab.id)
+        projectConfigWatchLeases[tab.id] = projectConfigWatcherRegistry.acquire(
             projectID: projectID,
             configFilePath: configPath
         ) { [weak self, tabID = tab.id] in
@@ -42,10 +42,16 @@ extension MainWindowController {
         }
     }
 
-    func releaseProjectConfigWatcher() {
-        guard let lease = projectConfigWatchLease else { return }
+    func releaseProjectConfigWatcher(for tabID: TabID) {
+        guard let lease = projectConfigWatchLeases.removeValue(forKey: tabID) else { return }
         projectConfigWatcherRegistry.release(lease)
-        projectConfigWatchLease = nil
+    }
+
+    func releaseProjectConfigWatchers() {
+        for lease in projectConfigWatchLeases.values {
+            projectConfigWatcherRegistry.release(lease)
+        }
+        projectConfigWatchLeases.removeAll()
     }
 
     private func reloadProjectConfigFromWatcher(for tabID: TabID) {
@@ -73,10 +79,10 @@ extension MainWindowController {
         }
         if visibleTabID == tabID {
             applyEffectiveAppearance(effective.appearance)
-            synchronizeProjectConfigWatcher(
-                for: currentTab,
-                preserveCurrentLeaseWhenMissing: true
-            )
         }
+        synchronizeProjectConfigWatcher(
+            for: currentTab,
+            preserveCurrentLeaseWhenMissing: true
+        )
     }
 }

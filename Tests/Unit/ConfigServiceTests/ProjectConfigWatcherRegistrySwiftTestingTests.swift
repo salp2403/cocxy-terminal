@@ -167,8 +167,49 @@ struct ProjectConfigWatcherRegistrySwiftTestingTests {
         #expect(first.tabManager.tab(for: firstTab.id)?.projectConfig?.fontSize == 19)
         #expect(second.tabManager.tab(for: secondTab.id)?.projectConfig?.fontSize == 19)
 
-        first.releaseProjectConfigWatcher()
-        second.releaseProjectConfigWatcher()
+        first.releaseProjectConfigWatcher(for: firstTab.id)
+        second.releaseProjectConfigWatcher(for: secondTab.id)
+    }
+
+    @Test("background tabs retain independent project config subscriptions")
+    func backgroundTabsRemainSubscribed() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-project-watch-tabs")
+            .appendingPathComponent(UUID().uuidString)
+        let firstRoot = base.appendingPathComponent("first")
+        let secondRoot = base.appendingPathComponent("second")
+        try FileManager.default.createDirectory(at: firstRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let firstConfig = firstRoot.appendingPathComponent(".cocxy.toml")
+        let secondConfig = secondRoot.appendingPathComponent(".cocxy.toml")
+        try "font-size = 14\n".write(to: firstConfig, atomically: true, encoding: .utf8)
+        try "font-size = 15\n".write(to: secondConfig, atomically: true, encoding: .utf8)
+
+        let factory = WatcherFactory()
+        let registry = ProjectConfigWatcherRegistry(watcherFactory: factory.make)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            projectConfigWatcherRegistry: registry,
+            deferContentSetup: true
+        )
+        let firstTab = controller.tabManager.addTab(workingDirectory: firstRoot)
+        let secondTab = controller.tabManager.addTab(workingDirectory: secondRoot)
+        controller.synchronizeProjectConfigWatcher(for: firstTab)
+        controller.synchronizeProjectConfigWatcher(for: secondTab)
+
+        #expect(controller.projectConfigWatchLeases.count == 2)
+        #expect(factory.created.count == 2)
+        try "font-size = 21\n".write(to: firstConfig, atomically: true, encoding: .utf8)
+        let firstWatcher = try #require(factory.created.first {
+            $0.watchedPath == firstConfig.path
+        })
+        firstWatcher.fire()
+        #expect(controller.tabManager.tab(for: firstTab.id)?.projectConfig?.fontSize == 21)
+
+        controller.releaseProjectConfigWatcher(for: firstTab.id)
+        #expect(controller.projectConfigWatchLeases[secondTab.id] != nil)
+        controller.releaseProjectConfigWatchers()
     }
 }
 

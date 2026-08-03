@@ -44,8 +44,6 @@ final class ProjectConfigWatcherRegistry {
         var accessSequence: UInt64
     }
 
-    static let shared = ProjectConfigWatcherRegistry()
-
     private let maximumWatcherCount: Int
     private let fallbackPollInterval: TimeInterval
     private let watcherFactory: (String) -> any ProjectConfigWatching
