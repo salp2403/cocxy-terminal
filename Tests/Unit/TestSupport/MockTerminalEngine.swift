@@ -94,8 +94,10 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         return sendKeyEventReturnValue
     }
 
-    func sendText(_ text: String, to surface: SurfaceID) {
+    @discardableResult
+    func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         sentTexts.append((surface, text))
+        return true
     }
 
     func sendPreeditText(

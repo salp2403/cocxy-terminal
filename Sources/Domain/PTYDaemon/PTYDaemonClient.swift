@@ -534,17 +534,17 @@ final class PTYDaemonClient: TerminalEngine {
         return response?.ok == true
     }
 
-    func sendText(_ text: String, to surface: SurfaceID) {
+    @discardableResult func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         sendRawBytes(Data(text.utf8), to: surface)
     }
 
-    func sendRawBytes(_ data: Data, to surface: SurfaceID) {
-        guard data.isEmpty == false else { return }
-        _ = try? sendSurfaceRequest(
+    @discardableResult func sendRawBytes(_ data: Data, to surface: SurfaceID) -> Bool {
+        guard data.isEmpty == false else { return true }
+        return (try? sendSurfaceRequest(
             surface,
             command: .surfaceWrite,
             payload: ["bytesBase64": data.base64EncodedString()]
-        )
+        ))?.ok == true
     }
 
     func sendPreeditText(

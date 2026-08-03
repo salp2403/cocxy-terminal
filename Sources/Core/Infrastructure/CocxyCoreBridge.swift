@@ -860,7 +860,7 @@ final class CocxyCoreBridge: TerminalEngine {
     @discardableResult
     private func writeBytes(_ bytes: [UInt8], to state: SurfaceState) -> Bool {
         if let pty = state.pty {
-            return writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: pty) > 0
+            return writeAttachedPTYBytes(bytes, terminal: state.terminal, pty: pty) == bytes.count
         }
         guard let transport = state.externalTransport else { return false }
         return transport.write(Data(bytes))
@@ -876,7 +876,13 @@ final class CocxyCoreBridge: TerminalEngine {
 
         let attachedWritten = bytes.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return 0 }
-            return Int(cocxycore_terminal_write_attached_pty(terminal, baseAddress, buffer.count))
+            return TerminalByteWriteCompleter.writeAll(byteCount: buffer.count) { offset, remaining in
+                Int(cocxycore_terminal_write_attached_pty(
+                    terminal,
+                    baseAddress.advanced(by: offset),
+                    remaining
+                ))
+            }
         }
 
         if attachedWritten > 0 {
@@ -885,7 +891,9 @@ final class CocxyCoreBridge: TerminalEngine {
 
         return bytes.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return 0 }
-            return Int(cocxycore_pty_write(pty, baseAddress, buffer.count))
+            return TerminalByteWriteCompleter.writeAll(byteCount: buffer.count) { offset, remaining in
+                Int(cocxycore_pty_write(pty, baseAddress.advanced(by: offset), remaining))
+            }
         }
     }
 
@@ -964,6 +972,18 @@ final class CocxyCoreBridge: TerminalEngine {
 
     @discardableResult
     func sendKeyEvent(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
+        sendKeyEvent(event, to: surface, requiresDelivery: false)
+    }
+
+    func sendKeyEventConfirmingDelivery(_ event: KeyEvent, to surface: SurfaceID) -> Bool {
+        sendKeyEvent(event, to: surface, requiresDelivery: true)
+    }
+
+    private func sendKeyEvent(
+        _ event: KeyEvent,
+        to surface: SurfaceID,
+        requiresDelivery: Bool
+    ) -> Bool {
         guard !event.isComposing else { return false }
 
         // Encode + write the key sequence atomically inside the per-surface
@@ -1109,7 +1129,7 @@ final class CocxyCoreBridge: TerminalEngine {
                 outcome.writeSucceeded ? .delivered : .dropped(.ptyWriteFailed)
             )
         }
-        return outcome.keyHandled
+        return outcome.keyHandled && (!requiresDelivery || outcome.writeSucceeded)
     }
 
     /// Internal tuple that disambiguates the two boolean dimensions the
@@ -1122,9 +1142,10 @@ final class CocxyCoreBridge: TerminalEngine {
         let writeSucceeded: Bool
     }
 
-    func sendText(_ text: String, to surface: SurfaceID) {
+    @discardableResult
+    func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         let bytes = Array(text.utf8)
-        guard !bytes.isEmpty else { return }
+        guard !bytes.isEmpty else { return true }
 
         // Raw text injection is another PTY write path. Keep it under the
         // same lock as key events so manual agent launches and programmatic
@@ -1154,6 +1175,7 @@ final class CocxyCoreBridge: TerminalEngine {
         } else {
             inputDeliveryObserver?(surface, .delivered)
         }
+        return writeResult == true
     }
 
     func sendPreeditText(

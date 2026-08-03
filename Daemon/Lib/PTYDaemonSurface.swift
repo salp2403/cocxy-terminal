@@ -154,15 +154,16 @@ final class PTYDaemonSurface: @unchecked Sendable {
                 guard let baseAddress = rawBuffer.bindMemory(to: UInt8.self).baseAddress else {
                     return false
                 }
-                return cocxycore_terminal_write_attached_pty(
-                    terminal,
-                    baseAddress,
-                    bytes.count
-                ) > 0
+                return TerminalByteWriteCompleter.writeAll(byteCount: bytes.count) { offset, remaining in
+                    Int(cocxycore_terminal_write_attached_pty(
+                        terminal,
+                        baseAddress.advanced(by: offset),
+                        remaining
+                    ))
+                } == bytes.count
             }
         }
     }
-
     func resize(rows: UInt16, columns: UInt16) -> Bool {
         guard Self.dimensionsAreValid(rows: rows, columns: columns) else { return false }
         return terminalLock.withLock {
@@ -172,7 +173,6 @@ final class PTYDaemonSurface: @unchecked Sendable {
             return didResize
         }
     }
-
     func applyFont(payload: [String: String]) throws -> Bool {
         let configuration = try Self.validatedFontConfiguration(payload: payload)
         return terminalLock.withLock {

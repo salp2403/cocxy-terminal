@@ -70,7 +70,7 @@ protocol TerminalEngine: AnyObject {
     /// - Parameters:
     ///   - text: The UTF-8 text to send.
     ///   - surface: Target surface.
-    func sendText(_ text: String, to surface: SurfaceID)
+    @discardableResult func sendText(_ text: String, to surface: SurfaceID) -> Bool
 
     /// Sends IME preedit (composing) text to the terminal surface.
     ///

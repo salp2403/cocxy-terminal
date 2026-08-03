@@ -114,11 +114,14 @@ extension PTYDaemonSurface {
     private func writeEncodedBytesLocked(_ bytes: [UInt8]) -> Bool {
         guard bytes.isEmpty == false else { return false }
         return bytes.withUnsafeBufferPointer { pointer in
-            cocxycore_terminal_write_attached_pty(
-                terminal,
-                pointer.baseAddress,
-                pointer.count
-            ) > 0
+            guard let baseAddress = pointer.baseAddress else { return false }
+            return TerminalByteWriteCompleter.writeAll(byteCount: pointer.count) { offset, remaining in
+                Int(cocxycore_terminal_write_attached_pty(
+                    terminal,
+                    baseAddress.advanced(by: offset),
+                    remaining
+                ))
+            } == pointer.count
         }
     }
 }
