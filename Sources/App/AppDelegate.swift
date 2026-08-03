@@ -202,6 +202,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Parallel task runs retained for comparison and winner promotion.
     var activeTaskRuns: [String: TaskRun] = [:]
+    let taskRunPromotionReservationStore = TaskRunPromotionReservationStore()
 
     /// App-wide durable storage for parallel task runs.
     var taskRunStore = TaskRunStore()

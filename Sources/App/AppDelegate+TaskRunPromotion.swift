@@ -102,6 +102,21 @@ extension AppDelegate {
     nonisolated func executeTaskRunPromotion(
         _ preview: TaskRunPromotionPreview
     ) async throws -> TaskRunPromotionOutcome {
+        let lease = try await acquireTaskRunPromotionLease(for: preview)
+        do {
+            let outcome = try await executeReservedTaskRunPromotion(preview, lease: lease)
+            await releaseTaskRunPromotionLease(lease)
+            return outcome
+        } catch {
+            await releaseTaskRunPromotionLease(lease)
+            throw error
+        }
+    }
+
+    nonisolated private func executeReservedTaskRunPromotion(
+        _ preview: TaskRunPromotionPreview,
+        lease: TaskRunPromotionLease
+    ) async throws -> TaskRunPromotionOutcome {
         guard var run = await MainActor.run(body: {
             self.activeTaskRuns[preview.run.id]
         }) else {
@@ -149,9 +164,15 @@ extension AppDelegate {
             throw stalePromotionError()
         }
 
+        let expectedRunningRun = run
         try run.markPromoting(candidateID: candidateID)
         let fallbackTabID = selectedEntry.tabID?.rawValue ?? UUID()
-        await publishTaskRunPromotionSnapshot(run, fallbackTabID: fallbackTabID)
+        try await publishReservedTaskRunPromotionSnapshot(
+            run,
+            replacing: expectedRunningRun,
+            lease: lease,
+            fallbackTabID: fallbackTabID
+        )
         await MainActor.run {
             _ = self.removeAgentTeamRuntime(
                 teamID: candidate.teamID,
@@ -170,12 +191,15 @@ extension AppDelegate {
                 store: store
             )
         } catch {
+            let expectedPromotingRun = run
             try await recoverFailedTaskRunPromotion(
                 error,
                 run: &run,
                 candidateID: candidateID,
                 fallbackTabID: fallbackTabID,
-                store: store
+                store: store,
+                replacing: expectedPromotingRun,
+                lease: lease
             )
             throw error
         }
@@ -198,12 +222,18 @@ extension AppDelegate {
         let warning = cleanupFailures.isEmpty
             ? nil
             : "Winner merged; some worktree directories still need cleanup"
+        let expectedPromotingRun = run
         try run.markCompleted(candidateID: candidateID, warning: warning)
+        try await publishReservedTaskRunPromotionSnapshot(
+            run,
+            replacing: expectedPromotingRun,
+            lease: lease,
+            fallbackTabID: fallbackTabID
+        )
         let completedRunID = run.id
         await MainActor.run {
             self.taskOrchestrationSessionManager.revoke(runID: completedRunID)
         }
-        await publishTaskRunPromotionSnapshot(run, fallbackTabID: fallbackTabID)
         return TaskRunPromotionOutcome(
             run: run,
             gitResult: gitResult,
@@ -260,7 +290,9 @@ extension AppDelegate {
         run: inout TaskRun,
         candidateID: String,
         fallbackTabID: UUID,
-        store: WorktreeManifestStore
+        store: WorktreeManifestStore,
+        replacing expectedRun: TaskRun,
+        lease: TaskRunPromotionLease
     ) async throws {
         run.markPromotionFailed(candidateID: candidateID, message: String(describing: error))
         if let detachedEntry = run.candidates.first(where: { $0.id == candidateID })?.worktree {
@@ -273,7 +305,12 @@ extension AppDelegate {
         }
         let recoveryTabID = run.candidates.compactMap(\.worktree?.tabID?.rawValue).first
             ?? fallbackTabID
-        await publishTaskRunPromotionSnapshot(run, fallbackTabID: recoveryTabID)
+        try await publishReservedTaskRunPromotionSnapshot(
+            run,
+            replacing: expectedRun,
+            lease: lease,
+            fallbackTabID: recoveryTabID
+        )
     }
 
     nonisolated private func loadTaskRunComparisons(
@@ -294,6 +331,48 @@ extension AppDelegate {
         fallbackTabID: UUID
     ) async {
         await MainActor.run {
+            self.publishTaskRun(run, fallbackTabID: fallbackTabID)
+        }
+    }
+
+    nonisolated private func acquireTaskRunPromotionLease(
+        for preview: TaskRunPromotionPreview
+    ) async throws -> TaskRunPromotionLease {
+        let reservationStore = await MainActor.run { self.taskRunPromotionReservationStore }
+        let revision = try await MainActor.run { () throws -> Date in
+            guard self.activeTaskRuns[preview.run.id] == preview.run else {
+                throw stalePromotionError()
+            }
+            return preview.run.updatedAt
+        }
+        return try await reservationStore.acquire(
+            runID: preview.run.id,
+            revision: revision
+        )
+    }
+
+    nonisolated private func releaseTaskRunPromotionLease(
+        _ lease: TaskRunPromotionLease
+    ) async {
+        let reservationStore = await MainActor.run { self.taskRunPromotionReservationStore }
+        await reservationStore.release(lease)
+    }
+
+    nonisolated private func publishReservedTaskRunPromotionSnapshot(
+        _ run: TaskRun,
+        replacing expectedRun: TaskRun,
+        lease: TaskRunPromotionLease,
+        fallbackTabID: UUID
+    ) async throws {
+        let reservationStore = await MainActor.run { self.taskRunPromotionReservationStore }
+        guard await reservationStore.owns(lease),
+              lease.runID == run.id else {
+            throw stalePromotionError()
+        }
+        try await MainActor.run {
+            guard self.activeTaskRuns[run.id] == expectedRun else {
+                throw stalePromotionError()
+            }
             self.publishTaskRun(run, fallbackTabID: fallbackTabID)
         }
     }
