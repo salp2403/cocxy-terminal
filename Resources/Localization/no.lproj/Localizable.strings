@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Utseende";
 "preferences.section.agentDetection" = "Agentgjenkjenning";
 "preferences.section.agentMode" = "Agentmodus";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Hvelv";
+"vault.sidebar.title" = "Hvelv";
 "vault.sidebar.accessibility" = "Vault-sidefelt";
 "vault.search.placeholder" = "Søk i økter...";
 "vault.search.clear" = "Tøm søk";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "Flere aktive agenter";
 "tabbar.tab.moreActiveAgents" = "%d aktive agenter til";
 "tabbar.tab.pinned" = "Festet";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "Arbeidstre";
 "tabbar.tab.renamePlaceholder" = "Fanenavn";
 "tabbar.agent.defaultName" = "Agent";
 "tabbar.agent.badge.launched" = "Startet";

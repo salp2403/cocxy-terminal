@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Apparence";
 "preferences.section.agentDetection" = "Détection des agents";
 "preferences.section.agentMode" = "Mode agent";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Coffre";
+"vault.sidebar.title" = "Coffre";
 "vault.sidebar.accessibility" = "Barre latérale Vault";
 "vault.search.placeholder" = "Rechercher des sessions...";
 "vault.search.clear" = "Effacer la recherche";
@@ -96,7 +96,7 @@
 "preferences.updates.channel.section" = "Canal de mise à jour";
 "preferences.updates.channel.label" = "Canal";
 "preferences.updates.channel.stable" = "Stable";
-"preferences.updates.channel.preview" = "Preview";
+"preferences.updates.channel.preview" = "Aperçu";
 "preferences.updates.channel.nightly" = "Nightly";
 "preferences.updates.channel.stable.help" = "Stable reçoit des versions de production signées.";
 "preferences.updates.channel.preview.help" = "Preview reçoit des versions signées en accès anticipé et peut être moins stable.";
@@ -459,7 +459,7 @@
 "quickSwitch.kind.tab" = "Onglet du terminal";
 "quickSwitch.kind.project" = "Projet";
 "quickSwitch.kind.browserTab" = "Onglet du navigateur";
-"quickSwitch.kind.worktree" = "Worktree";
+"quickSwitch.kind.worktree" = "Arbre de travail";
 "quickSwitch.kind.note" = "Note";
 "quickSwitch.result.switchedToTitle" = "Basculement vers : %@";
 "quickSwitch.result.switchedToUnreadTab" = "Basculement vers l’onglet non lu";
@@ -524,7 +524,7 @@
 "projectHome.unavailable.title" = "Accueil du projet indisponible";
 "projectHome.worktrees.empty" = "Aucun worktree géré";
 "projectHome.worktrees.failed" = "Les données du worktree sont indisponibles.";
-"projectHome.worktrees.title" = "Worktrees";
+"projectHome.worktrees.title" = "Arbres de travail";
 "project.open.title" = "Ouvrir le projet";
 "project.open.button" = "Ouvrir";
 "project.clone.title" = "Cloner le projet";
@@ -1177,7 +1177,7 @@
 "github.createPR.suggestReviewers" = "Suggérer des relecteurs";
 "github.createPR.noReviewerSuggestions" = "Aucun identifiant de relecteur n’a pu être déduit de cette branche.";
 "github.createPR.create" = "Créer";
-"github.worktrees.title" = "Worktrees";
+"github.worktrees.title" = "Arbres de travail";
 "theme.browser.title" = "Thèmes";
 "theme.browser.search" = "Rechercher des thèmes";
 "theme.browser.import" = "Importer";
@@ -2706,7 +2706,7 @@
 "command.category.theme" = "Apparence";
 "command.category.config" = "Configuration";
 "command.category.cli" = "CLI";
-"command.category.worktree" = "Worktree";
+"command.category.worktree" = "Arbre de travail";
 "command.category.editor" = "Éditeur";
 "command.window.new.name" = "Nouvelle fenêtre";
 "command.window.new.description" = "Ouvrir une nouvelle fenêtre Cocxy Terminal";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "Supprimer le worktree géré par cocxy attaché à l’onglet actif (refus en cas de modifications non validées)";
 "command.worktree.cleanupMerged.name" = "Nettoyer les worktrees fusionnés";
 "command.worktree.cleanupMerged.description" = "Examiner et supprimer les worktrees propres fusionnés gérés par cocxy";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "Arbre de travail";
 "worktree.featureDisabled" = "Définissez [worktree].enabled = true dans ~/.config/cocxy/config.toml ou dans le fichier .cocxy.toml du dépôt actif.";
 "worktree.advanced.title" = "Nouveau worktree";
 "worktree.advanced.shortDescription" = "Brève description";
@@ -3465,7 +3465,7 @@
 "taskQueue.composer.provider" = "Fournisseur";
 "taskQueue.composer.prompt" = "Invite de la tâche";
 "taskQueue.composer.pipeline" = "Pipeline JSON";
-"taskQueue.composer.worktree" = "Worktree";
+"taskQueue.composer.worktree" = "Arbre de travail";
 "taskQueue.composer.trigger" = "Déclencheur";
 "taskQueue.composer.cron" = "Expression cron";
 "taskQueue.composer.timeZone" = "Fuseau horaire";
@@ -3499,8 +3499,8 @@
 "voice.consent.openPreferences" = "Réglages vocaux";
 "voice.consent.saveFailed" = "Impossible d’enregistrer ce choix. Réessayez.";
 /* Mobile mirror */
-"menu.view.pairPhone" = "Jumeler l’iPhone...";
-"mobile.mirror.title" = "Jumeler l’iPhone";
+"menu.view.pairPhone" = "Jumeler un téléphone...";
+"mobile.mirror.title" = "Jumeler un téléphone";
 "mobile.mirror.start" = "Générer un code de jumelage";
 "mobile.mirror.security" = "Code à usage unique · réseau local · 90 secondes";
 "mobile.mirror.cancel" = "Annuler le jumelage";

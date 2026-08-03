@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Udseende";
 "preferences.section.agentDetection" = "Agentregistrering";
 "preferences.section.agentMode" = "Agenttilstand";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Hvælving";
+"vault.sidebar.title" = "Hvælving";
 "vault.sidebar.accessibility" = "Vault-sidepanel";
 "vault.search.placeholder" = "Søg i sessioner...";
 "vault.search.clear" = "Ryd søgning";
@@ -78,7 +78,7 @@
 "preferences.section.languageServers" = "Sprogservere";
 "preferences.section.editor" = "Editor";
 "preferences.section.keybindings" = "Tastaturgenveje";
-"preferences.section.worktrees" = "Worktrees";
+"preferences.section.worktrees" = "Arbejdstræer";
 "preferences.section.security" = "Sikkerhed";
 "preferences.section.plugins" = "Plugins";
 "preferences.section.github" = "GitHub";
@@ -244,7 +244,7 @@
 "agent.panel.accessibility" = "Agenttilstand";
 "agent.panel.close" = "Luk agenttilstand";
 "agent.panel.prompt.placeholder" = "Spørg agenttilstand";
-"agent.panel.sendPrompt" = "Send prompt";
+"agent.panel.sendPrompt" = "Send instruktion";
 "agent.panel.skills" = "Skills";
 "agent.panel.skills.one" = "%d skill";
 "agent.panel.skills.many" = "%d skills";
@@ -447,19 +447,19 @@
 "menu.view.agentMode" = "Agenttilstand";
 "menu.view.agentCodeReview" = "Agent-kodegennemgang";
 "menu.view.githubPane" = "GitHub-rude";
-"menu.view.vault" = "Vault";
+"menu.view.vault" = "Hvælving";
 "menu.view.notes" = "Noter";
 "menu.view.quickSwitch" = "Hurtigt skift";
 "quickSwitch.item.tab.title" = "Fane: %@";
 "quickSwitch.item.project.title" = "Projekt: %@";
 "quickSwitch.item.browser.title" = "Browser: %@";
-"quickSwitch.item.worktree.title" = "Worktree: %@";
+"quickSwitch.item.worktree.title" = "Arbejdstræ: %@";
 "quickSwitch.item.note.title" = "Note: %@";
 "quickSwitch.item.notes.subtitle" = "Arbejdsområdenoter";
 "quickSwitch.kind.tab" = "Terminalfane";
 "quickSwitch.kind.project" = "Projekt";
 "quickSwitch.kind.browserTab" = "Browserfane";
-"quickSwitch.kind.worktree" = "Worktree";
+"quickSwitch.kind.worktree" = "Arbejdstræ";
 "quickSwitch.kind.note" = "Note";
 "quickSwitch.result.switchedToTitle" = "Skiftet til: %@";
 "quickSwitch.result.switchedToUnreadTab" = "Skiftet til ulæst fane";
@@ -483,7 +483,7 @@
 "projectHome.activity.week" = "Uge";
 "projectHome.activity.month" = "Måned";
 "projectHome.activity.costDisabled" = "Omkostningssporing slået fra";
-"projectHome.action.fanOut" = "Fan Out";
+"projectHome.action.fanOut" = "Fordel";
 "projectHome.action.launchTeam" = "Start team";
 "projectHome.action.menu" = "Projekthandlinger";
 "projectHome.action.newSession" = "Ny session";
@@ -524,7 +524,7 @@
 "projectHome.unavailable.title" = "Projekthjem utilgængeligt";
 "projectHome.worktrees.empty" = "Ingen administrerede worktrees";
 "projectHome.worktrees.failed" = "Worktree-data er ikke tilgængelige.";
-"projectHome.worktrees.title" = "Worktrees";
+"projectHome.worktrees.title" = "Arbejdstræer";
 "project.open.title" = "Åbn projekt";
 "project.open.button" = "Åbn";
 "project.clone.title" = "Klon projekt";
@@ -542,7 +542,7 @@
 "menu.view.agentTimeline" = "Agenttidslinje";
 "menu.view.notifications" = "Notifikationer";
 "menu.view.browser" = "Browser";
-"menu.view.richInput" = "Rich Input";
+"menu.view.richInput" = "Udvidet input";
 "menu.view.focusLocation" = "Fokusér placering";
 "menu.view.openMarkdownPanel" = "Åbn Markdown-rude";
 "menu.view.openTextEditorPanel" = "Åbn teksteditor-rude";
@@ -664,7 +664,7 @@
 "keyboardShortcuts.panels.commandPalette" = "Kommandopalet";
 "keyboardShortcuts.panels.agentDashboard" = "Agent-dashboard";
 "keyboardShortcuts.panels.agentTimeline" = "Agenttidslinje";
-"keyboardShortcuts.panels.richInput" = "Rich Input";
+"keyboardShortcuts.panels.richInput" = "Udvidet input";
 "keyboardShortcuts.panels.notifications" = "Notifikationer";
 "keyboardShortcuts.panels.browser" = "Browser-rude";
 "keyboardShortcuts.panels.find" = "Find i terminal";
@@ -770,7 +770,7 @@
 "keybindings.action.editor.find.summary" = "Åbn terminalens søgelinje.";
 "keybindings.action.voice.input.name" = "Taleinput";
 "keybindings.action.voice.input.summary" = "Start lokal talediktering for den aktive kommandoflade.";
-"keybindings.action.terminal.richInput.name" = "Rich Input";
+"keybindings.action.terminal.richInput.name" = "Udvidet input";
 "keybindings.action.terminal.richInput.summary" = "Åbn den flerlinjede Rich Input-editor for den aktive terminal.";
 "keybindings.action.terminal.scrollPageUp.name" = "Rul terminal side op";
 "keybindings.action.terminal.scrollPageUp.summary" = "Flyt det lokale terminalvindue én side ind i historikken.";
@@ -1177,7 +1177,7 @@
 "github.createPR.suggestReviewers" = "Foreslå gennemgangspersoner";
 "github.createPR.noReviewerSuggestions" = "Der kunne ikke udledes nogen gennemgangsbrugere fra denne gren.";
 "github.createPR.create" = "Opret";
-"github.worktrees.title" = "Worktrees";
+"github.worktrees.title" = "Arbejdstræer";
 "theme.browser.title" = "Temaer";
 "theme.browser.search" = "Søg temaer";
 "theme.browser.import" = "Importer";
@@ -1222,7 +1222,7 @@
 "github.pane.status.openRepository" = "Åbn et git-repository for at se pull requests og issues.";
 "github.pane.status.signInToLoad" = "Log ind med `gh auth login` for at indlæse GitHub-data.";
 "github.pane.error.openAuthTab" = "Kunne ikke åbne en Cocxy-fane til `gh auth login`.";
-"github.pane.banner.prefix.info" = "Info";
+"github.pane.banner.prefix.info" = "Information";
 "github.pane.banner.prefix.error" = "Fejl";
 "github.pane.banner.notInstalled" = "Installer GitHub CLI: brew install gh";
 "github.pane.banner.notAuthenticated" = "Log ind med `gh auth login` for at slå GitHub-ruden til.";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "Yderligere aktive agenter";
 "tabbar.tab.moreActiveAgents" = "%d flere aktive agenter";
 "tabbar.tab.pinned" = "Fastgjort";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "Arbejdstræ";
 "tabbar.tab.renamePlaceholder" = "Fanenavn";
 "tabbar.agent.defaultName" = "Agent";
 "tabbar.agent.badge.launched" = "Startet";
@@ -1381,7 +1381,7 @@
 "workspaceToolbar.panel.browser" = "Browser";
 "workspaceToolbar.panel.markdown" = "Markdown";
 "workspaceToolbar.panel.editor" = "Editor";
-"workspaceToolbar.panel.notebook" = "Notebook";
+"workspaceToolbar.panel.notebook" = "Notesbog";
 "workspaceToolbar.panel.workflow" = "Workflow";
 "workspaceToolbar.panel.sessionReplay" = "Replay";
 "workspaceToolbar.panel.aiEditHistory" = "Redigeringshistorik";
@@ -1536,9 +1536,9 @@
 "horizontalTab.add.browser" = "Browser";
 "horizontalTab.add.markdown" = "Markdown";
 "horizontalTab.add.textEditor" = "Tekstredigering";
-"horizontalTab.add.notebook" = "Notebook";
+"horizontalTab.add.notebook" = "Notesbog";
 "horizontalTab.add.workflow" = "Workflow";
-"horizontalTab.add.sessionReplay" = "Session Replay";
+"horizontalTab.add.sessionReplay" = "Sessionsgengivelse";
 "horizontalTab.add.editHistory" = "Redigeringshistorik";
 "horizontalTab.add.templates" = "Skabeloner";
 "horizontalTab.add.macros" = "Makroer";
@@ -1672,7 +1672,7 @@
 "scripting.error.noActiveTerminal" = "Ingen aktiv terminal";
 "scripting.error.tabIndexRequired" = "Faneindeks påkrævet";
 "scripting.error.tabIndexOutOfRange" = "Faneindeks uden for interval";
-"sessionReplay.title" = "Session Replay";
+"sessionReplay.title" = "Sessionsgengivelse";
 "sessionReplay.refresh" = "Opdater";
 "sessionReplay.close" = "Luk Session Replay";
 "sessionReplay.status.noRecordings" = "Ingen optagelser";
@@ -2439,7 +2439,7 @@
 "browser.devTools.console.level.all" = "Alle";
 "browser.devTools.console.level.error" = "Fejl";
 "browser.devTools.console.level.warn" = "Advarsel";
-"browser.devTools.console.level.info" = "Info";
+"browser.devTools.console.level.info" = "Information";
 "browser.devTools.console.level.accessibility" = "Filter: %@";
 "browser.devTools.network.empty.title" = "Ingen netværksforespørgsler";
 "browser.devTools.network.empty.detail" = "Ressourceforespørgsler fra siden vises her.";
@@ -2706,7 +2706,7 @@
 "command.category.theme" = "Tema";
 "command.category.config" = "Konfiguration";
 "command.category.cli" = "CLI";
-"command.category.worktree" = "Worktree";
+"command.category.worktree" = "Arbejdstræ";
 "command.category.editor" = "Editor";
 "command.window.new.name" = "Nyt vindue";
 "command.window.new.description" = "Åbn et nyt Cocxy Terminal-vindue";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "Fjern det cocxy-håndterede worktree knyttet til den aktive fane (nægter, hvis der er ugemte ændringer)";
 "command.worktree.cleanupMerged.name" = "Ryd op i sammenlagte worktrees";
 "command.worktree.cleanupMerged.description" = "Gennemgå og fjern rene, sammenlagte cocxy-håndterede worktrees";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "Arbejdstræ";
 "worktree.featureDisabled" = "Angiv [worktree].enabled = true i ~/.config/cocxy/config.toml eller det aktive repositorys .cocxy.toml.";
 "worktree.advanced.title" = "Nyt worktree";
 "worktree.advanced.shortDescription" = "Kort beskrivelse";
@@ -3465,7 +3465,7 @@
 "taskQueue.composer.provider" = "Udbyder";
 "taskQueue.composer.prompt" = "Opgaveprompt";
 "taskQueue.composer.pipeline" = "Pipeline-JSON";
-"taskQueue.composer.worktree" = "Worktree";
+"taskQueue.composer.worktree" = "Arbejdstræ";
 "taskQueue.composer.trigger" = "Udløser";
 "taskQueue.composer.cron" = "Cron-udtryk";
 "taskQueue.composer.timeZone" = "Tidszone";

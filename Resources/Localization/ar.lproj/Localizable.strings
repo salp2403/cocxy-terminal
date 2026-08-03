@@ -584,7 +584,7 @@
 "menu.window.tabNumber" = "علامة التبويب %d";
 "menu.window.bringAllToFront" = "إحضار الكل إلى المقدمة";
 "menu.help.title" = "مساعدة";
-"menu.help.cocxyTerminalHelp" = "Cocxy Terminal Help";
+"menu.help.cocxyTerminalHelp" = "مساعدة Cocxy Terminal";
 "menu.help.showOnboarding" = "إظهار المقدمة";
 "terminal.smartCopy.openLink" = "فتح الرابط";
 "terminal.smartCopy.openURL" = "فتح عنوان URL";
@@ -612,7 +612,7 @@
 "terminal.historyPill.help" = "العودة إلى مخرجات الطرفية المباشرة";
 "statusBar.accessibility" = "شريط الحالة";
 "statusBar.mouseCaptured.accessibility" = "مدخلات الفأرة ملتقطة بواسطة تطبيق الطرفية";
-"statusBar.sshSession" = "SSH session: %@";
+"statusBar.sshSession" = "جلسة SSH: %@";
 "statusBar.command.running" = "قيد التشغيل...";
 "statusBar.command.running.accessibility" = "الأمر قيد التشغيل";
 "statusBar.command.last.accessibility" = "آخر أمر: %@، رمز الخروج %d";
@@ -682,7 +682,7 @@
 "keybindings.unparseableShortcut" = "تعذر تحليل هذا الاختصار.";
 "keybindings.invalidShortcutFor" = "الاختصار الخاص بـ %@ غير صالح.";
 "keybindings.persistenceUnavailable" = "نافذة التفضيلات غير متاحة للاحتفاظ بالتغييرات.";
-"keybindings.shortcut.accessibility" = "Shortcut: %@";
+"keybindings.shortcut.accessibility" = "الاختصار: %@";
 "keybindings.edit" = "تحرير";
 "keybindings.reset" = "إعادة تعيين";
 "keybindings.current" = "الحالي:";
@@ -1136,7 +1136,7 @@
 "github.pane.tab.commits" = "عمليات الالتزام";
 "github.pane.tab.diffs" = "فروق";
 "github.pane.tab.pullRequests" = "طلبات السحب";
-"github.pane.tab.pullRequests.compact" = "PRs";
+"github.pane.tab.pullRequests.compact" = "طلبات السحب";
 "github.pane.tab.issues" = "المشكلات";
 "github.pane.tab.checks" = "عمليات التحقق";
 "github.pane.tab.reviewThreads" = "سلاسل المراجعة";
@@ -1672,7 +1672,7 @@
 "scripting.error.noActiveTerminal" = "لا توجد طرفية نشطة";
 "scripting.error.tabIndexRequired" = "فهرس علامة التبويب مطلوب";
 "scripting.error.tabIndexOutOfRange" = "فهرس علامة التبويب خارج النطاق";
-"sessionReplay.title" = "Session Replay";
+"sessionReplay.title" = "إعادة تشغيل الجلسة";
 "sessionReplay.refresh" = "تحديث";
 "sessionReplay.close" = "إغلاق Session Replay";
 "sessionReplay.status.noRecordings" = "لا توجد تسجيلات";
@@ -2126,7 +2126,7 @@
 "codeReview.gitWorkflow.commitTip" = "تلميح: السطر الأول = ملخص، سطر فارغ = تفاصيل.";
 "codeReview.gitWorkflow.chars" = "%d حرفًا";
 "codeReview.gitWorkflow.commitAll" = "Commit الكل";
-"codeReview.gitWorkflow.push" = "Push";
+"codeReview.gitWorkflow.push" = "دفع";
 "codeReview.gitWorkflow.createPR" = "إنشاء طلب سحب";
 "codeReview.gitWorkflow.branchCreated" = "تم إنشاء الفرع.";
 "codeReview.gitWorkflow.commitCreated" = "تم إنشاء commit.";
@@ -2924,7 +2924,7 @@
 "macros.alias.name" = "الاسم المستعار";
 "macros.alias.command" = "الأمر";
 "macros.alias.detail" = "التفاصيل";
-"macros.alias.shell" = "Shell";
+"macros.alias.shell" = "سطر الأوامر";
 "macros.saveAlias" = "حفظ الاسم المستعار";
 "macros.render" = "عرض";
 "macros.apply" = "تطبيق";

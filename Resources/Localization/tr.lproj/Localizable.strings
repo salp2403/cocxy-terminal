@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Görünüm";
 "preferences.section.agentDetection" = "Ajan Algılama";
 "preferences.section.agentMode" = "Ajan Modu";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Kasa";
+"vault.sidebar.title" = "Kasa";
 "vault.sidebar.accessibility" = "Vault kenar çubuğu";
 "vault.search.placeholder" = "Oturum ara...";
 "vault.search.clear" = "Aramayı temizle";

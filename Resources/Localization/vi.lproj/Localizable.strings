@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Giao diện";
 "preferences.section.agentDetection" = "Phát hiện tác nhân";
 "preferences.section.agentMode" = "Chế độ tác nhân";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Kho lưu trữ";
+"vault.sidebar.title" = "Kho lưu trữ";
 "vault.sidebar.accessibility" = "Thanh bên Vault";
 "vault.search.placeholder" = "Tìm kiếm phiên...";
 "vault.search.clear" = "Xóa tìm kiếm";
@@ -64,7 +64,7 @@
 "command.cells.createDocker.description" = "Chuẩn bị lệnh cục bộ để tạo ô Docker";
 "command.cells.createSSH.name" = "Ô: Tạo ô SSH";
 "command.cells.createSSH.description" = "Chuẩn bị lệnh tạo ô SSH thuộc sở hữu của người dùng";
-"preferences.section.hooks" = "Hooks";
+"preferences.section.hooks" = "Móc";
 "preferences.section.mcpServers" = "Máy chủ MCP";
 "preferences.section.voice" = "Giọng nói";
 "preferences.section.spotlight" = "Spotlight";
@@ -89,7 +89,7 @@
 "preferences.save.help.changed" = "Lưu các cài đặt đã thay đổi vào config.toml.";
 "preferences.save.help.unchanged" = "Không có cài đặt nào thay đổi.";
 "preferences.save.openConfig" = "Mở config.toml";
-"preferences.general.shell.section" = "Shell";
+"preferences.general.shell.section" = "Trình dòng lệnh";
 "preferences.general.shellPath" = "Đường dẫn shell";
 "preferences.general.workingDirectory" = "Thư mục làm việc";
 "preferences.general.confirmBeforeClosing" = "Xác nhận trước khi đóng";
@@ -293,7 +293,7 @@
 "agent.panel.approval.body.allowMCPTool" = "Cho phép %@ gọi máy chủ MCP cục bộ đã cấu hình.";
 "agent.panel.approval.body.diffUnavailable" = "Bản xem trước phần khác biệt không khả dụng cho lệnh gọi %@.";
 "agent.panel.approval.body.destination" = "Đích: %@";
-"agent.panel.approval.body.terminal" = "Terminal: %@";
+"agent.panel.approval.body.terminal" = "Thiết bị đầu cuối: %@";
 "agent.panel.approval.body.commandBlocks" = "Khối lệnh: %d trong tối đa %d";
 "agent.panel.approval.body.terminalOutputNotice" = "Văn bản Terminal chưa được đọc. Khi phê duyệt, chỉ các khối đã chọn này được đọc, các mẫu bí mật phổ biến được che cục bộ và kết quả giới hạn được chia sẻ một lần.";
 "agent.panel.approval.body.terminalOutputWarning" = "Có thể vẫn còn định dạng bí mật chưa xác định. Hãy xem lại Terminal đã chọn trước khi phê duyệt.";
@@ -450,7 +450,7 @@
 "menu.view.vault" = "Kho lưu trữ";
 "menu.view.notes" = "Ghi chú";
 "menu.view.quickSwitch" = "Chuyển nhanh";
-"quickSwitch.item.tab.title" = "Tab: %@";
+"quickSwitch.item.tab.title" = "Thẻ: %@";
 "quickSwitch.item.project.title" = "Dự án: %@";
 "quickSwitch.item.browser.title" = "Trình duyệt: %@";
 "quickSwitch.item.worktree.title" = "Cây làm việc: %@";
@@ -581,7 +581,7 @@
 "menu.window.zoom" = "Thu phóng";
 "menu.window.nextTab" = "Tab tiếp theo";
 "menu.window.previousTab" = "Tab trước";
-"menu.window.tabNumber" = "Tab %d";
+"menu.window.tabNumber" = "Thẻ %d";
 "menu.window.bringAllToFront" = "Đưa tất cả ra trước";
 "menu.help.title" = "Trợ giúp";
 "menu.help.cocxyTerminalHelp" = "Trợ giúp Cocxy Terminal";
@@ -638,7 +638,7 @@
 "agentAttachment.removeImage" = "Xóa hình ảnh";
 "keyboardShortcuts.title" = "Phím tắt";
 "keyboardShortcuts.show" = "Hiển thị phím tắt";
-"keyboardShortcuts.section.terminal" = "Terminal";
+"keyboardShortcuts.section.terminal" = "Thiết bị đầu cuối";
 "keyboardShortcuts.section.tabs" = "Tab";
 "keyboardShortcuts.section.splits" = "Ngăn";
 "keyboardShortcuts.section.panels" = "Bảng điều khiển";
@@ -1136,7 +1136,7 @@
 "github.pane.tab.commits" = "Commit";
 "github.pane.tab.diffs" = "Diff";
 "github.pane.tab.pullRequests" = "Pull request";
-"github.pane.tab.pullRequests.compact" = "PRs";
+"github.pane.tab.pullRequests.compact" = "Yêu cầu kéo";
 "github.pane.tab.issues" = "Vấn đề";
 "github.pane.tab.checks" = "Kiểm tra";
 "github.pane.tab.reviewThreads" = "Luồng đánh giá";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "Các tác nhân khác đang hoạt động";
 "tabbar.tab.moreActiveAgents" = "Thêm %d tác nhân đang hoạt động";
 "tabbar.tab.pinned" = "Đã ghim";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "Cây làm việc";
 "tabbar.tab.renamePlaceholder" = "Tên tab";
 "tabbar.agent.defaultName" = "Tác nhân";
 "tabbar.agent.badge.launched" = "Đã khởi chạy";
@@ -1387,7 +1387,7 @@
 "workspaceToolbar.panel.aiEditHistory" = "Lịch sử chỉnh sửa";
 "workspaceToolbar.panel.templates" = "Mẫu";
 "workspaceToolbar.panel.macros" = "Macro";
-"workspaceToolbar.panel.dbCloud" = "DB/Cloud";
+"workspaceToolbar.panel.dbCloud" = "CSDL/Đám mây";
 "workspaceToolbar.panel.subagent" = "Tác nhân";
 "workspaceToolbar.addPanel.label" = "Thêm bảng";
 "workspaceToolbar.addPanel.tooltip" = "Chia tách với bảng mới";
@@ -1920,7 +1920,7 @@
 "markdown.diff.blame.lines.many" = "%d dòng";
 "markdown.diff.blame.authors.one" = "%d tác giả";
 "markdown.diff.blame.authors.many" = "%d tác giả";
-"markdown.diff.blame.commits.one" = "%d commit";
+"markdown.diff.blame.commits.one" = "%d bản commit";
 "markdown.diff.blame.commits.many" = "%d commit";
 "markdown.explorer.filesColumn" = "Tệp";
 "markdown.explorer.menu.rename" = "Đổi tên";
@@ -2126,7 +2126,7 @@
 "codeReview.gitWorkflow.commitTip" = "Mẹo: dòng đầu = tóm tắt, dòng trống = chi tiết.";
 "codeReview.gitWorkflow.chars" = "%d ký tự";
 "codeReview.gitWorkflow.commitAll" = "Commit tất cả";
-"codeReview.gitWorkflow.push" = "Push";
+"codeReview.gitWorkflow.push" = "Đẩy";
 "codeReview.gitWorkflow.createPR" = "Tạo pull request";
 "codeReview.gitWorkflow.branchCreated" = "Đã tạo nhánh.";
 "codeReview.gitWorkflow.commitCreated" = "Đã tạo commit.";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "Xóa worktree do cocxy quản lý được đính kèm vào tab hiện tại (từ chối khi có thay đổi chưa lưu)";
 "command.worktree.cleanupMerged.name" = "Dọn dẹp các worktree đã hợp nhất";
 "command.worktree.cleanupMerged.description" = "Xem lại và xóa các worktree sạch, đã hợp nhất do cocxy quản lý";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "Cây làm việc";
 "worktree.featureDisabled" = "Đặt [worktree].enabled = true trong ~/.config/cocxy/config.toml hoặc .cocxy.toml của kho lưu trữ hiện tại.";
 "worktree.advanced.title" = "Worktree mới";
 "worktree.advanced.shortDescription" = "Mô tả ngắn";
@@ -2924,7 +2924,7 @@
 "macros.alias.name" = "Tên bí danh";
 "macros.alias.command" = "Lệnh";
 "macros.alias.detail" = "Chi tiết";
-"macros.alias.shell" = "Shell";
+"macros.alias.shell" = "Trình dòng lệnh";
 "macros.saveAlias" = "Lưu bí danh";
 "macros.render" = "Kết xuất";
 "macros.apply" = "Áp dụng";
@@ -2985,9 +2985,9 @@
 "remoteWorkspace.empty.addProfile.accessibility" = "Thêm hồ sơ từ xa";
 "remoteWorkspace.subPanel.sessions" = "Phiên";
 "remoteWorkspace.subPanel.tunnels" = "Đường hầm";
-"remoteWorkspace.subPanel.proxy" = "Proxy";
+"remoteWorkspace.subPanel.proxy" = "Ủy quyền";
 "remoteWorkspace.subPanel.relay" = "Chuyển tiếp";
-"remoteWorkspace.subPanel.daemon" = "Daemon";
+"remoteWorkspace.subPanel.daemon" = "Tiến trình nền";
 "remoteWorkspace.subPanel.keys" = "Khóa";
 "remoteWorkspace.subPanel.sftp" = "SFTP";
 "remoteWorkspace.subPanel.sessions.detail" = "Phiên shell duy trì liên tục";

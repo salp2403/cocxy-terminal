@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Wygląd";
 "preferences.section.agentDetection" = "Wykrywanie agentów";
 "preferences.section.agentMode" = "Tryb agenta";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Skarbiec";
+"vault.sidebar.title" = "Skarbiec";
 "vault.sidebar.accessibility" = "Pasek boczny Vault";
 "vault.search.placeholder" = "Szukaj sesji...";
 "vault.search.clear" = "Wyczyść wyszukiwanie";
@@ -447,7 +447,7 @@
 "menu.view.agentMode" = "Tryb agenta";
 "menu.view.agentCodeReview" = "Przegląd kodu przez agenta";
 "menu.view.githubPane" = "Panel GitHub";
-"menu.view.vault" = "Vault";
+"menu.view.vault" = "Skarbiec";
 "menu.view.notes" = "Notatki";
 "menu.view.quickSwitch" = "Szybkie przełączanie";
 "quickSwitch.item.tab.title" = "Karta: %@";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "Dodatkowi aktywni agenci";
 "tabbar.tab.moreActiveAgents" = "%d więcej aktywnych agentów";
 "tabbar.tab.pinned" = "Przypięta";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "Drzewo robocze";
 "tabbar.tab.renamePlaceholder" = "Nazwa karty";
 "tabbar.agent.defaultName" = "Agent";
 "tabbar.agent.badge.launched" = "Uruchomiony";
@@ -1536,7 +1536,7 @@
 "horizontalTab.add.browser" = "Przeglądarka";
 "horizontalTab.add.markdown" = "Markdown";
 "horizontalTab.add.textEditor" = "Edytor tekstu";
-"horizontalTab.add.notebook" = "Notebook";
+"horizontalTab.add.notebook" = "Notatnik";
 "horizontalTab.add.workflow" = "Przepływ pracy";
 "horizontalTab.add.sessionReplay" = "Odtwarzanie sesji";
 "horizontalTab.add.editHistory" = "Historia edycji";
@@ -2706,7 +2706,7 @@
 "command.category.theme" = "Motyw";
 "command.category.config" = "Konfiguracja";
 "command.category.cli" = "CLI";
-"command.category.worktree" = "Worktree";
+"command.category.worktree" = "Drzewo robocze";
 "command.category.editor" = "Edytor";
 "command.window.new.name" = "Nowe okno";
 "command.window.new.description" = "Otwórz nowe okno Cocxy Terminal";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "Usuń worktree zarządzany przez cocxy dołączony do aktywnej karty (odmowa przy niezatwierdzonych zmianach)";
 "command.worktree.cleanupMerged.name" = "Uporządkuj scalone worktree";
 "command.worktree.cleanupMerged.description" = "Przejrzyj i usuń czyste scalone worktree zarządzane przez cocxy";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "Drzewo robocze";
 "worktree.featureDisabled" = "Ustaw [worktree].enabled = true w ~/.config/cocxy/config.toml lub w .cocxy.toml aktywnego repozytorium.";
 "worktree.advanced.title" = "Nowy worktree";
 "worktree.advanced.shortDescription" = "Krótki opis";

@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "모양";
 "preferences.section.agentDetection" = "에이전트 감지";
 "preferences.section.agentMode" = "에이전트 모드";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "보관함";
+"vault.sidebar.title" = "보관함";
 "vault.sidebar.accessibility" = "Vault 사이드바";
 "vault.search.placeholder" = "세션 검색...";
 "vault.search.clear" = "검색 지우기";
@@ -1105,7 +1105,7 @@
 "preferences.github.defaultState.closed" = "닫힘";
 "preferences.github.defaultState.merged" = "병합됨(PR만)";
 "preferences.github.defaultState.all" = "모두";
-"preferences.gitAssistant.section" = "Git Assistant";
+"preferences.gitAssistant.section" = "Git 도우미";
 "preferences.gitAssistant.caption" = "저장소 컨텍스트를 바탕으로 커밋 및 풀 리퀘스트 문구 초안을 기기에서 작성합니다.";
 "preferences.gitAssistant.enable" = "Git Assistant 활성화";
 "preferences.gitAssistant.provider" = "기본 제공업체";
@@ -1136,7 +1136,7 @@
 "github.pane.tab.commits" = "커밋";
 "github.pane.tab.diffs" = "Diff";
 "github.pane.tab.pullRequests" = "풀 리퀘스트";
-"github.pane.tab.pullRequests.compact" = "PRs";
+"github.pane.tab.pullRequests.compact" = "PR";
 "github.pane.tab.issues" = "이슈";
 "github.pane.tab.checks" = "검사";
 "github.pane.tab.reviewThreads" = "검토 스레드";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "추가로 활성화된 에이전트";
 "tabbar.tab.moreActiveAgents" = "활성 에이전트 %d개 더 있음";
 "tabbar.tab.pinned" = "고정됨";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "작업 트리";
 "tabbar.tab.renamePlaceholder" = "탭 이름";
 "tabbar.agent.defaultName" = "에이전트";
 "tabbar.agent.badge.launched" = "실행됨";

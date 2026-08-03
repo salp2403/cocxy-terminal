@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Aspetto";
 "preferences.section.agentDetection" = "Rilevamento agenti";
 "preferences.section.agentMode" = "Modalità agente";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Cassaforte";
+"vault.sidebar.title" = "Cassaforte";
 "vault.sidebar.accessibility" = "Barra laterale Vault";
 "vault.search.placeholder" = "Cerca sessioni...";
 "vault.search.clear" = "Cancella ricerca";
@@ -447,7 +447,7 @@
 "menu.view.agentMode" = "Modalità agente";
 "menu.view.agentCodeReview" = "Revisione del codice con l’agente";
 "menu.view.githubPane" = "Pannello GitHub";
-"menu.view.vault" = "Vault";
+"menu.view.vault" = "Cassaforte";
 "menu.view.notes" = "Note";
 "menu.view.quickSwitch" = "Cambio rapido";
 "quickSwitch.item.tab.title" = "Scheda: %@";
@@ -1376,8 +1376,8 @@
 "shortcutHints.debug.offsetX" = "x %@";
 "shortcutHints.debug.offsetY" = "y %@";
 "shortcutHints.debug.scale" = "scala %@";
-"workspaceToolbar.panel.terminal" = "Terminal %d";
-"workspaceToolbar.panel.terminal.default" = "Terminal";
+"workspaceToolbar.panel.terminal" = "Terminale %d";
+"workspaceToolbar.panel.terminal.default" = "Terminale";
 "workspaceToolbar.panel.browser" = "Browser";
 "workspaceToolbar.panel.markdown" = "Markdown";
 "workspaceToolbar.panel.editor" = "Editor";
@@ -3105,8 +3105,8 @@
 "remoteWorkspace.proxy.username" = "Nome utente";
 "remoteWorkspace.proxy.copyUsername" = "Copia nome utente del proxy";
 "remoteWorkspace.proxy.password" = "Password";
-"remoteWorkspace.proxy.socksPassword" = "SOCKS Password";
-"remoteWorkspace.proxy.httpPassword" = "HTTP Password";
+"remoteWorkspace.proxy.socksPassword" = "Password SOCKS";
+"remoteWorkspace.proxy.httpPassword" = "Password HTTP";
 "remoteWorkspace.proxy.hidePassword" = "Nascondi password";
 "remoteWorkspace.proxy.revealPassword" = "Mostra password";
 "remoteWorkspace.proxy.copyPassword" = "Copia password del proxy";

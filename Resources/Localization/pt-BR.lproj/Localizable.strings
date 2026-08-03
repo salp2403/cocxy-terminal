@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Aparência";
 "preferences.section.agentDetection" = "Detecção de Agente";
 "preferences.section.agentMode" = "Modo Agente";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Cofre";
+"vault.sidebar.title" = "Cofre";
 "vault.sidebar.accessibility" = "Barra lateral do Vault";
 "vault.search.placeholder" = "Buscar sessões...";
 "vault.search.clear" = "Limpar busca";
@@ -78,7 +78,7 @@
 "preferences.section.languageServers" = "Servidores de linguagem";
 "preferences.section.editor" = "Editor";
 "preferences.section.keybindings" = "Keybindings";
-"preferences.section.worktrees" = "Worktrees";
+"preferences.section.worktrees" = "Árvores de trabalho";
 "preferences.section.security" = "Segurança";
 "preferences.section.plugins" = "Plugins";
 "preferences.section.github" = "GitHub";
@@ -89,7 +89,7 @@
 "preferences.save.help.changed" = "Salve as configurações modificadas em config.toml.";
 "preferences.save.help.unchanged" = "Nenhuma configuração foi alterada.";
 "preferences.save.openConfig" = "Abrir config.toml";
-"preferences.general.shell.section" = "Shell";
+"preferences.general.shell.section" = "Interpretador de comandos";
 "preferences.general.shellPath" = "Caminho do Shell";
 "preferences.general.workingDirectory" = "Diretório de trabalho";
 "preferences.general.confirmBeforeClosing" = "Confirmar antes de fechar";
@@ -453,13 +453,13 @@
 "quickSwitch.item.tab.title" = "Aba: %@";
 "quickSwitch.item.project.title" = "Projeto: %@";
 "quickSwitch.item.browser.title" = "Navegador: %@";
-"quickSwitch.item.worktree.title" = "Worktree: %@";
+"quickSwitch.item.worktree.title" = "Árvore de trabalho: %@";
 "quickSwitch.item.note.title" = "Nota: %@";
 "quickSwitch.item.notes.subtitle" = "Notas do espaço de trabalho";
 "quickSwitch.kind.tab" = "Aba do terminal";
 "quickSwitch.kind.project" = "Projeto";
 "quickSwitch.kind.browserTab" = "Aba do navegador";
-"quickSwitch.kind.worktree" = "Worktree";
+"quickSwitch.kind.worktree" = "Árvore de trabalho";
 "quickSwitch.kind.note" = "Nota";
 "quickSwitch.result.switchedToTitle" = "Mudou para: %@";
 "quickSwitch.result.switchedToUnreadTab" = "Mudou para a aba não lida";
@@ -524,7 +524,7 @@
 "projectHome.unavailable.title" = "Início do Projeto Indisponível";
 "projectHome.worktrees.empty" = "Nenhum worktree gerenciado";
 "projectHome.worktrees.failed" = "Os dados dos worktrees estão indisponíveis.";
-"projectHome.worktrees.title" = "Worktrees";
+"projectHome.worktrees.title" = "Árvores de trabalho";
 "project.open.title" = "Abrir Projeto";
 "project.open.button" = "Abrir";
 "project.clone.title" = "Clonar Projeto";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "Agentes ativos adicionais";
 "tabbar.tab.moreActiveAgents" = "Mais %d agentes ativos";
 "tabbar.tab.pinned" = "Fixada";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "Árvore de trabalho";
 "tabbar.tab.renamePlaceholder" = "Nome da aba";
 "tabbar.agent.defaultName" = "Agente";
 "tabbar.agent.badge.launched" = "Iniciado";
@@ -2706,7 +2706,7 @@
 "command.category.theme" = "Tema";
 "command.category.config" = "Configuração";
 "command.category.cli" = "CLI";
-"command.category.worktree" = "Worktree";
+"command.category.worktree" = "Árvore de trabalho";
 "command.category.editor" = "Editor";
 "command.window.new.name" = "Nova Janela";
 "command.window.new.description" = "Abrir uma nova janela do Cocxy Terminal";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "Remover a worktree gerenciada pelo cocxy anexada à aba ativa (recusa se houver alterações)";
 "command.worktree.cleanupMerged.name" = "Limpar Worktrees Mescladas";
 "command.worktree.cleanupMerged.description" = "Revisar e remover worktrees mescladas, sem alterações e gerenciadas pelo cocxy";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "Árvore de trabalho";
 "worktree.featureDisabled" = "Defina [worktree].enabled = true em ~/.config/cocxy/config.toml ou no .cocxy.toml do repositório ativo.";
 "worktree.advanced.title" = "Nova Worktree";
 "worktree.advanced.shortDescription" = "Descrição curta";
@@ -2924,7 +2924,7 @@
 "macros.alias.name" = "Nome do alias";
 "macros.alias.command" = "Comando";
 "macros.alias.detail" = "Detalhes";
-"macros.alias.shell" = "Shell";
+"macros.alias.shell" = "Interpretador de comandos";
 "macros.saveAlias" = "Salvar alias";
 "macros.render" = "Renderizar";
 "macros.apply" = "Aplicar";
@@ -3465,7 +3465,7 @@
 "taskQueue.composer.provider" = "Provedor";
 "taskQueue.composer.prompt" = "Solicitação da tarefa";
 "taskQueue.composer.pipeline" = "Pipeline JSON";
-"taskQueue.composer.worktree" = "Worktree";
+"taskQueue.composer.worktree" = "Árvore de trabalho";
 "taskQueue.composer.trigger" = "Acionador";
 "taskQueue.composer.cron" = "Expressão cron";
 "taskQueue.composer.timeZone" = "Fuso horário";

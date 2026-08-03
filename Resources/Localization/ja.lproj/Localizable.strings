@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "外観";
 "preferences.section.agentDetection" = "エージェント検出";
 "preferences.section.agentMode" = "エージェントモード";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "保管庫";
+"vault.sidebar.title" = "保管庫";
 "vault.sidebar.accessibility" = "Vault サイドバー";
 "vault.search.placeholder" = "セッションを検索...";
 "vault.search.clear" = "検索をクリア";
@@ -447,7 +447,7 @@
 "menu.view.agentMode" = "エージェントモード";
 "menu.view.agentCodeReview" = "エージェントコードレビュー";
 "menu.view.githubPane" = "GitHubペイン";
-"menu.view.vault" = "Vault";
+"menu.view.vault" = "保管庫";
 "menu.view.notes" = "メモ";
 "menu.view.quickSwitch" = "クイックスイッチ";
 "quickSwitch.item.tab.title" = "タブ：%@";
@@ -1113,7 +1113,7 @@
 "preferences.gitAssistant.maxDiffLines" = "差分の最大行数：%d";
 "preferences.gitAssistant.autoPR" = "プルリクエストの下書きを自動入力";
 "preferences.gitAssistant.autoCommit" = "コミットメッセージを自動入力";
-"preferences.gitAssistant.style.conventional" = "Conventional";
+"preferences.gitAssistant.style.conventional" = "規約形式";
 "preferences.gitAssistant.style.descriptive" = "詳細";
 "preferences.gitAssistant.style.minimal" = "最小限";
 "preferences.rateLimit.autoDetect" = "アクティブなプロバイダを自動検出";
@@ -1136,7 +1136,7 @@
 "github.pane.tab.commits" = "コミット";
 "github.pane.tab.diffs" = "差分";
 "github.pane.tab.pullRequests" = "プルリクエスト";
-"github.pane.tab.pullRequests.compact" = "PRs";
+"github.pane.tab.pullRequests.compact" = "PR";
 "github.pane.tab.issues" = "Issue";
 "github.pane.tab.checks" = "チェック";
 "github.pane.tab.reviewThreads" = "レビュースレッド";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "アクティブなタブに関連付けられたcocxy管理のworktreeを削除します（変更が未保存の場合は削除しません）";
 "command.worktree.cleanupMerged.name" = "マージ済みWorktreeをクリーンアップ";
 "command.worktree.cleanupMerged.description" = "変更がなくマージ済みのcocxy管理worktreeを確認して削除します";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "ワークツリー";
 "worktree.featureDisabled" = "~/.config/cocxy/config.tomlまたはアクティブなリポジトリの.cocxy.tomlで[worktree].enabled = trueを設定してください。";
 "worktree.advanced.title" = "新規Worktree";
 "worktree.advanced.shortDescription" = "簡単な説明";

@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "外观";
 "preferences.section.agentDetection" = "代理检测";
 "preferences.section.agentMode" = "代理模式";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "保险库";
+"vault.sidebar.title" = "保险库";
 "vault.sidebar.accessibility" = "Vault 侧边栏";
 "vault.search.placeholder" = "搜索会话...";
 "vault.search.clear" = "清除搜索";
@@ -89,7 +89,7 @@
 "preferences.save.help.changed" = "将修改后的设置保存到 config.toml。";
 "preferences.save.help.unchanged" = "设置未发生更改。";
 "preferences.save.openConfig" = "打开 config.toml";
-"preferences.general.shell.section" = "Shell";
+"preferences.general.shell.section" = "命令行";
 "preferences.general.shellPath" = "Shell 路径";
 "preferences.general.workingDirectory" = "工作目录";
 "preferences.general.confirmBeforeClosing" = "关闭前确认";
@@ -2924,7 +2924,7 @@
 "macros.alias.name" = "别名名称";
 "macros.alias.command" = "命令";
 "macros.alias.detail" = "详情";
-"macros.alias.shell" = "Shell";
+"macros.alias.shell" = "命令行";
 "macros.saveAlias" = "保存别名";
 "macros.render" = "生成";
 "macros.apply" = "应用";

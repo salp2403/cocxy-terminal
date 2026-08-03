@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Оформление";
 "preferences.section.agentDetection" = "Обнаружение агентов";
 "preferences.section.agentMode" = "Режим агента";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Хранилище";
+"vault.sidebar.title" = "Хранилище";
 "vault.sidebar.accessibility" = "Боковая панель Vault";
 "vault.search.placeholder" = "Поиск сеансов...";
 "vault.search.clear" = "Очистить поиск";
@@ -447,7 +447,7 @@
 "menu.view.agentMode" = "Режим агента";
 "menu.view.agentCodeReview" = "Проверка кода агентом";
 "menu.view.githubPane" = "Панель GitHub";
-"menu.view.vault" = "Vault";
+"menu.view.vault" = "Хранилище";
 "menu.view.notes" = "Заметки";
 "menu.view.quickSwitch" = "Быстрое переключение";
 "quickSwitch.item.tab.title" = "Вкладка: %@";
@@ -1050,8 +1050,8 @@
 "editor.status.written" = "Записано";
 "editor.status.writeFailed" = "Не удалось записать";
 "editor.status.noWriteSinceLastChange" = "Изменения ещё не записаны";
-"editor.status.wrap" = "wrap";
-"editor.status.nowrap" = "nowrap";
+"editor.status.wrap" = "перенос";
+"editor.status.nowrap" = "без переноса";
 "editor.toolbar.openFile" = "Открыть файл";
 "editor.openPanel.title" = "Открыть файл";
 "editor.openPanel.message" = "Выберите локальный текстовый файл для редактирования.";
@@ -1486,7 +1486,7 @@
 "auroraTweaks.themePalette" = "Палитра темы";
 "auroraTweaks.renderMode" = "Переопределение режима отрисовки";
 "auroraTweaks.pill.auto" = "Авто";
-"auroraTweaks.pill.liquid" = "Liquid";
+"auroraTweaks.pill.liquid" = "Жидкий";
 "auroraTweaks.pill.visual" = "Визуальный";
 "auroraTweaks.pill.opaque" = "Непрозрачный";
 "auroraTweaks.renderMode.autoLabel" = "Авто (таблица решений)";

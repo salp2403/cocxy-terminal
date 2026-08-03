@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "外觀";
 "preferences.section.agentDetection" = "代理程式偵測";
 "preferences.section.agentMode" = "代理程式模式";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "保險庫";
+"vault.sidebar.title" = "保險庫";
 "vault.sidebar.accessibility" = "Vault 側邊欄";
 "vault.search.placeholder" = "搜尋工作階段...";
 "vault.search.clear" = "清除搜尋";
@@ -89,7 +89,7 @@
 "preferences.save.help.changed" = "將修改後的設定儲存至 config.toml。";
 "preferences.save.help.unchanged" = "沒有任何設定變更。";
 "preferences.save.openConfig" = "打開 config.toml";
-"preferences.general.shell.section" = "Shell";
+"preferences.general.shell.section" = "命令列";
 "preferences.general.shellPath" = "Shell 路徑";
 "preferences.general.workingDirectory" = "工作目錄";
 "preferences.general.confirmBeforeClosing" = "關閉前先確認";
@@ -2428,8 +2428,8 @@
 "browser.devTools.accessibility" = "瀏覽器開發者工具";
 "browser.devTools.help" = "開發者工具";
 "browser.devTools.close" = "關閉開發者工具";
-"browser.devTools.tab.console" = "Console";
-"browser.devTools.tab.network" = "Network";
+"browser.devTools.tab.console" = "主控台";
+"browser.devTools.tab.network" = "網路";
 "browser.devTools.tab.dom" = "DOM";
 "browser.devTools.tab.accessibility" = "%@ 分頁";
 "browser.devTools.console.empty.title" = "沒有主控台輸出";
@@ -2860,7 +2860,7 @@
 "command.worktree.remove.description" = "移除附加至使用中分頁且由 cocxy 管理的工作樹（有未提交的變更時拒絕移除）";
 "command.worktree.cleanupMerged.name" = "清理已合併的工作樹";
 "command.worktree.cleanupMerged.description" = "檢查並移除乾淨且已合併、由 cocxy 管理的工作樹";
-"worktree.alert.title" = "Worktree";
+"worktree.alert.title" = "工作樹";
 "worktree.featureDisabled" = "請在 ~/.config/cocxy/config.toml 或目前儲存庫的 .cocxy.toml 中設定 [worktree].enabled = true。";
 "worktree.advanced.title" = "新增 Worktree";
 "worktree.advanced.shortDescription" = "簡短說明";
@@ -2924,7 +2924,7 @@
 "macros.alias.name" = "別名名稱";
 "macros.alias.command" = "指令";
 "macros.alias.detail" = "詳細資料";
-"macros.alias.shell" = "Shell";
+"macros.alias.shell" = "命令列";
 "macros.saveAlias" = "儲存別名";
 "macros.render" = "產生";
 "macros.apply" = "套用";

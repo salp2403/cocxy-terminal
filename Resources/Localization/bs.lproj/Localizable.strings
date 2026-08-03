@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Izgled";
 "preferences.section.agentDetection" = "Otkrivanje agenata";
 "preferences.section.agentMode" = "Agentski način rada";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Trezor";
+"vault.sidebar.title" = "Trezor";
 "vault.sidebar.accessibility" = "Bočna traka Vaulta";
 "vault.search.placeholder" = "Pretraži sesije...";
 "vault.search.clear" = "Očisti pretragu";
@@ -1346,7 +1346,7 @@
 "tabbar.tab.additionalAgents" = "Dodatni aktivni agenti";
 "tabbar.tab.moreActiveAgents" = "Još %d aktivnih agenata";
 "tabbar.tab.pinned" = "Prikvačeno";
-"tabbar.tab.worktree" = "Worktree";
+"tabbar.tab.worktree" = "Radno stablo";
 "tabbar.tab.renamePlaceholder" = "Naziv kartice";
 "tabbar.agent.defaultName" = "Agent";
 "tabbar.agent.badge.launched" = "Pokrenut";
@@ -1729,7 +1729,7 @@
 "dbCloud.empty.noHelpers" = "Nema pomoćnika";
 "dbCloud.field.postgres" = "URL baze podataka ili servis";
 "dbCloud.field.sqlite" = "Putanja SQLite baze podataka";
-"dbCloud.field.awsProfile" = "AWS profile";
+"dbCloud.field.awsProfile" = "AWS profil";
 "dbCloud.field.region" = "Regija";
 "dbCloud.action.pending" = "Vizuelna radnja za ovog pomoćnika je na čekanju.";
 "dbCloud.output" = "Izlaz";
@@ -1801,7 +1801,7 @@
 "templates.builtIn.php-composer.name" = "PHP Composer";
 "templates.builtIn.php-composer.summary" = "Kreira kostur lokalnog PHP paketa u stilu Composera.";
 "templates.builtIn.php-composer.variable.project_name.prompt" = "Naziv projekta";
-"templates.builtIn.php-composer.variable.namespace.prompt" = "PHP namespace";
+"templates.builtIn.php-composer.variable.namespace.prompt" = "PHP imenski prostor";
 "templates.builtIn.python-package.name" = "Python paket";
 "templates.builtIn.python-package.summary" = "Kreira lokalni Python paket s unittest pokrivenošću.";
 "templates.builtIn.python-package.variable.project_name.prompt" = "Naziv projekta";
@@ -3114,7 +3114,7 @@
 "remoteWorkspace.proxy.copyHTTPPassword" = "Kopiraj HTTP lozinku";
 "remoteWorkspace.proxy.httpTitle" = "HTTP CONNECT";
 "remoteWorkspace.proxy.httpToggle" = "HTTP CONNECT proxy s provjerom autentičnosti";
-"remoteWorkspace.proxy.httpPort" = "HTTP CONNECT port";
+"remoteWorkspace.proxy.httpPort" = "HTTP CONNECT priključak";
 "remoteWorkspace.proxy.systemWideTitle" = "Proxy na nivou sistema";
 "remoteWorkspace.proxy.systemWide.secureUnavailable" = "Nije dostupno za sesije proxyja s provjerom autentičnosti";
 "remoteWorkspace.proxy.port" = "Port:";

@@ -4,8 +4,8 @@
 "preferences.section.appearance" = "Erscheinungsbild";
 "preferences.section.agentDetection" = "Agentenerkennung";
 "preferences.section.agentMode" = "Agentenmodus";
-"preferences.section.vault" = "Vault";
-"vault.sidebar.title" = "Vault";
+"preferences.section.vault" = "Tresor";
+"vault.sidebar.title" = "Tresor";
 "vault.sidebar.accessibility" = "Vault-Seitenleiste";
 "vault.search.placeholder" = "Sitzungen suchen...";
 "vault.search.clear" = "Suche löschen";
@@ -447,7 +447,7 @@
 "menu.view.agentMode" = "Agentenmodus";
 "menu.view.agentCodeReview" = "Codeprüfung durch Agenten";
 "menu.view.githubPane" = "GitHub-Bereich";
-"menu.view.vault" = "Vault";
+"menu.view.vault" = "Tresor";
 "menu.view.notes" = "Notizen";
 "menu.view.quickSwitch" = "Schnellwechsel";
 "quickSwitch.item.tab.title" = "Tab: %@";
@@ -1135,7 +1135,7 @@
 "github.pane.tab.branches" = "Branches";
 "github.pane.tab.commits" = "Commits";
 "github.pane.tab.diffs" = "Diffs";
-"github.pane.tab.pullRequests" = "Pull Requests";
+"github.pane.tab.pullRequests" = "Pull-Anfragen";
 "github.pane.tab.pullRequests.compact" = "PRs";
 "github.pane.tab.issues" = "Issues";
 "github.pane.tab.checks" = "Prüfungen";
@@ -1937,7 +1937,7 @@
 "codeReview.merge.title" = "Pull Request #%d mergen?";
 "codeReview.merge.message" = "Wählen Sie aus, wie dieser Pull Request gemergt werden soll. Nach dem Start kann die Aktion in Cocxy nicht rückgängig gemacht werden.";
 "codeReview.merge.squash" = "Squash & Merge";
-"codeReview.merge.mergeCommit" = "Merge Commit";
+"codeReview.merge.mergeCommit" = "Merge-Commit";
 "codeReview.merge.rebase" = "Rebase & Merge";
 "codeReview.merge.deleteBranch" = "Branch nach dem Merge löschen";
 "codeReview.merge.deleteBranch.tooltip" = "Löscht den lokalen und den entfernten Branch nach erfolgreichem Merge.";
