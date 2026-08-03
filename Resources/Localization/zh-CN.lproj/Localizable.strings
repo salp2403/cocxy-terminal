@@ -491,6 +491,8 @@
 "projectHome.context.title" = "项目上下文";
 "projectHome.diff.recent" = "打开最近的差异";
 "projectHome.git.loading" = "正在获取 Git 状态";
+"projectHome.git.retry" = "重试 Git 状态";
+"projectHome.git.unavailable" = "Git 状态不可用";
 "projectHome.inbox.empty" = "没有项目任务";
 "projectHome.inbox.failed" = "项目活动不可用。";
 "projectHome.inbox.loading" = "正在加载项目任务";

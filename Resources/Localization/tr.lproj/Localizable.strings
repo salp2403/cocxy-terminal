@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Proje Bağlamı";
 "projectHome.diff.recent" = "Son Değişiklikleri Aç";
 "projectHome.git.loading" = "Git durumu bekleniyor";
+"projectHome.git.retry" = "Git durumunu yeniden dene";
+"projectHome.git.unavailable" = "Git durumu kullanılamıyor";
 "projectHome.inbox.empty" = "Proje görevi yok";
 "projectHome.inbox.failed" = "Proje etkinliği kullanılamıyor.";
 "projectHome.inbox.loading" = "Proje görevleri yükleniyor";

@@ -112,6 +112,10 @@ extension MainWindowController {
             accent: record?.accent,
             fallbackRemote: record?.remoteOrigin,
             worktreeConfig: worktreeConfig,
+            headerUpdates: projectHomeHeaderUpdates(
+                projectID: projectID,
+                automaticName: descriptor.groupingAutomaticName
+            ),
             activitySummaryLoader: { [weak self] projectID in
                 guard let self else { return .unavailable }
                 return await self.loadProjectActivitySummary(for: projectID)
@@ -135,6 +139,25 @@ extension MainWindowController {
             fanOutCoordinator: fanOutCoordinator,
             localizer: localizer
         ))
+    }
+
+    private func projectHomeHeaderUpdates(
+        projectID: ProjectID,
+        automaticName: String
+    ) -> AnyPublisher<ProjectHomeHeaderState, Never> {
+        let records = projectRegistry?.$records.eraseToAnyPublisher()
+            ?? Just<[ProjectRecord]>([]).eraseToAnyPublisher()
+        return Publishers.CombineLatest(records, auroraWorkspaceTitleStore.$revision)
+            .map { [weak self] records, _ in
+                let record = records.first { $0.id == projectID }
+                return ProjectHomeHeaderState(
+                    displayName: self?.auroraWorkspaceTitleStore.title(for: projectID.rawValue)
+                        ?? automaticName,
+                    accent: record?.accent,
+                    remoteOrigin: record?.remoteOrigin
+                )
+            }
+            .eraseToAnyPublisher()
     }
 
     @discardableResult

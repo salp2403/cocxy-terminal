@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Contexto do Projeto";
 "projectHome.diff.recent" = "Abrir Diff Recente";
 "projectHome.git.loading" = "Status do Git pendente";
+"projectHome.git.retry" = "Tentar status do Git novamente";
+"projectHome.git.unavailable" = "Status do Git indisponível";
 "projectHome.inbox.empty" = "Nenhuma tarefa do projeto";
 "projectHome.inbox.failed" = "A atividade do projeto está indisponível.";
 "projectHome.inbox.loading" = "Carregando tarefas do projeto";

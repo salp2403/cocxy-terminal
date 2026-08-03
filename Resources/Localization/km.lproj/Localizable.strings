@@ -491,6 +491,8 @@
 "projectHome.context.title" = "បរិបទគម្រោង";
 "projectHome.diff.recent" = "បើក Diff ថ្មីៗ";
 "projectHome.git.loading" = "ស្ថានភាព Git កំពុងរង់ចាំ";
+"projectHome.git.retry" = "ព្យាយាមយកស្ថានភាព Git ម្ដងទៀត";
+"projectHome.git.unavailable" = "មិនអាចប្រើស្ថានភាព Git បានទេ";
 "projectHome.inbox.empty" = "មិនមានភារកិច្ចគម្រោង";
 "projectHome.inbox.failed" = "សកម្មភាពគម្រោងមិនអាចប្រើបាន។";
 "projectHome.inbox.loading" = "កំពុងផ្ទុកភារកិច្ចគម្រោង";

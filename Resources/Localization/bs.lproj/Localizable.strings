@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Kontekst projekta";
 "projectHome.diff.recent" = "Otvori nedavne razlike";
 "projectHome.git.loading" = "Git status je na čekanju";
+"projectHome.git.retry" = "Ponovo pokušaj Git status";
+"projectHome.git.unavailable" = "Git status nije dostupan";
 "projectHome.inbox.empty" = "Nema zadataka projekta";
 "projectHome.inbox.failed" = "Aktivnost projekta nije dostupna.";
 "projectHome.inbox.loading" = "Učitavanje zadataka projekta";

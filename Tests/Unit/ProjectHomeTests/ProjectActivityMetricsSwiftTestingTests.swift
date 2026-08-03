@@ -1,6 +1,7 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ProjectActivityMetricsSwiftTestingTests.swift - Compact Project Home metric formatting.
 
+import Combine
 import Foundation
 import Testing
 @testable import CocxyTerminal
@@ -78,5 +79,97 @@ struct ProjectActivityMetricsSwiftTestingTests {
             expected,
             costTrackingEnabled: true
         ))
+    }
+
+    @MainActor
+    @Test("open Project Home headers follow app-scoped metadata updates")
+    func headerMetadataUpdatesLive() async {
+        let updates = PassthroughSubject<ProjectHomeHeaderState, Never>()
+        let viewModel = ProjectHomePanelViewModel(
+            projectID: ProjectID(rawValue: "/tmp/project-header"),
+            projectRoot: URL(fileURLWithPath: "/tmp/project-header", isDirectory: true),
+            displayName: "Before",
+            accent: nil,
+            fallbackRemote: nil,
+            worktreeConfig: .defaults,
+            contextLoader: ProjectHomeContextLoader(
+                gitMetadata: { _, fallback in
+                    .success(ProjectHomeGitMetadata(
+                        branch: "main",
+                        remoteOrigin: fallback,
+                        statusSummary: "clean",
+                        changedFileCount: 0
+                    ))
+                },
+                worktrees: { _, _ in .success([]) }
+            ),
+            headerUpdates: updates.eraseToAnyPublisher(),
+            recentDiffProvider: { nil },
+            actions: emptyActions()
+        )
+
+        updates.send(ProjectHomeHeaderState(
+            displayName: "After",
+            accent: "#00AA66",
+            remoteOrigin: "ssh://owner/repo"
+        ))
+        viewModel.loadContext()
+        for _ in 0..<20 where viewModel.isLoadingContext { await Task.yield() }
+
+        #expect(viewModel.displayName == "After")
+        #expect(viewModel.accent == "#00AA66")
+        #expect(viewModel.gitMetadata?.remoteOrigin == "ssh://owner/repo")
+    }
+
+    @MainActor
+    @Test("failed Git context can be retried")
+    func failedGitContextRetries() async {
+        var attempts = 0
+        let viewModel = ProjectHomePanelViewModel(
+            projectID: ProjectID(rawValue: "/tmp/project-retry"),
+            projectRoot: URL(fileURLWithPath: "/tmp/project-retry", isDirectory: true),
+            displayName: "Retry",
+            accent: nil,
+            fallbackRemote: nil,
+            worktreeConfig: .defaults,
+            contextLoader: ProjectHomeContextLoader(
+                gitMetadata: { _, _ in
+                    attempts += 1
+                    return attempts == 1
+                        ? .failure(.gitStatusUnavailable)
+                        : .success(ProjectHomeGitMetadata(
+                            branch: "main",
+                            remoteOrigin: nil,
+                            statusSummary: "clean",
+                            changedFileCount: 0
+                        ))
+                },
+                worktrees: { _, _ in .success([]) }
+            ),
+            recentDiffProvider: { nil },
+            actions: emptyActions()
+        )
+
+        viewModel.loadContext()
+        for _ in 0..<20 where viewModel.isLoadingContext { await Task.yield() }
+        #expect(viewModel.gitContextFailed)
+
+        viewModel.loadContext()
+        for _ in 0..<20 where viewModel.isLoadingContext { await Task.yield() }
+        #expect(!viewModel.gitContextFailed)
+        #expect(viewModel.gitMetadata?.branch == "main")
+    }
+
+    @MainActor
+    private func emptyActions() -> ProjectHomeActions {
+        ProjectHomeActions(
+            createSession: {},
+            createWorktree: nil,
+            launchTeam: { _ in },
+            openCodeReview: {},
+            activateEntry: { _ in },
+            focusWorktree: nil,
+            openRecentDiff: nil
+        )
     }
 }

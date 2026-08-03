@@ -491,6 +491,8 @@
 "projectHome.context.title" = "프로젝트 컨텍스트";
 "projectHome.diff.recent" = "최근 diff 열기";
 "projectHome.git.loading" = "Git 상태 확인 대기 중";
+"projectHome.git.retry" = "Git 상태 다시 시도";
+"projectHome.git.unavailable" = "Git 상태를 사용할 수 없음";
 "projectHome.inbox.empty" = "프로젝트 작업이 없습니다";
 "projectHome.inbox.failed" = "프로젝트 활동을 사용할 수 없습니다.";
 "projectHome.inbox.loading" = "프로젝트 작업을 불러오는 중";

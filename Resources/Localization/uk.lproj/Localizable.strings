@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Контекст проєкту";
 "projectHome.diff.recent" = "Відкрити недавні зміни";
 "projectHome.git.loading" = "Очікування стану Git";
+"projectHome.git.retry" = "Повторити отримання стану Git";
+"projectHome.git.unavailable" = "Стан Git недоступний";
 "projectHome.inbox.empty" = "Немає завдань проєкту";
 "projectHome.inbox.failed" = "Активність проєкту недоступна.";
 "projectHome.inbox.loading" = "Завантаження завдань проєкту";

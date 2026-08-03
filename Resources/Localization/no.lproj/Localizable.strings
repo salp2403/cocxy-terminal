@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Prosjektkontekst";
 "projectHome.diff.recent" = "Åpne nylig diff";
 "projectHome.git.loading" = "Venter på Git-status";
+"projectHome.git.retry" = "Prøv Git-status på nytt";
+"projectHome.git.unavailable" = "Git-status er utilgjengelig";
 "projectHome.inbox.empty" = "Ingen prosjektoppgaver";
 "projectHome.inbox.failed" = "Prosjektaktiviteten er utilgjengelig.";
 "projectHome.inbox.loading" = "Laster prosjektoppgaver";

@@ -491,6 +491,8 @@
 "projectHome.context.title" = "プロジェクトコンテキスト";
 "projectHome.diff.recent" = "最近の差分を開く";
 "projectHome.git.loading" = "Gitステータスを確認中";
+"projectHome.git.retry" = "Git ステータスを再取得";
+"projectHome.git.unavailable" = "Git ステータスを取得できません";
 "projectHome.inbox.empty" = "プロジェクトタスクはありません";
 "projectHome.inbox.failed" = "プロジェクトのアクティビティを利用できません。";
 "projectHome.inbox.loading" = "プロジェクトタスクを読み込み中";

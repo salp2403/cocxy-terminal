@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Kontekst projektu";
 "projectHome.diff.recent" = "Otwórz ostatnie różnice";
 "projectHome.git.loading" = "Wczytywanie stanu Git";
+"projectHome.git.retry" = "Ponów pobieranie stanu Git";
+"projectHome.git.unavailable" = "Stan Git jest niedostępny";
 "projectHome.inbox.empty" = "Brak zadań projektu";
 "projectHome.inbox.failed" = "Aktywność projektu jest niedostępna.";
 "projectHome.inbox.loading" = "Wczytywanie zadań projektu";

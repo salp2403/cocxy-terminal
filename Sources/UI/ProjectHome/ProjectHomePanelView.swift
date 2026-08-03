@@ -270,11 +270,26 @@ struct ProjectHomePanelView: View {
 
     private func projectMetadata(includeRemote: Bool, includeStatus: Bool) -> some View {
         HStack(spacing: 12) {
-            metadataLabel(
-                icon: "arrow.triangle.branch",
-                text: viewModel.gitMetadata?.branch
-                    ?? localizer.string("projectHome.git.loading", fallback: "Git status pending")
-            )
+            if viewModel.gitContextFailed {
+                metadataLabel(
+                    icon: "exclamationmark.triangle",
+                    text: localizer.string(
+                        "projectHome.git.unavailable",
+                        fallback: "Git status unavailable"
+                    )
+                )
+                Button { viewModel.loadContext() } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .help(localizer.string("projectHome.git.retry", fallback: "Retry Git status"))
+            } else {
+                metadataLabel(
+                    icon: "arrow.triangle.branch",
+                    text: viewModel.gitMetadata?.branch
+                        ?? localizer.string("projectHome.git.loading", fallback: "Git status pending")
+                )
+            }
             if includeStatus, let summary = viewModel.gitMetadata?.statusSummary {
                 metadataLabel(icon: "circle.lefthalf.filled", text: summary)
             }

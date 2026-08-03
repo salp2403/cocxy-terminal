@@ -491,6 +491,8 @@
 "projectHome.context.title" = "บริบทโปรเจกต์";
 "projectHome.diff.recent" = "เปิด diff ล่าสุด";
 "projectHome.git.loading" = "กำลังรอสถานะ Git";
+"projectHome.git.retry" = "ลองโหลดสถานะ Git อีกครั้ง";
+"projectHome.git.unavailable" = "สถานะ Git ไม่พร้อมใช้งาน";
 "projectHome.inbox.empty" = "ไม่มีงานของโปรเจกต์";
 "projectHome.inbox.failed" = "กิจกรรมของโปรเจกต์ไม่พร้อมใช้งาน";
 "projectHome.inbox.loading" = "กำลังโหลดงานของโปรเจกต์";

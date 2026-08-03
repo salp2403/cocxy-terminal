@@ -491,6 +491,8 @@
 "projectHome.context.title" = "專案內容";
 "projectHome.diff.recent" = "開啟最近的差異";
 "projectHome.git.loading" = "正在等待 Git 狀態";
+"projectHome.git.retry" = "重試 Git 狀態";
+"projectHome.git.unavailable" = "Git 狀態無法使用";
 "projectHome.inbox.empty" = "沒有專案任務";
 "projectHome.inbox.failed" = "無法使用專案活動。";
 "projectHome.inbox.loading" = "正在載入專案任務";

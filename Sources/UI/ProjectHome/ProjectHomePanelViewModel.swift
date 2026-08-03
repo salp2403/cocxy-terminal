@@ -1,7 +1,14 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // ProjectHomePanelViewModel.swift - Per-panel context and action state.
 
+import Combine
 import Foundation
+
+struct ProjectHomeHeaderState: Equatable {
+    let displayName: String
+    let accent: String?
+    let remoteOrigin: String?
+}
 
 @MainActor
 struct ProjectHomeActions {
@@ -18,11 +25,11 @@ struct ProjectHomeActions {
 final class ProjectHomePanelViewModel: ObservableObject {
     let projectID: ProjectID
     let projectRoot: URL
-    let displayName: String
-    let accent: String?
     let worktreeConfig: WorktreeConfig
     let actions: ProjectHomeActions
 
+    @Published private(set) var displayName: String
+    @Published private(set) var accent: String?
     @Published private(set) var gitMetadata: ProjectHomeGitMetadata?
     @Published private(set) var worktrees: [WorktreeManifest.WorktreeEntry] = []
     @Published private(set) var recentDiffSessionID: String?
@@ -34,12 +41,13 @@ final class ProjectHomePanelViewModel: ObservableObject {
     @Published var isTeamSheetPresented = false
     @Published var actionErrorMessage: String?
 
-    private let fallbackRemote: String?
+    private var fallbackRemote: String?
     private let contextLoader: ProjectHomeContextLoader
     private let activitySummaryLoader: @MainActor (ProjectID) async -> ProjectActivitySummaryState
     private let recentDiffProvider: () -> String?
     private var loadTask: Task<Void, Never>?
     private var activityLoadTask: Task<Void, Never>?
+    private var headerCancellable: AnyCancellable?
 
     init(
         projectID: ProjectID,
@@ -49,6 +57,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
         fallbackRemote: String?,
         worktreeConfig: WorktreeConfig,
         contextLoader: ProjectHomeContextLoader = .live,
+        headerUpdates: AnyPublisher<ProjectHomeHeaderState, Never>? = nil,
         activitySummaryLoader: @escaping @MainActor (
             ProjectID
         ) async -> ProjectActivitySummaryState = { _ in .disabled },
@@ -65,6 +74,9 @@ final class ProjectHomePanelViewModel: ObservableObject {
         self.activitySummaryLoader = activitySummaryLoader
         self.recentDiffProvider = recentDiffProvider
         self.actions = actions
+        headerCancellable = headerUpdates?.removeDuplicates().sink { [weak self] state in
+            self?.applyHeaderState(state)
+        }
     }
 
     func loadContext() {
@@ -116,6 +128,23 @@ final class ProjectHomePanelViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             self?.activitySummaryState = state
         }
+    }
+
+    private func applyHeaderState(_ state: ProjectHomeHeaderState) {
+        let previousFallback = fallbackRemote
+        displayName = state.displayName
+        accent = state.accent
+        fallbackRemote = state.remoteOrigin
+        guard let metadata = gitMetadata,
+              metadata.remoteOrigin == nil || metadata.remoteOrigin == previousFallback else {
+            return
+        }
+        gitMetadata = ProjectHomeGitMetadata(
+            branch: metadata.branch,
+            remoteOrigin: state.remoteOrigin,
+            statusSummary: metadata.statusSummary,
+            changedFileCount: metadata.changedFileCount
+        )
     }
 
     func launchTeam(_ request: ProjectTeamLaunchRequest) async {

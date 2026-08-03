@@ -491,6 +491,8 @@
 "projectHome.context.title" = "Ngữ cảnh dự án";
 "projectHome.diff.recent" = "Mở bản diff gần đây";
 "projectHome.git.loading" = "Đang chờ trạng thái Git";
+"projectHome.git.retry" = "Thử lại trạng thái Git";
+"projectHome.git.unavailable" = "Trạng thái Git không khả dụng";
 "projectHome.inbox.empty" = "Không có tác vụ dự án";
 "projectHome.inbox.failed" = "Hoạt động dự án không khả dụng.";
 "projectHome.inbox.loading" = "Đang tải tác vụ dự án";

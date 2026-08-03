@@ -491,6 +491,8 @@
 "projectHome.context.title" = "سياق المشروع";
 "projectHome.diff.recent" = "فتح آخر مقارنة";
 "projectHome.git.loading" = "حالة Git قيد الانتظار";
+"projectHome.git.retry" = "إعادة محاولة حالة Git";
+"projectHome.git.unavailable" = "حالة Git غير متاحة";
 "projectHome.inbox.empty" = "لا توجد مهام للمشروع";
 "projectHome.inbox.failed" = "نشاط المشروع غير متاح.";
 "projectHome.inbox.loading" = "جارٍ تحميل مهام المشروع";
