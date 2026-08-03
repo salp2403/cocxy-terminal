@@ -182,12 +182,25 @@ extension AppDelegate {
     private func finishProjectCloneForCLI(
         _ clone: ProjectCloneResult
     ) throws -> (Bool, [String: String]) {
-        let rootURL = try clone.verifiedRootURL()
+        let verifiedDirectory = try clone.openVerifiedRoot()
+        let rootURL = try clone.verifiedRootURL(for: verifiedDirectory)
         projectResolver.invalidate(directory: rootURL)
         gitInfoProvider.invalidateCache(for: rootURL)
-        let descriptor = projectResolver.resolveProject(for: rootURL)
-        guard try clone.verifiedRootURL() == rootURL else {
+        let descriptor = try ProjectDescriptor.verifiedStandalone(verifiedDirectory)
+        guard try clone.verifiedRootURL(for: verifiedDirectory) == rootURL else {
             throw ProjectCloneError.destinationChanged(rootURL.path)
+        }
+        let tabID = try activateProject(
+            descriptor.groupingID,
+            verifiedDirectory: verifiedDirectory
+        )
+        do {
+            guard try clone.verifiedRootURL(for: verifiedDirectory) == rootURL else {
+                throw ProjectCloneError.destinationChanged(rootURL.path)
+            }
+        } catch {
+            controllerContainingTab(tabID)?.performCloseTab(tabID)
+            throw error
         }
         var warning: String?
         do {
@@ -199,7 +212,6 @@ extension AppDelegate {
         } catch {
             warning = error.localizedDescription
         }
-        let tabID = try activateProject(descriptor.groupingID)
         var data = [
             "status": "cloned",
             "project-id": descriptor.groupingID.rawValue,

@@ -62,6 +62,17 @@ struct ProjectDirectoryPublication: Sendable {
     func verifiedURL() throws -> URL {
         try root.verifiedChildURL(named: destinationName, identity: identity)
     }
+
+    func openVerifiedDirectory() throws -> ProjectDirectoryRoot {
+        try root.openVerifiedChild(named: destinationName, identity: identity)
+    }
+
+    func verifiedURL(for directory: ProjectDirectoryRoot) throws -> URL {
+        guard directory.identity == identity else {
+            throw ProjectDirectoryError.publicationChanged(directory.displayURL.path)
+        }
+        return try root.verifiedChildURL(named: destinationName, identity: identity)
+    }
 }
 
 final class ProjectDirectoryTransaction {

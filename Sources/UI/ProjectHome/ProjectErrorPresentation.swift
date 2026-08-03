@@ -110,6 +110,11 @@ extension AppLocalizer {
                 "project.activation.homeUnavailable",
                 fallback: "Cocxy could not open Project Home in a readable pane."
             )
+        case .verifiedSurfaceUnavailable:
+            return string(
+                "project.activation.verifiedSurfaceUnavailable",
+                fallback: "Cocxy could not open a terminal in the verified project folder."
+            )
         }
     }
 

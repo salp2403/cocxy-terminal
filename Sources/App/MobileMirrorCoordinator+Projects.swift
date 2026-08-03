@@ -51,17 +51,34 @@ extension MobileMirrorCoordinator {
         }
         try Task.checkCancellation()
         let publication = try await projectService.createProject(named: name, in: root)
-        let destination = try publication.verifiedURL()
+        guard let appDelegate else {
+            throw MobileMirrorError.projectCreationUnavailable
+        }
+        let verifiedDirectory = try publication.openVerifiedDirectory()
+        let destination = try publication.verifiedURL(for: verifiedDirectory)
         projectResolver.invalidate(directory: destination)
-        let descriptor = projectResolver.resolveProject(for: destination)
-        guard try publication.verifiedURL() == destination else {
+        let descriptor = try ProjectDescriptor.verifiedStandalone(verifiedDirectory)
+        guard try publication.verifiedURL(for: verifiedDirectory) == destination else {
             throw MobileMirrorError.projectCreationFailed(
                 "the destination changed before registration"
             )
         }
-        try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
-        _ = try appDelegate?.activateProject(descriptor.groupingID)
-        appDelegate?.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
+        let tabID = try appDelegate.activateProject(
+            descriptor.groupingID,
+            verifiedDirectory: verifiedDirectory
+        )
+        do {
+            guard try publication.verifiedURL(for: verifiedDirectory) == destination else {
+                throw MobileMirrorError.projectCreationFailed(
+                    "the destination changed during activation"
+                )
+            }
+            try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
+        } catch {
+            appDelegate.controllerContainingTab(tabID)?.performCloseTab(tabID)
+            throw error
+        }
+        appDelegate.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
     }
 
     private func confirmProjectCreation(

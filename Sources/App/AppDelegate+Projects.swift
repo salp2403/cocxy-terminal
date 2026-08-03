@@ -8,6 +8,7 @@ enum ProjectActivationError: Error, LocalizedError {
     case unavailable(String)
     case noWindow
     case projectHomeUnavailable
+    case verifiedSurfaceUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -17,6 +18,8 @@ enum ProjectActivationError: Error, LocalizedError {
             return "Cocxy could not create a window for this project."
         case .projectHomeUnavailable:
             return "Cocxy could not open Project Home in a readable pane."
+        case .verifiedSurfaceUnavailable:
+            return "Cocxy could not open a terminal in the verified project folder."
         }
     }
 }
@@ -131,6 +134,38 @@ extension AppDelegate {
         controller.showWindow(nil)
         controller.window?.center()
         controller.createTerminalSurface()
+        controller.window?.makeKeyAndOrderFront(nil)
+        additionalWindowControllers.append(controller)
+        return tabID
+    }
+
+    @discardableResult
+    func activateProject(
+        _ projectID: ProjectID,
+        verifiedDirectory: ProjectDirectoryRoot
+    ) throws -> TabID {
+        let verifiedURL = try verifiedDirectory.descriptorBoundURL()
+        guard ProjectID(verifiedRootURL: verifiedURL) == projectID else {
+            throw ProjectActivationError.unavailable(verifiedURL.path)
+        }
+
+        if let controller = focusedWindowController() ?? windowController {
+            let tabID = try controller.createTab(verifiedWorkingDirectory: verifiedDirectory)
+            controller.showWindow(nil)
+            controller.window?.makeKeyAndOrderFront(nil)
+            return tabID
+        }
+
+        guard let controller = makeWindowController(registerInitialSession: false) else {
+            throw ProjectActivationError.noWindow
+        }
+        let placeholderTabID = controller.tabManager.activeTabID
+        let tabID = try controller.createTab(verifiedWorkingDirectory: verifiedDirectory)
+        if let placeholderTabID, placeholderTabID != tabID {
+            controller.performCloseTab(placeholderTabID)
+        }
+        controller.showWindow(nil)
+        controller.window?.center()
         controller.window?.makeKeyAndOrderFront(nil)
         additionalWindowControllers.append(controller)
         return tabID
@@ -312,21 +347,44 @@ extension AppDelegate {
     }
 
     private func finishProjectClone(_ result: ProjectCloneResult) {
+        let verifiedDirectory: ProjectDirectoryRoot
         let rootURL: URL
         do {
-            rootURL = try result.verifiedRootURL()
+            verifiedDirectory = try result.openVerifiedRoot()
+            rootURL = try result.verifiedRootURL(for: verifiedDirectory)
         } catch {
             presentProjectError(error)
             return
         }
         projectResolver.invalidate(directory: rootURL)
         gitInfoProvider.invalidateCache(for: rootURL)
-        let descriptor = projectResolver.resolveProject(for: rootURL)
+        let descriptor: ProjectDescriptor
         do {
-            guard try result.verifiedRootURL() == rootURL else {
+            descriptor = try ProjectDescriptor.verifiedStandalone(verifiedDirectory)
+            guard try result.verifiedRootURL(for: verifiedDirectory) == rootURL else {
                 throw ProjectCloneError.destinationChanged(rootURL.path)
             }
         } catch {
+            presentProjectError(error)
+            return
+        }
+        let tabID: TabID
+        do {
+            tabID = try activateProject(
+                descriptor.groupingID,
+                verifiedDirectory: verifiedDirectory
+            )
+        } catch {
+            presentProjectError(error)
+            return
+        }
+
+        do {
+            guard try result.verifiedRootURL(for: verifiedDirectory) == rootURL else {
+                throw ProjectCloneError.destinationChanged(rootURL.path)
+            }
+        } catch {
+            controllerContainingTab(tabID)?.performCloseTab(tabID)
             presentProjectError(error)
             return
         }
@@ -339,13 +397,6 @@ extension AppDelegate {
             )
         } catch {
             metadataError = error
-        }
-
-        do {
-            _ = try activateProject(descriptor.groupingID)
-        } catch {
-            presentProjectError(error)
-            return
         }
         if let metadataError {
             presentProjectMetadataWarning(metadataError)

@@ -16,12 +16,17 @@ extension PTYDaemonSurface {
         rows: UInt16,
         columns: UInt16,
         shell: String,
-        workingDirectory: String
+        workingDirectory: String,
+        workingDirectoryDescriptor: Int32? = nil
     ) -> OpaquePointer? {
         spawnEnvironmentLock.lock()
         defer { spawnEnvironmentLock.unlock() }
 
-        let previousCwd = FileManager.default.currentDirectoryPath
+        let previousCwdDescriptor = Darwin.open(
+            ".",
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC
+        )
+        guard previousCwdDescriptor >= 0 else { return nil }
         let previousTERM = getenvString("TERM")
         let previousCOLORTERM = getenvString("COLORTERM")
         let previousTermProgram = getenvString("TERM_PROGRAM")
@@ -35,7 +40,16 @@ extension PTYDaemonSurface {
                 result[key] = getenvString(key)
             }
 
-        _ = FileManager.default.changeCurrentDirectoryPath(workingDirectory)
+        let directoryChangeResult: Int32
+        if let workingDirectoryDescriptor {
+            directoryChangeResult = Darwin.fchdir(workingDirectoryDescriptor)
+        } else {
+            directoryChangeResult = workingDirectory.withCString { Darwin.chdir($0) }
+        }
+        guard directoryChangeResult == 0 else {
+            Darwin.close(previousCwdDescriptor)
+            return nil
+        }
         setenv("TERM", "xterm-256color", 1)
         setenv("COLORTERM", "truecolor", 1)
         setenv("TERM_PROGRAM", "CocxyTerminal", 1)
@@ -52,7 +66,8 @@ extension PTYDaemonSurface {
             for (key, value) in previousUnsetKeys {
                 restoreEnv(key, value)
             }
-            _ = FileManager.default.changeCurrentDirectoryPath(previousCwd)
+            _ = Darwin.fchdir(previousCwdDescriptor)
+            Darwin.close(previousCwdDescriptor)
         }
 
         guard let pty = shell.withCString({ cocxycore_pty_spawn(rows, columns, $0) }) else {

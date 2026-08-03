@@ -98,6 +98,23 @@ struct TerminalEngineRoutingSwiftTestingTests {
         #expect(controller.remoteDaemonTerminalViewModels[expectedSurfaceID] == nil)
     }
 
+    @Test("verified project tab preserves descriptor authority through engine routing")
+    func verifiedProjectTabUsesDescriptorBoundEngine() throws {
+        let directoryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-verified-tab-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: directoryURL) }
+        let directory = try ProjectDirectoryRoot.open(directoryURL)
+        let engine = MockTerminalEngine()
+        let controller = MainWindowController(bridge: engine)
+
+        let tabID = try controller.createTab(verifiedWorkingDirectory: directory)
+
+        #expect(controller.tabSurfaceMap[tabID] != nil)
+        #expect(engine.descriptorBoundCreateRequests == [directory.identity])
+        #expect(engine.createSurfaceRequests.last?.workingDirectory == directoryURL)
+    }
+
     @Test("tab font updates route through the selected terminal engine")
     func tabFontUpdatesUseSelectedEngine() {
         let defaultEngine = MockTerminalEngine()

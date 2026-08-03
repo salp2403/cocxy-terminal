@@ -413,7 +413,7 @@ final class PTYDaemonProcessConnection: PTYDaemonClientConnection {
 }
 
 @MainActor
-final class PTYDaemonClient: TerminalEngine {
+final class PTYDaemonClient: DescriptorBoundTerminalEngine {
     private let connection: PTYDaemonClientConnection
     private var initialized = false
     private var liveSurfaces = Set<SurfaceID>()
@@ -459,24 +459,58 @@ final class PTYDaemonClient: TerminalEngine {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: workingDirectory,
+            verifiedWorkingDirectory: nil,
+            command: command
+        )
+    }
+
+    func createSurface(
+        in view: NativeTerminalView,
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        command: String?
+    ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: nil,
+            verifiedWorkingDirectory: verifiedWorkingDirectory,
+            command: command
+        )
+    }
+
+    private func createSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        verifiedWorkingDirectory: ProjectDirectoryRoot?,
+        command: String?
+    ) throws -> SurfaceID {
         guard initialized, let engineConfig else {
             throw TerminalEngineError.surfaceCreationFailed(reason: "PTY daemon client is not initialized")
         }
 
         let backingScale = Self.backingScale(for: view)
+        let verifiedURL = try verifiedWorkingDirectory?.descriptorBoundURL()
+        var payload = [
+            "workingDirectory": verifiedURL?.path ?? workingDirectory?.path ?? "",
+            "command": command ?? "",
+            "fontFamily": engineConfig.fontFamily,
+            "fontSize": "\(engineConfig.fontSize)",
+            "dpiScale": "\(backingScale)",
+            "ligaturesEnabled": "\(engineConfig.ligaturesEnabled)",
+        ]
+        if let verifiedWorkingDirectory {
+            payload["workingDirectoryDevice"] = "\(verifiedWorkingDirectory.identity.device)"
+            payload["workingDirectoryInode"] = "\(verifiedWorkingDirectory.identity.inode)"
+            payload["workingDirectoryFileType"] = "\(verifiedWorkingDirectory.identity.fileType)"
+        }
 
         let response = try connection.send(
             PTYDaemonRequest(
                 id: UUID().uuidString,
                 command: .surfaceCreate,
-                payload: [
-                    "workingDirectory": workingDirectory?.path ?? "",
-                    "command": command ?? "",
-                    "fontFamily": engineConfig.fontFamily,
-                    "fontSize": "\(engineConfig.fontSize)",
-                    "dpiScale": "\(backingScale)",
-                    "ligaturesEnabled": "\(engineConfig.ligaturesEnabled)",
-                ]
+                payload: payload
             )
         )
         guard response.ok,

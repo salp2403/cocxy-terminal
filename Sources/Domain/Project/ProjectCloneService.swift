@@ -64,6 +64,14 @@ struct ProjectCloneResult: Equatable, Sendable {
         try publication.verifiedURL()
     }
 
+    func openVerifiedRoot() throws -> ProjectDirectoryRoot {
+        try publication.openVerifiedDirectory()
+    }
+
+    func verifiedRootURL(for directory: ProjectDirectoryRoot) throws -> URL {
+        try publication.verifiedURL(for: directory)
+    }
+
     static func == (lhs: ProjectCloneResult, rhs: ProjectCloneResult) -> Bool {
         lhs.rootURL == rhs.rootURL && lhs.remoteOrigin == rhs.remoteOrigin
     }

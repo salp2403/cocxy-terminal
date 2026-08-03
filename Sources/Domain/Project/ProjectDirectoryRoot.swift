@@ -153,6 +153,10 @@ final class ProjectDirectoryRoot: @unchecked Sendable {
            reopened.identity == identity {
             return displayURL
         }
+        return try descriptorBoundURL()
+    }
+
+    func descriptorBoundURL() throws -> URL {
         var information = vnode_fdinfowithpath()
         let expectedBytes = Int32(MemoryLayout<vnode_fdinfowithpath>.size)
         let result = withUnsafeMutablePointer(to: &information) { pointer in
@@ -188,6 +192,13 @@ final class ProjectDirectoryRoot: @unchecked Sendable {
         named name: String,
         identity expectedIdentity: ProjectDirectoryFileIdentity
     ) throws -> URL {
+        try openVerifiedChild(named: name, identity: expectedIdentity).currentURL()
+    }
+
+    func openVerifiedChild(
+        named name: String,
+        identity expectedIdentity: ProjectDirectoryFileIdentity
+    ) throws -> ProjectDirectoryRoot {
         let childDescriptor = name.withCString {
             Darwin.openat(descriptor, $0, Self.directoryOpenFlags)
         }
@@ -196,7 +207,12 @@ final class ProjectDirectoryRoot: @unchecked Sendable {
                 try displayPath(for: name)
             )
         }
-        defer { Darwin.close(childDescriptor) }
+        var transfersDescriptorOwnership = false
+        defer {
+            if !transfersDescriptorOwnership {
+                Darwin.close(childDescriptor)
+            }
+        }
         var metadata = stat()
         guard Darwin.fstat(childDescriptor, &metadata) == 0,
               ProjectDirectoryFileIdentity(metadata) == expectedIdentity else {
@@ -210,7 +226,13 @@ final class ProjectDirectoryRoot: @unchecked Sendable {
                 rootURL.appendingPathComponent(name, isDirectory: true).path
             )
         }
-        return rootURL.appendingPathComponent(name, isDirectory: true)
+        let child = ProjectDirectoryRoot(
+            displayURL: rootURL.appendingPathComponent(name, isDirectory: true),
+            identity: expectedIdentity,
+            descriptor: childDescriptor
+        )
+        transfersDescriptorOwnership = true
+        return child
     }
 
     func childIdentity(named name: String) throws -> ProjectDirectoryFileIdentity? {

@@ -16,6 +16,10 @@ struct ProjectID: RawRepresentable, Codable, Hashable, Sendable {
         self.init(rawValue: rootURL.path)
     }
 
+    init(verifiedRootURL: URL) {
+        rawValue = verifiedRootURL.standardizedFileURL.path
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         self.init(rawValue: try container.decode(String.self))
@@ -66,6 +70,21 @@ struct ProjectDescriptor: Equatable, Sendable {
         if !name.isEmpty { return name }
         if standardizedRoot.path == "/" { return "root" }
         return standardizedRoot.path
+    }
+
+    static func verifiedStandalone(
+        _ directory: ProjectDirectoryRoot
+    ) throws -> ProjectDescriptor {
+        let rootURL = try directory.descriptorBoundURL()
+        let id = ProjectID(verifiedRootURL: rootURL)
+        let name = automaticName(for: rootURL)
+        return ProjectDescriptor(
+            id: id,
+            rootURL: rootURL,
+            automaticName: name,
+            displayName: name,
+            parent: nil
+        )
     }
 }
 

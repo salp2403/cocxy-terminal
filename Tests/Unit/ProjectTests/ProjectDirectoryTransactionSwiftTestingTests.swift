@@ -244,6 +244,36 @@ struct ProjectDirectoryTransactionSwiftTestingTests {
         ))
     }
 
+    @Test("opened publication remains bound when its pathname is replaced")
+    func openedPublicationRetainsExactDirectory() throws {
+        let rootURL = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: rootURL) }
+        let transaction = try ProjectDirectoryTransaction.begin(
+            in: ProjectDirectoryRoot.open(rootURL),
+            destinationName: "Demo"
+        )
+        try createGitDirectory(in: transaction)
+        let publication = try transaction.publish()
+        let openedDirectory = try publication.openVerifiedDirectory()
+        let originalIdentity = openedDirectory.identity
+        let moved = rootURL.appendingPathComponent("moved", isDirectory: true)
+
+        try FileManager.default.moveItem(
+            at: rootURL.appendingPathComponent("Demo", isDirectory: true),
+            to: moved
+        )
+        try FileManager.default.createDirectory(
+            at: rootURL.appendingPathComponent("Demo", isDirectory: true),
+            withIntermediateDirectories: false
+        )
+
+        #expect(openedDirectory.identity == originalIdentity)
+        #expect(try openedDirectory.currentURL() == moved)
+        #expect(throws: ProjectDirectoryError.self) {
+            try publication.verifiedURL(for: openedDirectory)
+        }
+    }
+
     @Test("ancestor symbolic links are rejected")
     func ancestorSymlinkIsRejected() throws {
         let container = try temporaryDirectory()

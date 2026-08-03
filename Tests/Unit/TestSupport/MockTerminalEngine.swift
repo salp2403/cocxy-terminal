@@ -5,7 +5,7 @@ import CocxyShared
 @testable import CocxyTerminal
 
 @MainActor
-final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
+final class MockTerminalEngine: DescriptorBoundTerminalEngine, SessionReplayTerminalBridging {
     struct SessionReplayStartRequest: Equatable {
         let surface: SurfaceID
         let outputURL: URL
@@ -22,6 +22,7 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
     private(set) var initializeCalls: [TerminalEngineConfig] = []
     private(set) var createdSurfaces: [SurfaceID: NativeTerminalView] = [:]
     private(set) var createSurfaceRequests: [(surface: SurfaceID, workingDirectory: URL?, command: String?)] = []
+    private(set) var descriptorBoundCreateRequests: [ProjectDirectoryFileIdentity] = []
     private(set) var destroyedSurfaces: [SurfaceID] = []
     private(set) var keyEvents: [(surface: SurfaceID, event: KeyEvent)] = []
     private(set) var sentTexts: [(surface: SurfaceID, text: String)] = []
@@ -79,6 +80,19 @@ final class MockTerminalEngine: TerminalEngine, SessionReplayTerminalBridging {
         createdSurfaces[surfaceID] = view
         createSurfaceRequests.append((surface: surfaceID, workingDirectory: workingDirectory, command: command))
         return surfaceID
+    }
+
+    func createSurface(
+        in view: NativeTerminalView,
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        command: String?
+    ) throws -> SurfaceID {
+        descriptorBoundCreateRequests.append(verifiedWorkingDirectory.identity)
+        return try createSurface(
+            in: view,
+            workingDirectory: try verifiedWorkingDirectory.descriptorBoundURL(),
+            command: command
+        )
     }
 
     func destroySurface(_ id: SurfaceID) {

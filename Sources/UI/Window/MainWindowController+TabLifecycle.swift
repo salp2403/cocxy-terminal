@@ -105,6 +105,39 @@ extension MainWindowController {
         return newTab.id
     }
 
+    @discardableResult
+    func createTab(
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        terminalEnginePreference: TerminalEnginePreference? = nil
+    ) throws -> TabID {
+        let directory = try verifiedWorkingDirectory.descriptorBoundURL()
+        var creationError: Error?
+        let tabID = createTab(
+            workingDirectory: directory,
+            terminalEnginePreference: terminalEnginePreference,
+            surfaceCreator: { engine, surfaceView, _ in
+                do {
+                    guard let descriptorBoundEngine = engine as? any DescriptorBoundTerminalEngine else {
+                        throw ProjectActivationError.verifiedSurfaceUnavailable
+                    }
+                    return try descriptorBoundEngine.createSurface(
+                        in: surfaceView,
+                        verifiedWorkingDirectory: verifiedWorkingDirectory,
+                        command: nil
+                    )
+                } catch {
+                    creationError = error
+                    throw error
+                }
+            }
+        )
+        guard tabSurfaceMap[tabID] != nil else {
+            performCloseTab(tabID)
+            throw creationError ?? ProjectActivationError.verifiedSurfaceUnavailable
+        }
+        return tabID
+    }
+
     /// Attaches worktree metadata to a tab and points tab-level consumers
     /// at the worktree root. When `sendShellDirectoryChange` is true the
     /// primary PTY also receives a `cd` command so the live shell follows

@@ -433,7 +433,7 @@ struct TerminalStreamSnapshot: Equatable, Sendable {
 /// happens on the source's queue; callbacks are dispatched to main before
 /// touching Swift-owned state.
 @MainActor
-final class CocxyCoreBridge: TerminalEngine {
+final class CocxyCoreBridge: DescriptorBoundTerminalEngine {
 
     // MARK: - Per-Surface State
 
@@ -652,9 +652,39 @@ final class CocxyCoreBridge: TerminalEngine {
         workingDirectory: URL?,
         command: String?
     ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: workingDirectory,
+            verifiedWorkingDirectory: nil,
+            command: command
+        )
+    }
+
+    func createSurface(
+        in view: NativeTerminalView,
+        verifiedWorkingDirectory: ProjectDirectoryRoot,
+        command: String?
+    ) throws -> SurfaceID {
+        try createSurface(
+            in: view,
+            workingDirectory: nil,
+            verifiedWorkingDirectory: verifiedWorkingDirectory,
+            command: command
+        )
+    }
+
+    private func createSurface(
+        in view: NativeTerminalView,
+        workingDirectory: URL?,
+        verifiedWorkingDirectory: ProjectDirectoryRoot?,
+        command: String?
+    ) throws -> SurfaceID {
         guard let config = self.config else {
             throw TerminalEngineError.initializationFailed(reason: "Bridge not initialized")
         }
+        let resolvedWorkingDirectory = try verifiedWorkingDirectory?.descriptorBoundURL()
+            ?? workingDirectory
+            ?? config.workingDirectory
 
         let surfaceID = SurfaceID()
 
@@ -677,7 +707,8 @@ final class CocxyCoreBridge: TerminalEngine {
             rows: initialRows,
             cols: initialCols,
             shell: shellPath,
-            workingDirectory: workingDirectory ?? config.workingDirectory
+            workingDirectory: resolvedWorkingDirectory,
+            workingDirectoryDescriptor: verifiedWorkingDirectory?.descriptor
         ) else {
             cocxycore_terminal_destroy(terminal)
             throw TerminalEngineError.surfaceCreationFailed(reason: "PTY spawn failed")
@@ -3913,7 +3944,8 @@ final class CocxyCoreBridge: TerminalEngine {
         rows: UInt16,
         cols: UInt16,
         shell: String,
-        workingDirectory: URL
+        workingDirectory: URL,
+        workingDirectoryDescriptor: Int32? = nil
     ) -> OpaquePointer? {
         // INVARIANT: This method mutates global process state (cwd, env vars)
         // and MUST run on the main actor to prevent concurrent access.
@@ -3923,7 +3955,11 @@ final class CocxyCoreBridge: TerminalEngine {
         // CocxyCore's current C API inherits cwd/env from the host process at
         // fork time. Scope those mutations carefully and restore them
         // immediately after spawn so other modules/windows do not observe them.
-        let previousCwd = FileManager.default.currentDirectoryPath
+        let previousCwdDescriptor = Darwin.open(
+            ".",
+            O_RDONLY | O_DIRECTORY | O_CLOEXEC
+        )
+        guard previousCwdDescriptor >= 0 else { return nil }
         let envVars = buildShellIntegrationEnvVars(
             forShell: shell,
             hookIntegration: config?.hookIntegration ?? .defaults
@@ -3936,8 +3972,16 @@ final class CocxyCoreBridge: TerminalEngine {
             previousEnv[key] = Self.environmentValue(for: key)
         }
 
-        let cwd = workingDirectory.path
-        _ = FileManager.default.changeCurrentDirectoryPath(cwd)
+        let directoryChangeResult: Int32
+        if let workingDirectoryDescriptor {
+            directoryChangeResult = Darwin.fchdir(workingDirectoryDescriptor)
+        } else {
+            directoryChangeResult = workingDirectory.path.withCString(Darwin.chdir)
+        }
+        guard directoryChangeResult == 0 else {
+            Darwin.close(previousCwdDescriptor)
+            return nil
+        }
         for key in envKeysToUnset { unsetenv(key) }
         for (key, value) in envVars { setenv(key, value, 1) }
 
@@ -3949,7 +3993,8 @@ final class CocxyCoreBridge: TerminalEngine {
                     unsetenv(key)
                 }
             }
-            _ = FileManager.default.changeCurrentDirectoryPath(previousCwd)
+            _ = Darwin.fchdir(previousCwdDescriptor)
+            Darwin.close(previousCwdDescriptor)
         }
 
         let pty = shell.withCString { shellPtr in
