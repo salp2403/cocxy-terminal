@@ -83,7 +83,7 @@ struct UnifiedQuickSwitchWiringSwiftTestingTests {
 
         #expect(MainWindowController.localizedUnifiedQuickSwitchTabTitle("main", using: spanish) == "Pestaña: main")
         #expect(MainWindowController.localizedUnifiedQuickSwitchBrowserTitle("Docs", using: spanish) == "Navegador: Docs")
-        #expect(MainWindowController.localizedUnifiedQuickSwitchWorktreeTitle("feat/a", using: spanish) == "Worktree: feat/a")
+        #expect(MainWindowController.localizedUnifiedQuickSwitchWorktreeTitle("feat/a", using: spanish) == "Árbol de trabajo: feat/a")
         #expect(MainWindowController.localizedUnifiedQuickSwitchNoteTitle("Ideas", using: spanish) == "Nota: Ideas")
         #expect(MainWindowController.localizedUnifiedQuickSwitchNotesSubtitle(using: spanish) == "Notas del espacio")
     }
