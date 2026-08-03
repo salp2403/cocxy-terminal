@@ -270,6 +270,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
             let result = await handler(request, identity)
             completion?.resolve(.result(result))
         }
+        completion.install(routeTask: routeTask)
         let timeoutNanoseconds = UInt64(requestTimeout * 1_000_000_000)
         let timeoutTask = Task { [completion] in
             do {
@@ -277,9 +278,9 @@ final class MobileMirrorGateway: @unchecked Sendable {
             } catch {
                 return
             }
-            completion.resolve(.timedOut)
+            await completion.cancelRouteAndWait()
         }
-        completion.install(routeTask: routeTask, timeoutTask: timeoutTask)
+        completion.install(timeoutTask: timeoutTask)
     }
 
     private func complete(
@@ -471,20 +472,37 @@ private final class MobileMirrorRouteCompletion: @unchecked Sendable {
         self.completion = completion
     }
 
-    func install(
-        routeTask: Task<Void, Never>,
-        timeoutTask: Task<Void, Never>
-    ) {
+    func install(routeTask: Task<Void, Never>) {
         lock.lock()
         if isResolved {
             lock.unlock()
             routeTask.cancel()
-            timeoutTask.cancel()
             return
         }
         self.routeTask = routeTask
+        lock.unlock()
+    }
+
+    func install(timeoutTask: Task<Void, Never>) {
+        lock.lock()
+        if isResolved {
+            lock.unlock()
+            timeoutTask.cancel()
+            return
+        }
         self.timeoutTask = timeoutTask
         lock.unlock()
+    }
+
+    func cancelRouteAndWait() async {
+        let state = lock.withLock {
+            (isResolved: isResolved, task: routeTask)
+        }
+        guard !state.isResolved else { return }
+
+        state.task?.cancel()
+        await state.task?.value
+        resolve(.timedOut)
     }
 
     func resolve(_ outcome: MobileMirrorRouteOutcome) {

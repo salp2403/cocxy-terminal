@@ -62,6 +62,49 @@ struct MobileMirrorProjectServiceSwiftTestingTests {
         }
     }
 
+    @Test("cancellation before publication removes staging and leaves no project")
+    func cancellationBeforePublicationIsReversible() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let started = DispatchSemaphore(value: 0)
+        let release = DispatchSemaphore(value: 0)
+        let service = MobileMirrorProjectService(runGit: { workingDirectory, _ in
+            try FileManager.default.createDirectory(
+                at: workingDirectory.displayURL.appendingPathComponent(".git", isDirectory: true),
+                withIntermediateDirectories: false
+            )
+            started.signal()
+            release.wait()
+            return BoundedProcessResult(
+                exitCode: 0,
+                stdout: "",
+                stderr: "",
+                stdoutWasTruncated: false,
+                stderrWasTruncated: false,
+                timedOut: false
+            )
+        })
+        let operation = Task {
+            try await service.createProject(named: "Cancelled", in: root)
+        }
+        #expect(started.wait(timeout: .now() + 2) == .success)
+
+        operation.cancel()
+        release.signal()
+        await #expect(throws: CancellationError.self) {
+            try await operation.value
+        }
+
+        #expect(FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("Cancelled", isDirectory: true).path
+        ) == false)
+        let stagedDirectories = try FileManager.default.contentsOfDirectory(
+            at: root,
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasPrefix(".cocxy-project-") }
+        #expect(stagedDirectories.isEmpty)
+    }
+
     private func temporaryDirectory() throws -> URL {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-mobile-project-\(UUID().uuidString)", isDirectory: true)

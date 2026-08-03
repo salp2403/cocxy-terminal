@@ -41,12 +41,15 @@ extension MobileMirrorCoordinator {
         named name: String,
         identity: MobileMirrorClientIdentity
     ) async throws {
+        try Task.checkCancellation()
         guard let root = projectCreationRootHandle else {
             throw MobileMirrorError.projectCreationUnavailable
         }
         guard await confirmProjectCreation(named: name, identity: identity) else {
+            try Task.checkCancellation()
             throw MobileMirrorError.authorizationDenied
         }
+        try Task.checkCancellation()
         let publication = try await projectService.createProject(named: name, in: root)
         let destination = try publication.verifiedURL()
         projectResolver.invalidate(directory: destination)
@@ -88,10 +91,53 @@ extension MobileMirrorCoordinator {
         alert.alertStyle = .warning
         alert.addButton(withTitle: localizer.string("common.create", fallback: "Create"))
         alert.addButton(withTitle: localizer.string("common.cancel", fallback: "Cancel"))
-        return await withCheckedContinuation { continuation in
-            alert.beginSheetModal(for: window) { response in
-                continuation.resume(returning: response == .alertFirstButtonReturn)
+        let resolution = MobileMirrorProjectConfirmationResolution()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                guard resolution.install(continuation) else { return }
+                alert.beginSheetModal(for: window) { response in
+                    resolution.resolve(response == .alertFirstButtonReturn)
+                }
+            }
+        } onCancel: {
+            resolution.resolve(false)
+            Task { @MainActor in
+                if window.attachedSheet === alert.window {
+                    window.endSheet(alert.window, returnCode: .cancel)
+                }
             }
         }
+    }
+}
+
+private final class MobileMirrorProjectConfirmationResolution: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Bool, Never>?
+    private var result: Bool?
+
+    func install(_ continuation: CheckedContinuation<Bool, Never>) -> Bool {
+        lock.lock()
+        if let result {
+            lock.unlock()
+            continuation.resume(returning: result)
+            return false
+        }
+        self.continuation = continuation
+        lock.unlock()
+        return true
+    }
+
+    func resolve(_ result: Bool) {
+        let continuation: CheckedContinuation<Bool, Never>?
+        lock.lock()
+        guard self.result == nil else {
+            lock.unlock()
+            return
+        }
+        self.result = result
+        continuation = self.continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: result)
     }
 }

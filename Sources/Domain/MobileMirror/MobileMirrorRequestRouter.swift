@@ -208,6 +208,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             return .response(.json(MobileMirrorActionResponse.success(
                 snapshot: responseSnapshot
             )))
+        } catch is CancellationError {
+            return .response(.error("Local request timed out.", status: 504))
         } catch {
             return errorResponse(error, identity: identity, authenticationFailure: true)
         }

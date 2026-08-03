@@ -41,10 +41,16 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
         named rawName: String,
         in authorizedRoot: ProjectDirectoryRoot
     ) async throws -> ProjectDirectoryPublication {
+        try Task.checkCancellation()
         let name = try normalizedProjectName(rawName)
-        return try await Task.detached(priority: .userInitiated) {
+        let operation = Task.detached(priority: .userInitiated) {
             try createProjectSynchronously(named: name, in: authorizedRoot)
-        }.value
+        }
+        return try await withTaskCancellationHandler {
+            try await operation.value
+        } onCancel: {
+            operation.cancel()
+        }
     }
 
     func createProject(
@@ -93,6 +99,7 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
         named name: String,
         in root: ProjectDirectoryRoot
     ) throws -> ProjectDirectoryPublication {
+        try Task.checkCancellation()
         let transaction: ProjectDirectoryTransaction
         do {
             transaction = try ProjectDirectoryTransaction.begin(
@@ -105,6 +112,7 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
         }
 
         do {
+            try Task.checkCancellation()
             let result = try runGit(try transaction.workingDirectory, [
                 "init", "--quiet", "--initial-branch=main", "--", ".",
             ])
@@ -118,6 +126,7 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
                 )
             }
             try transaction.verifyRepositoryMetadata()
+            try Task.checkCancellation()
             let publication = try transaction.publish()
             _ = try publication.verifiedURL()
             return publication

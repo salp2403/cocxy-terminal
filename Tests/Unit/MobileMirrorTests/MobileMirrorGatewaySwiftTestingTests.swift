@@ -97,8 +97,6 @@ struct MobileMirrorGatewaySwiftTestingTests {
 
     @Test("route timeout closes the request and releases its connection slot")
     func routeTimeoutReleasesConnection() async throws {
-        let stalled = MobileMirrorStalledRoute()
-        defer { stalled.release() }
         let gateway = MobileMirrorGateway(
             requestTimeout: 0.1,
             connectionLimits: MobileMirrorConnectionLimits(
@@ -110,7 +108,11 @@ struct MobileMirrorGatewaySwiftTestingTests {
             )
         ) { request, _ in
             if request.path == "/stalled" {
-                await stalled.wait()
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                } catch {
+                    return .response(.error("Local request timed out.", status: 504))
+                }
             }
             return .response(.json(["status": "ok"]))
         }
@@ -130,7 +132,37 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(String(decoding: healthData, as: UTF8.self).contains("\"status\":\"ok\""))
     }
 
-    @Test("stop retains an admitted request until its descriptor is closed")
+    @Test("timeout never responds before a non-cooperative mutation finishes")
+    func timeoutWaitsForNonCooperativeMutation() async throws {
+        let stalled = MobileMirrorStalledRoute()
+        let mutations = MobileMirrorMutationRecorder()
+        let gateway = MobileMirrorGateway(requestTimeout: 0.05) { request, _ in
+            if request.path == "/commit" {
+                await stalled.wait()
+                mutations.record()
+            }
+            return .response(.json(["status": "ok"]))
+        }
+        let port = try gateway.start()
+        defer {
+            stalled.release()
+            gateway.stop()
+        }
+        let url = try #require(URL(string: "http://127.0.0.1:\(port)/commit"))
+        let request = Task { try await URLSession.shared.data(from: url) }
+        #expect(stalled.waitUntilEntered())
+
+        try await Task.sleep(for: .milliseconds(120))
+        #expect(mutations.count == 0)
+        stalled.release()
+
+        let (data, response) = try await request.value
+        #expect((response as? HTTPURLResponse)?.statusCode == 200)
+        #expect(String(decoding: data, as: UTF8.self).contains("\"status\":\"ok\""))
+        #expect(mutations.count == 1)
+    }
+
+    @Test("stop retains an admitted request until its route acknowledges cancellation")
     func stopRetainsGatewayUntilRequestClosure() async throws {
         let stalled = MobileMirrorStalledRoute()
         defer { stalled.release() }
@@ -154,6 +186,7 @@ struct MobileMirrorGatewaySwiftTestingTests {
         gateway = nil
         try await Task.sleep(for: .milliseconds(20))
         #expect(retainedGateway != nil)
+        stalled.release()
 
         let deadline = ContinuousClock.now.advanced(by: .seconds(2))
         while retainedGateway != nil, ContinuousClock.now < deadline {
@@ -228,6 +261,23 @@ private final class MobileMirrorStalledRoute: @unchecked Sendable {
         continuations.removeAll()
         lock.unlock()
         pending.forEach { $0.resume() }
+    }
+}
+
+private final class MobileMirrorMutationRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+
+    func record() {
+        lock.lock()
+        value += 1
+        lock.unlock()
     }
 }
 
