@@ -184,9 +184,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var agentTimelineStore: AgentTimelineStoreImpl?
     /// App-wide owner for the local activity database used by every window.
     let activityStoreCoordinator = ActivityStoreCoordinator()
+    lazy var activityWorkingDirectoryProvider = ActivityWorkingDirectoryProvider { [weak self] in
+        self?.activityWorkingDirectoriesSnapshot() ?? []
+    }
     /// App-wide dashboard model, assigned during agent engine initialization.
     var agentDashboardViewModel: AgentDashboardViewModel?
-
     /// Active local agent-team coordinators keyed by team ID.
     var activeAgentTeamCoordinators: [String: AgentTeamCoordinator] = [:]
 
@@ -1528,6 +1530,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedProjectFanOutCoordinator = projectFanOutCoordinator
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedActivityStore = configuredActivityStore()
+        controller.activityWorkingDirectoryProvider = activityWorkingDirectoryProvider
         controller.injectedNotificationManager = notificationManager
         controller.onAgentTabClosed = { [weak self] tabID in
             self?.unbindHookSessions(for: tabID)

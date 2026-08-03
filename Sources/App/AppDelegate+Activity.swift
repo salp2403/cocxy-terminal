@@ -9,4 +9,13 @@ extension AppDelegate {
         activityStoreCoordinator.configure(for: configService?.current.activity ?? .defaults)
         return activityStoreCoordinator
     }
+
+    func activityWorkingDirectoriesSnapshot() -> [URL] {
+        let windowDirectories = allWindowControllers.flatMap { controller in
+            controller.tabManager.tabs.map(\.workingDirectory)
+                + Array(controller.surfaceWorkingDirectories.values)
+        }
+        let sessionDirectories = sessionRegistry?.allSessions.map(\.workingDirectory) ?? []
+        return windowDirectories + sessionDirectories
+    }
 }

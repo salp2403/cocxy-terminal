@@ -239,6 +239,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var activityStorePath: String?
     var activityDashboardStorePath: String?
     var injectedActivityStore: ActivityStoring?
+    var activityWorkingDirectoryProvider: ActivityWorkingDirectoryProvider?
 
     var agentPanelViewModel: AgentPanelViewModel?
     var agentModeHostingView: NSHostingView<AgentPanelView>?

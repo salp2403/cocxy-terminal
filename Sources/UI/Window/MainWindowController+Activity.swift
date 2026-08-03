@@ -375,8 +375,10 @@ extension MainWindowController {
 
     private func activityProjectRef(for workingDirectory: URL) -> ActivityProjectRef {
         let descriptor = projectResolver.resolveProject(for: workingDirectory)
-        let knownDirectories = (tabManager.tabs.map(\.workingDirectory)
-            + Array(surfaceWorkingDirectories.values)).filter {
+        let localDirectories = tabManager.tabs.map(\.workingDirectory)
+            + Array(surfaceWorkingDirectories.values)
+        let knownDirectories = ((activityWorkingDirectoryProvider?.directories() ?? [])
+            + localDirectories).filter {
                 projectResolver.resolveProject(for: $0).groupingID == descriptor.groupingID
             }
         return ActivityProjectRef.resolvedProject(

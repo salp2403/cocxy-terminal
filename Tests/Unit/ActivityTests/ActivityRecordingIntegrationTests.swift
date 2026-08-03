@@ -222,6 +222,38 @@ final class ActivityRecordingIntegrationTests: XCTestCase {
         )
     }
 
+    func testProjectAliasesIncludeDirectoriesFromOtherWindows() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-activity-cross-window-\(UUID().uuidString)", isDirectory: true)
+        let sources = root.appendingPathComponent("Sources", isDirectory: true)
+        let tests = root.appendingPathComponent("Tests", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(".git", isDirectory: true),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: tests, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let store = try SQLiteActivityStore(databasePath: ":memory:")
+        let controller = try makeActivityEnabledController(store: store, costTracking: true)
+        controller.activityWorkingDirectoryProvider = ActivityWorkingDirectoryProvider {
+            [sources, tests]
+        }
+        controller.showWindow(nil)
+        let tabID = try XCTUnwrap(controller.tabManager.activeTabID)
+        controller.handleOSCNotification(.currentDirectory(root), fromTabID: tabID)
+
+        let context = try XCTUnwrap(
+            controller.agentUsageAttributionContext(tabID: tabID, surfaceID: nil)
+        )
+        let aliases = Set(context.project?.legacyIDs ?? [])
+
+        XCTAssertEqual(context.project?.projectIdentity, ProjectID(rootURL: root))
+        XCTAssertTrue(aliases.contains(ActivityProjectRef.workingDirectory(sources).id))
+        XCTAssertTrue(aliases.contains(ActivityProjectRef.workingDirectory(tests).id))
+    }
+
     func testEnabledConfigRecordsProjectSwitchesOnlyWhenDirectoryChanges() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-project-switch-\(UUID().uuidString)", isDirectory: true)
