@@ -216,17 +216,6 @@ protocol TerminalEngine: AnyObject {
     func processMonitorRegistration(for surface: SurfaceID) -> TerminalProcessMonitorRegistration?
 }
 
-/// Terminal engines that can bind the initial shell directory to an already
-/// verified directory descriptor instead of reopening an untrusted pathname.
-@MainActor
-protocol DescriptorBoundTerminalEngine: TerminalEngine {
-    func createSurface(
-        in view: NativeTerminalView,
-        verifiedWorkingDirectory: ProjectDirectoryRoot,
-        command: String?
-    ) throws -> SurfaceID
-}
-
 // MARK: - Supporting Types
 
 /// Unique identifier for a terminal surface.

@@ -136,34 +136,6 @@ struct PTYDaemonClientSwiftTestingTests {
         #expect((dpiScale ?? 0) > 0)
     }
 
-    @Test("descriptor-bound creation transmits the exact directory identity")
-    func descriptorBoundCreationTransmitsIdentity() throws {
-        let directoryURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("cocxy-daemon-cwd-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: false)
-        defer { try? FileManager.default.removeItem(at: directoryURL) }
-        let directory = try ProjectDirectoryRoot.open(directoryURL)
-        let surfaceID = UUID()
-        let connection = MockPTYDaemonClientConnection(responses: [
-            PTYDaemonResponse(id: "hello", ok: true, hello: terminalSurfaceHello()),
-            PTYDaemonResponse(id: "create", ok: true, surfaceID: surfaceID.uuidString),
-        ])
-        let client = PTYDaemonClient(connection: connection)
-        try client.initialize(config: testConfig())
-
-        _ = try client.createSurface(
-            in: NSView(),
-            verifiedWorkingDirectory: directory,
-            command: "/bin/zsh"
-        )
-
-        let payload = try #require(connection.requests.last?.payload)
-        #expect(payload["workingDirectory"] == directoryURL.path)
-        #expect(payload["workingDirectoryDevice"] == "\(directory.identity.device)")
-        #expect(payload["workingDirectoryInode"] == "\(directory.identity.inode)")
-        #expect(payload["workingDirectoryFileType"] == "\(directory.identity.fileType)")
-    }
-
     @Test("font updates preserve surface scale and focus requests are deduplicated")
     func fontAndFocusRequestsPreserveSurfaceState() throws {
         let rawSurfaceID = UUID()
@@ -1085,7 +1057,7 @@ struct PTYDaemonClientSwiftTestingTests {
         client2.destroySurface(secondSurface)
     }
 
-    private func terminalSurfaceHello() -> PTYDaemonHello {
+    func terminalSurfaceHello() -> PTYDaemonHello {
         PTYDaemonHello(
             version: "dev",
             capabilities: [
@@ -1098,7 +1070,7 @@ struct PTYDaemonClientSwiftTestingTests {
         )
     }
 
-    private func testConfig() -> TerminalEngineConfig {
+    func testConfig() -> TerminalEngineConfig {
         TerminalEngineConfig(
             fontFamily: "Menlo",
             fontSize: 13,
@@ -1124,7 +1096,7 @@ struct PTYDaemonClientSwiftTestingTests {
 }
 
 @MainActor
-private final class MockPTYDaemonClientConnection: PTYDaemonClientConnection {
+final class MockPTYDaemonClientConnection: PTYDaemonClientConnection {
     private var responses: [PTYDaemonResponse]
     private var events: [PTYDaemonEvent]
     private var throwOnCommands: [PTYDaemonRequest.Command]
