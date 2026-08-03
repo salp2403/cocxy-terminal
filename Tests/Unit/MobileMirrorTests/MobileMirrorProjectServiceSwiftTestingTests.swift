@@ -12,7 +12,8 @@ struct MobileMirrorProjectServiceSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let service = MobileMirrorProjectService()
 
-        let project = try await service.createProject(named: "Mobile Demo", in: root)
+        let publication = try await service.createProject(named: "Mobile Demo", in: root)
+        let project = try publication.verifiedURL()
         #expect(project == root.appendingPathComponent("Mobile Demo", isDirectory: true))
         var isDirectory: ObjCBool = false
         #expect(FileManager.default.fileExists(

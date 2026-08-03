@@ -92,9 +92,12 @@ extension AppDelegate {
                     try mutateProjectForCLI(kind: kind, params: params)
                 }
             case "clone":
+                let parent = try ProjectDirectoryRoot.open(
+                    URL(fileURLWithPath: params["parent"] ?? "", isDirectory: true)
+                )
                 let clone = try ProjectCloneService().clone(
                     remote: params["remote"] ?? "",
-                    into: URL(fileURLWithPath: params["parent"] ?? "", isDirectory: true)
+                    in: parent
                 )
                 return try await MainActor.run { try finishProjectCloneForCLI(clone) }
             case "tasks":
@@ -175,9 +178,13 @@ extension AppDelegate {
     private func finishProjectCloneForCLI(
         _ clone: ProjectCloneResult
     ) throws -> (Bool, [String: String]) {
-        projectResolver.invalidate(directory: clone.rootURL)
-        gitInfoProvider.invalidateCache(for: clone.rootURL)
-        let descriptor = projectResolver.resolveProject(for: clone.rootURL)
+        let rootURL = try clone.verifiedRootURL()
+        projectResolver.invalidate(directory: rootURL)
+        gitInfoProvider.invalidateCache(for: rootURL)
+        let descriptor = projectResolver.resolveProject(for: rootURL)
+        guard try clone.verifiedRootURL() == rootURL else {
+            throw ProjectCloneError.destinationChanged(rootURL.path)
+        }
         var warning: String?
         do {
             try projectRegistry.recordOpen(

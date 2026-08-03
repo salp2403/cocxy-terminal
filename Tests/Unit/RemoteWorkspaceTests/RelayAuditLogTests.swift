@@ -87,8 +87,15 @@ struct RelayAuditLogTests {
         log.log(.connectionRejected(channelID: channelID, remoteHost: "10.0.0.1", reason: "bad"))
         log.log(.tokenRotated(channelID: channelID))
         log.log(.channelClosed(channelID: channelID))
+        log.log(.mobileAction(
+            channelID: channelID,
+            remoteHost: "127.0.0.1",
+            action: "select-session",
+            targetDigest: String(repeating: "a", count: 64),
+            outcome: "accepted"
+        ))
 
-        #expect(writer.entries.count == 5)
+        #expect(writer.entries.count == 6)
     }
 
     @Test("Auto-rotation triggers when log exceeds maxSizeBytes")
@@ -124,6 +131,13 @@ struct RelayAuditLogTests {
             (.connectionRejected(channelID: id, remoteHost: "h", reason: "r"), "connectionRejected"),
             (.tokenRotated(channelID: id), "tokenRotated"),
             (.channelClosed(channelID: id), "channelClosed"),
+            (.mobileAction(
+                channelID: id,
+                remoteHost: "h",
+                action: "select-session",
+                targetDigest: String(repeating: "a", count: 64),
+                outcome: "accepted"
+            ), "mobileAction"),
         ]
         for (event, expected) in events {
             #expect(event.typeName == expected)

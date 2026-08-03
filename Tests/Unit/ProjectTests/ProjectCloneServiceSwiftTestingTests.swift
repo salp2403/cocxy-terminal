@@ -42,14 +42,18 @@ struct ProjectCloneServiceSwiftTestingTests {
         defer { try? FileManager.default.removeItem(at: sandbox) }
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         let observedArguments = LockedArguments()
-        let service = ProjectCloneService { parent, arguments in
+        let service = ProjectCloneService { workingDirectory, arguments in
             observedArguments.store(arguments)
-            let destination = URL(fileURLWithPath: try #require(arguments.last))
             try FileManager.default.createDirectory(
-                at: destination.appendingPathComponent(".git", isDirectory: true),
+                at: workingDirectory.displayURL.appendingPathComponent(
+                    ".git",
+                    isDirectory: true
+                ),
                 withIntermediateDirectories: true
             )
-            #expect(parent == sandbox.standardizedFileURL)
+            #expect(workingDirectory.displayURL.lastPathComponent.hasPrefix(
+                ".cocxy-project-"
+            ))
             return successResult
         }
 
@@ -60,9 +64,10 @@ struct ProjectCloneServiceSwiftTestingTests {
 
         #expect(observedArguments.value == [
             "clone", "--", "https://example.test/team/project.git",
-            sandbox.appendingPathComponent("project").path,
+            ".",
         ])
         #expect(result.rootURL == sandbox.appendingPathComponent("project"))
+        #expect(try result.verifiedRootURL() == result.rootURL)
         #expect(result.remoteOrigin == "https://example.test/team/project.git")
     }
 
@@ -73,9 +78,12 @@ struct ProjectCloneServiceSwiftTestingTests {
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
         let unrelated = sandbox.appendingPathComponent("keep.txt")
         try "keep".write(to: unrelated, atomically: true, encoding: .utf8)
-        let service = ProjectCloneService { _, arguments in
-            let destination = URL(fileURLWithPath: try #require(arguments.last))
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let service = ProjectCloneService { workingDirectory, _ in
+            try "partial".write(
+                to: workingDirectory.displayURL.appendingPathComponent("partial.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
             return BoundedProcessResult(
                 exitCode: 3,
                 stdout: "",
@@ -95,6 +103,9 @@ struct ProjectCloneServiceSwiftTestingTests {
         #expect(!FileManager.default.fileExists(
             atPath: sandbox.appendingPathComponent("project").path
         ))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: sandbox.path).allSatisfy {
+            !$0.hasPrefix(".cocxy-project-")
+        })
         #expect(FileManager.default.fileExists(atPath: unrelated.path))
     }
 
@@ -103,9 +114,12 @@ struct ProjectCloneServiceSwiftTestingTests {
         let sandbox = makeSandbox()
         defer { try? FileManager.default.removeItem(at: sandbox) }
         try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
-        let service = ProjectCloneService { _, arguments in
-            let destination = URL(fileURLWithPath: try #require(arguments.last))
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let service = ProjectCloneService { workingDirectory, _ in
+            try "partial".write(
+                to: workingDirectory.displayURL.appendingPathComponent("partial.txt"),
+                atomically: true,
+                encoding: .utf8
+            )
             throw BoundedProcessRunnerError.invalidInvocation
         }
 
@@ -118,6 +132,9 @@ struct ProjectCloneServiceSwiftTestingTests {
         #expect(!FileManager.default.fileExists(
             atPath: sandbox.appendingPathComponent("project").path
         ))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: sandbox.path).allSatisfy {
+            !$0.hasPrefix(".cocxy-project-")
+        })
     }
 
     @Test("existing destinations and symbolic-link parents fail before Git runs")

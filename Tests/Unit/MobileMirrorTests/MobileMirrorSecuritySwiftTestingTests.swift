@@ -189,6 +189,34 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
     }
 
+    @Test("action audit stores a target digest without sensitive content")
+    func actionAuditRedactsContent() throws {
+        let projectName = "Private Project"
+        let response = "secret response"
+        let action = MobileMirrorAction(
+            kind: .projectCreate,
+            text: nil,
+            name: projectName
+        )
+        let event = MobileMirrorActionAudit.event(
+            action: action,
+            channelID: UUID(),
+            identity: MobileMirrorClientIdentity(
+                remoteAddress: "SSH workstation",
+                userAgent: response
+            ),
+            accepted: true
+        )
+        let data = try JSONSerialization.data(withJSONObject: event.toJSON())
+        let json = String(decoding: data, as: UTF8.self)
+
+        #expect(event.typeName == "mobileAction")
+        #expect(json.contains("project-create"))
+        #expect(json.contains(projectName) == false)
+        #expect(json.contains(response) == false)
+        #expect(json.contains(MobileMirrorPairingAuthority.digest(Data(projectName.utf8))))
+    }
+
     private func sign(
         timestamp: String,
         nonce: String,

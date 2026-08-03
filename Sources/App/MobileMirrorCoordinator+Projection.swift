@@ -59,7 +59,7 @@ extension MobileMirrorCoordinator {
         }
         snapshot = MobileMirrorSnapshot(
             selectedSessionID: selected,
-            projectCreationEnabled: projectCreationRoot != nil,
+            projectCreationEnabled: projectCreationRootHandle != nil,
             projects: projects,
             agents: agents,
             approvals: approvals

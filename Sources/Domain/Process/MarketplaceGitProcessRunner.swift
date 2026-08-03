@@ -44,8 +44,18 @@ struct MarketplaceGitProcessRunner: Sendable {
         )
         defer { try? FileManager.default.removeItem(at: isolatedDirectory) }
 
+        return try run(
+            arguments: arguments,
+            workingDirectory: .path(isolatedDirectory)
+        )
+    }
+
+    func run(
+        arguments: [String],
+        workingDirectory: BoundedProcessWorkingDirectory
+    ) throws -> BoundedProcessResult {
         var invocationEnvironment = environment
-        invocationEnvironment["GIT_CEILING_DIRECTORIES"] = isolatedDirectory.path
+        invocationEnvironment["GIT_CEILING_DIRECTORIES"] = workingDirectory.displayURL.path
         let safetyArguments = [
             "-c", "core.askPass=/usr/bin/false",
             "-c", "core.gitProxy=none",
@@ -58,7 +68,7 @@ struct MarketplaceGitProcessRunner: Sendable {
         ).run(
             executableURL: gitExecutableURL,
             arguments: safetyArguments + arguments,
-            workingDirectory: isolatedDirectory,
+            workingDirectory: workingDirectory,
             environment: invocationEnvironment,
             timeoutSeconds: timeoutSeconds
         )

@@ -1,75 +1,66 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // MobileMirrorProjectService.swift - Constrained local project creation.
 
-import Darwin
 import Foundation
 
 protocol MobileMirrorProjectCreating: Sendable {
-    func createProject(named name: String, in authorizedRoot: URL) async throws -> URL
+    func createProject(
+        named name: String,
+        in authorizedRoot: ProjectDirectoryRoot
+    ) async throws -> ProjectDirectoryPublication
 }
 
 struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
+    typealias GitRunner = @Sendable (
+        BoundedProcessWorkingDirectory,
+        [String]
+    ) throws -> BoundedProcessResult
+
     static let maximumNameUTF8Bytes = 160
 
-    private let fileManager: FileManager
-    private let gitExecutable: URL
+    private let hooks: ProjectDirectoryTransactionHooks
+    private let runGit: GitRunner
 
     init(
-        fileManager: FileManager = .default,
-        gitExecutable: URL = URL(fileURLWithPath: "/usr/bin/git")
+        gitExecutable: URL = URL(fileURLWithPath: "/usr/bin/git"),
+        hooks: ProjectDirectoryTransactionHooks = .none,
+        runGit: GitRunner? = nil
     ) {
-        self.fileManager = fileManager
-        self.gitExecutable = gitExecutable
+        self.hooks = hooks
+        self.runGit = runGit ?? { workingDirectory, arguments in
+            try MarketplaceGitProcessRunner(
+                gitExecutableURL: gitExecutable,
+                workingDirectory: workingDirectory.displayURL,
+                timeoutSeconds: 30,
+                maximumRetainedBytesPerStream: 64 * 1_024
+            ).run(arguments: arguments, workingDirectory: workingDirectory)
+        }
     }
 
-    func createProject(named rawName: String, in authorizedRoot: URL) async throws -> URL {
+    func createProject(
+        named rawName: String,
+        in authorizedRoot: ProjectDirectoryRoot
+    ) async throws -> ProjectDirectoryPublication {
         let name = try normalizedProjectName(rawName)
-        let root = authorizedRoot.standardizedFileURL
-        try validateAuthorizedRoot(root)
-        let destination = root.appendingPathComponent(name, isDirectory: true).standardizedFileURL
-        guard destination.deletingLastPathComponent() == root else {
-            throw MobileMirrorError.invalidProjectName
-        }
-        guard !fileManager.fileExists(atPath: destination.path) else {
-            throw MobileMirrorError.projectAlreadyExists
-        }
+        return try await Task.detached(priority: .userInitiated) {
+            try createProjectSynchronously(named: name, in: authorizedRoot)
+        }.value
+    }
 
-        let staging = root
-            .appendingPathComponent(".cocxy-project-\(UUID().uuidString)", isDirectory: true)
-            .standardizedFileURL
-        try fileManager.createDirectory(at: staging, withIntermediateDirectories: false)
-        var stagingOwned = true
-        defer {
-            if stagingOwned {
-                try? fileManager.removeItem(at: staging)
-            }
-        }
-
-        let result = try await runGitInit(in: staging)
-        guard result.exitCode == 0 else {
-            let message = result.standardError
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            throw MobileMirrorError.projectCreationFailed(
-                message.isEmpty ? "git init exited with status \(result.exitCode)" : message
-            )
-        }
-        var gitDirectory: ObjCBool = false
-        guard fileManager.fileExists(
-            atPath: staging.appendingPathComponent(".git", isDirectory: true).path,
-            isDirectory: &gitDirectory
-        ), gitDirectory.boolValue else {
-            throw MobileMirrorError.projectCreationFailed("git did not create repository metadata")
-        }
+    func createProject(
+        named rawName: String,
+        in authorizedRootURL: URL
+    ) async throws -> ProjectDirectoryPublication {
+        let root: ProjectDirectoryRoot
         do {
-            try fileManager.moveItem(at: staging, to: destination)
-            stagingOwned = false
-            return destination
+            root = try ProjectDirectoryRoot.open(
+                authorizedRootURL,
+                afterOpen: hooks.afterRootOpen
+            )
         } catch {
-            if fileManager.fileExists(atPath: destination.path) {
-                throw MobileMirrorError.projectAlreadyExists
-            }
-            throw MobileMirrorError.projectCreationFailed(error.localizedDescription)
+            throw Self.mobileError(error)
         }
+        return try await createProject(named: rawName, in: root)
     }
 
     func normalizedProjectName(_ rawName: String) throws -> String {
@@ -98,49 +89,73 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
         return name
     }
 
-    private func validateAuthorizedRoot(_ root: URL) throws {
-        var metadata = stat()
-        let status = root.path.withCString { Darwin.lstat($0, &metadata) }
-        guard status == 0,
-              (metadata.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR) else {
-            throw MobileMirrorError.projectCreationUnavailable
+    private func createProjectSynchronously(
+        named name: String,
+        in root: ProjectDirectoryRoot
+    ) throws -> ProjectDirectoryPublication {
+        let transaction: ProjectDirectoryTransaction
+        do {
+            transaction = try ProjectDirectoryTransaction.begin(
+                in: root,
+                destinationName: name,
+                hooks: hooks
+            )
+        } catch {
+            throw Self.mobileError(error)
         }
-        let resolved = root.resolvingSymlinksInPath().standardizedFileURL
-        guard resolved == root else {
-            throw MobileMirrorError.projectCreationUnavailable
-        }
-    }
 
-    private func runGitInit(in directory: URL) async throws -> GitResult {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                let standardError = Pipe()
-                process.executableURL = gitExecutable
-                process.arguments = ["init", "--quiet", "--initial-branch=main", "--"]
-                process.currentDirectoryURL = directory
-                process.standardOutput = FileHandle.nullDevice
-                process.standardError = standardError
-                do {
-                    try process.run()
-                    process.waitUntilExit()
-                    let errorData = standardError.fileHandleForReading.readDataToEndOfFile()
-                    let boundedError = Data(errorData.suffix(8 * 1_024))
-                    continuation.resume(returning: GitResult(
-                        exitCode: process.terminationStatus,
-                        standardError: String(decoding: boundedError, as: UTF8.self)
-                    ))
-                } catch {
-                    continuation.resume(throwing: MobileMirrorError.projectCreationFailed(
-                        error.localizedDescription
-                    ))
-                }
+        do {
+            let result = try runGit(try transaction.workingDirectory, [
+                "init", "--quiet", "--initial-branch=main", "--", ".",
+            ])
+            guard !result.timedOut, result.exitCode == 0 else {
+                let message = result.stderr
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                throw MobileMirrorError.projectCreationFailed(
+                    message.isEmpty
+                        ? "git init exited with status \(result.exitCode)"
+                        : String(message.prefix(1_000))
+                )
             }
+            try transaction.verifyRepositoryMetadata()
+            let publication = try transaction.publish()
+            _ = try publication.verifiedURL()
+            return publication
+        } catch let originalError {
+            do {
+                try transaction.cleanup()
+            } catch {
+                throw Self.mobileError(error)
+            }
+            throw Self.mobileError(originalError)
         }
     }
-}
 
-private struct GitResult: Sendable {
-    let exitCode: Int32
-    let standardError: String
+    private static func mobileError(_ error: Error) -> Error {
+        guard let directoryError = error as? ProjectDirectoryError else { return error }
+        switch directoryError {
+        case .invalidRoot, .symbolicLinkRejected:
+            return MobileMirrorError.projectCreationUnavailable
+        case .invalidDestinationName:
+            return MobileMirrorError.invalidProjectName
+        case .destinationExists:
+            return MobileMirrorError.projectAlreadyExists
+        case .repositoryMetadataMissing:
+            return MobileMirrorError.projectCreationFailed(
+                "git did not create repository metadata"
+            )
+        case .publicationChanged(let path):
+            return MobileMirrorError.projectCreationFailed(
+                "the destination changed while publishing \(path)"
+            )
+        case .cleanupUnverified(let path):
+            return MobileMirrorError.projectCreationFailed(
+                "cleanup could not be verified at \(path)"
+            )
+        case .systemCallFailed:
+            return MobileMirrorError.projectCreationFailed(
+                directoryError.localizedDescription
+            )
+        }
+    }
 }

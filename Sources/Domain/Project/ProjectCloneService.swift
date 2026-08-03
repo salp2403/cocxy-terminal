@@ -13,6 +13,8 @@ enum ProjectCloneError: Error, Equatable, LocalizedError {
     case destinationExists(String)
     case cloneFailed(exitCode: Int32, message: String)
     case clonedRepositoryMissing(String)
+    case destinationChanged(String)
+    case cleanupUnverified(String)
 
     var errorDescription: String? {
         switch self {
@@ -35,6 +37,10 @@ enum ProjectCloneError: Error, Equatable, LocalizedError {
             return "Git clone failed: \(detail)"
         case .clonedRepositoryMissing(let path):
             return "Git completed without creating a repository at \(path)."
+        case .destinationChanged(let path):
+            return "The clone destination changed while Git was running: \(path)"
+        case .cleanupUnverified(let path):
+            return "Cocxy could not safely verify clone cleanup at \(path)."
         }
     }
 }
@@ -42,40 +48,82 @@ enum ProjectCloneError: Error, Equatable, LocalizedError {
 struct ProjectCloneResult: Equatable, Sendable {
     let rootURL: URL
     let remoteOrigin: String
+    private let publication: ProjectDirectoryPublication
+
+    init(
+        rootURL: URL,
+        remoteOrigin: String,
+        publication: ProjectDirectoryPublication
+    ) {
+        self.rootURL = rootURL
+        self.remoteOrigin = remoteOrigin
+        self.publication = publication
+    }
+
+    func verifiedRootURL() throws -> URL {
+        try publication.verifiedURL()
+    }
+
+    static func == (lhs: ProjectCloneResult, rhs: ProjectCloneResult) -> Bool {
+        lhs.rootURL == rhs.rootURL && lhs.remoteOrigin == rhs.remoteOrigin
+    }
 }
 
 struct ProjectCloneService: Sendable {
-    typealias GitRunner = @Sendable (URL, [String]) throws -> BoundedProcessResult
+    typealias GitRunner = @Sendable (
+        BoundedProcessWorkingDirectory,
+        [String]
+    ) throws -> BoundedProcessResult
 
-    private let fileManager: FileManager
+    private let hooks: ProjectDirectoryTransactionHooks
     private let runGit: GitRunner
 
     init(
-        fileManager: FileManager = .default,
-        runGit: @escaping GitRunner = { parent, arguments in
+        hooks: ProjectDirectoryTransactionHooks = .none,
+        runGit: @escaping GitRunner = { workingDirectory, arguments in
             try MarketplaceGitProcessRunner(
-                workingDirectory: parent,
+                workingDirectory: workingDirectory.displayURL,
                 timeoutSeconds: 180
-            ).run(arguments: arguments)
+            ).run(arguments: arguments, workingDirectory: workingDirectory)
         }
     ) {
-        self.fileManager = fileManager
+        self.hooks = hooks
         self.runGit = runGit
     }
 
     func clone(remote rawRemote: String, into parentDirectory: URL) throws -> ProjectCloneResult {
+        let root: ProjectDirectoryRoot
+        do {
+            root = try ProjectDirectoryRoot.open(
+                parentDirectory,
+                afterOpen: hooks.afterRootOpen
+            )
+        } catch {
+            throw Self.cloneError(error, fallbackPath: parentDirectory.path)
+        }
+        return try clone(remote: rawRemote, in: root)
+    }
+
+    func clone(
+        remote rawRemote: String,
+        in parent: ProjectDirectoryRoot
+    ) throws -> ProjectCloneResult {
         let remote = try Self.validatedRemote(rawRemote)
-        let parent = parentDirectory.standardizedFileURL
-        try validateParent(parent)
         let projectName = try Self.projectName(from: remote)
-        let destination = parent.appendingPathComponent(projectName, isDirectory: true)
-        guard !fileManager.fileExists(atPath: destination.path) else {
-            throw ProjectCloneError.destinationExists(destination.path)
+        let transaction: ProjectDirectoryTransaction
+        do {
+            transaction = try ProjectDirectoryTransaction.begin(
+                in: parent,
+                destinationName: projectName,
+                hooks: hooks
+            )
+        } catch {
+            throw Self.cloneError(error, fallbackPath: parent.displayURL.path)
         }
 
         do {
-            let result = try runGit(parent, [
-                "clone", "--", remote.absoluteString, destination.path,
+            let result = try runGit(try transaction.workingDirectory, [
+                "clone", "--", remote.absoluteString, ".",
             ])
             guard !result.timedOut, result.exitCode == 0 else {
                 throw ProjectCloneError.cloneFailed(
@@ -83,23 +131,21 @@ struct ProjectCloneService: Sendable {
                     message: Self.boundedMessage(result.stderr)
                 )
             }
-            var isDirectory: ObjCBool = false
-            guard fileManager.fileExists(atPath: destination.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue,
-                  fileManager.fileExists(
-                    atPath: destination.appendingPathComponent(".git").path
-                  ) else {
-                throw ProjectCloneError.clonedRepositoryMissing(destination.path)
-            }
+            try transaction.verifyRepositoryMetadata()
+            let publication = try transaction.publish()
+            let destination = try publication.verifiedURL()
             return ProjectCloneResult(
                 rootURL: destination,
-                remoteOrigin: remote.absoluteString
+                remoteOrigin: remote.absoluteString,
+                publication: publication
             )
-        } catch {
-            if fileManager.fileExists(atPath: destination.path) {
-                try? fileManager.removeItem(at: destination)
+        } catch let originalError {
+            do {
+                try transaction.cleanup()
+            } catch {
+                throw Self.cloneError(error, fallbackPath: parent.displayURL.path)
             }
-            throw error
+            throw Self.cloneError(originalError, fallbackPath: parent.displayURL.path)
         }
     }
 
@@ -142,18 +188,6 @@ struct ProjectCloneService: Sendable {
         return name
     }
 
-    private func validateParent(_ parent: URL) throws {
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: parent.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            throw ProjectCloneError.invalidParent(parent.path)
-        }
-        let values = try parent.resourceValues(forKeys: [.isSymbolicLinkKey])
-        guard values.isSymbolicLink != true else {
-            throw ProjectCloneError.symbolicLinkRejected(parent.path)
-        }
-    }
-
     private static func normalizeSCPRemote(_ remote: String) -> String? {
         guard !remote.contains("://"),
               let at = remote.firstIndex(of: "@"),
@@ -173,5 +207,27 @@ struct ProjectCloneService: Sendable {
 
     private static func boundedMessage(_ message: String) -> String {
         String(message.trimmingCharacters(in: .whitespacesAndNewlines).prefix(1_000))
+    }
+
+    private static func cloneError(_ error: Error, fallbackPath: String) -> Error {
+        guard let directoryError = error as? ProjectDirectoryError else { return error }
+        switch directoryError {
+        case .invalidRoot(let path):
+            return ProjectCloneError.invalidParent(path)
+        case .symbolicLinkRejected(let path):
+            return ProjectCloneError.symbolicLinkRejected(path)
+        case .invalidDestinationName:
+            return ProjectCloneError.invalidProjectName
+        case .destinationExists(let path):
+            return ProjectCloneError.destinationExists(path)
+        case .repositoryMetadataMissing(let path):
+            return ProjectCloneError.clonedRepositoryMissing(path)
+        case .publicationChanged(let path):
+            return ProjectCloneError.destinationChanged(path)
+        case .cleanupUnverified(let path):
+            return ProjectCloneError.cleanupUnverified(path)
+        case .systemCallFailed:
+            return ProjectCloneError.invalidParent(fallbackPath)
+        }
     }
 }

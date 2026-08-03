@@ -12,6 +12,13 @@ enum RelayAuditEvent: Sendable {
     case connectionRejected(channelID: UUID, remoteHost: String, reason: String)
     case tokenRotated(channelID: UUID)
     case channelClosed(channelID: UUID)
+    case mobileAction(
+        channelID: UUID,
+        remoteHost: String,
+        action: String,
+        targetDigest: String,
+        outcome: String
+    )
 
     /// Machine-readable event type name.
     var typeName: String {
@@ -21,6 +28,7 @@ enum RelayAuditEvent: Sendable {
         case .connectionRejected: return "connectionRejected"
         case .tokenRotated: return "tokenRotated"
         case .channelClosed: return "channelClosed"
+        case .mobileAction: return "mobileAction"
         }
     }
 
@@ -31,7 +39,8 @@ enum RelayAuditEvent: Sendable {
              .connectionAccepted(let id, _),
              .connectionRejected(let id, _, _),
              .tokenRotated(let id),
-             .channelClosed(let id):
+             .channelClosed(let id),
+             .mobileAction(let id, _, _, _, _):
             return id
         }
     }
@@ -51,6 +60,11 @@ enum RelayAuditEvent: Sendable {
         case .connectionRejected(_, let host, let reason):
             dict["remoteHost"] = host
             dict["reason"] = reason
+        case .mobileAction(_, let host, let action, let targetDigest, let outcome):
+            dict["remoteHost"] = host
+            dict["action"] = action
+            dict["targetDigest"] = targetDigest
+            dict["outcome"] = outcome
         case .tokenRotated, .channelClosed:
             break
         }

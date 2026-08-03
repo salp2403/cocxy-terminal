@@ -248,6 +248,13 @@ extension AppDelegate {
     }
 
     private func performProjectClone(remote: String, parentDirectory: URL) {
+        let parentRoot: ProjectDirectoryRoot
+        do {
+            parentRoot = try ProjectDirectoryRoot.open(parentDirectory)
+        } catch {
+            presentProjectError(error)
+            return
+        }
         let progress = NSAlert()
         progress.messageText = appLocalizer().string(
             "project.clone.progress",
@@ -271,7 +278,7 @@ extension AppDelegate {
                 let result = try await Task.detached(priority: .userInitiated) {
                     try ProjectCloneService().clone(
                         remote: remote,
-                        into: parentDirectory
+                        in: parentRoot
                     )
                 }.value
                 dismissProgressAlert(progress, parentWindow: parentWindow)
@@ -284,9 +291,24 @@ extension AppDelegate {
     }
 
     private func finishProjectClone(_ result: ProjectCloneResult) {
-        projectResolver.invalidate(directory: result.rootURL)
-        gitInfoProvider.invalidateCache(for: result.rootURL)
-        let descriptor = projectResolver.resolveProject(for: result.rootURL)
+        let rootURL: URL
+        do {
+            rootURL = try result.verifiedRootURL()
+        } catch {
+            presentProjectError(error)
+            return
+        }
+        projectResolver.invalidate(directory: rootURL)
+        gitInfoProvider.invalidateCache(for: rootURL)
+        let descriptor = projectResolver.resolveProject(for: rootURL)
+        do {
+            guard try result.verifiedRootURL() == rootURL else {
+                throw ProjectCloneError.destinationChanged(rootURL.path)
+            }
+        } catch {
+            presentProjectError(error)
+            return
+        }
         var metadataError: Error?
         do {
             try projectRegistry.recordOpen(

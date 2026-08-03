@@ -59,6 +59,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     var tunnelClosureTask: Task<Void, Never>?
     var transportGeneration: UInt64 = 0
     var announcedApprovalIDs: Set<String> = []
+    var projectCreationRootHandle: ProjectDirectoryRoot?
 
     init(
         appDelegate: AppDelegate,
@@ -246,34 +247,6 @@ final class MobileMirrorCoordinator: ObservableObject {
         state = .stopped
     }
 
-    func chooseProjectCreationRoot() {
-        let panel = NSOpenPanel()
-        let localizer = appDelegate?.appLocalizer()
-            ?? AppLocalizer(languagePreference: .system)
-        panel.title = localizer.string(
-            "mobile.mirror.projectRoot.title",
-            fallback: "Choose Project Creation Folder"
-        )
-        panel.prompt = localizer.string("common.choose", fallback: "Choose")
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.canCreateDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.resolvesAliases = false
-        panel.begin { [weak self] response in
-            guard response == .OK, let url = panel.url else { return }
-            MainActor.assumeIsolated {
-                let standardized = url.standardizedFileURL
-                guard standardized.resolvingSymlinksInPath().standardizedFileURL == standardized else {
-                    NSSound.beep()
-                    return
-                }
-                self?.projectCreationRoot = standardized
-                self?.refreshSnapshotAndPublish()
-            }
-        }
-    }
-
     func openRemoteWorkspaceSetup() {
         appDelegate?.focusedWindowController()?.showRemoteWorkspacePanel()
     }
@@ -385,65 +358,81 @@ final class MobileMirrorCoordinator: ObservableObject {
         channelID: UUID,
         identity: MobileMirrorClientIdentity
     ) async throws -> MobileMirrorSnapshot {
-        guard let active = authority.activePairing(cookie: cookie),
-              active.channelID == channelID,
-              active.identity.fingerprint == identity.fingerprint else {
-            throw MobileMirrorError.sessionExpired
-        }
-        refreshSnapshot()
-        var publishesState = true
-        switch action.kind {
-        case .selectSession:
-            guard let sessionID = action.sessionID,
-                  sessionEntriesSnapshot.contains(where: {
-                      $0.sessionID.rawValue.uuidString == sessionID
-                  }), authority.selectSession(sessionID, cookie: cookie) else {
-                throw MobileMirrorError.targetUnavailable
+        do {
+            guard let active = authority.activePairing(cookie: cookie),
+                  active.channelID == channelID,
+                  active.identity.fingerprint == identity.fingerprint else {
+                throw MobileMirrorError.sessionExpired
             }
-        case .terminalControl:
-            let entry = try terminalEntry(for: action.sessionID)
-            guard let route = routeRegistry.route(
-                for: entry.sessionID.rawValue.uuidString
-            ) else {
-                throw MobileMirrorError.targetUnavailable
-            }
-            if action.controlType == "viewport-scroll" {
-                guard let scrollDelta = action.scrollDelta else {
-                    throw MobileMirrorError.invalidAction
-                }
-                try scrollTerminal(entry, route: route, deltaRows: scrollDelta)
-            } else {
-                guard let writer = makeTerminalWriter(channelID: active.channelID) else {
+            refreshSnapshot()
+            var publishesState = true
+            switch action.kind {
+            case .selectSession:
+                guard let sessionID = action.sessionID,
+                      sessionEntriesSnapshot.contains(where: {
+                          $0.sessionID.rawValue.uuidString == sessionID
+                      }), authority.selectSession(sessionID, cookie: cookie) else {
                     throw MobileMirrorError.targetUnavailable
                 }
-                try await writer.write(
-                    action: action,
-                    to: entry.tabID,
-                    surfaceID: route.surfaceID
-                )
+            case .terminalControl:
+                let entry = try terminalEntry(for: action.sessionID)
+                guard let route = routeRegistry.route(
+                    for: entry.sessionID.rawValue.uuidString
+                ) else {
+                    throw MobileMirrorError.targetUnavailable
+                }
+                if action.controlType == "viewport-scroll" {
+                    guard let scrollDelta = action.scrollDelta else {
+                        throw MobileMirrorError.invalidAction
+                    }
+                    try scrollTerminal(entry, route: route, deltaRows: scrollDelta)
+                } else {
+                    guard let writer = makeTerminalWriter(channelID: active.channelID) else {
+                        throw MobileMirrorError.targetUnavailable
+                    }
+                    try await writer.write(
+                        action: action,
+                        to: entry.tabID,
+                        surfaceID: route.surfaceID
+                    )
+                }
+                publishesState = false
+            case .agentRespond:
+                let entry = try terminalEntry(for: action.sessionID)
+                guard entry.agentState == .waitingInput,
+                      let route = routeRegistry.route(
+                          for: entry.sessionID.rawValue.uuidString
+                      ),
+                      let text = action.text,
+                      let writer = makeTerminalWriter(channelID: active.channelID) else {
+                    throw MobileMirrorError.targetUnavailable
+                }
+                try await writer.respond(text, to: entry.tabID, surfaceID: route.surfaceID)
+            case .approvalApprove, .approvalReject:
+                try await handleApproval(action)
+            case .projectCreate:
+                guard let name = action.name else { throw MobileMirrorError.invalidAction }
+                try await createProject(named: name, identity: identity)
             }
-            publishesState = false
-        case .agentRespond:
-            let entry = try terminalEntry(for: action.sessionID)
-            guard entry.agentState == .waitingInput,
-                  let route = routeRegistry.route(
-                      for: entry.sessionID.rawValue.uuidString
-                  ),
-                  let text = action.text,
-                  let writer = makeTerminalWriter(channelID: active.channelID) else {
-                throw MobileMirrorError.targetUnavailable
+            if publishesState {
+                refreshSnapshotAndPublish()
             }
-            try await writer.respond(text, to: entry.tabID, surfaceID: route.surfaceID)
-        case .approvalApprove, .approvalReject:
-            try await handleApproval(action)
-        case .projectCreate:
-            guard let name = action.name else { throw MobileMirrorError.invalidAction }
-            try await createProject(named: name, identity: identity)
+            auditLog.log(MobileMirrorActionAudit.event(
+                action: action,
+                channelID: channelID,
+                identity: identity,
+                accepted: true
+            ))
+            return snapshot
+        } catch {
+            auditLog.log(MobileMirrorActionAudit.event(
+                action: action,
+                channelID: channelID,
+                identity: identity,
+                accepted: false
+            ))
+            throw error
         }
-        if publishesState {
-            refreshSnapshotAndPublish()
-        }
-        return snapshot
     }
 
     private func terminalEntry(for rawSessionID: String?) throws -> SessionEntry {
@@ -512,58 +501,6 @@ final class MobileMirrorCoordinator: ObservableObject {
                 )
             }
         )
-    }
-
-    private func createProject(
-        named name: String,
-        identity: MobileMirrorClientIdentity
-    ) async throws {
-        guard let root = projectCreationRoot else {
-            throw MobileMirrorError.projectCreationUnavailable
-        }
-        guard await confirmProjectCreation(named: name, identity: identity) else {
-            throw MobileMirrorError.authorizationDenied
-        }
-        let destination = try await projectService.createProject(named: name, in: root)
-        projectResolver.invalidate(directory: destination)
-        let descriptor = projectResolver.resolveProject(for: destination)
-        try projectRegistry.recordOpen(descriptor, incrementOpenCount: false)
-        _ = try appDelegate?.activateProject(descriptor.groupingID)
-        appDelegate?.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
-    }
-
-    private func confirmProjectCreation(
-        named name: String,
-        identity: MobileMirrorClientIdentity
-    ) async -> Bool {
-        guard let appDelegate,
-              let window = appDelegate.mobileMirrorWindowController?.window,
-              window.attachedSheet == nil else {
-            return false
-        }
-        window.makeKeyAndOrderFront(nil)
-        let localizer = appDelegate.appLocalizer()
-        let alert = NSAlert()
-        alert.messageText = localizer.string(
-            "mobile.mirror.projectConfirm.title",
-            fallback: "Create Project from Phone?"
-        )
-        alert.informativeText = String(
-            format: localizer.string(
-                "mobile.mirror.projectConfirm.message",
-                fallback: "Create %@ for the paired device at %@?"
-            ),
-            name,
-            identity.remoteAddress
-        )
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: localizer.string("common.create", fallback: "Create"))
-        alert.addButton(withTitle: localizer.string("common.cancel", fallback: "Cancel"))
-        return await withCheckedContinuation { continuation in
-            alert.beginSheetModal(for: window) { response in
-                continuation.resume(returning: response == .alertFirstButtonReturn)
-            }
-        }
     }
 
 }
