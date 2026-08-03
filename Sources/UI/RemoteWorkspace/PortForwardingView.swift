@@ -276,7 +276,11 @@ struct PortForwardingView: View {
             forward = .local(localPort: localPort, remotePort: remotePort)
         case .remote:
             guard let remotePort = Int(newRemotePort) else { return }
-            forward = .remote(remotePort: remotePort, localPort: localPort)
+            forward = .remote(
+                remotePort: remotePort,
+                localPort: localPort,
+                remoteBindHost: RemoteConnectionProfile.PortForward.remoteLoopbackBindHost
+            )
         case .dynamic:
             return
         }
@@ -505,7 +509,7 @@ struct TunnelRow: View {
                 portLabel("\(localPort)")
                 directionArrow("arrow.right")
                 portLabel("\(remotePort)")
-            case let .remote(remotePort, localPort, _):
+            case let .remote(remotePort, localPort, _, _):
                 portLabel("\(localPort)")
                 directionArrow("arrow.left")
                 portLabel("\(remotePort)")
@@ -559,7 +563,7 @@ struct TunnelRow: View {
                 localPort,
                 remotePort
             )
-        case let .remote(remotePort, localPort, _):
+        case let .remote(remotePort, localPort, _, _):
             return String(
                 format: localized("remoteWorkspace.portForward.accessibility.remote", fallback: "Remote forward, port %d to %d"),
                 remotePort,

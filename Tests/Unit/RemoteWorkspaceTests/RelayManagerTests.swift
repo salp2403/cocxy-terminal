@@ -235,7 +235,7 @@ struct RelayManagerTests {
         #expect(context.forwarder.forwardedPorts.count == 1)
         #expect(context.tokenStore.stored[channel.id] != nil)
 
-        guard case let .remote(remotePort, localPort, localHost) =
+        guard case let .remote(remotePort, localPort, localHost, remoteBindHost) =
             context.forwarder.forwardedPorts[0]
         else {
             Issue.record("Expected a reverse forward")
@@ -245,6 +245,7 @@ struct RelayManagerTests {
         #expect(localPort == 45_000)
         #expect(localPort != channel.localPort)
         #expect(localHost == "127.0.0.1")
+        #expect(remoteBindHost == "127.0.0.1")
     }
 
     @Test("Production broker factory is a live mandatory hop")
@@ -261,7 +262,7 @@ struct RelayManagerTests {
         )
 
         let forward = try #require(forwarder.forwardedPorts.first)
-        guard case let .remote(remotePort, localPort, localHost) = forward else {
+        guard case let .remote(remotePort, localPort, localHost, remoteBindHost) = forward else {
             Issue.record("Expected a reverse forward")
             return
         }
@@ -269,6 +270,7 @@ struct RelayManagerTests {
         #expect(localPort != 3000)
         #expect(localPort > 0)
         #expect(localHost == "127.0.0.1")
+        #expect(remoteBindHost == "127.0.0.1")
         await manager.closeChannel(channelID: channel.id)
     }
 

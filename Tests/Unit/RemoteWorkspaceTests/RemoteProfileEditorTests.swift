@@ -34,6 +34,12 @@ struct RemoteProfileEditorTests {
         forward.remoteHost = "   "
         #expect(forward.toPortForward() == nil)
 
+        forward.type = .remote
+        forward.remoteBindHost = "0.0.0.0"
+        #expect(forward.toPortForward() == nil)
+        forward.remoteBindHost = "127.0.0.1"
+        #expect(forward.toPortForward() != nil)
+
         forward.type = .dynamic
         forward.localPort = "1080"
         #expect(forward.toPortForward() == .dynamic(localPort: 1_080))

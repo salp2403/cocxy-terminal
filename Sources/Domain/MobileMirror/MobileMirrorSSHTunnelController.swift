@@ -85,7 +85,8 @@ final class MobileMirrorSSHTunnelController: ObservableObject {
             let forward = RemoteConnectionProfile.PortForward.remote(
                 remotePort: Int(remotePort),
                 localPort: Int(localPort),
-                localHost: "127.0.0.1"
+                localHost: "127.0.0.1",
+                remoteBindHost: RemoteConnectionProfile.PortForward.remoteLoopbackBindHost
             )
             do {
                 try await connectionManager.forwardPort(

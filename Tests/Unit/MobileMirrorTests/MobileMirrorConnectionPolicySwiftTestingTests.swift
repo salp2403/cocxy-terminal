@@ -120,7 +120,12 @@ struct MobileMirrorSSHTunnelControllerSwiftTestingTests {
 
         #expect(lease.remotePort == 52_345)
         #expect(multiplexer.forwardedPorts == [
-            .remote(remotePort: 52_345, localPort: 41_321, localHost: "127.0.0.1"),
+            .remote(
+                remotePort: 52_345,
+                localPort: 41_321,
+                localHost: "127.0.0.1",
+                remoteBindHost: "127.0.0.1"
+            ),
         ])
         #expect(tunnelManager.listTunnels(for: profile.id).count == 1)
 

@@ -233,6 +233,7 @@ struct EditablePortForward: Identifiable {
     var remotePort: String = ""
     var localHost: String = "localhost"
     var remoteHost: String = "localhost"
+    var remoteBindHost: String = RemoteConnectionProfile.PortForward.remoteLoopbackBindHost
 
     init() {}
 
@@ -243,11 +244,12 @@ struct EditablePortForward: Identifiable {
             localPort = String(lp)
             remotePort = String(rp)
             self.remoteHost = remoteHost
-        case let .remote(rp, lp, localHost):
+        case let .remote(rp, lp, localHost, remoteBindHost):
             type = .remote
             localPort = String(lp)
             remotePort = String(rp)
             self.localHost = localHost
+            self.remoteBindHost = remoteBindHost
         case let .dynamic(lp):
             type = .dynamic
             localPort = String(lp)
@@ -271,12 +273,19 @@ struct EditablePortForward: Identifiable {
             return .local(localPort: lp, remotePort: rp, remoteHost: targetHost)
         case .remote:
             let targetHost = localHost.trimmingCharacters(in: .whitespacesAndNewlines)
+            let bindHost = remoteBindHost.trimmingCharacters(in: .whitespacesAndNewlines)
             let trimmedRemotePort = remotePort.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !targetHost.isEmpty,
+                  bindHost == RemoteConnectionProfile.PortForward.remoteLoopbackBindHost,
                   let rp = Int(trimmedRemotePort),
                   (1...65_535).contains(rp)
             else { return nil }
-            return .remote(remotePort: rp, localPort: lp, localHost: targetHost)
+            return .remote(
+                remotePort: rp,
+                localPort: lp,
+                localHost: targetHost,
+                remoteBindHost: bindHost
+            )
         case .dynamic:
             return .dynamic(localPort: lp)
         }

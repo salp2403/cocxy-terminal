@@ -1873,8 +1873,16 @@ final class SSHMultiplexer: SSHMultiplexing, @unchecked Sendable {
         switch forward {
         case let .local(localPort, remotePort, remoteHost):
             return ["-L", "\(localPort):\(remoteHost):\(remotePort)"]
-        case let .remote(remotePort, localPort, localHost):
-            return ["-R", "\(remotePort):\(localHost):\(localPort)"]
+        case let .remote(remotePort, localPort, localHost, remoteBindHost):
+            guard remoteBindHost == RemoteConnectionProfile.PortForward.remoteLoopbackBindHost else {
+                throw SSHMultiplexerError.forwardFailed(
+                    "Remote forwards must bind the exact IPv4 loopback address"
+                )
+            }
+            return [
+                "-R",
+                "\(remoteBindHost):\(remotePort):\(localHost):\(localPort)",
+            ]
         case .dynamic:
             throw SSHMultiplexerError.forwardFailed(
                 "Dynamic forwarding requires the authenticated proxy"

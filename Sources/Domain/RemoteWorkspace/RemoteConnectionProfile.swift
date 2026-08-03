@@ -146,14 +146,20 @@ extension RemoteConnectionProfile {
 
     /// Defines a port forwarding rule for an SSH connection.
     enum PortForward: Codable, Equatable, Sendable {
+        static let remoteLoopbackBindHost = "127.0.0.1"
 
         /// Local port forward: binds a local port to a remote host:port.
         /// Equivalent to `ssh -L localPort:remoteHost:remotePort`.
         case local(localPort: Int, remotePort: Int, remoteHost: String = "localhost")
 
         /// Remote port forward: binds a remote port to a local host:port.
-        /// Equivalent to `ssh -R remotePort:localHost:localPort`.
-        case remote(remotePort: Int, localPort: Int, localHost: String = "localhost")
+        /// Equivalent to `ssh -R remoteBindHost:remotePort:localHost:localPort`.
+        case remote(
+            remotePort: Int,
+            localPort: Int,
+            localHost: String = "localhost",
+            remoteBindHost: String = "127.0.0.1"
+        )
 
         /// Legacy dynamic proxy entry retained only for profile compatibility.
         /// Runtime code rejects this case and uses the authenticated proxy broker.
@@ -164,8 +170,8 @@ extension RemoteConnectionProfile {
             switch self {
             case let .local(localPort, remotePort, remoteHost):
                 return "-L \(localPort):\(remoteHost):\(remotePort)"
-            case let .remote(remotePort, localPort, localHost):
-                return "-R \(remotePort):\(localHost):\(localPort)"
+            case let .remote(remotePort, localPort, localHost, remoteBindHost):
+                return "-R \(remoteBindHost):\(remotePort):\(localHost):\(localPort)"
             case .dynamic:
                 return nil
             }
@@ -180,6 +186,94 @@ extension RemoteConnectionProfile {
                 return nil
             case let .dynamic(localPort):
                 return localPort
+            }
+        }
+
+        private enum CaseCodingKeys: String, CodingKey {
+            case local, remote, dynamic
+        }
+
+        private enum LocalCodingKeys: String, CodingKey {
+            case localPort, remotePort, remoteHost
+        }
+
+        private enum RemoteCodingKeys: String, CodingKey {
+            case remotePort, localPort, localHost, remoteBindHost
+        }
+
+        private enum DynamicCodingKeys: String, CodingKey {
+            case localPort
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CaseCodingKeys.self)
+            guard container.allKeys.count == 1, let kind = container.allKeys.first else {
+                throw DecodingError.dataCorrupted(
+                    .init(codingPath: decoder.codingPath, debugDescription: "Invalid port forward")
+                )
+            }
+            switch kind {
+            case .local:
+                let values = try container.nestedContainer(
+                    keyedBy: LocalCodingKeys.self,
+                    forKey: .local
+                )
+                self = .local(
+                    localPort: try values.decode(Int.self, forKey: .localPort),
+                    remotePort: try values.decode(Int.self, forKey: .remotePort),
+                    remoteHost: try values.decodeIfPresent(String.self, forKey: .remoteHost)
+                        ?? "localhost"
+                )
+            case .remote:
+                let values = try container.nestedContainer(
+                    keyedBy: RemoteCodingKeys.self,
+                    forKey: .remote
+                )
+                self = .remote(
+                    remotePort: try values.decode(Int.self, forKey: .remotePort),
+                    localPort: try values.decode(Int.self, forKey: .localPort),
+                    localHost: try values.decodeIfPresent(String.self, forKey: .localHost)
+                        ?? "localhost",
+                    remoteBindHost: try values.decodeIfPresent(
+                        String.self,
+                        forKey: .remoteBindHost
+                    ) ?? Self.remoteLoopbackBindHost
+                )
+            case .dynamic:
+                let values = try container.nestedContainer(
+                    keyedBy: DynamicCodingKeys.self,
+                    forKey: .dynamic
+                )
+                self = .dynamic(localPort: try values.decode(Int.self, forKey: .localPort))
+            }
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CaseCodingKeys.self)
+            switch self {
+            case let .local(localPort, remotePort, remoteHost):
+                var values = container.nestedContainer(
+                    keyedBy: LocalCodingKeys.self,
+                    forKey: .local
+                )
+                try values.encode(localPort, forKey: .localPort)
+                try values.encode(remotePort, forKey: .remotePort)
+                try values.encode(remoteHost, forKey: .remoteHost)
+            case let .remote(remotePort, localPort, localHost, remoteBindHost):
+                var values = container.nestedContainer(
+                    keyedBy: RemoteCodingKeys.self,
+                    forKey: .remote
+                )
+                try values.encode(remotePort, forKey: .remotePort)
+                try values.encode(localPort, forKey: .localPort)
+                try values.encode(localHost, forKey: .localHost)
+                try values.encode(remoteBindHost, forKey: .remoteBindHost)
+            case let .dynamic(localPort):
+                var values = container.nestedContainer(
+                    keyedBy: DynamicCodingKeys.self,
+                    forKey: .dynamic
+                )
+                try values.encode(localPort, forKey: .localPort)
             }
         }
     }

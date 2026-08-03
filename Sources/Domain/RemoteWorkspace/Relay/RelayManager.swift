@@ -213,7 +213,8 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         let forward = RemoteConnectionProfile.PortForward.remote(
             remotePort: config.remotePort,
             localPort: Int(brokerPort),
-            localHost: "127.0.0.1"
+            localHost: "127.0.0.1",
+            remoteBindHost: RemoteConnectionProfile.PortForward.remoteLoopbackBindHost
         )
 
         forwards[channel.id] = forward
