@@ -7,18 +7,33 @@ import Foundation
 final class MobileMirrorEventHub: @unchecked Sendable {
     typealias Sender = @Sendable (Data, Int32) -> Bool
 
+    private struct RetainedEvent {
+        let id: UInt64
+        let payload: Data
+    }
+
+    private static let maximumRetainedEvents = 128
+    private static let maximumRetainedBytes = 256 * 1_024
+
     private let lock = NSLock()
     private var clients: [Int32: MobileMirrorEventClientWriter] = [:]
     private var clientOrder: [Int32] = []
     private let heartbeatQueue = DispatchQueue(label: "dev.cocxy.mobile.events")
     private let sender: Sender
     private var heartbeat: DispatchSourceTimer?
+    private var nextEventID: UInt64 = 0
+    private var retainedEvents: [RetainedEvent] = []
+    private var retainedBytes = 0
 
     init(sender: @escaping Sender = { MobileMirrorGateway.sendAll($0, to: $1) }) {
         self.sender = sender
     }
 
-    func add(descriptor: Int32, close: @escaping @Sendable () -> Void) {
+    func add(
+        descriptor: Int32,
+        afterEventID: UInt64? = nil,
+        close: @escaping @Sendable () -> Void
+    ) {
         let writer = MobileMirrorEventClientWriter(
             descriptor: descriptor,
             sender: sender,
@@ -26,15 +41,23 @@ final class MobileMirrorEventHub: @unchecked Sendable {
         ) { [weak self] descriptor, identifier in
             self?.remove(descriptor: descriptor, identifier: identifier)
         }
-        lock.lock()
-        clients[descriptor]?.stop()
-        clients[descriptor] = writer
-        clientOrder.removeAll { $0 == descriptor }
-        clientOrder.append(descriptor)
-        let needsHeartbeat = heartbeat == nil
-        lock.unlock()
-        if needsHeartbeat { startHeartbeat() }
-        publish(event: "state", data: "{}")
+        heartbeatQueue.async { [weak self] in
+            guard let self else { return }
+            self.lock.lock()
+            self.clients[descriptor]?.stop()
+            self.clients[descriptor] = writer
+            self.clientOrder.removeAll { $0 == descriptor }
+            self.clientOrder.append(descriptor)
+            self.lock.unlock()
+
+            self.startHeartbeatIfNeeded()
+            if let afterEventID {
+                for event in self.retainedEvents where event.id > afterEventID {
+                    writer.enqueue(event.payload)
+                }
+            }
+            writer.enqueue(self.makePayload(event: "state", data: "{}"))
+        }
     }
 
     func publish(event: String, data: String) {
@@ -45,9 +68,13 @@ final class MobileMirrorEventHub: @unchecked Sendable {
               !data.contains("\n") else {
             return
         }
-        let payload = Data("event: \(event)\ndata: \(data)\n\n".utf8)
         heartbeatQueue.async { [weak self] in
-            self?.send(payload)
+            guard let self else { return }
+            let payload = self.makePayload(event: event, data: data)
+            if event != "state" {
+                self.retain(payload: payload, id: self.nextEventID)
+            }
+            self.send(payload)
         }
     }
 
@@ -55,6 +82,9 @@ final class MobileMirrorEventHub: @unchecked Sendable {
         heartbeatQueue.sync {
             heartbeat?.cancel()
             heartbeat = nil
+            nextEventID = 0
+            retainedEvents.removeAll(keepingCapacity: false)
+            retainedBytes = 0
         }
         lock.lock()
         let current = clientOrder.compactMap { clients[$0] }
@@ -64,16 +94,34 @@ final class MobileMirrorEventHub: @unchecked Sendable {
         current.forEach { $0.stop() }
     }
 
-    private func startHeartbeat() {
-        heartbeatQueue.async { [weak self] in
-            guard let self, self.heartbeat == nil else { return }
-            let timer = DispatchSource.makeTimerSource(queue: self.heartbeatQueue)
-            timer.schedule(deadline: .now() + 15, repeating: 15)
-            timer.setEventHandler { [weak self] in
-                self?.send(Data(": keep-alive\n\n".utf8))
-            }
-            self.heartbeat = timer
-            timer.resume()
+    private func startHeartbeatIfNeeded() {
+        guard heartbeat == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: heartbeatQueue)
+        timer.schedule(deadline: .now() + 15, repeating: 15)
+        timer.setEventHandler { [weak self] in
+            self?.send(Data(": keep-alive\n\n".utf8))
+        }
+        heartbeat = timer
+        timer.resume()
+    }
+
+    private func makePayload(event: String, data: String) -> Data {
+        if nextEventID == UInt64.max {
+            nextEventID = 1
+            retainedEvents.removeAll(keepingCapacity: true)
+            retainedBytes = 0
+        } else {
+            nextEventID += 1
+        }
+        return Data("id: \(nextEventID)\nevent: \(event)\ndata: \(data)\n\n".utf8)
+    }
+
+    private func retain(payload: Data, id: UInt64) {
+        retainedEvents.append(RetainedEvent(id: id, payload: payload))
+        retainedBytes += payload.count
+        while retainedEvents.count > Self.maximumRetainedEvents
+            || retainedBytes > Self.maximumRetainedBytes {
+            retainedBytes -= retainedEvents.removeFirst().payload.count
         }
     }
 

@@ -32,6 +32,49 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(fastReceived.wait(timeout: .now() + 1) == .success)
     }
 
+    @Test("event stream replays bounded notifications after the last received ID")
+    func eventStreamReplaysNotifications() throws {
+        let capture = MobileMirrorEventCapture()
+        let hub = MobileMirrorEventHub { data, descriptor in
+            capture.append(data, descriptor: descriptor)
+            return true
+        }
+        defer { hub.stop() }
+
+        hub.add(descriptor: 51, close: {})
+        try capture.wait(for: 1, descriptor: 51)
+        hub.publish(event: "notification", data: #"{"kind":"agent-finished"}"#)
+        try capture.wait(for: 2, descriptor: 51)
+        let notification = try #require(capture.payloads(for: 51).last)
+        let notificationID = try #require(Self.eventID(in: notification))
+
+        hub.add(descriptor: 52, afterEventID: 0, close: {})
+        try capture.wait(for: 2, descriptor: 52)
+        let replayed = capture.payloads(for: 52)
+        #expect(replayed[0] == notification)
+        #expect(Self.eventName(in: replayed[0]) == "notification")
+        #expect(Self.eventName(in: replayed[1]) == "state")
+
+        hub.add(descriptor: 53, afterEventID: notificationID, close: {})
+        try capture.wait(for: 1, descriptor: 53)
+        #expect(capture.payloads(for: 53).count == 1)
+        #expect(Self.eventName(in: capture.payloads(for: 53)[0]) == "state")
+    }
+
+    private static func eventID(in data: Data) -> UInt64? {
+        String(decoding: data, as: UTF8.self)
+            .split(separator: "\n")
+            .first(where: { $0.hasPrefix("id: ") })
+            .flatMap { UInt64($0.dropFirst(4)) }
+    }
+
+    private static func eventName(in data: Data) -> String? {
+        String(decoding: data, as: UTF8.self)
+            .split(separator: "\n")
+            .first(where: { $0.hasPrefix("event: ") })
+            .map { String($0.dropFirst(7)) }
+    }
+
     @Test("listener serves only through its exact requested address")
     func listenerServesExactAddress() async throws {
         let gateway = MobileMirrorGateway(
@@ -83,6 +126,35 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(received.contains("Origin: http://127.0.0.1:\(upstream.port)\r\n"))
         #expect(received.localizedCaseInsensitiveContains("mobile-secret") == false)
         #expect(received.localizedCaseInsensitiveContains("signed-action") == false)
+    }
+}
+
+private final class MobileMirrorEventCapture: @unchecked Sendable {
+    private let condition = NSCondition()
+    private var values: [Int32: [Data]] = [:]
+
+    func append(_ data: Data, descriptor: Int32) {
+        condition.lock()
+        values[descriptor, default: []].append(data)
+        condition.broadcast()
+        condition.unlock()
+    }
+
+    func payloads(for descriptor: Int32) -> [Data] {
+        condition.lock()
+        defer { condition.unlock() }
+        return values[descriptor] ?? []
+    }
+
+    func wait(for count: Int, descriptor: Int32) throws {
+        let deadline = Date().addingTimeInterval(2)
+        condition.lock()
+        defer { condition.unlock() }
+        while values[descriptor, default: []].count < count {
+            guard condition.wait(until: deadline) else {
+                throw CocoaError(.fileReadUnknown)
+            }
+        }
     }
 }
 

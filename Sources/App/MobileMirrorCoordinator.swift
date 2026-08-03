@@ -58,6 +58,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     var pairingTask: Task<Void, Never>?
     var tunnelClosureTask: Task<Void, Never>?
     var transportGeneration: UInt64 = 0
+    var announcedApprovalIDs: Set<String> = []
 
     init(
         appDelegate: AppDelegate,
@@ -198,6 +199,7 @@ final class MobileMirrorCoordinator: ObservableObject {
                 remoteHost: active.identity.remoteAddress
             ))
             refreshSnapshotAndPublish()
+            receiveApprovalRecords(approvalRegistry.currentRecords())
             startRefreshTimer()
             scheduleSessionExpiry(active)
         } catch {
@@ -306,7 +308,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             .store(in: &cancellables)
         approvalRegistry.$records
             .dropFirst()
-            .sink { [weak self] _ in self?.refreshSnapshotAndPublish() }
+            .sink { [weak self] records in self?.receiveApprovalRecords(records) }
             .store(in: &cancellables)
     }
 
@@ -336,9 +338,23 @@ final class MobileMirrorCoordinator: ObservableObject {
             sessionEntriesSnapshot.append(updated)
         }
         if case .agentStateChanged(let old, let new) = event.change,
-           old != new, new == .waitingInput || new == .finished,
+           old != new, new == .waitingInput || new == .finished || new == .error,
            let entry = sessionRegistry.session(for: event.sessionID) {
-            publishAgentState(entry)
+            publishAgentNotification(entry)
+        }
+        refreshSnapshotAndPublish()
+    }
+
+    private func receiveApprovalRecords(_ records: [MobileMirrorApprovalRecord]) {
+        guard activePairing != nil else {
+            announcedApprovalIDs.removeAll()
+            return
+        }
+        let currentIDs = Set(records.map(\.id))
+        let newRecords = records.filter { !announcedApprovalIDs.contains($0.id) }
+        announcedApprovalIDs = currentIDs
+        for record in newRecords {
+            publishApprovalNotification(record)
         }
         refreshSnapshotAndPublish()
     }

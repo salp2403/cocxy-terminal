@@ -257,7 +257,12 @@ final class MobileMirrorGateway: @unchecked Sendable {
                 finish(descriptor)
                 return
             }
-            eventHub.add(descriptor: descriptor) { [weak self] in self?.finish(descriptor) }
+            eventHub.add(
+                descriptor: descriptor,
+                afterEventID: request.headers["last-event-id"].flatMap(UInt64.init)
+            ) { [weak self] in
+                self?.finish(descriptor)
+            }
         case .proxy(let target):
             proxy(request: request, to: target, client: descriptor)
         }

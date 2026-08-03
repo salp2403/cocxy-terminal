@@ -182,15 +182,47 @@ extension MobileMirrorCoordinator {
         stream.bridge.stopWebTerminal(for: stream.surfaceID)
     }
 
-    func publishAgentState(_ entry: SessionEntry) {
+    func publishAgentNotification(_ entry: SessionEntry) {
+        let kind: String
+        switch entry.agentState {
+        case .waitingInput: kind = "agent-waiting"
+        case .finished: kind = "agent-finished"
+        case .error: kind = "agent-error"
+        default: return
+        }
+        publishNotification(
+            kind: kind,
+            title: entry.detectedAgentName ?? entry.title,
+            message: Self.stateLabel(entry.agentState),
+            sessionID: entry.sessionID.rawValue.uuidString
+        )
+    }
+
+    func publishApprovalNotification(_ record: MobileMirrorApprovalRecord) {
+        publishNotification(
+            kind: "approval",
+            title: record.title,
+            message: "Approval requested",
+            sessionID: record.sessionID
+        )
+    }
+
+    func publishNotification(
+        kind: String,
+        title: String,
+        message: String,
+        sessionID: String
+    ) {
         guard activePairing != nil,
               let data = try? JSONSerialization.data(withJSONObject: [
-                  "title": entry.detectedAgentName ?? entry.title,
-                  "message": Self.stateLabel(entry.agentState),
+                  "kind": kind,
+                  "title": title,
+                  "message": message,
+                  "sessionID": sessionID,
               ]), let json = String(data: data, encoding: .utf8) else {
             return
         }
-        gateway?.eventHub.publish(event: "agent-state", data: json)
+        gateway?.eventHub.publish(event: "notification", data: json)
     }
 
     func startRefreshTimer() {
@@ -274,6 +306,7 @@ extension MobileMirrorCoordinator {
         pendingPairing = nil
         activePairing = nil
         pairingChannelID = nil
+        announcedApprovalIDs.removeAll()
         snapshot = .empty
     }
 
