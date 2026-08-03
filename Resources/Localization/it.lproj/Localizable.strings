@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Esiste già un file o una cartella in %@.";
 "project.clone.error.failed" = "Git non ha potuto clonare il repository (codice di uscita %d).";
 "project.clone.error.repositoryMissing" = "Git è terminato senza creare un repository in %@.";
+"project.clone.error.destinationChanged" = "La destinazione della clonazione è cambiata prima che potesse essere registrata: %@.";
+"project.clone.error.cleanupUnverified" = "Non è stato possibile verificare in modo sicuro la pulizia della clonazione in %@. Controlla la cartella prima di riprovare.";
 "projectHome.error.servicesUnavailable" = "I servizi del progetto sono temporaneamente non disponibili.";
 "projectHome.error.providerUnavailable" = "Il provider di agente locale selezionato non è disponibile.";
 "projectHome.error.sessionChanged" = "La sessione del progetto è cambiata prima dell’avvio dell’azione.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Conferma desktop richiesta";
 "mobile.mirror.status.active" = "Connesso localmente";
 "mobile.mirror.status.denied" = "Abbinamento negato";
+"mobile.mirror.status.starting" = "Apertura del tunnel cifrato verso il telefono";
+"mobile.mirror.transport.label" = "Connessione cifrata al telefono";
+"mobile.mirror.transport.profile" = "Profilo SSH del telefono";
+"mobile.mirror.transport.detail" = "Il codice QR si apre tramite la sessione SSH selezionata. Non viene creato alcun listener sulla LAN né alcun servizio di inoltro esterno.";
+"mobile.mirror.transport.unavailable" = "Collega prima un profilo SSH per questo telefono.";
+"mobile.mirror.transport.detail.unavailable" = "L’abbinamento sarà disponibile dopo che Cocxy si sarà connesso al telefono tramite SSH. L’endpoint del browser rimane sull’interfaccia di loopback del telefono.";
+"mobile.mirror.transport.open" = "Apri connessioni remote";
 "common.choose" = "Scegli";
 "common.deny" = "Nega";
 "common.allow" = "Consenti";

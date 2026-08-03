@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Ya existe un archivo o una carpeta en %@.";
 "project.clone.error.failed" = "Git no pudo clonar el repositorio (código de salida %d).";
 "project.clone.error.repositoryMissing" = "Git terminó sin crear un repositorio en %@.";
+"project.clone.error.destinationChanged" = "El destino de la clonación cambió antes de que pudiera registrarse: %@.";
+"project.clone.error.cleanupUnverified" = "No se pudo verificar de forma segura la limpieza de la clonación en %@. Revisa la carpeta antes de volver a intentarlo.";
 "projectHome.error.servicesUnavailable" = "Los servicios del proyecto no están disponibles temporalmente.";
 "projectHome.error.providerUnavailable" = "El proveedor de agente local seleccionado no está disponible.";
 "projectHome.error.sessionChanged" = "La sesión del proyecto cambió antes de iniciar la acción.";

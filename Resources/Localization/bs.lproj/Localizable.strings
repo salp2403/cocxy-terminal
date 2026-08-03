@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Datoteka ili mapa već postoji na %@.";
 "project.clone.error.failed" = "Git nije mogao klonirati repozitorij (izlazni kod %d).";
 "project.clone.error.repositoryMissing" = "Git je završio bez kreiranja repozitorija na %@.";
+"project.clone.error.destinationChanged" = "Odredište kloniranja se promijenilo prije registracije: %@.";
+"project.clone.error.cleanupUnverified" = "Sigurno čišćenje kloniranja na %@ nije bilo moguće provjeriti. Pregledajte fasciklu prije ponovnog pokušaja.";
 "projectHome.error.servicesUnavailable" = "Usluge projekta privremeno nisu dostupne.";
 "projectHome.error.providerUnavailable" = "Odabrani lokalni pružalac agenta nije dostupan.";
 "projectHome.error.sessionChanged" = "Sesija projekta se promijenila prije pokretanja radnje.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Potrebna je potvrda na računaru";
 "mobile.mirror.status.active" = "Povezano lokalno";
 "mobile.mirror.status.denied" = "Uparivanje je odbijeno";
+"mobile.mirror.status.starting" = "Otvaranje šifrovanog tunela prema telefonu";
+"mobile.mirror.transport.label" = "Šifrovana veza s telefonom";
+"mobile.mirror.transport.profile" = "SSH profil telefona";
+"mobile.mirror.transport.detail" = "QR kôd se otvara putem odabrane SSH sesije. Ne kreira se osluškivač na LAN mreži niti vanjski relej.";
+"mobile.mirror.transport.unavailable" = "Prvo povežite SSH profil za ovaj telefon.";
+"mobile.mirror.transport.detail.unavailable" = "Uparivanje će biti dostupno nakon što se Cocxy poveže s telefonom putem SSH-a. Krajnja tačka preglednika ostaje na loopback interfejsu telefona.";
+"mobile.mirror.transport.open" = "Otvori udaljene veze";
 "common.choose" = "Odaberi";
 "common.deny" = "Odbij";
 "common.allow" = "Dozvoli";

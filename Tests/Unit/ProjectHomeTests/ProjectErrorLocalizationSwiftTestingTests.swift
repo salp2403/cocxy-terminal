@@ -37,6 +37,20 @@ struct ProjectErrorLocalizationSwiftTestingTests {
         #expect(!message.contains("secret-token"))
     }
 
+    @Test("clone integrity failures use localized recovery guidance")
+    func cloneIntegrityFailuresUseLocalizedRecoveryGuidance() throws {
+        let localizer = try spanishLocalizer()
+
+        #expect(localizer.projectErrorMessage(
+            for: ProjectCloneError.destinationChanged("/tmp/destino"),
+            context: .projectAction
+        ) == "El destino de la clonación cambió antes de que pudiera registrarse: /tmp/destino.")
+        #expect(localizer.projectErrorMessage(
+            for: ProjectCloneError.cleanupUnverified("/tmp/limpieza"),
+            context: .projectAction
+        ) == "No se pudo verificar de forma segura la limpieza de la clonación en /tmp/limpieza. Revisa la carpeta antes de volver a intentarlo.")
+    }
+
     @Test("unknown failures degrade to localized context copy")
     func unknownFailureUsesLocalizedContextFallback() throws {
         let localizer = try spanishLocalizer()

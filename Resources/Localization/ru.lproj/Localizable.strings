@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "В %@ уже существует файл или папка.";
 "project.clone.error.failed" = "Git не удалось клонировать репозиторий (код завершения %d).";
 "project.clone.error.repositoryMissing" = "Git завершил работу, не создав репозиторий в %@.";
+"project.clone.error.destinationChanged" = "Папка назначения клонирования изменилась до регистрации: %@.";
+"project.clone.error.cleanupUnverified" = "Не удалось безопасно проверить очистку после клонирования в %@. Проверьте папку перед повторной попыткой.";
 "projectHome.error.servicesUnavailable" = "Сервисы проекта временно недоступны.";
 "projectHome.error.providerUnavailable" = "Выбранный локальный поставщик агента недоступен.";
 "projectHome.error.sessionChanged" = "Сеанс проекта изменился до начала действия.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Требуется подтверждение на Mac";
 "mobile.mirror.status.active" = "Подключено локально";
 "mobile.mirror.status.denied" = "В подключении отказано";
+"mobile.mirror.status.starting" = "Открытие зашифрованного туннеля к телефону";
+"mobile.mirror.transport.label" = "Зашифрованное подключение к телефону";
+"mobile.mirror.transport.profile" = "SSH-профиль телефона";
+"mobile.mirror.transport.detail" = "QR-код открывается через выбранный сеанс SSH. Слушатель в локальной сети и внешний ретранслятор не создаются.";
+"mobile.mirror.transport.unavailable" = "Сначала подключите SSH-профиль для этого телефона.";
+"mobile.mirror.transport.detail.unavailable" = "Сопряжение станет доступно после подключения Cocxy к телефону по SSH. Конечная точка браузера останется на интерфейсе обратной петли телефона.";
+"mobile.mirror.transport.open" = "Открыть удалённые подключения";
 "common.choose" = "Выбрать";
 "common.deny" = "Отклонить";
 "common.allow" = "Разрешить";

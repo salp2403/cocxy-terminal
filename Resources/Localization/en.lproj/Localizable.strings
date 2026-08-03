@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "A file or folder already exists at %@.";
 "project.clone.error.failed" = "Git could not clone the repository (exit %d).";
 "project.clone.error.repositoryMissing" = "Git finished without creating a repository at %@.";
+"project.clone.error.destinationChanged" = "The clone destination changed before it could be registered: %@.";
+"project.clone.error.cleanupUnverified" = "Clone cleanup could not be verified safely at %@. Review the folder before trying again.";
 "projectHome.error.servicesUnavailable" = "Project services are temporarily unavailable.";
 "projectHome.error.providerUnavailable" = "The selected local agent provider is unavailable.";
 "projectHome.error.sessionChanged" = "The project session changed before the action started.";

@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Unter %@ ist bereits eine Datei oder ein Ordner vorhanden.";
 "project.clone.error.failed" = "Git konnte das Repository nicht klonen (Exit-Code %d).";
 "project.clone.error.repositoryMissing" = "Git wurde beendet, ohne unter %@ ein Repository zu erstellen.";
+"project.clone.error.destinationChanged" = "Das Klonziel wurde geändert, bevor es registriert werden konnte: %@.";
+"project.clone.error.cleanupUnverified" = "Die Bereinigung des Klonvorgangs unter %@ konnte nicht sicher überprüft werden. Prüfen Sie den Ordner, bevor Sie es erneut versuchen.";
 "projectHome.error.servicesUnavailable" = "Die Projektdienste sind vorübergehend nicht verfügbar.";
 "projectHome.error.providerUnavailable" = "Der ausgewählte lokale Agent-Anbieter ist nicht verfügbar.";
 "projectHome.error.sessionChanged" = "Die Projektsitzung wurde vor dem Start der Aktion geändert.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Bestätigung am Mac erforderlich";
 "mobile.mirror.status.active" = "Lokal verbunden";
 "mobile.mirror.status.denied" = "Kopplung abgelehnt";
+"mobile.mirror.status.starting" = "Verschlüsselter Tunnel zum Telefon wird geöffnet";
+"mobile.mirror.transport.label" = "Verschlüsselte Telefonverbindung";
+"mobile.mirror.transport.profile" = "SSH-Profil des Telefons";
+"mobile.mirror.transport.detail" = "Der QR-Code wird über die ausgewählte SSH-Sitzung geöffnet. Es werden weder ein Listener im LAN noch ein externer Vermittlungsdienst erstellt.";
+"mobile.mirror.transport.unavailable" = "Verbinden Sie zuerst ein SSH-Profil für dieses Telefon.";
+"mobile.mirror.transport.detail.unavailable" = "Die Kopplung ist verfügbar, nachdem Cocxy per SSH eine Verbindung zum Telefon hergestellt hat. Der Browser-Endpunkt verbleibt auf der Loopback-Schnittstelle des Telefons.";
+"mobile.mirror.transport.open" = "Remoteverbindungen öffnen";
 "common.choose" = "Auswählen";
 "common.deny" = "Ablehnen";
 "common.allow" = "Erlauben";

@@ -165,6 +165,18 @@ extension AppLocalizer {
                 fallback: "Git finished without creating a repository at %@.",
                 path
             )
+        case .destinationChanged(let path):
+            return formattedProjectString(
+                "project.clone.error.destinationChanged",
+                fallback: "The clone destination changed before it could be registered: %@.",
+                path
+            )
+        case .cleanupUnverified(let path):
+            return formattedProjectString(
+                "project.clone.error.cleanupUnverified",
+                fallback: "Clone cleanup could not be verified safely at %@. Review the folder before trying again.",
+                path
+            )
         }
     }
 

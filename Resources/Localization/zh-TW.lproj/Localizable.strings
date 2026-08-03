@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "%@ 已有檔案或資料夾。";
 "project.clone.error.failed" = "Git 無法複製儲存庫（結束碼 %d）。";
 "project.clone.error.repositoryMissing" = "Git 已結束，但未在 %@ 建立儲存庫。";
+"project.clone.error.destinationChanged" = "複製目的地在登錄前已變更：%@。";
+"project.clone.error.cleanupUnverified" = "無法安全確認 %@ 的複製清理結果。請檢查該資料夾後再試一次。";
 "projectHome.error.servicesUnavailable" = "專案服務暫時無法使用。";
 "projectHome.error.providerUnavailable" = "所選的本機代理程式提供者無法使用。";
 "projectHome.error.sessionChanged" = "專案工作階段在操作開始前已變更。";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "需要在桌面端確認";
 "mobile.mirror.status.active" = "已在本機連線";
 "mobile.mirror.status.denied" = "配對遭拒";
+"mobile.mirror.status.starting" = "正在開啟通往手機的加密通道";
+"mobile.mirror.transport.label" = "手機加密連線";
+"mobile.mirror.transport.profile" = "手機 SSH 設定檔";
+"mobile.mirror.transport.detail" = "QR 碼會透過選取的 SSH 工作階段開啟。不會建立區域網路接聽器或外部轉送服務。";
+"mobile.mirror.transport.unavailable" = "請先連接此手機的 SSH 設定檔。";
+"mobile.mirror.transport.detail.unavailable" = "Cocxy 透過 SSH 連接手機後即可配對。瀏覽器端點會保留在手機的迴路介面上。";
+"mobile.mirror.transport.open" = "開啟遠端連線";
 "common.choose" = "選擇";
 "common.deny" = "拒絕";
 "common.allow" = "允許";

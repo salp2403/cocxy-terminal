@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "มีไฟล์หรือโฟลเดอร์อยู่แล้วที่ %@";
 "project.clone.error.failed" = "Git ไม่สามารถโคลนที่เก็บได้ (รหัสออก %d)";
 "project.clone.error.repositoryMissing" = "Git ทำงานเสร็จโดยไม่ได้สร้างที่เก็บที่ %@";
+"project.clone.error.destinationChanged" = "ปลายทางการโคลนเปลี่ยนไปก่อนที่จะลงทะเบียนได้: %@";
+"project.clone.error.cleanupUnverified" = "ไม่สามารถตรวจสอบการล้างข้อมูลการโคลนที่ %@ ได้อย่างปลอดภัย โปรดตรวจสอบโฟลเดอร์ก่อนลองอีกครั้ง";
 "projectHome.error.servicesUnavailable" = "บริการโปรเจกต์ไม่พร้อมใช้งานชั่วคราว";
 "projectHome.error.providerUnavailable" = "ผู้ให้บริการเอเจนต์ภายในเครื่องที่เลือกไม่พร้อมใช้งาน";
 "projectHome.error.sessionChanged" = "เซสชันโปรเจกต์เปลี่ยนแปลงก่อนเริ่มการดำเนินการ";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "ต้องยืนยันบนเดสก์ท็อป";
 "mobile.mirror.status.active" = "เชื่อมต่อภายในเครื่องแล้ว";
 "mobile.mirror.status.denied" = "ปฏิเสธการจับคู่แล้ว";
+"mobile.mirror.status.starting" = "กำลังเปิดอุโมงค์เข้ารหัสไปยังโทรศัพท์";
+"mobile.mirror.transport.label" = "การเชื่อมต่อโทรศัพท์แบบเข้ารหัส";
+"mobile.mirror.transport.profile" = "โปรไฟล์ SSH ของโทรศัพท์";
+"mobile.mirror.transport.detail" = "รหัส QR จะเปิดผ่านเซสชัน SSH ที่เลือก โดยจะไม่มีการสร้างตัวรับฟังบน LAN หรือรีเลย์ภายนอก";
+"mobile.mirror.transport.unavailable" = "เชื่อมต่อโปรไฟล์ SSH สำหรับโทรศัพท์เครื่องนี้ก่อน";
+"mobile.mirror.transport.detail.unavailable" = "การจับคู่จะใช้งานได้หลังจาก Cocxy เชื่อมต่อกับโทรศัพท์ผ่าน SSH จุดเชื่อมต่อของเบราว์เซอร์ยังคงอยู่บนอินเทอร์เฟซลูปแบ็กของโทรศัพท์";
+"mobile.mirror.transport.open" = "เปิดการเชื่อมต่อระยะไกล";
 "common.choose" = "เลือก";
 "common.deny" = "ปฏิเสธ";
 "common.allow" = "อนุญาต";

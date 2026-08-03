@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Det finnes allerede en fil eller mappe på %@.";
 "project.clone.error.failed" = "Git kunne ikke klone repoet (avslutningskode %d).";
 "project.clone.error.repositoryMissing" = "Git ble avsluttet uten å opprette et repo på %@.";
+"project.clone.error.destinationChanged" = "Klonemålet ble endret før det kunne registreres: %@.";
+"project.clone.error.cleanupUnverified" = "Oppryddingen etter kloning på %@ kunne ikke bekreftes på en trygg måte. Kontroller mappen før du prøver igjen.";
 "projectHome.error.servicesUnavailable" = "Prosjekttjenestene er midlertidig utilgjengelige.";
 "projectHome.error.providerUnavailable" = "Den valgte lokale agentleverandøren er utilgjengelig.";
 "projectHome.error.sessionChanged" = "Prosjektøkten ble endret før handlingen startet.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Må bekreftes på Macen";
 "mobile.mirror.status.active" = "Tilkoblet lokalt";
 "mobile.mirror.status.denied" = "Sammenkobling avvist";
+"mobile.mirror.status.starting" = "Åpner kryptert tunnel til telefonen";
+"mobile.mirror.transport.label" = "Kryptert telefontilkobling";
+"mobile.mirror.transport.profile" = "Telefonens SSH-profil";
+"mobile.mirror.transport.detail" = "QR-koden åpnes gjennom den valgte SSH-økten. Det opprettes ingen lytter på lokalnettet eller eksternt relé.";
+"mobile.mirror.transport.unavailable" = "Koble først til en SSH-profil for denne telefonen.";
+"mobile.mirror.transport.detail.unavailable" = "Sammenkobling blir tilgjengelig etter at Cocxy kobler til telefonen via SSH. Nettleserens endepunkt forblir på telefonens loopback-grensesnitt.";
+"mobile.mirror.transport.open" = "Åpne eksterne tilkoblinger";
 "common.choose" = "Velg";
 "common.deny" = "Avvis";
 "common.allow" = "Tillat";

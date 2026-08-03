@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "មានឯកសារ ឬថតរួចហើយនៅ %@។";
 "project.clone.error.failed" = "Git មិនអាចក្លូនឃ្លាំងបានទេ (កូដចាកចេញ %d)។";
 "project.clone.error.repositoryMissing" = "Git បានបញ្ចប់ដោយមិនបានបង្កើតឃ្លាំងនៅ %@។";
+"project.clone.error.destinationChanged" = "ទិសដៅក្លូនបានផ្លាស់ប្តូរ មុនពេលអាចចុះបញ្ជីបាន៖ %@។";
+"project.clone.error.cleanupUnverified" = "មិនអាចផ្ទៀងផ្ទាត់ការសម្អាតក្លូននៅ %@ ដោយសុវត្ថិភាពបានទេ។ សូមពិនិត្យថតមុនពេលព្យាយាមម្ដងទៀត។";
 "projectHome.error.servicesUnavailable" = "សេវាគម្រោងមិនអាចប្រើបានជាបណ្តោះអាសន្ន។";
 "projectHome.error.providerUnavailable" = "អ្នកផ្តល់ភ្នាក់ងារមូលដ្ឋានដែលបានជ្រើសមិនអាចប្រើបានទេ។";
 "projectHome.error.sessionChanged" = "សម័យគម្រោងបានផ្លាស់ប្តូរមុនពេលសកម្មភាពចាប់ផ្តើម។";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "ត្រូវការការបញ្ជាក់ពី Desktop";
 "mobile.mirror.status.active" = "បានភ្ជាប់ក្នុងមូលដ្ឋាន";
 "mobile.mirror.status.denied" = "ការផ្គូផ្គងត្រូវបានបដិសេធ";
+"mobile.mirror.status.starting" = "កំពុងបើកផ្លូវរូងក្រោមដីដែលបានអ៊ិនគ្រីបទៅកាន់ទូរសព្ទ";
+"mobile.mirror.transport.label" = "ការតភ្ជាប់ទូរសព្ទដែលបានអ៊ិនគ្រីប";
+"mobile.mirror.transport.profile" = "ប្រវត្តិរូប SSH របស់ទូរសព្ទ";
+"mobile.mirror.transport.detail" = "កូដ QR បើកតាមរយៈសម័យ SSH ដែលបានជ្រើស។ មិនមានការបង្កើតកម្មវិធីស្តាប់លើ LAN ឬកម្មវិធីបញ្ជូនតខាងក្រៅទេ។";
+"mobile.mirror.transport.unavailable" = "ដំបូង សូមភ្ជាប់ប្រវត្តិរូប SSH សម្រាប់ទូរសព្ទនេះ។";
+"mobile.mirror.transport.detail.unavailable" = "ការផ្គូផ្គងនឹងអាចប្រើបាន បន្ទាប់ពី Cocxy ភ្ជាប់ទៅទូរសព្ទតាមរយៈ SSH។ ចំណុចបញ្ចប់របស់កម្មវិធីរុករកនៅតែស្ថិតលើចំណុចប្រទាក់ loopback របស់ទូរសព្ទ។";
+"mobile.mirror.transport.open" = "បើកការតភ្ជាប់ពីចម្ងាយ";
 "common.choose" = "ជ្រើសរើស";
 "common.deny" = "បដិសេធ";
 "common.allow" = "អនុញ្ញាត";

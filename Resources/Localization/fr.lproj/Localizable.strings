@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Un fichier ou un dossier existe déjà à l’emplacement %@.";
 "project.clone.error.failed" = "Git n’a pas pu cloner le dépôt (code de sortie %d).";
 "project.clone.error.repositoryMissing" = "Git s’est terminé sans créer de dépôt à l’emplacement %@.";
+"project.clone.error.destinationChanged" = "La destination du clonage a changé avant de pouvoir être enregistrée : %@.";
+"project.clone.error.cleanupUnverified" = "Le nettoyage du clonage dans %@ n’a pas pu être vérifié de manière sûre. Vérifiez le dossier avant de réessayer.";
 "projectHome.error.servicesUnavailable" = "Les services du projet sont temporairement indisponibles.";
 "projectHome.error.providerUnavailable" = "Le fournisseur d’agent local sélectionné est indisponible.";
 "projectHome.error.sessionChanged" = "La session du projet a changé avant le début de l’action.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Confirmation sur l’ordinateur requise";
 "mobile.mirror.status.active" = "Connecté localement";
 "mobile.mirror.status.denied" = "Jumelage refusé";
+"mobile.mirror.status.starting" = "Ouverture du tunnel chiffré vers le téléphone";
+"mobile.mirror.transport.label" = "Connexion chiffrée au téléphone";
+"mobile.mirror.transport.profile" = "Profil SSH du téléphone";
+"mobile.mirror.transport.detail" = "Le code QR s’ouvre via la session SSH sélectionnée. Aucun écouteur sur le réseau local ni relais externe n’est créé.";
+"mobile.mirror.transport.unavailable" = "Connectez d’abord un profil SSH pour ce téléphone.";
+"mobile.mirror.transport.detail.unavailable" = "Le jumelage sera disponible lorsque Cocxy se sera connecté au téléphone via SSH. Le point de terminaison du navigateur reste sur l’interface de bouclage du téléphone.";
+"mobile.mirror.transport.open" = "Ouvrir les connexions distantes";
 "common.choose" = "Choisir";
 "common.deny" = "Refuser";
 "common.allow" = "Autoriser";

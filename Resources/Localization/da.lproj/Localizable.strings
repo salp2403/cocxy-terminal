@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Der findes allerede en fil eller mappe på %@.";
 "project.clone.error.failed" = "Git kunne ikke klone arkivet (afslutningskode %d).";
 "project.clone.error.repositoryMissing" = "Git afsluttede uden at oprette et arkiv på %@.";
+"project.clone.error.destinationChanged" = "Kloningsdestinationen blev ændret, før den kunne registreres: %@.";
+"project.clone.error.cleanupUnverified" = "Kloningsoprydningen på %@ kunne ikke bekræftes sikkert. Gennemgå mappen, før du prøver igen.";
 "projectHome.error.servicesUnavailable" = "Projekttjenester er midlertidigt utilgængelige.";
 "projectHome.error.providerUnavailable" = "Den valgte lokale agentudbyder er ikke tilgængelig.";
 "projectHome.error.sessionChanged" = "Projektsessionen blev ændret, før handlingen startede.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Bekræftelse på computeren påkrævet";
 "mobile.mirror.status.active" = "Forbundet lokalt";
 "mobile.mirror.status.denied" = "Parring afvist";
+"mobile.mirror.status.starting" = "Åbner krypteret tunnel til telefonen";
+"mobile.mirror.transport.label" = "Krypteret telefonforbindelse";
+"mobile.mirror.transport.profile" = "Telefonens SSH-profil";
+"mobile.mirror.transport.detail" = "QR-koden åbnes via den valgte SSH-session. Der oprettes ingen lytter på LAN'et eller eksternt relæ.";
+"mobile.mirror.transport.unavailable" = "Tilslut først en SSH-profil for denne telefon.";
+"mobile.mirror.transport.detail.unavailable" = "Parring bliver tilgængelig, når Cocxy har oprettet forbindelse til telefonen via SSH. Browserens slutpunkt forbliver på telefonens loopback-grænseflade.";
+"mobile.mirror.transport.open" = "Åbn fjernforbindelser";
 "common.choose" = "Vælg";
 "common.deny" = "Afvis";
 "common.allow" = "Tillad";

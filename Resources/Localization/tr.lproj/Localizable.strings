@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "%@ konumunda zaten bir dosya veya klasör var.";
 "project.clone.error.failed" = "Git depoyu klonlayamadı (çıkış kodu %d).";
 "project.clone.error.repositoryMissing" = "Git, %@ konumunda depo oluşturmadan tamamlandı.";
+"project.clone.error.destinationChanged" = "Klonlama hedefi kaydedilmeden önce değişti: %@.";
+"project.clone.error.cleanupUnverified" = "%@ konumundaki klonlama temizliği güvenli biçimde doğrulanamadı. Yeniden denemeden önce klasörü gözden geçirin.";
 "projectHome.error.servicesUnavailable" = "Proje hizmetleri geçici olarak kullanılamıyor.";
 "projectHome.error.providerUnavailable" = "Seçilen yerel ajan sağlayıcısı kullanılamıyor.";
 "projectHome.error.sessionChanged" = "Proje oturumu işlem başlamadan önce değişti.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Masaüstü onayı gerekli";
 "mobile.mirror.status.active" = "Yerel bağlantı kuruldu";
 "mobile.mirror.status.denied" = "Eşleştirme reddedildi";
+"mobile.mirror.status.starting" = "Telefona şifreli tünel açılıyor";
+"mobile.mirror.transport.label" = "Şifreli Telefon Bağlantısı";
+"mobile.mirror.transport.profile" = "Telefon SSH profili";
+"mobile.mirror.transport.detail" = "QR kodu seçilen SSH oturumu üzerinden açılır. LAN üzerinde dinleyici veya harici aktarıcı oluşturulmaz.";
+"mobile.mirror.transport.unavailable" = "Önce bu telefon için bir SSH profili bağlayın.";
+"mobile.mirror.transport.detail.unavailable" = "Eşleştirme, Cocxy telefona SSH üzerinden bağlandıktan sonra kullanılabilir. Tarayıcı uç noktası telefonun geri döngü arayüzünde kalır.";
+"mobile.mirror.transport.open" = "Uzak Bağlantıları Aç";
 "common.choose" = "Seç";
 "common.deny" = "Reddet";
 "common.allow" = "İzin Ver";

@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "%@ にはファイルまたはフォルダがすでに存在します。";
 "project.clone.error.failed" = "Git でリポジトリをクローンできませんでした（終了コード %d）。";
 "project.clone.error.repositoryMissing" = "Git は %@ にリポジトリを作成せずに終了しました。";
+"project.clone.error.destinationChanged" = "クローン先は登録前に変更されました：%@。";
+"project.clone.error.cleanupUnverified" = "%@ でクローンのクリーンアップを安全に確認できませんでした。再試行する前にフォルダを確認してください。";
 "projectHome.error.servicesUnavailable" = "プロジェクトサービスは一時的に利用できません。";
 "projectHome.error.providerUnavailable" = "選択したローカルエージェントプロバイダを利用できません。";
 "projectHome.error.sessionChanged" = "操作を開始する前にプロジェクトセッションが変更されました。";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "デスクトップでの確認が必要です";
 "mobile.mirror.status.active" = "ローカル接続済み";
 "mobile.mirror.status.denied" = "ペアリングが拒否されました";
+"mobile.mirror.status.starting" = "電話への暗号化トンネルを開いています";
+"mobile.mirror.transport.label" = "電話への暗号化接続";
+"mobile.mirror.transport.profile" = "電話の SSH プロファイル";
+"mobile.mirror.transport.detail" = "QR コードは選択した SSH セッション経由で開きます。LAN リスナーや外部リレーは作成されません。";
+"mobile.mirror.transport.unavailable" = "まず、この電話用の SSH プロファイルを接続してください。";
+"mobile.mirror.transport.detail.unavailable" = "Cocxy が SSH 経由で電話に接続するとペアリングを利用できます。ブラウザのエンドポイントは電話のループバックインターフェース上に維持されます。";
+"mobile.mirror.transport.open" = "リモート接続を開く";
 "common.choose" = "選択";
 "common.deny" = "拒否";
 "common.allow" = "許可";

@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "يوجد ملف أو مجلد بالفعل في %@.";
 "project.clone.error.failed" = "تعذر على Git استنساخ المستودع (رمز الخروج %d).";
 "project.clone.error.repositoryMissing" = "انتهى Git دون إنشاء مستودع في %@.";
+"project.clone.error.destinationChanged" = "تغيّرت وجهة الاستنساخ قبل أن يمكن تسجيلها: %@.";
+"project.clone.error.cleanupUnverified" = "تعذر التحقق بأمان من تنظيف الاستنساخ في %@. راجع المجلد قبل المحاولة مرة أخرى.";
 "projectHome.error.servicesUnavailable" = "خدمات المشروع غير متاحة مؤقتًا.";
 "projectHome.error.providerUnavailable" = "موفر الوكيل المحلي المحدد غير متاح.";
 "projectHome.error.sessionChanged" = "تغيرت جلسة المشروع قبل بدء الإجراء.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "مطلوب تأكيد من سطح المكتب";
 "mobile.mirror.status.active" = "متصل محليًا";
 "mobile.mirror.status.denied" = "تم رفض الإقران";
+"mobile.mirror.status.starting" = "جارٍ فتح نفق مشفّر إلى الهاتف";
+"mobile.mirror.transport.label" = "اتصال مشفّر بالهاتف";
+"mobile.mirror.transport.profile" = "ملف تعريف SSH للهاتف";
+"mobile.mirror.transport.detail" = "يُفتح رمز QR عبر جلسة SSH المحددة. لا يتم إنشاء مستمع على شبكة LAN أو مرحّل خارجي.";
+"mobile.mirror.transport.unavailable" = "صِل أولاً ملف تعريف SSH لهذا الهاتف.";
+"mobile.mirror.transport.detail.unavailable" = "يتوفر الإقران بعد اتصال Cocxy بالهاتف عبر SSH. تظل نقطة نهاية المتصفح على واجهة loopback الخاصة بالهاتف.";
+"mobile.mirror.transport.open" = "فتح الاتصالات البعيدة";
 "common.choose" = "اختيار";
 "common.deny" = "رفض";
 "common.allow" = "السماح";

@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "%@ 已存在文件或文件夹。";
 "project.clone.error.failed" = "Git 无法克隆存储库（退出代码 %d）。";
 "project.clone.error.repositoryMissing" = "Git 已结束，但未在 %@ 创建存储库。";
+"project.clone.error.destinationChanged" = "克隆目标在注册前发生了变化：%@。";
+"project.clone.error.cleanupUnverified" = "无法安全确认 %@ 处的克隆清理结果。请检查该文件夹后再重试。";
 "projectHome.error.servicesUnavailable" = "项目服务暂时不可用。";
 "projectHome.error.providerUnavailable" = "所选本地代理提供程序不可用。";
 "projectHome.error.sessionChanged" = "项目会话在操作开始前已更改。";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "需要在桌面端确认";
 "mobile.mirror.status.active" = "已在本地连接";
 "mobile.mirror.status.denied" = "配对已拒绝";
+"mobile.mirror.status.starting" = "正在打开通往手机的加密隧道";
+"mobile.mirror.transport.label" = "手机加密连接";
+"mobile.mirror.transport.profile" = "手机 SSH 配置";
+"mobile.mirror.transport.detail" = "二维码通过选定的 SSH 会话打开。不会创建局域网监听器或外部中继。";
+"mobile.mirror.transport.unavailable" = "请先连接此手机的 SSH 配置。";
+"mobile.mirror.transport.detail.unavailable" = "Cocxy 通过 SSH 连接到手机后即可配对。浏览器端点始终位于手机的环回接口上。";
+"mobile.mirror.transport.open" = "打开远程连接";
 "common.choose" = "选择";
 "common.deny" = "拒绝";
 "common.allow" = "允许";

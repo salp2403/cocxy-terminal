@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "%@에 파일 또는 폴더가 이미 있습니다.";
 "project.clone.error.failed" = "Git에서 저장소를 복제하지 못했습니다(종료 코드 %d).";
 "project.clone.error.repositoryMissing" = "Git이 %@에 저장소를 만들지 않고 종료되었습니다.";
+"project.clone.error.destinationChanged" = "클론 대상이 등록되기 전에 변경되었습니다: %@.";
+"project.clone.error.cleanupUnverified" = "%@에서 클론 정리가 안전하게 완료되었는지 확인할 수 없습니다. 다시 시도하기 전에 폴더를 확인하십시오.";
 "projectHome.error.servicesUnavailable" = "프로젝트 서비스를 일시적으로 사용할 수 없습니다.";
 "projectHome.error.providerUnavailable" = "선택한 로컬 에이전트 공급자를 사용할 수 없습니다.";
 "projectHome.error.sessionChanged" = "작업이 시작되기 전에 프로젝트 세션이 변경되었습니다.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "데스크탑 확인 필요";
 "mobile.mirror.status.active" = "로컬로 연결됨";
 "mobile.mirror.status.denied" = "페어링 거부됨";
+"mobile.mirror.status.starting" = "휴대전화로 암호화된 터널을 여는 중";
+"mobile.mirror.transport.label" = "암호화된 휴대전화 연결";
+"mobile.mirror.transport.profile" = "휴대전화 SSH 프로필";
+"mobile.mirror.transport.detail" = "QR 코드는 선택한 SSH 세션을 통해 열립니다. LAN 수신기나 외부 릴레이는 생성되지 않습니다.";
+"mobile.mirror.transport.unavailable" = "먼저 이 휴대전화의 SSH 프로필을 연결하십시오.";
+"mobile.mirror.transport.detail.unavailable" = "Cocxy가 SSH를 통해 휴대전화에 연결하면 페어링을 사용할 수 있습니다. 브라우저 엔드포인트는 휴대전화의 루프백 인터페이스에 유지됩니다.";
+"mobile.mirror.transport.open" = "원격 연결 열기";
 "common.choose" = "선택";
 "common.deny" = "거부";
 "common.allow" = "허용";

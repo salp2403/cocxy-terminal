@@ -550,6 +550,8 @@
 "project.clone.error.destinationExists" = "Đã có tệp hoặc thư mục tại %@.";
 "project.clone.error.failed" = "Git không thể sao chép kho lưu trữ (mã thoát %d).";
 "project.clone.error.repositoryMissing" = "Git đã kết thúc mà không tạo kho lưu trữ tại %@.";
+"project.clone.error.destinationChanged" = "Đích nhân bản đã thay đổi trước khi có thể được đăng ký: %@.";
+"project.clone.error.cleanupUnverified" = "Không thể xác minh an toàn việc dọn dẹp bản nhân tại %@. Hãy kiểm tra thư mục trước khi thử lại.";
 "projectHome.error.servicesUnavailable" = "Các dịch vụ dự án tạm thời không khả dụng.";
 "projectHome.error.providerUnavailable" = "Nhà cung cấp tác tử cục bộ đã chọn không khả dụng.";
 "projectHome.error.sessionChanged" = "Phiên dự án đã thay đổi trước khi thao tác bắt đầu.";
@@ -3545,6 +3547,13 @@
 "mobile.mirror.status.confirmation" = "Cần xác nhận trên máy Mac";
 "mobile.mirror.status.active" = "Đã kết nối cục bộ";
 "mobile.mirror.status.denied" = "Đã từ chối ghép đôi";
+"mobile.mirror.status.starting" = "Đang mở đường hầm mã hóa tới điện thoại";
+"mobile.mirror.transport.label" = "Kết nối điện thoại được mã hóa";
+"mobile.mirror.transport.profile" = "Hồ sơ SSH của điện thoại";
+"mobile.mirror.transport.detail" = "Mã QR được mở qua phiên SSH đã chọn. Không tạo trình lắng nghe trên mạng LAN hoặc bộ chuyển tiếp bên ngoài.";
+"mobile.mirror.transport.unavailable" = "Trước tiên, hãy kết nối hồ sơ SSH cho điện thoại này.";
+"mobile.mirror.transport.detail.unavailable" = "Tính năng ghép đôi sẽ khả dụng sau khi Cocxy kết nối với điện thoại qua SSH. Điểm cuối của trình duyệt vẫn nằm trên giao diện loopback của điện thoại.";
+"mobile.mirror.transport.open" = "Mở kết nối từ xa";
 "common.choose" = "Chọn";
 "common.deny" = "Từ chối";
 "common.allow" = "Cho phép";
