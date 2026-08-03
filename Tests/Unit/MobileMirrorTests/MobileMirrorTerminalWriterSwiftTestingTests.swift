@@ -59,6 +59,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         let action = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID.rawValue.uuidString,
             controlType: "paste",
             text: payload
         )
@@ -120,7 +121,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         )
 
         try await writer.write(
-            action: Self.characterAction("x"),
+            action: Self.characterAction("x", surfaceID: surfaceID),
             to: tabID,
             surfaceID: surfaceID
         )
@@ -144,7 +145,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
 
         await #expect(throws: MobileMirrorError.authorizationDenied) {
             try await writer.write(
-                action: Self.characterAction("x"),
+                action: Self.characterAction("x", surfaceID: surfaceID),
                 to: TabID(),
                 surfaceID: surfaceID
             )
@@ -172,6 +173,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         let action = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID.rawValue.uuidString,
             controlType: "key",
             key: "left",
             ctrl: true
@@ -236,11 +238,34 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
 
         await #expect(throws: MobileMirrorError.authorizationDenied) {
             try await writer.write(
-                action: Self.characterAction("x"),
+                action: Self.characterAction("x", surfaceID: requestedSurfaceID),
                 to: tabID,
                 surfaceID: requestedSurfaceID
             )
         }
+        #expect(capture.texts.isEmpty)
+    }
+
+    @Test("an action for another surface is rejected before authorization")
+    func actionForAnotherSurfaceFailsClosed() async {
+        let requestedSurfaceID = SurfaceID()
+        let capture = MobileMirrorTerminalWriteCapture()
+        let writer = MobileMirrorTerminalWriter(
+            grantProvider: { request in
+                capture.requests.append(request)
+                return nil
+            },
+            targetProvider: { _ in capture.target }
+        )
+
+        await #expect(throws: MobileMirrorError.invalidAction) {
+            try await writer.write(
+                action: Self.characterAction("x", surfaceID: SurfaceID()),
+                to: TabID(),
+                surfaceID: requestedSurfaceID
+            )
+        }
+        #expect(capture.requests.isEmpty)
         #expect(capture.texts.isEmpty)
     }
 
@@ -262,7 +287,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
 
         await #expect(throws: MobileMirrorError.targetUnavailable) {
             try await writer.write(
-                action: Self.characterAction("x"),
+                action: Self.characterAction("x", surfaceID: surfaceID),
                 to: tabID,
                 surfaceID: surfaceID
             )
@@ -270,10 +295,14 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         #expect(capture.texts == ["x"])
     }
 
-    private static func characterAction(_ text: String) -> MobileMirrorAction {
+    private static func characterAction(
+        _ text: String,
+        surfaceID: SurfaceID
+    ) -> MobileMirrorAction {
         MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID.rawValue.uuidString,
             controlType: "key",
             text: text
         )

@@ -18,9 +18,10 @@ enum MobileMirrorTerminalControl {
 }
 
 struct MobileMirrorAgentSnapshot: Codable, Equatable, Sendable, Identifiable {
-    var id: String { sessionID }
+    var id: String { "\(sessionID):\(surfaceID)" }
 
     let sessionID: String
+    let surfaceID: String
     let projectID: String
     let title: String
     let name: String?
@@ -28,6 +29,53 @@ struct MobileMirrorAgentSnapshot: Codable, Equatable, Sendable, Identifiable {
     let stateLabel: String
     let canRespond: Bool
     let terminalAvailable: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case sessionID
+        case surfaceID
+        case projectID
+        case title
+        case name
+        case state
+        case stateLabel
+        case canRespond
+        case terminalAvailable
+    }
+
+    init(
+        sessionID: String,
+        surfaceID: String,
+        projectID: String,
+        title: String,
+        name: String?,
+        state: String,
+        stateLabel: String,
+        canRespond: Bool,
+        terminalAvailable: Bool
+    ) {
+        self.sessionID = sessionID
+        self.surfaceID = surfaceID
+        self.projectID = projectID
+        self.title = title
+        self.name = name
+        self.state = state
+        self.stateLabel = stateLabel
+        self.canRespond = canRespond
+        self.terminalAvailable = terminalAvailable
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sessionID = try container.decode(String.self, forKey: .sessionID)
+        surfaceID = try container.decodeIfPresent(String.self, forKey: .surfaceID) ?? sessionID
+        projectID = try container.decode(String.self, forKey: .projectID)
+        title = try container.decode(String.self, forKey: .title)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        state = try container.decode(String.self, forKey: .state)
+        stateLabel = try container.decode(String.self, forKey: .stateLabel)
+        canRespond = try container.decode(Bool.self, forKey: .canRespond)
+        terminalAvailable = try container.decode(Bool.self, forKey: .terminalAvailable)
+    }
 }
 
 struct MobileMirrorApprovalSnapshot: Codable, Equatable, Sendable, Identifiable {
@@ -40,13 +88,62 @@ struct MobileMirrorApprovalSnapshot: Codable, Equatable, Sendable, Identifiable 
 
 struct MobileMirrorSnapshot: Codable, Equatable, Sendable {
     let selectedSessionID: String?
+    let selectedSurfaceID: String?
     let projectCreationEnabled: Bool
     let projects: [MobileMirrorProjectSnapshot]
     let agents: [MobileMirrorAgentSnapshot]
     let approvals: [MobileMirrorApprovalSnapshot]
 
+    private enum CodingKeys: String, CodingKey {
+        case selectedSessionID
+        case selectedSurfaceID
+        case projectCreationEnabled
+        case projects
+        case agents
+        case approvals
+    }
+
+    init(
+        selectedSessionID: String?,
+        selectedSurfaceID: String? = nil,
+        projectCreationEnabled: Bool,
+        projects: [MobileMirrorProjectSnapshot],
+        agents: [MobileMirrorAgentSnapshot],
+        approvals: [MobileMirrorApprovalSnapshot]
+    ) {
+        self.selectedSessionID = selectedSessionID
+        self.selectedSurfaceID = selectedSurfaceID
+        self.projectCreationEnabled = projectCreationEnabled
+        self.projects = projects
+        self.agents = agents
+        self.approvals = approvals
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        selectedSessionID = try container.decodeIfPresent(String.self, forKey: .selectedSessionID)
+        selectedSurfaceID = try container.decodeIfPresent(String.self, forKey: .selectedSurfaceID)
+        projectCreationEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .projectCreationEnabled
+        ) ?? false
+        projects = try container.decodeIfPresent(
+            [MobileMirrorProjectSnapshot].self,
+            forKey: .projects
+        ) ?? []
+        agents = try container.decodeIfPresent(
+            [MobileMirrorAgentSnapshot].self,
+            forKey: .agents
+        ) ?? []
+        approvals = try container.decodeIfPresent(
+            [MobileMirrorApprovalSnapshot].self,
+            forKey: .approvals
+        ) ?? []
+    }
+
     static let empty = MobileMirrorSnapshot(
         selectedSessionID: nil,
+        selectedSurfaceID: nil,
         projectCreationEnabled: false,
         projects: [],
         agents: [],
@@ -97,6 +194,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
 
     let kind: Kind
     let sessionID: String?
+    let surfaceID: String?
     let controlType: String?
     let key: String?
     let text: String?
@@ -114,6 +212,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case kind
         case sessionID
+        case surfaceID
         case controlType
         case key
         case text
@@ -132,6 +231,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
     init(
         kind: Kind,
         sessionID: String? = nil,
+        surfaceID: String? = nil,
         controlType: String? = nil,
         key: String? = nil,
         text: String? = nil,
@@ -148,6 +248,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
     ) {
         self.kind = kind
         self.sessionID = sessionID
+        self.surfaceID = surfaceID
         self.controlType = controlType
         self.key = key
         self.text = text
@@ -167,6 +268,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         kind = try container.decode(Kind.self, forKey: .kind)
         sessionID = try container.decodeIfPresent(String.self, forKey: .sessionID)
+        surfaceID = try container.decodeIfPresent(String.self, forKey: .surfaceID)
         controlType = try container.decodeIfPresent(String.self, forKey: .controlType)
         key = try container.decodeIfPresent(String.self, forKey: .key)
         text = try container.decodeIfPresent(String.self, forKey: .text)
@@ -187,7 +289,8 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
         case .terminalControl:
             try validateTerminalControl()
         case .selectSession:
-            guard let sessionID, UUID(uuidString: sessionID) != nil else {
+            guard let sessionID, UUID(uuidString: sessionID) != nil,
+                  let surfaceID, UUID(uuidString: surfaceID) != nil else {
                 throw MobileMirrorError.invalidAction
             }
             guard controlType == nil, key == nil, text == nil, mouseAction == nil,
@@ -197,6 +300,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
             }
         case .agentRespond:
             guard let sessionID, UUID(uuidString: sessionID) != nil,
+                  let surfaceID, UUID(uuidString: surfaceID) != nil,
                   let text,
                   !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   text.utf8.count <= 8_192,
@@ -210,7 +314,8 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
                   !approvalID.isEmpty,
                   text?.utf8.count ?? 0 <= 8_192,
                   actionAllowsApprovalText,
-                  sessionID == nil, controlType == nil, key == nil, mouseAction == nil,
+                  sessionID == nil, surfaceID == nil,
+                  controlType == nil, key == nil, mouseAction == nil,
                   row == nil, col == nil, button == nil, scrollDelta == nil,
                   !shift, !alt, !ctrl, name == nil else {
                 throw MobileMirrorError.invalidAction
@@ -219,7 +324,8 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
             guard let name,
                   !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                   name.utf8.count <= 160,
-                  sessionID == nil, controlType == nil, key == nil, text == nil,
+                  sessionID == nil, surfaceID == nil,
+                  controlType == nil, key == nil, text == nil,
                   mouseAction == nil, row == nil, col == nil, button == nil,
                   scrollDelta == nil, !shift, !alt, !ctrl, approvalID == nil else {
                 throw MobileMirrorError.invalidAction
@@ -233,6 +339,7 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
 
     private func validateTerminalControl() throws {
         guard let sessionID, UUID(uuidString: sessionID) != nil,
+              let surfaceID, UUID(uuidString: surfaceID) != nil,
               approvalID == nil, name == nil else {
             throw MobileMirrorError.invalidAction
         }

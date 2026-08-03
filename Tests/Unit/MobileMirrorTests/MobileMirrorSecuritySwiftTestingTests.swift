@@ -140,6 +140,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let action = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: UUID().uuidString,
             controlType: "paste",
             text: String(
                 repeating: "é",
@@ -164,9 +165,11 @@ struct MobileMirrorSecuritySwiftTestingTests {
 
     @Test("terminal action permits bounded viewport scroll but rejects browser mouse controls")
     func terminalActionValidatesViewportNavigation() throws {
+        let surfaceID = UUID().uuidString
         let action = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             controlType: "mouse",
             mouseAction: "press",
             row: 1,
@@ -180,6 +183,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let viewportScroll = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             controlType: "viewport-scroll",
             scrollDelta: 4
         )
@@ -188,6 +192,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let unboundedScroll = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             controlType: "viewport-scroll",
             scrollDelta: 65
         )
@@ -198,6 +203,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let paste = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             controlType: "paste",
             text: String(repeating: "p", count: MobileMirrorTerminalControl.maximumPasteUTF8Bytes)
         )
@@ -205,6 +211,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let oversizedPaste = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             controlType: "paste",
             text: paste.text! + "x"
         )
@@ -215,6 +222,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let ambiguous = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             controlType: "key",
             key: "enter",
             text: "unexpected"
@@ -226,6 +234,7 @@ struct MobileMirrorSecuritySwiftTestingTests {
         let pollutedSelection = MobileMirrorAction(
             kind: .selectSession,
             sessionID: UUID().uuidString,
+            surfaceID: surfaceID,
             text: "unexpected"
         )
         #expect(throws: MobileMirrorError.invalidAction) {

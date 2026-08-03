@@ -228,9 +228,9 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             )
         }
 
-        if let sessionID = Self.terminalSessionID(from: request.path) {
-            guard UUID(uuidString: sessionID) != nil,
-                  let route = routeRegistry.route(for: sessionID) else {
+        if let surfaceID = Self.terminalSessionID(from: request.path) {
+            guard UUID(uuidString: surfaceID) != nil,
+                  let route = routeRegistry.route(forSurfaceID: surfaceID) else {
                 return .response(.error("Terminal stream is unavailable.", status: 404))
             }
             return .proxy(MobileMirrorProxyTarget(
@@ -249,8 +249,9 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         guard request.path == "/ws" || allowedStaticPaths.contains(request.path) else {
             return .response(.error("Not found.", status: 404))
         }
-        let selectedID = authority.selectedSessionID(cookie: cookie)
-        let route = selectedID.flatMap(routeRegistry.route(for:)) ?? routeRegistry.defaultRoute()
+        let selectedSurfaceID = authority.selectedTerminal(cookie: cookie)?.surfaceID
+        let route = selectedSurfaceID.flatMap(routeRegistry.route(forSurfaceID:))
+            ?? routeRegistry.defaultRoute()
         guard let route else {
             return .response(.error("No local terminal stream is available.", status: 503))
         }

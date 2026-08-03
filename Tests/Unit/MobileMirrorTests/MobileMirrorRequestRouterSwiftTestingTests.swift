@@ -89,7 +89,8 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
 
         let action = MobileMirrorAction(
             kind: .selectSession,
-            sessionID: UUID().uuidString
+            sessionID: UUID().uuidString,
+            surfaceID: UUID().uuidString
         )
         let body = try JSONEncoder().encode(action)
         let timestamp = String(UInt64(Date().timeIntervalSince1970))
@@ -124,6 +125,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let terminalAction = MobileMirrorAction(
             kind: .terminalControl,
             sessionID: UUID().uuidString,
+            surfaceID: UUID().uuidString,
             controlType: "viewport-scroll",
             scrollDelta: 3
         )
@@ -160,14 +162,15 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(await actionRecorder.values == [action, terminalAction])
 
         let terminalSessionID = UUID().uuidString
+        let terminalSurfaceID = SurfaceID()
         routes.replace(
             routes: [MobileMirrorTerminalRoute(
                 sessionID: terminalSessionID,
-                surfaceID: SurfaceID(),
+                surfaceID: terminalSurfaceID,
                 port: 42_345,
                 bearerToken: "stream-token"
             )],
-            preferredSessionID: terminalSessionID
+            preferredSurfaceID: terminalSurfaceID.rawValue.uuidString
         )
         let authenticatedHeaders = ["cookie": "cocxy_mobile=\(cookie)"]
         guard case .proxy = await router.route(
@@ -186,7 +189,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         }
         guard case .proxy = await router.route(
             request: request(
-                path: "/terminal/\(terminalSessionID)/ws",
+                path: "/terminal/\(terminalSurfaceID.rawValue.uuidString)/ws",
                 headers: [
                     "cookie": "cocxy_mobile=\(cookie)",
                     "origin": "http://127.0.0.1:43120",

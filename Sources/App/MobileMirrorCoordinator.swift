@@ -52,7 +52,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     var router: MobileMirrorRequestRouter?
     var tunnelLease: MobileMirrorTunnelLease?
     var pairingChannelID: UUID?
-    var ownedStreams: [String: OwnedStream] = [:]
+    var ownedStreams: [SurfaceID: OwnedStream] = [:]
     var cancellables = Set<AnyCancellable>()
     var refreshTimer: Timer?
     var expiryTask: Task<Void, Never>?
@@ -342,12 +342,21 @@ final class MobileMirrorCoordinator: ObservableObject {
     private func snapshot(for cookie: String) throws -> MobileMirrorSnapshot {
         _ = try authority.credentials(cookie: cookie)
         refreshSnapshot()
-        let availableIDs = Set(snapshot.agents.map(\.sessionID))
-        let selected = authority.selectedSessionID(cookie: cookie)
-        if selected == nil || !availableIDs.contains(selected ?? "") {
-            let fallback = snapshot.agents.first(where: \.terminalAvailable)?.sessionID
-                ?? snapshot.agents.first?.sessionID
-            _ = authority.selectSession(fallback, cookie: cookie)
+        let selected = authority.selectedTerminal(cookie: cookie)
+        let selectionIsAvailable = selected.map { selection in
+            snapshot.agents.contains {
+                $0.sessionID == selection.sessionID
+                    && $0.surfaceID == selection.surfaceID
+                    && $0.terminalAvailable
+            }
+        } == true
+        if !selectionIsAvailable {
+            let fallback = snapshot.agents.first(where: \.terminalAvailable)
+            _ = authority.selectTerminal(
+                sessionID: fallback?.sessionID,
+                surfaceID: fallback?.surfaceID,
+                cookie: cookie
+            )
             refreshSnapshot()
         }
         return snapshot
@@ -369,46 +378,50 @@ final class MobileMirrorCoordinator: ObservableObject {
             var publishesState = true
             switch action.kind {
             case .selectSession:
-                guard let sessionID = action.sessionID,
-                      sessionEntriesSnapshot.contains(where: {
-                          $0.sessionID.rawValue.uuidString == sessionID
-                      }), authority.selectSession(sessionID, cookie: cookie) else {
-                    throw MobileMirrorError.targetUnavailable
-                }
-            case .terminalControl:
-                let entry = try terminalEntry(for: action.sessionID)
-                guard let route = routeRegistry.route(
-                    for: entry.sessionID.rawValue.uuidString
+                let selection = try terminalSelection(for: action)
+                guard authority.selectTerminal(
+                    sessionID: selection.entry.sessionID.rawValue.uuidString,
+                    surfaceID: selection.route.surfaceID.rawValue.uuidString,
+                    cookie: cookie
                 ) else {
                     throw MobileMirrorError.targetUnavailable
                 }
+            case .terminalControl:
+                let selection = try terminalSelection(for: action)
                 if action.controlType == "viewport-scroll" {
                     guard let scrollDelta = action.scrollDelta else {
                         throw MobileMirrorError.invalidAction
                     }
-                    try scrollTerminal(entry, route: route, deltaRows: scrollDelta)
+                    try scrollTerminal(
+                        selection.entry,
+                        route: selection.route,
+                        deltaRows: scrollDelta
+                    )
                 } else {
                     guard let writer = makeTerminalWriter(channelID: active.channelID) else {
                         throw MobileMirrorError.targetUnavailable
                     }
                     try await writer.write(
                         action: action,
-                        to: entry.tabID,
-                        surfaceID: route.surfaceID
+                        to: selection.entry.tabID,
+                        surfaceID: selection.route.surfaceID
                     )
                 }
                 publishesState = false
             case .agentRespond:
-                let entry = try terminalEntry(for: action.sessionID)
-                guard entry.agentState == .waitingInput,
-                      let route = routeRegistry.route(
-                          for: entry.sessionID.rawValue.uuidString
-                      ),
+                let selection = try terminalSelection(for: action)
+                let surfaceState = selection.controller.injectedPerSurfaceStore?
+                    .state(for: selection.route.surfaceID)
+                guard (surfaceState?.agentState ?? selection.entry.agentState) == .waitingInput,
                       let text = action.text,
                       let writer = makeTerminalWriter(channelID: active.channelID) else {
                     throw MobileMirrorError.targetUnavailable
                 }
-                try await writer.respond(text, to: entry.tabID, surfaceID: route.surfaceID)
+                try await writer.respond(
+                    text,
+                    to: selection.entry.tabID,
+                    surfaceID: selection.route.surfaceID
+                )
             case .approvalApprove, .approvalReject:
                 try await handleApproval(action)
             case .projectCreate:
@@ -436,14 +449,30 @@ final class MobileMirrorCoordinator: ObservableObject {
         }
     }
 
-    private func terminalEntry(for rawSessionID: String?) throws -> SessionEntry {
-        guard let rawSessionID,
+    private struct TerminalSelection {
+        let entry: SessionEntry
+        let route: MobileMirrorTerminalRoute
+        let controller: MainWindowController
+    }
+
+    private func terminalSelection(for action: MobileMirrorAction) throws -> TerminalSelection {
+        guard let rawSessionID = action.sessionID,
+              let rawSurfaceID = action.surfaceID,
+              let surfaceUUID = UUID(uuidString: rawSurfaceID),
               let entry = sessionEntriesSnapshot.first(where: {
                   $0.sessionID.rawValue.uuidString == rawSessionID
-              }), sessionRegistry.session(for: entry.sessionID) == entry else {
+              }), sessionRegistry.session(for: entry.sessionID) == entry,
+              let controller = appDelegate?.allWindowControllers.first(where: {
+                  $0.windowID == entry.ownerWindowID
+              }), controller.tabManager.tab(for: entry.tabID) != nil,
+              controller.tabID(for: SurfaceID(rawValue: surfaceUUID)) == entry.tabID,
+              let route = routeRegistry.route(
+                  sessionID: rawSessionID,
+                  surfaceID: rawSurfaceID
+              ), route.surfaceID.rawValue == surfaceUUID else {
             throw MobileMirrorError.targetUnavailable
         }
-        return entry
+        return TerminalSelection(entry: entry, route: route, controller: controller)
     }
 
     private func scrollTerminal(
@@ -483,7 +512,11 @@ final class MobileMirrorCoordinator: ObservableObject {
                 )
             },
             targetProvider: { [weak appDelegate] context in
-                guard let target = appDelegate?.privilegedSocketTerminalTarget(for: context) else {
+                guard let rawTabID = context.tabID,
+                      let rawSurfaceID = context.surfaceID,
+                      let target = appDelegate?.privilegedSocketTerminalTarget(for: context),
+                      target.surfaceID.rawValue == rawSurfaceID,
+                      target.controller.tabID(for: target.surfaceID) == TabID(rawValue: rawTabID) else {
                     return nil
                 }
                 let engine = target.controller.terminalEngine(for: target.surfaceID)
@@ -516,7 +549,7 @@ final class MobileMirrorCoordinator: ObservableObject {
                         )
                     },
                     isAvailable: {
-                        target.controller.tabID(for: surfaceID) != nil
+                        target.controller.tabID(for: surfaceID) == TabID(rawValue: rawTabID)
                             && ((engine as? CocxyCoreBridge)?.surfaceState(for: surfaceID) != nil
                                 || !(engine is CocxyCoreBridge))
                     }

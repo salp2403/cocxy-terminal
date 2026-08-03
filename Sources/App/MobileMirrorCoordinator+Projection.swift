@@ -27,26 +27,43 @@ extension MobileMirrorCoordinator {
 
         var agents: [MobileMirrorAgentSnapshot] = []
         for entry in sessionEntriesSnapshot.sorted(by: Self.sortSessions) {
-            let projectID = projectResolver.resolveProject(for: entry.workingDirectory).groupingID
-            if projectsByID[projectID.storageKey] == nil {
-                projectsByID[projectID.storageKey] = projectSnapshot(
-                    id: projectID,
-                    isPinned: false,
-                    accent: nil
-                )
-            }
             let sessionID = entry.sessionID.rawValue.uuidString
-            let terminalAvailable = routeRegistry.contains(sessionID: sessionID)
-            agents.append(MobileMirrorAgentSnapshot(
-                sessionID: sessionID,
-                projectID: projectID.storageKey,
-                title: entry.title,
-                name: entry.detectedAgentName,
-                state: entry.agentState.rawValue,
-                stateLabel: Self.stateLabel(entry.agentState),
-                canRespond: entry.agentState == .waitingInput && terminalAvailable,
-                terminalAvailable: terminalAvailable
-            ))
+            guard let controller = appDelegate?.allWindowControllers.first(where: {
+                $0.windowID == entry.ownerWindowID
+            }), controller.tabManager.tab(for: entry.tabID) != nil else { continue }
+            let surfaces = orderedSurfaceIDs(for: entry.tabID, controller: controller)
+            for (index, surfaceID) in surfaces.enumerated()
+                where controller.tabID(for: surfaceID) == entry.tabID {
+                let directory = controller.workingDirectory(for: surfaceID) ?? entry.workingDirectory
+                let projectID = projectResolver.resolveProject(for: directory).groupingID
+                if projectsByID[projectID.storageKey] == nil {
+                    projectsByID[projectID.storageKey] = projectSnapshot(
+                        id: projectID,
+                        isPinned: false,
+                        accent: nil
+                    )
+                }
+                let surfaceIDString = surfaceID.rawValue.uuidString
+                let state = controller.injectedPerSurfaceStore?.state(for: surfaceID)
+                let agentState = state?.agentState ?? (surfaces.count == 1 ? entry.agentState : .idle)
+                let agentName = state?.detectedAgent?.displayName
+                    ?? (surfaces.count == 1 ? entry.detectedAgentName : nil)
+                let terminalAvailable = routeRegistry.contains(
+                    sessionID: sessionID,
+                    surfaceID: surfaceIDString
+                )
+                agents.append(MobileMirrorAgentSnapshot(
+                    sessionID: sessionID,
+                    surfaceID: surfaceIDString,
+                    projectID: projectID.storageKey,
+                    title: surfaces.count > 1 ? "\(entry.title) \(index + 1)" : entry.title,
+                    name: agentName,
+                    state: agentState.rawValue,
+                    stateLabel: Self.stateLabel(agentState),
+                    canRespond: agentState == .waitingInput && terminalAvailable,
+                    terminalAvailable: terminalAvailable
+                ))
+            }
         }
 
         let approvals = approvalSnapshots()
@@ -54,11 +71,14 @@ extension MobileMirrorCoordinator {
             if $0.isPinned != $1.isPinned { return $0.isPinned && !$1.isPinned }
             return $0.name.localizedStandardCompare($1.name) == .orderedAscending
         }
-        let selected = authority.selectedSessionID().flatMap { id in
-            agents.contains(where: { $0.sessionID == id }) ? id : nil
+        let selected = authority.selectedTerminal().flatMap { selection in
+            agents.contains(where: {
+                $0.sessionID == selection.sessionID && $0.surfaceID == selection.surfaceID
+            }) ? selection : nil
         }
         snapshot = MobileMirrorSnapshot(
-            selectedSessionID: selected,
+            selectedSessionID: selected?.sessionID,
+            selectedSurfaceID: selected?.surfaceID,
             projectCreationEnabled: projectCreationRootHandle != nil,
             projects: projects,
             agents: agents,
@@ -95,10 +115,18 @@ extension MobileMirrorCoordinator {
 
     func synchronizeTerminalStreams() {
         guard let appDelegate else { return }
-        let desiredIDs = Set(sessionEntriesSnapshot.map { $0.sessionID.rawValue.uuidString })
-        for (sessionID, stream) in Array(ownedStreams) where !desiredIDs.contains(sessionID) {
+        let desiredSurfaceIDs = Set(sessionEntriesSnapshot.flatMap { entry -> [SurfaceID] in
+            guard let controller = appDelegate.allWindowControllers.first(where: {
+                $0.windowID == entry.ownerWindowID
+            }), controller.tabManager.tab(for: entry.tabID) != nil else { return [] }
+            return orderedSurfaceIDs(for: entry.tabID, controller: controller).filter {
+                controller.tabID(for: $0) == entry.tabID
+            }
+        })
+        for (surfaceID, stream) in Array(ownedStreams)
+            where !desiredSurfaceIDs.contains(surfaceID) {
             stopOwnedStream(stream)
-            ownedStreams.removeValue(forKey: sessionID)
+            ownedStreams.removeValue(forKey: surfaceID)
         }
 
         var routes: [MobileMirrorTerminalRoute] = []
@@ -106,73 +134,83 @@ extension MobileMirrorCoordinator {
             let sessionID = entry.sessionID.rawValue.uuidString
             guard let controller = appDelegate.allWindowControllers.first(where: {
                 $0.windowID == entry.ownerWindowID
-            }), controller.tabManager.tab(for: entry.tabID) != nil,
-                  let surfaceID = preferredSurfaceID(for: entry.tabID, controller: controller),
-                  let bridge = controller.cocxyCoreBridge(forSurface: surfaceID) else {
-                if let stream = ownedStreams.removeValue(forKey: sessionID) {
-                    stopOwnedStream(stream)
-                }
-                continue
-            }
-
-            if let stream = ownedStreams[sessionID] {
-                let status = stream.bridge.webTerminalStatus(for: stream.surfaceID)
-                if stream.bridge === bridge, stream.surfaceID == surfaceID,
-                   status?.running == true, status?.port == stream.port,
-                   status?.allowsInput == false {
-                    routes.append(MobileMirrorTerminalRoute(
-                        sessionID: sessionID,
-                        surfaceID: surfaceID,
-                        port: stream.port,
-                        bearerToken: stream.token
-                    ))
+            }), controller.tabManager.tab(for: entry.tabID) != nil else { continue }
+            for surfaceID in orderedSurfaceIDs(for: entry.tabID, controller: controller)
+                where controller.tabID(for: surfaceID) == entry.tabID {
+                guard let bridge = controller.cocxyCoreBridge(forSurface: surfaceID) else {
+                    if let stream = ownedStreams.removeValue(forKey: surfaceID) {
+                        stopOwnedStream(stream)
+                    }
                     continue
                 }
-                stopOwnedStream(stream)
-                ownedStreams.removeValue(forKey: sessionID)
-            }
 
-            guard bridge.webTerminalStatus(for: surfaceID) == nil else { continue }
-            let token = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
-            guard let status = bridge.startWebTerminal(
-                for: surfaceID,
-                configuration: WebTerminalConfiguration(
-                    bindAddress: WebTerminalConfiguration.defaultBindAddress,
-                    port: 0,
-                    authToken: token,
-                    maxConnections: 2,
-                    maxFrameRate: 30,
-                    allowsInput: false
+                if let stream = ownedStreams[surfaceID] {
+                    let status = stream.bridge.webTerminalStatus(for: stream.surfaceID)
+                    if stream.bridge === bridge,
+                       status?.running == true, status?.port == stream.port,
+                       status?.allowsInput == false {
+                        routes.append(MobileMirrorTerminalRoute(
+                            sessionID: sessionID,
+                            surfaceID: surfaceID,
+                            port: stream.port,
+                            bearerToken: stream.token
+                        ))
+                        continue
+                    }
+                    stopOwnedStream(stream)
+                    ownedStreams.removeValue(forKey: surfaceID)
+                }
+
+                guard bridge.webTerminalStatus(for: surfaceID) == nil else { continue }
+                let token = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
+                guard let status = bridge.startWebTerminal(
+                    for: surfaceID,
+                    configuration: WebTerminalConfiguration(
+                        bindAddress: WebTerminalConfiguration.defaultBindAddress,
+                        port: 0,
+                        authToken: token,
+                        maxConnections: 2,
+                        maxFrameRate: 30,
+                        allowsInput: false
+                    )
+                ), status.running, !status.allowsInput else {
+                    continue
+                }
+                let stream = OwnedStream(
+                    bridge: bridge,
+                    surfaceID: surfaceID,
+                    port: status.port,
+                    token: token
                 )
-            ), status.running, !status.allowsInput else {
-                continue
+                ownedStreams[surfaceID] = stream
+                routes.append(MobileMirrorTerminalRoute(
+                    sessionID: sessionID,
+                    surfaceID: surfaceID,
+                    port: status.port,
+                    bearerToken: token
+                ))
             }
-            let stream = OwnedStream(
-                bridge: bridge,
-                surfaceID: surfaceID,
-                port: status.port,
-                token: token
-            )
-            ownedStreams[sessionID] = stream
-            routes.append(MobileMirrorTerminalRoute(
-                sessionID: sessionID,
-                surfaceID: surfaceID,
-                port: status.port,
-                bearerToken: token
-            ))
         }
-        routeRegistry.replace(routes: routes, preferredSessionID: snapshot.selectedSessionID)
+        routeRegistry.replace(
+            routes: routes,
+            preferredSurfaceID: authority.selectedTerminal()?.surfaceID
+        )
     }
 
-    func preferredSurfaceID(
+    func orderedSurfaceIDs(
         for tabID: TabID,
         controller: MainWindowController
-    ) -> SurfaceID? {
-        let available = controller.surfaceIDs(for: tabID)
-        if let primary = controller.tabSurfaceMap[tabID], available.contains(primary) {
-            return primary
+    ) -> [SurfaceID] {
+        var surfaces = controller.surfaceIDs(for: tabID).sorted {
+            $0.rawValue.uuidString < $1.rawValue.uuidString
         }
-        return available.sorted { $0.rawValue.uuidString < $1.rawValue.uuidString }.first
+        guard let primary = controller.tabSurfaceMap[tabID],
+              let primaryIndex = surfaces.firstIndex(of: primary) else {
+            return surfaces
+        }
+        surfaces.remove(at: primaryIndex)
+        surfaces.insert(primary, at: 0)
+        return surfaces
     }
 
     func stopOwnedStream(_ stream: OwnedStream) {
@@ -301,7 +339,7 @@ extension MobileMirrorCoordinator {
         tunnelLease = nil
         for stream in ownedStreams.values { stopOwnedStream(stream) }
         ownedStreams.removeAll()
-        routeRegistry.replace(routes: [], preferredSessionID: nil)
+        routeRegistry.replace(routes: [], preferredSurfaceID: nil)
         terminalPasteDeliveryCoordinator.cancelAll()
         pairingURL = nil
         pendingPairing = nil

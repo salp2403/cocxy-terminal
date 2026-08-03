@@ -58,7 +58,8 @@ final class MobileMirrorTerminalWriter {
         to tabID: TabID,
         surfaceID: SurfaceID
     ) async throws {
-        guard action.kind == .terminalControl else {
+        guard action.kind == .terminalControl,
+              action.surfaceID == surfaceID.rawValue.uuidString else {
             throw MobileMirrorError.invalidAction
         }
         try await authorizeAndApply(

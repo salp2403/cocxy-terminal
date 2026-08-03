@@ -37,6 +37,12 @@ struct MobileMirrorSessionCredentials: Equatable, Sendable {
     let channelID: UUID
     let actionSecret: String
     let selectedSessionID: String?
+    let selectedSurfaceID: String?
+}
+
+struct MobileMirrorTerminalSelection: Equatable, Sendable {
+    let sessionID: String
+    let surfaceID: String
 }
 
 enum MobileMirrorPairingPollResult: Equatable, Sendable {
@@ -71,6 +77,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         let pairedAt: Date
         let expiresAt: Date
         var selectedSessionID: String?
+        var selectedSurfaceID: String?
         var replayTracker: ReplayTracker
     }
 
@@ -159,6 +166,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 pairedAt: pairedAt,
                 expiresAt: expiresAt,
                 selectedSessionID: nil,
+                selectedSurfaceID: nil,
                 replayTracker: ReplayTracker(windowSeconds: Self.actionFreshnessSeconds)
             )
             current.cookieDeliveryToken = cookie
@@ -210,7 +218,8 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
             return MobileMirrorSessionCredentials(
                 channelID: current.channelID,
                 actionSecret: Self.base64URL(current.actionToken.secret),
-                selectedSessionID: current.selectedSessionID
+                selectedSessionID: current.selectedSessionID,
+                selectedSurfaceID: current.selectedSurfaceID
             )
         }
     }
@@ -238,28 +247,44 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
         }
     }
 
-    func selectedSessionID(cookie: String) -> String? {
+    func selectedTerminal(cookie: String) -> MobileMirrorTerminalSelection? {
         let now = clock()
-        return lock.withLock { validSession(cookie: cookie, now: now)?.selectedSessionID }
+        return lock.withLock {
+            guard let current = validSession(cookie: cookie, now: now),
+                  let sessionID = current.selectedSessionID,
+                  let surfaceID = current.selectedSurfaceID else {
+                return nil
+            }
+            return MobileMirrorTerminalSelection(sessionID: sessionID, surfaceID: surfaceID)
+        }
     }
 
-    func selectedSessionID() -> String? {
+    func selectedTerminal() -> MobileMirrorTerminalSelection? {
         let now = clock()
         return lock.withLock {
             guard let current = session, current.expiresAt > now else {
                 session = nil
                 return nil
             }
-            return current.selectedSessionID
+            guard let sessionID = current.selectedSessionID,
+                  let surfaceID = current.selectedSurfaceID else {
+                return nil
+            }
+            return MobileMirrorTerminalSelection(sessionID: sessionID, surfaceID: surfaceID)
         }
     }
 
     @discardableResult
-    func selectSession(_ sessionID: String?, cookie: String) -> Bool {
+    func selectTerminal(
+        sessionID: String?,
+        surfaceID: String?,
+        cookie: String
+    ) -> Bool {
         let now = clock()
         return lock.withLock {
             guard var current = validSession(cookie: cookie, now: now) else { return false }
             current.selectedSessionID = sessionID
+            current.selectedSurfaceID = surfaceID
             session = current
             return true
         }

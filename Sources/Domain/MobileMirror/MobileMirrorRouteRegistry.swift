@@ -13,47 +13,59 @@ struct MobileMirrorTerminalRoute: Equatable, Sendable {
 
 final class MobileMirrorRouteRegistry: @unchecked Sendable {
     private let lock = NSLock()
-    private var routesBySessionID: [String: MobileMirrorTerminalRoute] = [:]
-    private var defaultSessionID: String?
+    private var routesBySurfaceID: [String: MobileMirrorTerminalRoute] = [:]
+    private var defaultSurfaceID: String?
 
     func replace(
         routes: [MobileMirrorTerminalRoute],
-        preferredSessionID: String?
+        preferredSurfaceID: String?
     ) {
         lock.lock()
         defer { lock.unlock() }
-        routesBySessionID = Dictionary(uniqueKeysWithValues: routes.map { ($0.sessionID, $0) })
-        if let preferredSessionID, routesBySessionID[preferredSessionID] != nil {
-            defaultSessionID = preferredSessionID
+        routesBySurfaceID = [:]
+        for route in routes {
+            routesBySurfaceID[route.surfaceID.rawValue.uuidString] = route
+        }
+        if let preferredSurfaceID, routesBySurfaceID[preferredSurfaceID] != nil {
+            defaultSurfaceID = preferredSurfaceID
         } else {
-            defaultSessionID = routes
-                .sorted { $0.sessionID.localizedStandardCompare($1.sessionID) == .orderedAscending }
-                .first?
-                .sessionID
+            defaultSurfaceID = routes.first?
+                .surfaceID
+                .rawValue
+                .uuidString
         }
     }
 
-    func route(for sessionID: String) -> MobileMirrorTerminalRoute? {
+    func route(sessionID: String, surfaceID: String) -> MobileMirrorTerminalRoute? {
         lock.lock()
         defer { lock.unlock() }
-        return routesBySessionID[sessionID]
+        guard let route = routesBySurfaceID[surfaceID], route.sessionID == sessionID else {
+            return nil
+        }
+        return route
+    }
+
+    func route(forSurfaceID surfaceID: String) -> MobileMirrorTerminalRoute? {
+        lock.lock()
+        defer { lock.unlock() }
+        return routesBySurfaceID[surfaceID]
     }
 
     func defaultRoute() -> MobileMirrorTerminalRoute? {
         lock.lock()
         defer { lock.unlock() }
-        return defaultSessionID.flatMap { routesBySessionID[$0] }
+        return defaultSurfaceID.flatMap { routesBySurfaceID[$0] }
     }
 
-    func contains(sessionID: String) -> Bool {
+    func contains(sessionID: String, surfaceID: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }
-        return routesBySessionID[sessionID] != nil
+        return routesBySurfaceID[surfaceID]?.sessionID == sessionID
     }
 
-    var sessionIDs: Set<String> {
+    var surfaceIDs: Set<String> {
         lock.lock()
         defer { lock.unlock() }
-        return Set(routesBySessionID.keys)
+        return Set(routesBySurfaceID.keys)
     }
 }
