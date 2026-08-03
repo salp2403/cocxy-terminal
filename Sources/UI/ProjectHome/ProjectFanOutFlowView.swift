@@ -521,7 +521,7 @@ struct ProjectFanOutFlowView: View {
         guard micros > 0 else {
             return localized("taskRun.compare.costUnavailable", fallback: "N/A")
         }
-        return String(format: "$%.4f", Double(micros) / 1_000_000)
+        return ProjectActivityMetricsFormatter.cost(micros, locale: localizer.locale)
     }
 
     private func localizedStatus(_ rawValue: String) -> String {

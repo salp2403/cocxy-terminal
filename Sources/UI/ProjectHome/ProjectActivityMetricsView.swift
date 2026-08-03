@@ -93,9 +93,18 @@ struct ProjectActivityMetricsView: View {
         GridRow {
             Text(localizer.string(key, fallback: fallback))
                 .foregroundStyle(palette.textLow.resolvedColor())
-            Text(ProjectActivityMetricsFormatter.duration(metrics.durationMilliseconds))
-            Text(ProjectActivityMetricsFormatter.tokens(metrics.totalTokens))
-            Text(ProjectActivityMetricsFormatter.cost(metrics.totalCostMicros))
+            Text(ProjectActivityMetricsFormatter.duration(
+                metrics.durationMilliseconds,
+                locale: localizer.locale
+            ))
+            Text(ProjectActivityMetricsFormatter.tokens(
+                metrics.totalTokens,
+                locale: localizer.locale
+            ))
+            Text(ProjectActivityMetricsFormatter.cost(
+                metrics.totalCostMicros,
+                locale: localizer.locale
+            ))
         }
         .font(.system(size: 10, design: .monospaced))
         .foregroundStyle(palette.textMedium.resolvedColor())
@@ -109,33 +118,30 @@ struct ProjectActivityMetricsView: View {
 }
 
 enum ProjectActivityMetricsFormatter {
-    static func duration(_ milliseconds: Int64) -> String {
-        let totalSeconds = max(0, milliseconds) / 1_000
-        let hours = totalSeconds / 3_600
-        let minutes = (totalSeconds % 3_600) / 60
-        let seconds = totalSeconds % 60
-        if hours > 0 { return "\(hours)h \(minutes)m" }
-        if minutes > 0 { return seconds > 0 ? "\(minutes)m \(seconds)s" : "\(minutes)m" }
-        return "\(seconds)s"
+    static func duration(_ milliseconds: Int64, locale: Locale) -> String {
+        Duration.milliseconds(max(0, milliseconds)).formatted(
+            .units(
+                allowed: [.hours, .minutes, .seconds],
+                width: .narrow,
+                maximumUnitCount: 2
+            )
+            .locale(locale)
+        )
     }
 
-    static func tokens(_ count: Int) -> String {
-        let value = max(0, count)
-        if value >= 1_000_000 {
-            return compact(Double(value) / 1_000_000, suffix: "M")
-        }
-        if value >= 1_000 {
-            return compact(Double(value) / 1_000, suffix: "K")
-        }
-        return "\(value)"
+    static func tokens(_ count: Int, locale: Locale) -> String {
+        max(0, count).formatted(
+            .number
+                .notation(.compactName)
+                .locale(locale)
+        )
     }
 
-    static func cost(_ micros: Int64) -> String {
-        String(format: "$%.4f", Double(max(0, micros)) / 1_000_000)
-    }
-
-    private static func compact(_ value: Double, suffix: String) -> String {
-        let format = value >= 100 || value.rounded() == value ? "%.0f%@" : "%.1f%@"
-        return String(format: format, value, suffix)
+    static func cost(_ micros: Int64, locale: Locale) -> String {
+        (Double(max(0, micros)) / 1_000_000).formatted(
+            .currency(code: "USD")
+                .precision(.fractionLength(4))
+                .locale(locale)
+        )
     }
 }

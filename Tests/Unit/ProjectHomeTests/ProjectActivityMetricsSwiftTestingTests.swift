@@ -10,22 +10,33 @@ import Testing
 struct ProjectActivityMetricsSwiftTestingTests {
     @Test("duration formatter stays compact and deterministic")
     func durationFormatting() {
-        #expect(ProjectActivityMetricsFormatter.duration(0) == "0s")
-        #expect(ProjectActivityMetricsFormatter.duration(90_000) == "1m 30s")
-        #expect(ProjectActivityMetricsFormatter.duration(3_661_000) == "1h 1m")
+        let english = Locale(identifier: "en_US")
+        let spanish = Locale(identifier: "es_ES")
+        #expect(ProjectActivityMetricsFormatter.duration(0, locale: english) == "0s")
+        #expect(ProjectActivityMetricsFormatter.duration(90_000, locale: english) == "1m 30s")
+        #expect(ProjectActivityMetricsFormatter.duration(3_661_000, locale: english) == "1h 1m")
+        #expect(ProjectActivityMetricsFormatter.duration(90_000, locale: spanish) == "1 min 30 s")
     }
 
     @Test("token formatter preserves useful precision")
     func tokenFormatting() {
-        #expect(ProjectActivityMetricsFormatter.tokens(999) == "999")
-        #expect(ProjectActivityMetricsFormatter.tokens(1_250) == "1.2K")
-        #expect(ProjectActivityMetricsFormatter.tokens(2_000_000) == "2M")
+        let english = Locale(identifier: "en_US")
+        let spanish = Locale(identifier: "es_ES")
+        #expect(ProjectActivityMetricsFormatter.tokens(999, locale: english) == "999")
+        #expect(ProjectActivityMetricsFormatter.tokens(1_250, locale: english) == "1.2K")
+        #expect(ProjectActivityMetricsFormatter.tokens(2_000_000, locale: english) == "2M")
+        #expect(ProjectActivityMetricsFormatter.tokens(1_250, locale: spanish) == "1,2 mil")
     }
 
     @Test("cost formatter uses the persisted micro-dollar unit")
     func costFormatting() {
-        #expect(ProjectActivityMetricsFormatter.cost(0) == "$0.0000")
-        #expect(ProjectActivityMetricsFormatter.cost(1_250_000) == "$1.2500")
+        let english = Locale(identifier: "en_US")
+        let spanish = Locale(identifier: "es_ES")
+        let arabic = Locale(identifier: "ar")
+        #expect(ProjectActivityMetricsFormatter.cost(0, locale: english) == "$0.0000")
+        #expect(ProjectActivityMetricsFormatter.cost(1_250_000, locale: english) == "$1.2500")
+        #expect(ProjectActivityMetricsFormatter.cost(1_250_000, locale: spanish) == "1,2500 US$")
+        #expect(ProjectActivityMetricsFormatter.cost(1_250_000, locale: arabic).contains("US$"))
     }
 
     @MainActor
