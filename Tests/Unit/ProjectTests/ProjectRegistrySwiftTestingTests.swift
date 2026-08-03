@@ -37,6 +37,28 @@ struct ProjectRegistrySwiftTestingTests {
         #expect(record.defaultAgents.isEmpty)
     }
 
+    @Test("raw persisted IDs reject relative paths and NUL bytes")
+    func unsafeRawIDsAreRejectedBeforeCanonicalization() throws {
+        let sandbox = makeSandbox()
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let payloads = [
+            #"[{"id":"relative/project"}]"#,
+            #"[{"id":"/tmp/project\u0000suffix"}]"#,
+        ]
+
+        for (index, payload) in payloads.enumerated() {
+            #expect(throws: DecodingError.self) {
+                try JSONDecoder().decode([ProjectRecord].self, from: Data(payload.utf8))
+            }
+            let fileURL = sandbox.appendingPathComponent("registry-\(index).json")
+            try Data(payload.utf8).write(to: fileURL)
+            #expect(throws: ProjectRegistryStoreError.self) {
+                try ProjectRegistryStore(fileURL: fileURL).load()
+            }
+        }
+    }
+
     @Test("store writes atomically with owner-only permissions")
     func ownerOnlyPersistence() throws {
         let sandbox = makeSandbox()

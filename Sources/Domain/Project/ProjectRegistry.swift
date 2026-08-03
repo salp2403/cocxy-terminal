@@ -55,8 +55,8 @@ struct ProjectRecord: Codable, Equatable, Sendable, Identifiable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        let id = try container.decode(ProjectID.self, forKey: .id)
-        guard id.rawValue.hasPrefix("/"), !id.rawValue.contains("\0") else {
+        let rawID = try container.decode(String.self, forKey: .id)
+        guard rawID.hasPrefix("/"), !rawID.contains("\0") else {
             throw DecodingError.dataCorruptedError(
                 forKey: .id,
                 in: container,
@@ -64,7 +64,7 @@ struct ProjectRecord: Codable, Equatable, Sendable, Identifiable {
             )
         }
         self.init(
-            id: id,
+            id: ProjectID(rawValue: rawID),
             lastOpenedAt: try container.decodeIfPresent(Date.self, forKey: .lastOpenedAt)
                 ?? .distantPast,
             openCount: try container.decodeIfPresent(Int.self, forKey: .openCount) ?? 0,
