@@ -144,6 +144,14 @@ final class MobileMirrorCoordinator: ObservableObject {
                     identity: identity
                 )
             },
+            rejectionAuditor: { [weak self] reason, channelID, identity in
+                guard let self else { throw MobileMirrorError.unavailable }
+                try await self.recordRequestRejection(
+                    reason,
+                    channelID: channelID,
+                    identity: identity
+                )
+            },
             pendingPairingHandler: { [weak self] pending in
                 await self?.receivePendingPairing(pending)
             }
@@ -178,6 +186,14 @@ final class MobileMirrorCoordinator: ObservableObject {
                 await closeUnpublishedTunnelLease(lease)
                 throw MobileMirrorError.unavailable
             }
+            do {
+                try auditLog.log(.channelOpened(channelID: offer.id, name: "Mobile mirror"))
+            } catch {
+                gateway.stop()
+                _ = authority.revoke()
+                await closeUnpublishedTunnelLease(lease)
+                throw error
+            }
             self.router = router
             self.gateway = gateway
             pairingURL = url
@@ -185,7 +201,6 @@ final class MobileMirrorCoordinator: ObservableObject {
             activePairing = nil
             pairingChannelID = offer.id
             state = .offering
-            auditLog.log(.channelOpened(channelID: offer.id, name: "Mobile mirror"))
             scheduleOfferExpiry(offer)
         } catch {
             gateway.stop()
@@ -209,18 +224,20 @@ final class MobileMirrorCoordinator: ObservableObject {
             guard let active = try authority.decide(pendingID: pendingPairing.id, approve: true) else {
                 throw MobileMirrorError.pairingDenied
             }
-            self.pendingPairing = nil
-            activePairing = active
-            state = .active
-            auditLog.log(.connectionAccepted(
+            try auditLog.log(.connectionAccepted(
                 channelID: active.channelID,
                 remoteHost: active.identity.remoteAddress
             ))
+            self.pendingPairing = nil
+            activePairing = active
+            state = .active
             refreshSnapshotAndPublish()
             receiveApprovalRecords(approvalRegistry.currentRecords())
             startRefreshTimer()
             scheduleSessionExpiry(active)
         } catch {
+            _ = authority.revoke()
+            stopTransport(revoke: false)
             state = .failed(error.localizedDescription)
         }
     }
@@ -229,7 +246,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         guard let pendingPairing else { return }
         do {
             _ = try authority.decide(pendingID: pendingPairing.id, approve: false)
-            auditLog.log(.connectionRejected(
+            try auditLog.log(.connectionRejected(
                 channelID: pendingPairing.channelID,
                 remoteHost: pendingPairing.identity.remoteAddress,
                 reason: "Desktop confirmation denied"
@@ -244,6 +261,7 @@ final class MobileMirrorCoordinator: ObservableObject {
                 self?.finishDeniedPairing()
             }
         } catch {
+            stopTransport(revoke: true)
             state = .failed(error.localizedDescription)
         }
     }
@@ -445,22 +463,38 @@ final class MobileMirrorCoordinator: ObservableObject {
             if publishesState {
                 refreshSnapshotAndPublish()
             }
-            auditLog.log(MobileMirrorActionAudit.event(
-                action: action,
-                channelID: channelID,
-                identity: identity,
-                accepted: true
-            ))
-            return snapshot
         } catch {
-            auditLog.log(MobileMirrorActionAudit.event(
-                action: action,
-                channelID: channelID,
-                identity: identity,
-                accepted: false
-            ))
+            do {
+                try auditLog.log(MobileMirrorActionAudit.event(
+                    action: action,
+                    channelID: channelID,
+                    identity: identity,
+                    accepted: false
+                ))
+            } catch let auditError {
+                throw auditError
+            }
             throw error
         }
+        try auditLog.log(MobileMirrorActionAudit.event(
+            action: action,
+            channelID: channelID,
+            identity: identity,
+            accepted: true
+        ))
+        return snapshot
+    }
+
+    private func recordRequestRejection(
+        _ reason: MobileMirrorActionAudit.RejectionReason,
+        channelID: UUID,
+        identity: MobileMirrorClientIdentity
+    ) throws {
+        try auditLog.log(MobileMirrorActionAudit.rejectionEvent(
+            reason: reason,
+            channelID: channelID,
+            identity: identity
+        ))
     }
 
     private struct TerminalSelection {

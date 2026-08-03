@@ -13,6 +13,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let routes = MobileMirrorRouteRegistry()
         let pendingRecorder = MobileMirrorPendingRecorder()
         let actionRecorder = MobileMirrorActionRecorder()
+        let rejectionRecorder = MobileMirrorRejectionRecorder()
         let snapshot = MobileMirrorSnapshot.empty
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
@@ -22,6 +23,9 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             actionHandler: { action, _, _, _ in
                 await actionRecorder.record(action)
                 return snapshot
+            },
+            rejectionAuditor: { reason, channelID, identity in
+                await rejectionRecorder.record(reason, channelID: channelID, identity: identity)
             },
             pendingPairingHandler: { pending in
                 await pendingRecorder.record(pending)
@@ -95,7 +99,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let body = try JSONEncoder().encode(action)
         let timestamp = String(UInt64(Date().timeIntervalSince1970))
         let nonce = UUID().uuidString
-        let signature = try signature(
+        let signedActionSignature = try signature(
             body: body,
             timestamp: timestamp,
             nonce: nonce,
@@ -110,7 +114,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 "content-type": "application/json",
                 "x-cocxy-timestamp": timestamp,
                 "x-cocxy-nonce": nonce,
-                "x-cocxy-signature": signature,
+                "x-cocxy-signature": signedActionSignature,
             ],
             body: body
         )
@@ -121,6 +125,53 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let replayResult = await router.route(request: signedRequest, identity: identity)
         #expect(try response(from: replayResult).status == 403)
         #expect(await actionRecorder.values == [action])
+
+        let invalidSignatureRequest = request(
+            method: "POST",
+            path: "/mobile/api/action",
+            headers: [
+                "cookie": "cocxy_mobile=\(cookie)",
+                "origin": "http://127.0.0.1:43120",
+                "content-type": "application/json",
+                "x-cocxy-timestamp": String(UInt64(Date().timeIntervalSince1970)),
+                "x-cocxy-nonce": UUID().uuidString,
+                "x-cocxy-signature": "bad",
+            ],
+            body: body
+        )
+        #expect(try response(
+            from: await router.route(request: invalidSignatureRequest, identity: identity)
+        ).status == 403)
+
+        let malformedBody = Data("{".utf8)
+        let malformedTimestamp = String(UInt64(Date().timeIntervalSince1970))
+        let malformedNonce = UUID().uuidString
+        let malformedRequest = request(
+            method: "POST",
+            path: "/mobile/api/action",
+            headers: [
+                "cookie": "cocxy_mobile=\(cookie)",
+                "origin": "http://127.0.0.1:43120",
+                "content-type": "application/json",
+                "x-cocxy-timestamp": malformedTimestamp,
+                "x-cocxy-nonce": malformedNonce,
+                "x-cocxy-signature": try signature(
+                    body: malformedBody,
+                    timestamp: malformedTimestamp,
+                    nonce: malformedNonce,
+                    secret: bootstrap.actionSecret
+                ),
+            ],
+            body: malformedBody
+        )
+        #expect(try response(
+            from: await router.route(request: malformedRequest, identity: identity)
+        ).status == 400)
+        #expect(await rejectionRecorder.reasons == [
+            .replayDetected,
+            .invalidSignature,
+            .malformedAction,
+        ])
 
         let terminalAction = MobileMirrorAction(
             kind: .terminalControl,
@@ -232,6 +283,54 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(await actionRecorder.values.count == 34)
     }
 
+    @Test("audit persistence failure blocks an unaudited action rejection")
+    func auditFailureBlocksRejectedActionResponse() async throws {
+        let authority = MobileMirrorPairingAuthority()
+        let identity = MobileMirrorClientIdentity(remoteAddress: "10.0.0.8", userAgent: "Phone")
+        let offer = authority.makeOffer()
+        let pending = try authority.consumeOffer(token: offer.token, identity: identity)
+        _ = try authority.decide(pendingID: pending.id, approve: true)
+        guard case .confirmed(let cookie) = try authority.poll(
+            pendingID: pending.id,
+            identity: identity
+        ) else {
+            Issue.record("Expected confirmed pairing")
+            return
+        }
+        let actionRecorder = MobileMirrorActionRecorder()
+        let router = MobileMirrorRequestRouter(
+            publicAddress: "127.0.0.1",
+            authority: authority,
+            routeRegistry: MobileMirrorRouteRegistry(),
+            snapshotProvider: { _ in .empty },
+            actionHandler: { action, _, _, _ in
+                await actionRecorder.record(action)
+                return .empty
+            },
+            rejectionAuditor: { _, _, _ in
+                throw RelayAuditWriterTestFailure.injected
+            },
+            pendingPairingHandler: { _ in }
+        )
+        router.updatePublicPort(43120)
+
+        let result = await router.route(
+            request: request(
+                method: "POST",
+                path: "/mobile/api/action",
+                headers: [
+                    "cookie": "cocxy_mobile=\(cookie)",
+                    "origin": "http://127.0.0.1:43120",
+                    "content-type": "application/json",
+                ]
+            ),
+            identity: identity
+        )
+
+        #expect(try response(from: result).status == 503)
+        #expect(await actionRecorder.values.isEmpty)
+    }
+
     @Test("unpaired and internal test assets are not proxied")
     func unauthorizedAndInternalRoutesAreRejected() async throws {
         let authority = MobileMirrorPairingAuthority()
@@ -333,4 +432,22 @@ private actor MobileMirrorPendingRecorder {
 private actor MobileMirrorActionRecorder {
     private(set) var values: [MobileMirrorAction] = []
     func record(_ action: MobileMirrorAction) { values.append(action) }
+}
+
+private actor MobileMirrorRejectionRecorder {
+    private(set) var reasons: [MobileMirrorActionAudit.RejectionReason] = []
+
+    func record(
+        _ reason: MobileMirrorActionAudit.RejectionReason,
+        channelID: UUID,
+        identity: MobileMirrorClientIdentity
+    ) {
+        _ = channelID
+        _ = identity
+        reasons.append(reason)
+    }
+}
+
+private enum RelayAuditWriterTestFailure: Error {
+    case injected
 }

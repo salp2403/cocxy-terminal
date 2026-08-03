@@ -518,7 +518,7 @@ final class RelayAuthBroker: RelayAuthBrokering {
         }
         let connectionID = ObjectIdentifier(connection)
         guard pendingHandshakes.count < maxPendingHandshakes else {
-            auditLog?.log(.connectionRejected(
+            _ = recordAudit(.connectionRejected(
                 channelID: channelID,
                 remoteHost: extractRemoteHost(from: connection),
                 reason: "Pending handshake limit exceeded"
@@ -551,7 +551,7 @@ final class RelayAuthBroker: RelayAuthBrokering {
                 let earlyRemoteHost = self.extractRemoteHost(from: connection)
 
                 guard let data, data.count >= RelayHandshake.totalSize else {
-                    self.auditLog?.log(.connectionRejected(
+                    _ = self.recordAudit(.connectionRejected(
                         channelID: self.channelID,
                         remoteHost: earlyRemoteHost,
                         reason: "Incomplete handshake"
@@ -575,7 +575,7 @@ final class RelayAuthBroker: RelayAuthBrokering {
                     // SSH does not preserve the remote process or host identity at this hop.
                     // Enforce only policy backed by observable broker state.
                     guard self.acl.canAcceptConnection(currentCount: self.activeConnections) else {
-                        self.auditLog?.log(.connectionRejected(
+                        _ = self.recordAudit(.connectionRejected(
                             channelID: self.channelID,
                             remoteHost: remoteHost,
                             reason: "Max connections exceeded"
@@ -583,14 +583,17 @@ final class RelayAuthBroker: RelayAuthBrokering {
                         self.cancelAndForget(connection)
                         return
                     }
-                    self.auditLog?.log(.connectionAccepted(
+                    guard self.recordAudit(.connectionAccepted(
                         channelID: self.channelID,
                         remoteHost: remoteHost
-                    ))
+                    )) else {
+                        self.cancelAndForget(connection)
+                        return
+                    }
                     self.relayToTarget(clientConnection: connection)
 
                 case .rejected(let reason):
-                    self.auditLog?.log(.connectionRejected(
+                    _ = self.recordAudit(.connectionRejected(
                         channelID: self.channelID,
                         remoteHost: remoteHost,
                         reason: "\(reason)"
@@ -812,12 +815,25 @@ final class RelayAuthBroker: RelayAuthBrokering {
                 return
             }
             guard let self, self.pendingHandshakes.contains(id) else { return }
-            self.auditLog?.log(.connectionRejected(
+            _ = self.recordAudit(.connectionRejected(
                 channelID: self.channelID,
                 remoteHost: self.extractRemoteHost(from: connection),
                 reason: "Handshake timed out"
             ))
             self.cancelAndForget(connection)
+        }
+    }
+
+    private func recordAudit(_ event: RelayAuditEvent) -> Bool {
+        guard let auditLog else { return true }
+        do {
+            try auditLog.log(event)
+            return true
+        } catch {
+            acceptsConnections = false
+            revokeAllConnections()
+            failureHandler?(error)
+            return false
         }
     }
 

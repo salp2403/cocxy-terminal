@@ -12,6 +12,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         MobileMirrorClientIdentity
     ) async throws -> MobileMirrorSnapshot
     typealias PendingPairingHandler = @Sendable (MobileMirrorPendingPairing) async -> Void
+    typealias RejectionAuditor = @Sendable (
+        MobileMirrorActionAudit.RejectionReason,
+        UUID,
+        MobileMirrorClientIdentity
+    ) async throws -> Void
 
     static let cookieName = "cocxy_mobile"
 
@@ -22,6 +27,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     private let snapshotProvider: SnapshotProvider
     private let actionHandler: ActionHandler
     private let pendingPairingHandler: PendingPairingHandler
+    private let rejectionAuditor: RejectionAuditor
     private let monotonicNow: @Sendable () -> TimeInterval
     private let endpointLock = NSLock()
     private let requestRateLock = NSLock()
@@ -38,6 +44,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         },
         snapshotProvider: @escaping SnapshotProvider,
         actionHandler: @escaping ActionHandler,
+        rejectionAuditor: @escaping RejectionAuditor = { _, _, _ in },
         pendingPairingHandler: @escaping PendingPairingHandler
     ) {
         self.publicAddress = publicAddress
@@ -46,6 +53,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         self.monotonicNow = monotonicNow
         self.snapshotProvider = snapshotProvider
         self.actionHandler = actionHandler
+        self.rejectionAuditor = rejectionAuditor
         self.pendingPairingHandler = pendingPairingHandler
         self.requestRatePolicy = MobileMirrorRequestRatePolicy(limits: connectionLimits)
     }
@@ -88,7 +96,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 identity: identity
             )
         }
-        guard authority.activePairing(cookie: cookie)?.identity.fingerprint == identity.fingerprint else {
+        guard let activePairing = authority.activePairing(cookie: cookie),
+              activePairing.identity.fingerprint == identity.fingerprint else {
             return rejected(
                 .error(MobileMirrorError.sessionExpired.localizedDescription, status: 401),
                 identity: identity
@@ -116,7 +125,12 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 return errorResponse(error)
             }
         case "/mobile/api/action":
-            return await action(request: request, cookie: cookie, identity: identity)
+            return await action(
+                request: request,
+                cookie: cookie,
+                channelID: activePairing.channelID,
+                identity: identity
+            )
         case "/mobile/api/events":
             guard request.method == "GET" else { return methodNotAllowed() }
             return .eventStream
@@ -178,6 +192,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     private func action(
         request: MobileMirrorHTTPRequest,
         cookie: String,
+        channelID expectedChannelID: UUID,
         identity: MobileMirrorClientIdentity
     ) async -> MobileMirrorHTTPRouteResult {
         guard request.method == "POST",
@@ -188,21 +203,61 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
               let timestamp = request.headers["x-cocxy-timestamp"],
               let nonce = request.headers["x-cocxy-nonce"],
               let signature = request.headers["x-cocxy-signature"] else {
+            if let auditFailure = await auditRejection(
+                .invalidEnvelope,
+                channelID: expectedChannelID,
+                identity: identity
+            ) {
+                return auditFailure
+            }
             return rejected(
                 .error("Invalid signed action.", status: 403),
                 identity: identity
             )
         }
+        let channelID: UUID
         do {
-            let channelID = try authority.validateAction(
+            channelID = try authority.validateAction(
                 cookie: cookie,
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
                 body: request.body
             )
-            let action = try JSONDecoder().decode(MobileMirrorAction.self, from: request.body)
+            guard channelID == expectedChannelID else {
+                throw MobileMirrorError.sessionExpired
+            }
+        } catch {
+            if let auditFailure = await auditRejection(
+                Self.rejectionReason(forValidationError: error),
+                channelID: expectedChannelID,
+                identity: identity
+            ) {
+                return auditFailure
+            }
+            return errorResponse(error, identity: identity, authenticationFailure: true)
+        }
+
+        let action: MobileMirrorAction
+        do {
+            action = try JSONDecoder().decode(MobileMirrorAction.self, from: request.body)
             try action.validate()
+        } catch {
+            if let auditFailure = await auditRejection(
+                .malformedAction,
+                channelID: channelID,
+                identity: identity
+            ) {
+                return auditFailure
+            }
+            return errorResponse(
+                MobileMirrorError.invalidAction,
+                identity: identity,
+                authenticationFailure: true
+            )
+        }
+
+        do {
             let snapshot = try await actionHandler(action, cookie, channelID, identity)
             let responseSnapshot = action.kind == .terminalControl ? nil : snapshot
             return .response(.json(MobileMirrorActionResponse.success(
@@ -212,6 +267,34 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             return .response(.error("Local request timed out.", status: 504))
         } catch {
             return errorResponse(error, identity: identity, authenticationFailure: true)
+        }
+    }
+
+    private func auditRejection(
+        _ reason: MobileMirrorActionAudit.RejectionReason,
+        channelID: UUID,
+        identity: MobileMirrorClientIdentity
+    ) async -> MobileMirrorHTTPRouteResult? {
+        do {
+            try await rejectionAuditor(reason, channelID, identity)
+            return nil
+        } catch {
+            return .response(.error("Local audit log is unavailable.", status: 503))
+        }
+    }
+
+    private static func rejectionReason(
+        forValidationError error: Error
+    ) -> MobileMirrorActionAudit.RejectionReason {
+        switch error {
+        case MobileMirrorError.invalidSignature:
+            return .invalidSignature
+        case MobileMirrorError.replayDetected:
+            return .replayDetected
+        case MobileMirrorError.sessionExpired:
+            return .sessionExpired
+        default:
+            return .invalidEnvelope
         }
     }
 

@@ -71,6 +71,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
 
     @Published private(set) var channels: [UUID: RelayChannel] = [:]
     @Published private(set) var tokens: [UUID: RelayToken] = [:]
+    @Published private(set) var auditFailureDescription: String?
 
     // MARK: - Dependencies
 
@@ -269,7 +270,12 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         channelLeaseIDs[channel.id] = connectionLeaseID
         channels[channel.id] = channel
         tokens[channel.id] = token
-        auditLog?.log(.channelOpened(channelID: channel.id, name: channel.name))
+        do {
+            try recordAudit(.channelOpened(channelID: channel.id, name: channel.name))
+        } catch {
+            await closeChannel(channelID: channel.id)
+            throw error
+        }
 
         return channel
     }
@@ -433,7 +439,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         try tokenStore.save(token: newToken, channelID: channelID)
         tokens[channelID] = newToken
         brokers[channelID]?.updateAuthorization(token: newToken, acl: channel.acl)
-        auditLog?.log(.tokenRotated(channelID: channelID))
+        try recordAudit(.tokenRotated(channelID: channelID))
     }
 
     /// Returns the current token for a channel.
@@ -716,6 +722,21 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
         tunnelIDs.removeValue(forKey: channelID)
         channelLeaseIDs.removeValue(forKey: channelID)
         try? tokenStore.delete(channelID: channelID)
-        auditLog?.log(.channelClosed(channelID: channelID))
+        do {
+            try recordAudit(.channelClosed(channelID: channelID))
+        } catch {
+            auditFailureDescription = error.localizedDescription
+        }
+    }
+
+    private func recordAudit(_ event: RelayAuditEvent) throws {
+        guard let auditLog else { return }
+        do {
+            try auditLog.log(event)
+            auditFailureDescription = nil
+        } catch {
+            auditFailureDescription = error.localizedDescription
+            throw error
+        }
     }
 }

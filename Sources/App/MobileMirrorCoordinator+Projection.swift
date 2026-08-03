@@ -337,7 +337,7 @@ extension MobileMirrorCoordinator {
                             self.tunnelLease = nil
                         }
                         if let channelID {
-                            self.auditLog.log(.channelClosed(channelID: channelID))
+                            try self.auditLog.log(.channelClosed(channelID: channelID))
                         }
                     } catch {
                         self?.state = .failed(error.localizedDescription)
@@ -346,7 +346,11 @@ extension MobileMirrorCoordinator {
                 }
             }
         } else if let channelID {
-            auditLog.log(.channelClosed(channelID: channelID))
+            do {
+                try auditLog.log(.channelClosed(channelID: channelID))
+            } catch {
+                state = .failed(error.localizedDescription)
+            }
         }
         for stream in ownedStreams.values { stopOwnedStream(stream) }
         ownedStreams.removeAll()

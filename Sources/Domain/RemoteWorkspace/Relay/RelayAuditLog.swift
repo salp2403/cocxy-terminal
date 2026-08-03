@@ -19,6 +19,11 @@ enum RelayAuditEvent: Sendable {
         targetDigest: String,
         outcome: String
     )
+    case mobileRequestRejected(
+        channelID: UUID,
+        remoteHost: String,
+        reason: String
+    )
 
     /// Machine-readable event type name.
     var typeName: String {
@@ -29,6 +34,7 @@ enum RelayAuditEvent: Sendable {
         case .tokenRotated: return "tokenRotated"
         case .channelClosed: return "channelClosed"
         case .mobileAction: return "mobileAction"
+        case .mobileRequestRejected: return "mobileRequestRejected"
         }
     }
 
@@ -40,7 +46,8 @@ enum RelayAuditEvent: Sendable {
              .connectionRejected(let id, _, _),
              .tokenRotated(let id),
              .channelClosed(let id),
-             .mobileAction(let id, _, _, _, _):
+             .mobileAction(let id, _, _, _, _),
+             .mobileRequestRejected(let id, _, _):
             return id
         }
     }
@@ -65,10 +72,33 @@ enum RelayAuditEvent: Sendable {
             dict["action"] = action
             dict["targetDigest"] = targetDigest
             dict["outcome"] = outcome
+        case .mobileRequestRejected(_, let host, let reason):
+            dict["remoteHost"] = host
+            dict["reason"] = reason
         case .tokenRotated, .channelClosed:
             break
         }
         return dict
+    }
+}
+
+enum RelayAuditLogError: Error, Equatable, LocalizedError, Sendable {
+    case serializationFailed(String)
+    case appendFailed(String)
+    case rotationFailed(String)
+    case readFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .serializationFailed(let reason):
+            return "Audit event serialization failed: \(reason)"
+        case .appendFailed(let reason):
+            return "Audit event persistence failed: \(reason)"
+        case .rotationFailed(let reason):
+            return "Audit log rotation failed: \(reason)"
+        case .readFailed(let reason):
+            return "Audit log read failed: \(reason)"
+        }
     }
 }
 
@@ -103,6 +133,7 @@ final class RelayAuditLog {
     let maxSizeBytes: Int
 
     private let writer: any AuditLogWriting
+    private(set) var lastFailure: RelayAuditLogError?
 
     init(writer: any AuditLogWriting, maxSizeBytes: Int = 10 * 1024 * 1024) {
         self.writer = writer
@@ -113,22 +144,53 @@ final class RelayAuditLog {
     ///
     /// Serializes the event to a JSON line and appends it to the log.
     /// Triggers rotation when the log exceeds `maxSizeBytes`.
-    func log(_ event: RelayAuditEvent) {
+    func log(_ event: RelayAuditEvent) throws {
         let json = event.toJSON()
-        guard let data = try? JSONSerialization.data(withJSONObject: json),
-              let line = String(data: data, encoding: .utf8)
-        else { return }
+        let line: String
+        do {
+            let data = try JSONSerialization.data(withJSONObject: json)
+            guard let encoded = String(data: data, encoding: .utf8) else {
+                throw RelayAuditLogError.serializationFailed("invalid UTF-8")
+            }
+            line = encoded
+        } catch let error as RelayAuditLogError {
+            lastFailure = error
+            throw error
+        } catch {
+            let failure = RelayAuditLogError.serializationFailed(error.localizedDescription)
+            lastFailure = failure
+            throw failure
+        }
 
-        try? writer.appendLine(line)
+        do {
+            try writer.appendLine(line)
+        } catch {
+            let failure = RelayAuditLogError.appendFailed(error.localizedDescription)
+            lastFailure = failure
+            throw failure
+        }
 
         if writer.currentSize >= maxSizeBytes {
-            try? writer.rotate()
+            do {
+                try writer.rotate()
+            } catch {
+                let failure = RelayAuditLogError.rotationFailed(error.localizedDescription)
+                lastFailure = failure
+                throw failure
+            }
         }
+        lastFailure = nil
     }
 
     /// Reads all log entries.
-    func readAll() -> [String] {
-        (try? writer.readAllLines()) ?? []
+    func readAll() throws -> [String] {
+        do {
+            return try writer.readAllLines()
+        } catch {
+            let failure = RelayAuditLogError.readFailed(error.localizedDescription)
+            lastFailure = failure
+            throw failure
+        }
     }
 }
 

@@ -173,7 +173,8 @@ struct RelayManagerTests {
 
     @MainActor
     private func makeManager(
-        tokenStore: RelayTestTokenStore = RelayTestTokenStore()
+        tokenStore: RelayTestTokenStore = RelayTestTokenStore(),
+        auditLog: RelayAuditLog? = nil
     ) -> (
         manager: RelayManagerImpl,
         forwarder: MockPortForwarder,
@@ -190,6 +191,7 @@ struct RelayManagerTests {
             tunnelManager: tunnelManager,
             forwarder: forwarder,
             tokenStore: tokenStore,
+            auditLog: auditLog,
             profileSessionRevoker: { profileID, connectionLeaseID in
                 await profileRevoker.revoke(
                     profileID,
@@ -215,6 +217,27 @@ struct RelayManagerTests {
             brokerFactory,
             profileRevoker
         )
+    }
+
+    @Test("Open channel fails closed and tears down when its audit record cannot persist")
+    @MainActor func openChannelAuditFailure() async throws {
+        let writer = MockAuditLogWriter()
+        writer.appendError = RelayManagerAuditTestError.injected
+        let context = makeManager(auditLog: RelayAuditLog(writer: writer))
+        let profileID = UUID()
+
+        await #expect(throws: RelayAuditLogError.self) {
+            try await context.manager.openChannel(
+                config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
+                profileID: profileID
+            )
+        }
+
+        #expect(context.manager.listChannels(profileID: profileID).isEmpty)
+        #expect(context.manager.clientToken(for: context.brokerFactory.brokers[0].channelID) == nil)
+        #expect(context.forwarder.cancelledPorts == context.forwarder.forwardedPorts)
+        #expect(context.brokerFactory.brokers[0].isStopped)
+        #expect(context.manager.auditFailureDescription != nil)
     }
 
     @Test("Open channel routes the reverse tunnel only through its auth broker")
@@ -852,4 +875,8 @@ struct RelayManagerTests {
 
         #expect(context.forwarder.cancelledPorts.isEmpty)
     }
+}
+
+private enum RelayManagerAuditTestError: Error {
+    case injected
 }
