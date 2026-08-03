@@ -105,6 +105,7 @@ struct MobileMirrorGatewaySwiftTestingTests {
                 maximumTotal: 1,
                 maximumPerAddress: 1,
                 maximumStartsPerWindow: 4,
+                maximumFailuresPerWindow: 2,
                 rateWindow: 10
             )
         ) { request, _ in

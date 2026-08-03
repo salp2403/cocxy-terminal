@@ -158,6 +158,75 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(terminalResponse.ok)
         #expect(terminalResponse.snapshot == nil)
         #expect(await actionRecorder.values == [action, terminalAction])
+
+        let terminalSessionID = UUID().uuidString
+        routes.replace(
+            routes: [MobileMirrorTerminalRoute(
+                sessionID: terminalSessionID,
+                surfaceID: SurfaceID(),
+                port: 42_345,
+                bearerToken: "stream-token"
+            )],
+            preferredSessionID: terminalSessionID
+        )
+        let authenticatedHeaders = ["cookie": "cocxy_mobile=\(cookie)"]
+        guard case .proxy = await router.route(
+            request: request(path: "/index.html", headers: authenticatedHeaders),
+            identity: identity
+        ) else {
+            Issue.record("Expected authenticated static asset proxy")
+            return
+        }
+        guard case .eventStream = await router.route(
+            request: request(path: "/mobile/api/events", headers: authenticatedHeaders),
+            identity: identity
+        ) else {
+            Issue.record("Expected authenticated event stream")
+            return
+        }
+        guard case .proxy = await router.route(
+            request: request(
+                path: "/terminal/\(terminalSessionID)/ws",
+                headers: [
+                    "cookie": "cocxy_mobile=\(cookie)",
+                    "origin": "http://127.0.0.1:43120",
+                    "upgrade": "websocket",
+                ]
+            ),
+            identity: identity
+        ) else {
+            Issue.record("Expected authenticated terminal proxy")
+            return
+        }
+
+        for _ in 0..<32 {
+            let sustainedBody = try JSONEncoder().encode(terminalAction)
+            let sustainedTimestamp = String(UInt64(Date().timeIntervalSince1970))
+            let sustainedNonce = UUID().uuidString
+            let sustainedResult = await router.route(
+                request: request(
+                    method: "POST",
+                    path: "/mobile/api/action",
+                    headers: [
+                        "cookie": "cocxy_mobile=\(cookie)",
+                        "origin": "http://127.0.0.1:43120",
+                        "content-type": "application/json",
+                        "x-cocxy-timestamp": sustainedTimestamp,
+                        "x-cocxy-nonce": sustainedNonce,
+                        "x-cocxy-signature": try self.signature(
+                            body: sustainedBody,
+                            timestamp: sustainedTimestamp,
+                            nonce: sustainedNonce,
+                            secret: bootstrap.actionSecret
+                        ),
+                    ],
+                    body: sustainedBody
+                ),
+                identity: identity
+            )
+            #expect(try response(from: sustainedResult).status == 200)
+        }
+        #expect(await actionRecorder.values.count == 34)
     }
 
     @Test("unpaired and internal test assets are not proxied")

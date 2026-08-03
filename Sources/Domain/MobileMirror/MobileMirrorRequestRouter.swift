@@ -22,13 +22,20 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     private let snapshotProvider: SnapshotProvider
     private let actionHandler: ActionHandler
     private let pendingPairingHandler: PendingPairingHandler
+    private let monotonicNow: @Sendable () -> TimeInterval
     private let endpointLock = NSLock()
+    private let requestRateLock = NSLock()
     private var gatewayPort: UInt16?
+    private var requestRatePolicy: MobileMirrorRequestRatePolicy
 
     init(
         publicAddress: String,
         authority: MobileMirrorPairingAuthority,
         routeRegistry: MobileMirrorRouteRegistry,
+        connectionLimits: MobileMirrorConnectionLimits = .default,
+        monotonicNow: @escaping @Sendable () -> TimeInterval = {
+            ProcessInfo.processInfo.systemUptime
+        },
         snapshotProvider: @escaping SnapshotProvider,
         actionHandler: @escaping ActionHandler,
         pendingPairingHandler: @escaping PendingPairingHandler
@@ -36,9 +43,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         self.publicAddress = publicAddress
         self.authority = authority
         self.routeRegistry = routeRegistry
+        self.monotonicNow = monotonicNow
         self.snapshotProvider = snapshotProvider
         self.actionHandler = actionHandler
         self.pendingPairingHandler = pendingPairingHandler
+        self.requestRatePolicy = MobileMirrorRequestRatePolicy(limits: connectionLimits)
     }
 
     func updatePublicPort(_ port: UInt16) {
@@ -58,24 +67,32 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         identity: MobileMirrorClientIdentity
     ) async -> MobileMirrorHTTPRouteResult {
         guard let baseURL, request.host == String(baseURL.dropFirst("http://".count)) else {
-            return .response(.error("Invalid local host.", status: 403))
+            return rejected(
+                .error("Invalid local host.", status: 403),
+                identity: identity
+            )
         }
 
         if request.path == "/pair" {
+            guard admitPreAuthentication(identity: identity) else { return rateLimited() }
             return await pair(request: request, identity: identity)
         }
         if request.path == "/mobile/api/pair-status" {
+            guard admitPreAuthentication(identity: identity) else { return rateLimited() }
             return pairStatus(request: request, identity: identity)
         }
 
         guard let cookie = request.cookie(named: Self.cookieName) else {
-            return .response(.error("Pair this device from Cocxy Terminal.", status: 401))
+            return rejected(
+                .error("Pair this device from Cocxy Terminal.", status: 401),
+                identity: identity
+            )
         }
         guard authority.activePairing(cookie: cookie)?.identity.fingerprint == identity.fingerprint else {
-            return .response(.error(
-                MobileMirrorError.sessionExpired.localizedDescription,
-                status: 401
-            ))
+            return rejected(
+                .error(MobileMirrorError.sessionExpired.localizedDescription, status: 401),
+                identity: identity
+            )
         }
 
         switch request.path {
@@ -104,7 +121,12 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             guard request.method == "GET" else { return methodNotAllowed() }
             return .eventStream
         default:
-            return proxy(request: request, cookie: cookie, baseURL: baseURL)
+            return proxy(
+                request: request,
+                cookie: cookie,
+                baseURL: baseURL,
+                identity: identity
+            )
         }
     }
 
@@ -120,7 +142,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             await pendingPairingHandler(pending)
             return .response(pairingPage(pendingID: pending.id))
         } catch {
-            return errorResponse(error)
+            return errorResponse(error, identity: identity, authenticationFailure: true)
         }
     }
 
@@ -149,7 +171,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 ))
             }
         } catch {
-            return errorResponse(error)
+            return errorResponse(error, identity: identity, authenticationFailure: true)
         }
     }
 
@@ -166,7 +188,10 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
               let timestamp = request.headers["x-cocxy-timestamp"],
               let nonce = request.headers["x-cocxy-nonce"],
               let signature = request.headers["x-cocxy-signature"] else {
-            return .response(.error("Invalid signed action.", status: 403))
+            return rejected(
+                .error("Invalid signed action.", status: 403),
+                identity: identity
+            )
         }
         do {
             let channelID = try authority.validateAction(
@@ -184,19 +209,23 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
                 snapshot: responseSnapshot
             )))
         } catch {
-            return errorResponse(error)
+            return errorResponse(error, identity: identity, authenticationFailure: true)
         }
     }
 
     private func proxy(
         request: MobileMirrorHTTPRequest,
         cookie: String,
-        baseURL: String
+        baseURL: String,
+        identity: MobileMirrorClientIdentity
     ) -> MobileMirrorHTTPRouteResult {
         guard request.method == "GET" else { return methodNotAllowed() }
         let isWebSocket = request.headers["upgrade"]?.lowercased() == "websocket"
         if isWebSocket, request.origin != baseURL {
-            return .response(.error("Invalid terminal origin.", status: 403))
+            return rejected(
+                .error("Invalid terminal origin.", status: 403),
+                identity: identity
+            )
         }
 
         if let sessionID = Self.terminalSessionID(from: request.path) {
@@ -275,7 +304,11 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         .response(.error("Method not allowed.", status: 400))
     }
 
-    private func errorResponse(_ error: Error) -> MobileMirrorHTTPRouteResult {
+    private func errorResponse(
+        _ error: Error,
+        identity: MobileMirrorClientIdentity? = nil,
+        authenticationFailure: Bool = false
+    ) -> MobileMirrorHTTPRouteResult {
         let status: Int
         switch error {
         case MobileMirrorError.invalidPairingToken,
@@ -295,7 +328,37 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         default:
             status = 503
         }
-        return .response(.error(error.localizedDescription, status: status))
+        let response = MobileMirrorHTTPResponse.error(error.localizedDescription, status: status)
+        if authenticationFailure, let identity {
+            return rejected(response, identity: identity)
+        }
+        return .response(response)
+    }
+
+    private func admitPreAuthentication(identity: MobileMirrorClientIdentity) -> Bool {
+        requestRateLock.lock()
+        defer { requestRateLock.unlock() }
+        return requestRatePolicy.admitPreAuthentication(
+            address: identity.remoteAddress,
+            now: monotonicNow()
+        )
+    }
+
+    private func rejected(
+        _ response: MobileMirrorHTTPResponse,
+        identity: MobileMirrorClientIdentity
+    ) -> MobileMirrorHTTPRouteResult {
+        requestRateLock.lock()
+        let allowed = requestRatePolicy.recordAuthenticationFailure(
+            address: identity.remoteAddress,
+            now: monotonicNow()
+        )
+        requestRateLock.unlock()
+        return allowed ? .response(response) : rateLimited()
+    }
+
+    private func rateLimited() -> MobileMirrorHTTPRouteResult {
+        .response(.error("Too many local requests.", status: 429))
     }
 
     private static func terminalSessionID(from path: String) -> String? {

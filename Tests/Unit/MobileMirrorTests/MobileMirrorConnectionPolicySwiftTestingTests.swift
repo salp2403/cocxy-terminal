@@ -12,6 +12,7 @@ struct MobileMirrorConnectionPolicySwiftTestingTests {
             maximumTotal: 2,
             maximumPerAddress: 1,
             maximumStartsPerWindow: 4,
+            maximumFailuresPerWindow: 2,
             rateWindow: 10
         ))
 
@@ -24,21 +25,51 @@ struct MobileMirrorConnectionPolicySwiftTestingTests {
         #expect(policy.admit(address: "127.0.0.3", now: 102) == .accepted)
     }
 
-    @Test("rate window expires using the injected monotonic time")
-    func rateWindowExpiresDeterministically() {
+    @Test("completed HTTP requests do not consume an authentication rate budget")
+    func sequentialConnectionsRemainAvailable() {
         var policy = MobileMirrorConnectionPolicy(limits: MobileMirrorConnectionLimits(
-            maximumTotal: 4,
-            maximumPerAddress: 4,
-            maximumStartsPerWindow: 2,
+            maximumTotal: 2,
+            maximumPerAddress: 1,
+            maximumStartsPerWindow: 1,
+            maximumFailuresPerWindow: 1,
             rateWindow: 10
         ))
 
-        #expect(policy.admit(address: "phone", now: 20) == .accepted)
-        policy.release(address: "phone")
-        #expect(policy.admit(address: "phone", now: 21) == .accepted)
-        policy.release(address: "phone")
-        #expect(policy.admit(address: "phone", now: 29.99) == .rateLimited)
-        #expect(policy.admit(address: "phone", now: 30.01) == .accepted)
+        for index in 0..<100 {
+            #expect(policy.admit(address: "phone", now: TimeInterval(index)) == .accepted)
+            policy.release(address: "phone")
+        }
+    }
+
+    @Test("pre-authentication and failure windows are independent")
+    func requestRateWindowsAreIndependent() {
+        var policy = MobileMirrorRequestRatePolicy(limits: MobileMirrorConnectionLimits(
+            maximumTotal: 4,
+            maximumPerAddress: 4,
+            maximumStartsPerWindow: 2,
+            maximumFailuresPerWindow: 1,
+            rateWindow: 10
+        ))
+
+        let firstPreAuthentication = policy.admitPreAuthentication(address: "phone", now: 20)
+        let secondPreAuthentication = policy.admitPreAuthentication(address: "phone", now: 21)
+        let limitedPreAuthentication = policy.admitPreAuthentication(
+            address: "phone",
+            now: 29.99
+        )
+        let firstFailure = policy.recordAuthenticationFailure(address: "phone", now: 29.99)
+        let limitedFailure = policy.recordAuthenticationFailure(address: "phone", now: 29.99)
+        let expiredPreAuthentication = policy.admitPreAuthentication(
+            address: "phone",
+            now: 30.01
+        )
+
+        #expect(firstPreAuthentication)
+        #expect(secondPreAuthentication)
+        #expect(!limitedPreAuthentication)
+        #expect(firstFailure)
+        #expect(!limitedFailure)
+        #expect(expiredPreAuthentication)
     }
 
     @Test("absolute deadline never resets after partial progress")

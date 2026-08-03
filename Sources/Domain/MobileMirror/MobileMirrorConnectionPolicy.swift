@@ -5,8 +5,9 @@ import Foundation
 
 struct MobileMirrorConnectionLimits: Equatable, Sendable {
     var maximumTotal = 16
-    var maximumPerAddress = 4
-    var maximumStartsPerWindow = 12
+    var maximumPerAddress = 8
+    var maximumStartsPerWindow = 48
+    var maximumFailuresPerWindow = 12
     var rateWindow: TimeInterval = 10
 
     static let `default` = MobileMirrorConnectionLimits()
@@ -21,26 +22,18 @@ struct MobileMirrorConnectionPolicy: Sendable {
 
     private let limits: MobileMirrorConnectionLimits
     private var activeByAddress: [String: Int] = [:]
-    private var startsByAddress: [String: [TimeInterval]] = [:]
 
     init(limits: MobileMirrorConnectionLimits = .default) {
         self.limits = limits
     }
 
-    mutating func admit(address: String, now: TimeInterval) -> Decision {
+    mutating func admit(address: String, now _: TimeInterval) -> Decision {
         let total = activeByAddress.values.reduce(0, +)
         guard total < limits.maximumTotal,
               activeByAddress[address, default: 0] < limits.maximumPerAddress else {
             return .tooManyConnections
         }
 
-        let threshold = now - limits.rateWindow
-        let recentStarts = startsByAddress[address, default: []].filter { $0 > threshold }
-        guard recentStarts.count < limits.maximumStartsPerWindow else {
-            startsByAddress[address] = recentStarts
-            return .rateLimited
-        }
-        startsByAddress[address] = recentStarts + [now]
         activeByAddress[address, default: 0] += 1
         return .accepted
     }
@@ -56,7 +49,50 @@ struct MobileMirrorConnectionPolicy: Sendable {
 
     mutating func reset() {
         activeByAddress.removeAll()
-        startsByAddress.removeAll()
+    }
+}
+
+struct MobileMirrorRequestRatePolicy: Sendable {
+    private let limits: MobileMirrorConnectionLimits
+    private var preAuthenticationStartsByAddress: [String: [TimeInterval]] = [:]
+    private var failuresByAddress: [String: [TimeInterval]] = [:]
+
+    init(limits: MobileMirrorConnectionLimits = .default) {
+        self.limits = limits
+    }
+
+    mutating func admitPreAuthentication(address: String, now: TimeInterval) -> Bool {
+        admit(
+            address: address,
+            now: now,
+            maximum: limits.maximumStartsPerWindow,
+            values: &preAuthenticationStartsByAddress
+        )
+    }
+
+    mutating func recordAuthenticationFailure(address: String, now: TimeInterval) -> Bool {
+        admit(
+            address: address,
+            now: now,
+            maximum: limits.maximumFailuresPerWindow,
+            values: &failuresByAddress
+        )
+    }
+
+    private func admit(
+        address: String,
+        now: TimeInterval,
+        maximum: Int,
+        values: inout [String: [TimeInterval]]
+    ) -> Bool {
+        let threshold = now - limits.rateWindow
+        let recent = values[address, default: []].filter { $0 > threshold }
+        guard recent.count < maximum else {
+            values[address] = recent
+            return false
+        }
+        values[address] = recent + [now]
+        return true
     }
 }
 
