@@ -95,6 +95,73 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(String(decoding: data, as: UTF8.self).contains("\"status\":\"ok\""))
     }
 
+    @Test("route timeout closes the request and releases its connection slot")
+    func routeTimeoutReleasesConnection() async throws {
+        let stalled = MobileMirrorStalledRoute()
+        defer { stalled.release() }
+        let gateway = MobileMirrorGateway(
+            requestTimeout: 0.1,
+            connectionLimits: MobileMirrorConnectionLimits(
+                maximumTotal: 1,
+                maximumPerAddress: 1,
+                maximumStartsPerWindow: 4,
+                rateWindow: 10
+            )
+        ) { request, _ in
+            if request.path == "/stalled" {
+                await stalled.wait()
+            }
+            return .response(.json(["status": "ok"]))
+        }
+        let port = try gateway.start()
+        defer { gateway.stop() }
+
+        let (timeoutData, timeoutResponse) = try await URLSession.shared.data(
+            from: try #require(URL(string: "http://127.0.0.1:\(port)/stalled"))
+        )
+        #expect((timeoutResponse as? HTTPURLResponse)?.statusCode == 504)
+        #expect(String(decoding: timeoutData, as: UTF8.self).contains("timed out"))
+
+        let (healthData, healthResponse) = try await URLSession.shared.data(
+            from: try #require(URL(string: "http://127.0.0.1:\(port)/health"))
+        )
+        #expect((healthResponse as? HTTPURLResponse)?.statusCode == 200)
+        #expect(String(decoding: healthData, as: UTF8.self).contains("\"status\":\"ok\""))
+    }
+
+    @Test("stop retains an admitted request until its descriptor is closed")
+    func stopRetainsGatewayUntilRequestClosure() async throws {
+        let stalled = MobileMirrorStalledRoute()
+        defer { stalled.release() }
+        var gateway: MobileMirrorGateway? = MobileMirrorGateway(
+            requestTimeout: 0.25
+        ) { _, _ in
+            await stalled.wait()
+            return .response(.json(["status": "ok"]))
+        }
+        weak let retainedGateway = gateway
+        let port = try #require(try gateway?.start())
+        let stalledURL = try #require(URL(
+            string: "http://127.0.0.1:\(port)/stalled"
+        ))
+        let request = Task {
+            try? await URLSession.shared.data(from: stalledURL)
+        }
+        #expect(stalled.waitUntilEntered())
+
+        gateway?.stop()
+        gateway = nil
+        try await Task.sleep(for: .milliseconds(20))
+        #expect(retainedGateway != nil)
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while retainedGateway != nil, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(retainedGateway == nil)
+        _ = await request.value
+    }
+
     @Test("proxy strips mobile credentials and injects loopback bearer")
     func proxyRewritesSecurityHeaders() async throws {
         let upstream = try MobileMirrorCaptureServer()
@@ -126,6 +193,40 @@ struct MobileMirrorGatewaySwiftTestingTests {
         #expect(received.contains("Origin: http://127.0.0.1:\(upstream.port)\r\n"))
         #expect(received.localizedCaseInsensitiveContains("mobile-secret") == false)
         #expect(received.localizedCaseInsensitiveContains("signed-action") == false)
+    }
+}
+
+private final class MobileMirrorStalledRoute: @unchecked Sendable {
+    private let lock = NSLock()
+    private let entered = DispatchSemaphore(value: 0)
+    private var continuations: [CheckedContinuation<Void, Never>] = []
+    private var wasReleased = false
+
+    func wait() async {
+        entered.signal()
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if wasReleased {
+                lock.unlock()
+                continuation.resume()
+                return
+            }
+            continuations.append(continuation)
+            lock.unlock()
+        }
+    }
+
+    func waitUntilEntered() -> Bool {
+        entered.wait(timeout: .now() + 2) == .success
+    }
+
+    func release() {
+        lock.lock()
+        wasReleased = true
+        let pending = continuations
+        continuations.removeAll()
+        lock.unlock()
+        pending.forEach { $0.resume() }
     }
 }
 

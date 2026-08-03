@@ -67,7 +67,9 @@ final class MobileMirrorGateway: @unchecked Sendable {
         self.requestedPort = requestedPort
         self.eventHub = eventHub
         self.clientIdentityLabel = clientIdentityLabel
-        self.requestTimeout = max(0.05, requestTimeout)
+        self.requestTimeout = requestTimeout.isFinite
+            ? min(60, max(0.05, requestTimeout))
+            : 8
         self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
         self.monotonicNow = monotonicNow
         self.routeHandler = routeHandler
@@ -163,6 +165,12 @@ final class MobileMirrorGateway: @unchecked Sendable {
             configureClientSocket(descriptor)
             let remoteAddress = Self.numericAddress(remote) ?? "unknown"
             stateLock.lock()
+            guard port != nil else {
+                stateLock.unlock()
+                Darwin.shutdown(descriptor, SHUT_RDWR)
+                Darwin.close(descriptor)
+                continue
+            }
             let decision = connectionPolicy.admit(
                 address: remoteAddress,
                 now: monotonicNow()
@@ -183,8 +191,8 @@ final class MobileMirrorGateway: @unchecked Sendable {
                 Darwin.close(descriptor)
                 continue
             }
-            workerQueue.async { [weak self] in
-                self?.readRequest(from: descriptor, remoteAddress: remoteAddress)
+            workerQueue.async { [self] in
+                readRequest(from: descriptor, remoteAddress: remoteAddress)
             }
         }
     }
@@ -213,13 +221,11 @@ final class MobileMirrorGateway: @unchecked Sendable {
                         remoteAddress: clientIdentityLabel ?? remoteAddress,
                         userAgent: request.userAgent
                     )
-                    Task { [weak self] in
-                        guard let self else { return }
-                        let result = await self.routeHandler(request, identity)
-                        self.workerQueue.async {
-                            self.complete(request: request, result: result, descriptor: descriptor)
-                        }
-                    }
+                    route(
+                        request: request,
+                        identity: identity,
+                        descriptor: descriptor
+                    )
                     return
                 }
                 guard let timeout = deadline.remainingPollMilliseconds(at: monotonicNow()) else {
@@ -241,6 +247,41 @@ final class MobileMirrorGateway: @unchecked Sendable {
         }
     }
 
+    private func route(
+        request: MobileMirrorHTTPRequest,
+        identity: MobileMirrorClientIdentity,
+        descriptor: Int32
+    ) {
+        let completion = MobileMirrorRouteCompletion { [self] outcome in
+            workerQueue.async { [self] in
+                switch outcome {
+                case .result(let result):
+                    complete(request: request, result: result, descriptor: descriptor)
+                case .timedOut:
+                    respond(
+                        .error("Local request timed out.", status: 504),
+                        to: descriptor
+                    )
+                }
+            }
+        }
+        let handler = routeHandler
+        let routeTask = Task { [weak completion] in
+            let result = await handler(request, identity)
+            completion?.resolve(.result(result))
+        }
+        let timeoutNanoseconds = UInt64(requestTimeout * 1_000_000_000)
+        let timeoutTask = Task { [completion] in
+            do {
+                try await Task.sleep(nanoseconds: timeoutNanoseconds)
+            } catch {
+                return
+            }
+            completion.resolve(.timedOut)
+        }
+        completion.install(routeTask: routeTask, timeoutTask: timeoutTask)
+    }
+
     private func complete(
         request: MobileMirrorHTTPRequest,
         result: MobileMirrorHTTPRouteResult,
@@ -260,8 +301,8 @@ final class MobileMirrorGateway: @unchecked Sendable {
             eventHub.add(
                 descriptor: descriptor,
                 afterEventID: request.headers["last-event-id"].flatMap(UInt64.init)
-            ) { [weak self] in
-                self?.finish(descriptor)
+            ) { [self] in
+                finish(descriptor)
             }
         case .proxy(let target):
             proxy(request: request, to: target, client: descriptor)
@@ -318,7 +359,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         pumpDescriptors.forEach { _ = fcntl($0, F_SETFD, FD_CLOEXEC) }
         let lifetime = MobileMirrorProxyLifetime(
             upstream: upstream,
-            closeClient: { [weak self] in self?.finish(client) }
+            closeClient: { [self] in finish(client) }
         )
         workerQueue.async {
             Self.pump(from: clientInput, to: upstreamOutput)
@@ -411,6 +452,57 @@ final class MobileMirrorGateway: @unchecked Sendable {
             }
         }
         return result == 0 ? String(cString: host) : nil
+    }
+}
+
+private enum MobileMirrorRouteOutcome: Sendable {
+    case result(MobileMirrorHTTPRouteResult)
+    case timedOut
+}
+
+private final class MobileMirrorRouteCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private let completion: @Sendable (MobileMirrorRouteOutcome) -> Void
+    private var routeTask: Task<Void, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    private var isResolved = false
+
+    init(completion: @escaping @Sendable (MobileMirrorRouteOutcome) -> Void) {
+        self.completion = completion
+    }
+
+    func install(
+        routeTask: Task<Void, Never>,
+        timeoutTask: Task<Void, Never>
+    ) {
+        lock.lock()
+        if isResolved {
+            lock.unlock()
+            routeTask.cancel()
+            timeoutTask.cancel()
+            return
+        }
+        self.routeTask = routeTask
+        self.timeoutTask = timeoutTask
+        lock.unlock()
+    }
+
+    func resolve(_ outcome: MobileMirrorRouteOutcome) {
+        let tasks: (Task<Void, Never>?, Task<Void, Never>?)
+        lock.lock()
+        guard !isResolved else {
+            lock.unlock()
+            return
+        }
+        isResolved = true
+        tasks = (routeTask, timeoutTask)
+        routeTask = nil
+        timeoutTask = nil
+        lock.unlock()
+
+        tasks.0?.cancel()
+        tasks.1?.cancel()
+        completion(outcome)
     }
 }
 
