@@ -11,7 +11,8 @@ struct TaskInboxProjectorSwiftTestingTests {
     func projectsEveryLiveSourceDeterministically() throws {
         let project = ProjectID(rawValue: "/tmp/inbox-project")
         let otherProject = ProjectID(rawValue: "/tmp/inbox-other")
-        let run = try makeRun(project: project, now: Date(timeIntervalSince1970: 40))
+        var run = try makeRun(project: project, now: Date(timeIntervalSince1970: 40))
+        run.candidates[0].touchedFiles = ["Sources/Restored.swift"]
         let queued = try makeQueueItem(project: project, now: Date(timeIntervalSince1970: 30))
         let ownerWindow = WindowID()
         let agentTab = TabID()
@@ -64,6 +65,7 @@ struct TaskInboxProjectorSwiftTestingTests {
         #expect(Set(projectEntries.map(\.id)).count == projectEntries.count)
         let fanOut = try #require(projectEntries.first { $0.kind == .fanOut })
         #expect(fanOut.navigation?.sessionID == run.id)
+        #expect(fanOut.touchedFiles == ["Sources/Restored.swift"])
         let agent = try #require(projectEntries.first { $0.kind == .liveAgent })
         #expect(agent.status == AgentDashboardState.waitingForInput.rawValue)
         #expect(agent.touchedFiles == ["Sources/App.swift"])

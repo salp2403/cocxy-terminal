@@ -30,7 +30,9 @@ enum TaskInboxProjector {
                 status: run.status.rawValue,
                 agents: uniqueSorted(run.candidates.map { $0.provider.displayName }),
                 worktreePaths: uniqueSorted(run.candidates.compactMap { $0.worktree?.path.path }),
-                touchedFiles: touchedFiles(from: relatedDashboard),
+                touchedFiles: uniqueSorted(
+                    run.candidates.flatMap(\.touchedFiles) + touchedFiles(from: relatedDashboard)
+                ),
                 updatedAt: run.updatedAt,
                 navigation: TaskInboxNavigation(sessionID: run.id)
             ))
