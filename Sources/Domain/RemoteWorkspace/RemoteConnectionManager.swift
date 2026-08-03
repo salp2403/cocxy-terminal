@@ -22,29 +22,6 @@ import Foundation
 @MainActor
 final class RemoteConnectionManager: ObservableObject {
 
-    // MARK: - Connection State
-
-    /// Represents the current state of a remote connection.
-    enum ConnectionState: Equatable, Sendable {
-        case disconnected
-        case connecting
-        case connected(latencyMs: Int?)
-        case reconnecting(attempt: Int)
-        case failed(String)
-    }
-
-    // MARK: - Constants
-
-    /// Maximum number of automatic reconnection attempts.
-    nonisolated static let maxReconnectAttempts = 5
-
-    /// Maximum delay between reconnection attempts (in seconds).
-    nonisolated static let maxBackoffDelay: TimeInterval = 30.0
-
-    /// Bounded checks used before releasing a relay port quarantine.
-    nonisolated static let terminationConfirmationAttempts = 5
-    nonisolated static let terminationConfirmationDelayNanoseconds: UInt64 = 100_000_000
-
     // MARK: - Published State
 
     /// Current connection state for each profile, keyed by profile ID.

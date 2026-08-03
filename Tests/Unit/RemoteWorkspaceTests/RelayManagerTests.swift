@@ -36,7 +36,7 @@ private final class RelayTestTokenStore: RelayTokenStoring, @unchecked Sendable 
 }
 
 @MainActor
-private final class MockRelayAuthBroker: RelayAuthBrokering {
+final class MockRelayAuthBroker: RelayAuthBrokering {
     enum TestError: Error {
         case startFailed
     }
@@ -109,7 +109,7 @@ private final class MockRelayAuthBroker: RelayAuthBrokering {
 }
 
 @MainActor
-private final class RelayBrokerFactoryRecorder {
+final class RelayBrokerFactoryRecorder {
     private var nextPort: UInt16 = 45_000
     private(set) var brokers: [MockRelayAuthBroker] = []
     var shouldFailStart = false
@@ -173,8 +173,7 @@ struct RelayManagerTests {
 
     @MainActor
     private func makeManager(
-        tokenStore: RelayTestTokenStore = RelayTestTokenStore(),
-        auditLog: RelayAuditLog? = nil
+        tokenStore: RelayTestTokenStore = RelayTestTokenStore()
     ) -> (
         manager: RelayManagerImpl,
         forwarder: MockPortForwarder,
@@ -191,7 +190,6 @@ struct RelayManagerTests {
             tunnelManager: tunnelManager,
             forwarder: forwarder,
             tokenStore: tokenStore,
-            auditLog: auditLog,
             profileSessionRevoker: { profileID, connectionLeaseID in
                 await profileRevoker.revoke(
                     profileID,
@@ -217,27 +215,6 @@ struct RelayManagerTests {
             brokerFactory,
             profileRevoker
         )
-    }
-
-    @Test("Open channel fails closed and tears down when its audit record cannot persist")
-    @MainActor func openChannelAuditFailure() async throws {
-        let writer = MockAuditLogWriter()
-        writer.appendError = RelayManagerAuditTestError.injected
-        let context = makeManager(auditLog: RelayAuditLog(writer: writer))
-        let profileID = UUID()
-
-        await #expect(throws: RelayAuditLogError.self) {
-            try await context.manager.openChannel(
-                config: RelayChannelConfig(name: "api", localPort: 3000, remotePort: 9000),
-                profileID: profileID
-            )
-        }
-
-        #expect(context.manager.listChannels(profileID: profileID).isEmpty)
-        #expect(context.manager.clientToken(for: context.brokerFactory.brokers[0].channelID) == nil)
-        #expect(context.forwarder.cancelledPorts == context.forwarder.forwardedPorts)
-        #expect(context.brokerFactory.brokers[0].isStopped)
-        #expect(context.manager.auditFailureDescription != nil)
     }
 
     @Test("Open channel routes the reverse tunnel only through its auth broker")
@@ -866,17 +843,4 @@ struct RelayManagerTests {
         }
     }
 
-    @Test("Close and rotate for unknown channels are safe no-ops")
-    @MainActor func unknownChannelNoOps() async throws {
-        let context = makeManager()
-
-        await context.manager.closeChannel(channelID: UUID())
-        try context.manager.rotateToken(channelID: UUID())
-
-        #expect(context.forwarder.cancelledPorts.isEmpty)
-    }
-}
-
-private enum RelayManagerAuditTestError: Error {
-    case injected
 }

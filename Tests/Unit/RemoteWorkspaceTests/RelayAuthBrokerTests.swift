@@ -102,7 +102,7 @@ private final class RelayLoopbackEchoServer {
 }
 
 @MainActor
-private func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
+func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
     let connection = NWConnection(
         host: .ipv4(.loopback),
         port: NWEndpoint.Port(rawValue: port)!,
@@ -148,7 +148,7 @@ private func sendRelayTestPayload(_ data: Data, to port: UInt16) async throws {
 }
 
 @MainActor
-private func waitForRelayEffect(
+func waitForRelayEffect(
     within timeout: Duration = .seconds(5),
     _ condition: @MainActor () -> Bool
 ) async -> Bool {
@@ -545,38 +545,6 @@ struct RelayAuthBrokerTests {
         })
     }
 
-    @Test("An accepted handshake is revoked before relay when audit persistence fails")
-    @MainActor func auditFailureBlocksAcceptedHandshake() async throws {
-        let writer = MockAuditLogWriter()
-        writer.appendError = RelayAuthBrokerAuditTestError.injected
-        let channelID = UUID()
-        let token = RelayToken.generate()
-        let broker = RelayAuthBroker(
-            channelID: channelID,
-            token: token,
-            acl: RelayACL(),
-            targetPort: 9,
-            auditLog: RelayAuditLog(writer: writer)
-        )
-        var observedFailure: RelayAuditLogError?
-        broker.setFailureHandler { error in
-            observedFailure = error as? RelayAuditLogError
-        }
-        let port = try await broker.startOnEphemeralLoopbackPort()
-        defer { broker.stop() }
-        let handshake = RelayHandshake.build(
-            channelID: channelID,
-            timestamp: UInt64(Date().timeIntervalSince1970),
-            token: token
-        )
-
-        try await sendRelayTestPayload(handshake, to: port)
-
-        #expect(await waitForRelayEffect { observedFailure != nil })
-        #expect(broker.activeConnections == 0)
-        #expect(writer.entries.isEmpty)
-    }
-
     @Test("Authenticated traffic is relayed bidirectionally to the configured service")
     @MainActor func authenticatedTrafficReachesTarget() async throws {
         let target = RelayLoopbackEchoServer()
@@ -918,8 +886,4 @@ struct RelayAuthBrokerTests {
         #expect(RelayHandshake.ValidationResult.rejected(.invalidSignature)
                 != .rejected(.timestampExpired))
     }
-}
-
-private enum RelayAuthBrokerAuditTestError: Error {
-    case injected
 }
