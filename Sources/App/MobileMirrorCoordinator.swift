@@ -386,30 +386,38 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
         case .terminalControl:
             let entry = try terminalEntry(for: action.sessionID)
-            guard routeRegistry.contains(sessionID: entry.sessionID.rawValue.uuidString) else {
+            guard let route = routeRegistry.route(
+                for: entry.sessionID.rawValue.uuidString
+            ) else {
                 throw MobileMirrorError.targetUnavailable
             }
             if action.controlType == "viewport-scroll" {
                 guard let scrollDelta = action.scrollDelta else {
                     throw MobileMirrorError.invalidAction
                 }
-                try scrollTerminal(entry, deltaRows: scrollDelta)
+                try scrollTerminal(entry, route: route, deltaRows: scrollDelta)
             } else {
                 guard let writer = makeTerminalWriter(channelID: active.channelID) else {
                     throw MobileMirrorError.targetUnavailable
                 }
-                try await writer.write(action: action, to: entry.tabID)
+                try await writer.write(
+                    action: action,
+                    to: entry.tabID,
+                    surfaceID: route.surfaceID
+                )
             }
             publishesState = false
         case .agentRespond:
             let entry = try terminalEntry(for: action.sessionID)
             guard entry.agentState == .waitingInput,
-                  routeRegistry.contains(sessionID: entry.sessionID.rawValue.uuidString),
+                  let route = routeRegistry.route(
+                      for: entry.sessionID.rawValue.uuidString
+                  ),
                   let text = action.text,
                   let writer = makeTerminalWriter(channelID: active.channelID) else {
                 throw MobileMirrorError.targetUnavailable
             }
-            try await writer.respond(text, to: entry.tabID)
+            try await writer.respond(text, to: entry.tabID, surfaceID: route.surfaceID)
         case .approvalApprove, .approvalReject:
             try await handleApproval(action)
         case .projectCreate:
@@ -432,15 +440,19 @@ final class MobileMirrorCoordinator: ObservableObject {
         return entry
     }
 
-    private func scrollTerminal(_ entry: SessionEntry, deltaRows: Int) throws {
+    private func scrollTerminal(
+        _ entry: SessionEntry,
+        route: MobileMirrorTerminalRoute,
+        deltaRows: Int
+    ) throws {
         guard let controller = appDelegate?.allWindowControllers.first(where: {
             $0.windowID == entry.ownerWindowID
         }), controller.tabManager.tab(for: entry.tabID) != nil,
-              let surfaceID = preferredSurfaceID(for: entry.tabID, controller: controller),
-              let bridge = controller.cocxyCoreBridge(forSurface: surfaceID) else {
+              controller.surfaceIDs(for: entry.tabID).contains(route.surfaceID),
+              let bridge = controller.cocxyCoreBridge(forSurface: route.surfaceID) else {
             throw MobileMirrorError.targetUnavailable
         }
-        bridge.scrollViewport(surfaceID: surfaceID, deltaRows: deltaRows)
+        bridge.scrollViewport(surfaceID: route.surfaceID, deltaRows: deltaRows)
     }
 
     private func makeTerminalWriter(channelID: UUID) -> MobileMirrorTerminalWriter? {
@@ -472,7 +484,15 @@ final class MobileMirrorCoordinator: ObservableObject {
                 let surfaceID = target.surfaceID
                 return MobileMirrorTerminalTarget(
                     sendText: { engine.sendText($0, to: surfaceID) },
-                    sendKeyEvent: { engine.sendKeyEvent($0, to: surfaceID) }
+                    sendKeyEvent: { event in
+                        if let bridge = engine as? CocxyCoreBridge {
+                            return bridge.sendKeyEventConfirmingDelivery(
+                                event,
+                                to: surfaceID
+                            )
+                        }
+                        return engine.sendKeyEvent(event, to: surfaceID)
+                    }
                 )
             }
         )

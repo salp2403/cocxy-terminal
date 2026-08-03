@@ -152,6 +152,7 @@ extension MobileMirrorCoordinator {
                    status?.allowsInput == false {
                     routes.append(MobileMirrorTerminalRoute(
                         sessionID: sessionID,
+                        surfaceID: surfaceID,
                         port: stream.port,
                         bearerToken: stream.token
                     ))
@@ -185,6 +186,7 @@ extension MobileMirrorCoordinator {
             ownedStreams[sessionID] = stream
             routes.append(MobileMirrorTerminalRoute(
                 sessionID: sessionID,
+                surfaceID: surfaceID,
                 port: status.port,
                 bearerToken: token
             ))

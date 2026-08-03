@@ -6,8 +6,8 @@ import Foundation
 
 @MainActor
 struct MobileMirrorTerminalTarget {
-    let sendText: (String) -> Void
-    let sendKeyEvent: (KeyEvent) -> Void
+    let sendText: (String) -> Bool
+    let sendKeyEvent: (KeyEvent) -> Bool
 }
 
 @MainActor
@@ -35,34 +35,55 @@ final class MobileMirrorTerminalWriter {
         self.targetProvider = targetProvider
     }
 
-    func write(action: MobileMirrorAction, to tabID: TabID) async throws {
+    func write(
+        action: MobileMirrorAction,
+        to tabID: TabID,
+        surfaceID: SurfaceID
+    ) async throws {
         guard action.kind == .terminalControl else {
             throw MobileMirrorError.invalidAction
         }
         try await authorizeAndApply(
             effect: try Self.effect(for: action),
-            tabID: tabID
+            tabID: tabID,
+            surfaceID: surfaceID
         )
     }
 
-    func respond(_ text: String, to tabID: TabID) async throws {
+    func respond(_ text: String, to tabID: TabID, surfaceID: SurfaceID) async throws {
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               text.utf8.count <= 8_192 else {
             throw MobileMirrorError.invalidAction
         }
-        try await authorizeAndApply(effect: .text(text + "\r"), tabID: tabID)
+        try await authorizeAndApply(
+            effect: .text(text + "\r"),
+            tabID: tabID,
+            surfaceID: surfaceID
+        )
     }
 
-    private func authorizeAndApply(effect: Effect, tabID: TabID) async throws {
+    private func authorizeAndApply(
+        effect: Effect,
+        tabID: TabID,
+        surfaceID: SurfaceID
+    ) async throws {
         let command: CLICommandName
         let params: [String: String]
         switch effect {
         case .text(let text):
             command = .send
-            params = ["tabId": tabID.rawValue.uuidString, "text": text]
+            params = [
+                "tabId": tabID.rawValue.uuidString,
+                "surfaceId": surfaceID.rawValue.uuidString,
+                "text": text,
+            ]
         case .key(let name, _):
             command = .sendKey
-            params = ["tabId": tabID.rawValue.uuidString, "key": name]
+            params = [
+                "tabId": tabID.rawValue.uuidString,
+                "surfaceId": surfaceID.rawValue.uuidString,
+                "key": name,
+            ]
         }
         let socketRequest = SocketRequest(
             id: UUID().uuidString,
@@ -73,15 +94,20 @@ final class MobileMirrorTerminalWriter {
             socketRequest: socketRequest
         ), let grant = await grantProvider(request), grant.consume(for: request),
               grant.context.tabID == tabID.rawValue,
+              grant.context.surfaceID == surfaceID.rawValue,
               let target = targetProvider(grant.context) else {
             throw MobileMirrorError.authorizationDenied
         }
 
+        let delivered: Bool
         switch effect {
         case .text(let text):
-            target.sendText(text)
+            delivered = target.sendText(text)
         case .key(_, let event):
-            target.sendKeyEvent(event)
+            delivered = target.sendKeyEvent(event)
+        }
+        guard delivered else {
+            throw MobileMirrorError.targetUnavailable
         }
     }
 

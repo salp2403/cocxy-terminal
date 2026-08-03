@@ -1,10 +1,12 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
 // MobileMirrorRouteRegistry.swift - Thread-safe terminal stream routing.
 
+import CocxyShared
 import Foundation
 
 struct MobileMirrorTerminalRoute: Equatable, Sendable {
     let sessionID: String
+    let surfaceID: SurfaceID
     let port: UInt16
     let bearerToken: String
 }

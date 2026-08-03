@@ -10,6 +10,7 @@ import Testing
 struct MobileMirrorTerminalWriterSwiftTestingTests {
     @Test("terminal bytes are not sent when desktop authorization is denied")
     func deniedAuthorizationDoesNotWrite() async {
+        let surfaceID = SurfaceID()
         let capture = MobileMirrorTerminalWriteCapture()
         let writer = MobileMirrorTerminalWriter(
             grantProvider: { _ in nil },
@@ -20,7 +21,11 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         )
 
         await #expect(throws: MobileMirrorError.authorizationDenied) {
-            try await writer.write(action: Self.characterAction("x"), to: TabID())
+            try await writer.write(
+                action: Self.characterAction("x"),
+                to: TabID(),
+                surfaceID: surfaceID
+            )
         }
         #expect(capture.targetRequests == 0)
         #expect(capture.texts.isEmpty)
@@ -30,13 +35,14 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
     @Test("arrow input consumes one exact grant and stays on the mode-aware key path")
     func arrowUsesModeAwareKeyPath() async throws {
         let tabID = TabID()
+        let surfaceID = SurfaceID()
         let capture = MobileMirrorTerminalWriteCapture()
         let writer = MobileMirrorTerminalWriter(
             grantProvider: { request in
                 capture.requests.append(request)
                 return SocketPrivilegedCommandAuthorizationGrant(
                     request: request,
-                    context: Self.context(tabID: tabID)
+                    context: Self.context(tabID: tabID, surfaceID: surfaceID)
                 )
             },
             targetProvider: { _ in capture.target }
@@ -49,11 +55,12 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
             ctrl: true
         )
 
-        try await writer.write(action: action, to: tabID)
+        try await writer.write(action: action, to: tabID, surfaceID: surfaceID)
 
         #expect(capture.requests.count == 1)
         #expect(capture.requests.first?.command == .sendKey)
         #expect(capture.requests.first?.params["tabId"] == tabID.rawValue.uuidString)
+        #expect(capture.requests.first?.params["surfaceId"] == surfaceID.rawValue.uuidString)
         #expect(capture.requests.first?.params["key"] == "left")
         #expect(capture.texts.isEmpty)
         #expect(capture.keyCodes == [123])
@@ -63,6 +70,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
     @Test("agent response is bound with return and a grant cannot authorize another request")
     func responseIsExactAndGrantIsOneUse() async throws {
         let tabID = TabID()
+        let surfaceID = SurfaceID()
         let capture = MobileMirrorTerminalWriteCapture()
         var retainedGrant: SocketPrivilegedCommandAuthorizationGrant?
         let writer = MobileMirrorTerminalWriter(
@@ -71,7 +79,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
                 if retainedGrant == nil {
                     retainedGrant = SocketPrivilegedCommandAuthorizationGrant(
                         request: request,
-                        context: Self.context(tabID: tabID)
+                        context: Self.context(tabID: tabID, surfaceID: surfaceID)
                     )
                 }
                 return retainedGrant
@@ -79,14 +87,65 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
             targetProvider: { _ in capture.target }
         )
 
-        try await writer.respond("continue", to: tabID)
+        try await writer.respond("continue", to: tabID, surfaceID: surfaceID)
         await #expect(throws: MobileMirrorError.authorizationDenied) {
-            try await writer.respond("again", to: tabID)
+            try await writer.respond("again", to: tabID, surfaceID: surfaceID)
         }
 
         #expect(capture.requests.first?.command == .send)
         #expect(capture.requests.first?.params["text"] == "continue\r")
         #expect(capture.texts == ["continue\r"])
+    }
+
+    @Test("a grant for another surface cannot authorize terminal input")
+    func grantForAnotherSurfaceFailsClosed() async {
+        let tabID = TabID()
+        let requestedSurfaceID = SurfaceID()
+        let capture = MobileMirrorTerminalWriteCapture()
+        let writer = MobileMirrorTerminalWriter(
+            grantProvider: { request in
+                SocketPrivilegedCommandAuthorizationGrant(
+                    request: request,
+                    context: Self.context(tabID: tabID, surfaceID: SurfaceID())
+                )
+            },
+            targetProvider: { _ in capture.target }
+        )
+
+        await #expect(throws: MobileMirrorError.authorizationDenied) {
+            try await writer.write(
+                action: Self.characterAction("x"),
+                to: tabID,
+                surfaceID: requestedSurfaceID
+            )
+        }
+        #expect(capture.texts.isEmpty)
+    }
+
+    @Test("failed engine delivery is reported instead of acknowledged")
+    func failedEngineDeliveryIsReported() async {
+        let tabID = TabID()
+        let surfaceID = SurfaceID()
+        let capture = MobileMirrorTerminalWriteCapture()
+        capture.deliversText = false
+        let writer = MobileMirrorTerminalWriter(
+            grantProvider: { request in
+                SocketPrivilegedCommandAuthorizationGrant(
+                    request: request,
+                    context: Self.context(tabID: tabID, surfaceID: surfaceID)
+                )
+            },
+            targetProvider: { _ in capture.target }
+        )
+
+        await #expect(throws: MobileMirrorError.targetUnavailable) {
+            try await writer.write(
+                action: Self.characterAction("x"),
+                to: tabID,
+                surfaceID: surfaceID
+            )
+        }
+        #expect(capture.texts == ["x"])
     }
 
     private static func characterAction(_ text: String) -> MobileMirrorAction {
@@ -98,13 +157,16 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         )
     }
 
-    private static func context(tabID: TabID) -> SocketPrivilegedCommandContext {
+    private static func context(
+        tabID: TabID,
+        surfaceID: SurfaceID
+    ) -> SocketPrivilegedCommandContext {
         SocketPrivilegedCommandContext(
             scope: .terminalSurface,
             windowControllerIdentifier: nil,
             tabID: tabID.rawValue,
             workingDirectory: "/tmp",
-            surfaceID: UUID(),
+            surfaceID: surfaceID.rawValue,
             browserViewModelIdentifier: nil,
             browserTabID: nil,
             browserURL: nil,
@@ -120,13 +182,19 @@ private final class MobileMirrorTerminalWriteCapture {
     var keyCodes: [UInt16] = []
     var modifierValues: [UInt] = []
     var targetRequests = 0
+    var deliversText = true
+    var deliversKeyEvent = true
 
     var target: MobileMirrorTerminalTarget {
         MobileMirrorTerminalTarget(
-            sendText: { [weak self] in self?.texts.append($0) },
+            sendText: { [weak self] text in
+                self?.texts.append(text)
+                return self?.deliversText == true
+            },
             sendKeyEvent: { [weak self] event in
                 self?.keyCodes.append(event.keyCode)
                 self?.modifierValues.append(event.modifiers.rawValue)
+                return self?.deliversKeyEvent == true
             }
         )
     }
