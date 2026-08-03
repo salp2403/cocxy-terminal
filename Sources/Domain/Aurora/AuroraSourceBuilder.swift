@@ -55,12 +55,12 @@ struct GitAncestorWorkspaceRootResolver: AuroraWorkspaceRootResolver {
         homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser,
         maxDepth: Int = 12
     ) {
-        self.homeDirectory = homeDirectory.standardizedFileURL
+        self.homeDirectory = ProjectPathCanonicalizer.canonicalURL(homeDirectory)
         self.maxDepth = maxDepth
     }
 
     func workspaceRoot(for directory: URL) -> URL? {
-        var current = directory.standardizedFileURL
+        var current = ProjectPathCanonicalizer.canonicalURL(directory)
         let home = homeDirectory
 
         for _ in 0..<maxDepth {
@@ -74,7 +74,9 @@ struct GitAncestorWorkspaceRootResolver: AuroraWorkspaceRootResolver {
             if FileManager.default.fileExists(atPath: dotGit.path) {
                 return current
             }
-            let parent = current.deletingLastPathComponent().standardizedFileURL
+            let parent = ProjectPathCanonicalizer.canonicalURL(
+                current.deletingLastPathComponent()
+            )
             if parent == current { return nil } // hit filesystem root
             current = parent
         }
@@ -169,10 +171,10 @@ enum AuroraSourceBuilder {
                 resolver: workspaceRootResolver
             )
             let workspaceTitle: String?
-            if workspace.unfoldedIdentity != workspace.identity,
-               let storedValue = workspaceTitlesByIdentity?[workspace.unfoldedIdentity] {
+            if let storedValue = workspaceTitlesByIdentity?[workspace.identity] {
                 workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(storedValue)
-            } else if let storedValue = workspaceTitlesByIdentity?[workspace.identity] {
+            } else if workspace.unfoldedIdentity != workspace.identity,
+                      let storedValue = workspaceTitlesByIdentity?[workspace.unfoldedIdentity] {
                 workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(storedValue)
             } else {
                 workspaceTitle = AuroraWorkspacePlanner.normalizedTitle(tab.workspaceCustomTitle)

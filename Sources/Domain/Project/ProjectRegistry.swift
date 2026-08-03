@@ -121,14 +121,18 @@ struct ProjectRegistryStore: Sendable {
             guard values.isRegularFile == true else {
                 throw ProjectRegistryStoreError.invalidRecord("Registry is not a regular file")
             }
+            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
             let records = try Self.decoder.decode(
                 [ProjectRecord].self,
-                from: Data(contentsOf: fileURL, options: [.mappedIfSafe])
+                from: data
             )
-            guard Set(records.map(\.id)).count == records.count else {
-                throw ProjectRegistryStoreError.invalidRecord("Duplicate project IDs")
+            let migrated = Self.coalescedCanonicalRecords(records)
+            let rawIDs = (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]])?
+                .compactMap { $0["id"] as? String } ?? []
+            if migrated.count != records.count || rawIDs != records.map(\.id.rawValue) {
+                try save(migrated)
             }
-            return records
+            return migrated
         } catch let error as ProjectRegistryStoreError {
             throw error
         } catch {
@@ -187,6 +191,36 @@ struct ProjectRegistryStore: Sendable {
         }
     }
 
+    private static func coalescedCanonicalRecords(
+        _ records: [ProjectRecord]
+    ) -> [ProjectRecord] {
+        var recordsByID: [ProjectID: ProjectRecord] = [:]
+        for record in records {
+            guard var existing = recordsByID[record.id] else {
+                recordsByID[record.id] = record
+                continue
+            }
+            let newest = existing.lastOpenedAt >= record.lastOpenedAt ? existing : record
+            let older = existing.lastOpenedAt >= record.lastOpenedAt ? record : existing
+            existing = newest
+            existing.lastOpenedAt = max(newest.lastOpenedAt, older.lastOpenedAt)
+            existing.openCount = max(newest.openCount, older.openCount)
+            existing.isPinned = newest.isPinned || older.isPinned
+            existing.isCollapsed = newest.isCollapsed || older.isCollapsed
+            existing.accent = newest.accent ?? older.accent
+            existing.remoteOrigin = newest.remoteOrigin ?? older.remoteOrigin
+            existing.tags = Array(Set(newest.tags + older.tags)).sorted()
+            existing.defaultBaseRef = newest.defaultBaseRef ?? older.defaultBaseRef
+            existing.defaultAgents = newest.defaultAgents.isEmpty
+                ? older.defaultAgents
+                : newest.defaultAgents
+            recordsByID[record.id] = existing
+        }
+        return recordsByID.values.sorted {
+            $0.id.rawValue.localizedStandardCompare($1.id.rawValue) == .orderedAscending
+        }
+    }
+
     private static let encoder: JSONEncoder = {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -216,6 +250,7 @@ enum ProjectRegistryError: Error, Equatable, CustomStringConvertible {
 final class ProjectRegistry: ObservableObject {
     @Published private(set) var records: [ProjectRecord]
     @Published private(set) var persistenceErrorDescription: String?
+    let recordsDidChange = PassthroughSubject<[ProjectRecord], Never>()
 
     private let store: ProjectRegistryStore
     private let clock: () -> Date
@@ -325,6 +360,7 @@ final class ProjectRegistry: ObservableObject {
             try store.save(updated)
             records = updated
             persistenceErrorDescription = nil
+            recordsDidChange.send(updated)
         } catch {
             persistenceErrorDescription = String(describing: error)
             throw error

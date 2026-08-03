@@ -111,6 +111,36 @@ struct ProjectRegistrySwiftTestingTests {
         #expect(Set(registry.records.map(\.id)).count == 2)
     }
 
+    @Test("legacy symlink records migrate to one physical project")
+    func symlinkRecordsMigrate() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let physical = sandbox.appendingPathComponent("physical", isDirectory: true)
+        let link = sandbox.appendingPathComponent("linked", isDirectory: true)
+        try FileManager.default.createDirectory(at: physical, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: physical)
+        let fileURL = sandbox.appendingPathComponent("registry.json")
+        let legacy = """
+        [
+          {"id":"\(link.path)","openCount":2,"isPinned":true},
+          {"id":"\(physical.path)","openCount":3,"tags":["swift"]}
+        ]
+        """
+        try Data(legacy.utf8).write(to: fileURL)
+
+        let store = ProjectRegistryStore(fileURL: fileURL)
+        let records = try store.load()
+
+        let record = try #require(records.first)
+        #expect(records.count == 1)
+        #expect(record.id == ProjectID(rootURL: physical))
+        #expect(record.openCount == 3)
+        #expect(record.isPinned)
+        #expect(record.tags == ["swift"])
+        let persisted = try store.load()
+        #expect(persisted.map(\.id) == [ProjectID(rootURL: physical)])
+    }
+
     @Test("pin collapse and open count survive reload")
     func mutationsSurviveReload() throws {
         let sandbox = makeSandbox()
@@ -198,6 +228,26 @@ struct ProjectRegistrySwiftTestingTests {
         store.setTitle("Backend", for: "/tmp/project")
 
         #expect(revisions == [1])
+        _ = cancellable
+    }
+
+    @Test("post-commit publisher observes the committed registry snapshot")
+    func postCommitPublisherUsesCommittedSnapshot() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let registry = ProjectRegistry(
+            store: ProjectRegistryStore(fileURL: sandbox.appendingPathComponent("registry.json"))
+        )
+        var observed: [[ProjectRecord]] = []
+        let cancellable = registry.recordsDidChange.sink { snapshot in
+            #expect(registry.records == snapshot)
+            observed.append(snapshot)
+        }
+
+        try registry.recordOpen(descriptor("/tmp/post-commit"))
+
+        #expect(observed.count == 1)
+        #expect(observed.first?.first?.id == ProjectID(rawValue: "/tmp/post-commit"))
         _ = cancellable
     }
 

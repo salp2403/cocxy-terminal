@@ -7,19 +7,35 @@ struct ProjectID: RawRepresentable, Codable, Hashable, Sendable {
     let rawValue: String
 
     init(rawValue: String) {
-        self.rawValue = URL(fileURLWithPath: rawValue, isDirectory: true)
-            .standardizedFileURL
-            .path
+        self.rawValue = ProjectPathCanonicalizer.canonicalURL(
+            URL(fileURLWithPath: rawValue, isDirectory: true)
+        ).path
     }
 
     init(rootURL: URL) {
-        self.init(rawValue: rootURL.standardizedFileURL.path)
+        self.init(rawValue: rootURL.path)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        self.init(rawValue: try container.decode(String.self))
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
     }
 
     var storageKey: String {
         NoteWorkspaceID.computeID(
             from: URL(fileURLWithPath: rawValue, isDirectory: true)
         )
+    }
+}
+
+enum ProjectPathCanonicalizer {
+    static func canonicalURL(_ url: URL) -> URL {
+        url.standardizedFileURL.resolvingSymlinksInPath().standardizedFileURL
     }
 }
 
@@ -90,7 +106,7 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     func resolveProject(for directory: URL) -> ProjectDescriptor {
-        let standardizedDirectory = directory.standardizedFileURL
+        let standardizedDirectory = ProjectPathCanonicalizer.canonicalURL(directory)
         let key = standardizedDirectory.path
         let now = clock()
 
@@ -117,7 +133,7 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     func invalidate(directory: URL) {
-        let invalidatedPath = directory.standardizedFileURL.path
+        let invalidatedPath = ProjectPathCanonicalizer.canonicalURL(directory).path
         cache = cache.filter { cachedPath, _ in
             !Self.path(cachedPath, isEqualToOrDescendantOf: invalidatedPath)
                 && !Self.path(invalidatedPath, isEqualToOrDescendantOf: cachedPath)
@@ -133,8 +149,9 @@ final class CachedProjectResolver: ProjectResolving {
     }
 
     private func makeDescriptor(for directory: URL) -> ProjectDescriptor {
-        let root = (rootResolver.workspaceRoot(for: directory) ?? directory)
-            .standardizedFileURL
+        let root = ProjectPathCanonicalizer.canonicalURL(
+            rootResolver.workspaceRoot(for: directory) ?? directory
+        )
         let id = ProjectID(rootURL: root)
         let automaticName = ProjectDescriptor.automaticName(for: root)
         return ProjectDescriptor(
@@ -166,12 +183,13 @@ final class CachedProjectResolver: ProjectResolving {
 
         let commonDirectory: URL
         if pointer.hasPrefix("/") {
-            commonDirectory = URL(fileURLWithPath: pointer, isDirectory: true)
-                .standardizedFileURL
+            commonDirectory = ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: pointer, isDirectory: true)
+            )
         } else {
-            commonDirectory = gitDirectory
-                .appendingPathComponent(pointer, isDirectory: true)
-                .standardizedFileURL
+            commonDirectory = ProjectPathCanonicalizer.canonicalURL(
+                gitDirectory.appendingPathComponent(pointer, isDirectory: true)
+            )
         }
 
         // Linked worktrees share the origin checkout's `<root>/.git`.
@@ -184,7 +202,9 @@ final class CachedProjectResolver: ProjectResolving {
             return nil
         }
 
-        let parentRoot = commonDirectory.deletingLastPathComponent().standardizedFileURL
+        let parentRoot = ProjectPathCanonicalizer.canonicalURL(
+            commonDirectory.deletingLastPathComponent()
+        )
         guard parentRoot != root else { return nil }
         return ProjectID(rootURL: parentRoot)
     }

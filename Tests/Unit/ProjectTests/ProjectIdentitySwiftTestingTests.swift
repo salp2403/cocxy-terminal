@@ -27,6 +27,32 @@ struct ProjectIdentitySwiftTestingTests {
         }
     }
 
+    private final class TrackingProjectResolver: ProjectResolving {
+        let descriptor: ProjectDescriptor
+        private(set) var invalidatedPaths: [String] = []
+
+        init(root: URL) {
+            let canonical = ProjectPathCanonicalizer.canonicalURL(root)
+            descriptor = ProjectDescriptor(
+                id: ProjectID(rootURL: canonical),
+                rootURL: canonical,
+                automaticName: canonical.lastPathComponent,
+                displayName: canonical.lastPathComponent,
+                parent: nil
+            )
+        }
+
+        func resolveProject(for directory: URL) -> ProjectDescriptor { descriptor }
+
+        func invalidate(directory: URL) {
+            invalidatedPaths.append(ProjectPathCanonicalizer.canonicalURL(directory).path)
+        }
+
+        func invalidateAll() {
+            invalidatedPaths.append("*")
+        }
+    }
+
     @Test("same project basenames retain distinct canonical IDs and storage keys")
     func sameBasenamesDoNotCollide() {
         let firstRoot = URL(fileURLWithPath: "/Users/user/first/html")
@@ -148,5 +174,49 @@ struct ProjectIdentitySwiftTestingTests {
         _ = resolver.resolveProject(for: sandbox.appendingPathComponent("second"))
         _ = resolver.resolveProject(for: sandbox.appendingPathComponent("third"))
         #expect(resolver.cachedEntryCount == 2)
+    }
+
+    @Test("symlinked and physical paths share one canonical identity and cache entry")
+    func symlinkCanonicalization() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectSymlinkTests-\(UUID().uuidString)", isDirectory: true)
+        let physical = sandbox.appendingPathComponent("physical", isDirectory: true)
+        let link = sandbox.appendingPathComponent("linked", isDirectory: true)
+        try FileManager.default.createDirectory(at: physical, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: physical)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let rootResolver = CountingRootResolver()
+        let resolver = CachedProjectResolver(rootResolver: rootResolver, cacheTTL: 60)
+
+        let linked = resolver.resolveProject(for: link)
+        let direct = resolver.resolveProject(for: physical)
+
+        #expect(linked.id == direct.id)
+        #expect(linked.rootURL == physical.standardizedFileURL)
+        #expect(resolver.cachedEntryCount == 1)
+        #expect(rootResolver.callCount == 1)
+    }
+
+    @Test("repeated OSC 7 paths preserve the resolver cache")
+    func repeatedCurrentDirectoryDoesNotInvalidate() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectOSC7Tests-\(UUID().uuidString)", isDirectory: true)
+        let child = root.appendingPathComponent("child", isDirectory: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let resolver = TrackingProjectResolver(root: root)
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            projectResolver: resolver,
+            deferContentSetup: true
+        )
+        let tab = controller.tabManager.addTab(workingDirectory: root)
+
+        controller.handleCurrentDirectoryChange(root, tabID: tab.id, surfaceID: nil)
+        controller.handleCurrentDirectoryChange(root, tabID: tab.id, surfaceID: nil)
+        #expect(resolver.invalidatedPaths.isEmpty)
+
+        controller.handleCurrentDirectoryChange(child, tabID: tab.id, surfaceID: nil)
+        #expect(resolver.invalidatedPaths == [root.path, child.path])
     }
 }

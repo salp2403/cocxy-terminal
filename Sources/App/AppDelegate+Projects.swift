@@ -31,7 +31,7 @@ extension AppDelegate {
     func startProjectChangeBroadcasting() {
         projectRegistryChangeCancellable?.cancel()
         var changes: [AnyPublisher<Void, Never>] = [
-            projectRegistry.$records.dropFirst().map { _ in () }.eraseToAnyPublisher(),
+            projectRegistry.recordsDidChange.map { _ in () }.eraseToAnyPublisher(),
             auroraWorkspaceTitleStore.$revision.dropFirst().map { _ in () }.eraseToAnyPublisher(),
         ]
         if let sessionRegistry {
