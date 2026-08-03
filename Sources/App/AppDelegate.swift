@@ -16,16 +16,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private(set) var bridge: (any TerminalEngine)?
     /// Exposed for testing purposes.
     private(set) var windowController: MainWindowController?
-
     /// The configuration service. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var configService: ConfigService?
-
     let voiceConsentCoordinator = VoiceConsentCoordinator()
     /// The macOS notification adapter. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var notificationAdapter: MacOSNotificationAdapter?
-
     /// The notification manager. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var notificationManager: NotificationManagerImpl?
@@ -1544,6 +1541,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.activateProjectForUser(projectID)
         }
         controller.projectLiveIDsProvider = { [weak self] in self?.liveProjectIDs() ?? [] }
+        controller.projectAliasHandler = { [weak self] projectID, title in
+            self?.setProjectAlias(title, for: projectID)
+        }
         controller.windowEventBus = windowEventBus
         controller.notificationAggregator = notificationAggregator
         controller.portScanner = portScanner

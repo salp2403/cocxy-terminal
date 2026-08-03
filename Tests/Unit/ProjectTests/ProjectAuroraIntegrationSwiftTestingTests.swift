@@ -101,11 +101,11 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
 
         #expect(source.workspaceGroup == originID.rawValue)
         #expect(source.workspaceRootPath == origin.path)
-        #expect(source.workspaceTitle == "Legacy Product")
+        #expect(source.workspaceTitle == "Current Product")
         #expect(source.workspaceBranch == "main")
         #expect(source.branch == "feature/search")
         #expect(project.id == originID.rawValue)
-        #expect(project.name == "Legacy Product")
+        #expect(project.name == "Current Product")
         #expect(project.branch == "main")
         #expect(project.sessions[0].branch == "feature/search")
         #expect(project.notesWorkspaceID == originID.storageKey)
@@ -162,5 +162,32 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(titleStore.title(for: originID.rawValue) == "Product Suite")
         #expect(titleStore.snapshot[childID.rawValue] == nil)
         #expect(tabManager.tabs.allSatisfy { $0.workspaceCustomTitle == nil })
+    }
+
+    @Test("canonical alias migration includes symlink identities from every live directory")
+    func aliasMigrationIncludesSymlinkIdentities() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectAliasTests-\(UUID().uuidString)", isDirectory: true)
+        let physical = sandbox.appendingPathComponent("physical", isDirectory: true)
+        let linked = sandbox.appendingPathComponent("linked", isDirectory: true)
+        let nested = linked.appendingPathComponent("Sources", isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: physical.appendingPathComponent(".git"),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(at: linked, withDestinationURL: physical)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let resolver = CachedProjectResolver()
+        let projectID = resolver.resolveProject(for: physical).groupingID
+
+        let aliases = ProjectAliasMigrationPlanner.legacyIdentities(
+            for: projectID,
+            directories: [physical, nested],
+            requestedDirectory: linked,
+            projectResolver: resolver
+        )
+
+        #expect(aliases == Set([linked.standardizedFileURL.path]))
     }
 }

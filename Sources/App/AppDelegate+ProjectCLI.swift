@@ -158,7 +158,11 @@ extension AppDelegate {
         case "unpin":
             try projectRegistry.setPinned(false, projectID: projectID)
         case "alias":
-            auroraWorkspaceTitleStore.setTitle(params["alias"], for: projectID.rawValue)
+            setProjectAlias(
+                params["alias"],
+                for: projectID,
+                requestedDirectory: URL(fileURLWithPath: reference, isDirectory: true)
+            )
         case "forget":
             try projectRegistry.forget(projectID)
         default:

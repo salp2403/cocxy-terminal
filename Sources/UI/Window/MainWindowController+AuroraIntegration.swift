@@ -857,55 +857,6 @@ extension MainWindowController {
         refreshAuroraChromeAfterTabMutation()
     }
 
-    private func presentAuroraWorkspaceRename(workspaceID: String, currentName: String) {
-        guard let parentWindow = window else { return }
-
-        let localizer = appLocalizer()
-        RenameSheetController.present(
-            on: parentWindow,
-            currentName: currentName,
-            placeholder: Self.localizedAuroraWorkspaceRenamePlaceholder(using: localizer),
-            icon: "square.stack.3d.up",
-            localizer: localizer,
-            onComplete: { [weak self] result in
-                guard case .confirmed(let newTitle) = result else { return }
-                guard let self else { return }
-                let trimmed = (newTitle ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                self.applyAuroraWorkspaceRename(
-                    workspaceID: workspaceID,
-                    newTitle: trimmed.isEmpty ? nil : trimmed
-                )
-            }
-        )
-    }
-
-    func applyAuroraWorkspaceRename(workspaceID: String, newTitle: String?) {
-        let matchingIDs = AuroraWorkspacePlanner.matchingTabIDs(
-            projectID: workspaceID,
-            in: tabManager.tabs,
-            projectResolver: projectResolver
-        )
-        guard !matchingIDs.isEmpty else { return }
-
-        let legacyIdentities = Set(matchingIDs.compactMap { tabID in
-            tabManager.tab(for: tabID).map {
-                AuroraWorkspacePlanner.descriptor(
-                    for: $0,
-                    projectResolver: projectResolver
-                ).unfoldedIdentity
-            }
-        })
-        auroraWorkspaceTitleStore.setTitle(
-            newTitle,
-            for: workspaceID,
-            migrating: legacyIdentities
-        )
-    }
-
-    private static func localizedAuroraWorkspaceRenamePlaceholder(using localizer: AppLocalizer) -> String {
-        localizer.string("auroraSidebar.workspace.rename.placeholder", fallback: "Workspace name")
-    }
-
     /// Keeps the window-level tooltip overlay aligned with the sidebar's
     /// AppKit frame. The SwiftUI row frames are local to the sidebar; the
     /// overlay host needs the sidebar's frame in overlay coordinates so
@@ -976,40 +927,6 @@ extension MainWindowController {
             return
         }
         presentAuroraTabRename(for: tabID)
-    }
-
-    func renameActiveWorkspaceFromPalette() {
-        guard let tabID = tabManager.activeTabID,
-              let tab = tabManager.tab(for: tabID) else {
-            return
-        }
-        if isAuroraChromeActive, let controller = auroraChromeController {
-            controller.refreshSources()
-            _ = controller.requestRenameWorkspace(containing: tabID)
-            return
-        }
-
-        let workspace = AuroraWorkspacePlanner.descriptor(
-            for: tab,
-            projectResolver: projectResolver
-        )
-        let storedValues = auroraWorkspaceTitleStore.snapshot
-        let currentName: String
-        if workspace.unfoldedIdentity != workspace.identity,
-           let storedValue = storedValues[workspace.unfoldedIdentity] {
-            currentName = AuroraWorkspacePlanner.normalizedTitle(storedValue)
-                ?? workspace.automaticName
-        } else if let storedValue = storedValues[workspace.identity] {
-            currentName = AuroraWorkspacePlanner.normalizedTitle(storedValue)
-                ?? workspace.automaticName
-        } else {
-            currentName = AuroraWorkspacePlanner.normalizedTitle(tab.workspaceCustomTitle)
-                ?? workspace.automaticName
-        }
-        presentAuroraWorkspaceRename(
-            workspaceID: workspace.identity,
-            currentName: currentName
-        )
     }
 
     /// Shows or hides the Aurora palette overlay. Refreshes the action

@@ -57,6 +57,27 @@ extension AppDelegate {
         })
     }
 
+    func setProjectAlias(
+        _ title: String?,
+        for projectID: ProjectID,
+        requestedDirectory: URL? = nil
+    ) {
+        let directories = allWindowControllers.flatMap { controller in
+            controller.tabManager.tabs.map(\.workingDirectory)
+        }
+        let legacyIdentities = ProjectAliasMigrationPlanner.legacyIdentities(
+            for: projectID,
+            directories: directories,
+            requestedDirectory: requestedDirectory,
+            projectResolver: projectResolver
+        )
+        auroraWorkspaceTitleStore.setTitle(
+            title,
+            for: projectID.rawValue,
+            migrating: legacyIdentities
+        )
+    }
+
     @discardableResult
     func activateProject(_ projectID: ProjectID) throws -> TabID {
         let rootURL = URL(fileURLWithPath: projectID.rawValue, isDirectory: true)

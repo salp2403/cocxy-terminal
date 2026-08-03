@@ -90,7 +90,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     }
     var projectActivationHandler: ((ProjectID) -> Void)?
     var projectLiveIDsProvider: (() -> Set<String>)?
-
+    var projectAliasHandler: ((ProjectID, String?) -> Void)?
     private var eventBusCancellable: AnyCancellable?
     /// Periodic Aurora-only safety net that reconciles visible terminal
     /// buffers back into the per-surface agent store. The live semantic
