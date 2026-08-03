@@ -1121,14 +1121,13 @@ extension MainWindowController {
             self?.toggleCommandBlockBookmark(block, tabID: tabID, surfaceID: surfaceID)
         }
     }
-
     private func toggleCommandBlockBookmark(
         _ block: TerminalCommandBlock,
         tabID: TabID,
         surfaceID: SurfaceID
     ) {
-        let liveBlock = terminalEngine(for: surfaceID).cocxyCoreBridge?
-            .commandBlock(for: surfaceID, blockID: block.id)
+        let liveBlock = terminalEngine(for: surfaceID).cocxyCoreBridge?.commandBlock(
+            for: surfaceID, blockID: block.id)
         let updated = (liveBlock ?? block).withBookmark(!block.isBookmarked)
         var restored = restoredCommandBlocksBySurfaceID[surfaceID] ?? []
         restored.append(updated)
@@ -1137,9 +1136,7 @@ extension MainWindowController {
             restored: restored,
             limit: 256
         )
-
         (surfaceView(for: surfaceID) as? CocxyCoreView)?.invalidateCommandBlockOverlayData()
-
         let sessionID = sessionIDForTab(tabID).rawValue.uuidString
         let spotlightConfig = configService?.current.spotlight ?? .defaults
         let commandBlockStore = commandBlockStore

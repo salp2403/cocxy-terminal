@@ -332,7 +332,7 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
             while let chunk = try? output.fileHandleForReading.read(upToCount: 4_096),
                   !chunk.isEmpty {
                 capturedOutput.withValue { capture in
-                    Self.appendBoundedTail(chunk, to: &capture, limit: 4_096)
+                    BoundedDataTail.append(chunk, to: &capture, limit: 4_096)
                 }
             }
         }
@@ -349,22 +349,6 @@ final class AgentTeamExecutableLocator: @unchecked Sendable {
         guard process.terminationStatus == 0 else { return nil }
         let capture = capturedOutput.withValue { $0 }
         return String(decoding: capture, as: UTF8.self)
-    }
-
-    static func appendBoundedTail(_ chunk: Data, to capture: inout Data, limit: Int) {
-        guard limit > 0 else {
-            capture.removeAll(keepingCapacity: false)
-            return
-        }
-        if chunk.count >= limit {
-            capture = Data(chunk.suffix(limit))
-            return
-        }
-        let overflow = capture.count + chunk.count - limit
-        if overflow > 0 {
-            capture.removeFirst(overflow)
-        }
-        capture.append(chunk)
     }
 
     private func cacheResolvedPath(_ path: String, for executable: String) {

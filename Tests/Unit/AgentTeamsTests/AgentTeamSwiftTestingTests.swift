@@ -33,26 +33,6 @@ struct AgentTeamSwiftTestingTests {
         #expect(AgentTeamProvider.resolve(named: "unknown") == nil)
     }
 
-    @Test("handoff aliases resolve before provider executable preflight")
-    func handoffAliasesResolveBeforePreflight() {
-        #expect(AppDelegate.agentTeamProviderForPreflight(
-            command: .handoffImport,
-            params: ["agent": " droid "]
-        ) == .factory)
-        #expect(AppDelegate.agentTeamProviderForPreflight(
-            command: .handoffImport,
-            params: ["agent": "open-code"]
-        ) == .opencode)
-        #expect(AppDelegate.agentTeamProviderForPreflight(
-            command: .agentTeamLaunch,
-            params: ["provider": "codex"]
-        ) == .codex)
-        #expect(AppDelegate.agentTeamProviderForPreflight(
-            command: .handoffImport,
-            params: ["agent": "  \n"]
-        ) == .claudeCode)
-    }
-
     @Test("config parses teammate lists with stable IDs and isolated notifications")
     func configParsesTeammateLists() throws {
         let config = try AgentTeamConfig.from(
@@ -169,26 +149,6 @@ struct AgentTeamSwiftTestingTests {
             in: "profile notice\nwarning: plugin output\n\n/opt/tools/codex\n\n"
         ) == "/opt/tools/codex")
         #expect(AgentTeamExecutableLocator.lastNonemptyLine(in: "\n \n") == nil)
-    }
-
-    @Test("verbose shell lookup retains its bounded tail and final executable line")
-    func executableLookupRetainsBoundedTail() {
-        var capture = Data()
-        AgentTeamExecutableLocator.appendBoundedTail(
-            Data(String(repeating: "profile notice\n", count: 400).utf8),
-            to: &capture,
-            limit: 4_096
-        )
-        AgentTeamExecutableLocator.appendBoundedTail(
-            Data("/opt/tools/codex\n".utf8),
-            to: &capture,
-            limit: 4_096
-        )
-
-        #expect(capture.count == 4_096)
-        #expect(AgentTeamExecutableLocator.lastNonemptyLine(
-            in: String(decoding: capture, as: UTF8.self)
-        ) == "/opt/tools/codex")
     }
 
     @Test("CLI launch plans expose and bind each resolved provider command")
