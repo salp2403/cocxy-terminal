@@ -9,6 +9,7 @@ struct ProjectHomePanelView: View {
     @StateObject private var fanOutViewModel: ProjectFanOutFlowViewModel
     @ObservedObject private var inboxStore: TaskInboxStore
     @ObservedObject private var fanOutCoordinator: ProjectFanOutCoordinator
+    let targetTabID: TabID?
     let localizer: AppLocalizer
 
     @Environment(\.designThemePalette) private var palette
@@ -18,12 +19,14 @@ struct ProjectHomePanelView: View {
         fanOutViewModel: ProjectFanOutFlowViewModel,
         inboxStore: TaskInboxStore,
         fanOutCoordinator: ProjectFanOutCoordinator,
+        targetTabID: TabID?,
         localizer: AppLocalizer
     ) {
         _viewModel = StateObject(wrappedValue: viewModel)
         _fanOutViewModel = StateObject(wrappedValue: fanOutViewModel)
         self.inboxStore = inboxStore
         self.fanOutCoordinator = fanOutCoordinator
+        self.targetTabID = targetTabID
         self.localizer = localizer
     }
 
@@ -65,10 +68,10 @@ struct ProjectHomePanelView: View {
             viewModel.loadContext()
             await consumePendingFanOutRequest()
         }
-        .onReceive(fanOutCoordinator.$request.compactMap { $0 }) { request in
+        .onReceive(fanOutCoordinator.$requests) { _ in
             Task { @MainActor in
                 await Task.yield()
-                await consumeFanOutRequest(request)
+                await consumePendingFanOutRequest()
             }
         }
         .onReceive(
@@ -392,14 +395,10 @@ struct ProjectHomePanelView: View {
     }
 
     private func consumePendingFanOutRequest() async {
-        guard let destination = fanOutCoordinator.consume(for: viewModel.projectID) else { return }
-        await fanOutViewModel.handle(destination)
-    }
-
-    private func consumeFanOutRequest(_ request: ProjectFanOutRequest) async {
-        guard let destination = fanOutCoordinator.consume(
-            request,
-            for: viewModel.projectID
+        guard let targetTabID,
+              let destination = fanOutCoordinator.consume(
+                for: viewModel.projectID,
+                targetTabID: targetTabID
         ) else { return }
         await fanOutViewModel.handle(destination)
     }

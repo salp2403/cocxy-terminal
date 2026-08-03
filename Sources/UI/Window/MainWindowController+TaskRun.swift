@@ -32,8 +32,11 @@ extension MainWindowController {
             for: context.originRepoPath
         ).groupingID
         do {
-            _ = try delegate.showProjectHome(projectID)
-            delegate.projectFanOutCoordinator.presentLaunch(projectID: projectID)
+            let targetTabID = try delegate.showProjectHome(projectID)
+            delegate.projectFanOutCoordinator.presentLaunch(
+                projectID: projectID,
+                targetTabID: targetTabID
+            )
         } catch {
             presentTaskRunAlert(message: String(describing: error))
         }
@@ -98,9 +101,10 @@ extension MainWindowController {
             return
         }
         do {
-            _ = try delegate.showProjectHome(run.projectID)
+            let targetTabID = try delegate.showProjectHome(run.projectID)
             delegate.projectFanOutCoordinator.presentComparison(
                 projectID: run.projectID,
+                targetTabID: targetTabID,
                 runID: run.id
             )
         } catch {

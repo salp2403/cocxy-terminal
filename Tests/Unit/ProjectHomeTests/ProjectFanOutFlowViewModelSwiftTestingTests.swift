@@ -89,11 +89,48 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
     func coordinatorRoutesOnce() {
         let coordinator = ProjectFanOutCoordinator()
         let project = ProjectID(rawValue: "/tmp/project")
-        coordinator.presentComparison(projectID: project, runID: "run")
+        let target = TabID()
+        coordinator.presentComparison(projectID: project, targetTabID: target, runID: "run")
 
-        #expect(coordinator.consume(for: ProjectID(rawValue: "/tmp/other")) == nil)
-        #expect(coordinator.consume(for: project) == .comparison(runID: "run"))
-        #expect(coordinator.consume(for: project) == nil)
+        #expect(coordinator.consume(
+            for: ProjectID(rawValue: "/tmp/other"), targetTabID: target
+        ) == nil)
+        #expect(coordinator.consume(
+            for: project, targetTabID: target
+        ) == .comparison(runID: "run"))
+        #expect(coordinator.consume(for: project, targetTabID: target) == nil)
+    }
+
+    @Test("coordinator preserves simultaneous requests for different windows")
+    func coordinatorQueuesDestinations() {
+        let coordinator = ProjectFanOutCoordinator()
+        let project = ProjectID(rawValue: "/tmp/project")
+        let firstTarget = TabID()
+        let secondTarget = TabID()
+
+        coordinator.presentLaunch(projectID: project, targetTabID: firstTarget)
+        coordinator.presentComparison(
+            projectID: project,
+            targetTabID: secondTarget,
+            runID: "second"
+        )
+        coordinator.presentComparison(
+            projectID: project,
+            targetTabID: firstTarget,
+            runID: "third"
+        )
+
+        #expect(coordinator.requests.count == 3)
+        #expect(coordinator.consume(
+            for: project, targetTabID: secondTarget
+        ) == .comparison(runID: "second"))
+        #expect(coordinator.consume(
+            for: project, targetTabID: firstTarget
+        ) == .launch(nil))
+        #expect(coordinator.consume(
+            for: project, targetTabID: firstTarget
+        ) == .comparison(runID: "third"))
+        #expect(coordinator.requests.isEmpty)
     }
 
     private func collision(path: String) -> TaskFileCollision {

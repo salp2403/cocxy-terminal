@@ -11,42 +11,67 @@ enum ProjectFanOutDestination: Equatable, Sendable {
 struct ProjectFanOutRequest: Identifiable, Equatable, Sendable {
     let id: UUID
     let projectID: ProjectID
+    let targetTabID: TabID
     let destination: ProjectFanOutDestination
 
-    init(projectID: ProjectID, destination: ProjectFanOutDestination) {
+    init(projectID: ProjectID, targetTabID: TabID, destination: ProjectFanOutDestination) {
         self.id = UUID()
         self.projectID = projectID
+        self.targetTabID = targetTabID
         self.destination = destination
     }
 }
 
 @MainActor
 final class ProjectFanOutCoordinator: ObservableObject {
-    @Published private(set) var request: ProjectFanOutRequest?
+    static let maximumPendingRequests = 64
+    @Published private(set) var requests: [ProjectFanOutRequest] = []
 
-    func presentLaunch(projectID: ProjectID, draft: TaskRunRecycleDraft? = nil) {
-        request = ProjectFanOutRequest(projectID: projectID, destination: .launch(draft))
-    }
-
-    func presentComparison(projectID: ProjectID, runID: String) {
-        request = ProjectFanOutRequest(
+    func presentLaunch(
+        projectID: ProjectID,
+        targetTabID: TabID,
+        draft: TaskRunRecycleDraft? = nil
+    ) {
+        enqueue(ProjectFanOutRequest(
             projectID: projectID,
-            destination: .comparison(runID: runID)
-        )
+            targetTabID: targetTabID,
+            destination: .launch(draft)
+        ))
     }
 
-    func consume(for projectID: ProjectID) -> ProjectFanOutDestination? {
-        guard let request, request.projectID == projectID else { return nil }
-        return consume(request, for: projectID)
+    func presentComparison(projectID: ProjectID, targetTabID: TabID, runID: String) {
+        enqueue(ProjectFanOutRequest(
+            projectID: projectID,
+            targetTabID: targetTabID,
+            destination: .comparison(runID: runID)
+        ))
+    }
+
+    func consume(for projectID: ProjectID, targetTabID: TabID) -> ProjectFanOutDestination? {
+        guard let request = requests.first(where: {
+            $0.projectID == projectID && $0.targetTabID == targetTabID
+        }) else { return nil }
+        return consume(request, for: projectID, targetTabID: targetTabID)
     }
 
     func consume(
         _ deliveredRequest: ProjectFanOutRequest,
-        for projectID: ProjectID
+        for projectID: ProjectID,
+        targetTabID: TabID
     ) -> ProjectFanOutDestination? {
         guard deliveredRequest.projectID == projectID,
-              request?.id == deliveredRequest.id else { return nil }
-        self.request = nil
+              deliveredRequest.targetTabID == targetTabID,
+              let index = requests.firstIndex(where: { $0.id == deliveredRequest.id }) else {
+            return nil
+        }
+        requests.remove(at: index)
         return deliveredRequest.destination
+    }
+
+    private func enqueue(_ request: ProjectFanOutRequest) {
+        requests.append(request)
+        if requests.count > Self.maximumPendingRequests {
+            requests.removeFirst(requests.count - Self.maximumPendingRequests)
+        }
     }
 }

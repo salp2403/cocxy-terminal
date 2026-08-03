@@ -137,6 +137,7 @@ extension MainWindowController {
             fanOutViewModel: fanOutViewModel,
             inboxStore: store,
             fanOutCoordinator: fanOutCoordinator,
+            targetTabID: tabID ?? visibleTabID ?? tabManager.activeTabID,
             localizer: localizer
         ))
     }
