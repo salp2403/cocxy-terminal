@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Theo hệ thống";
 "preferences.appearance.language.title" = "Ngôn ngữ";
 "preferences.appearance.language.picker" = "Ngôn ngữ ứng dụng";
-"preferences.appearance.language.help" = "Khi chọn Theo hệ thống, ứng dụng sẽ dùng ngôn ngữ được hỗ trợ đầu tiên trong danh sách ưu tiên của macOS. Hiện có tiếng Anh và tiếng Tây Ban Nha.";
+"preferences.appearance.language.help" = "Theo hệ thống sẽ dùng ngôn ngữ được hỗ trợ đầu tiên trong tùy chọn macOS. Bạn cũng có thể chọn bất kỳ ngôn ngữ được hỗ trợ nào tại đây.";
 "preferences.appearance.font.section" = "Phông chữ";
 "preferences.appearance.fontFamily" = "Họ phông chữ";
 "preferences.appearance.fontHelp" = "Chọn bất kỳ phông chữ đơn cách nào đã cài đặt. Danh sách thả xuống chỉ hiển thị các họ phông chữ phù hợp với terminal, nhưng bạn vẫn có thể tự nhập tên họ phông chữ tùy chỉnh.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Ghép đôi điện thoại...";
 "mobile.mirror.title" = "Ghép đôi điện thoại";
 "mobile.mirror.start" = "Tạo mã ghép đôi";
-"mobile.mirror.security" = "Mã dùng một lần · mạng cục bộ · 90 giây";
+"mobile.mirror.security" = "Mã dùng một lần · SSH được mã hóa · 90 giây";
 "mobile.mirror.cancel" = "Hủy ghép đôi";
 "mobile.mirror.qr.accessibility" = "Mã ghép đôi điện thoại dùng một lần";
 "mobile.mirror.scan" = "Quét bằng điện thoại";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Chưa ghép đôi";
 "mobile.mirror.status.offering" = "Mã ghép đôi đã sẵn sàng";
 "mobile.mirror.status.confirmation" = "Cần xác nhận trên máy Mac";
-"mobile.mirror.status.active" = "Đã kết nối cục bộ";
+"mobile.mirror.status.active" = "Đã kết nối qua SSH";
 "mobile.mirror.status.denied" = "Đã từ chối ghép đôi";
 "mobile.mirror.status.starting" = "Đang mở đường hầm mã hóa tới điện thoại";
 "mobile.mirror.transport.label" = "Kết nối điện thoại được mã hóa";

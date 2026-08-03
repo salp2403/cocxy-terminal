@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "システム設定に従う";
 "preferences.appearance.language.title" = "言語";
 "preferences.appearance.language.picker" = "アプリの言語";
-"preferences.appearance.language.help" = "「システム設定に従う」では、macOS の優先言語のうち最初に対応する言語が使用されます。現在は英語とスペイン語に対応しています。";
+"preferences.appearance.language.help" = "「システム」はmacOSの言語設定で最初に対応している言語を使用します。ここで対応言語を直接選ぶこともできます。";
 "preferences.appearance.font.section" = "フォント";
 "preferences.appearance.fontFamily" = "フォントファミリー";
 "preferences.appearance.fontHelp" = "インストール済みの等幅フォントを選択します。メニューにはターミナルで安全に使えるファミリーのみ表示されますが、カスタムファミリー名を直接入力することもできます。";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "スマートフォンをペアリング...";
 "mobile.mirror.title" = "スマートフォンをペアリング";
 "mobile.mirror.start" = "ペアリングコードを生成";
-"mobile.mirror.security" = "1回限りのコード · ローカルネットワーク · 90秒";
+"mobile.mirror.security" = "1回限りのコード · 暗号化SSH · 90秒";
 "mobile.mirror.cancel" = "ペアリングをキャンセル";
 "mobile.mirror.qr.accessibility" = "スマートフォン用の1回限りのペアリングコード";
 "mobile.mirror.scan" = "スマートフォンでスキャン";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "未ペアリング";
 "mobile.mirror.status.offering" = "ペアリングコードの準備完了";
 "mobile.mirror.status.confirmation" = "デスクトップでの確認が必要です";
-"mobile.mirror.status.active" = "ローカル接続済み";
+"mobile.mirror.status.active" = "SSH経由で接続済み";
 "mobile.mirror.status.denied" = "ペアリングが拒否されました";
 "mobile.mirror.status.starting" = "電話への暗号化トンネルを開いています";
 "mobile.mirror.transport.label" = "電話への暗号化接続";

@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Systemeinstellung verwenden";
 "preferences.appearance.language.title" = "Sprache";
 "preferences.appearance.language.picker" = "App-Sprache";
-"preferences.appearance.language.help" = "„System“ verwendet die erste unterstützte bevorzugte macOS-Sprache. Deutsch, Englisch und Spanisch sind derzeit verfügbar.";
+"preferences.appearance.language.help" = "„System“ verwendet die erste unterstützte Sprache in deinen macOS-Einstellungen. Hier kannst du auch jede unterstützte Sprache auswählen.";
 "preferences.appearance.font.section" = "Schrift";
 "preferences.appearance.fontFamily" = "Schriftfamilie";
 "preferences.appearance.fontHelp" = "Wähle eine installierte Festbreitenschrift. Das Einblendmenü zeigt nur terminalsichere Familien; ein eigener Familienname kann weiterhin manuell eingegeben werden.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Telefon koppeln …";
 "mobile.mirror.title" = "Telefon koppeln";
 "mobile.mirror.start" = "Kopplungscode erzeugen";
-"mobile.mirror.security" = "Einmaliger Code · lokales Netzwerk · 90 Sekunden";
+"mobile.mirror.security" = "Einmaliger Code · verschlüsseltes SSH · 90 Sekunden";
 "mobile.mirror.cancel" = "Kopplung abbrechen";
 "mobile.mirror.qr.accessibility" = "Einmaliger Kopplungscode für das Telefon";
 "mobile.mirror.scan" = "Mit dem Telefon scannen";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Nicht gekoppelt";
 "mobile.mirror.status.offering" = "Kopplungscode bereit";
 "mobile.mirror.status.confirmation" = "Bestätigung am Mac erforderlich";
-"mobile.mirror.status.active" = "Lokal verbunden";
+"mobile.mirror.status.active" = "Über SSH verbunden";
 "mobile.mirror.status.denied" = "Kopplung abgelehnt";
 "mobile.mirror.status.starting" = "Verschlüsselter Tunnel zum Telefon wird geöffnet";
 "mobile.mirror.transport.label" = "Verschlüsselte Telefonverbindung";

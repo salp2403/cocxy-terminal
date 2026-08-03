@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Følg system";
 "preferences.appearance.language.title" = "Sprog";
 "preferences.appearance.language.picker" = "Appsprog";
-"preferences.appearance.language.help" = "System følger det første understøttede foretrukne macOS-sprog. Engelsk og spansk er tilgængelige nu.";
+"preferences.appearance.language.help" = "System følger det første understøttede sprog i dine macOS-indstillinger. Du kan også vælge et hvilket som helst understøttet sprog her.";
 "preferences.appearance.font.section" = "Skrifttype";
 "preferences.appearance.fontFamily" = "Skrifttypefamilie";
 "preferences.appearance.fontHelp" = "Vælg en vilkårlig installeret skrifttype med fast bredde. Rullelisten er filtreret til terminalsikre familier, men du kan stadig indtaste et brugerdefineret familienavn manuelt.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Par telefon...";
 "mobile.mirror.title" = "Par telefon";
 "mobile.mirror.start" = "Generér parringskode";
-"mobile.mirror.security" = "Engangskode · lokalt netværk · 90 sekunder";
+"mobile.mirror.security" = "Engangskode · krypteret SSH · 90 sekunder";
 "mobile.mirror.cancel" = "Annuller parring";
 "mobile.mirror.qr.accessibility" = "Engangskode til telefonparring";
 "mobile.mirror.scan" = "Scan med din telefon";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Ikke parret";
 "mobile.mirror.status.offering" = "Parringskode klar";
 "mobile.mirror.status.confirmation" = "Bekræftelse på computeren påkrævet";
-"mobile.mirror.status.active" = "Forbundet lokalt";
+"mobile.mirror.status.active" = "Forbundet via SSH";
 "mobile.mirror.status.denied" = "Parring afvist";
 "mobile.mirror.status.starting" = "Åbner krypteret tunnel til telefonen";
 "mobile.mirror.transport.label" = "Krypteret telefonforbindelse";

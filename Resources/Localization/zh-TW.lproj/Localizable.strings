@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "跟隨系統";
 "preferences.appearance.language.title" = "語言";
 "preferences.appearance.language.picker" = "App 語言";
-"preferences.appearance.language.help" = "「系統」會採用 macOS 偏好語言中第一個受支援的語言。目前提供英文和西班牙文。";
+"preferences.appearance.language.help" = "「系統」會使用 macOS 偏好設定中第一個受支援的語言。你也可以在此選擇任一受支援的語言。";
 "preferences.appearance.font.section" = "字體";
 "preferences.appearance.fontFamily" = "字體家族";
 "preferences.appearance.fontHelp" = "選擇任何已安裝的等寬字體。下拉式選單只會顯示適合終端機的字體家族，但你仍可手動輸入自訂家族名稱。";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "配對手機...";
 "mobile.mirror.title" = "配對手機";
 "mobile.mirror.start" = "產生配對碼";
-"mobile.mirror.security" = "一次性代碼 · 區域網路 · 90 秒";
+"mobile.mirror.security" = "一次性代碼 · 加密 SSH · 90 秒";
 "mobile.mirror.cancel" = "取消配對";
 "mobile.mirror.qr.accessibility" = "一次性手機配對碼";
 "mobile.mirror.scan" = "使用手機掃描";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "尚未配對";
 "mobile.mirror.status.offering" = "配對碼已就緒";
 "mobile.mirror.status.confirmation" = "需要在桌面端確認";
-"mobile.mirror.status.active" = "已在本機連線";
+"mobile.mirror.status.active" = "已透過 SSH 連線";
 "mobile.mirror.status.denied" = "配對遭拒";
 "mobile.mirror.status.starting" = "正在開啟通往手機的加密通道";
 "mobile.mirror.transport.label" = "手機加密連線";

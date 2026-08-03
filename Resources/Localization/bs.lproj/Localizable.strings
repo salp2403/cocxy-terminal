@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Prati sistem";
 "preferences.appearance.language.title" = "Jezik";
 "preferences.appearance.language.picker" = "Jezik aplikacije";
-"preferences.appearance.language.help" = "Sistem koristi prvi podržani preferirani jezik sistema macOS. Trenutno su dostupni engleski i španski.";
+"preferences.appearance.language.help" = "Sistem koristi prvi podržani jezik iz postavki jezika u macOS-u. Ovdje možete odabrati i bilo koji podržani jezik.";
 "preferences.appearance.font.section" = "Font";
 "preferences.appearance.fontFamily" = "Porodica fontova";
 "preferences.appearance.fontHelp" = "Odaberite bilo koji instalirani font fiksne širine. Padajući izbornik prikazuje samo porodice prikladne za terminal, ali naziv prilagođene porodice ipak možete unijeti ručno.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Upari telefon...";
 "mobile.mirror.title" = "Upari telefon";
 "mobile.mirror.start" = "Generiši kod za uparivanje";
-"mobile.mirror.security" = "Jednokratni kod · lokalna mreža · 90 sekundi";
+"mobile.mirror.security" = "Jednokratni kod · šifrovani SSH · 90 sekundi";
 "mobile.mirror.cancel" = "Otkaži uparivanje";
 "mobile.mirror.qr.accessibility" = "Jednokratni kod za uparivanje telefona";
 "mobile.mirror.scan" = "Skenirajte telefonom";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Nije upareno";
 "mobile.mirror.status.offering" = "Kod za uparivanje je spreman";
 "mobile.mirror.status.confirmation" = "Potrebna je potvrda na računaru";
-"mobile.mirror.status.active" = "Povezano lokalno";
+"mobile.mirror.status.active" = "Povezano putem SSH-a";
 "mobile.mirror.status.denied" = "Uparivanje je odbijeno";
 "mobile.mirror.status.starting" = "Otvaranje šifrovanog tunela prema telefonu";
 "mobile.mirror.transport.label" = "Šifrovana veza s telefonom";

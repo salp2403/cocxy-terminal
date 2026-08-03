@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Sistemle eşleştir";
 "preferences.appearance.language.title" = "Dil";
 "preferences.appearance.language.picker" = "Uygulama dili";
-"preferences.appearance.language.help" = "Sistem, macOS’te tercih edilen ilk desteklenen dili kullanır. Şu anda İngilizce ve İspanyolca kullanılabilir.";
+"preferences.appearance.language.help" = "Sistem, macOS tercihlerinizdeki ilk desteklenen dili kullanır. Buradan desteklenen herhangi bir dili de seçebilirsiniz.";
 "preferences.appearance.font.section" = "Yazı Tipi";
 "preferences.appearance.fontFamily" = "Yazı tipi ailesi";
 "preferences.appearance.fontHelp" = "Yüklü eş aralıklı yazı tiplerinden birini seçin. Açılır liste, terminalde güvenle kullanılabilen ailelerle sınırlandırılmıştır; yine de özel bir aile adını elle girebilirsiniz.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Telefonu eşle...";
 "mobile.mirror.title" = "Telefonu Eşleştir";
 "mobile.mirror.start" = "Eşleştirme Kodu Oluştur";
-"mobile.mirror.security" = "Tek kullanımlık kod · yerel ağ · 90 saniye";
+"mobile.mirror.security" = "Tek kullanımlık kod · şifreli SSH · 90 saniye";
 "mobile.mirror.cancel" = "Eşleştirmeyi iptal et";
 "mobile.mirror.qr.accessibility" = "Tek kullanımlık telefon eşleştirme kodu";
 "mobile.mirror.scan" = "Telefonunuzla tarayın";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Eşleştirilmedi";
 "mobile.mirror.status.offering" = "Eşleştirme kodu hazır";
 "mobile.mirror.status.confirmation" = "Masaüstü onayı gerekli";
-"mobile.mirror.status.active" = "Yerel bağlantı kuruldu";
+"mobile.mirror.status.active" = "SSH üzerinden bağlandı";
 "mobile.mirror.status.denied" = "Eşleştirme reddedildi";
 "mobile.mirror.status.starting" = "Telefona şifreli tünel açılıyor";
 "mobile.mirror.transport.label" = "Şifreli Telefon Bağlantısı";

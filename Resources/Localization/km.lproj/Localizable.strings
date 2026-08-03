@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "តាមប្រព័ន្ធ";
 "preferences.appearance.language.title" = "ភាសា";
 "preferences.appearance.language.picker" = "ភាសាកម្មវិធី";
-"preferences.appearance.language.help" = "ប្រព័ន្ធនឹងប្រើភាសាដែលគាំទ្រដំបូងគេក្នុងបញ្ជីភាសាដែលចូលចិត្តរបស់ macOS។ បច្ចុប្បន្នមានភាសាអង់គ្លេស និងអេស្ប៉ាញ។";
+"preferences.appearance.language.help" = "ប្រព័ន្ធប្រើភាសាដែលគាំទ្រដំបូងគេក្នុងចំណូលចិត្ត macOS របស់អ្នក។ អ្នកក៏អាចជ្រើសរើសភាសាដែលគាំទ្រណាមួយនៅទីនេះបានដែរ។";
 "preferences.appearance.font.section" = "ពុម្ពអក្សរ";
 "preferences.appearance.fontFamily" = "ក្រុមពុម្ពអក្សរ";
 "preferences.appearance.fontHelp" = "ជ្រើសរើសពុម្ពអក្សរទទឹងថេរណាមួយដែលបានដំឡើង។ បញ្ជីទម្លាក់ត្រូវបានច្រោះឱ្យនៅសល់តែក្រុមពុម្ពអក្សរដែលសមស្របសម្រាប់ស្ថានីយ ប៉ុន្តែអ្នកនៅតែអាចវាយឈ្មោះក្រុមពុម្ពអក្សរផ្ទាល់ខ្លួនដោយដៃបាន។";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "ផ្គូផ្គងទូរស័ព្ទ...";
 "mobile.mirror.title" = "ផ្គូផ្គងទូរស័ព្ទ";
 "mobile.mirror.start" = "បង្កើតកូដផ្គូផ្គង";
-"mobile.mirror.security" = "កូដប្រើម្តង · បណ្តាញមូលដ្ឋាន · 90 វិនាទី";
+"mobile.mirror.security" = "កូដប្រើម្តង · SSH ដែលបានអ៊ិនគ្រីប · 90 វិនាទី";
 "mobile.mirror.cancel" = "បោះបង់ការផ្គូផ្គង";
 "mobile.mirror.qr.accessibility" = "កូដផ្គូផ្គងទូរស័ព្ទប្រើម្តង";
 "mobile.mirror.scan" = "ស្កេនដោយប្រើទូរស័ព្ទរបស់អ្នក";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "មិនបានផ្គូផ្គង";
 "mobile.mirror.status.offering" = "កូដផ្គូផ្គងរួចរាល់";
 "mobile.mirror.status.confirmation" = "ត្រូវការការបញ្ជាក់ពី Desktop";
-"mobile.mirror.status.active" = "បានភ្ជាប់ក្នុងមូលដ្ឋាន";
+"mobile.mirror.status.active" = "បានភ្ជាប់តាម SSH";
 "mobile.mirror.status.denied" = "ការផ្គូផ្គងត្រូវបានបដិសេធ";
 "mobile.mirror.status.starting" = "កំពុងបើកផ្លូវរូងក្រោមដីដែលបានអ៊ិនគ្រីបទៅកាន់ទូរសព្ទ";
 "mobile.mirror.transport.label" = "ការតភ្ជាប់ទូរសព្ទដែលបានអ៊ិនគ្រីប";

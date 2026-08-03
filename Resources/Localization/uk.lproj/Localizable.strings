@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Відповідно до системи";
 "preferences.appearance.language.title" = "Мова";
 "preferences.appearance.language.picker" = "Мова програми";
-"preferences.appearance.language.help" = "Варіант «Системна» використовує першу підтримувану мову зі списку пріоритетних мов macOS. Наразі доступні англійська та іспанська.";
+"preferences.appearance.language.help" = "Варіант «Системна» використовує першу підтримувану мову з налаштувань macOS. Тут також можна вибрати будь-яку підтримувану мову.";
 "preferences.appearance.font.section" = "Шрифт";
 "preferences.appearance.fontFamily" = "Гарнітура";
 "preferences.appearance.fontHelp" = "Виберіть будь-який установлений моноширинний шрифт. У розкривному списку показано лише гарнітури, придатні для термінала, але назву іншої гарнітури також можна ввести вручну.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Створити пару з телефоном...";
 "mobile.mirror.title" = "Створення пари з телефоном";
 "mobile.mirror.start" = "Створити код спарювання";
-"mobile.mirror.security" = "Одноразовий код · локальна мережа · 90 секунд";
+"mobile.mirror.security" = "Одноразовий код · зашифрований SSH · 90 секунд";
 "mobile.mirror.cancel" = "Скасувати спарювання";
 "mobile.mirror.qr.accessibility" = "Одноразовий код спарювання з телефоном";
 "mobile.mirror.scan" = "Відскануйте телефоном";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Пару не створено";
 "mobile.mirror.status.offering" = "Код спарювання готовий";
 "mobile.mirror.status.confirmation" = "Потрібне підтвердження на комп’ютері";
-"mobile.mirror.status.active" = "Підключено локально";
+"mobile.mirror.status.active" = "Підключено через SSH";
 "mobile.mirror.status.denied" = "У спарюванні відмовлено";
 "mobile.mirror.status.starting" = "Відкриття зашифрованого тунелю до телефона";
 "mobile.mirror.transport.label" = "Зашифроване підключення до телефона";

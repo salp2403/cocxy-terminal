@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Suivre le système";
 "preferences.appearance.language.title" = "Langue";
 "preferences.appearance.language.picker" = "Langue de l’app";
-"preferences.appearance.language.help" = "Le système suit la première langue préférée de macOS prise en charge. L’anglais et l’espagnol sont disponibles pour le moment.";
+"preferences.appearance.language.help" = "Le système utilise la première langue prise en charge dans vos préférences macOS. Vous pouvez aussi choisir ici n’importe quelle langue prise en charge.";
 "preferences.appearance.font.section" = "Police";
 "preferences.appearance.fontFamily" = "Famille de polices";
 "preferences.appearance.fontHelp" = "Choisissez n’importe quelle police à chasse fixe installée. Le menu est filtré pour les familles adaptées au terminal, mais vous pouvez toujours saisir manuellement un nom de famille personnalisé.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Jumeler un téléphone...";
 "mobile.mirror.title" = "Jumeler un téléphone";
 "mobile.mirror.start" = "Générer un code de jumelage";
-"mobile.mirror.security" = "Code à usage unique · réseau local · 90 secondes";
+"mobile.mirror.security" = "Code à usage unique · SSH chiffré · 90 secondes";
 "mobile.mirror.cancel" = "Annuler le jumelage";
 "mobile.mirror.qr.accessibility" = "Code de jumelage du téléphone à usage unique";
 "mobile.mirror.scan" = "Scannez avec votre téléphone";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Non jumelé";
 "mobile.mirror.status.offering" = "Code de jumelage prêt";
 "mobile.mirror.status.confirmation" = "Confirmation sur l’ordinateur requise";
-"mobile.mirror.status.active" = "Connecté localement";
+"mobile.mirror.status.active" = "Connecté via SSH";
 "mobile.mirror.status.denied" = "Jumelage refusé";
 "mobile.mirror.status.starting" = "Ouverture du tunnel chiffré vers le téléphone";
 "mobile.mirror.transport.label" = "Connexion chiffrée au téléphone";

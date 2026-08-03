@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Segui il sistema";
 "preferences.appearance.language.title" = "Lingua";
 "preferences.appearance.language.picker" = "Lingua dell’app";
-"preferences.appearance.language.help" = "L’opzione Sistema usa la prima lingua preferita di macOS tra quelle supportate. Al momento sono disponibili inglese e spagnolo.";
+"preferences.appearance.language.help" = "Sistema usa la prima lingua supportata nelle preferenze di macOS. Qui puoi anche scegliere qualsiasi lingua supportata.";
 "preferences.appearance.font.section" = "Font";
 "preferences.appearance.fontFamily" = "Famiglia di font";
 "preferences.appearance.fontHelp" = "Scegli un font monospaziato installato. Il menu mostra solo le famiglie adatte al terminale, ma puoi comunque digitare manualmente il nome di una famiglia personalizzata.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Abbina telefono...";
 "mobile.mirror.title" = "Abbina telefono";
 "mobile.mirror.start" = "Genera codice di abbinamento";
-"mobile.mirror.security" = "Codice monouso · rete locale · 90 secondi";
+"mobile.mirror.security" = "Codice monouso · SSH crittografato · 90 secondi";
 "mobile.mirror.cancel" = "Annulla abbinamento";
 "mobile.mirror.qr.accessibility" = "Codice di abbinamento telefono monouso";
 "mobile.mirror.scan" = "Scansiona con il telefono";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Non abbinato";
 "mobile.mirror.status.offering" = "Codice di abbinamento pronto";
 "mobile.mirror.status.confirmation" = "Conferma desktop richiesta";
-"mobile.mirror.status.active" = "Connesso localmente";
+"mobile.mirror.status.active" = "Connesso tramite SSH";
 "mobile.mirror.status.denied" = "Abbinamento negato";
 "mobile.mirror.status.starting" = "Apertura del tunnel cifrato verso il telefono";
 "mobile.mirror.transport.label" = "Connessione cifrata al telefono";

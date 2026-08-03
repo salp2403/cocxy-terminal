@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "跟随系统";
 "preferences.appearance.language.title" = "语言";
 "preferences.appearance.language.picker" = "应用语言";
-"preferences.appearance.language.help" = "“系统”会使用 macOS 首选语言列表中首个受支持的语言。目前提供英语和西班牙语。";
+"preferences.appearance.language.help" = "“系统”会使用 macOS 偏好设置中首个受支持的语言。你也可以在此选择任一受支持的语言。";
 "preferences.appearance.font.section" = "字体";
 "preferences.appearance.fontFamily" = "字体系列";
 "preferences.appearance.fontHelp" = "选择任意已安装的等宽字体。下拉列表仅显示适合终端的字体系列，但也可以手动输入自定义字体系列名称。";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "配对手机...";
 "mobile.mirror.title" = "配对手机";
 "mobile.mirror.start" = "生成配对码";
-"mobile.mirror.security" = "一次性代码 · 本地网络 · 90 秒";
+"mobile.mirror.security" = "一次性代码 · 加密 SSH · 90 秒";
 "mobile.mirror.cancel" = "取消配对";
 "mobile.mirror.qr.accessibility" = "手机一次性配对码";
 "mobile.mirror.scan" = "使用手机扫描";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "未配对";
 "mobile.mirror.status.offering" = "配对码已就绪";
 "mobile.mirror.status.confirmation" = "需要在桌面端确认";
-"mobile.mirror.status.active" = "已在本地连接";
+"mobile.mirror.status.active" = "已通过 SSH 连接";
 "mobile.mirror.status.denied" = "配对已拒绝";
 "mobile.mirror.status.starting" = "正在打开通往手机的加密隧道";
 "mobile.mirror.transport.label" = "手机加密连接";

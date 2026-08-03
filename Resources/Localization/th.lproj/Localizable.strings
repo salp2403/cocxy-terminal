@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "ใช้ตามระบบ";
 "preferences.appearance.language.title" = "ภาษา";
 "preferences.appearance.language.picker" = "ภาษาของแอป";
-"preferences.appearance.language.help" = "เมื่อใช้ตามระบบ แอปจะเลือกภาษาแรกที่รองรับจากภาษาที่ต้องการของ macOS ขณะนี้มีภาษาอังกฤษและภาษาสเปนให้ใช้";
+"preferences.appearance.language.help" = "ตามระบบจะใช้ภาษาแรกที่รองรับในการตั้งค่า macOS ของคุณ และคุณสามารถเลือกภาษาที่รองรับภาษาใดก็ได้ที่นี่";
 "preferences.appearance.font.section" = "แบบอักษร";
 "preferences.appearance.fontFamily" = "ตระกูลแบบอักษร";
 "preferences.appearance.fontHelp" = "เลือกแบบอักษรความกว้างคงที่ที่ติดตั้งไว้ได้ทุกแบบ รายการแบบเลื่อนลงจะแสดงเฉพาะตระกูลที่เหมาะกับเทอร์มินัล แต่คุณยังพิมพ์ชื่อตระกูลเองได้";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "จับคู่โทรศัพท์...";
 "mobile.mirror.title" = "จับคู่โทรศัพท์";
 "mobile.mirror.start" = "สร้างรหัสจับคู่";
-"mobile.mirror.security" = "รหัสใช้ครั้งเดียว · เครือข่ายภายใน · 90 วินาที";
+"mobile.mirror.security" = "รหัสใช้ครั้งเดียว · SSH ที่เข้ารหัส · 90 วินาที";
 "mobile.mirror.cancel" = "ยกเลิกการจับคู่";
 "mobile.mirror.qr.accessibility" = "รหัสใช้ครั้งเดียวสำหรับจับคู่โทรศัพท์";
 "mobile.mirror.scan" = "สแกนด้วยโทรศัพท์ของคุณ";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "ยังไม่ได้จับคู่";
 "mobile.mirror.status.offering" = "รหัสจับคู่พร้อมแล้ว";
 "mobile.mirror.status.confirmation" = "ต้องยืนยันบนเดสก์ท็อป";
-"mobile.mirror.status.active" = "เชื่อมต่อภายในเครื่องแล้ว";
+"mobile.mirror.status.active" = "เชื่อมต่อผ่าน SSH แล้ว";
 "mobile.mirror.status.denied" = "ปฏิเสธการจับคู่แล้ว";
 "mobile.mirror.status.starting" = "กำลังเปิดอุโมงค์เข้ารหัสไปยังโทรศัพท์";
 "mobile.mirror.transport.label" = "การเชื่อมต่อโทรศัพท์แบบเข้ารหัส";

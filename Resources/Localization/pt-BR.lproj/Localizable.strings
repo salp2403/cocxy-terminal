@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Seguir o sistema";
 "preferences.appearance.language.title" = "Idioma";
 "preferences.appearance.language.picker" = "Idioma do app";
-"preferences.appearance.language.help" = "Sistema segue o primeiro idioma preferido do macOS compatível. Inglês e espanhol já estão disponíveis.";
+"preferences.appearance.language.help" = "Sistema usa o primeiro idioma compatível nas preferências do macOS. Você também pode escolher aqui qualquer idioma compatível.";
 "preferences.appearance.font.section" = "Fonte";
 "preferences.appearance.fontFamily" = "Família da fonte";
 "preferences.appearance.fontHelp" = "Escolha qualquer fonte monoespaçada instalada. A lista mostra apenas famílias adequadas para o terminal, mas você também pode digitar manualmente o nome de uma família personalizada.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Emparelhar Telefone...";
 "mobile.mirror.title" = "Emparelhar Telefone";
 "mobile.mirror.start" = "Gerar Código de Emparelhamento";
-"mobile.mirror.security" = "Código de uso único · rede local · 90 segundos";
+"mobile.mirror.security" = "Código de uso único · SSH criptografado · 90 segundos";
 "mobile.mirror.cancel" = "Cancelar emparelhamento";
 "mobile.mirror.qr.accessibility" = "Código de uso único para emparelhar o telefone";
 "mobile.mirror.scan" = "Escaneie com o telefone";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Não emparelhado";
 "mobile.mirror.status.offering" = "Código de emparelhamento pronto";
 "mobile.mirror.status.confirmation" = "Confirmação no Mac necessária";
-"mobile.mirror.status.active" = "Conectado localmente";
+"mobile.mirror.status.active" = "Conectado via SSH";
 "mobile.mirror.status.denied" = "Emparelhamento negado";
 "mobile.mirror.status.starting" = "Abrindo túnel criptografado para o telefone";
 "mobile.mirror.transport.label" = "Conexão criptografada com o telefone";

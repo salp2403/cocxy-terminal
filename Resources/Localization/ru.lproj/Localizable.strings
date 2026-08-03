@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Как в системе";
 "preferences.appearance.language.title" = "Язык";
 "preferences.appearance.language.picker" = "Язык приложения";
-"preferences.appearance.language.help" = "Вариант «Как в системе» выбирает первый поддерживаемый язык из предпочитаемых языков macOS. Сейчас доступны английский и испанский.";
+"preferences.appearance.language.help" = "Вариант «Как в системе» использует первый поддерживаемый язык из настроек macOS. Здесь также можно выбрать любой поддерживаемый язык.";
 "preferences.appearance.font.section" = "Шрифт";
 "preferences.appearance.fontFamily" = "Гарнитура шрифта";
 "preferences.appearance.fontHelp" = "Выберите любой установленный моноширинный шрифт. В списке показаны только подходящие для терминала гарнитуры, но название другой гарнитуры можно ввести вручную.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Подключить телефон…";
 "mobile.mirror.title" = "Подключение телефона";
 "mobile.mirror.start" = "Создать код подключения";
-"mobile.mirror.security" = "Одноразовый код · локальная сеть · 90 секунд";
+"mobile.mirror.security" = "Одноразовый код · зашифрованный SSH · 90 секунд";
 "mobile.mirror.cancel" = "Отменить подключение";
 "mobile.mirror.qr.accessibility" = "Одноразовый код подключения телефона";
 "mobile.mirror.scan" = "Отсканируйте с помощью телефона";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Не подключено";
 "mobile.mirror.status.offering" = "Код подключения готов";
 "mobile.mirror.status.confirmation" = "Требуется подтверждение на Mac";
-"mobile.mirror.status.active" = "Подключено локально";
+"mobile.mirror.status.active" = "Подключено через SSH";
 "mobile.mirror.status.denied" = "В подключении отказано";
 "mobile.mirror.status.starting" = "Открытие зашифрованного туннеля к телефону";
 "mobile.mirror.transport.label" = "Зашифрованное подключение к телефону";

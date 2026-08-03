@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Follow System";
 "preferences.appearance.language.title" = "Language";
 "preferences.appearance.language.picker" = "App language";
-"preferences.appearance.language.help" = "System follows the first supported macOS preferred language. English and Spanish are available now.";
+"preferences.appearance.language.help" = "System follows the first supported language in your macOS preferences. You can choose any supported language here.";
 "preferences.appearance.font.section" = "Font";
 "preferences.appearance.fontFamily" = "Font family";
 "preferences.appearance.fontHelp" = "Choose any installed monospaced font. The dropdown is filtered to terminal-safe families, but you can still type a custom family name manually.";

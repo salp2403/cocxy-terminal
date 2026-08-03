@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "시스템 설정 따르기";
 "preferences.appearance.language.title" = "언어";
 "preferences.appearance.language.picker" = "앱 언어";
-"preferences.appearance.language.help" = "시스템 설정은 macOS의 선호 언어 중 지원되는 첫 번째 언어를 따릅니다. 현재 영어와 스페인어를 사용할 수 있습니다.";
+"preferences.appearance.language.help" = "시스템은 macOS 언어 설정에서 지원되는 첫 번째 언어를 사용합니다. 여기에서 지원되는 언어를 직접 선택할 수도 있습니다.";
 "preferences.appearance.font.section" = "서체";
 "preferences.appearance.fontFamily" = "서체 패밀리";
 "preferences.appearance.fontHelp" = "설치된 고정폭 서체를 선택하십시오. 드롭다운에는 터미널에 적합한 서체 패밀리만 표시되지만 사용자 지정 패밀리 이름을 직접 입력할 수도 있습니다.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "휴대전화 페어링...";
 "mobile.mirror.title" = "휴대전화 페어링";
 "mobile.mirror.start" = "페어링 코드 생성";
-"mobile.mirror.security" = "일회용 코드 · 로컬 네트워크 · 90초";
+"mobile.mirror.security" = "일회용 코드 · 암호화된 SSH · 90초";
 "mobile.mirror.cancel" = "페어링 취소";
 "mobile.mirror.qr.accessibility" = "휴대전화 페어링용 일회용 코드";
 "mobile.mirror.scan" = "휴대전화로 스캔";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "페어링되지 않음";
 "mobile.mirror.status.offering" = "페어링 코드 준비됨";
 "mobile.mirror.status.confirmation" = "데스크탑 확인 필요";
-"mobile.mirror.status.active" = "로컬로 연결됨";
+"mobile.mirror.status.active" = "SSH를 통해 연결됨";
 "mobile.mirror.status.denied" = "페어링 거부됨";
 "mobile.mirror.status.starting" = "휴대전화로 암호화된 터널을 여는 중";
 "mobile.mirror.transport.label" = "암호화된 휴대전화 연결";

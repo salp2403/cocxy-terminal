@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Dopasuj do systemu";
 "preferences.appearance.language.title" = "Język";
 "preferences.appearance.language.picker" = "Język aplikacji";
-"preferences.appearance.language.help" = "System używa pierwszego obsługiwanego języka z listy preferowanych języków macOS. Obecnie dostępne są angielski i hiszpański.";
+"preferences.appearance.language.help" = "Opcja System używa pierwszego obsługiwanego języka z preferencji macOS. Tutaj możesz też wybrać dowolny obsługiwany język.";
 "preferences.appearance.font.section" = "Czcionka";
 "preferences.appearance.fontFamily" = "Rodzina czcionek";
 "preferences.appearance.fontHelp" = "Wybierz dowolną zainstalowaną czcionkę o stałej szerokości. Lista zawiera rodziny odpowiednie dla terminala, ale możesz też ręcznie wpisać nazwę innej rodziny.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Sparuj telefon...";
 "mobile.mirror.title" = "Sparuj telefon";
 "mobile.mirror.start" = "Wygeneruj kod parowania";
-"mobile.mirror.security" = "Kod jednorazowy · sieć lokalna · 90 sekund";
+"mobile.mirror.security" = "Kod jednorazowy · szyfrowane SSH · 90 sekund";
 "mobile.mirror.cancel" = "Anuluj parowanie";
 "mobile.mirror.qr.accessibility" = "Jednorazowy kod parowania telefonu";
 "mobile.mirror.scan" = "Zeskanuj telefonem";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Nie sparowano";
 "mobile.mirror.status.offering" = "Kod parowania gotowy";
 "mobile.mirror.status.confirmation" = "Wymagane potwierdzenie na komputerze";
-"mobile.mirror.status.active" = "Połączono lokalnie";
+"mobile.mirror.status.active" = "Połączono przez SSH";
 "mobile.mirror.status.denied" = "Odrzucono parowanie";
 "mobile.mirror.status.starting" = "Otwieranie szyfrowanego tunelu do telefonu";
 "mobile.mirror.transport.label" = "Szyfrowane połączenie z telefonem";

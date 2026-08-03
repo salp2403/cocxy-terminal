@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "مطابقة النظام";
 "preferences.appearance.language.title" = "اللغة";
 "preferences.appearance.language.picker" = "لغة التطبيق";
-"preferences.appearance.language.help" = "يتبع النظام أول لغة مفضلة مدعومة في macOS. اللغتان الإنجليزية والإسبانية متاحتان الآن.";
+"preferences.appearance.language.help" = "يتبع خيار النظام أول لغة مدعومة في تفضيلات macOS. ويمكنك اختيار أي لغة مدعومة هنا.";
 "preferences.appearance.font.section" = "الخط";
 "preferences.appearance.fontFamily" = "عائلة الخط";
 "preferences.appearance.fontHelp" = "اختر أي خط أحادي المسافة مثبت. تُرشَّح القائمة المنسدلة إلى العائلات الآمنة للطرفية، لكن لا يزال بإمكانك كتابة اسم عائلة مخصص يدويًا.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "إقران الهاتف...";
 "mobile.mirror.title" = "إقران الهاتف";
 "mobile.mirror.start" = "إنشاء رمز الإقران";
-"mobile.mirror.security" = "رمز للاستخدام مرة واحدة · شبكة محلية · 90 ثانية";
+"mobile.mirror.security" = "رمز للاستخدام مرة واحدة · SSH مشفّر · 90 ثانية";
 "mobile.mirror.cancel" = "إلغاء الإقران";
 "mobile.mirror.qr.accessibility" = "رمز إقران الهاتف للاستخدام مرة واحدة";
 "mobile.mirror.scan" = "امسح باستخدام هاتفك";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "غير مقترن";
 "mobile.mirror.status.offering" = "رمز الإقران جاهز";
 "mobile.mirror.status.confirmation" = "مطلوب تأكيد من سطح المكتب";
-"mobile.mirror.status.active" = "متصل محليًا";
+"mobile.mirror.status.active" = "متصل عبر SSH";
 "mobile.mirror.status.denied" = "تم رفض الإقران";
 "mobile.mirror.status.starting" = "جارٍ فتح نفق مشفّر إلى الهاتف";
 "mobile.mirror.transport.label" = "اتصال مشفّر بالهاتف";

@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Følg systemet";
 "preferences.appearance.language.title" = "Språk";
 "preferences.appearance.language.picker" = "Programspråk";
-"preferences.appearance.language.help" = "Systemet følger det første støttede foretrukne språket i macOS. Engelsk og spansk er tilgjengelig nå.";
+"preferences.appearance.language.help" = "System bruker det første støttede språket i macOS-innstillingene dine. Du kan også velge et hvilket som helst støttet språk her.";
 "preferences.appearance.font.section" = "Skrift";
 "preferences.appearance.fontFamily" = "Skriftfamilie";
 "preferences.appearance.fontHelp" = "Velg en installert skrift med fast tegnbredde. Menyen er filtrert til skriftfamilier som er trygge å bruke i terminalen, men du kan også skrive inn navnet på en egendefinert familie manuelt.";
@@ -3528,7 +3528,7 @@
 "menu.view.pairPhone" = "Koble sammen med telefon...";
 "mobile.mirror.title" = "Koble sammen med telefon";
 "mobile.mirror.start" = "Generer sammenkoblingskode";
-"mobile.mirror.security" = "Engangskode · lokalt nettverk · 90 sekunder";
+"mobile.mirror.security" = "Engangskode · kryptert SSH · 90 sekunder";
 "mobile.mirror.cancel" = "Avbryt sammenkobling";
 "mobile.mirror.qr.accessibility" = "Engangskode for sammenkobling med telefon";
 "mobile.mirror.scan" = "Skann med telefonen";
@@ -3545,7 +3545,7 @@
 "mobile.mirror.status.stopped" = "Ikke sammenkoblet";
 "mobile.mirror.status.offering" = "Sammenkoblingskoden er klar";
 "mobile.mirror.status.confirmation" = "Må bekreftes på Macen";
-"mobile.mirror.status.active" = "Tilkoblet lokalt";
+"mobile.mirror.status.active" = "Tilkoblet via SSH";
 "mobile.mirror.status.denied" = "Sammenkobling avvist";
 "mobile.mirror.status.starting" = "Åpner kryptert tunnel til telefonen";
 "mobile.mirror.transport.label" = "Kryptert telefontilkobling";

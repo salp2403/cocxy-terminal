@@ -285,6 +285,33 @@ struct AllLocaleParitySwiftTestingTests {
         #expect(english.isRightToLeft == false)
     }
 
+    @Test("language help stays evergreen and mobile transport copy matches SSH")
+    func languageHelpAndMobileTransportRemainSemanticallyCurrent() throws {
+        let obsoleteLanguagePairs = [
+            "en": "English and Spanish", "es": "Inglés y español",
+            "ar": "اللغتان الإنجليزية والإسبانية", "bs": "engleski i španski",
+            "da": "Engelsk og spansk", "de": "Deutsch, Englisch und Spanisch",
+            "fr": "L’anglais et l’espagnol", "it": "inglese e spagnolo",
+            "ja": "英語とスペイン語", "km": "ភាសាអង់គ្លេស និងអេស្ប៉ាញ",
+            "ko": "영어와 스페인어", "no": "Engelsk og spansk",
+            "pl": "angielski i hiszpański", "pt-BR": "Inglês e espanhol",
+            "ru": "английский и испанский", "th": "ภาษาอังกฤษและภาษาสเปน",
+            "tr": "İngilizce ve İspanyolca", "uk": "англійська та іспанська",
+            "vi": "tiếng Anh và tiếng Tây Ban Nha", "zh-CN": "英语和西班牙语",
+            "zh-TW": "英文和西班牙文",
+        ]
+        let resources = localizationResourcesURL()
+
+        for locale in Self.localeCodes {
+            let strings = try localizationStrings(locale: locale, resources: resources)
+            let help = try #require(strings["preferences.appearance.language.help"])
+            let obsoletePair = try #require(obsoleteLanguagePairs[locale])
+            #expect(!help.localizedCaseInsensitiveContains(obsoletePair))
+            #expect(strings["mobile.mirror.security"]?.contains("SSH") == true)
+            #expect(strings["mobile.mirror.status.active"]?.contains("SSH") == true)
+        }
+    }
+
     private func localizationResourcesURL() -> URL {
         URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent("Resources/Localization", isDirectory: true)

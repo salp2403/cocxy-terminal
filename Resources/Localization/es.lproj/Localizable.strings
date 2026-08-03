@@ -108,7 +108,7 @@
 "preferences.appearance.followSystem" = "Seguir sistema";
 "preferences.appearance.language.title" = "Idioma";
 "preferences.appearance.language.picker" = "Idioma de la app";
-"preferences.appearance.language.help" = "Sistema usa el primer idioma compatible preferido de macOS. Inglés y español están disponibles ahora.";
+"preferences.appearance.language.help" = "Sistema usa el primer idioma compatible de tus preferencias de macOS. También puedes elegir aquí cualquier idioma compatible.";
 "preferences.appearance.font.section" = "Fuente";
 "preferences.appearance.fontFamily" = "Familia de fuente";
 "preferences.appearance.fontHelp" = "Elige cualquier fuente monoespaciada instalada. El desplegable se filtra a familias seguras para terminal, pero también puedes escribir una familia personalizada.";
