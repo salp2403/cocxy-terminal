@@ -94,6 +94,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
     private let commandAllowlist: any AgentCommandAllowlistLoading
     private let agentSecrets: AgentSecrets
     private let usageRecorder: AgentUsageRecording?
+    private let usageRecorderProvider: (@MainActor @Sendable () -> AgentUsageRecording?)?
     private let spotlightConfigProvider: @MainActor @Sendable () -> SpotlightIndexConfig
     private let spotlightIndexWriter: any SpotlightIndexWriting
     private let securitySandboxConfigProvider: @MainActor @Sendable () -> SecuritySandboxConfig
@@ -112,6 +113,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         commandAllowlist: any AgentCommandAllowlistLoading = AgentCommandAllowlist(),
         agentSecrets: AgentSecrets = AgentSecrets(),
         usageRecorder: AgentUsageRecording? = nil,
+        usageRecorderProvider: (@MainActor @Sendable () -> AgentUsageRecording?)? = nil,
         spotlightConfigProvider: @escaping @MainActor @Sendable () -> SpotlightIndexConfig = { .defaults },
         spotlightIndexWriter: any SpotlightIndexWriting = CoreSpotlightIndexWriter(),
         securitySandboxConfigProvider: @escaping @MainActor @Sendable () -> SecuritySandboxConfig = { .defaults }
@@ -129,6 +131,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         self.commandAllowlist = commandAllowlist
         self.agentSecrets = agentSecrets
         self.usageRecorder = usageRecorder
+        self.usageRecorderProvider = usageRecorderProvider
         self.spotlightConfigProvider = spotlightConfigProvider
         self.spotlightIndexWriter = spotlightIndexWriter
         self.securitySandboxConfigProvider = securitySandboxConfigProvider
@@ -153,11 +156,13 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         configuration: AgentModeConfig,
         imageAttachments: [AgentImageAttachment]
     ) async throws -> AgentLoopResult {
+        let requestUsageRecorder = await usageRecorderProvider?() ?? usageRecorder
         let workspace = try await currentWorkspace()
         let loop = try await makeLoop(
             configuration: configuration,
             approvals: baseApprovalContext(for: configuration),
-            workspace: workspace
+            workspace: workspace,
+            usageRecorder: requestUsageRecorder
         )
 
         return try await loop.run(
@@ -175,6 +180,7 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
         history: [AgentMessage],
         configuration: AgentModeConfig
     ) async throws -> AgentLoopResult {
+        let requestUsageRecorder = await usageRecorderProvider?() ?? usageRecorder
         let workspace = try await currentWorkspace()
         try validateApprovalRequest(request, in: workspace, configuration: configuration)
         let loop = try await makeLoop(
@@ -184,7 +190,8 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
                 userInput: userInput,
                 configuration: configuration
             ),
-            workspace: workspace
+            workspace: workspace,
+            usageRecorder: requestUsageRecorder
         )
 
         return try await loop.resume(
@@ -198,7 +205,8 @@ struct AgentSessionRunner: AgentApprovalRunning, AgentAttachmentPromptRunning {
     private func makeLoop(
         configuration: AgentModeConfig,
         approvals: AgentToolApprovalContext,
-        workspace: AgentWorkspace
+        workspace: AgentWorkspace,
+        usageRecorder: AgentUsageRecording?
     ) async throws -> AgentLoop {
         let effectiveRegistry = await effectiveToolRegistry()
         let lineCodec = try conversationLineCodec(from: configuration)

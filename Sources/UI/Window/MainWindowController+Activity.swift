@@ -4,6 +4,13 @@
 import AppKit
 import SwiftUI
 
+struct AgentUsageAttributionContext: Sendable, Equatable {
+    let tabID: TabID
+    let surfaceID: SurfaceID?
+    let sessionID: String
+    let project: ActivityProjectRef?
+}
+
 @MainActor
 extension MainWindowController {
 
@@ -243,6 +250,32 @@ extension MainWindowController {
         tabID: TabID,
         surfaceID: SurfaceID?
     ) {
+        guard let context = agentUsageAttributionContext(
+            tabID: tabID,
+            surfaceID: surfaceID
+        ) else { return }
+        recordAgentTokenUsage(usage, context: context)
+    }
+
+    func agentUsageAttributionContext(
+        tabID: TabID,
+        surfaceID: SurfaceID?
+    ) -> AgentUsageAttributionContext? {
+        guard let tab = tabManager.tab(for: tabID) else { return nil }
+        let workingDirectory = surfaceID.flatMap(workingDirectory(for:))
+            ?? tab.workingDirectory
+        return AgentUsageAttributionContext(
+            tabID: tabID,
+            surfaceID: surfaceID,
+            sessionID: sessionIDForTab(tabID).rawValue.uuidString,
+            project: activityProjectRef(for: workingDirectory)
+        )
+    }
+
+    func recordAgentTokenUsage(
+        _ usage: AgentLLMUsage,
+        context: AgentUsageAttributionContext
+    ) {
         guard let activityConfig = configService?.current.activity else { return }
         let policy = activityConfig.privacyPolicy
         guard policy.tokenCostTrackingEnabled else { return }
@@ -253,14 +286,12 @@ extension MainWindowController {
                 store: store,
                 policyProvider: { policy }
             )
-            let workingDirectory = surfaceID.flatMap(workingDirectory(for:))
-                ?? tabManager.tab(for: tabID)?.workingDirectory
             let rate = activityConfig.tokenCostRate(provider: usage.provider, model: usage.model)
             let record = CostTracker.usageRecord(
                 provider: usage.provider,
                 model: usage.model,
-                sessionID: sessionIDForTab(tabID).rawValue.uuidString,
-                project: workingDirectory.map(activityProjectRef(for:)),
+                sessionID: context.sessionID,
+                project: context.project,
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 rate: rate

@@ -114,8 +114,8 @@ extension MainWindowController {
                 self?.currentAgentModeLSPDiagnostics(limit: limit) ?? []
             },
             mcpManager: agentModeMCPManager(),
-            usageRecorder: { [weak self] usage in
-                await self?.recordCurrentAgentModeTokenUsage(usage)
+            usageRecorderProvider: { [weak self] in
+                self?.currentAgentModeUsageRecorder()
             },
             spotlightConfigProvider: { [weak self] in
                 self?.configService?.current.spotlight ?? .defaults
@@ -202,11 +202,17 @@ extension MainWindowController {
         SkillRegistry.localDefault(projectRoot: currentAgentModeWorkingDirectory())
     }
 
-    func recordCurrentAgentModeTokenUsage(_ usage: AgentLLMUsage) {
-        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return }
+    func currentAgentModeUsageRecorder() -> AgentUsageRecording? {
+        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return nil }
         let surfaceID = focusedSplitSurfaceView?.terminalViewModel?.surfaceID
             ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID
-        recordAgentTokenUsage(usage, tabID: tabID, surfaceID: surfaceID)
+        guard let context = agentUsageAttributionContext(
+            tabID: tabID,
+            surfaceID: surfaceID
+        ) else { return nil }
+        return { [weak self] usage in
+            await self?.recordAgentTokenUsage(usage, context: context)
+        }
     }
 
     func currentAgentModeWorkingDirectory() -> URL? {
