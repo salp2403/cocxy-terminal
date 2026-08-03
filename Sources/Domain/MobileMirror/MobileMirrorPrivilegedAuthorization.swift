@@ -38,9 +38,22 @@ enum MobileMirrorPrivilegedAuthorization {
     ) -> Bool {
         switch request.command {
         case .send:
-            return Set(request.params.keys) == ["surfaceId", "tabId", "text"]
-                && request.params["text"]?.isEmpty == false
-                && (request.params["text"]?.utf8.count ?? 0) <= 8_192
+            let keys = Set(request.params.keys)
+            if keys == ["surfaceId", "tabId", "text"] {
+                return request.params["text"]?.isEmpty == false
+                    && (request.params["text"]?.utf8.count ?? 0) <= 8_192
+            }
+            guard keys == ["pasteByteCount", "pasteDigest", "surfaceId", "tabId"],
+                  let rawByteCount = request.params["pasteByteCount"],
+                  let byteCount = Int(rawByteCount),
+                  (1...MobileMirrorTerminalControl.maximumPasteUTF8Bytes).contains(byteCount),
+                  let digest = request.params["pasteDigest"], digest.utf8.count == 64,
+                  digest.unicodeScalars.allSatisfy({
+                      (48...57).contains($0.value) || (97...102).contains($0.value)
+                  }) else {
+                return false
+            }
+            return true
         case .sendKey:
             return Set(request.params.keys) == ["key", "surfaceId", "tabId"]
                 && MobileMirrorTerminalControl.supportedKeys.contains(

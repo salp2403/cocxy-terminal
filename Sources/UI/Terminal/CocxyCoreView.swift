@@ -209,8 +209,7 @@ final class CocxyCoreView: NSView {
     /// Active async paste delivery, used to keep large clipboard writes from
     /// monopolizing the main thread while an agent TUI is reading from the PTY.
     private var pasteDeliveryTask: Task<Void, Never>?
-    private var activeBracketedPasteSurfaceID: SurfaceID?
-    private var activeBracketedPasteSessionID: UUID?
+    private let pasteDeliveryCoordinator = TerminalPasteDeliveryCoordinator()
 
     /// Last dispatched repeated delete key event by hardware key code.
     private var repeatedDeleteDispatchTimestamps: [UInt16: TimeInterval] = [:]
@@ -247,11 +246,10 @@ final class CocxyCoreView: NSView {
 
     // MARK: - Constants
 
-    static let defaultPasteChunkMaxUTF8Bytes = 512
-    static let agentPasteChunkMaxUTF8Bytes = 128
-    private static let pasteChunkMaxUTF8Bytes = defaultPasteChunkMaxUTF8Bytes
-    private static let pasteChunkDelayNanoseconds: UInt64 = 6_000_000
-    private static let agentPasteChunkDelayNanoseconds: UInt64 = 18_000_000
+    static let defaultPasteChunkMaxUTF8Bytes = TerminalPasteDeliveryTiming.production
+        .standardChunkMaxUTF8Bytes
+    static let agentPasteChunkMaxUTF8Bytes = TerminalPasteDeliveryTiming.production
+        .agentChunkMaxUTF8Bytes
     private static let repeatedDeleteMinimumInterval: TimeInterval = 0.095
     private static let agentRepeatedDeleteMinimumInterval: TimeInterval = 0.220
     private static let throttledDeleteKeyCodes: Set<UInt16> = [51, 117]
@@ -300,6 +298,7 @@ final class CocxyCoreView: NSView {
         MainActor.assumeIsolated {
             clearComposition(forceEngineClear: true)
             pasteDeliveryTask?.cancel()
+            pasteDeliveryCoordinator.cancelAll()
             removeWindowObservers()
             stopDisplayLink()
         }
@@ -352,6 +351,8 @@ final class CocxyCoreView: NSView {
     /// Configures the view with a bridge and surface. Call after createSurface.
     func configure(bridge: CocxyCoreBridge, surfaceID: SurfaceID, viewModel: TerminalViewModel) {
         if self.bridge !== bridge || self.surfaceID != surfaceID {
+            pasteDeliveryTask?.cancel()
+            pasteDeliveryCoordinator.cancelAll()
             resetCommandBlockOverlayForSurfaceTeardown()
             clearComposition(forceEngineClear: true, discardInputContext: true)
             dismissDetectedContentHints()
@@ -1407,61 +1408,21 @@ final class CocxyCoreView: NSView {
         bridge: CocxyCoreBridge,
         surfaceID sid: SurfaceID
     ) {
-        guard let state = bridge.surfaceState(for: sid) else { return }
-
-        let usesBracketedPaste = cocxycore_terminal_mode_bracketed_paste(state.terminal)
-        let normalizedText = Self.normalizedTerminalPasteText(text)
+        guard let diagnostics = bridge.modeDiagnostics(for: sid) else { return }
         let agentPacedPaste = shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid)
-        let chunks = Self.terminalPasteChunks(
-            for: normalizedText,
-            agentPaced: agentPacedPaste
-        )
-        guard !chunks.isEmpty else { return }
-
-        closeActiveBracketedPasteIfNeeded(bridge: bridge)
-        pasteDeliveryTask?.cancel()
-        let pasteSessionID = UUID()
         pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
             guard let self, let bridge else { return }
             self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-            defer {
-                if self.activeBracketedPasteSessionID == pasteSessionID {
-                    self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
-                }
-            }
-            guard !Task.isCancelled else { return }
-
-            let remainingChunks: ArraySlice<String>
-            if usesBracketedPaste {
-                guard let firstChunk = chunks.first else { return }
-                self.activeBracketedPasteSurfaceID = sid
-                self.activeBracketedPasteSessionID = pasteSessionID
-                bridge.sendText("\u{1B}[200~" + firstChunk, to: sid)
-                remainingChunks = chunks.dropFirst()
-                await Self.sleepBetweenPasteChunksIfNeeded(
-                    chunks.count,
+            _ = await self.pasteDeliveryCoordinator.deliver(
+                text,
+                to: sid,
+                configuration: TerminalPasteDeliveryConfiguration(
+                    usesBracketedPaste: diagnostics.bracketedPasteMode,
                     agentPaced: agentPacedPaste
-                )
-            } else {
-                remainingChunks = chunks[...]
-            }
-
-            for chunk in remainingChunks {
-                guard !Task.isCancelled,
-                      !usesBracketedPaste || self.activeBracketedPasteSessionID == pasteSessionID,
-                      bridge.surfaceState(for: sid) != nil else { return }
-                bridge.sendText(chunk, to: sid)
-                await Self.sleepBetweenPasteChunksIfNeeded(
-                    chunks.count,
-                    agentPaced: agentPacedPaste
-                )
-            }
-
-            guard !Task.isCancelled,
-                  bridge.surfaceState(for: sid) != nil else { return }
-            if usesBracketedPaste {
-                self.closeActiveBracketedPasteIfNeeded(bridge: bridge)
-            }
+                ),
+                isAvailable: { [weak bridge] in bridge?.surfaceState(for: sid) != nil },
+                sendText: { [weak bridge] chunk in bridge?.sendText(chunk, to: sid) == true }
+            )
         }
     }
 
@@ -1471,58 +1432,25 @@ final class CocxyCoreView: NSView {
         surfaceID sid: SurfaceID
     ) {
         let agentPacedPaste = shouldUsePromptSafePasteDelivery(bridge: bridge, surfaceID: sid)
-        let chunks = Self.terminalPasteChunks(
-            for: text,
-            agentPaced: agentPacedPaste
-        )
-        guard !chunks.isEmpty else { return }
-
-        closeActiveBracketedPasteIfNeeded(bridge: bridge)
-        pasteDeliveryTask?.cancel()
         pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
             guard let self, let bridge else { return }
             self.followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-            for chunk in chunks {
-                guard !Task.isCancelled,
-                      bridge.surfaceState(for: sid) != nil else { return }
-                bridge.sendText(chunk, to: sid)
-                await Self.sleepBetweenPasteChunksIfNeeded(
-                    chunks.count,
-                    agentPaced: agentPacedPaste
-                )
-            }
+            _ = await self.pasteDeliveryCoordinator.deliver(
+                text,
+                to: sid,
+                configuration: TerminalPasteDeliveryConfiguration(
+                    usesBracketedPaste: false,
+                    agentPaced: agentPacedPaste,
+                    normalizesText: false
+                ),
+                isAvailable: { [weak bridge] in bridge?.surfaceState(for: sid) != nil },
+                sendText: { [weak bridge] chunk in bridge?.sendText(chunk, to: sid) == true }
+            )
         }
-    }
-
-    private func closeActiveBracketedPasteIfNeeded(bridge: CocxyCoreBridge) {
-        guard let activeSurfaceID = activeBracketedPasteSurfaceID else { return }
-        if bridge.surfaceState(for: activeSurfaceID) != nil {
-            bridge.sendText("\u{1B}[201~", to: activeSurfaceID)
-        }
-        activeBracketedPasteSurfaceID = nil
-        activeBracketedPasteSessionID = nil
     }
 
     nonisolated static func normalizedTerminalPasteText(_ text: String) -> String {
-        let lineNormalized = text
-            .replacingOccurrences(of: "\r\n", with: "\n")
-            .replacingOccurrences(of: "\r", with: "\n")
-            .replacingOccurrences(of: "\u{2028}", with: "\n")
-            .replacingOccurrences(of: "\u{2029}", with: "\n")
-
-        var scalars = String.UnicodeScalarView()
-        scalars.reserveCapacity(lineNormalized.unicodeScalars.count)
-        for scalar in lineNormalized.unicodeScalars {
-            switch scalar.value {
-            case 0x09, 0x0A:
-                scalars.append(scalar)
-            case 0x00...0x1F, 0x7F:
-                continue
-            default:
-                scalars.append(scalar)
-            }
-        }
-        return String(scalars)
+        TerminalPasteDelivery.normalizedText(text)
     }
 
     static func terminalPasteChunks(for text: String) -> [String] {
@@ -1530,9 +1458,11 @@ final class CocxyCoreView: NSView {
     }
 
     static func terminalPasteChunks(for text: String, agentPaced: Bool) -> [String] {
-        terminalPasteChunks(
+        TerminalPasteDelivery.chunks(
             for: text,
-            maxUTF8Bytes: agentPaced ? agentPasteChunkMaxUTF8Bytes : pasteChunkMaxUTF8Bytes
+            maxUTF8Bytes: agentPaced
+                ? agentPasteChunkMaxUTF8Bytes
+                : defaultPasteChunkMaxUTF8Bytes
         )
     }
 
@@ -1540,37 +1470,7 @@ final class CocxyCoreView: NSView {
         for text: String,
         maxUTF8Bytes: Int
     ) -> [String] {
-        guard maxUTF8Bytes > 0 else { return [text] }
-
-        var chunks: [String] = []
-        var current = ""
-        var currentBytes = 0
-
-        for character in text {
-            let characterText = String(character)
-            let byteCount = characterText.utf8.count
-            if currentBytes > 0, currentBytes + byteCount > maxUTF8Bytes {
-                chunks.append(current)
-                current = ""
-                currentBytes = 0
-            }
-            current.append(character)
-            currentBytes += byteCount
-        }
-
-        if !current.isEmpty {
-            chunks.append(current)
-        }
-        return chunks
-    }
-
-    private static func sleepBetweenPasteChunksIfNeeded(
-        _ chunkCount: Int,
-        agentPaced: Bool
-    ) async {
-        guard chunkCount > 1 else { return }
-        let delay = agentPaced ? agentPasteChunkDelayNanoseconds : pasteChunkDelayNanoseconds
-        try? await Task.sleep(nanoseconds: delay)
+        TerminalPasteDelivery.chunks(for: text, maxUTF8Bytes: maxUTF8Bytes)
     }
 
     internal func shouldThrottleTerminalDeleteRepeat(

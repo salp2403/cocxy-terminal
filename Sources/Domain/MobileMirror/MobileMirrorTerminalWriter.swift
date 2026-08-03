@@ -8,6 +8,20 @@ import Foundation
 struct MobileMirrorTerminalTarget {
     let sendText: (String) -> Bool
     let sendKeyEvent: (KeyEvent) -> Bool
+    let pasteConfiguration: () -> TerminalPasteDeliveryConfiguration?
+    let isAvailable: () -> Bool
+
+    init(
+        sendText: @escaping (String) -> Bool,
+        sendKeyEvent: @escaping (KeyEvent) -> Bool,
+        pasteConfiguration: @escaping () -> TerminalPasteDeliveryConfiguration? = { nil },
+        isAvailable: @escaping () -> Bool = { true }
+    ) {
+        self.sendText = sendText
+        self.sendKeyEvent = sendKeyEvent
+        self.pasteConfiguration = pasteConfiguration
+        self.isAvailable = isAvailable
+    }
 }
 
 @MainActor
@@ -22,17 +36,21 @@ final class MobileMirrorTerminalWriter {
     private enum Effect {
         case text(String)
         case key(name: String, event: KeyEvent)
+        case paste(String)
     }
 
     private let grantProvider: GrantProvider
     private let targetProvider: TargetProvider
+    private let pasteDeliveryCoordinator: TerminalPasteDeliveryCoordinator
 
     init(
         grantProvider: @escaping GrantProvider,
-        targetProvider: @escaping TargetProvider
+        targetProvider: @escaping TargetProvider,
+        pasteDeliveryCoordinator: TerminalPasteDeliveryCoordinator = TerminalPasteDeliveryCoordinator()
     ) {
         self.grantProvider = grantProvider
         self.targetProvider = targetProvider
+        self.pasteDeliveryCoordinator = pasteDeliveryCoordinator
     }
 
     func write(
@@ -84,6 +102,14 @@ final class MobileMirrorTerminalWriter {
                 "surfaceId": surfaceID.rawValue.uuidString,
                 "key": name,
             ]
+        case .paste(let text):
+            command = .send
+            params = [
+                "pasteByteCount": String(text.utf8.count),
+                "pasteDigest": MobileMirrorPairingAuthority.digest(Data(text.utf8)),
+                "surfaceId": surfaceID.rawValue.uuidString,
+                "tabId": tabID.rawValue.uuidString,
+            ]
         }
         let socketRequest = SocketRequest(
             id: UUID().uuidString,
@@ -105,6 +131,17 @@ final class MobileMirrorTerminalWriter {
             delivered = target.sendText(text)
         case .key(_, let event):
             delivered = target.sendKeyEvent(event)
+        case .paste(let text):
+            guard let configuration = target.pasteConfiguration() else {
+                throw MobileMirrorError.targetUnavailable
+            }
+            delivered = await pasteDeliveryCoordinator.deliver(
+                text,
+                to: surfaceID,
+                configuration: configuration,
+                isAvailable: target.isAvailable,
+                sendText: target.sendText
+            )
         }
         guard delivered else {
             throw MobileMirrorError.targetUnavailable
@@ -112,6 +149,13 @@ final class MobileMirrorTerminalWriter {
     }
 
     private static func effect(for action: MobileMirrorAction) throws -> Effect {
+        if action.controlType == "paste" {
+            guard let text = action.text, !text.isEmpty,
+                  text.utf8.count <= MobileMirrorTerminalControl.maximumPasteUTF8Bytes else {
+                throw MobileMirrorError.invalidAction
+            }
+            return .paste(text)
+        }
         let modifiers = keyModifiers(for: action)
         if let name = action.key?.lowercased() {
             guard let keyCode = keyCode(for: name) else {

@@ -204,6 +204,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
     public let mouseTrackingMode: UInt8?
     public let mouseEncodingMode: UInt8?
     public let isAltScreen: Bool
+    public let bracketedPasteMode: Bool
     public let alternateScrollMode: Bool
     public let synchronizedOutput: Bool
     public let detectedContents: [PTYDaemonDetectedContent]
@@ -223,6 +224,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         mouseTrackingMode: UInt8? = nil,
         mouseEncodingMode: UInt8? = nil,
         isAltScreen: Bool = false,
+        bracketedPasteMode: Bool = false,
         alternateScrollMode: Bool = true,
         synchronizedOutput: Bool = false,
         detectedContents: [PTYDaemonDetectedContent] = []
@@ -241,6 +243,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         self.mouseTrackingMode = mouseTrackingMode
         self.mouseEncodingMode = mouseEncodingMode
         self.isAltScreen = isAltScreen
+        self.bracketedPasteMode = bracketedPasteMode
         self.alternateScrollMode = alternateScrollMode
         self.synchronizedOutput = synchronizedOutput
         self.detectedContents = detectedContents
@@ -261,6 +264,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         case mouseTrackingMode
         case mouseEncodingMode
         case isAltScreen
+        case bracketedPasteMode
         case alternateScrollMode
         case synchronizedOutput
         case detectedContents
@@ -285,6 +289,10 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         mouseTrackingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseTrackingMode)
         mouseEncodingMode = try container.decodeIfPresent(UInt8.self, forKey: .mouseEncodingMode)
         isAltScreen = try container.decodeIfPresent(Bool.self, forKey: .isAltScreen) ?? false
+        bracketedPasteMode = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .bracketedPasteMode
+        ) ?? false
         alternateScrollMode = try container.decodeIfPresent(
             Bool.self,
             forKey: .alternateScrollMode
@@ -315,6 +323,7 @@ public struct PTYDaemonSurfaceFrame: Codable, Equatable, Sendable {
         try container.encodeIfPresent(mouseTrackingMode, forKey: .mouseTrackingMode)
         try container.encodeIfPresent(mouseEncodingMode, forKey: .mouseEncodingMode)
         try container.encode(isAltScreen, forKey: .isAltScreen)
+        try container.encode(bracketedPasteMode, forKey: .bracketedPasteMode)
         try container.encode(alternateScrollMode, forKey: .alternateScrollMode)
         try container.encode(synchronizedOutput, forKey: .synchronizedOutput)
         try container.encode(detectedContents, forKey: .detectedContents)

@@ -302,6 +302,7 @@ extension MobileMirrorCoordinator {
         for stream in ownedStreams.values { stopOwnedStream(stream) }
         ownedStreams.removeAll()
         routeRegistry.replace(routes: [], preferredSessionID: nil)
+        terminalPasteDeliveryCoordinator.cancelAll()
         pairingURL = nil
         pendingPairing = nil
         activePairing = nil

@@ -49,6 +49,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     private(set) var detectedContentHintSession: TerminalDetectedContentHintSession?
     private var consumedDetectedContentMouseGesture = false
     private var compositionState = TextCompositionState()
+    private var pasteDeliveryTask: Task<Void, Never>?
+    private let pasteDeliveryCoordinator = TerminalPasteDeliveryCoordinator()
 
     private struct KeyTextInterpretation {
         var text = ""
@@ -85,6 +87,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     deinit {
         MainActor.assumeIsolated {
             clearComposition(forceEngineClear: true)
+            pasteDeliveryTask?.cancel()
+            pasteDeliveryCoordinator.cancelAll()
             eventDrainTimer?.invalidate()
             synchronizedOutputFlushWorkItem?.cancel()
         }
@@ -117,6 +121,8 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
     func configureSurfaceIfNeeded(bridge: any TerminalEngine, surfaceID: SurfaceID) {
         guard self.surfaceID != surfaceID else { return }
         clearComposition(forceEngineClear: true, discardInputContext: true)
+        pasteDeliveryTask?.cancel()
+        pasteDeliveryCoordinator.cancelAll()
         synchronizedOutputFlushWorkItem?.cancel()
         synchronizedOutputFlushWorkItem = nil
         synchronizedOutputGate.reset()
@@ -520,9 +526,13 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
                 guard let self, let bridge else { return }
                 switch self.clipboardService.readTerminalPastePayload() {
                 case .text(let text):
-                    bridge.sendText(CocxyCoreView.normalizedTerminalPasteText(text), to: surfaceID)
+                    self.deliverTerminalPaste(text, bridge: bridge, surfaceID: surfaceID)
                 case .fileURLs(let urls):
-                    bridge.sendText(FileDropPathFormatter.format(urls), to: surfaceID)
+                    self.deliverTerminalPaste(
+                        FileDropPathFormatter.format(urls),
+                        bridge: bridge,
+                        surfaceID: surfaceID
+                    )
                 case nil:
                     break
                 }
@@ -533,6 +543,37 @@ final class PTYDaemonHostView: NSView, TerminalHostingView {
             localizer: localizer
         )
         NSMenu.popUpContextMenu(menu, with: event, for: self)
+    }
+
+    func deliverTerminalPaste(_ text: String) {
+        guard let bridge, let surfaceID else { return }
+        deliverTerminalPaste(text, bridge: bridge, surfaceID: surfaceID)
+    }
+
+    private func deliverTerminalPaste(
+        _ text: String,
+        bridge: any TerminalEngine,
+        surfaceID: SurfaceID
+    ) {
+        let frame = latestFrame
+        let configuration = TerminalPasteDeliveryConfiguration(
+            usesBracketedPaste: frame?.bracketedPasteMode == true,
+            agentPaced: frame?.isAltScreen == true || (frame?.mouseTrackingMode ?? 0) > 0
+        )
+        pasteDeliveryTask = Task { @MainActor [weak self, weak bridge] in
+            guard let self, let bridge else { return }
+            _ = await self.pasteDeliveryCoordinator.deliver(
+                text,
+                to: surfaceID,
+                configuration: configuration,
+                isAvailable: { [weak self, weak bridge] in
+                    self?.surfaceID == surfaceID && bridge != nil
+                },
+                sendText: { [weak bridge] chunk in
+                    bridge?.sendText(chunk, to: surfaceID) == true
+                }
+            )
+        }
     }
 
     @objc func copy(_ sender: Any?) {

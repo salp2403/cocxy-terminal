@@ -11,6 +11,7 @@ struct MobileMirrorProjectSnapshot: Codable, Equatable, Sendable, Identifiable {
 }
 
 enum MobileMirrorTerminalControl {
+    static let maximumPasteUTF8Bytes = 1 * 1_024 * 1_024
     static let supportedKeys: Set<String> = [
         "backspace", "down", "enter", "escape", "left", "right", "tab", "up",
     ]
@@ -245,6 +246,14 @@ struct MobileMirrorAction: Codable, Equatable, Sendable {
                       MobileMirrorTerminalControl.supportedKeys.contains($0.lowercased())
                   } ?? true),
                   text?.utf8.count ?? 0 <= 8_192 else {
+                throw MobileMirrorError.invalidAction
+            }
+        case "paste":
+            guard key == nil, mouseAction == nil,
+                  row == nil, col == nil, button == nil, scrollDelta == nil,
+                  let text, !text.isEmpty,
+                  text.utf8.count <= MobileMirrorTerminalControl.maximumPasteUTF8Bytes,
+                  !shift, !alt, !ctrl else {
                 throw MobileMirrorError.invalidAction
             }
         case "viewport-scroll":

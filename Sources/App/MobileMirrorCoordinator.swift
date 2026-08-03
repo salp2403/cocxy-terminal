@@ -43,6 +43,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     let auditLog: RelayAuditLog
     let authority: MobileMirrorPairingAuthority
     let routeRegistry = MobileMirrorRouteRegistry()
+    let terminalPasteDeliveryCoordinator = TerminalPasteDeliveryCoordinator()
     let projectService: any MobileMirrorProjectCreating
     let tunnelController: MobileMirrorSSHTunnelController
     var projectRecordsSnapshot: [ProjectRecord]
@@ -497,9 +498,31 @@ final class MobileMirrorCoordinator: ObservableObject {
                             )
                         }
                         return engine.sendKeyEvent(event, to: surfaceID)
+                    },
+                    pasteConfiguration: {
+                        let agentPaced = target.controller.surfaceLooksLikeActiveAgent(surfaceID)
+                        guard let bridge = engine as? CocxyCoreBridge,
+                              let diagnostics = bridge.modeDiagnostics(for: surfaceID) else {
+                            return TerminalPasteDeliveryConfiguration(
+                                usesBracketedPaste: false,
+                                agentPaced: true
+                            )
+                        }
+                        return TerminalPasteDeliveryConfiguration(
+                            usesBracketedPaste: diagnostics.bracketedPasteMode,
+                            agentPaced: agentPaced
+                                || diagnostics.altScreen
+                                || diagnostics.mouseTrackingMode > 0
+                        )
+                    },
+                    isAvailable: {
+                        target.controller.tabID(for: surfaceID) != nil
+                            && ((engine as? CocxyCoreBridge)?.surfaceState(for: surfaceID) != nil
+                                || !(engine is CocxyCoreBridge))
                     }
                 )
-            }
+            },
+            pasteDeliveryCoordinator: terminalPasteDeliveryCoordinator
         )
     }
 

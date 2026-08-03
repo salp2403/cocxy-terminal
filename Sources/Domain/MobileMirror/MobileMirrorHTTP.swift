@@ -13,7 +13,7 @@ enum MobileMirrorHTTPError: Error, Equatable {
 
 struct MobileMirrorHTTPRequest: Equatable, Sendable {
     static let maximumHeaderBytes = 32 * 1_024
-    static let maximumBodyBytes = 64 * 1_024
+    static let maximumBodyBytes = 2 * 1_024 * 1_024 + 16 * 1_024
 
     let method: String
     let target: String

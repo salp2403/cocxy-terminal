@@ -8,6 +8,78 @@ import Testing
 @Suite("Mobile mirror privileged terminal writes")
 @MainActor
 struct MobileMirrorTerminalWriterSwiftTestingTests {
+    @Test("one MiB paste uses a digest-bound grant and bracketed delivery")
+    func largePasteUsesSafeAuthorizedDelivery() async throws {
+        let tabID = TabID()
+        let surfaceID = SurfaceID()
+        let channelID = UUID()
+        let identity = MobileMirrorTerminalAuthorizationIdentity()
+        let capture = MobileMirrorTerminalWriteCapture()
+        let context = SocketPrivilegedCommandContext(
+            scope: .terminalSurface,
+            windowControllerIdentifier: ObjectIdentifier(identity),
+            tabID: tabID.rawValue,
+            workingDirectory: "/tmp",
+            surfaceID: surfaceID.rawValue,
+            browserViewModelIdentifier: nil,
+            browserTabID: nil,
+            browserURL: nil,
+            targetDisplayName: "Paired terminal"
+        )
+        let active = MobileMirrorActivePairing(
+            channelID: channelID,
+            identity: MobileMirrorClientIdentity(remoteAddress: "127.0.0.1", userAgent: "Phone"),
+            pairedAt: Date(),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        let timing = TerminalPasteDeliveryTiming(
+            standardChunkMaxUTF8Bytes: 64 * 1_024,
+            agentChunkMaxUTF8Bytes: 64 * 1_024,
+            standardDelayNanoseconds: 0,
+            agentDelayNanoseconds: 0
+        )
+        let writer = MobileMirrorTerminalWriter(
+            grantProvider: { request in
+                capture.requests.append(request)
+                return MobileMirrorPrivilegedAuthorization.grant(
+                    for: request,
+                    channelID: channelID,
+                    activePairing: active,
+                    tabID: tabID,
+                    context: context
+                )
+            },
+            targetProvider: { _ in capture.pasteTarget },
+            pasteDeliveryCoordinator: TerminalPasteDeliveryCoordinator(timing: timing)
+        )
+        let payload = String(
+            repeating: "p",
+            count: MobileMirrorTerminalControl.maximumPasteUTF8Bytes
+        )
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "paste",
+            text: payload
+        )
+
+        try await writer.write(action: action, to: tabID, surfaceID: surfaceID)
+
+        let request = try #require(capture.requests.first)
+        #expect(request.params["text"] == nil)
+        #expect(request.params["pasteByteCount"] == String(payload.utf8.count))
+        #expect(request.params["pasteDigest"] == MobileMirrorPairingAuthority.digest(Data(payload.utf8)))
+        #expect(capture.texts.first?.hasPrefix(TerminalPasteDelivery.bracketedPasteStart) == true)
+        #expect(capture.texts.last == TerminalPasteDelivery.bracketedPasteEnd)
+        let delivered = capture.texts.enumerated().map { index, chunk in
+            if index == 0 { return String(chunk.dropFirst(TerminalPasteDelivery.bracketedPasteStart.count)) }
+            if index == capture.texts.count - 1 { return "" }
+            return chunk
+        }.joined()
+        #expect(delivered == payload)
+        _ = identity
+    }
+
     @Test("terminal writer reaches the target through the real paired-session authority")
     func writerUsesRealAuthorityEndToEnd() async throws {
         let tabID = TabID()
@@ -247,6 +319,22 @@ private final class MobileMirrorTerminalWriteCapture {
                 self?.keyCodes.append(event.keyCode)
                 self?.modifierValues.append(event.modifiers.rawValue)
                 return self?.deliversKeyEvent == true
+            }
+        )
+    }
+
+    var pasteTarget: MobileMirrorTerminalTarget {
+        MobileMirrorTerminalTarget(
+            sendText: { [weak self] text in
+                self?.texts.append(text)
+                return self?.deliversText == true
+            },
+            sendKeyEvent: { _ in false },
+            pasteConfiguration: {
+                TerminalPasteDeliveryConfiguration(
+                    usesBracketedPaste: true,
+                    agentPaced: false
+                )
             }
         )
     }

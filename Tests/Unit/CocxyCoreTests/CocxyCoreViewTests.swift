@@ -837,6 +837,7 @@ struct CocxyCoreViewTests {
         harness.bridge.setOutputHandler(for: harness.surfaceID) { data in
             output.data.append(data)
         }
+        try await awaitRawPTYReady(at: rawCat.readyFileURL, output: output)
 
         let firstPayload = String(repeating: "first-paste-line\n", count: 2_600)
         harness.view.clipboardService = RecordingClipboardService(readText: firstPayload)

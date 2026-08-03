@@ -122,6 +122,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
             mouseTrackingMode: 2,
             mouseEncodingMode: 3,
             isAltScreen: true,
+            bracketedPasteMode: true,
             alternateScrollMode: false,
             synchronizedOutput: true,
             detectedContents: [
@@ -205,6 +206,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         legacyObject.removeValue(forKey: "wrappedRows")
         legacyObject.removeValue(forKey: "mouseEncodingMode")
         legacyObject.removeValue(forKey: "isAltScreen")
+        legacyObject.removeValue(forKey: "bracketedPasteMode")
         legacyObject.removeValue(forKey: "alternateScrollMode")
         legacyObject.removeValue(forKey: "synchronizedOutput")
         legacyObject.removeValue(forKey: "detectedContents")
@@ -217,6 +219,7 @@ struct PTYDaemonProtocolSwiftTestingTests {
         #expect(decoded.mouseTrackingMode == 6)
         #expect(decoded.mouseEncodingMode == nil)
         #expect(decoded.isAltScreen == false)
+        #expect(decoded.bracketedPasteMode == false)
         #expect(decoded.alternateScrollMode == true)
         #expect(decoded.synchronizedOutput == false)
         #expect(decoded.detectedContents.isEmpty)

@@ -135,6 +135,33 @@ struct MobileMirrorSecuritySwiftTestingTests {
         }
     }
 
+    @Test("HTTP parser preserves an exact one MiB terminal paste body")
+    func HTTPParserPreservesMaximumPaste() throws {
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "paste",
+            text: String(
+                repeating: "é",
+                count: MobileMirrorTerminalControl.maximumPasteUTF8Bytes / 2
+            )
+        )
+        let body = try JSONEncoder().encode(action)
+        var request = Data((
+            "POST /mobile/api/action HTTP/1.1\r\n"
+                + "Host: local\r\n"
+                + "Content-Type: application/json\r\n"
+                + "Content-Length: \(body.count)\r\n\r\n"
+        ).utf8)
+        request.append(body)
+
+        let parsed = try #require(try MobileMirrorHTTPRequest.parseIfComplete(request))
+        let decoded = try JSONDecoder().decode(MobileMirrorAction.self, from: parsed.body)
+
+        #expect(decoded.controlType == "paste")
+        #expect(decoded.text?.utf8.count == MobileMirrorTerminalControl.maximumPasteUTF8Bytes)
+    }
+
     @Test("terminal action permits bounded viewport scroll but rejects browser mouse controls")
     func terminalActionValidatesViewportNavigation() throws {
         let action = MobileMirrorAction(
@@ -166,6 +193,23 @@ struct MobileMirrorSecuritySwiftTestingTests {
         )
         #expect(throws: MobileMirrorError.invalidAction) {
             try unboundedScroll.validate()
+        }
+
+        let paste = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "paste",
+            text: String(repeating: "p", count: MobileMirrorTerminalControl.maximumPasteUTF8Bytes)
+        )
+        try paste.validate()
+        let oversizedPaste = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            controlType: "paste",
+            text: paste.text! + "x"
+        )
+        #expect(throws: MobileMirrorError.invalidAction) {
+            try oversizedPaste.validate()
         }
 
         let ambiguous = MobileMirrorAction(
