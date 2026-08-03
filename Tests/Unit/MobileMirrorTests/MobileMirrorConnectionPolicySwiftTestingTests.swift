@@ -1,0 +1,101 @@
+// Copyright (c) 2026 Said Arturo Lopez. MIT License.
+
+import Foundation
+import Testing
+@testable import CocxyTerminal
+
+@Suite("Mobile mirror connection policy")
+struct MobileMirrorConnectionPolicySwiftTestingTests {
+    @Test("admission is bounded independently by origin and active count")
+    func admissionIsBoundedByOrigin() {
+        var policy = MobileMirrorConnectionPolicy(limits: MobileMirrorConnectionLimits(
+            maximumTotal: 2,
+            maximumPerAddress: 1,
+            maximumStartsPerWindow: 4,
+            rateWindow: 10
+        ))
+
+        #expect(policy.admit(address: "127.0.0.1", now: 100) == .accepted)
+        #expect(policy.admit(address: "127.0.0.1", now: 101) == .tooManyConnections)
+        #expect(policy.admit(address: "127.0.0.2", now: 101) == .accepted)
+        #expect(policy.admit(address: "127.0.0.3", now: 101) == .tooManyConnections)
+
+        policy.release(address: "127.0.0.1")
+        #expect(policy.admit(address: "127.0.0.3", now: 102) == .accepted)
+    }
+
+    @Test("rate window expires using the injected monotonic time")
+    func rateWindowExpiresDeterministically() {
+        var policy = MobileMirrorConnectionPolicy(limits: MobileMirrorConnectionLimits(
+            maximumTotal: 4,
+            maximumPerAddress: 4,
+            maximumStartsPerWindow: 2,
+            rateWindow: 10
+        ))
+
+        #expect(policy.admit(address: "phone", now: 20) == .accepted)
+        policy.release(address: "phone")
+        #expect(policy.admit(address: "phone", now: 21) == .accepted)
+        policy.release(address: "phone")
+        #expect(policy.admit(address: "phone", now: 29.99) == .rateLimited)
+        #expect(policy.admit(address: "phone", now: 30.01) == .accepted)
+    }
+
+    @Test("absolute deadline never resets after partial progress")
+    func requestDeadlineIsAbsolute() {
+        let deadline = MobileMirrorRequestDeadline(startedAt: 40, timeout: 8)
+
+        #expect(deadline.remainingPollMilliseconds(at: 40) == 8_000)
+        #expect(deadline.remainingPollMilliseconds(at: 47.999) == 1)
+        #expect(deadline.remainingPollMilliseconds(at: 48) == nil)
+        #expect(deadline.remainingPollMilliseconds(at: 60) == nil)
+    }
+}
+
+@Suite("Mobile mirror SSH tunnel", .serialized)
+@MainActor
+struct MobileMirrorSSHTunnelControllerSwiftTestingTests {
+    @Test("remote forward binds phone loopback and closes the exact lease")
+    func opensAndClosesExactRemoteForward() async throws {
+        let profile = RemoteConnectionProfile(
+            name: "Phone",
+            host: "phone.local",
+            user: "mobile"
+        )
+        let profileStore = MockRemoteProfileStore()
+        profileStore.profiles = [profile]
+        let multiplexer = MockSSHMultiplexerDelegate()
+        let tunnelManager = SSHTunnelManager()
+        let connectionManager = RemoteConnectionManager(
+            multiplexer: multiplexer,
+            profileStore: profileStore,
+            tunnelManager: tunnelManager,
+            executor: MockProcessExecutor()
+        )
+        await connectionManager.connect(profile: profile)
+        let controller = MobileMirrorSSHTunnelController(
+            connectionManager: connectionManager,
+            profileStore: profileStore,
+            tunnelManager: tunnelManager,
+            portProvider: { 52_345 }
+        )
+
+        #expect(controller.targets == [MobileMirrorTunnelTarget(
+            id: profile.id,
+            name: "Phone",
+            destination: "mobile@phone.local"
+        )])
+        let lease = try await controller.open(profileID: profile.id, localPort: 41_321)
+
+        #expect(lease.remotePort == 52_345)
+        #expect(multiplexer.forwardedPorts == [
+            .remote(remotePort: 52_345, localPort: 41_321, localHost: "127.0.0.1"),
+        ])
+        #expect(tunnelManager.listTunnels(for: profile.id).count == 1)
+
+        try await controller.close(lease)
+
+        #expect(multiplexer.lifecycleEvents.suffix(2) == ["forward", "cancel"])
+        #expect(tunnelManager.listTunnels(for: profile.id).isEmpty)
+    }
+}

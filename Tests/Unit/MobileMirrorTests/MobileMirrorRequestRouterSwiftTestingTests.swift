@@ -15,7 +15,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let actionRecorder = MobileMirrorActionRecorder()
         let snapshot = MobileMirrorSnapshot.empty
         let router = MobileMirrorRequestRouter(
-            bindAddress: "192.168.1.10",
+            publicAddress: "127.0.0.1",
             authority: authority,
             routeRegistry: routes,
             snapshotProvider: { _ in snapshot },
@@ -27,7 +27,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 await pendingRecorder.record(pending)
             }
         )
-        router.updateGatewayPort(43120)
+        router.updatePublicPort(43120)
         let identity = MobileMirrorClientIdentity(
             remoteAddress: "192.168.1.24",
             userAgent: "Mobile Browser"
@@ -105,7 +105,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             path: "/mobile/api/action",
             headers: [
                 "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "http://192.168.1.10:43120",
+                "origin": "http://127.0.0.1:43120",
                 "content-type": "application/json",
                 "x-cocxy-timestamp": timestamp,
                 "x-cocxy-nonce": nonce,
@@ -136,7 +136,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 path: "/mobile/api/action",
                 headers: [
                     "cookie": "cocxy_mobile=\(cookie)",
-                    "origin": "http://192.168.1.10:43120",
+                    "origin": "http://127.0.0.1:43120",
                     "content-type": "application/json",
                     "x-cocxy-timestamp": terminalTimestamp,
                     "x-cocxy-nonce": terminalNonce,
@@ -164,18 +164,18 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
     func unauthorizedAndInternalRoutesAreRejected() async throws {
         let authority = MobileMirrorPairingAuthority()
         let router = MobileMirrorRequestRouter(
-            bindAddress: "10.0.0.2",
+            publicAddress: "127.0.0.1",
             authority: authority,
             routeRegistry: MobileMirrorRouteRegistry(),
             snapshotProvider: { _ in .empty },
             actionHandler: { _, _, _, _ in .empty },
             pendingPairingHandler: { _ in }
         )
-        router.updateGatewayPort(4444)
+        router.updatePublicPort(4444)
         let identity = MobileMirrorClientIdentity(remoteAddress: "10.0.0.3", userAgent: "Phone")
 
         let unauthorized = await router.route(
-            request: request(path: "/index.html", host: "10.0.0.2:4444"),
+            request: request(path: "/index.html", host: "127.0.0.1:4444"),
             identity: identity
         )
         #expect(try response(from: unauthorized).status == 401)
@@ -193,7 +193,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let internalAsset = await router.route(
             request: request(
                 path: "/tests/render-smoke.html",
-                host: "10.0.0.2:4444",
+                host: "127.0.0.1:4444",
                 headers: ["cookie": "cocxy_mobile=\(cookie)"]
             ),
             identity: identity
@@ -204,7 +204,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
     private func request(
         method: String = "GET",
         path: String,
-        host: String = "192.168.1.10:43120",
+        host: String = "127.0.0.1:43120",
         query: [String: String] = [:],
         headers: [String: String] = [:],
         body: Data = Data()

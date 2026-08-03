@@ -3502,7 +3502,7 @@
 "menu.view.pairPhone" = "Pair Phone...";
 "mobile.mirror.title" = "Pair Phone";
 "mobile.mirror.start" = "Generate Pairing Code";
-"mobile.mirror.security" = "One-use code · local network · 90 seconds";
+"mobile.mirror.security" = "One-use code · encrypted SSH · 90 seconds";
 "mobile.mirror.cancel" = "Cancel pairing";
 "mobile.mirror.qr.accessibility" = "One-use phone pairing code";
 "mobile.mirror.scan" = "Scan with your phone";
@@ -3519,8 +3519,15 @@
 "mobile.mirror.status.stopped" = "Not paired";
 "mobile.mirror.status.offering" = "Pairing code ready";
 "mobile.mirror.status.confirmation" = "Desktop confirmation required";
-"mobile.mirror.status.active" = "Connected locally";
+"mobile.mirror.status.active" = "Connected through SSH";
 "mobile.mirror.status.denied" = "Pairing denied";
+"mobile.mirror.status.starting" = "Opening encrypted phone tunnel";
+"mobile.mirror.transport.label" = "Encrypted Phone Connection";
+"mobile.mirror.transport.profile" = "Phone SSH profile";
+"mobile.mirror.transport.detail" = "The QR opens through the selected SSH session. No LAN listener or external relay is created.";
+"mobile.mirror.transport.unavailable" = "Connect an SSH profile for this phone first.";
+"mobile.mirror.transport.detail.unavailable" = "Pairing is available after Cocxy connects by SSH to the phone. The browser endpoint remains on the phone's loopback interface.";
+"mobile.mirror.transport.open" = "Open Remote Connections";
 "common.choose" = "Choose";
 "common.deny" = "Deny";
 "common.allow" = "Allow";

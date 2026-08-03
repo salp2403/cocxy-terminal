@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// MobileMirrorGateway.swift - Private-LAN HTTP and WebSocket relay.
+// MobileMirrorGateway.swift - Loopback HTTP and WebSocket relay behind SSH.
 
 import Darwin
 import Dispatch
@@ -14,91 +14,12 @@ enum MobileMirrorGatewayError: Error, Equatable, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidBindAddress: return "The mobile mirror requires a private IPv4 address."
+        case .invalidBindAddress: return "The mobile mirror listener must use loopback."
         case .socketCreationFailed(let code): return "Could not create the local listener (\(code))."
         case .bindFailed(let code): return "Could not bind the local listener (\(code))."
         case .listenFailed(let code): return "Could not start the local listener (\(code))."
         case .portUnavailable: return "The local listener did not receive a port."
         }
-    }
-}
-
-final class MobileMirrorEventHub: @unchecked Sendable {
-    private struct Client {
-        let descriptor: Int32
-        let close: @Sendable () -> Void
-    }
-
-    private let lock = NSLock()
-    private var clients: [Int32: Client] = [:]
-    private let heartbeatQueue = DispatchQueue(label: "dev.cocxy.mobile.events")
-    private var heartbeat: DispatchSourceTimer?
-
-    func add(descriptor: Int32, close: @escaping @Sendable () -> Void) {
-        lock.lock()
-        clients[descriptor] = Client(descriptor: descriptor, close: close)
-        let needsHeartbeat = heartbeat == nil
-        lock.unlock()
-        if needsHeartbeat { startHeartbeat() }
-        publish(event: "state", data: "{}")
-    }
-
-    func publish(event: String, data: String) {
-        guard event.utf8.count <= 64,
-              event.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "-" }),
-              data.utf8.count <= 16 * 1_024,
-              !data.contains("\r"),
-              !data.contains("\n") else {
-            return
-        }
-        let payload = Data("event: \(event)\ndata: \(data)\n\n".utf8)
-        heartbeatQueue.async { [weak self] in
-            self?.send(payload)
-        }
-    }
-
-    func stop() {
-        heartbeatQueue.sync {
-            heartbeat?.cancel()
-            heartbeat = nil
-        }
-        let current: [Client]
-        lock.lock()
-        current = Array(clients.values)
-        clients.removeAll()
-        lock.unlock()
-        current.forEach { $0.close() }
-    }
-
-    private func startHeartbeat() {
-        heartbeatQueue.async { [weak self] in
-            guard let self, self.heartbeat == nil else { return }
-            let timer = DispatchSource.makeTimerSource(queue: self.heartbeatQueue)
-            timer.schedule(deadline: .now() + 15, repeating: 15)
-            timer.setEventHandler { [weak self] in
-                self?.send(Data(": keep-alive\n\n".utf8))
-            }
-            self.heartbeat = timer
-            timer.resume()
-        }
-    }
-
-    private func send(_ data: Data) {
-        let current: [Client]
-        lock.lock()
-        current = Array(clients.values)
-        lock.unlock()
-        var failed: [Client] = []
-        for client in current where !MobileMirrorGateway.sendAll(data, to: client.descriptor) {
-            failed.append(client)
-        }
-        guard !failed.isEmpty else { return }
-        lock.lock()
-        for client in failed {
-            clients.removeValue(forKey: client.descriptor)
-        }
-        lock.unlock()
-        failed.forEach { $0.close() }
     }
 }
 
@@ -109,13 +30,16 @@ final class MobileMirrorGateway: @unchecked Sendable {
     ) async -> MobileMirrorHTTPRouteResult
 
     static let maximumConnections = 16
+    static let loopbackAddress = "127.0.0.1"
 
-    let bindAddress: String
+    let bindAddress = MobileMirrorGateway.loopbackAddress
     let eventHub: MobileMirrorEventHub
 
     private let requestedPort: UInt16
     private let routeHandler: RouteHandler
-    private let allowsLoopbackForTesting: Bool
+    private let clientIdentityLabel: String?
+    private let requestTimeout: TimeInterval
+    private let monotonicNow: @Sendable () -> TimeInterval
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.listener")
     private let workerQueue = DispatchQueue(
         label: "dev.cocxy.mobile.connections",
@@ -125,20 +49,27 @@ final class MobileMirrorGateway: @unchecked Sendable {
     private let stateLock = NSLock()
     private var listenerDescriptor: Int32 = -1
     private var listenerSource: DispatchSourceRead?
-    private var clientDescriptors: Set<Int32> = []
+    private var clientDescriptors: [Int32: String] = [:]
+    private var connectionPolicy: MobileMirrorConnectionPolicy
     private(set) var port: UInt16?
 
     init(
-        bindAddress: String,
         requestedPort: UInt16 = 0,
         eventHub: MobileMirrorEventHub = MobileMirrorEventHub(),
-        allowsLoopbackForTesting: Bool = false,
+        clientIdentityLabel: String? = nil,
+        requestTimeout: TimeInterval = 8,
+        connectionLimits: MobileMirrorConnectionLimits = .default,
+        monotonicNow: @escaping @Sendable () -> TimeInterval = {
+            ProcessInfo.processInfo.systemUptime
+        },
         routeHandler: @escaping RouteHandler
     ) {
-        self.bindAddress = bindAddress
         self.requestedPort = requestedPort
         self.eventHub = eventHub
-        self.allowsLoopbackForTesting = allowsLoopbackForTesting
+        self.clientIdentityLabel = clientIdentityLabel
+        self.requestTimeout = max(0.05, requestTimeout)
+        self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
+        self.monotonicNow = monotonicNow
         self.routeHandler = routeHandler
     }
 
@@ -147,11 +78,6 @@ final class MobileMirrorGateway: @unchecked Sendable {
         stateLock.lock()
         defer { stateLock.unlock() }
         if let port { return port }
-        guard Self.isPrivateIPv4(bindAddress)
-                || (allowsLoopbackForTesting && bindAddress == "127.0.0.1") else {
-            throw MobileMirrorGatewayError.invalidBindAddress
-        }
-
         let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
         guard descriptor >= 0 else {
             throw MobileMirrorGatewayError.socketCreationFailed(errno)
@@ -213,63 +139,12 @@ final class MobileMirrorGateway: @unchecked Sendable {
         listenerSource = nil
         listenerDescriptor = -1
         port = nil
-        for descriptor in clientDescriptors {
+        for descriptor in clientDescriptors.keys {
             Darwin.shutdown(descriptor, SHUT_RDWR)
         }
         stateLock.unlock()
         source?.cancel()
         eventHub.stop()
-    }
-
-    static func privateIPv4Addresses() -> [String] {
-        var list: UnsafeMutablePointer<ifaddrs>?
-        guard getifaddrs(&list) == 0, let first = list else { return [] }
-        defer { freeifaddrs(list) }
-        var candidates: [(name: String, address: String)] = []
-        var pointer: UnsafeMutablePointer<ifaddrs>? = first
-        while let current = pointer {
-            let interface = current.pointee
-            let flags = Int32(interface.ifa_flags)
-            if let address = interface.ifa_addr,
-               address.pointee.sa_family == UInt8(AF_INET),
-               flags & IFF_UP != 0,
-               flags & IFF_RUNNING != 0,
-               flags & IFF_LOOPBACK == 0 {
-                var host = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                let result = getnameinfo(
-                    address,
-                    socklen_t(address.pointee.sa_len),
-                    &host,
-                    socklen_t(host.count),
-                    nil,
-                    0,
-                    NI_NUMERICHOST
-                )
-                if result == 0 {
-                    let value = String(cString: host)
-                    if isPrivateIPv4(value) {
-                        candidates.append((String(cString: interface.ifa_name), value))
-                    }
-                }
-            }
-            pointer = interface.ifa_next
-        }
-        return Array(Set(candidates.map(\.address))).sorted { lhs, rhs in
-            let lhsName = candidates.first { $0.address == lhs }?.name ?? ""
-            let rhsName = candidates.first { $0.address == rhs }?.name ?? ""
-            let lhsRank = lhsName == "en0" ? 0 : (lhsName.hasPrefix("en") ? 1 : 2)
-            let rhsRank = rhsName == "en0" ? 0 : (rhsName.hasPrefix("en") ? 1 : 2)
-            return lhsRank == rhsRank ? lhs < rhs : lhsRank < rhsRank
-        }
-    }
-
-    static func isPrivateIPv4(_ value: String) -> Bool {
-        let parts = value.split(separator: ".").compactMap { UInt8($0) }
-        guard parts.count == 4 else { return false }
-        return parts[0] == 10
-            || (parts[0] == 172 && (16...31).contains(parts[1]))
-            || (parts[0] == 192 && parts[1] == 168)
-            || (parts[0] == 169 && parts[1] == 254)
     }
 
     private func acceptAvailableConnections() {
@@ -286,15 +161,28 @@ final class MobileMirrorGateway: @unchecked Sendable {
                 return
             }
             configureClientSocket(descriptor)
+            let remoteAddress = Self.numericAddress(remote) ?? "unknown"
             stateLock.lock()
-            let canAccept = clientDescriptors.count < Self.maximumConnections
-            if canAccept { clientDescriptors.insert(descriptor) }
+            let decision = connectionPolicy.admit(
+                address: remoteAddress,
+                now: monotonicNow()
+            )
+            if decision == .accepted {
+                clientDescriptors[descriptor] = remoteAddress
+            }
             stateLock.unlock()
-            guard canAccept else {
+            guard decision == .accepted else {
+                _ = Self.sendAll(
+                    MobileMirrorHTTPResponse.error(
+                        "Too many local requests.",
+                        status: 429
+                    ).encoded(),
+                    to: descriptor
+                )
+                Darwin.shutdown(descriptor, SHUT_RDWR)
                 Darwin.close(descriptor)
                 continue
             }
-            let remoteAddress = Self.numericAddress(remote) ?? "local-network"
             workerQueue.async { [weak self] in
                 self?.readRequest(from: descriptor, remoteAddress: remoteAddress)
             }
@@ -308,18 +196,21 @@ final class MobileMirrorGateway: @unchecked Sendable {
         let flags = fcntl(descriptor, F_GETFL)
         if flags >= 0 { _ = fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) }
         var timeout = timeval(tv_sec: 8, tv_usec: 0)
-        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
         setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
     }
 
     private func readRequest(from descriptor: Int32, remoteAddress: String) {
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 8 * 1_024)
+        let deadline = MobileMirrorRequestDeadline(
+            startedAt: monotonicNow(),
+            timeout: requestTimeout
+        )
         do {
             while true {
                 if let request = try MobileMirrorHTTPRequest.parseIfComplete(data) {
                     let identity = MobileMirrorClientIdentity(
-                        remoteAddress: remoteAddress,
+                        remoteAddress: clientIdentityLabel ?? remoteAddress,
                         userAgent: request.userAgent
                     )
                     Task { [weak self] in
@@ -330,6 +221,15 @@ final class MobileMirrorGateway: @unchecked Sendable {
                         }
                     }
                     return
+                }
+                guard let timeout = deadline.remainingPollMilliseconds(at: monotonicNow()) else {
+                    throw MobileMirrorHTTPError.malformedRequest
+                }
+                var descriptorPoll = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+                let pollResult = Darwin.poll(&descriptorPoll, 1, timeout)
+                if pollResult < 0, errno == EINTR { continue }
+                guard pollResult > 0, descriptorPoll.revents & Int16(POLLIN) != 0 else {
+                    throw MobileMirrorHTTPError.malformedRequest
                 }
                 let count = Darwin.recv(descriptor, &buffer, buffer.count, 0)
                 if count < 0, errno == EINTR { continue }
@@ -453,9 +353,12 @@ final class MobileMirrorGateway: @unchecked Sendable {
 
     private func finish(_ descriptor: Int32) {
         stateLock.lock()
-        let owned = clientDescriptors.remove(descriptor) != nil
+        let remoteAddress = clientDescriptors.removeValue(forKey: descriptor)
+        if let remoteAddress {
+            connectionPolicy.release(address: remoteAddress)
+        }
         stateLock.unlock()
-        guard owned else { return }
+        guard remoteAddress != nil else { return }
         Darwin.shutdown(descriptor, SHUT_RDWR)
         Darwin.close(descriptor)
     }

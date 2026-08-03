@@ -268,6 +268,9 @@ extension MobileMirrorCoordinator {
     }
 
     func stopTransport(revoke: Bool, logRevocation: Bool = true) {
+        transportGeneration &+= 1
+        pairingTask?.cancel()
+        pairingTask = nil
         expiryTask?.cancel()
         expiryTask = nil
         refreshTimer?.invalidate()
@@ -284,6 +287,14 @@ extension MobileMirrorCoordinator {
         gateway?.stop()
         gateway = nil
         router = nil
+        if let lease = tunnelLease {
+            let priorClosure = tunnelClosureTask
+            tunnelClosureTask = Task { [tunnelController] in
+                await priorClosure?.value
+                try? await tunnelController.close(lease)
+            }
+        }
+        tunnelLease = nil
         for stream in ownedStreams.values { stopOwnedStream(stream) }
         ownedStreams.removeAll()
         routeRegistry.replace(routes: [], preferredSessionID: nil)

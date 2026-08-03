@@ -18,7 +18,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     let authority: MobileMirrorPairingAuthority
     let routeRegistry: MobileMirrorRouteRegistry
 
-    private let bindAddress: String
+    private let publicAddress: String
     private let snapshotProvider: SnapshotProvider
     private let actionHandler: ActionHandler
     private let pendingPairingHandler: PendingPairingHandler
@@ -26,14 +26,14 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     private var gatewayPort: UInt16?
 
     init(
-        bindAddress: String,
+        publicAddress: String,
         authority: MobileMirrorPairingAuthority,
         routeRegistry: MobileMirrorRouteRegistry,
         snapshotProvider: @escaping SnapshotProvider,
         actionHandler: @escaping ActionHandler,
         pendingPairingHandler: @escaping PendingPairingHandler
     ) {
-        self.bindAddress = bindAddress
+        self.publicAddress = publicAddress
         self.authority = authority
         self.routeRegistry = routeRegistry
         self.snapshotProvider = snapshotProvider
@@ -41,7 +41,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         self.pendingPairingHandler = pendingPairingHandler
     }
 
-    func updateGatewayPort(_ port: UInt16) {
+    func updatePublicPort(_ port: UInt16) {
         endpointLock.lock()
         gatewayPort = port
         endpointLock.unlock()
@@ -50,7 +50,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     var baseURL: String? {
         endpointLock.lock()
         defer { endpointLock.unlock() }
-        return gatewayPort.map { "http://\(bindAddress):\($0)" }
+        return gatewayPort.map { "http://\(publicAddress):\($0)" }
     }
 
     func route(

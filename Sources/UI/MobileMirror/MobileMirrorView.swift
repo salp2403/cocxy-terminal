@@ -14,6 +14,7 @@ struct MobileMirrorView: View {
             Divider()
             ScrollView {
                 VStack(spacing: 18) {
+                    transportSection
                     statusSection
                     pairingSection
                     projectSection
@@ -53,15 +54,54 @@ struct MobileMirrorView: View {
     private var statusSection: some View {
         switch coordinator.state {
         case .stopped, .denied, .unavailable, .failed:
-            Button(action: coordinator.startPairing) {
-                Label(
-                    localizer.string("mobile.mirror.start", fallback: "Generate Pairing Code"),
-                    systemImage: "qrcode"
-                )
-                .frame(maxWidth: .infinity)
+            if coordinator.tunnelTargets.isEmpty {
+                VStack(spacing: 10) {
+                    Label(
+                        localizer.string(
+                            "mobile.mirror.transport.unavailable",
+                            fallback: "Connect an SSH profile for this phone first."
+                        ),
+                        systemImage: "lock.trianglebadge.exclamationmark"
+                    )
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    Button(action: coordinator.openRemoteWorkspaceSetup) {
+                        Label(
+                            localizer.string(
+                                "mobile.mirror.transport.open",
+                                fallback: "Open Remote Connections"
+                            ),
+                            systemImage: "network"
+                        )
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                }
+            } else {
+                Button(action: coordinator.startPairing) {
+                    Label(
+                        localizer.string("mobile.mirror.start", fallback: "Generate Pairing Code"),
+                        systemImage: "qrcode"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+        case .starting:
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text(localizer.string(
+                    "mobile.mirror.status.starting",
+                    fallback: "Opening encrypted phone tunnel"
+                ))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
         case .offering:
             pairingCode
         case .awaitingConfirmation:
@@ -79,7 +119,7 @@ struct MobileMirrorView: View {
                     .foregroundStyle(.green)
                 Text(localizer.string(
                     "mobile.mirror.security",
-                    fallback: "One-use code - local network - 90 seconds"
+                    fallback: "One-use code - encrypted SSH - 90 seconds"
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -91,6 +131,53 @@ struct MobileMirrorView: View {
                 .help(localizer.string("mobile.mirror.cancel", fallback: "Cancel pairing"))
             }
         }
+    }
+
+    private var transportSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(
+                localizer.string(
+                    "mobile.mirror.transport.label",
+                    fallback: "Encrypted Phone Connection"
+                ),
+                systemImage: "lock.shield"
+            )
+            .font(.subheadline.weight(.semibold))
+            if coordinator.tunnelTargets.isEmpty {
+                Text(localizer.string(
+                    "mobile.mirror.transport.detail.unavailable",
+                    fallback: "Pairing is available after Cocxy connects by SSH to the phone. The browser endpoint remains on the phone's loopback interface."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Picker(
+                    localizer.string(
+                        "mobile.mirror.transport.profile",
+                        fallback: "Phone SSH profile"
+                    ),
+                    selection: $coordinator.selectedTunnelTargetID
+                ) {
+                    ForEach(coordinator.tunnelTargets) { target in
+                        Text("\(target.name) - \(target.destination)")
+                            .tag(Optional(target.id))
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled(!canChangeTunnelTarget)
+                Text(localizer.string(
+                    "mobile.mirror.transport.detail",
+                    fallback: "The QR opens through the selected SSH session. No LAN listener or external relay is created."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(16)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 
     private var pairingCode: some View {
@@ -250,10 +337,19 @@ struct MobileMirrorView: View {
             .accessibilityHidden(true)
     }
 
+    private var canChangeTunnelTarget: Bool {
+        switch coordinator.state {
+        case .stopped, .failed, .unavailable, .denied:
+            return true
+        case .starting, .offering, .awaitingConfirmation, .active:
+            return false
+        }
+    }
+
     private var statusColor: Color {
         switch coordinator.state {
         case .active: return .green
-        case .offering, .awaitingConfirmation: return .orange
+        case .starting, .offering, .awaitingConfirmation: return .orange
         case .failed, .unavailable, .denied: return .red
         case .stopped: return .secondary
         }
@@ -263,6 +359,11 @@ struct MobileMirrorView: View {
         switch coordinator.state {
         case .stopped:
             return localizer.string("mobile.mirror.status.stopped", fallback: "Not paired")
+        case .starting:
+            return localizer.string(
+                "mobile.mirror.status.starting",
+                fallback: "Opening encrypted phone tunnel"
+            )
         case .offering:
             return localizer.string("mobile.mirror.status.offering", fallback: "Pairing code ready")
         case .awaitingConfirmation:
@@ -271,7 +372,7 @@ struct MobileMirrorView: View {
                 fallback: "Desktop confirmation required"
             )
         case .active:
-            return localizer.string("mobile.mirror.status.active", fallback: "Connected locally")
+            return localizer.string("mobile.mirror.status.active", fallback: "Connected through SSH")
         case .denied:
             return localizer.string("mobile.mirror.status.denied", fallback: "Pairing denied")
         case .unavailable(let message), .failed(let message):

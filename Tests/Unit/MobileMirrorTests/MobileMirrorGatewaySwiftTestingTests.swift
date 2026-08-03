@@ -7,11 +7,35 @@ import Testing
 
 @Suite("Mobile mirror gateway")
 struct MobileMirrorGatewaySwiftTestingTests {
+    @Test("one stalled event client cannot delay another client")
+    func eventClientsAreIsolated() {
+        let slowStarted = DispatchSemaphore(value: 0)
+        let releaseSlow = DispatchSemaphore(value: 0)
+        let fastReceived = DispatchSemaphore(value: 0)
+        let hub = MobileMirrorEventHub { _, descriptor in
+            if descriptor == 41 {
+                slowStarted.signal()
+                return releaseSlow.wait(timeout: .now() + 2) == .success
+            }
+            fastReceived.signal()
+            return true
+        }
+        defer {
+            releaseSlow.signal()
+            hub.stop()
+        }
+
+        hub.add(descriptor: 41, close: {})
+        #expect(slowStarted.wait(timeout: .now() + 1) == .success)
+        hub.add(descriptor: 42, close: {})
+
+        #expect(fastReceived.wait(timeout: .now() + 1) == .success)
+    }
+
     @Test("listener serves only through its exact requested address")
     func listenerServesExactAddress() async throws {
         let gateway = MobileMirrorGateway(
-            bindAddress: "127.0.0.1",
-            allowsLoopbackForTesting: true
+            requestedPort: 0
         ) { request, identity in
             #expect(request.path == "/health")
             #expect(identity.remoteAddress == "127.0.0.1")
@@ -19,6 +43,7 @@ struct MobileMirrorGatewaySwiftTestingTests {
         }
         let port = try gateway.start()
         defer { gateway.stop() }
+        #expect(gateway.bindAddress == "127.0.0.1")
 
         let (data, response) = try await URLSession.shared.data(
             from: try #require(URL(string: "http://127.0.0.1:\(port)/health"))
@@ -32,8 +57,7 @@ struct MobileMirrorGatewaySwiftTestingTests {
         let upstream = try MobileMirrorCaptureServer()
         defer { upstream.stop() }
         let gateway = MobileMirrorGateway(
-            bindAddress: "127.0.0.1",
-            allowsLoopbackForTesting: true
+            requestedPort: 0
         ) { _, _ in
             .proxy(MobileMirrorProxyTarget(
                 port: upstream.port,

@@ -3502,7 +3502,7 @@
 "menu.view.pairPhone" = "Emparejar teléfono...";
 "mobile.mirror.title" = "Emparejar teléfono";
 "mobile.mirror.start" = "Generar código de emparejamiento";
-"mobile.mirror.security" = "Código de un uso · red local · 90 segundos";
+"mobile.mirror.security" = "Código de un uso · SSH cifrado · 90 segundos";
 "mobile.mirror.cancel" = "Cancelar emparejamiento";
 "mobile.mirror.qr.accessibility" = "Código de un uso para emparejar el teléfono";
 "mobile.mirror.scan" = "Escanéalo con tu teléfono";
@@ -3519,8 +3519,15 @@
 "mobile.mirror.status.stopped" = "Sin emparejar";
 "mobile.mirror.status.offering" = "Código de emparejamiento listo";
 "mobile.mirror.status.confirmation" = "Se requiere confirmación en esta Mac";
-"mobile.mirror.status.active" = "Conectado localmente";
+"mobile.mirror.status.active" = "Conectado mediante SSH";
 "mobile.mirror.status.denied" = "Emparejamiento denegado";
+"mobile.mirror.status.starting" = "Abriendo túnel cifrado al teléfono";
+"mobile.mirror.transport.label" = "Conexión cifrada al teléfono";
+"mobile.mirror.transport.profile" = "Perfil SSH del teléfono";
+"mobile.mirror.transport.detail" = "El QR se abre mediante la sesión SSH seleccionada. No se crea un listener en la LAN ni un relay externo.";
+"mobile.mirror.transport.unavailable" = "Conecta primero un perfil SSH para este teléfono.";
+"mobile.mirror.transport.detail.unavailable" = "El emparejamiento estará disponible cuando Cocxy se conecte por SSH al teléfono. El endpoint del navegador permanece en la interfaz loopback del teléfono.";
+"mobile.mirror.transport.open" = "Abrir conexiones remotas";
 "common.choose" = "Elegir";
 "common.deny" = "Denegar";
 "common.allow" = "Permitir";

@@ -7,6 +7,7 @@ import Foundation
 
 enum MobileMirrorServiceState: Equatable {
     case stopped
+    case starting
     case offering
     case awaitingConfirmation
     case active
@@ -36,6 +37,8 @@ final class MobileMirrorCoordinator: ObservableObject {
     @Published var activePairing: MobileMirrorActivePairing?
     @Published var projectCreationRoot: URL?
     @Published var snapshot: MobileMirrorSnapshot = .empty
+    @Published private(set) var tunnelTargets: [MobileMirrorTunnelTarget] = []
+    @Published var selectedTunnelTargetID: UUID?
 
     weak var appDelegate: AppDelegate?
     let projectRegistry: ProjectRegistry
@@ -46,17 +49,21 @@ final class MobileMirrorCoordinator: ObservableObject {
     let authority: MobileMirrorPairingAuthority
     let routeRegistry = MobileMirrorRouteRegistry()
     let projectService: any MobileMirrorProjectCreating
-    let addressProvider: @Sendable () -> [String]
+    let tunnelController: MobileMirrorSSHTunnelController
     var projectRecordsSnapshot: [ProjectRecord]
     var sessionEntriesSnapshot: [SessionEntry]
     var gateway: MobileMirrorGateway?
     var router: MobileMirrorRequestRouter?
+    var tunnelLease: MobileMirrorTunnelLease?
     var pairingChannelID: UUID?
     var ownedStreams: [String: OwnedStream] = [:]
     var approvalTargets: [String: ApprovalTarget] = [:]
     var cancellables = Set<AnyCancellable>()
     var refreshTimer: Timer?
     var expiryTask: Task<Void, Never>?
+    var pairingTask: Task<Void, Never>?
+    var tunnelClosureTask: Task<Void, Never>?
+    var transportGeneration: UInt64 = 0
 
     init(
         appDelegate: AppDelegate,
@@ -65,11 +72,9 @@ final class MobileMirrorCoordinator: ObservableObject {
         titleStore: AuroraWorkspaceTitleStore,
         sessionRegistry: SessionRegistryImpl,
         auditLog: RelayAuditLog,
+        tunnelController: MobileMirrorSSHTunnelController,
         authority: MobileMirrorPairingAuthority = MobileMirrorPairingAuthority(),
-        projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService(),
-        addressProvider: @escaping @Sendable () -> [String] = {
-            MobileMirrorGateway.privateIPv4Addresses()
-        }
+        projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService()
     ) {
         self.appDelegate = appDelegate
         self.projectRegistry = projectRegistry
@@ -77,23 +82,47 @@ final class MobileMirrorCoordinator: ObservableObject {
         self.titleStore = titleStore
         self.sessionRegistry = sessionRegistry
         self.auditLog = auditLog
+        self.tunnelController = tunnelController
         self.authority = authority
         self.projectService = projectService
-        self.addressProvider = addressProvider
         projectRecordsSnapshot = projectRegistry.records
         sessionEntriesSnapshot = sessionRegistry.allSessions
         subscribeToAppState()
+        subscribeToTunnelTargets()
     }
 
     func startPairing() {
+        let priorPairing = pairingTask
+        priorPairing?.cancel()
+        pairingTask = nil
         stopTransport(revoke: true)
-        guard let bindAddress = addressProvider().first else {
-            state = .unavailable(MobileMirrorError.noPrivateNetwork.localizedDescription)
+        guard let targetID = selectedTunnelTargetID,
+              let target = tunnelTargets.first(where: { $0.id == targetID }) else {
+            state = .unavailable(MobileMirrorTunnelError.noConnectedTarget.localizedDescription)
             return
         }
+        transportGeneration &+= 1
+        let generation = transportGeneration
+        let pendingClosure = tunnelClosureTask
+        state = .starting
+        pairingTask = Task { [weak self] in
+            await priorPairing?.value
+            await pendingClosure?.value
+            guard !Task.isCancelled else { return }
+            await self?.openPairingTransport(
+                target: target,
+                generation: generation
+            )
+        }
+    }
 
+    private func openPairingTransport(
+        target: MobileMirrorTunnelTarget,
+        generation: UInt64
+    ) async {
+        let publicAddress = "127.0.0.1"
         let router = MobileMirrorRequestRouter(
-            bindAddress: bindAddress,
+            publicAddress: publicAddress,
             authority: authority,
             routeRegistry: routeRegistry,
             snapshotProvider: { [weak self] cookie in
@@ -113,7 +142,9 @@ final class MobileMirrorCoordinator: ObservableObject {
                 await self?.receivePendingPairing(pending)
             }
         )
-        let gateway = MobileMirrorGateway(bindAddress: bindAddress) { [weak router] request, identity in
+        let gateway = MobileMirrorGateway(
+            clientIdentityLabel: "SSH \(target.destination)"
+        ) { [weak router] request, identity in
             guard let router else {
                 return .response(.error("Mobile mirror is unavailable.", status: 503))
             }
@@ -121,15 +152,28 @@ final class MobileMirrorCoordinator: ObservableObject {
         }
 
         do {
-            let port = try gateway.start()
-            router.updateGatewayPort(port)
-            let offer = authority.makeOffer()
-            guard let url = URL(string: "http://\(bindAddress):\(port)/pair?token=\(offer.token)") else {
+            let localPort = try gateway.start()
+            let lease = try await tunnelController.open(
+                profileID: target.id,
+                localPort: localPort
+            )
+            guard !Task.isCancelled, generation == transportGeneration else {
                 gateway.stop()
+                try? await tunnelController.close(lease)
+                return
+            }
+            router.updatePublicPort(lease.remotePort)
+            let offer = authority.makeOffer()
+            guard let url = URL(
+                string: "http://\(publicAddress):\(lease.remotePort)/pair?token=\(offer.token)"
+            ) else {
+                gateway.stop()
+                try? await tunnelController.close(lease)
                 throw MobileMirrorError.unavailable
             }
             self.router = router
             self.gateway = gateway
+            tunnelLease = lease
             pairingURL = url
             pendingPairing = nil
             activePairing = nil
@@ -139,6 +183,7 @@ final class MobileMirrorCoordinator: ObservableObject {
             scheduleOfferExpiry(offer)
         } catch {
             gateway.stop()
+            guard generation == transportGeneration else { return }
             state = .failed(error.localizedDescription)
         }
     }
@@ -190,11 +235,15 @@ final class MobileMirrorCoordinator: ObservableObject {
     }
 
     func revoke() {
+        pairingTask?.cancel()
+        pairingTask = nil
         stopTransport(revoke: true)
         state = .stopped
     }
 
     func shutdown() {
+        pairingTask?.cancel()
+        pairingTask = nil
         stopTransport(revoke: true)
         state = .stopped
     }
@@ -227,6 +276,10 @@ final class MobileMirrorCoordinator: ObservableObject {
         }
     }
 
+    func openRemoteWorkspaceSetup() {
+        appDelegate?.focusedWindowController()?.showRemoteWorkspacePanel()
+    }
+
     private func subscribeToAppState() {
         projectRegistry.$records
             .sink { [weak self] records in
@@ -254,6 +307,26 @@ final class MobileMirrorCoordinator: ObservableObject {
             .store(in: &cancellables)
         sessionRegistry.sessionUpdated
             .sink { [weak self] event in self?.receiveSessionUpdate(event) }
+            .store(in: &cancellables)
+    }
+
+    private func subscribeToTunnelTargets() {
+        tunnelController.$targets
+            .sink { [weak self] targets in
+                guard let self else { return }
+                tunnelTargets = targets
+                if selectedTunnelTargetID.map({ id in targets.contains(where: { $0.id == id }) })
+                    != true {
+                    selectedTunnelTargetID = targets.first?.id
+                }
+                if let lease = tunnelLease,
+                   !targets.contains(where: { $0.id == lease.profileID }) {
+                    stopTransport(revoke: true)
+                    state = .unavailable(
+                        MobileMirrorTunnelError.noConnectedTarget.localizedDescription
+                    )
+                }
+            }
             .store(in: &cancellables)
     }
 
