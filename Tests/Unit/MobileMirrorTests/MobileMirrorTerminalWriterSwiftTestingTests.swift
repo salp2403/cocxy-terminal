@@ -8,6 +8,56 @@ import Testing
 @Suite("Mobile mirror privileged terminal writes")
 @MainActor
 struct MobileMirrorTerminalWriterSwiftTestingTests {
+    @Test("terminal writer reaches the target through the real paired-session authority")
+    func writerUsesRealAuthorityEndToEnd() async throws {
+        let tabID = TabID()
+        let surfaceID = SurfaceID()
+        let channelID = UUID()
+        let identity = MobileMirrorTerminalAuthorizationIdentity()
+        let capture = MobileMirrorTerminalWriteCapture()
+        let active = MobileMirrorActivePairing(
+            channelID: channelID,
+            identity: MobileMirrorClientIdentity(remoteAddress: "127.0.0.1", userAgent: "Phone"),
+            pairedAt: Date(),
+            expiresAt: Date().addingTimeInterval(60)
+        )
+        let context = SocketPrivilegedCommandContext(
+            scope: .terminalSurface,
+            windowControllerIdentifier: ObjectIdentifier(identity),
+            tabID: tabID.rawValue,
+            workingDirectory: "/tmp",
+            surfaceID: surfaceID.rawValue,
+            browserViewModelIdentifier: nil,
+            browserTabID: nil,
+            browserURL: nil,
+            targetDisplayName: "Paired terminal"
+        )
+        let writer = MobileMirrorTerminalWriter(
+            grantProvider: { request in
+                MobileMirrorPrivilegedAuthorization.grant(
+                    for: request,
+                    channelID: channelID,
+                    activePairing: active,
+                    tabID: tabID,
+                    context: context
+                )
+            },
+            targetProvider: { authorizedContext in
+                authorizedContext == context ? capture.target : nil
+            }
+        )
+
+        try await writer.write(
+            action: Self.characterAction("x"),
+            to: tabID,
+            surfaceID: surfaceID
+        )
+
+        #expect(capture.texts == ["x"])
+        #expect(capture.requests.isEmpty)
+        _ = identity
+    }
+
     @Test("terminal bytes are not sent when desktop authorization is denied")
     func deniedAuthorizationDoesNotWrite() async {
         let surfaceID = SurfaceID()
@@ -174,6 +224,8 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         )
     }
 }
+
+private final class MobileMirrorTerminalAuthorizationIdentity {}
 
 @MainActor
 private final class MobileMirrorTerminalWriteCapture {

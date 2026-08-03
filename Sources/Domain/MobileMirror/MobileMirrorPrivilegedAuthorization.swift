@@ -21,7 +21,8 @@ enum MobileMirrorPrivilegedAuthorization {
               context.scope == .terminalSurface,
               context.windowControllerIdentifier != nil,
               context.tabID == tabID.rawValue,
-              context.surfaceID != nil,
+              let surfaceID = context.surfaceID,
+              request.params["surfaceId"] == surfaceID.uuidString,
               hasExactParameters(request) else {
             return nil
         }
@@ -37,11 +38,11 @@ enum MobileMirrorPrivilegedAuthorization {
     ) -> Bool {
         switch request.command {
         case .send:
-            return Set(request.params.keys) == ["tabId", "text"]
+            return Set(request.params.keys) == ["surfaceId", "tabId", "text"]
                 && request.params["text"]?.isEmpty == false
                 && (request.params["text"]?.utf8.count ?? 0) <= 8_192
         case .sendKey:
-            return Set(request.params.keys) == ["key", "tabId"]
+            return Set(request.params.keys) == ["key", "surfaceId", "tabId"]
                 && MobileMirrorTerminalControl.supportedKeys.contains(
                     request.params["key"]?.lowercased() ?? ""
                 )

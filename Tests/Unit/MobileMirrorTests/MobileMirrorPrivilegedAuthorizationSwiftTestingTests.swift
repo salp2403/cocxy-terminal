@@ -12,14 +12,19 @@ struct MobileMirrorPrivilegedAuthorizationSwiftTestingTests {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let channelID = UUID()
         let tabID = TabID()
-        let request = try #require(Self.request(tabID: tabID, createdAt: now))
+        let surfaceID = SurfaceID()
+        let request = try #require(Self.request(
+            tabID: tabID,
+            surfaceID: surfaceID,
+            createdAt: now
+        ))
         let active = MobileMirrorActivePairing(
             channelID: channelID,
             identity: MobileMirrorClientIdentity(remoteAddress: "192.168.1.20", userAgent: "Phone"),
             pairedAt: now,
             expiresAt: now.addingTimeInterval(60)
         )
-        let context = Self.context(tabID: tabID)
+        let context = Self.context(tabID: tabID, surfaceID: surfaceID)
 
         let grant = try #require(MobileMirrorPrivilegedAuthorization.grant(
             for: request,
@@ -39,7 +44,12 @@ struct MobileMirrorPrivilegedAuthorizationSwiftTestingTests {
     func mismatchedScopeIsDenied() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let tabID = TabID()
-        let request = try #require(Self.request(tabID: tabID, createdAt: now))
+        let surfaceID = SurfaceID()
+        let request = try #require(Self.request(
+            tabID: tabID,
+            surfaceID: surfaceID,
+            createdAt: now
+        ))
         let active = MobileMirrorActivePairing(
             channelID: UUID(),
             identity: MobileMirrorClientIdentity(remoteAddress: "10.0.0.2", userAgent: "Phone"),
@@ -52,7 +62,7 @@ struct MobileMirrorPrivilegedAuthorizationSwiftTestingTests {
             channelID: UUID(),
             activePairing: active,
             tabID: tabID,
-            context: Self.context(tabID: tabID),
+            context: Self.context(tabID: tabID, surfaceID: surfaceID),
             at: now
         ) == nil)
         #expect(MobileMirrorPrivilegedAuthorization.grant(
@@ -60,20 +70,33 @@ struct MobileMirrorPrivilegedAuthorizationSwiftTestingTests {
             channelID: active.channelID,
             activePairing: active,
             tabID: tabID,
-            context: Self.context(tabID: tabID, scope: .terminalTab),
+            context: Self.context(tabID: tabID, surfaceID: surfaceID, scope: .terminalTab),
+            at: now
+        ) == nil)
+        #expect(MobileMirrorPrivilegedAuthorization.grant(
+            for: request,
+            channelID: active.channelID,
+            activePairing: active,
+            tabID: tabID,
+            context: Self.context(tabID: tabID, surfaceID: SurfaceID()),
             at: now
         ) == nil)
     }
 
     private static func request(
         tabID: TabID,
+        surfaceID: SurfaceID,
         createdAt: Date
     ) -> SocketPrivilegedCommandAuthorizationRequest? {
         SocketPrivilegedCommandAuthorizationRequest(
             socketRequest: SocketRequest(
                 id: UUID().uuidString,
                 command: CLICommandName.send.rawValue,
-                params: ["tabId": tabID.rawValue.uuidString, "text": "pwd"]
+                params: [
+                    "surfaceId": surfaceID.rawValue.uuidString,
+                    "tabId": tabID.rawValue.uuidString,
+                    "text": "pwd",
+                ]
             ),
             createdAt: createdAt
         )
@@ -81,6 +104,7 @@ struct MobileMirrorPrivilegedAuthorizationSwiftTestingTests {
 
     private static func context(
         tabID: TabID,
+        surfaceID: SurfaceID,
         scope: SocketPrivilegedCommandContext.Scope = .terminalSurface
     ) -> SocketPrivilegedCommandContext {
         SocketPrivilegedCommandContext(
@@ -88,7 +112,7 @@ struct MobileMirrorPrivilegedAuthorizationSwiftTestingTests {
             windowControllerIdentifier: ObjectIdentifier(AuthorizationIdentity()),
             tabID: tabID.rawValue,
             workingDirectory: "/tmp",
-            surfaceID: UUID(),
+            surfaceID: surfaceID.rawValue,
             browserViewModelIdentifier: nil,
             browserTabID: nil,
             browserURL: nil,
