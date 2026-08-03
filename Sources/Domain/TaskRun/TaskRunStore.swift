@@ -261,6 +261,11 @@ struct TaskRunStore: Sendable {
 }
 
 final class TaskRunPersistenceCoordinator: @unchecked Sendable {
+    private struct PendingRun {
+        let run: TaskRun
+        let generation: UInt64
+    }
+
     typealias SaveOperation = @Sendable (TaskRun) throws -> Void
     typealias FailureHandler = @Sendable (String) -> Void
 
@@ -268,32 +273,44 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
     private let lock = NSLock()
     private let saveOperation: SaveOperation
     private let failureHandler: FailureHandler
-    private var pendingRuns: [String: TaskRun] = [:]
+    private let maximumRetryAttempts: Int
+    private let retryDelay: TimeInterval
+    private var pendingRuns: [String: PendingRun] = [:]
+    private var nextGeneration: UInt64 = 0
     private var drainScheduled = false
 
     init(
         store: TaskRunStore,
         label: String = "dev.cocxy.task-run-persistence",
+        maximumRetryAttempts: Int = 3,
+        retryDelay: TimeInterval = 0.05,
         failureHandler: @escaping FailureHandler = { _ in }
     ) {
         self.queue = DispatchQueue(label: label, qos: .utility)
         self.saveOperation = { try store.save($0) }
         self.failureHandler = failureHandler
+        self.maximumRetryAttempts = max(1, maximumRetryAttempts)
+        self.retryDelay = max(0, retryDelay)
     }
 
     init(
         label: String = "dev.cocxy.task-run-persistence",
+        maximumRetryAttempts: Int = 3,
+        retryDelay: TimeInterval = 0.05,
         saveOperation: @escaping SaveOperation,
         failureHandler: @escaping FailureHandler = { _ in }
     ) {
         self.queue = DispatchQueue(label: label, qos: .utility)
         self.saveOperation = saveOperation
         self.failureHandler = failureHandler
+        self.maximumRetryAttempts = max(1, maximumRetryAttempts)
+        self.retryDelay = max(0, retryDelay)
     }
 
     func enqueue(_ run: TaskRun) {
         let shouldSchedule = lock.withLock { () -> Bool in
-            pendingRuns[run.id] = run
+            nextGeneration &+= 1
+            pendingRuns[run.id] = PendingRun(run: run, generation: nextGeneration)
             guard !drainScheduled else { return false }
             drainScheduled = true
             return true
@@ -311,22 +328,38 @@ final class TaskRunPersistenceCoordinator: @unchecked Sendable {
     }
 
     private func drainPendingRuns() {
+        var attemptsByGeneration: [UInt64: Int] = [:]
         while true {
-            let runs = lock.withLock { () -> [TaskRun] in
-                guard !pendingRuns.isEmpty else {
+            let runs = lock.withLock { () -> [PendingRun] in
+                let eligible = pendingRuns.values
+                    .filter { attemptsByGeneration[$0.generation, default: 0] < maximumRetryAttempts }
+                    .sorted { $0.run.id < $1.run.id }
+                guard !eligible.isEmpty else {
                     drainScheduled = false
                     return []
                 }
-                let snapshot = pendingRuns.values.sorted { $0.id < $1.id }
-                pendingRuns.removeAll(keepingCapacity: true)
-                return snapshot
+                for pending in eligible where pendingRuns[pending.run.id]?.generation == pending.generation {
+                    pendingRuns.removeValue(forKey: pending.run.id)
+                }
+                return eligible
             }
             guard !runs.isEmpty else { return }
-            for run in runs {
+            for pending in runs {
                 do {
-                    try saveOperation(run)
+                    try saveOperation(pending.run)
+                    attemptsByGeneration.removeValue(forKey: pending.generation)
                 } catch {
                     failureHandler(String(describing: error))
+                    attemptsByGeneration[pending.generation, default: 0] += 1
+                    lock.withLock {
+                        if pendingRuns[pending.run.id] == nil {
+                            pendingRuns[pending.run.id] = pending
+                        }
+                    }
+                    if attemptsByGeneration[pending.generation, default: 0] < maximumRetryAttempts,
+                       retryDelay > 0 {
+                        Thread.sleep(forTimeInterval: retryDelay)
+                    }
                 }
             }
         }

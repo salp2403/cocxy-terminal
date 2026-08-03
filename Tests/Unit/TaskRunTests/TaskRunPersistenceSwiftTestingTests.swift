@@ -55,7 +55,7 @@ struct TaskRunPersistenceSwiftTestingTests {
         let probe = TaskRunSaveProbe(blocksFirstSave: true)
         let coordinator = TaskRunPersistenceCoordinator(
             label: "dev.cocxy.tests.task-run-coalescing",
-            saveOperation: { probe.save($0) }
+            saveOperation: { try probe.save($0) }
         )
         var run = try makeRun(
             origin: URL(fileURLWithPath: "/tmp/task-run-coalescing"),
@@ -78,6 +78,61 @@ struct TaskRunPersistenceSwiftTestingTests {
         #expect(probe.savedOnMainThread == false)
     }
 
+    @Test("coordinator retries a transient save and survives a fresh store load")
+    func coordinatorRetriesTransientFailureBeforeRestart() throws {
+        let root = temporaryDirectory("retry")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let snapshots = root.appendingPathComponent("snapshots", isDirectory: true)
+        let store = TaskRunStore(rootDirectory: snapshots)
+        let probe = TaskRunTransientSaveProbe(store: store, failuresBeforeSuccess: 1)
+        let coordinator = TaskRunPersistenceCoordinator(
+            label: "dev.cocxy.tests.task-run-retry",
+            maximumRetryAttempts: 3,
+            retryDelay: 0,
+            saveOperation: { try probe.save($0) }
+        )
+        let run = try makeRun(
+            id: "retry-survives-restart",
+            origin: root.appendingPathComponent("repo"),
+            count: 2
+        )
+
+        coordinator.enqueue(run)
+        coordinator.flush()
+
+        #expect(probe.attemptCount == 2)
+        let restartedStore = TaskRunStore(rootDirectory: snapshots)
+        let report = try restartedStore.loadAll()
+        #expect(report.rejectedFiles.isEmpty)
+        #expect(report.runs == [run])
+    }
+
+    @Test("a failed stale snapshot never replaces a newer pending snapshot")
+    func coordinatorRetainsNewestSnapshotAcrossFailure() throws {
+        let probe = TaskRunSaveProbe(blocksFirstSave: true, failsFirstSave: true)
+        let coordinator = TaskRunPersistenceCoordinator(
+            label: "dev.cocxy.tests.task-run-newest-retry",
+            maximumRetryAttempts: 1,
+            retryDelay: 0,
+            saveOperation: { try probe.save($0) }
+        )
+        var run = try makeRun(
+            origin: URL(fileURLWithPath: "/tmp/task-run-newest-retry"),
+            count: 2
+        )
+
+        coordinator.enqueue(run)
+        #expect(probe.firstSaveStarted.wait(timeout: .now() + 2) == .success)
+        run.updatedAt = Date(timeIntervalSince1970: 200)
+        run.failureMessage = "newest-snapshot"
+        coordinator.enqueue(run)
+        probe.releaseFirstSave.signal()
+        coordinator.flush()
+
+        #expect(probe.snapshots.count == 2)
+        #expect(probe.successfulSnapshots == [run])
+    }
+
     @Test("publish funnel writes through the app-scoped coordinator")
     @MainActor
     func publishFunnelWritesThroughCoordinator() throws {
@@ -85,7 +140,7 @@ struct TaskRunPersistenceSwiftTestingTests {
         let delegate = AppDelegate()
         delegate.taskRunPersistenceCoordinator = TaskRunPersistenceCoordinator(
             label: "dev.cocxy.tests.task-run-funnel",
-            saveOperation: { probe.save($0) }
+            saveOperation: { try probe.save($0) }
         )
         let run = try makeRun(
             origin: URL(fileURLWithPath: "/tmp/task-run-funnel"),
@@ -261,11 +316,14 @@ private final class TaskRunSaveProbe: @unchecked Sendable {
 
     private let lock = NSLock()
     private let blocksFirstSave: Bool
+    private let failsFirstSave: Bool
     private var storedSnapshots: [TaskRun] = []
+    private var storedSuccessfulSnapshots: [TaskRun] = []
     private var observedMainThread = false
 
-    init(blocksFirstSave: Bool = false) {
+    init(blocksFirstSave: Bool = false, failsFirstSave: Bool = false) {
         self.blocksFirstSave = blocksFirstSave
+        self.failsFirstSave = failsFirstSave
     }
 
     var snapshots: [TaskRun] {
@@ -280,7 +338,11 @@ private final class TaskRunSaveProbe: @unchecked Sendable {
         return observedMainThread
     }
 
-    func save(_ run: TaskRun) {
+    var successfulSnapshots: [TaskRun] {
+        lock.withLock { storedSuccessfulSnapshots }
+    }
+
+    func save(_ run: TaskRun) throws {
         lock.lock()
         storedSnapshots.append(run)
         observedMainThread = observedMainThread || Thread.isMainThread
@@ -289,6 +351,12 @@ private final class TaskRunSaveProbe: @unchecked Sendable {
         if blocksFirstSave && isFirstSave {
             firstSaveStarted.signal()
             releaseFirstSave.wait()
+        }
+        if failsFirstSave && isFirstSave {
+            throw TaskRunStoreError.persistenceFailed("controlled stale snapshot failure")
+        }
+        lock.withLock {
+            storedSuccessfulSnapshots.append(run)
         }
     }
 }
@@ -307,5 +375,32 @@ private final class TaskRunGitProbe: @unchecked Sendable {
         lock.lock()
         calls += 1
         lock.unlock()
+    }
+}
+
+private final class TaskRunTransientSaveProbe: @unchecked Sendable {
+    private let store: TaskRunStore
+    private let failuresBeforeSuccess: Int
+    private let lock = NSLock()
+    private var attempts = 0
+
+    init(store: TaskRunStore, failuresBeforeSuccess: Int) {
+        self.store = store
+        self.failuresBeforeSuccess = failuresBeforeSuccess
+    }
+
+    var attemptCount: Int {
+        lock.withLock { attempts }
+    }
+
+    func save(_ run: TaskRun) throws {
+        let shouldFail = lock.withLock {
+            attempts += 1
+            return attempts <= failuresBeforeSuccess
+        }
+        if shouldFail {
+            throw TaskRunStoreError.persistenceFailed("controlled transient failure")
+        }
+        try store.save(run)
     }
 }
