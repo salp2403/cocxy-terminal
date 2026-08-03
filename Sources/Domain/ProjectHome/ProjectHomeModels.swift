@@ -66,8 +66,11 @@ enum ProjectTeamLaunchError: Error, Equatable, Sendable {
     case promptTooLarge(maximumBytes: Int)
 }
 
-struct ProjectHomeActionFailure: Error, LocalizedError, Equatable, Sendable {
-    let message: String
-
-    var errorDescription: String? { message }
+enum ProjectHomeActionFailure: Error, Equatable, Sendable {
+    case servicesUnavailable
+    case providerUnavailable
+    case projectSessionChanged
+    case teamAlreadyRunning
+    case teamLaunchFailed
+    case worktreeOpenFailed
 }

@@ -29,9 +29,7 @@ extension MainWindowController {
                           controller: self,
                           tab: tab
                       ) else {
-                    throw ProjectHomeActionFailure(
-                        message: "The project session changed before launch."
-                    )
+                    throw ProjectHomeActionFailure.projectSessionChanged
                 }
                 guard context.worktreeConfig.enabled else {
                     throw TaskRunExecutionError.featureDisabled
@@ -43,7 +41,7 @@ extension MainWindowController {
             },
             loadSnapshot: { runID in
                 guard let delegate = NSApp.delegate as? AppDelegate else {
-                    throw ProjectHomeActionFailure(message: "Parallel task services are unavailable.")
+                    throw ProjectHomeActionFailure.servicesUnavailable
                 }
                 let comparisons = try await delegate.taskRunComparisons(runID: runID)
                 guard let run = delegate.taskRunsSnapshot().first(where: { $0.id == runID }),
@@ -69,7 +67,7 @@ extension MainWindowController {
             },
             preparePromotion: { runID, candidateID in
                 guard let delegate = NSApp.delegate as? AppDelegate else {
-                    throw ProjectHomeActionFailure(message: "Promotion services are unavailable.")
+                    throw ProjectHomeActionFailure.servicesUnavailable
                 }
                 return try await delegate.prepareTaskRunPromotion(
                     runID: runID,
@@ -78,13 +76,13 @@ extension MainWindowController {
             },
             executePromotion: { preview in
                 guard let delegate = NSApp.delegate as? AppDelegate else {
-                    throw ProjectHomeActionFailure(message: "Promotion services are unavailable.")
+                    throw ProjectHomeActionFailure.servicesUnavailable
                 }
                 return try await delegate.executeTaskRunPromotion(preview)
             },
             recycle: { runID, candidateID in
                 guard let delegate = NSApp.delegate as? AppDelegate else {
-                    throw ProjectHomeActionFailure(message: "Task recycling is unavailable.")
+                    throw ProjectHomeActionFailure.servicesUnavailable
                 }
                 return try await delegate.recycleTaskRunCandidate(
                     runID: runID,
@@ -98,6 +96,7 @@ extension MainWindowController {
             availableBaseRefs: availableWorktreeBaseRefs(for: projectRoot),
             defaultBaseRef: record?.defaultBaseRef ?? worktreeConfig.baseRef,
             defaultAgentNames: record?.defaultAgents ?? [],
+            localizer: appLocalizer(),
             actions: actions
         )
     }

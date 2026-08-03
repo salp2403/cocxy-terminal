@@ -52,6 +52,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
 
     private let defaultProviders: [AgentTeamProvider]
     private let defaultBaseRef: String
+    private let localizer: AppLocalizer
     private let actions: ProjectFanOutActions
     private var loadRevision = 0
 
@@ -62,6 +63,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         availableBaseRefs: [String],
         defaultBaseRef: String?,
         defaultAgentNames: [String],
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english),
         actions: ProjectFanOutActions
     ) {
         self.projectID = projectID
@@ -86,6 +88,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             self.defaultProviders.count
         )
         self.baseRef = normalizedBase
+        self.localizer = localizer
         self.actions = actions
     }
 
@@ -189,7 +192,10 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     func addPendingPath() {
         let paths = normalizedPaths([pendingPath])
         guard let path = paths.first else {
-            errorMessage = "The file path must stay inside this project."
+            errorMessage = localizer.string(
+                "projectHome.fanOut.pathOutsideProject",
+                fallback: "The file path must stay inside this project."
+            )
             return
         }
         if !plannedPaths.contains(path) {
@@ -233,7 +239,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             await loadComparison(runID: launchedRun.id, ownsBusyState: true)
         } catch {
             isBusy = false
-            errorMessage = Self.message(for: error)
+            errorMessage = message(for: error)
         }
     }
 
@@ -259,7 +265,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             isBusy = false
         } catch {
             isBusy = false
-            errorMessage = Self.message(for: error)
+            errorMessage = message(for: error)
         }
     }
 
@@ -279,13 +285,19 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             mode = .comparison
             promotionPreview = nil
             successMessage = outcome.cleanupFailures.isEmpty
-                ? "Candidate promoted."
-                : "Candidate promoted with cleanup warnings."
+                ? localizer.string(
+                    "projectHome.fanOut.candidatePromoted",
+                    fallback: "Candidate promoted."
+                )
+                : localizer.string(
+                    "projectHome.fanOut.candidatePromotedWithWarnings",
+                    fallback: "Candidate promoted with cleanup warnings."
+                )
             isBusy = false
             await loadComparison(runID: outcome.run.id, ownsBusyState: false)
         } catch {
             isBusy = false
-            errorMessage = Self.message(for: error)
+            errorMessage = message(for: error)
         }
     }
 
@@ -298,7 +310,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             showLaunch(draft: draft)
         } catch {
             isBusy = false
-            errorMessage = Self.message(for: error)
+            errorMessage = message(for: error)
         }
     }
 
@@ -325,7 +337,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         } catch {
             guard revision == loadRevision else { return }
             isBusy = false
-            errorMessage = Self.message(for: error)
+            errorMessage = message(for: error)
             if ownsBusyState { mode = .launch }
         }
     }
@@ -354,7 +366,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         return trimmed.isEmpty ? nil : trimmed
     }
 
-    private static func message(for error: Error) -> String {
-        (error as? LocalizedError)?.errorDescription ?? String(describing: error)
+    private func message(for error: Error) -> String {
+        localizer.projectErrorMessage(for: error, context: .fanOut)
     }
 }

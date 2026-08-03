@@ -65,7 +65,7 @@ extension MainWindowController {
             } : nil,
             launchTeam: { request in
                 guard let delegate = NSApp.delegate as? AppDelegate else {
-                    throw ProjectHomeActionFailure(message: "Project team services are unavailable.")
+                    throw ProjectHomeActionFailure.servicesUnavailable
                 }
                 try await delegate.launchProjectTeam(request, projectRoot: projectRoot)
             },
@@ -83,7 +83,7 @@ extension MainWindowController {
             },
             focusWorktree: worktreeConfig.enabled ? { id in
                 guard let delegate = NSApp.delegate as? AppDelegate else {
-                    throw ProjectHomeActionFailure(message: "Worktree services are unavailable.")
+                    throw ProjectHomeActionFailure.servicesUnavailable
                 }
                 let result = await delegate.performProjectWorktreeRequest(
                     kind: "focus",
@@ -91,9 +91,7 @@ extension MainWindowController {
                     params: ["id": id]
                 )
                 guard result.0 else {
-                    throw ProjectHomeActionFailure(
-                        message: result.1["error"] ?? "The worktree could not be opened."
-                    )
+                    throw ProjectHomeActionFailure.worktreeOpenFailed
                 }
             } : nil,
             openRecentDiff: { [weak self] sessionID in
@@ -112,6 +110,7 @@ extension MainWindowController {
             accent: record?.accent,
             fallbackRemote: record?.remoteOrigin,
             worktreeConfig: worktreeConfig,
+            localizer: localizer,
             headerUpdates: projectHomeHeaderUpdates(
                 projectID: projectID,
                 automaticName: descriptor.groupingAutomaticName
@@ -191,7 +190,10 @@ extension MainWindowController {
 
     private func openProjectCodeReview(projectRoot: URL) {
         guard let delegate = NSApp.delegate as? AppDelegate else {
-            presentProjectHomeActionError("Project services are unavailable.")
+            presentProjectHomeActionError(
+                ProjectHomeActionFailure.servicesUnavailable,
+                context: .codeReview
+            )
             return
         }
         do {
@@ -202,21 +204,23 @@ extension MainWindowController {
             }
             controller.showCodeReviewPanel()
         } catch {
-            presentProjectHomeActionError(
-                (error as? LocalizedError)?.errorDescription ?? "Code Review could not be opened."
-            )
+            presentProjectHomeActionError(error, context: .codeReview)
         }
     }
 
-    private func presentProjectHomeActionError(_ message: String) {
+    private func presentProjectHomeActionError(
+        _ error: Error,
+        context: ProjectErrorPresentationContext
+    ) {
+        let localizer = appLocalizer()
         let alert = NSAlert()
         alert.alertStyle = .warning
-        alert.messageText = appLocalizer().string(
+        alert.messageText = localizer.string(
             "projectHome.action.error.title",
             fallback: "Action Failed"
         )
-        alert.informativeText = message
-        alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
+        alert.informativeText = localizer.projectErrorMessage(for: error, context: context)
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
         if let window {
             alert.beginSheetModal(for: window)
         } else {

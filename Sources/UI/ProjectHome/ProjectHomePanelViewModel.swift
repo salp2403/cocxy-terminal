@@ -42,6 +42,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
     @Published var actionErrorMessage: String?
 
     private var fallbackRemote: String?
+    private let localizer: AppLocalizer
     private let contextLoader: ProjectHomeContextLoader
     private let activitySummaryLoader: @MainActor (ProjectID) async -> ProjectActivitySummaryState
     private let recentDiffProvider: () -> String?
@@ -56,6 +57,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
         accent: String?,
         fallbackRemote: String?,
         worktreeConfig: WorktreeConfig,
+        localizer: AppLocalizer = AppLocalizer(languagePreference: .english),
         contextLoader: ProjectHomeContextLoader = .live,
         headerUpdates: AnyPublisher<ProjectHomeHeaderState, Never>? = nil,
         activitySummaryLoader: @escaping @MainActor (
@@ -70,6 +72,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
         self.accent = accent
         self.fallbackRemote = fallbackRemote
         self.worktreeConfig = worktreeConfig
+        self.localizer = localizer
         self.contextLoader = contextLoader
         self.activitySummaryLoader = activitySummaryLoader
         self.recentDiffProvider = recentDiffProvider
@@ -156,8 +159,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
             try await actions.launchTeam(request)
             isTeamSheetPresented = false
         } catch {
-            actionErrorMessage = (error as? LocalizedError)?.errorDescription
-                ?? "The team could not be launched."
+            actionErrorMessage = localizer.projectErrorMessage(for: error, context: .teamLaunch)
         }
     }
 
@@ -167,8 +169,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
         do {
             try await focusWorktree(id)
         } catch {
-            actionErrorMessage = (error as? LocalizedError)?.errorDescription
-                ?? "The worktree could not be opened."
+            actionErrorMessage = localizer.projectErrorMessage(for: error, context: .worktreeOpen)
         }
     }
 }

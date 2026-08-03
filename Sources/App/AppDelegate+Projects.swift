@@ -383,26 +383,28 @@ extension AppDelegate {
     }
 
     private func presentProjectError(_ error: Error) {
+        let localizer = appLocalizer()
         let alert = NSAlert()
-        alert.messageText = appLocalizer().string(
+        alert.messageText = localizer.string(
             "project.error.title",
             fallback: "Project action failed"
         )
-        alert.informativeText = error.localizedDescription
+        alert.informativeText = localizer.projectErrorMessage(for: error, context: .projectAction)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
         presentAlert(alert) { _ in }
     }
 
     private func presentProjectMetadataWarning(_ error: Error) {
+        let localizer = appLocalizer()
         let alert = NSAlert()
-        alert.messageText = appLocalizer().string(
+        alert.messageText = localizer.string(
             "project.metadata.warning.title",
             fallback: "Project cloned with a warning"
         )
-        alert.informativeText = error.localizedDescription
+        alert.informativeText = localizer.projectErrorMessage(for: error, context: .metadataWarning)
         alert.alertStyle = .warning
-        alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
         presentAlert(alert) { _ in }
     }
 }

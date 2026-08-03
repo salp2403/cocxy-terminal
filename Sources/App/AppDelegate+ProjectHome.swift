@@ -53,9 +53,7 @@ extension AppDelegate {
         guard await agentTeamProviderAdapterRegistry.prepareExecutableForLaunch(
             for: request.provider
         ) != nil else {
-            throw ProjectHomeActionFailure(
-                message: "The selected local agent provider is unavailable."
-            )
+            throw ProjectHomeActionFailure.providerUnavailable
         }
 
         let projectID = projectResolver.resolveProject(for: projectRoot).groupingID
@@ -63,7 +61,7 @@ extension AppDelegate {
         guard let controller = controllerContainingTab(tabID),
               let tab = controller.tabManager.tab(for: tabID),
               projectResolver.resolveProject(for: tab.workingDirectory).groupingID == projectID else {
-            throw ProjectHomeActionFailure(message: "The project session changed before launch.")
+            throw ProjectHomeActionFailure.projectSessionChanged
         }
 
         var usedIDs: [String: Int] = [:]
@@ -90,9 +88,9 @@ extension AppDelegate {
                 workingDirectory: projectID.rawValue
             )
         } catch AgentTeamError.alreadyRunning {
-            throw ProjectHomeActionFailure(message: "A team with this name is already running.")
+            throw ProjectHomeActionFailure.teamAlreadyRunning
         } catch {
-            throw ProjectHomeActionFailure(message: "The team could not be launched.")
+            throw ProjectHomeActionFailure.teamLaunchFailed
         }
     }
 }
