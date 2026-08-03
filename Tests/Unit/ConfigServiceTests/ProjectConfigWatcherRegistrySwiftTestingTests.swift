@@ -110,22 +110,21 @@ struct ProjectConfigWatcherRegistrySwiftTestingTests {
         #expect(registry.fallbackEntryCount == 0)
     }
 
-    @Test("windows can share one app-scoped registry instance")
+    @Test("windows receive the same app-scoped stores")
     func controllerOwnershipIsInjected() {
         let registry = ProjectConfigWatcherRegistry()
-        let first = MainWindowController(
-            bridge: MockTerminalEngine(),
-            projectConfigWatcherRegistry: registry,
-            deferContentSetup: true
-        )
-        let second = MainWindowController(
-            bridge: MockTerminalEngine(),
-            projectConfigWatcherRegistry: registry,
-            deferContentSetup: true
-        )
+        let stores = WindowStoreFixture()
+        let first = stores.makeController(registry: registry)
+        let second = stores.makeController(registry: registry)
 
         #expect(first.projectConfigWatcherRegistry === registry)
         #expect(second.projectConfigWatcherRegistry === registry)
+        #expect(first.auroraWorkspaceTitleStore === stores.titleStore)
+        #expect(second.auroraWorkspaceTitleStore === stores.titleStore)
+        #expect(first.tabConfigProjectContextStore === stores.contextStore)
+        #expect(second.tabConfigProjectContextStore === stores.contextStore)
+        #expect(first.commandBlockStore === stores.blockStore)
+        #expect(second.commandBlockStore === stores.blockStore)
     }
 
     @Test("one project file reloads every subscribed window")
@@ -143,16 +142,9 @@ struct ProjectConfigWatcherRegistrySwiftTestingTests {
             maximumWatcherCount: 2,
             watcherFactory: factory.make
         )
-        let first = MainWindowController(
-            bridge: MockTerminalEngine(),
-            projectConfigWatcherRegistry: registry,
-            deferContentSetup: true
-        )
-        let second = MainWindowController(
-            bridge: MockTerminalEngine(),
-            projectConfigWatcherRegistry: registry,
-            deferContentSetup: true
-        )
+        let stores = WindowStoreFixture()
+        let first = stores.makeController(registry: registry)
+        let second = stores.makeController(registry: registry)
         let firstTab = first.tabManager.addTab(workingDirectory: root)
         let secondTab = second.tabManager.addTab(workingDirectory: root)
         first.tabManager.setActive(id: firstTab.id)
@@ -188,11 +180,7 @@ struct ProjectConfigWatcherRegistrySwiftTestingTests {
 
         let factory = WatcherFactory()
         let registry = ProjectConfigWatcherRegistry(watcherFactory: factory.make)
-        let controller = MainWindowController(
-            bridge: MockTerminalEngine(),
-            projectConfigWatcherRegistry: registry,
-            deferContentSetup: true
-        )
+        let controller = WindowStoreFixture().makeController(registry: registry)
         let firstTab = controller.tabManager.addTab(workingDirectory: firstRoot)
         let secondTab = controller.tabManager.addTab(workingDirectory: secondRoot)
         controller.synchronizeProjectConfigWatcher(for: firstTab)
@@ -210,6 +198,27 @@ struct ProjectConfigWatcherRegistrySwiftTestingTests {
         controller.releaseProjectConfigWatcher(for: firstTab.id)
         #expect(controller.projectConfigWatchLeases[secondTab.id] != nil)
         controller.releaseProjectConfigWatchers()
+    }
+}
+
+@MainActor
+private struct WindowStoreFixture {
+    let titleStore = AuroraWorkspaceTitleStore()
+    let contextStore = TabConfigProjectContextStore()
+    let blockStore = TerminalBlockStore()
+
+    func makeController(registry: ProjectConfigWatcherRegistry) -> MainWindowController {
+        MainWindowController(
+            bridge: MockTerminalEngine(),
+            appStores: MainWindowAppStores(
+                auroraWorkspaceTitleStore: titleStore,
+                projectRegistry: nil,
+                projectConfigWatcherRegistry: registry,
+                tabConfigProjectContextStore: contextStore,
+                commandBlockStore: blockStore
+            ),
+            deferContentSetup: true
+        )
     }
 }
 

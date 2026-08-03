@@ -462,8 +462,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     /// semantic finish event is delivered through more than one path.
     var persistedCommandBlockKeys: Set<String> = []
 
-    /// Store used for live command-block persistence and restoration.
-    var commandBlockStore = TerminalBlockStore()
+    /// App-scoped store used for live command-block persistence and restoration.
+    let commandBlockStore: TerminalBlockStore
 
     /// Persisted command blocks reattached to restored primary surfaces.
     ///
@@ -726,10 +726,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         bridge: any TerminalEngine,
         configService: ConfigService? = nil,
         tabManager: TabManager? = nil,
-        auroraWorkspaceTitleStore: AuroraWorkspaceTitleStore? = nil,
-        projectRegistry: ProjectRegistry? = nil,
-        projectConfigWatcherRegistry: ProjectConfigWatcherRegistry = ProjectConfigWatcherRegistry(),
-        tabConfigProjectContextStore: TabConfigProjectContextStore = TabConfigProjectContextStore(),
+        appStores: MainWindowAppStores,
         gitInfoProvider: (any GitInfoProviding)? = nil,
         projectResolver: (any ProjectResolving)? = nil,
         worktreeService: WorktreeService? = nil,
@@ -744,13 +741,14 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         let resolvedGitInfoProvider = gitInfoProvider ?? GitInfoProviderImpl()
         self.gitInfoProvider = resolvedGitInfoProvider
         self.projectResolver = projectResolver ?? CachedProjectResolver()
-        self.projectRegistry = projectRegistry
-        self.projectConfigWatcherRegistry = projectConfigWatcherRegistry
-        self.tabConfigProjectContextStore = tabConfigProjectContextStore
+        self.projectRegistry = appStores.projectRegistry
+        self.projectConfigWatcherRegistry = appStores.projectConfigWatcherRegistry
+        self.tabConfigProjectContextStore = appStores.tabConfigProjectContextStore
+        self.commandBlockStore = appStores.commandBlockStore
         self.worktreeService = worktreeService
             ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
         self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
-        self.auroraWorkspaceTitleStore = auroraWorkspaceTitleStore ?? AuroraWorkspaceTitleStore()
+        self.auroraWorkspaceTitleStore = appStores.auroraWorkspaceTitleStore
         self.terminalViewModel = TerminalViewModel(engine: bridge)
         let configuredFontSize = configService?.current.appearance.fontSize
             ?? AppearanceConfig.defaults.fontSize

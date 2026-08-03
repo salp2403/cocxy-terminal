@@ -1525,7 +1525,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedDashboardViewModel = agentDashboardViewModel
         controller.injectedTaskInboxStore = taskInboxStore
         controller.injectedProjectFanOutCoordinator = projectFanOutCoordinator
-        controller.commandBlockStore = terminalBlockStore
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedActivityStore = configuredActivityStore()
         controller.injectedNotificationManager = notificationManager
@@ -1625,10 +1624,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let controller = MainWindowController(
             bridge: bridge,
             configService: configService,
-            auroraWorkspaceTitleStore: auroraWorkspaceTitleStore,
-            projectRegistry: projectRegistry,
-            projectConfigWatcherRegistry: projectConfigWatcherRegistry,
-            tabConfigProjectContextStore: tabConfigProjectContextStore,
+            appStores: mainWindowAppStores,
             gitInfoProvider: gitInfoProvider,
             projectResolver: projectResolver,
             worktreeService: sharedWorktreeService,

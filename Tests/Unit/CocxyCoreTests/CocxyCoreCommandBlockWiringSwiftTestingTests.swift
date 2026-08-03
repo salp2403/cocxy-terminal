@@ -79,9 +79,11 @@ struct CocxyCoreCommandBlockWiringSwiftTestingTests {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-\(name)-\(UUID().uuidString)", isDirectory: true)
         let bridge = try makeBridge()
-        let controller = MainWindowController(bridge: bridge)
         let store = TerminalBlockStore(rootDirectory: root)
-        controller.commandBlockStore = store
+        let controller = MainWindowController(
+            bridge: bridge,
+            commandBlockStore: store
+        )
         controller.showWindow(nil)
         if controller.tabManager.activeTabID.flatMap({ controller.tabSurfaceMap[$0] }) == nil {
             controller.createTerminalSurface()
