@@ -140,6 +140,7 @@ struct TaskQueueCenterView: View {
         .frame(minWidth: 900, minHeight: 620)
         .glassPanelBackground()
         .environment(\.locale, localizer.locale)
+        .environment(\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)
         .task {
             await viewModel.reload()
             while !Task.isCancelled {
