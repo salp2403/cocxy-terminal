@@ -30,7 +30,13 @@ struct TaskQueueStoreLoadReport: Sendable, Equatable {
     let rejectedFiles: [TaskQueueStoreRejectedFile]
 }
 
-struct TaskQueueStore: Sendable {
+protocol TaskQueueStoring: Sendable {
+    func save(_ item: TaskQueueItem) throws
+    func loadAll() throws -> TaskQueueStoreLoadReport
+    func remove(taskID: String) throws
+}
+
+struct TaskQueueStore: TaskQueueStoring, Sendable {
     static let fileSuffix = ".task.json"
 
     let rootDirectory: URL

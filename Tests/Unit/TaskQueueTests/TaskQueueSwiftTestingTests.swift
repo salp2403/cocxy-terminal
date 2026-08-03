@@ -159,6 +159,72 @@ struct TaskQueueSwiftTestingTests {
         #expect(await lifecycle.kinds == [.started, .finished, .started, .finished])
     }
 
+    @Test("a failed running-state write prevents pipeline effects")
+    func runningPersistenceFailurePreventsExecution() async throws {
+        let start = Date(timeIntervalSince1970: 1_767_261_570)
+        let clock = LockedQueueClock(now: start)
+        let recorder = QueueRunRecorder(clock: clock)
+        let controlledStore = ControlledTaskQueueStore(
+            base: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            failingSaveAttempts: [3]
+        )
+        let queue = try TaskQueue(
+            store: controlledStore,
+            clock: { clock.now },
+            runHandler: { item in await recorder.run(item) }
+        )
+        _ = try await queue.start()
+        let schedule = try CronSchedule(expression: "0 10 * * *", timeZoneIdentifier: "UTC")
+        let item = try makeQueueItem(id: "durable-start", trigger: .cron(schedule), now: start)
+        _ = try await queue.enqueue(item)
+
+        clock.advance(by: 30)
+        await queue.tick(at: clock.now)
+
+        #expect(await recorder.runCount == 0)
+        #expect(await queue.item(id: item.id)?.status == .queued)
+        #expect(try controlledStore.loadAll().items.first?.status == .queued)
+        #expect(await queue.lastPersistenceError != nil)
+
+        await queue.tick(at: clock.now)
+        _ = try await waitForQueueItem(queue, id: item.id) { $0.status == .scheduled }
+        #expect(await recorder.runCount == 1)
+    }
+
+    @Test("a failed completion write is retried without repeating pipeline effects")
+    func completionPersistenceFailureIsRetriedWithoutRerun() async throws {
+        let clock = LockedQueueClock(now: Date(timeIntervalSince1970: 30_000))
+        let recorder = QueueRunRecorder(clock: clock)
+        let lifecycle = QueueLifecycleRecorder()
+        let controlledStore = ControlledTaskQueueStore(
+            base: TaskQueueStore(rootDirectory: temporaryQueueDirectory()),
+            failingSaveAttempts: [3]
+        )
+        let queue = try TaskQueue(
+            store: controlledStore,
+            clock: { clock.now },
+            runHandler: { item in await recorder.run(item) },
+            lifecycleHandler: { event in await lifecycle.record(event) }
+        )
+        _ = try await queue.start()
+        let item = try makeQueueItem(id: "durable-finish", now: clock.now)
+        _ = try await queue.enqueue(item)
+        _ = try await waitForQueueItem(queue, id: item.id) { $0.status == .succeeded }
+
+        #expect(await recorder.runCount == 1)
+        #expect(try controlledStore.loadAll().items.first?.status == .running)
+        await #expect(throws: TaskQueueError.persistencePending(item.id)) {
+            _ = try await queue.rerun(id: item.id)
+        }
+
+        await queue.tick(at: clock.now)
+
+        #expect(try controlledStore.loadAll().items.first?.status == .succeeded)
+        #expect(await recorder.runCount == 1)
+        #expect(await lifecycle.kinds == [.started, .finished])
+        #expect(await queue.lastPersistenceError == nil)
+    }
+
     @Test("global run concurrency is bounded and queued work drains")
     func globalConcurrencyIsBounded() async throws {
         let gate = QueueConcurrencyGate()
@@ -441,6 +507,37 @@ private final class LockedQueueClock: @unchecked Sendable {
 
     func advance(by interval: TimeInterval) {
         lock.withLock { storedNow = storedNow.addingTimeInterval(interval) }
+    }
+}
+
+private final class ControlledTaskQueueStore: TaskQueueStoring, @unchecked Sendable {
+    private let base: TaskQueueStore
+    private let lock = NSLock()
+    private var saveAttempt = 0
+    private var failingSaveAttempts: Set<Int>
+
+    init(base: TaskQueueStore, failingSaveAttempts: Set<Int>) {
+        self.base = base
+        self.failingSaveAttempts = failingSaveAttempts
+    }
+
+    func save(_ item: TaskQueueItem) throws {
+        let shouldFail = lock.withLock {
+            saveAttempt += 1
+            return failingSaveAttempts.remove(saveAttempt) != nil
+        }
+        if shouldFail {
+            throw TaskQueueStoreError.persistenceFailed("controlled test failure")
+        }
+        try base.save(item)
+    }
+
+    func loadAll() throws -> TaskQueueStoreLoadReport {
+        try base.loadAll()
+    }
+
+    func remove(taskID: String) throws {
+        try base.remove(taskID: taskID)
     }
 }
 

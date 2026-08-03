@@ -10,6 +10,7 @@ enum TaskQueueError: Error, Equatable, Sendable, CustomStringConvertible {
     case taskNotFound(String)
     case taskAlreadyFinished(String)
     case taskNotFinished(String)
+    case persistencePending(String)
     case invalidMaximumRetries(Int)
     case invalidConcurrency(Int)
     case unsupportedEventTrigger(String)
@@ -30,6 +31,8 @@ enum TaskQueueError: Error, Equatable, Sendable, CustomStringConvertible {
             return "Queued task is already finished: \(taskID)"
         case .taskNotFinished(let taskID):
             return "Queued task must be finished before this operation: \(taskID)"
+        case .persistencePending(let taskID):
+            return "Queued task is waiting for durable persistence: \(taskID)"
         case .invalidMaximumRetries(let value):
             return "Queued task retries must be between 0 and 5, got \(value)"
         case .invalidConcurrency(let value):

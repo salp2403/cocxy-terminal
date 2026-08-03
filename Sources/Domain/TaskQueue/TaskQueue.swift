@@ -4,7 +4,12 @@
 import Foundation
 
 actor TaskQueue {
-    private let store: TaskQueueStore
+    private struct PendingPersistence: Sendable {
+        let item: TaskQueueItem
+        let lifecycleEvent: TaskQueueLifecycleEvent
+    }
+
+    private let store: any TaskQueueStoring
     private let maximumConcurrentRuns: Int
     private let retryBaseDelay: TimeInterval
     private let eventRetriggerMinimumInterval: TimeInterval
@@ -15,11 +20,12 @@ actor TaskQueue {
 
     private var itemsByID: [String: TaskQueueItem] = [:]
     private var activeRuns: [String: Task<Void, Never>] = [:]
+    private var pendingPersistenceByID: [String: PendingPersistence] = [:]
     private(set) var loadWarnings: [TaskQueueStoreRejectedFile] = []
     private(set) var lastPersistenceError: String?
 
     init(
-        store: TaskQueueStore = TaskQueueStore(),
+        store: any TaskQueueStoring = TaskQueueStore(),
         maximumConcurrentRuns: Int = 2,
         retryBaseDelay: TimeInterval = 5,
         eventRetriggerMinimumInterval: TimeInterval = 5,
@@ -94,6 +100,9 @@ actor TaskQueue {
     @discardableResult
     func cancel(id rawID: String) async throws -> TaskQueueItem {
         let taskID = AgentTeamConfig.slug(rawID)
+        guard pendingPersistenceByID[taskID] == nil else {
+            throw TaskQueueError.persistencePending(taskID)
+        }
         guard var item = itemsByID[taskID] else {
             throw TaskQueueError.taskNotFound(taskID)
         }
@@ -102,7 +111,6 @@ actor TaskQueue {
         }
 
         let wasRunning = item.status == .running
-        activeRuns[taskID]?.cancel()
         let now = clock()
         item.status = .cancelled
         item.updatedAt = now
@@ -112,6 +120,7 @@ actor TaskQueue {
         item.lastError = "Cancelled by user"
         try store.save(item)
         itemsByID[taskID] = item
+        activeRuns[taskID]?.cancel()
 
         if wasRunning {
             Task {
@@ -135,6 +144,9 @@ actor TaskQueue {
     @discardableResult
     func rerun(id rawID: String) async throws -> TaskQueueItem {
         let taskID = AgentTeamConfig.slug(rawID)
+        guard pendingPersistenceByID[taskID] == nil else {
+            throw TaskQueueError.persistencePending(taskID)
+        }
         guard var item = itemsByID[taskID] else {
             throw TaskQueueError.taskNotFound(taskID)
         }
@@ -160,6 +172,9 @@ actor TaskQueue {
     @discardableResult
     func remove(id rawID: String) async throws -> TaskQueueItem {
         let taskID = AgentTeamConfig.slug(rawID)
+        guard pendingPersistenceByID[taskID] == nil else {
+            throw TaskQueueError.persistencePending(taskID)
+        }
         guard let item = itemsByID[taskID] else {
             throw TaskQueueError.taskNotFound(taskID)
         }
@@ -180,6 +195,7 @@ actor TaskQueue {
         let now = date ?? clock()
         for taskID in itemsByID.keys.sorted() {
             guard var item = itemsByID[taskID],
+                  pendingPersistenceByID[taskID] == nil,
                   case .event(let expectedEvent) = item.trigger,
                   expectedEvent == event,
                   !item.status.isFinished else {
@@ -193,8 +209,9 @@ actor TaskQueue {
                 item.nextRunAt = earliestEventRunDate(for: item, after: now)
             }
             item.updatedAt = now
-            persistBestEffort(item)
-            itemsByID[taskID] = item
+            if persist(item) {
+                itemsByID[taskID] = item
+            }
         }
         drainEligibleRuns(at: now)
         await publishSnapshot()
@@ -202,6 +219,7 @@ actor TaskQueue {
 
     func tick(at date: Date? = nil) async {
         let now = date ?? clock()
+        await flushPendingPersistence()
         for taskID in itemsByID.keys.sorted() {
             guard var item = itemsByID[taskID], !item.status.isFinished else { continue }
             switch item.status {
@@ -212,8 +230,9 @@ actor TaskQueue {
                 }
                 item.status = .queued
                 item.updatedAt = now
-                persistBestEffort(item)
-                itemsByID[taskID] = item
+                if persist(item) {
+                    itemsByID[taskID] = item
+                }
             case .queued, .running, .succeeded, .failed, .cancelled:
                 continue
             }
@@ -233,7 +252,9 @@ actor TaskQueue {
         guard activeRuns.count < maximumConcurrentRuns else { return }
         let eligibleIDs = itemsByID.values
             .filter { item in
-                item.status == .queued && (item.nextRunAt == nil || item.nextRunAt! <= now)
+                pendingPersistenceByID[item.id] == nil
+                    && item.status == .queued
+                    && (item.nextRunAt == nil || item.nextRunAt! <= now)
             }
             .sorted { lhs, rhs in
                 let lhsDate = lhs.nextRunAt ?? lhs.createdAt
@@ -257,7 +278,7 @@ actor TaskQueue {
         item.totalRunCount += 1
         item.lastError = nil
         item.completedAt = nil
-        persistBestEffort(item)
+        guard persist(item) else { return }
         itemsByID[taskID] = item
 
         let event = TaskQueueLifecycleEvent(
@@ -324,17 +345,24 @@ actor TaskQueue {
             }
         }
 
-        persistBestEffort(item)
         itemsByID[taskID] = item
-        await lifecycleHandler(TaskQueueLifecycleEvent(
+        let lifecycleEvent = TaskQueueLifecycleEvent(
             kind: .finished,
             taskID: item.id,
             pipelineID: item.pipeline.id,
             status: item.status,
             attempt: max(1, completedAttempt),
             occurredAt: now
-        ))
-        drainEligibleRuns(at: now)
+        )
+        if persist(item) {
+            await lifecycleHandler(lifecycleEvent)
+            drainEligibleRuns(at: now)
+        } else {
+            pendingPersistenceByID[taskID] = PendingPersistence(
+                item: item,
+                lifecycleEvent: lifecycleEvent
+            )
+        }
         await publishSnapshot()
     }
 
@@ -373,12 +401,30 @@ actor TaskQueue {
         return max(now, lastRunAt.addingTimeInterval(eventRetriggerMinimumInterval))
     }
 
-    private func persistBestEffort(_ item: TaskQueueItem) {
+    @discardableResult
+    private func persist(_ item: TaskQueueItem) -> Bool {
         do {
             try store.save(item)
-            lastPersistenceError = nil
+            if pendingPersistenceByID.isEmpty {
+                lastPersistenceError = nil
+            }
+            return true
         } catch {
             lastPersistenceError = String(describing: error)
+            return false
+        }
+    }
+
+    private func flushPendingPersistence() async {
+        for taskID in pendingPersistenceByID.keys.sorted() {
+            guard let pending = pendingPersistenceByID[taskID], persist(pending.item) else {
+                continue
+            }
+            pendingPersistenceByID.removeValue(forKey: taskID)
+            if pendingPersistenceByID.isEmpty {
+                lastPersistenceError = nil
+            }
+            await lifecycleHandler(pending.lifecycleEvent)
         }
     }
 
