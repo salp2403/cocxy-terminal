@@ -25,12 +25,6 @@ final class MobileMirrorCoordinator: ObservableObject {
         let token: String
     }
 
-    struct ApprovalTarget {
-        let sessionID: SessionID
-        let requestID: String
-        let viewModel: AgentPanelViewModel
-    }
-
     @Published var state: MobileMirrorServiceState = .stopped
     @Published var pairingURL: URL?
     @Published var pendingPairing: MobileMirrorPendingPairing?
@@ -45,6 +39,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     let projectResolver: CachedProjectResolver
     let titleStore: AuroraWorkspaceTitleStore
     let sessionRegistry: SessionRegistryImpl
+    let approvalRegistry: MobileMirrorApprovalRegistry
     let auditLog: RelayAuditLog
     let authority: MobileMirrorPairingAuthority
     let routeRegistry = MobileMirrorRouteRegistry()
@@ -57,7 +52,6 @@ final class MobileMirrorCoordinator: ObservableObject {
     var tunnelLease: MobileMirrorTunnelLease?
     var pairingChannelID: UUID?
     var ownedStreams: [String: OwnedStream] = [:]
-    var approvalTargets: [String: ApprovalTarget] = [:]
     var cancellables = Set<AnyCancellable>()
     var refreshTimer: Timer?
     var expiryTask: Task<Void, Never>?
@@ -71,6 +65,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         projectResolver: CachedProjectResolver,
         titleStore: AuroraWorkspaceTitleStore,
         sessionRegistry: SessionRegistryImpl,
+        approvalRegistry: MobileMirrorApprovalRegistry,
         auditLog: RelayAuditLog,
         tunnelController: MobileMirrorSSHTunnelController,
         authority: MobileMirrorPairingAuthority = MobileMirrorPairingAuthority(),
@@ -81,6 +76,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         self.projectResolver = projectResolver
         self.titleStore = titleStore
         self.sessionRegistry = sessionRegistry
+        self.approvalRegistry = approvalRegistry
         self.auditLog = auditLog
         self.tunnelController = tunnelController
         self.authority = authority
@@ -308,6 +304,10 @@ final class MobileMirrorCoordinator: ObservableObject {
         sessionRegistry.sessionUpdated
             .sink { [weak self] event in self?.receiveSessionUpdate(event) }
             .store(in: &cancellables)
+        approvalRegistry.$records
+            .dropFirst()
+            .sink { [weak self] _ in self?.refreshSnapshotAndPublish() }
+            .store(in: &cancellables)
     }
 
     private func subscribeToTunnelTargets() {
@@ -496,43 +496,6 @@ final class MobileMirrorCoordinator: ObservableObject {
                 )
             }
         )
-    }
-
-    private func handleApproval(_ action: MobileMirrorAction) async throws {
-        guard let approvalID = action.approvalID,
-              let target = approvalTargets[approvalID],
-              let request = target.viewModel.pendingApproval,
-              request.id == target.requestID,
-              approvalID == approvalDigest(sessionID: target.sessionID, request: request),
-              approvalTargetIsCurrent(target) else {
-            throw MobileMirrorError.targetUnavailable
-        }
-        if action.kind == .approvalReject {
-            target.viewModel.rejectPendingTool()
-            return
-        }
-        if request.preview.kind == .userInput {
-            guard let text = action.text,
-                  !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-                throw MobileMirrorError.invalidAction
-            }
-            target.viewModel.pendingApprovalResponseDraft = text
-        }
-        guard target.viewModel.canApprovePendingTool else {
-            throw MobileMirrorError.targetUnavailable
-        }
-        await target.viewModel.approvePendingTool()
-    }
-
-    private func approvalTargetIsCurrent(_ target: ApprovalTarget) -> Bool {
-        guard let entry = sessionRegistry.session(for: target.sessionID),
-              let controller = appDelegate?.allWindowControllers.first(where: {
-                  $0.windowID == entry.ownerWindowID
-              }), (controller.visibleTabID ?? controller.tabManager.activeTabID) == entry.tabID,
-              controller.agentPanelViewModel === target.viewModel else {
-            return false
-        }
-        return true
     }
 
     private func createProject(

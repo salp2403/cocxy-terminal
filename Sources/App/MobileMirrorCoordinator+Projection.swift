@@ -25,7 +25,6 @@ extension MobileMirrorCoordinator {
             )
         }
 
-        approvalTargets.removeAll(keepingCapacity: true)
         var agents: [MobileMirrorAgentSnapshot] = []
         for entry in sessionEntriesSnapshot.sorted(by: Self.sortSessions) {
             let projectID = projectResolver.resolveProject(for: entry.workingDirectory).groupingID
@@ -83,44 +82,15 @@ extension MobileMirrorCoordinator {
     }
 
     func approvalSnapshots() -> [MobileMirrorApprovalSnapshot] {
-        guard let appDelegate else { return [] }
-        var values: [MobileMirrorApprovalSnapshot] = []
-        for controller in appDelegate.allWindowControllers {
-            guard let tabID = controller.visibleTabID ?? controller.tabManager.activeTabID,
-                  let entry = sessionEntriesSnapshot.first(where: {
-                      $0.ownerWindowID == controller.windowID && $0.tabID == tabID
-                  }), let viewModel = controller.agentPanelViewModel,
-                  let request = viewModel.pendingApproval else {
-                continue
-            }
-            let id = approvalDigest(sessionID: entry.sessionID, request: request)
-            approvalTargets[id] = ApprovalTarget(
-                sessionID: entry.sessionID,
-                requestID: request.id,
-                viewModel: viewModel
+        approvalRegistry.currentRecords().map { record in
+            MobileMirrorApprovalSnapshot(
+                id: record.id,
+                sessionID: record.sessionID,
+                title: record.title,
+                body: record.body,
+                requiresResponse: record.requiresResponse
             )
-            values.append(MobileMirrorApprovalSnapshot(
-                id: id,
-                sessionID: entry.sessionID.rawValue.uuidString,
-                title: request.preview.title,
-                body: request.preview.body,
-                requiresResponse: request.preview.kind == .userInput
-            ))
         }
-        return values.sorted { $0.id < $1.id }
-    }
-
-    func approvalDigest(
-        sessionID: SessionID,
-        request: AgentToolApprovalRequest
-    ) -> String {
-        MobileMirrorPairingAuthority.digest(Data("""
-        \(sessionID.rawValue.uuidString)
-        \(request.id)
-        \(request.preview.kind.rawValue)
-        \(request.preview.title)
-        \(request.preview.body)
-        """.utf8))
     }
 
     func synchronizeTerminalStreams() {
@@ -300,7 +270,6 @@ extension MobileMirrorCoordinator {
         for stream in ownedStreams.values { stopOwnedStream(stream) }
         ownedStreams.removeAll()
         routeRegistry.replace(routes: [], preferredSessionID: nil)
-        approvalTargets.removeAll()
         pairingURL = nil
         pendingPairing = nil
         activePairing = nil

@@ -246,13 +246,13 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
     var agentModeHostingView: NSHostingView<AgentPanelView>?
     var isAgentModeVisible: Bool = false
     var injectedAgentPromptRunner: (any AgentPromptRunning)?
-
+    var mobileMirrorApprovalRegistry: MobileMirrorApprovalRegistry?
+    var mobileMirrorApprovalCancellable: AnyCancellable?
     var richInputViewModel: RichInputComposerViewModel?
     var richInputHostingView: FocusableHostingView<RichInputComposerView>?
     var richInputPanel: RichInputPanel?
     var richInputCancelHandler: (() -> Void)?
     var richInputDraftStore = RichInputDraftStore()
-
     var voiceTriggerHandler: VoiceTriggerHandler?
     var voiceIndicatorHostingView: NSHostingView<VoiceIndicator>?
     var voiceConsentBannerHostingView: NSHostingView<VoiceConsentBanner>?

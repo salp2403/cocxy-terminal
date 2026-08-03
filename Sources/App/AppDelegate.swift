@@ -105,9 +105,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Exposed for testing purposes.
     private(set) var socketServer: SocketServerImpl?
 
-    /// Serializes visible approval for sensitive local-socket operations.
-    let privilegedSocketCommandAuthorizationCoordinator =
-        SocketPrivilegedCommandAuthorizationCoordinator()
+    /// Serializes visible approval and app-scoped mobile approval producers.
+    let mobileMirrorApprovalRegistry = MobileMirrorApprovalRegistry()
+    lazy var privilegedSocketCommandAuthorizationCoordinator = SocketPrivilegedCommandAuthorizationCoordinator(approvalRegistry: mobileMirrorApprovalRegistry)
     var activePrivilegedSocketCommandContext: SocketPrivilegedCommandContext?
 
     /// Timer that periodically checks if the socket file still exists.
@@ -1558,7 +1558,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.browserHistoryStore = browserHistoryStore
         controller.browserBookmarkStore = browserBookmarkStore
         controller.sparkleUpdater = sparkleUpdater
-
+        controller.mobileMirrorApprovalRegistry = mobileMirrorApprovalRegistry
         if let registry = sessionRegistry {
             controller.sessionRegistry = registry
             if registerWindow {

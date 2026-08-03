@@ -21,6 +21,7 @@ extension AppDelegate {
             projectResolver: projectResolver,
             titleStore: auroraWorkspaceTitleStore,
             sessionRegistry: sessionRegistry,
+            approvalRegistry: mobileMirrorApprovalRegistry,
             auditLog: relayAuditLog,
             tunnelController: tunnelController
         )

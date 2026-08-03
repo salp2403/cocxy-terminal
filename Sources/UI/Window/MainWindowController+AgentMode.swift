@@ -88,6 +88,7 @@ extension MainWindowController {
         if let agentPanelViewModel {
             agentPanelViewModel.updateConfiguration(configuration)
             agentPanelViewModel.updateSkillRegistry(currentAgentModeSkillRegistry())
+            bindMobileMirrorApprovals(to: agentPanelViewModel)
             return agentPanelViewModel
         }
 
@@ -129,6 +130,7 @@ extension MainWindowController {
             skillRegistry: currentAgentModeSkillRegistry()
         )
         agentPanelViewModel = viewModel
+        bindMobileMirrorApprovals(to: viewModel)
         return viewModel
     }
 
