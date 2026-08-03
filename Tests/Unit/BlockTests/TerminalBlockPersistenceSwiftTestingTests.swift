@@ -73,6 +73,30 @@ struct TerminalBlockPersistenceSwiftTestingTests {
         #expect(try store.load(sessionID: "tab-1").map(\.command) == ["echo one", "echo two"])
     }
 
+    @Test("store serializes concurrent appends without corrupting JSONL")
+    func storeSerializesConcurrentAppends() async throws {
+        let root = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TerminalBlockStore(rootDirectory: root)
+        let count = 256
+
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            for index in 0..<count {
+                group.addTask {
+                    try store.append(
+                        sampleBlock(id: UInt64(index), command: "echo \(index)"),
+                        sessionID: "shared-session"
+                    )
+                }
+            }
+            try await group.waitForAll()
+        }
+
+        let blocks = try store.load(sessionID: "shared-session")
+        #expect(blocks.count == count)
+        #expect(Set(blocks.map(\.id)) == Set((0..<count).map(UInt64.init)))
+    }
+
     @Test("store lists only regular JSONL session files")
     func storeListsOnlyRegularJSONLSessionFiles() throws {
         let root = temporaryDirectory()

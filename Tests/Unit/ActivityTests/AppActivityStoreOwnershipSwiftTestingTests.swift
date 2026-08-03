@@ -18,5 +18,7 @@ struct AppActivityStoreOwnershipSwiftTestingTests {
 
         #expect(first.injectedActivityStore === delegate.activityStoreCoordinator)
         #expect(second.injectedActivityStore === delegate.activityStoreCoordinator)
+        #expect(first.commandBlockStore === delegate.terminalBlockStore)
+        #expect(second.commandBlockStore === delegate.terminalBlockStore)
     }
 }

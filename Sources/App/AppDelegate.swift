@@ -29,11 +29,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Shared cross-window tab router used by notifications and the dashboard.
     var windowTabRouter: WindowControllerTabRouter?
-
     /// The dock badge controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var dockBadgeController: DockBadgeController?
-
     /// The quick switch controller. Created during app launch.
     /// Exposed for testing purposes.
     private(set) var quickSwitchController: QuickSwitchController?
@@ -48,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let projectRegistry = ProjectRegistry()
     let projectConfigWatcherRegistry = ProjectConfigWatcherRegistry()
     let tabConfigProjectContextStore = TabConfigProjectContextStore()
+    let terminalBlockStore = TerminalBlockStore()
     var projectRegistryChangeCancellable: AnyCancellable?
     lazy var taskInboxStore = TaskInboxStore(projectResolver: projectResolver)
     let projectFanOutCoordinator = ProjectFanOutCoordinator()
@@ -1526,6 +1525,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         controller.injectedDashboardViewModel = agentDashboardViewModel
         controller.injectedTaskInboxStore = taskInboxStore
         controller.injectedProjectFanOutCoordinator = projectFanOutCoordinator
+        controller.commandBlockStore = terminalBlockStore
         controller.injectedTimelineStore = agentTimelineStore
         controller.injectedActivityStore = configuredActivityStore()
         controller.injectedNotificationManager = notificationManager
