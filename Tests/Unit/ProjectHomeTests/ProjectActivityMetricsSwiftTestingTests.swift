@@ -124,7 +124,7 @@ struct ProjectActivityMetricsSwiftTestingTests {
     @MainActor
     @Test("failed Git context can be retried")
     func failedGitContextRetries() async {
-        var attempts = 0
+        let attempts = LockedBox(0)
         let viewModel = ProjectHomePanelViewModel(
             projectID: ProjectID(rawValue: "/tmp/project-retry"),
             projectRoot: URL(fileURLWithPath: "/tmp/project-retry", isDirectory: true),
@@ -134,8 +134,11 @@ struct ProjectActivityMetricsSwiftTestingTests {
             worktreeConfig: .defaults,
             contextLoader: ProjectHomeContextLoader(
                 gitMetadata: { _, _ in
-                    attempts += 1
-                    return attempts == 1
+                    let attempt = attempts.withValue { value in
+                        value += 1
+                        return value
+                    }
+                    return attempt == 1
                         ? .failure(.gitStatusUnavailable)
                         : .success(ProjectHomeGitMetadata(
                             branch: "main",
