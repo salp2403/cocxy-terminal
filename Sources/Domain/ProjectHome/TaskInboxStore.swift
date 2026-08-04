@@ -38,6 +38,7 @@ final class TaskInboxStore: ObservableObject {
     private enum SourcePhase: Equatable {
         case loading
         case ready
+        case degraded(String)
         case failed(String)
     }
 
@@ -88,7 +89,9 @@ final class TaskInboxStore: ObservableObject {
 
     func updateTaskRuns(_ runs: [TaskRun]) {
         taskRuns = runs
-        phases[.taskRuns] = .ready
+        if phases[.taskRuns] == .loading {
+            phases[.taskRuns] = .ready
+        }
         rebuild()
     }
 
@@ -115,6 +118,16 @@ final class TaskInboxStore: ObservableObject {
         rebuild()
     }
 
+    func markDegraded(_ source: TaskInboxSource, message: String) {
+        phases[source] = .degraded(message)
+        rebuild()
+    }
+
+    func markReady(_ source: TaskInboxSource) {
+        phases[source] = .ready
+        rebuild()
+    }
+
     func entries(for projectID: ProjectID) -> [TaskInboxEntry] {
         snapshot.entries.filter { $0.projectID == projectID }
     }
@@ -137,20 +150,24 @@ final class TaskInboxStore: ObservableObject {
     }
 
     private func availability() -> TaskInboxAvailability {
-        let readyCount = phases.values.filter { $0 == .ready }.count
+        let availableCount = phases.values.filter {
+            if case .ready = $0 { return true }
+            if case .degraded = $0 { return true }
+            return false
+        }.count
         let issues = phases.compactMap { source, phase -> TaskInboxIssue? in
             switch phase {
             case .loading:
                 return TaskInboxIssue(source: source, message: "Loading")
             case .ready:
                 return nil
-            case .failed(let message):
+            case .degraded(let message), .failed(let message):
                 return TaskInboxIssue(source: source, message: message)
             }
         }.sorted { $0.source.rawValue < $1.source.rawValue }
 
-        if readyCount == TaskInboxSource.allCases.count { return .ready }
-        if readyCount > 0 { return .partial(issues) }
+        if issues.isEmpty { return .ready }
+        if availableCount > 0 { return .partial(issues) }
         if phases.values.contains(where: {
             if case .failed = $0 { return true }
             return false

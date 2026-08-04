@@ -54,7 +54,8 @@ extension MainWindowController {
                     candidateCollisions: TaskCollisionDetector.betweenCandidates(
                         comparisons,
                         projectRoot: projectRoot
-                    )
+                    ),
+                    persistenceIssue: delegate.taskRunPersistenceIssue(for: runID)
                 )
             },
             launchCollisions: { prompt, seedPaths in
@@ -89,6 +90,18 @@ extension MainWindowController {
                     runID: runID,
                     candidateID: candidateID
                 )
+            },
+            cancel: { runID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                return try await delegate.cancelTaskRun(runID: runID)
+            },
+            forget: { runID in
+                guard let delegate = NSApp.delegate as? AppDelegate else {
+                    throw ProjectHomeActionFailure.servicesUnavailable
+                }
+                try await delegate.forgetTaskRun(runID: runID)
             }
         )
         return ProjectFanOutFlowViewModel(

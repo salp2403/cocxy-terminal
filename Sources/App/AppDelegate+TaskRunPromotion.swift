@@ -376,7 +376,7 @@ extension AppDelegate {
         _ run: TaskRun,
         fallbackTabID: UUID
     ) async {
-        await MainActor.run {
+        _ = await MainActor.run {
             self.publishTaskRun(run, fallbackTabID: fallbackTabID)
         }
     }

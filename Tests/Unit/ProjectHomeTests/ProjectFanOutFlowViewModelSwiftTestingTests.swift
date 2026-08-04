@@ -124,6 +124,47 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         #expect(model.inferredPaths == harness.recycleDraft.plannedPaths)
     }
 
+    @Test("active task run can be cancelled from the comparison surface")
+    func activeRunCancels() async throws {
+        let harness = try Harness()
+        let model = harness.makeModel()
+        await model.showComparison(runID: harness.run.id)
+
+        #expect(model.canCancelRun)
+        await model.cancelRun()
+
+        #expect(harness.cancelledRunIDs == [harness.run.id])
+        #expect(model.run?.status == .cancelled)
+        #expect(model.canForgetRun)
+    }
+
+    @Test("finished task run can be forgotten from the comparison surface")
+    func finishedRunForgets() async throws {
+        let harness = try Harness(completed: true)
+        let runID = harness.run.id
+        let model = harness.makeModel()
+        await model.showComparison(runID: runID)
+
+        #expect(model.canForgetRun)
+        await model.forgetRun()
+
+        #expect(harness.forgottenRunIDs == [runID])
+        #expect(model.mode == .inbox)
+        #expect(model.run == nil)
+    }
+
+    @Test("comparison exposes a task run persistence warning")
+    func comparisonExposesPersistenceWarning() async throws {
+        let harness = try Harness()
+        harness.persistenceIssue = "Task flow could not be saved. Changes remain in memory."
+        let model = harness.makeModel()
+
+        await model.showComparison(runID: harness.run.id)
+
+        #expect(model.persistenceIssue == harness.persistenceIssue)
+        #expect(model.durabilityNotice == harness.persistenceIssue)
+    }
+
     @Test("coordinator consumes a request once for the matching project")
     func coordinatorRoutesOnce() {
         let coordinator = ProjectFanOutCoordinator()
@@ -195,6 +236,9 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         var prepareCallCount = 0
         var executionError: TaskRunExecutionError?
         var cleanupFailures: [String] = []
+        var cancelledRunIDs: [String] = []
+        var forgottenRunIDs: [String] = []
+        var persistenceIssue: String?
 
         init(completed: Bool = false) throws {
             var run = TaskRun(
@@ -280,7 +324,8 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                             comparisons: run.candidates.map {
                                 TaskRunCandidateComparison(candidate: $0, diffs: [])
                             },
-                            candidateCollisions: .empty
+                            candidateCollisions: .empty,
+                            persistenceIssue: persistenceIssue
                         )
                     },
                     launchCollisions: { [self] _, seedPaths in
@@ -309,7 +354,13 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                             cleanupFailures: cleanupFailures
                         )
                     },
-                    recycle: { [self] _, _ in recycleDraft }
+                    recycle: { [self] _, _ in recycleDraft },
+                    cancel: { [self] runID in
+                        cancelledRunIDs.append(runID)
+                        try run.markCancelled()
+                        return run
+                    },
+                    forget: { [self] runID in forgottenRunIDs.append(runID) }
                 )
             )
         }

@@ -206,6 +206,7 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
     var promotedCandidateID: String?
     var failureMessage: String?
     var completionWarning: String?
+    var recoveredFromInterruption: Bool
 
     var projectID: ProjectID {
         ProjectID(rootURL: originRepoPath)
@@ -240,6 +241,69 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         self.promotedCandidateID = nil
         self.failureMessage = nil
         self.completionWarning = nil
+        self.recoveredFromInterruption = false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case prompt
+        case originRepoPath
+        case worktreeBasePath
+        case baseRef
+        case baseCommit
+        case createdAt
+        case updatedAt
+        case status
+        case candidates
+        case promotedCandidateID
+        case failureMessage
+        case completionWarning
+        case recoveredFromInterruption
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        prompt = try container.decode(String.self, forKey: .prompt)
+        originRepoPath = try container.decode(URL.self, forKey: .originRepoPath)
+        worktreeBasePath = try container.decode(String.self, forKey: .worktreeBasePath)
+        baseRef = try container.decode(String.self, forKey: .baseRef)
+        baseCommit = try container.decode(String.self, forKey: .baseCommit)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        status = try container.decode(TaskRunStatus.self, forKey: .status)
+        candidates = try container.decode([TaskRunCandidate].self, forKey: .candidates)
+        promotedCandidateID = try container.decodeIfPresent(
+            String.self,
+            forKey: .promotedCandidateID
+        )
+        failureMessage = try container.decodeIfPresent(String.self, forKey: .failureMessage)
+        completionWarning = try container.decodeIfPresent(
+            String.self,
+            forKey: .completionWarning
+        )
+        recoveredFromInterruption = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .recoveredFromInterruption
+        ) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(id, forKey: .id)
+        try container.encode(prompt, forKey: .prompt)
+        try container.encode(originRepoPath, forKey: .originRepoPath)
+        try container.encode(worktreeBasePath, forKey: .worktreeBasePath)
+        try container.encode(baseRef, forKey: .baseRef)
+        try container.encode(baseCommit, forKey: .baseCommit)
+        try container.encode(createdAt, forKey: .createdAt)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(status, forKey: .status)
+        try container.encode(candidates, forKey: .candidates)
+        try container.encodeIfPresent(promotedCandidateID, forKey: .promotedCandidateID)
+        try container.encodeIfPresent(failureMessage, forKey: .failureMessage)
+        try container.encodeIfPresent(completionWarning, forKey: .completionWarning)
+        try container.encode(recoveredFromInterruption, forKey: .recoveredFromInterruption)
     }
 
     @discardableResult
@@ -263,6 +327,7 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         updatedAt = now
         failureMessage = nil
         completionWarning = nil
+        recoveredFromInterruption = false
     }
 
     mutating func markFailed(_ message: String, now: Date = Date()) {
@@ -270,6 +335,28 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         updatedAt = now
         failureMessage = message
         completionWarning = nil
+    }
+
+    mutating func markCancelled(
+        _ message: String = "Cancelled by user",
+        now: Date = Date()
+    ) throws {
+        guard !status.isFinished else { throw TaskRunError.runAlreadyFinished(id) }
+        status = .cancelled
+        promotedCandidateID = nil
+        updatedAt = now
+        failureMessage = message
+        completionWarning = nil
+        for index in candidates.indices {
+            switch candidates[index].status {
+            case .preparing, .running:
+                candidates[index].status = candidates[index].worktree == nil ? .orphaned : .failed
+                candidates[index].failureMessage = message
+                candidates[index].worktree?.tabID = nil
+            case .finished, .failed, .promoted, .discarded, .orphaned:
+                break
+            }
+        }
     }
 
     mutating func markPromoting(candidateID: String, now: Date = Date()) throws {

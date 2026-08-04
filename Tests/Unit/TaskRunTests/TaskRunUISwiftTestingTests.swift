@@ -24,7 +24,9 @@ struct TaskRunUISwiftTestingTests {
                 },
                 preparePromotion: { _, _ in throw TaskRunError.runNotFound("missing") },
                 executePromotion: { _ in throw TaskRunError.runNotFound("missing") },
-                recycle: { _, _ in throw TaskRunError.runNotFound("missing") }
+                recycle: { _, _ in throw TaskRunError.runNotFound("missing") },
+                cancel: { _ in throw TaskRunError.runNotFound("missing") },
+                forget: { _ in throw TaskRunError.runNotFound("missing") }
             )
         )
         model.showLaunch()

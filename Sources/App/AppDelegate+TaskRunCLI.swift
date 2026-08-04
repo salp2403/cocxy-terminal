@@ -23,6 +23,7 @@ enum TaskRunExecutionError: Error, Sendable, Equatable, CustomStringConvertible 
     case duplicateRun(String)
     case launchFailed(reason: String, rollbackFailures: [String])
     case promotionUnavailable(String)
+    case cancelled(String)
 
     var description: String {
         switch self {
@@ -39,6 +40,8 @@ enum TaskRunExecutionError: Error, Sendable, Equatable, CustomStringConvertible 
             return "Task run launch failed: \(reason). Rollback needs attention: \(rollbackFailures.joined(separator: "; "))"
         case .promotionUnavailable(let reason):
             return "Task candidate cannot be promoted: \(reason)"
+        case .cancelled(let runID):
+            return "Task run was cancelled: \(runID)"
         }
     }
 }
@@ -71,9 +74,18 @@ extension AppDelegate {
             run: run,
             preflightWorkingDirectory: originRepoPath
         )
+        do {
+            try await persistTaskRunImmediately(run)
+        } catch {
+            throw TaskRunExecutionError.launchFailed(
+                reason: "Task run could not be saved before worktree creation: \(error)",
+                rollbackFailures: []
+            )
+        }
         let registered = await registerTaskRunSnapshot(
             run,
-            fallbackTabID: context.sourceTabID.rawValue
+            fallbackTabID: context.sourceTabID.rawValue,
+            persist: false
         )
         guard registered else {
             throw TaskRunExecutionError.duplicateRun(run.id)
@@ -97,6 +109,7 @@ extension AppDelegate {
 
         do {
             for index in run.candidates.indices {
+                try await requireTaskRunLaunchActive(run.id)
                 let candidate = run.candidates[index]
                 let entry = try await service.add(
                     originRepoPath: originRepoPath,
@@ -108,13 +121,15 @@ extension AppDelegate {
                 try run.updateCandidate(id: candidate.id) {
                     $0.worktree = entry
                 }
-                await publishTaskRunSnapshot(
+                run = await publishTaskRunSnapshot(
                     run,
                     fallbackTabID: context.sourceTabID.rawValue
                 )
+                try requireTaskRunLaunchActive(run)
             }
 
             for plan in launchPlans {
+                try await requireTaskRunLaunchActive(run.id)
                 guard let candidate = run.candidates.first(where: { $0.id == plan.candidateID }),
                       var entry = candidate.worktree else {
                     throw TaskRunError.candidateNotFound(plan.candidateID)
@@ -122,28 +137,31 @@ extension AppDelegate {
                 let entrySnapshot = entry
                 let runID = run.id
                 let tabID = try await MainActor.run { () throws -> TabID in
-                    guard let controller = self.taskRunController(for: context) else {
-                        throw TaskRunExecutionError.targetUnavailable
+                    try self.performTaskRunLaunchEffect(runID: runID) { _ in
+                        guard let controller = self.taskRunController(for: context) else {
+                            throw TaskRunExecutionError.targetUnavailable
+                        }
+                        let launch = try self.launchAgentTeamConfig(
+                            plan.config,
+                            controller: controller,
+                            targetTabID: context.sourceTabID.rawValue,
+                            workingDirectory: entrySnapshot.path.path,
+                            persistSnapshot: false,
+                            syncDashboard: false
+                        )
+                        guard launch.tabIDs.count == 1, let tabID = launch.tabIDs.first else {
+                            throw AgentTeamError.paneLaunchFailed(plan.config.id)
+                        }
+                        controller.attachWorktree(
+                            entrySnapshot,
+                            originRepo: originRepoPath,
+                            to: tabID
+                        )
+                        self.taskRunIDByTeamID[plan.config.id] = runID
+                        return tabID
                     }
-                    let launch = try self.launchAgentTeamConfig(
-                        plan.config,
-                        controller: controller,
-                        targetTabID: context.sourceTabID.rawValue,
-                        workingDirectory: entrySnapshot.path.path,
-                        persistSnapshot: false,
-                        syncDashboard: false
-                    )
-                    guard launch.tabIDs.count == 1, let tabID = launch.tabIDs.first else {
-                        throw AgentTeamError.paneLaunchFailed(plan.config.id)
-                    }
-                    controller.attachWorktree(
-                        entrySnapshot,
-                        originRepo: originRepoPath,
-                        to: tabID
-                    )
-                    self.taskRunIDByTeamID[plan.config.id] = runID
-                    return tabID
                 }
+                try await requireTaskRunLaunchActive(run.id)
 
                 entry.tabID = tabID
                 try await store.upsert(entry)
@@ -152,23 +170,33 @@ extension AppDelegate {
                     $0.status = .running
                     $0.failureMessage = nil
                 }
-                await publishTaskRunSnapshot(
+                run = await publishTaskRunSnapshot(
                     run,
                     fallbackTabID: context.sourceTabID.rawValue
                 )
+                try requireTaskRunLaunchActive(run)
             }
 
             run.markRunning()
-            await publishTaskRunSnapshot(
+            run = await publishTaskRunSnapshot(
                 run,
                 fallbackTabID: context.sourceTabID.rawValue
             )
-            let runningSnapshot = run
-            _ = try await MainActor.run {
-                try self.registerTaskOrchestrationSession(for: runningSnapshot)
+            try requireTaskRunLaunchActive(run)
+            let runID = run.id
+            let registeredRun = try await MainActor.run {
+                try self.performTaskRunLaunchEffect(runID: runID) { activeRun in
+                    _ = try self.registerTaskOrchestrationSession(for: activeRun)
+                    return activeRun
+                }
             }
-            return run
+            return registeredRun
         } catch {
+            if let executionError = error as? TaskRunExecutionError,
+               case .cancelled = executionError {
+                await stopCancelledTaskRunRuntimes(run)
+                throw executionError
+            }
             let rollback = await rollbackTaskRunLaunch(
                 run: run,
                 reason: String(describing: error),
@@ -348,14 +376,88 @@ extension AppDelegate {
     }
 
     @MainActor
-    func publishTaskRun(_ run: TaskRun, fallbackTabID: UUID) {
+    @discardableResult
+    func publishTaskRun(
+        _ proposedRun: TaskRun,
+        fallbackTabID: UUID,
+        persist: Bool = true
+    ) -> TaskRun {
+        let run = taskRunSnapshotForPublication(proposedRun)
         activeTaskRuns[run.id] = run
         taskInboxStore.updateTaskRuns(Array(activeTaskRuns.values))
-        taskRunPersistenceCoordinator?.enqueue(run)
+        if persist {
+            taskRunPersistenceCoordinator?.enqueue(run)
+        }
         agentDashboardViewModel?.syncTaskRun(run, fallbackTabId: fallbackTabID)
         for controller in allWindowControllers {
             guard controller.dashboardViewModel !== agentDashboardViewModel else { continue }
             controller.dashboardViewModel?.syncTaskRun(run, fallbackTabId: fallbackTabID)
+        }
+        return run
+    }
+
+    @MainActor
+    private func taskRunSnapshotForPublication(_ proposedRun: TaskRun) -> TaskRun {
+        guard var current = activeTaskRuns[proposedRun.id],
+              current.status == .cancelled,
+              proposedRun.status != .cancelled else {
+            return proposedRun
+        }
+        for proposedCandidate in proposedRun.candidates {
+            guard let index = current.candidates.firstIndex(where: {
+                $0.id == proposedCandidate.id
+            }) else { continue }
+            if current.candidates[index].worktree == nil {
+                current.candidates[index].worktree = proposedCandidate.worktree
+                current.candidates[index].worktree?.tabID = nil
+            }
+            current.candidates[index].touchedFiles = Array(Set(
+                current.candidates[index].touchedFiles + proposedCandidate.touchedFiles
+            )).sorted()
+        }
+        return current
+    }
+
+    nonisolated private func requireTaskRunLaunchActive(_ runID: String) async throws {
+        let run = await MainActor.run { self.activeTaskRuns[runID] }
+        guard let run else { throw TaskRunError.runNotFound(runID) }
+        try requireTaskRunLaunchActive(run)
+    }
+
+    nonisolated private func requireTaskRunLaunchActive(_ run: TaskRun) throws {
+        if run.status == .cancelled {
+            throw TaskRunExecutionError.cancelled(run.id)
+        }
+        guard run.status == .launching || run.status == .running else {
+            throw TaskRunExecutionError.launchFailed(
+                reason: "Task run changed to \(run.status.rawValue) during launch",
+                rollbackFailures: []
+            )
+        }
+    }
+
+    @MainActor
+    func performTaskRunLaunchEffect<T>(
+        runID: String,
+        _ effect: (TaskRun) throws -> T
+    ) throws -> T {
+        guard let current = activeTaskRuns[runID] else {
+            throw TaskRunError.runNotFound(runID)
+        }
+        try requireTaskRunLaunchActive(current)
+        return try effect(current)
+    }
+
+    nonisolated private func stopCancelledTaskRunRuntimes(_ run: TaskRun) async {
+        await MainActor.run {
+            self.taskOrchestrationSessionManager.revoke(runID: run.id)
+            for candidate in run.candidates {
+                _ = self.removeAgentTeamRuntime(
+                    teamID: candidate.teamID,
+                    worktreeClosePolicyOverride: .keep,
+                    removeDashboardRow: false
+                )
+            }
         }
     }
 
@@ -416,19 +518,21 @@ extension AppDelegate {
 
     nonisolated private func registerTaskRunSnapshot(
         _ run: TaskRun,
-        fallbackTabID: UUID
+        fallbackTabID: UUID,
+        persist: Bool = true
     ) async -> Bool {
         await MainActor.run {
             guard self.activeTaskRuns[run.id] == nil else { return false }
-            self.publishTaskRun(run, fallbackTabID: fallbackTabID)
+            self.publishTaskRun(run, fallbackTabID: fallbackTabID, persist: persist)
             return true
         }
     }
 
+    @discardableResult
     nonisolated private func publishTaskRunSnapshot(
         _ run: TaskRun,
         fallbackTabID: UUID
-    ) async {
+    ) async -> TaskRun {
         await MainActor.run {
             self.publishTaskRun(run, fallbackTabID: fallbackTabID)
         }

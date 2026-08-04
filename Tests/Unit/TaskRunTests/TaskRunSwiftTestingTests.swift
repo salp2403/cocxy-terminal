@@ -94,6 +94,30 @@ struct TaskRunSwiftTestingTests {
         #expect(run.updatedAt == Date(timeIntervalSince1970: 20))
     }
 
+    @Test("legacy task run snapshots default the interruption marker")
+    func legacySnapshotDefaultsInterruptionMarker() throws {
+        let run = TaskRun(
+            id: "legacy-recovery",
+            request: try TaskRunRequest.make(prompt: "Ship", agents: "codex,claude"),
+            originRepoPath: URL(fileURLWithPath: "/tmp/repo"),
+            baseCommit: "abc123",
+            now: Date(timeIntervalSince1970: 10)
+        )
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        var object = try #require(
+            JSONSerialization.jsonObject(with: encoder.encode(run)) as? [String: Any]
+        )
+        object.removeValue(forKey: "recoveredFromInterruption")
+        let legacyData = try JSONSerialization.data(withJSONObject: object)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let decoded = try decoder.decode(TaskRun.self, from: legacyData)
+
+        #expect(decoded.recoveredFromInterruption == false)
+    }
+
     @Test("failed promotion detaches only the selected candidate and keeps an alternative runnable")
     func failedPromotionKeepsAlternativeRunnable() throws {
         let request = try TaskRunRequest.make(

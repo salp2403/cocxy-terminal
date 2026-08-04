@@ -50,6 +50,25 @@ struct TaskRunPersistenceSwiftTestingTests {
         }
     }
 
+    @Test("snapshot removal rejects a symbolic link without deleting its target")
+    func removalRejectsSnapshotSymlink() throws {
+        let root = temporaryDirectory("remove-symlink")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let run = try makeRun(origin: root.appendingPathComponent("repo"), count: 2)
+        let store = TaskRunStore(rootDirectory: root.appendingPathComponent("snapshots"))
+        try store.save(run)
+        let snapshot = store.fileURL(for: run)
+        let outside = root.appendingPathComponent("outside.json")
+        try Data("outside".utf8).write(to: outside)
+        try FileManager.default.removeItem(at: snapshot)
+        try FileManager.default.createSymbolicLink(at: snapshot, withDestinationURL: outside)
+
+        #expect(throws: TaskRunStoreError.symbolicLinkRejected(snapshot.path)) {
+            try store.remove(run)
+        }
+        #expect(try Data(contentsOf: outside) == Data("outside".utf8))
+    }
+
     @Test("coordinator persists the newest burst snapshot away from the main thread")
     func coordinatorCoalescesBurst() throws {
         let probe = TaskRunSaveProbe(blocksFirstSave: true)
@@ -133,6 +152,92 @@ struct TaskRunPersistenceSwiftTestingTests {
         #expect(probe.successfulSnapshots == [run])
     }
 
+    @Test("nested persistence barriers replay the newest deferred snapshot")
+    func coordinatorReplaysNestedSuppression() throws {
+        let probe = TaskRunSaveProbe()
+        let coordinator = TaskRunPersistenceCoordinator(
+            label: "dev.cocxy.tests.task-run-nested-barrier",
+            saveOperation: { try probe.save($0) }
+        )
+        var run = try makeRun(
+            origin: URL(fileURLWithPath: "/tmp/task-run-nested-barrier"),
+            count: 2
+        )
+
+        coordinator.suppress(runID: run.id)
+        coordinator.suppress(runID: run.id)
+        run.failureMessage = "newest-deferred-snapshot"
+        coordinator.enqueue(run)
+        coordinator.resume(runID: run.id)
+        coordinator.flush()
+        #expect(probe.snapshots.isEmpty)
+
+        coordinator.resume(runID: run.id)
+        coordinator.flush()
+        #expect(probe.snapshots == [run])
+    }
+
+    @Test("immediate persistence replays state published while the disk is busy")
+    @MainActor
+    func immediatePersistenceReplaysConcurrentPublication() async throws {
+        let probe = TaskRunSaveProbe(blocksFirstSave: true)
+        let delegate = AppDelegate()
+        delegate.taskRunPersistenceCoordinator = TaskRunPersistenceCoordinator(
+            label: "dev.cocxy.tests.task-run-immediate-replay",
+            saveOperation: { try probe.save($0) }
+        )
+        let run = try makeRun(
+            origin: URL(fileURLWithPath: "/tmp/task-run-immediate-replay"),
+            count: 2
+        )
+        delegate.publishTaskRun(run, fallbackTabID: UUID(), persist: false)
+
+        let saveTask = Task.detached(priority: .utility) {
+            try await delegate.persistTaskRunImmediately(run)
+        }
+        let startResult = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(
+                    returning: probe.firstSaveStarted.wait(timeout: .now() + 2)
+                )
+            }
+        }
+        #expect(startResult == .success)
+        var latest = run
+        latest.failureMessage = "published-during-save"
+        latest.updatedAt = Date(timeIntervalSince1970: 500)
+        delegate.publishTaskRun(latest, fallbackTabID: UUID())
+        probe.releaseFirstSave.signal()
+        try await saveTask.value
+        delegate.taskRunPersistenceCoordinator?.flush()
+
+        #expect(probe.snapshots == [run, latest])
+    }
+
+    @Test("a stale launch precheck cannot execute after cancellation")
+    @MainActor
+    func staleLaunchPrecheckCannotExecuteAfterCancellation() throws {
+        let delegate = AppDelegate()
+        var run = try makeRun(
+            id: "cancelled-before-launch-effect",
+            origin: URL(fileURLWithPath: "/tmp/cancelled-before-launch-effect"),
+            count: 2
+        )
+        delegate.publishTaskRun(run, fallbackTabID: UUID(), persist: false)
+        let stalePrecheck = run
+        #expect(stalePrecheck.status == .launching)
+        try run.markCancelled()
+        delegate.publishTaskRun(run, fallbackTabID: UUID(), persist: false)
+        var effectCount = 0
+
+        #expect(throws: TaskRunExecutionError.cancelled(run.id)) {
+            try delegate.performTaskRunLaunchEffect(runID: stalePrecheck.id) { _ in
+                effectCount += 1
+            }
+        }
+        #expect(effectCount == 0)
+    }
+
     @Test("publish funnel writes through the app-scoped coordinator")
     @MainActor
     func publishFunnelWritesThroughCoordinator() throws {
@@ -173,9 +278,191 @@ struct TaskRunPersistenceSwiftTestingTests {
         await delegate.taskRunRestorationTask?.value
         delegate.taskRunPersistenceCoordinator?.flush()
 
-        #expect(delegate.activeTaskRuns[run.id] == run)
+        let restored = try #require(delegate.activeTaskRuns[run.id])
+        #expect(restored.status == .failed)
+        #expect(restored.candidates.allSatisfy { $0.status == .orphaned })
         #expect(delegate.taskRunPersistenceCoordinator != nil)
         delegate.shutdownTaskRuntimesForTermination()
+    }
+
+    @Test("restore marks candidates without worktrees orphaned and fails an empty launch")
+    func restoreMarksMissingWorktreesOrphaned() async throws {
+        let run = try makeRun(
+            id: "interrupted-before-worktrees",
+            origin: URL(fileURLWithPath: "/tmp/interrupted-before-worktrees"),
+            count: 3
+        )
+
+        let result = await TaskRunRestorer(
+            now: { Date(timeIntervalSince1970: 200) }
+        ).reconcile(run)
+
+        #expect(result.run.status == .failed)
+        #expect(result.run.candidates.allSatisfy { $0.status == .orphaned })
+        #expect(result.run.candidates.allSatisfy {
+            $0.failureMessage?.contains("was not created") == true
+        })
+        #expect(result.orphanedCandidateCount == 3)
+        #expect(result.interruptedRunCount == 1)
+    }
+
+    @Test("restore turns an interrupted promotion into an explicit failure")
+    func restoreFailsInterruptedPromotion() async throws {
+        var run = try makeRun(
+            id: "interrupted-promotion",
+            origin: URL(fileURLWithPath: "/tmp/interrupted-promotion"),
+            count: 2
+        )
+        run.markRunning(now: Date(timeIntervalSince1970: 150))
+        try run.markPromoting(
+            candidateID: run.candidates[0].id,
+            now: Date(timeIntervalSince1970: 160)
+        )
+
+        let result = await TaskRunRestorer(
+            now: { Date(timeIntervalSince1970: 200) }
+        ).reconcile(run)
+
+        #expect(result.run.status == .failed)
+        #expect(result.run.promotedCandidateID == nil)
+        #expect(result.run.failureMessage?.contains("promotion was interrupted") == true)
+        #expect(result.run.recoveredFromInterruption)
+    }
+
+    @Test("store caps finished history without pruning an active run")
+    func storeCapsFinishedHistory() throws {
+        let root = temporaryDirectory("retention")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let snapshots = root.appendingPathComponent("snapshots", isDirectory: true)
+        let origin = root.appendingPathComponent("repo", isDirectory: true)
+        let writer = TaskRunStore(
+            rootDirectory: snapshots,
+            retentionPolicy: TaskRunRetentionPolicy(maximumFinishedRunsPerProject: 10)
+        )
+        for index in 0..<5 {
+            var run = try makeRun(id: "finished-\(index)", origin: origin, count: 2)
+            try run.markCompleted(
+                candidateID: run.candidates[0].id,
+                now: Date(timeIntervalSince1970: TimeInterval(300 + index))
+            )
+            try writer.save(run)
+        }
+        let active = try makeRun(id: "active", origin: origin, count: 2)
+        try writer.save(active)
+
+        let capped = TaskRunStore(
+            rootDirectory: snapshots,
+            retentionPolicy: TaskRunRetentionPolicy(maximumFinishedRunsPerProject: 2)
+        )
+        let report = try capped.loadAll()
+
+        #expect(report.prunedSnapshotCount == 3)
+        #expect(Set(report.runs.map(\.id)) == ["active", "finished-3", "finished-4"])
+        #expect(report.runs.contains(where: { !$0.status.isFinished }))
+        let projectFiles = try FileManager.default.contentsOfDirectory(
+            at: capped.fileURL(for: active).deletingLastPathComponent(),
+            includingPropertiesForKeys: nil
+        ).filter { $0.lastPathComponent.hasSuffix(TaskRunStore.fileSuffix) }
+        #expect(projectFiles.count == 3)
+    }
+
+    @Test("final persistence failure becomes visible task state")
+    @MainActor
+    func persistenceFailureIsVisible() throws {
+        let probe = TaskRunPersistenceEventProbe()
+        let delegate = AppDelegate()
+        delegate.taskRunPersistenceCoordinator = TaskRunPersistenceCoordinator(
+            label: "dev.cocxy.tests.task-run-visible-failure",
+            maximumRetryAttempts: 2,
+            retryDelay: 0,
+            saveOperation: { _ in
+                throw TaskRunStoreError.persistenceFailed("controlled disk failure")
+            },
+            eventHandler: { probe.record($0) }
+        )
+        let run = try makeRun(
+            id: "visible-failure",
+            origin: URL(fileURLWithPath: "/tmp/visible-failure"),
+            count: 2
+        )
+
+        delegate.publishTaskRun(run, fallbackTabID: UUID())
+        delegate.taskRunPersistenceCoordinator?.flush()
+        let event = try #require(probe.events.last)
+        delegate.handleTaskRunPersistenceEvent(event)
+
+        #expect(delegate.taskRunPersistenceIssue(for: run.id)?.contains(
+            "controlled disk failure"
+        ) == true)
+        guard case .partial(let issues) = delegate.taskInboxStore.snapshot.availability else {
+            Issue.record("Expected degraded task inbox state")
+            return
+        }
+        #expect(issues.contains { $0.message.contains("Changes remain in memory") })
+    }
+
+    @Test("restored active run cancellation is durable")
+    @MainActor
+    func restoredRunCancellationPersists() async throws {
+        let root = temporaryDirectory("cancel")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TaskRunStore(rootDirectory: root.appendingPathComponent("snapshots"))
+        var run = try makeRun(id: "restored-active", origin: root.appendingPathComponent("repo"), count: 2)
+        run.markRunning(now: Date(timeIntervalSince1970: 200))
+        run.recoveredFromInterruption = true
+        let delegate = AppDelegate()
+        delegate.taskRunStore = store
+        delegate.taskRunPersistenceCoordinator = TaskRunPersistenceCoordinator(store: store)
+        delegate.publishTaskRun(run, fallbackTabID: UUID(), persist: false)
+        for candidate in run.candidates {
+            delegate.taskRunIDByTeamID[candidate.teamID] = run.id
+        }
+        _ = try delegate.taskOrchestrationSessionManager.issue(
+            runID: run.id,
+            tabIDs: [UUID()]
+        )
+
+        let cancelled = try await delegate.cancelTaskRun(runID: run.id)
+
+        #expect(cancelled.status == .cancelled)
+        #expect(delegate.activeTaskRuns[run.id]?.status == .cancelled)
+        #expect(run.candidates.allSatisfy { delegate.taskRunIDByTeamID[$0.teamID] == nil })
+        #expect(delegate.taskOrchestrationSessionManager.credential(forRunID: run.id) == nil)
+        #expect(try store.loadAll().runs.first?.status == .cancelled)
+    }
+
+    @Test("forget removes a finished run from memory and disk")
+    @MainActor
+    func forgetFinishedRunRemovesSnapshot() async throws {
+        let root = temporaryDirectory("forget")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = TaskRunStore(rootDirectory: root.appendingPathComponent("snapshots"))
+        var run = try makeRun(id: "finished-forget", origin: root.appendingPathComponent("repo"), count: 2)
+        let retainedWorktree = root.appendingPathComponent("retained-worktree", isDirectory: true)
+        try FileManager.default.createDirectory(at: retainedWorktree, withIntermediateDirectories: true)
+        try run.updateCandidate(id: run.candidates[0].id) {
+            $0.worktree = WorktreeManifest.WorktreeEntry(
+                id: "retained-worktree",
+                branch: "task/retained",
+                path: retainedWorktree,
+                createdAt: Date(timeIntervalSince1970: 1),
+                agent: $0.provider.rawValue,
+                tabID: nil
+            )
+        }
+        try run.markCompleted(candidateID: run.candidates[0].id)
+        try store.save(run)
+        let delegate = AppDelegate()
+        delegate.taskRunStore = store
+        delegate.taskRunPersistenceCoordinator = TaskRunPersistenceCoordinator(store: store)
+        delegate.publishTaskRun(run, fallbackTabID: UUID(), persist: false)
+
+        try await delegate.forgetTaskRun(runID: run.id)
+
+        #expect(delegate.activeTaskRuns[run.id] == nil)
+        #expect(!FileManager.default.fileExists(atPath: store.fileURL(for: run).path))
+        #expect(FileManager.default.fileExists(atPath: retainedWorktree.path))
+        #expect(try store.loadAll().runs.isEmpty)
     }
 
     @Test("task run list filters by canonical project")
@@ -263,7 +550,14 @@ struct TaskRunPersistenceSwiftTestingTests {
         #expect(restored.candidates.map(\.worktree?.branch) == entries.map(\.branch))
         #expect(restored.candidates[2].status == .orphaned)
         #expect(restored.candidates[2].worktree?.tabID == nil)
+        #expect(restored.recoveredFromInterruption)
         #expect(report.orphanedCandidateCount == 1)
+
+        let secondRestore = await TaskRunRestorer(
+            now: { Date(timeIntervalSince1970: 9_999) }
+        ).reconcile(restored)
+        #expect(secondRestore.run == restored)
+        #expect(secondRestore.interruptedRunCount == 0)
 
         let gitProbe = TaskRunGitProbe()
         let comparisons = try TaskRunComparisonService { _, _ in
@@ -402,5 +696,20 @@ private final class TaskRunTransientSaveProbe: @unchecked Sendable {
             throw TaskRunStoreError.persistenceFailed("controlled transient failure")
         }
         try store.save(run)
+    }
+}
+
+private final class TaskRunPersistenceEventProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storedEvents: [TaskRunPersistenceEvent] = []
+
+    var events: [TaskRunPersistenceEvent] {
+        lock.withLock { storedEvents }
+    }
+
+    func record(_ event: TaskRunPersistenceEvent) {
+        lock.withLock {
+            storedEvents.append(event)
+        }
     }
 }

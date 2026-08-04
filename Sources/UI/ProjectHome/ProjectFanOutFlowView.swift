@@ -55,6 +55,14 @@ struct ProjectFanOutFlowView: View {
                 ProgressView().controlSize(.small)
             }
             if viewModel.mode == .comparison {
+                TaskRunLifecycleControls(
+                    canCancel: viewModel.canCancelRun,
+                    canForget: viewModel.canForgetRun,
+                    isBusy: viewModel.isBusy,
+                    localizer: localizer,
+                    cancel: { Task { await viewModel.cancelRun() } },
+                    forget: { Task { await viewModel.forgetRun() } }
+                )
                 Button { Task { await viewModel.refreshComparison() } } label: {
                     Image(systemName: "arrow.clockwise")
                         .frame(width: 24, height: 24)
@@ -479,6 +487,12 @@ struct ProjectFanOutFlowView: View {
                 .font(.system(size: 10.5))
                 .foregroundStyle(Color(nsColor: .systemRed))
                 .lineLimit(3)
+                .textSelection(.enabled)
+        } else if let issue = viewModel.durabilityNotice {
+            Label(issue, systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 10.5))
+                .foregroundStyle(Color(nsColor: .systemOrange))
+                .lineLimit(5)
                 .textSelection(.enabled)
         } else if let success = viewModel.successMessage {
             Label(success, systemImage: "checkmark.circle.fill")

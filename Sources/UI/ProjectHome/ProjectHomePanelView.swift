@@ -333,17 +333,8 @@ struct ProjectHomePanelView: View {
             .foregroundStyle(palette.textMedium.resolvedColor())
             .padding(.horizontal, 18)
             .padding(.bottom, 10)
-        case .partial:
-            availabilityBanner(
-                localizer.string(
-                    "projectHome.inbox.partial",
-                    fallback: "Some project activity is temporarily unavailable."
-                )
-            )
-        case .failed:
-            availabilityBanner(
-                localizer.string("projectHome.inbox.failed", fallback: "Project activity is unavailable.")
-            )
+        case .partial(let issues), .failed(let issues):
+            availabilityBanner(issues.map(\.message).joined(separator: "\n"))
         case .ready:
             EmptyView()
         }
@@ -376,8 +367,7 @@ struct ProjectHomePanelView: View {
 
     @ViewBuilder
     private func taskRow(_ entry: TaskInboxEntry) -> some View {
-        if let navigation = entry.navigation,
-           entry.kind != .fanOut || viewModel.worktreeConfig.enabled {
+        if let navigation = entry.navigation {
             Button { activate(entry, navigation: navigation) } label: {
                 taskRowContent(entry)
             }
@@ -389,7 +379,6 @@ struct ProjectHomePanelView: View {
 
     private func activate(_ entry: TaskInboxEntry, navigation: TaskInboxNavigation) {
         if entry.kind == .fanOut,
-           viewModel.worktreeConfig.enabled,
            let runID = navigation.sessionID {
             Task { await fanOutViewModel.showComparison(runID: runID) }
             return

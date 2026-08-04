@@ -7,6 +7,7 @@ struct ProjectFanOutSnapshot: Equatable, Sendable {
     let run: TaskRun
     let comparisons: [TaskRunCandidateComparison]
     let candidateCollisions: TaskCollisionReport
+    let persistenceIssue: String?
 }
 
 @MainActor
@@ -17,6 +18,8 @@ struct ProjectFanOutActions {
     let preparePromotion: (String, String) async throws -> TaskRunPromotionPreview
     let executePromotion: (TaskRunPromotionPreview) async throws -> TaskRunPromotionOutcome
     let recycle: (String, String) async throws -> TaskRunRecycleDraft
+    let cancel: (String) async throws -> TaskRun
+    let forget: (String) async throws -> Void
 }
 
 @MainActor
@@ -49,6 +52,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     @Published private(set) var isBusy = false
     @Published private(set) var errorMessage: String?
     @Published private(set) var successMessage: String?
+    @Published private(set) var persistenceIssue: String?
 
     private let defaultProviders: [AgentTeamProvider]
     private let defaultBaseRef: String
@@ -114,6 +118,14 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     var canRecycleSelectedCandidate: Bool {
         selectedCandidate?.status == .discarded && !isBusy
     }
+    var canCancelRun: Bool {
+        guard let run else { return false }
+        return (run.status == .launching || run.status == .running) && !isBusy
+    }
+    var canForgetRun: Bool { run?.status.isFinished == true && !isBusy }
+    var durabilityNotice: String? {
+        persistenceIssue ?? (run?.recoveredFromInterruption == true ? run?.failureMessage : nil)
+    }
 
     func handle(_ destination: ProjectFanOutDestination) async {
         switch destination {
@@ -133,6 +145,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         isAnalyzingCollisions = false
         errorMessage = nil
         promotionPreview = nil
+        persistenceIssue = nil
     }
 
     func showLaunch(draft: TaskRunRecycleDraft? = nil) {
@@ -142,6 +155,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         errorMessage = nil
         successMessage = nil
         promotionPreview = nil
+        persistenceIssue = nil
         if let draft {
             prompt = draft.prompt
             selectedProviders = Array(Self.uniqueProviders(draft.providers)
@@ -359,17 +373,56 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         }
     }
 
+    func cancelRun() async {
+        guard let run, canCancelRun else { return }
+        isBusy = true
+        errorMessage = nil
+        do {
+            self.run = try await actions.cancel(run.id)
+            successMessage = localizer.string(
+                "taskRun.status.cancelled",
+                fallback: "Task run cancelled."
+            )
+            isBusy = false
+            await loadComparison(runID: run.id, ownsBusyState: false)
+        } catch {
+            let failure = message(for: error)
+            isBusy = false
+            await loadComparison(runID: run.id, ownsBusyState: false)
+            errorMessage = failure
+        }
+    }
+
+    func forgetRun() async {
+        guard let run, canForgetRun else { return }
+        isBusy = true
+        errorMessage = nil
+        do {
+            try await actions.forget(run.id)
+            self.run = nil
+            comparisons = []
+            selectedCandidateID = nil
+            persistenceIssue = nil
+            showInbox()
+        } catch {
+            isBusy = false
+            errorMessage = message(for: error)
+        }
+    }
+
     private func loadComparison(runID: String, ownsBusyState: Bool) async {
         loadRevision += 1
         let revision = loadRevision
         isBusy = true
         errorMessage = nil
+        persistenceIssue = nil
         do {
             let snapshot = try await actions.loadSnapshot(runID)
             guard revision == loadRevision else { return }
             run = snapshot.run
             comparisons = snapshot.comparisons
             candidateCollisionReport = snapshot.candidateCollisions
+            persistenceIssue = snapshot.persistenceIssue
             if let selectedCandidateID,
                snapshot.run.candidates.contains(where: { $0.id == selectedCandidateID }) {
                 self.selectedCandidateID = selectedCandidateID
@@ -453,6 +506,9 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     }
 
     private func message(for error: Error) -> String {
-        localizer.projectErrorMessage(for: error, context: .fanOut)
+        if let lifecycleError = error as? TaskRunLifecycleError {
+            return lifecycleError.description
+        }
+        return localizer.projectErrorMessage(for: error, context: .fanOut)
     }
 }
