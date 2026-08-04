@@ -180,8 +180,8 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         try configService.reload()
         let controller = MainWindowController(
             bridge: MockTerminalEngine(),
-            tabManager: tabManager,
             configService: configService,
+            tabManager: tabManager,
             gitInfoProvider: git,
             projectResolver: resolver
         )
