@@ -33,6 +33,14 @@ extension AppLocalizer {
                 fallback: "Enable worktrees in the global or project configuration to use this action."
             )
         }
+        if context == .fanOut {
+            if let executionError = error as? TaskRunExecutionError {
+                return taskRunExecutionErrorMessage(executionError)
+            }
+            if let worktreeError = error as? WorktreeServiceError {
+                return worktreeServiceErrorMessage(worktreeError)
+            }
+        }
 
         switch context {
         case .metadataWarning:
@@ -49,7 +57,14 @@ extension AppLocalizer {
                 "projectHome.error.codeReviewOpenFailed",
                 fallback: "Code Review could not be opened."
             )
-        case .projectAction, .fanOut:
+        case .fanOut:
+            let category = "\(String(describing: type(of: error))) [\((error as NSError).code)]"
+            return formattedProjectString(
+                "projectHome.fanOut.error.unknown",
+                fallback: "The parallel task could not be completed. Technical category: %@",
+                category
+            )
+        case .projectAction:
             return string(
                 "project.error.message",
                 fallback: "The project action could not be completed."
@@ -183,6 +198,120 @@ extension AppLocalizer {
                 path
             )
         }
+    }
+
+    private func taskRunExecutionErrorMessage(_ error: TaskRunExecutionError) -> String {
+        switch error {
+        case .targetUnavailable:
+            return string(
+                "projectHome.fanOut.error.targetUnavailable",
+                fallback: "The task target is no longer available. Reopen Project Home and try again."
+            )
+        case .featureDisabled:
+            return string(
+                "worktree.featureDisabled",
+                fallback: "Enable worktrees in the global or project configuration to use this action."
+            )
+        case .duplicateRun(let runID):
+            return formattedProjectString(
+                "projectHome.fanOut.error.duplicateRun",
+                fallback: "A task run with this identifier is already active: %@",
+                runID
+            )
+        case .launchFailed(_, let rollbackFailures) where !rollbackFailures.isEmpty:
+            return formattedProjectString(
+                "projectHome.fanOut.error.launchRollbackIncomplete",
+                fallback: "The parallel task could not start, and %d cleanup operation(s) need attention.",
+                Int32(clamping: rollbackFailures.count)
+            )
+        case .launchFailed:
+            return string(
+                "projectHome.fanOut.error.launchFailed",
+                fallback: "The parallel task could not start. Verify the selected providers and worktree state, then try again."
+            )
+        case .promotionUnavailable(let reason):
+            return formattedProjectString(
+                "projectHome.fanOut.error.promotionUnavailable",
+                fallback: "The promotion preview is no longer valid: %@",
+                boundedFanOutDetail(reason)
+            )
+        case .cancelled:
+            return string(
+                "projectHome.fanOut.error.cancelled",
+                fallback: "The parallel task was cancelled."
+            )
+        }
+    }
+
+    private func worktreeServiceErrorMessage(_ error: WorktreeServiceError) -> String {
+        switch error {
+        case .featureDisabled:
+            return string(
+                "worktree.featureDisabled",
+                fallback: "Enable worktrees in the global or project configuration to use this action."
+            )
+        case .gitUnavailable:
+            return string(
+                "projectHome.fanOut.error.gitUnavailable",
+                fallback: "Git is unavailable. Check your installation and PATH."
+            )
+        case .notAGitRepository(let path):
+            return formattedProjectString(
+                "projectHome.fanOut.error.notRepository",
+                fallback: "The project is no longer a Git repository: %@",
+                path
+            )
+        case .collisionAfterRetries(let attempts):
+            return formattedProjectString(
+                "projectHome.fanOut.error.worktreeCollision",
+                fallback: "A unique worktree could not be created after %d attempts.",
+                Int32(clamping: attempts)
+            )
+        case .gitCommandFailed(_, _, let exitCode):
+            return formattedProjectString(
+                "projectHome.fanOut.error.gitFailed",
+                fallback: "Git could not complete the operation (exit %d). Review the repository state and try again.",
+                exitCode
+            )
+        case .worktreeNotFound(let id):
+            return formattedProjectString(
+                "projectHome.fanOut.error.worktreeMissing",
+                fallback: "The worktree is no longer available: %@",
+                id
+            )
+        case .uncommittedChanges(let path, _):
+            return formattedProjectString(
+                "projectHome.fanOut.error.uncommittedChanges",
+                fallback: "Commit or stash the changes in %@ before continuing.",
+                path
+            )
+        case .originHasUncommittedChanges(let path, _):
+            return formattedProjectString(
+                "projectHome.fanOut.error.originDirty",
+                fallback: "Commit or stash the changes in the project checkout before promotion: %@",
+                path
+            )
+        case .baseRevisionChanged:
+            return string(
+                "projectHome.fanOut.error.baseChanged",
+                fallback: "The project branch changed after the parallel task started. Refresh or restart the task."
+            )
+        case .manifestError:
+            return string(
+                "projectHome.fanOut.error.manifestUnavailable",
+                fallback: "The worktree registry could not be updated safely."
+            )
+        }
+    }
+
+    private func boundedFanOutDetail(_ detail: String) -> String {
+        let oneLine = detail
+            .split(whereSeparator: { $0.isNewline })
+            .first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !oneLine.isEmpty else { return "state changed" }
+        return String(oneLine.prefix(180))
     }
 
     private func formattedProjectString(

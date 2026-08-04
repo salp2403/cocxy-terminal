@@ -66,6 +66,54 @@ struct ProjectErrorLocalizationSwiftTestingTests {
         ) == "El proyecto se abrió, pero no se pudieron guardar sus metadatos en la lista de proyectos recientes.")
     }
 
+    @Test("fan-out failures expose actionable causes without process output")
+    func fanOutFailuresAreActionableAndRedacted() throws {
+        let localizer = try spanishLocalizer()
+
+        let target = localizer.projectErrorMessage(
+            for: TaskRunExecutionError.targetUnavailable,
+            context: .fanOut
+        )
+        #expect(target != "The task target is no longer available. Reopen Project Home and try again.")
+        #expect(target.localizedCaseInsensitiveContains("tarea"))
+
+        let promotion = localizer.projectErrorMessage(
+            for: TaskRunExecutionError.promotionUnavailable("task changed"),
+            context: .fanOut
+        )
+        #expect(promotion.contains("task changed"))
+
+        let launch = localizer.projectErrorMessage(
+            for: TaskRunExecutionError.launchFailed(
+                reason: "secret-token from provider stderr",
+                rollbackFailures: ["private cleanup path", "second private path"]
+            ),
+            context: .fanOut
+        )
+        #expect(launch.contains("2"))
+        #expect(!launch.contains("secret-token"))
+        #expect(!launch.contains("private cleanup path"))
+
+        let git = localizer.projectErrorMessage(
+            for: WorktreeServiceError.gitCommandFailed(
+                command: "git merge private-branch",
+                stderr: "secret-token and untrusted terminal output",
+                exitCode: 7
+            ),
+            context: .fanOut
+        )
+        #expect(git.contains("7"))
+        #expect(!git.contains("secret-token"))
+        #expect(!git.contains("private-branch"))
+
+        let unknown = localizer.projectErrorMessage(
+            for: NSError(domain: "secret-domain", code: 41),
+            context: .fanOut
+        )
+        #expect(unknown.contains("NSError [41]"))
+        #expect(!unknown.contains("secret-domain"))
+    }
+
     @Test("Project Home view model presents localized action failures")
     func projectHomeViewModelUsesInjectedLocalizer() async throws {
         let localizer = try spanishLocalizer()
