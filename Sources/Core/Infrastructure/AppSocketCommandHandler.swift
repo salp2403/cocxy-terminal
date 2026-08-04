@@ -194,17 +194,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
     private let tabMoveProvider: @Sendable (String, Int) -> Bool
 
     /// Saves the focused tab as a reusable local TOML config.
-    private let tabConfigSaveProvider: (@Sendable (
-        _ name: String,
-        _ command: String?,
-        _ theme: String?,
-        _ environment: [String: String]
-    ) -> (name: String, path: String, warning: String?)?)?
+    private let tabConfigSaveProvider: TabConfigSaveSocketProvider?
 
     /// Opens a new tab from a reusable local TOML config.
-    private let tabConfigOpenProvider: (@Sendable (
-        _ name: String
-    ) -> (id: String, title: String, path: String, warning: String?)?)?
+    private let tabConfigOpenProvider: TabConfigOpenSocketProvider?
 
     /// Lists saved reusable tab config names.
     private let tabConfigListProvider: (@Sendable () -> [String]?)?
@@ -622,15 +615,8 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         tabCreateWithEngineProviderOverride: (@Sendable (String?, String?) -> (id: String, title: String)?)? = nil,
         tabRenameProviderOverride: (@Sendable (String, String) -> Bool)? = nil,
         tabMoveProviderOverride: (@Sendable (String, Int) -> Bool)? = nil,
-        tabConfigSaveProvider: (@Sendable (
-            _ name: String,
-            _ command: String?,
-            _ theme: String?,
-            _ environment: [String: String]
-        ) -> (name: String, path: String, warning: String?)?)? = nil,
-        tabConfigOpenProvider: (@Sendable (
-            _ name: String
-        ) -> (id: String, title: String, path: String, warning: String?)?)? = nil,
+        tabConfigSaveProvider: TabConfigSaveSocketProvider? = nil,
+        tabConfigOpenProvider: TabConfigOpenSocketProvider? = nil,
         tabConfigListProvider: (@Sendable () -> [String]?)? = nil,
         tabConfigPathProvider: (@Sendable (_ name: String) -> String?)? = nil,
         tabConfigExportProvider: (@Sendable (

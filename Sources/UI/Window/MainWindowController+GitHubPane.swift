@@ -477,11 +477,8 @@ extension MainWindowController {
         let tabID = createTab(workingDirectory: workingDirectory)
         guard let surfaceID = tabSurfaceMap[tabID] else { return false }
 
-        let browserOpenerPath = installGitHubAuthBrowserOpenerScript()
-        guard terminalEngine(for: surfaceID).sendText(
-            Self.gitHubAuthenticationCommand(browserOpenerPath: browserOpenerPath),
-            to: surfaceID
-        ) else {
+        let authCommand = Self.gitHubAuthenticationCommand(browserOpenerPath: installGitHubAuthBrowserOpenerScript())
+        guard terminalEngine(for: surfaceID).sendText(authCommand, to: surfaceID) else {
             performCloseTab(tabID)
             return false
         }

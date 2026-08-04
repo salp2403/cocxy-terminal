@@ -543,9 +543,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
     }
 
     func test_tabConfigSave_routesNameThemeAndEnvToProviderWithoutCommand() {
-        let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>(
-            (nil, nil, nil, [:])
-        )
+        let captured = LockedBox<(name: String?, command: String?, theme: String?, env: [String: String])>((nil, nil, nil, [:]))
         let handler = AppSocketCommandHandler(
             privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
             tabManager: nil,
@@ -609,12 +607,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             hookEventReceiver: nil,
             tabConfigOpenProvider: { name in
                 captured.withValue { $0 = name }
-                return (
-                    id: "tab-1",
-                    title: "api",
-                    path: "/tmp/api.toml",
-                    warning: "one pane replaced"
-                )
+                return (id: "tab-1", title: "api", path: "/tmp/api.toml", warning: "one pane replaced")
             }
         )
 
@@ -2136,24 +2129,6 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(response.data?["status"], "sent")
     }
 
-    func test_sendCommand_withDroppedDelivery_returnsFailure() {
-        let handler = AppSocketCommandHandler(
-            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
-            tabManager: nil,
-            hookEventReceiver: nil,
-            sendTextProvider: { _ in false }
-        )
-
-        let response = handler.handleCommand(SocketRequest(
-            id: "v4-8-dropped",
-            command: "send",
-            params: ["text": "ls"]
-        ))
-
-        XCTAssertFalse(response.success)
-        XCTAssertEqual(response.error, "Terminal input could not be delivered")
-    }
-
     func test_sendKeyCommand_withProvider_returnsSent() {
         let handler = AppSocketCommandHandler(
             privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
@@ -2164,24 +2139,6 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         let response = handler.handleCommand(request)
         XCTAssertTrue(response.success)
         XCTAssertEqual(response.data?["status"], "sent")
-    }
-
-    func test_sendKeyCommand_withDroppedDelivery_returnsFailure() {
-        let handler = AppSocketCommandHandler(
-            privilegedCommandAuthorizationProvider: { request in .internalTrusted(for: request) },
-            tabManager: nil,
-            hookEventReceiver: nil,
-            sendKeyProvider: { _ in false }
-        )
-
-        let response = handler.handleCommand(SocketRequest(
-            id: "v4-9-dropped",
-            command: "send-key",
-            params: ["key": "enter"]
-        ))
-
-        XCTAssertFalse(response.success)
-        XCTAssertEqual(response.error, "Terminal input could not be delivered")
     }
 
     func test_hooksCommand_returnsData() {

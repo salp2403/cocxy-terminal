@@ -51,7 +51,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     private var openingFailures: [UUID: String] = [:]
     private var closingChannelIDs: Set<UUID> = []
     private var profileRevocationTasks: [ProfileLeaseKey: ProfileRevocationTask] = [:]
-    private var mobileMirrorRelays: [UUID: MobileMirrorLocalRelay] = [:]
+    let mobileMirrorRelayPool = MobileMirrorLocalRelayPool()
 
     // MARK: - Auto-Cleanup
 
@@ -372,35 +372,10 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
     }
 
     // MARK: - List Channels
-
     /// Returns all active channels for a given profile.
     func listChannels(profileID: UUID) -> [RelayChannel] {
-        channels.values
-            .filter { $0.profileID == profileID }
+        channels.values.filter { $0.profileID == profileID }
             .sorted { $0.name < $1.name }
-    }
-
-    func openMobileMirrorRelay(
-        gatewayPort: UInt16,
-        preambleSecret: String,
-        bindAddress: String
-    ) throws -> MobileMirrorLocalRelayLease {
-        let relay = MobileMirrorLocalRelay(
-            gatewayPort: gatewayPort,
-            preambleSecret: preambleSecret,
-            addressProvider: { bindAddress }
-        )
-        let lease = try relay.start()
-        mobileMirrorRelays[lease.id] = relay
-        return lease
-    }
-
-    func privateMobileMirrorAddress() -> String? {
-        MobileMirrorPrivateNetworkAddress.current()
-    }
-
-    func closeMobileMirrorRelay(leaseID: UUID) {
-        mobileMirrorRelays.removeValue(forKey: leaseID)?.stop()
     }
 
     func channelIDs(profileID: UUID, connectionLeaseID: UUID) -> Set<UUID> {
@@ -497,9 +472,7 @@ final class RelayManagerImpl: RelayManaging, ObservableObject {
             revocation.task.cancel()
         }
         profileRevocationTasks.removeAll()
-        let localRelays = Array(mobileMirrorRelays.values)
-        mobileMirrorRelays.removeAll()
-        localRelays.forEach { $0.stop() }
+        mobileMirrorRelayPool.stopAll()
     }
 
     /// Closes all channels that have passed their `expiresAt` time.

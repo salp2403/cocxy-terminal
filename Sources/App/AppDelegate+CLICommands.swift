@@ -531,12 +531,7 @@ extension AppDelegate {
             return nil
         }
 
-        guard controller.terminalEngine(for: surfaceID).sendText(
-            command + "\r",
-            to: surfaceID
-        ) else {
-            return nil
-        }
+        guard controller.terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID) else { return nil }
         var data: [String: String] = [
             "status": "sent",
             "id": "\(block.id)",

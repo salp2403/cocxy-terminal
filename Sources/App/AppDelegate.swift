@@ -1941,30 +1941,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     // MARK: - Socket Server Initialization
 
-    nonisolated static func agentTeamProviderForPreflight(
-        command: CLICommandName,
-        params: [String: String]
-    ) -> AgentTeamProvider? {
-        switch command {
-        case .agentTeamLaunch:
-            let requestedProvider = (params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedProvider = requestedProvider.isEmpty
-                ? AgentTeamProvider.claudeCode.rawValue
-                : requestedProvider
-            return AgentTeamProvider(rawValue: normalizedProvider)
-        case .handoffImport:
-            let requestedProvider = (params["agent"] ?? AgentTeamProvider.claudeCode.rawValue)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            let normalizedProvider = requestedProvider.isEmpty
-                ? AgentTeamProvider.claudeCode.rawValue
-                : requestedProvider
-            return AgentTeamProvider.resolve(named: normalizedProvider)
-        default:
-            return nil
-        }
-    }
-
     /// Starts the CLI companion socket server and schedules a health check timer.
     private func initializeSocketServer() {
         try? CellCloudInitFileStager.removeAbandonedDefaultStaging()

@@ -10,6 +10,30 @@ struct AgentTeamAppLaunchResult {
 }
 
 extension AppDelegate {
+    nonisolated static func agentTeamProviderForPreflight(
+        command: CLICommandName,
+        params: [String: String]
+    ) -> AgentTeamProvider? {
+        switch command {
+        case .agentTeamLaunch:
+            let requestedProvider = (params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedProvider = requestedProvider.isEmpty
+                ? AgentTeamProvider.claudeCode.rawValue
+                : requestedProvider
+            return AgentTeamProvider(rawValue: normalizedProvider)
+        case .handoffImport:
+            let requestedProvider = (params["agent"] ?? AgentTeamProvider.claudeCode.rawValue)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedProvider = requestedProvider.isEmpty
+                ? AgentTeamProvider.claudeCode.rawValue
+                : requestedProvider
+            return AgentTeamProvider.resolve(named: normalizedProvider)
+        default:
+            return nil
+        }
+    }
+
     nonisolated func handleAgentTeamCLIRequest(
         kind: String,
         params: [String: String],
