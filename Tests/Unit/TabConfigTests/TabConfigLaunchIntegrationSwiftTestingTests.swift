@@ -123,6 +123,64 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         #expect(captured.layout == fixture.layout)
     }
 
+    @Test("save keeps the config when the visible pane layout cannot be reused")
+    func saveFallsBackWithoutLayout() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+        let tabID = try #require(fixture.controller.tabManager.activeTabID)
+        let surfaceID = try #require(fixture.controller.tabSurfaceMap[tabID])
+        fixture.controller.surfaceWorkingDirectories[surfaceID] = fixture.root
+
+        let saved = fixture.delegate.saveFocusedTabConfigForCLI(
+            name: "fallback",
+            command: nil,
+            theme: nil,
+            environment: [:],
+            store: fixture.store
+        )
+        let config = try fixture.store.load(named: "fallback")
+
+        #expect(saved?.warning != nil)
+        #expect(config.layout == nil)
+        #expect(config.workingDirectory == fixture.workspace.path)
+    }
+
+    @Test("open replaces only missing pane resources and reports the degradation")
+    func openReplacesMissingPaneResources() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let degradedLayout = TabConfigLayout.split(
+            direction: .horizontal,
+            ratio: 0.5,
+            first: .pane(TabConfigPane(workingDirectory: "api")),
+            second: .pane(TabConfigPane(
+                type: .markdown,
+                filePath: "missing.md",
+                title: "Missing"
+            ))
+        )
+        try fixture.store.save(TabConfig(
+            name: "degraded",
+            workingDirectory: fixture.workspace.path,
+            layout: degradedLayout
+        ))
+
+        let result = fixture.delegate.openTabConfigForCLI(
+            named: "degraded",
+            store: fixture.store
+        )
+        let tabID = try #require(fixture.controller.tabManager.activeTabID)
+        let splitManager = fixture.controller.tabSplitCoordinator.splitManager(for: tabID)
+        let paneTypes = splitManager.rootNode.allLeafIDs().map {
+            splitManager.panelType(for: $0.terminalID)
+        }
+
+        #expect(result?.warning != nil)
+        #expect(paneTypes == [.terminal, .terminal])
+        #expect(fixture.controller.collectLeafViews().count == 2)
+    }
+
     @Test("partial layout creation failure releases every created resource")
     func partialCreationFailureCleansUp() throws {
         let fixture = try makeFixture()

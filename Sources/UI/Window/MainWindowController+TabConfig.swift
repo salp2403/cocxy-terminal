@@ -125,14 +125,20 @@ extension MainWindowController {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appDelegate.saveFocusedTabConfigForCLI(
+        guard let result = appDelegate.saveFocusedTabConfigForCLI(
             name: name,
             command: nil,
             theme: nil,
             environment: [:]
-        ) != nil else {
+        ) else {
             showTabConfigError(Self.localizedTabConfigSaveFailureMessage(localizer: appLocalizer()))
             return
+        }
+        if let warning = result.warning {
+            showTabConfigWarning(
+                title: copy.messageText,
+                message: warning
+            )
         }
     }
 
@@ -154,9 +160,15 @@ extension MainWindowController {
 
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard appDelegate.openTabConfigFromUserInterface(named: name) != nil else {
+        guard let result = appDelegate.openTabConfigFromUserInterface(named: name) else {
             showTabConfigError(Self.localizedTabConfigOpenFailureMessage(localizer: appLocalizer()))
             return
+        }
+        if let warning = result.warning {
+            showTabConfigWarning(
+                title: copy.messageText,
+                message: warning
+            )
         }
     }
 
@@ -166,6 +178,19 @@ extension MainWindowController {
         alert.messageText = message
         alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
         alert.runModal()
+    }
+
+    private func showTabConfigWarning(title: String, message: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .informational
+        alert.messageText = title
+        alert.informativeText = message
+        alert.addButton(withTitle: appLocalizer().string("common.ok", fallback: "OK"))
+        if let window, window.attachedSheet == nil {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
     }
 
     @MainActor

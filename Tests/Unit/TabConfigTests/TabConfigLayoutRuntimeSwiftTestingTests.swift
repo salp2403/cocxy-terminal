@@ -87,6 +87,46 @@ struct TabConfigLayoutRuntimeSwiftTestingTests {
         }
     }
 
+    @Test("best-effort resolution preserves topology and replaces unavailable panes")
+    func bestEffortResolutionReplacesUnavailablePanes() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let layout = TabConfigLayout.split(
+            direction: .vertical,
+            ratio: 0.4,
+            first: .pane(TabConfigPane(
+                workingDirectory: "missing-directory",
+                title: "Shell"
+            )),
+            second: .pane(TabConfigPane(
+                type: .markdown,
+                filePath: "missing.md",
+                title: "Notes"
+            ))
+        )
+
+        let report = try TabConfigLayoutRuntimeResolver().resolveBestEffort(
+            layout,
+            projectDirectory: fixture.project
+        )
+
+        guard case .split(.vertical, 0.4, let first, let second) = report.layout,
+              case .pane(let firstPane) = first,
+              case .pane(let secondPane) = second else {
+            Issue.record("Best-effort resolution did not preserve split topology")
+            return
+        }
+        #expect(firstPane.type == .terminal)
+        #expect(firstPane.workingDirectory?.standardizedFileURL.path
+            == fixture.project.standardizedFileURL.path)
+        #expect(firstPane.title == "Shell")
+        #expect(secondPane.type == .terminal)
+        #expect(secondPane.workingDirectory?.standardizedFileURL.path
+            == fixture.project.standardizedFileURL.path)
+        #expect(secondPane.title == "Notes")
+        #expect(report.warnings.map(\.paneType) == [.terminal, .markdown])
+    }
+
     private func makeFixture() throws -> Fixture {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-tab-config-runtime-tests")

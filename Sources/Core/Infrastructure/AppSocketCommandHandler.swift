@@ -199,10 +199,12 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         _ command: String?,
         _ theme: String?,
         _ environment: [String: String]
-    ) -> (name: String, path: String)?)?
+    ) -> (name: String, path: String, warning: String?)?)?
 
     /// Opens a new tab from a reusable local TOML config.
-    private let tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)?
+    private let tabConfigOpenProvider: (@Sendable (
+        _ name: String
+    ) -> (id: String, title: String, path: String, warning: String?)?)?
 
     /// Lists saved reusable tab config names.
     private let tabConfigListProvider: (@Sendable () -> [String]?)?
@@ -625,8 +627,10 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             _ command: String?,
             _ theme: String?,
             _ environment: [String: String]
-        ) -> (name: String, path: String)?)? = nil,
-        tabConfigOpenProvider: (@Sendable (_ name: String) -> (id: String, title: String, path: String)?)? = nil,
+        ) -> (name: String, path: String, warning: String?)?)? = nil,
+        tabConfigOpenProvider: (@Sendable (
+            _ name: String
+        ) -> (id: String, title: String, path: String, warning: String?)?)? = nil,
         tabConfigListProvider: (@Sendable () -> [String]?)? = nil,
         tabConfigPathProvider: (@Sendable (_ name: String) -> String?)? = nil,
         tabConfigExportProvider: (@Sendable (
@@ -1876,11 +1880,15 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
             return .failure(id: request.id, error: "Unable to save tab config")
         }
 
-        return .ok(id: request.id, data: [
+        var data = [
             "status": "saved",
             "name": result.name,
             "path": result.path,
-        ])
+        ]
+        if let warning = result.warning {
+            data["warning"] = warning
+        }
+        return .ok(id: request.id, data: data)
     }
 
     /// Opens a new tab from a saved TOML config. The provider reloads the
@@ -1895,13 +1903,17 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         guard let result = provider(name) else {
             return .failure(id: request.id, error: "Unable to open tab config")
         }
-        return .ok(id: request.id, data: [
+        var data = [
             "status": "opened",
             "name": name,
             "id": result.id,
             "title": result.title,
             "path": result.path,
-        ])
+        ]
+        if let warning = result.warning {
+            data["warning"] = warning
+        }
+        return .ok(id: request.id, data: data)
     }
 
     private func handleTabConfigList(_ request: SocketRequest) -> SocketResponse {

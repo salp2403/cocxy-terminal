@@ -554,7 +554,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
                 captured.withValue { value in
                     value = (name, command, theme, environment)
                 }
-                return (name: name, path: "/tmp/\(name).toml")
+                return (name: name, path: "/tmp/\(name).toml", warning: "layout omitted")
             }
         )
 
@@ -575,6 +575,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(snapshot.theme, "Nord")
         XCTAssertEqual(snapshot.env, ["API_URL": "http://127.0.0.1:8080"])
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+        XCTAssertEqual(response.data?["warning"], "layout omitted")
     }
 
     func test_tabConfigSave_rejectsStartupCommandBeforeProviderDispatch() {
@@ -585,7 +586,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             hookEventReceiver: nil,
             tabConfigSaveProvider: { name, _, _, _ in
                 providerWasCalled.withValue { $0 = true }
-                return (name: name, path: "/tmp/\(name).toml")
+                return (name: name, path: "/tmp/\(name).toml", warning: nil)
             }
         )
 
@@ -608,7 +609,12 @@ final class AppSocketCommandHandlerTests: XCTestCase {
             hookEventReceiver: nil,
             tabConfigOpenProvider: { name in
                 captured.withValue { $0 = name }
-                return (id: "tab-1", title: "api", path: "/tmp/api.toml")
+                return (
+                    id: "tab-1",
+                    title: "api",
+                    path: "/tmp/api.toml",
+                    warning: "one pane replaced"
+                )
             }
         )
 
@@ -622,6 +628,7 @@ final class AppSocketCommandHandlerTests: XCTestCase {
         XCTAssertEqual(captured.withValue { $0 }, "api")
         XCTAssertEqual(response.data?["id"], "tab-1")
         XCTAssertEqual(response.data?["path"], "/tmp/api.toml")
+        XCTAssertEqual(response.data?["warning"], "one pane replaced")
     }
 
     func test_tabConfigExport_routesNameLeafAndForceToProvider() {

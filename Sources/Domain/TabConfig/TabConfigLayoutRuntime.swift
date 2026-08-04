@@ -37,6 +37,17 @@ struct ResolvedTabConfigPane: Equatable, Sendable {
     let title: String?
 }
 
+struct TabConfigLayoutRuntimeWarning: Equatable, Sendable {
+    let paneType: PanelType
+    let title: String?
+    let reason: String
+}
+
+struct ResolvedTabConfigLayoutReport: Equatable, Sendable {
+    let layout: ResolvedTabConfigLayout
+    let warnings: [TabConfigLayoutRuntimeWarning]
+}
+
 indirect enum ResolvedTabConfigLayout: Equatable, Sendable {
     case pane(ResolvedTabConfigPane)
     case split(
@@ -75,6 +86,21 @@ struct TabConfigLayoutRuntimeResolver {
         try TabConfigLayoutTOMLCodec.validate(layout)
         let projectRoot = try canonicalProjectDirectory(projectDirectory)
         return try resolveNode(layout, projectRoot: projectRoot)
+    }
+
+    func resolveBestEffort(
+        _ layout: TabConfigLayout,
+        projectDirectory: URL
+    ) throws -> ResolvedTabConfigLayoutReport {
+        try TabConfigLayoutTOMLCodec.validate(layout)
+        let projectRoot = try canonicalProjectDirectory(projectDirectory)
+        var warnings: [TabConfigLayoutRuntimeWarning] = []
+        let resolved = resolveNodeBestEffort(
+            layout,
+            projectRoot: projectRoot,
+            warnings: &warnings
+        )
+        return ResolvedTabConfigLayoutReport(layout: resolved, warnings: warnings)
     }
 
     func canonicalProjectDirectory(_ directory: URL) throws -> URL {
@@ -117,6 +143,47 @@ struct TabConfigLayoutRuntimeResolver {
                 ratio: ratio,
                 first: try resolveNode(first, projectRoot: projectRoot),
                 second: try resolveNode(second, projectRoot: projectRoot)
+            )
+        }
+    }
+
+    private func resolveNodeBestEffort(
+        _ layout: TabConfigLayout,
+        projectRoot: URL,
+        warnings: inout [TabConfigLayoutRuntimeWarning]
+    ) -> ResolvedTabConfigLayout {
+        switch layout {
+        case .pane(let pane):
+            do {
+                return .pane(try resolvePane(pane, projectRoot: projectRoot))
+            } catch {
+                warnings.append(TabConfigLayoutRuntimeWarning(
+                    paneType: pane.type,
+                    title: pane.title,
+                    reason: error.localizedDescription
+                ))
+                return .pane(ResolvedTabConfigPane(
+                    type: .terminal,
+                    workingDirectory: projectRoot,
+                    fileURL: nil,
+                    initialURL: nil,
+                    title: pane.title
+                ))
+            }
+        case .split(let direction, let ratio, let first, let second):
+            return .split(
+                direction: direction,
+                ratio: ratio,
+                first: resolveNodeBestEffort(
+                    first,
+                    projectRoot: projectRoot,
+                    warnings: &warnings
+                ),
+                second: resolveNodeBestEffort(
+                    second,
+                    projectRoot: projectRoot,
+                    warnings: &warnings
+                )
             )
         }
     }
