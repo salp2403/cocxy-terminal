@@ -1619,8 +1619,7 @@ extension MainWindowController {
         ) else {
             return false
         }
-        terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
-        return true
+        return terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
     }
 
     private func resolveCodeReviewSurfaceID(

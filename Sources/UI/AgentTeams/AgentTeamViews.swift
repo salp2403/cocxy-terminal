@@ -91,7 +91,10 @@ extension MainWindowController: AgentTeamPaneLaunching {
             teamID: teamID,
             teammateID: launchSpec.teammateID
         )
-        terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID)
+        guard terminalEngine(for: surfaceID).sendText(command + "\r", to: surfaceID) else {
+            performCloseTab(tabID)
+            return nil
+        }
         scheduleAgentTeamPrompt(
             initialPrompt,
             teamID: teamID,

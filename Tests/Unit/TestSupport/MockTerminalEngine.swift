@@ -46,6 +46,7 @@ final class MockTerminalEngine: DescriptorBoundTerminalEngine, SessionReplayTerm
     var createSurfaceError: Error?
     var createSurfaceFailureAfterSuccessCount: Int?
     var sendKeyEventReturnValue: Bool = true
+    var sendTextReturnValue: Bool = true
     var nativeSearchResults: [SurfaceID: [SearchResult]?] = [:]
     var detectedContents: [SurfaceID: [TerminalDetectedContent]] = [:]
     var semanticNavigationResult: TerminalSemanticNavigationResult?
@@ -111,7 +112,7 @@ final class MockTerminalEngine: DescriptorBoundTerminalEngine, SessionReplayTerm
     @discardableResult
     func sendText(_ text: String, to surface: SurfaceID) -> Bool {
         sentTexts.append((surface, text))
-        return true
+        return sendTextReturnValue
     }
 
     func sendPreeditText(

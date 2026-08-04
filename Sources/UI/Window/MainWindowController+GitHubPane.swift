@@ -477,12 +477,15 @@ extension MainWindowController {
         let tabID = createTab(workingDirectory: workingDirectory)
         guard let surfaceID = tabSurfaceMap[tabID] else { return false }
 
-        openInternalBrowser(to: Self.gitHubDeviceLoginURLString)
         let browserOpenerPath = installGitHubAuthBrowserOpenerScript()
-        terminalEngine(for: surfaceID).sendText(
+        guard terminalEngine(for: surfaceID).sendText(
             Self.gitHubAuthenticationCommand(browserOpenerPath: browserOpenerPath),
             to: surfaceID
-        )
+        ) else {
+            performCloseTab(tabID)
+            return false
+        }
+        openInternalBrowser(to: Self.gitHubDeviceLoginURLString)
         window?.makeKeyAndOrderFront(nil)
         focusActiveTerminalSurface()
         return true

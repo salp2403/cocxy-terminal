@@ -1962,8 +1962,7 @@ final class CocxyCoreView: NSView {
         // terminal on the platform.
         let paths = FileDropPathFormatter.format(urls)
         followLiveViewportBeforeUserInput(bridge: bridge, surfaceID: sid)
-        bridge.sendText(paths, to: sid)
-        return true
+        return bridge.sendText(paths, to: sid)
     }
 
     private func flashVaultDropFeedback(success: Bool) {

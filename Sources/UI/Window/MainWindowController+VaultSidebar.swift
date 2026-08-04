@@ -230,11 +230,10 @@ extension MainWindowController {
                 return false
             }
             let invocation = try VaultSessionResumer.plan(agent: agent, session: session)
-            terminalEngine(for: surfaceID).sendText(
+            return terminalEngine(for: surfaceID).sendText(
                 VaultShellCommandRenderer.commandLine(for: invocation),
                 to: surfaceID
             )
-            return true
         } catch {
             return false
         }

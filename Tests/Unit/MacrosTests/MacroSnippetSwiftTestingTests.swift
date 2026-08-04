@@ -161,6 +161,7 @@ struct MacroSnippetSwiftTestingTests {
         var sentText: [String] = []
         let replayer = MacroTerminalInputReplayer { text in
             sentText.append(text)
+            return true
         }
 
         let replayedCount = try replayer.replay(plan)
@@ -173,11 +174,30 @@ struct MacroSnippetSwiftTestingTests {
     @MainActor
     func terminalInputReplayerRejectsUnsupportedKeys() throws {
         let plan = MacroPlaybackPlan(macroID: "bad", events: [.key("hyper-space")])
-        let replayer = MacroTerminalInputReplayer { _ in }
+        let replayer = MacroTerminalInputReplayer { _ in true }
 
         #expect(throws: MacroTerminalInputReplayError.unsupportedKey("hyper-space")) {
             _ = try replayer.replay(plan)
         }
+    }
+
+    @Test("terminal input replayer stops when PTY delivery fails")
+    @MainActor
+    func terminalInputReplayerReportsDeliveryFailure() throws {
+        var sentText: [String] = []
+        let plan = MacroPlaybackPlan(
+            macroID: "drop",
+            events: [.text("first"), .command("second")]
+        )
+        let replayer = MacroTerminalInputReplayer { text in
+            sentText.append(text)
+            return text != "first"
+        }
+
+        #expect(throws: MacroTerminalInputReplayError.deliveryFailed) {
+            _ = try replayer.replay(plan)
+        }
+        #expect(sentText == ["first"])
     }
 
     @Test("player rejects empty macros and invalid repeat counts")

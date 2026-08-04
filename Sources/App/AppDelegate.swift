@@ -2663,9 +2663,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                           ) else {
                         return false
                     }
-                    target.controller.terminalEngine(for: target.surfaceID)
+                    return target.controller.terminalEngine(for: target.surfaceID)
                         .sendText(text, to: target.surfaceID)
-                    return true
                 }
             },
             // V4: Send key — send a named key to the active terminal.
@@ -2686,9 +2685,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                           ) else {
                         return false
                     }
-                    target.controller.terminalEngine(for: target.surfaceID)
+                    return target.controller.terminalEngine(for: target.surfaceID)
                         .sendText(seq, to: target.surfaceID)
-                    return true
                 }
             },
             vaultOpenProvider: {

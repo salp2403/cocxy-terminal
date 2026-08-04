@@ -29,6 +29,8 @@ extension MainWindowController {
             ?? activeTerminalSurfaceView?.terminalViewModel?.surfaceID else {
             throw MacroTerminalInputReplayError.noTargetSurface
         }
-        terminalEngine(for: surfaceID).sendText(text, to: surfaceID)
+        guard terminalEngine(for: surfaceID).sendText(text, to: surfaceID) else {
+            throw MacroTerminalInputReplayError.deliveryFailed
+        }
     }
 }
