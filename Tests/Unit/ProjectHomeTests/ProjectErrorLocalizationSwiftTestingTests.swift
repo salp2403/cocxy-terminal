@@ -101,34 +101,6 @@ struct ProjectErrorLocalizationSwiftTestingTests {
         #expect(model.isTeamSheetPresented == false)
     }
 
-    @Test("fan-out path validation uses the injected app language")
-    func fanOutPathValidationUsesInjectedLocalizer() throws {
-        let localizer = try spanishLocalizer()
-        let model = ProjectFanOutFlowViewModel(
-            projectID: ProjectID(rawValue: "/tmp/localized-project"),
-            projectRoot: URL(fileURLWithPath: "/tmp/localized-project", isDirectory: true),
-            availableProviders: [.codex, .claudeCode],
-            availableBaseRefs: ["HEAD"],
-            defaultBaseRef: "HEAD",
-            defaultAgentNames: ["codex", "claude"],
-            localizer: localizer,
-            actions: ProjectFanOutActions(
-                launch: { _ in throw ProjectHomeActionFailure.servicesUnavailable },
-                loadSnapshot: { _ in throw ProjectHomeActionFailure.servicesUnavailable },
-                launchCollisions: { _ in .empty },
-                preparePromotion: { _, _ in throw ProjectHomeActionFailure.servicesUnavailable },
-                executePromotion: { _ in throw ProjectHomeActionFailure.servicesUnavailable },
-                recycle: { _, _ in throw ProjectHomeActionFailure.servicesUnavailable }
-            )
-        )
-        model.pendingPath = "../fuera.swift"
-
-        model.addPendingPath()
-
-        #expect(model.errorMessage == "La ruta del archivo debe permanecer dentro de este proyecto.")
-        #expect(model.plannedPaths.isEmpty)
-    }
-
     private func spanishLocalizer() throws -> AppLocalizer {
         let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         let bundle = try #require(Bundle(

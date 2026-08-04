@@ -43,10 +43,10 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         harness.launchCollisionReport = TaskCollisionReport(collisions: [collision(path: "A.swift")])
         let model = harness.makeModel()
         model.showLaunch()
-        model.prompt = "Implement"
-        model.pendingPath = "A.swift"
-        model.addPendingPath()
+        model.prompt = "Implement A.swift"
+        await model.refreshLaunchCollisions()
 
+        #expect(model.inferredPaths == ["A.swift"])
         #expect(model.launchCollisionReport.paths == ["A.swift"])
         #expect(model.canLaunch)
         await model.launch()
@@ -101,7 +101,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
 
         #expect(model.mode == .launch)
         #expect(model.prompt == harness.recycleDraft.prompt)
-        #expect(model.plannedPaths == harness.recycleDraft.plannedPaths)
+        #expect(model.inferredPaths == harness.recycleDraft.plannedPaths)
     }
 
     @Test("coordinator consumes a request once for the matching project")
@@ -262,7 +262,14 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                             candidateCollisions: .empty
                         )
                     },
-                    launchCollisions: { [self] _ in launchCollisionReport },
+                    launchCollisions: { [self] _, seedPaths in
+                        TaskLaunchCollisionAnalysis(
+                            inferredPaths: Array(
+                                Set(seedPaths + launchCollisionReport.paths)
+                            ).sorted(),
+                            report: launchCollisionReport
+                        )
+                    },
                     preparePromotion: { [self] _, _ in
                         prepareCallCount += 1
                         return preview

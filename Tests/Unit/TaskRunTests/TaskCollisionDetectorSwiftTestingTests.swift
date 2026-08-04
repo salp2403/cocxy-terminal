@@ -82,6 +82,116 @@ struct TaskCollisionDetectorSwiftTestingTests {
         #expect(report.collisions.first?.participants.map(\.id) == ["candidate", "independent"])
     }
 
+    @Test("absolute sibling worktree paths normalize against their own root")
+    func siblingWorktreeCollision() {
+        let siblingRoot = URL(fileURLWithPath: "/tmp/cocxy-sibling", isDirectory: true)
+        let live = TaskCollisionLiveSession(
+            session: session(
+                id: "sibling",
+                projectID: projectID,
+                touched: ["/tmp/cocxy-sibling/Sources/App.swift"]
+            ),
+            effectiveRoot: siblingRoot,
+            worktreeID: "sibling-worktree"
+        )
+
+        let report = TaskCollisionDetector.beforeLaunch(
+            plannedPaths: ["Sources/App.swift"],
+            liveWork: [live],
+            otherWork: [],
+            projectID: projectID,
+            projectRoot: root
+        )
+
+        #expect(report.paths == ["Sources/App.swift"])
+        #expect(report.collisions.first?.participants.map(\.id) == ["planned-task", "sibling"])
+    }
+
+    @Test("promotion excludes every live session attached to its own worktrees")
+    func promotionExcludesOwnWorktrees() {
+        let selected = comparison(id: "candidate", files: ["Sources/App.swift"])
+        let live = TaskCollisionLiveSession(
+            session: session(
+                id: "different-runtime-id",
+                projectID: projectID,
+                touched: ["/tmp/cocxy-own-worktree/Sources/App.swift"]
+            ),
+            effectiveRoot: URL(fileURLWithPath: "/tmp/cocxy-own-worktree", isDirectory: true),
+            worktreeID: "own-worktree"
+        )
+
+        let report = TaskCollisionDetector.beforePromotion(
+            candidate: selected,
+            liveWork: [live],
+            otherWork: [],
+            projectID: projectID,
+            projectRoot: root,
+            excludingWorktreeIDs: ["own-worktree"]
+        )
+
+        #expect(report.isEmpty)
+    }
+
+    @Test("prelaunch crosses inferred paths with queued tasks and other task runs")
+    func prelaunchCrossesAllWorkloads() {
+        let report = TaskCollisionDetector.beforeLaunch(
+            plannedPaths: ["Sources/App.swift", "Tests/AppTests.swift"],
+            liveWork: [],
+            otherWork: [
+                TaskCollisionWorkload(
+                    participant: TaskCollisionParticipant(
+                        id: "queue:verify",
+                        label: "Queued: Verify",
+                        kind: .queuedTask
+                    ),
+                    paths: ["Tests/AppTests.swift"]
+                ),
+                TaskCollisionWorkload(
+                    participant: TaskCollisionParticipant(
+                        id: "task-run:active",
+                        label: "Parallel task active",
+                        kind: .taskRun
+                    ),
+                    paths: ["Sources/App.swift"]
+                ),
+            ],
+            projectID: projectID,
+            projectRoot: root
+        )
+
+        #expect(report.paths == ["Sources/App.swift", "Tests/AppTests.swift"])
+        #expect(Set(report.collisions.flatMap { $0.participants.map(\.kind) }) == [
+            .plannedTask, .queuedTask, .taskRun,
+        ])
+    }
+
+    @Test("prelaunch ignores collisions that do not involve the planned task")
+    func prelaunchIgnoresUnrelatedWorkloadCollisions() {
+        let queue = TaskCollisionParticipant(
+            id: "queue:verify",
+            label: "Queued: Verify",
+            kind: .queuedTask
+        )
+        let run = TaskCollisionParticipant(
+            id: "task-run:active",
+            label: "Parallel task active",
+            kind: .taskRun
+        )
+
+        let report = TaskCollisionDetector.beforeLaunch(
+            plannedPaths: ["Sources/Current.swift"],
+            liveWork: [],
+            otherWork: [
+                TaskCollisionWorkload(participant: queue, paths: ["Sources/Other.swift"]),
+                TaskCollisionWorkload(participant: run, paths: ["Sources/Other.swift"]),
+            ],
+            projectID: projectID,
+            projectRoot: root
+        )
+
+        #expect(report.isEmpty)
+    }
+
     @Test("normalization rejects paths outside the canonical project root")
     func normalizationBoundary() {
         #expect(TaskCollisionDetector.normalize([

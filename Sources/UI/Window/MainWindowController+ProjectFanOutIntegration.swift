@@ -57,10 +57,11 @@ extension MainWindowController {
                     )
                 )
             },
-            launchCollisions: { plannedPaths in
+            launchCollisions: { prompt, seedPaths in
                 guard let delegate = NSApp.delegate as? AppDelegate else { return .empty }
-                return delegate.taskLaunchCollisionReport(
-                    plannedPaths: plannedPaths,
+                return await delegate.taskLaunchCollisionAnalysis(
+                    prompt: prompt,
+                    seedPaths: seedPaths,
                     projectID: projectID,
                     projectRoot: projectRoot
                 )

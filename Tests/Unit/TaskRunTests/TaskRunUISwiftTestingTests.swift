@@ -19,7 +19,9 @@ struct TaskRunUISwiftTestingTests {
             actions: ProjectFanOutActions(
                 launch: { _ in throw TaskRunExecutionError.targetUnavailable },
                 loadSnapshot: { _ in throw TaskRunError.runNotFound("missing") },
-                launchCollisions: { _ in .empty },
+                launchCollisions: { _, _ in
+                    TaskLaunchCollisionAnalysis(inferredPaths: [], report: .empty)
+                },
                 preparePromotion: { _, _ in throw TaskRunError.runNotFound("missing") },
                 executePromotion: { _ in throw TaskRunError.runNotFound("missing") },
                 recycle: { _, _ in throw TaskRunError.runNotFound("missing") }

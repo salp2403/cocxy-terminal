@@ -12,6 +12,8 @@ enum TaskCollisionParticipantKind: String, Equatable, Sendable {
     case plannedTask
     case candidate
     case liveSession
+    case queuedTask
+    case taskRun
 }
 
 struct TaskCollisionParticipant: Equatable, Sendable {
@@ -37,6 +39,27 @@ struct TaskCollisionReport: Equatable, Sendable {
 
     var isEmpty: Bool { collisions.isEmpty }
     var paths: [String] { Array(Set(collisions.map(\.path))).sorted() }
+}
+
+struct TaskLaunchCollisionAnalysis: Equatable, Sendable {
+    let inferredPaths: [String]
+    let report: TaskCollisionReport
+
+    static let empty = TaskLaunchCollisionAnalysis(
+        inferredPaths: [],
+        report: .empty
+    )
+}
+
+struct TaskCollisionLiveSession: Equatable, Sendable {
+    let session: AgentSessionInfo
+    let effectiveRoot: URL
+    let worktreeID: String?
+}
+
+struct TaskCollisionWorkload: Equatable, Sendable {
+    let participant: TaskCollisionParticipant
+    let paths: [String]
 }
 
 enum TaskCollisionDetector {
@@ -86,6 +109,40 @@ enum TaskCollisionDetector {
         )
     }
 
+    static func beforeLaunch(
+        plannedPaths: [String],
+        liveWork: [TaskCollisionLiveSession],
+        otherWork: [TaskCollisionWorkload],
+        projectID: ProjectID,
+        projectRoot: URL
+    ) -> TaskCollisionReport {
+        let planned = CandidateFiles(
+            participant: TaskCollisionParticipant(
+                id: "planned-task",
+                label: "Planned task",
+                kind: .plannedTask
+            ),
+            paths: normalize(plannedPaths, projectRoot: projectRoot)
+        )
+        let live = liveFiles(
+            liveWork,
+            projectID: projectID,
+            projectRoot: projectRoot,
+            excludingIDs: [],
+            excludingWorktreeIDs: []
+        )
+        return combinedReport(
+            overlaps: overlaps(
+                in: [planned] + live.files + candidateFiles(
+                    otherWork,
+                    projectRoot: projectRoot
+                ),
+                requiringParticipantID: planned.participant.id
+            ),
+            reported: live.reported
+        )
+    }
+
     static func beforePromotion(
         candidate: TaskRunCandidateComparison,
         liveSessions: [AgentSessionInfo],
@@ -115,6 +172,48 @@ enum TaskCollisionDetector {
         )
         return combinedReport(
             overlaps: overlaps(in: [selected] + live.files),
+            reported: live.reported
+        )
+    }
+
+    static func beforePromotion(
+        candidate: TaskRunCandidateComparison,
+        liveWork: [TaskCollisionLiveSession],
+        otherWork: [TaskCollisionWorkload],
+        projectID: ProjectID,
+        projectRoot: URL,
+        excludingIDs: Set<String> = [],
+        excludingWorktreeIDs: Set<String> = []
+    ) -> TaskCollisionReport {
+        let selected = CandidateFiles(
+            participant: TaskCollisionParticipant(
+                id: candidate.candidate.id,
+                label: candidate.candidate.provider.displayName,
+                kind: .candidate
+            ),
+            paths: normalize(
+                candidate.diffs.map(\.filePath) + candidate.candidate.touchedFiles,
+                projectRoot: projectRoot
+            )
+        )
+        let live = liveFiles(
+            liveWork,
+            projectID: projectID,
+            projectRoot: projectRoot,
+            excludingIDs: excludingIDs.union([
+                candidate.candidate.id,
+                candidate.candidate.teamID,
+            ]),
+            excludingWorktreeIDs: excludingWorktreeIDs
+        )
+        return combinedReport(
+            overlaps: overlaps(
+                in: [selected] + live.files + candidateFiles(
+                    otherWork,
+                    projectRoot: projectRoot
+                ),
+                requiringParticipantID: selected.participant.id
+            ),
             reported: live.reported
         )
     }
@@ -156,30 +255,65 @@ enum TaskCollisionDetector {
         projectRoot: URL,
         excludingIDs: Set<String>
     ) -> LiveFiles {
+        liveFiles(
+            sessions.map {
+                TaskCollisionLiveSession(
+                    session: $0,
+                    effectiveRoot: projectRoot,
+                    worktreeID: nil
+                )
+            },
+            projectID: projectID,
+            projectRoot: projectRoot,
+            excludingIDs: excludingIDs,
+            excludingWorktreeIDs: []
+        )
+    }
+
+    private static func liveFiles(
+        _ sessions: [TaskCollisionLiveSession],
+        projectID: ProjectID,
+        projectRoot: URL,
+        excludingIDs: Set<String>,
+        excludingWorktreeIDs: Set<String>
+    ) -> LiveFiles {
         let matching = sessions.filter {
-            $0.projectIdentity == projectID
-                && $0.state != .finished
-                && !excludingIDs.contains($0.id)
+            $0.session.projectIdentity == projectID
+                && $0.session.state != .finished
+                && !excludingIDs.contains($0.session.id)
+                && !($0.worktreeID.map(excludingWorktreeIDs.contains) ?? false)
         }
-        let files = matching.map { session in
+        let files = matching.map { live in
             CandidateFiles(
-                participant: participant(for: session),
+                participant: participant(for: live.session),
                 paths: normalize(
-                    session.filesTouched.map(\.path) + session.fileConflicts,
-                    projectRoot: projectRoot
+                    live.session.filesTouched.map(\.path) + live.session.fileConflicts,
+                    projectRoot: live.effectiveRoot
                 )
             )
         }
-        let reported = matching.flatMap { session in
-            normalize(session.fileConflicts, projectRoot: projectRoot).map { path in
+        let reported = matching.flatMap { live in
+            normalize(live.session.fileConflicts, projectRoot: live.effectiveRoot).map { path in
                 TaskFileCollision(
                     path: path,
                     kind: .reportedConflict,
-                    participants: [participant(for: session)]
+                    participants: [participant(for: live.session)]
                 )
             }
         }
         return LiveFiles(files: files, reported: reported)
+    }
+
+    private static func candidateFiles(
+        _ workloads: [TaskCollisionWorkload],
+        projectRoot: URL
+    ) -> [CandidateFiles] {
+        workloads.map {
+            CandidateFiles(
+                participant: $0.participant,
+                paths: normalize($0.paths, projectRoot: projectRoot)
+            )
+        }
     }
 
     private static func participant(for session: AgentSessionInfo) -> TaskCollisionParticipant {
@@ -190,7 +324,10 @@ enum TaskCollisionDetector {
         )
     }
 
-    private static func overlaps(in candidates: [CandidateFiles]) -> TaskCollisionReport {
+    private static func overlaps(
+        in candidates: [CandidateFiles],
+        requiringParticipantID requiredID: String? = nil
+    ) -> TaskCollisionReport {
         var participantsByPath: [String: [TaskCollisionParticipant]] = [:]
         for candidate in candidates {
             for path in candidate.paths {
@@ -201,7 +338,10 @@ enum TaskCollisionDetector {
             let unique = Dictionary(grouping: participants, by: \.id)
                 .compactMap { $0.value.first }
                 .sorted { $0.id < $1.id }
-            guard unique.count > 1 else { return nil }
+            guard unique.count > 1,
+                  requiredID.map({ id in unique.contains { $0.id == id } }) ?? true else {
+                return nil
+            }
             return TaskFileCollision(path: path, kind: .overlap, participants: unique)
         }.sorted { $0.path < $1.path }
         return TaskCollisionReport(collisions: collisions)

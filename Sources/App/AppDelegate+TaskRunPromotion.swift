@@ -81,13 +81,19 @@ extension AppDelegate {
             mergedPlan: mergedPlan
         )
         let excludedRuntimeIDs = Set(run.candidates.flatMap { [$0.id, $0.teamID] })
-        let dashboardSessions = await MainActor.run { self.taskRunLiveSessionsSnapshot() }
-        let collisionReport = TaskCollisionDetector.beforePromotion(
-            candidate: selectedComparison,
-            liveSessions: dashboardSessions,
+        let collisionInputs = await taskPromotionCollisionInputs(
             projectID: run.projectID,
             projectRoot: run.originRepoPath,
-            excludingIDs: excludedRuntimeIDs
+            excludingRunID: run.id
+        )
+        let collisionReport = TaskCollisionDetector.beforePromotion(
+            candidate: selectedComparison,
+            liveWork: collisionInputs.liveWork,
+            otherWork: collisionInputs.otherWork,
+            projectID: run.projectID,
+            projectRoot: run.originRepoPath,
+            excludingIDs: excludedRuntimeIDs,
+            excludingWorktreeIDs: runWorktreeIDs
         )
         return TaskRunPromotionPreview(
             run: run,
@@ -134,19 +140,25 @@ extension AppDelegate {
         guard preview.matches(currentComparisons: freshComparisons) else {
             throw stalePromotionError()
         }
-        let dashboardSessions = await MainActor.run { self.taskRunLiveSessionsSnapshot() }
         let excludedRuntimeIDs = Set(run.candidates.flatMap { [$0.id, $0.teamID] })
         guard let freshSelectedComparison = freshComparisons.first(where: {
             $0.id == candidateID
         }) else {
             throw TaskRunError.candidateNotFound(candidateID)
         }
-        let freshCollisionReport = TaskCollisionDetector.beforePromotion(
-            candidate: freshSelectedComparison,
-            liveSessions: dashboardSessions,
+        let collisionInputs = await taskPromotionCollisionInputs(
             projectID: run.projectID,
             projectRoot: run.originRepoPath,
-            excludingIDs: excludedRuntimeIDs
+            excludingRunID: run.id
+        )
+        let freshCollisionReport = TaskCollisionDetector.beforePromotion(
+            candidate: freshSelectedComparison,
+            liveWork: collisionInputs.liveWork,
+            otherWork: collisionInputs.otherWork,
+            projectID: run.projectID,
+            projectRoot: run.originRepoPath,
+            excludingIDs: excludedRuntimeIDs,
+            excludingWorktreeIDs: Set(run.candidates.compactMap(\.worktree?.id))
         )
         guard freshCollisionReport == preview.collisionReport else {
             throw stalePromotionError()
@@ -424,16 +436,4 @@ extension AppDelegate {
         }
     }
 
-    func taskLaunchCollisionReport(
-        plannedPaths: [String],
-        projectID: ProjectID,
-        projectRoot: URL
-    ) -> TaskCollisionReport {
-        TaskCollisionDetector.beforeLaunch(
-            plannedPaths: plannedPaths,
-            liveSessions: taskRunLiveSessionsSnapshot(),
-            projectID: projectID,
-            projectRoot: projectRoot
-        )
-    }
 }

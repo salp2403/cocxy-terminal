@@ -76,7 +76,7 @@ struct ProjectFanOutFlowView: View {
                 launchPrompt
                 launchProviders
                 launchOptions
-                plannedFileEditor
+                automaticFileRadar
                 collisionBanner(viewModel.launchCollisionReport)
                 messageBanner
                 HStack {
@@ -112,6 +112,9 @@ struct ProjectFanOutFlowView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(palette.divider.resolvedColor())
                 )
+                .onChange(of: viewModel.prompt) {
+                    viewModel.scheduleLaunchCollisionRefresh()
+                }
         }
     }
 
@@ -181,46 +184,45 @@ struct ProjectFanOutFlowView: View {
         .frame(maxWidth: 320)
     }
 
-    private var plannedFileEditor: some View {
+    @ViewBuilder
+    private var automaticFileRadar: some View {
         VStack(alignment: .leading, spacing: 8) {
-            fieldLabel(localized("projectHome.fanOut.paths", fallback: "Planned files"))
-            HStack(spacing: 8) {
-                TextField(
-                    localized("projectHome.fanOut.pathPlaceholder", fallback: "Sources/Feature.swift"),
-                    text: $viewModel.pendingPath
-                )
-                .textFieldStyle(.roundedBorder)
-                .onSubmit { viewModel.addPendingPath() }
-                Button { viewModel.addPendingPath() } label: {
-                    Image(systemName: "plus")
-                        .frame(width: 22, height: 22)
+            HStack(spacing: 7) {
+                fieldLabel(localized(
+                    "projectHome.fanOut.inferredPaths",
+                    fallback: "Detected file targets"
+                ))
+                if viewModel.isAnalyzingCollisions {
+                    ProgressView().controlSize(.mini)
                 }
-                .buttonStyle(.bordered)
-                .disabled(viewModel.pendingPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .help(localized("projectHome.fanOut.addPath", fallback: "Add planned file"))
-                .accessibilityLabel(localized("projectHome.fanOut.addPath", fallback: "Add planned file"))
             }
-            ForEach(viewModel.plannedPaths, id: \.self) { path in
+            if !viewModel.isAnalyzingCollisions && viewModel.inferredPaths.isEmpty {
+                Text(localized(
+                    "projectHome.fanOut.noInferredPaths",
+                    fallback: "No file targets detected"
+                ))
+                .font(.system(size: 10.5))
+                .foregroundStyle(palette.textLow.resolvedColor())
+            }
+            ForEach(viewModel.inferredPaths.prefix(8), id: \.self) { path in
                 HStack(spacing: 8) {
-                    Image(systemName: "doc")
+                    Image(systemName: "scope")
                         .foregroundStyle(palette.textLow.resolvedColor())
                     Text(path)
                         .font(.system(size: 10.5, design: .monospaced))
                         .lineLimit(1)
                         .truncationMode(.middle)
                     Spacer()
-                    Button { viewModel.removePlannedPath(path) } label: {
-                        Image(systemName: "xmark")
-                            .frame(width: 20, height: 20)
-                    }
-                    .buttonStyle(.plain)
-                    .help(localized("projectHome.fanOut.removePath", fallback: "Remove planned file"))
-                    .accessibilityLabel(localized("projectHome.fanOut.removePath", fallback: "Remove planned file"))
                 }
                 .padding(.horizontal, 10)
                 .frame(minHeight: 34)
                 .background(palette.backgroundSecondary.resolvedColor())
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            if viewModel.inferredPaths.count > 8 {
+                Text(verbatim: "+\(viewModel.inferredPaths.count - 8)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(palette.textLow.resolvedColor())
             }
         }
     }
@@ -449,11 +451,17 @@ struct ProjectFanOutFlowView: View {
                     systemImage: "exclamationmark.triangle.fill"
                 )
                 .font(.system(size: 11, weight: .semibold))
-                ForEach(report.paths, id: \.self) { path in
-                    Text(path)
-                        .font(.system(size: 9.5, design: .monospaced))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                ForEach(report.collisions.prefix(8)) { collision in
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(collision.path)
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                        Text(collision.participants.map(\.label).joined(separator: " | "))
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(palette.textMedium.resolvedColor())
+                            .lineLimit(1)
+                    }
                 }
             }
             .foregroundStyle(Color(nsColor: .systemOrange))

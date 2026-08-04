@@ -13,7 +13,7 @@ struct ProjectFanOutSnapshot: Equatable, Sendable {
 struct ProjectFanOutActions {
     let launch: (TaskRunRequest) async throws -> TaskRun
     let loadSnapshot: (String) async throws -> ProjectFanOutSnapshot
-    let launchCollisions: ([String]) -> TaskCollisionReport
+    let launchCollisions: (String, [String]) async -> TaskLaunchCollisionAnalysis
     let preparePromotion: (String, String) async throws -> TaskRunPromotionPreview
     let executePromotion: (TaskRunPromotionPreview) async throws -> TaskRunPromotionOutcome
     let recycle: (String, String) async throws -> TaskRunRecycleDraft
@@ -38,9 +38,9 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     @Published private(set) var selectedProviders: [AgentTeamProvider]
     @Published var candidateCount: Int
     @Published var baseRef: String
-    @Published var pendingPath = ""
-    @Published private(set) var plannedPaths: [String] = []
+    @Published private(set) var inferredPaths: [String] = []
     @Published private(set) var launchCollisionReport = TaskCollisionReport.empty
+    @Published private(set) var isAnalyzingCollisions = false
     @Published private(set) var run: TaskRun?
     @Published private(set) var comparisons: [TaskRunCandidateComparison] = []
     @Published var selectedCandidateID: String?
@@ -55,6 +55,9 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     private let localizer: AppLocalizer
     private let actions: ProjectFanOutActions
     private var loadRevision = 0
+    private var collisionRevision = 0
+    private var collisionRefreshTask: Task<Void, Never>?
+    private var collisionSeedPaths: [String] = []
 
     init(
         projectID: ProjectID,
@@ -123,8 +126,11 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
 
     func showInbox() {
         loadRevision += 1
+        collisionRefreshTask?.cancel()
+        collisionRevision += 1
         mode = .inbox
         isBusy = false
+        isAnalyzingCollisions = false
         errorMessage = nil
         promotionPreview = nil
     }
@@ -149,16 +155,18 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
                 )
             )
             baseRef = availableBaseRefs.contains(draft.baseRef) ? draft.baseRef : defaultBaseRef
-            plannedPaths = normalizedPaths(draft.plannedPaths)
+            collisionSeedPaths = normalizedPaths(draft.plannedPaths)
+            inferredPaths = collisionSeedPaths
         } else {
             prompt = ""
             selectedProviders = defaultProviders
             candidateCount = max(TaskRunRequest.minimumCandidateCount, defaultProviders.count)
             baseRef = defaultBaseRef
-            plannedPaths = []
+            collisionSeedPaths = []
+            inferredPaths = []
         }
-        pendingPath = ""
-        refreshLaunchCollisions()
+        launchCollisionReport = .empty
+        scheduleLaunchCollisionRefresh()
     }
 
     func isSelected(_ provider: AgentTeamProvider) -> Bool {
@@ -189,31 +197,50 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         errorMessage = nil
     }
 
-    func addPendingPath() {
-        let paths = normalizedPaths([pendingPath])
-        guard let path = paths.first else {
-            errorMessage = localizer.string(
-                "projectHome.fanOut.pathOutsideProject",
-                fallback: "The file path must stay inside this project."
-            )
+    func scheduleLaunchCollisionRefresh() {
+        collisionRevision += 1
+        let revision = collisionRevision
+        let prompt = prompt
+        let seedPaths = collisionSeedPaths
+        collisionRefreshTask?.cancel()
+        guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !seedPaths.isEmpty else {
+            inferredPaths = []
+            launchCollisionReport = .empty
+            isAnalyzingCollisions = false
             return
         }
-        if !plannedPaths.contains(path) {
-            plannedPaths.append(path)
-            plannedPaths.sort()
+        isAnalyzingCollisions = true
+        collisionRefreshTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled, let self else { return }
+            await self.performLaunchCollisionRefresh(
+                prompt: prompt,
+                seedPaths: seedPaths,
+                revision: revision
+            )
         }
-        pendingPath = ""
-        errorMessage = nil
-        refreshLaunchCollisions()
     }
 
-    func removePlannedPath(_ path: String) {
-        plannedPaths.removeAll { $0 == path }
-        refreshLaunchCollisions()
-    }
-
-    func refreshLaunchCollisions() {
-        launchCollisionReport = actions.launchCollisions(plannedPaths)
+    func refreshLaunchCollisions() async {
+        collisionRefreshTask?.cancel()
+        collisionRevision += 1
+        let revision = collisionRevision
+        let prompt = prompt
+        let seedPaths = collisionSeedPaths
+        guard !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !seedPaths.isEmpty else {
+            inferredPaths = []
+            launchCollisionReport = .empty
+            isAnalyzingCollisions = false
+            return
+        }
+        isAnalyzingCollisions = true
+        await performLaunchCollisionRefresh(
+            prompt: prompt,
+            seedPaths: seedPaths,
+            revision: revision
+        )
     }
 
     func makeRequest() throws -> TaskRunRequest {
@@ -229,7 +256,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
         guard !isBusy else { return }
         do {
             let request = try makeRequest()
-            refreshLaunchCollisions()
+            await refreshLaunchCollisions()
             isBusy = true
             errorMessage = nil
             successMessage = nil
@@ -244,6 +271,9 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     }
 
     func showComparison(runID: String) async {
+        collisionRefreshTask?.cancel()
+        collisionRevision += 1
+        isAnalyzingCollisions = false
         mode = .comparison
         successMessage = nil
         promotionPreview = nil
@@ -351,6 +381,18 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             errorMessage = message(for: error)
             if ownsBusyState { mode = .launch }
         }
+    }
+
+    private func performLaunchCollisionRefresh(
+        prompt: String,
+        seedPaths: [String],
+        revision: Int
+    ) async {
+        let analysis = await actions.launchCollisions(prompt, seedPaths)
+        guard revision == collisionRevision else { return }
+        inferredPaths = analysis.inferredPaths
+        launchCollisionReport = analysis.report
+        isAnalyzingCollisions = false
     }
 
     private func refreshPromotionPreview(
