@@ -1064,9 +1064,7 @@ extension MainWindowController {
         tabID: TabID,
         surfaceID: SurfaceID
     ) {
-        let liveBlock = terminalEngine(for: surfaceID).cocxyCoreBridge?.commandBlock(
-            for: surfaceID, blockID: block.id)
-        let updated = (liveBlock ?? block).withBookmark(!block.isBookmarked)
+        let updated = block.withBookmark(!block.isBookmarked)
         var restored = restoredCommandBlocksBySurfaceID[surfaceID] ?? []
         restored.append(updated)
         restoredCommandBlocksBySurfaceID[surfaceID] = TerminalBlockRestoration.blocksForDisplay(

@@ -63,7 +63,10 @@ struct CocxyCoreCommandBlockWiringSwiftTestingTests {
             includeVisibleMapping: false
         ).last)
         #expect(metadataOnlyBlock.output.isEmpty)
-        fixture.coreView.onToggleCommandBlockBookmark?(metadataOnlyBlock)
+        var outputCopies = 0
+        fixture.bridge.commandBlockOutputCopyObserver = { outputCopies += 1 }
+        try #require(fixture.coreView.commandBlockOverlayView)
+            .onToggleBookmark?(metadataOnlyBlock)
 
         try await waitUntil {
             (try? fixture.store.load(sessionID: fixture.sessionID).last?.isBookmarked) == true
@@ -73,6 +76,7 @@ struct CocxyCoreCommandBlockWiringSwiftTestingTests {
         )
         #expect(bookmarked.output == output)
         #expect(bookmarked.isBookmarked)
+        #expect(outputCopies == 1)
     }
 
     private func makeFixture(named name: String) throws -> CommandBlockWiringFixture {
