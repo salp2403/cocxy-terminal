@@ -180,6 +180,10 @@ struct CITestGateScriptSwiftTestingTests {
             contentsOf: repositoryRoot().appendingPathComponent(".github/workflows/ci.yml"),
             encoding: .utf8
         )
+        let translationWorkflow = try String(
+            contentsOf: repositoryRoot().appendingPathComponent(".github/workflows/translations-stale.yml"),
+            encoding: .utf8
+        )
         let jobStart = try #require(ci.range(of: "  bounded-process-containment:"))
         let nextJob = try #require(
             ci.range(of: "  trusted-bundle-audit:", range: jobStart.upperBound..<ci.endIndex)
@@ -192,6 +196,7 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(job.contains("timeout-minutes: 20"))
         #expect(job.contains("persist-credentials: false"))
         #expect(!job.contains("macos-14"))
+        #expect(!translationWorkflow.contains("runs-on: macos-14"))
         #expect(!job.contains("continue-on-error"))
         #expect(job.contains(
             "./scripts/run-filtered-swift-testing.sh NotebookProcessRunnerSwiftTestingTests"
@@ -200,7 +205,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(!job.contains("COCXYCORE_DEPLOY_KEY"))
         #expect(!job.contains("repository: salp2403/cocxycore"))
     }
-
     @Test("filtered Swift Testing gate exits nonzero when discovery finds no match")
     func filteredGateRejectsEmptyDiscovery() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -218,7 +222,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.terminationStatus != 0)
         #expect(result.stderr.contains("filter discovered zero tests"))
     }
-
     @Test("filtered Swift Testing gate discovers and executes matching tests")
     func filteredGateDiscoversAndExecutesMatchingTests() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -256,7 +259,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(executionInvocation.contains("--disable-xctest"))
         #expect(executionInvocation.contains("--verbose --filter FilteredSuite"))
     }
-
     @Test("filtered Swift Testing gate propagates discovery failure")
     func filteredGatePropagatesDiscoveryFailure() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -274,7 +276,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.terminationStatus == 23)
         #expect(result.stderr.contains("synthetic discovery failure"))
     }
-
     @Test("filtered Swift Testing gate propagates filtered execution failure")
     func filteredGatePropagatesExecutionFailure() throws {
         let result = try runFilteredGateWithFakeSwift(
@@ -297,7 +298,6 @@ struct CITestGateScriptSwiftTestingTests {
         #expect(result.stdout.contains("Discovered 1 Swift Testing test(s)"))
         #expect(result.stderr.contains("synthetic filtered execution failure"))
     }
-
     @Test("workflow actions use reviewed immutable commits and checkouts drop credentials")
     func workflowActionsUseImmutableCommits() throws {
         let workflowDirectory = repositoryRoot().appendingPathComponent(".github/workflows", isDirectory: true)
