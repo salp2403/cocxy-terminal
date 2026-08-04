@@ -2809,16 +2809,10 @@ void cocxycore_web_set_event_callback(
 /** Check if the server is running. */
 bool cocxycore_web_is_running(const cocxycore_web_server* server);
 
-/**
- * Get the actual port the server is listening on.
- * Useful when port 0 was specified (OS assigns a port).
- */
+/** Get the actual listening port; port 0 allows OS assignment. */
 uint16_t cocxycore_web_port(const cocxycore_web_server* server);
 
-/**
- * Return the newline-delimited public static asset paths compiled into the
- * engine. The returned bytes remain owned by the engine for process lifetime.
- */
+/** Return newline-delimited static asset paths owned for process lifetime. */
 const uint8_t* cocxycore_web_static_asset_paths(uint32_t* length);
 
 /* -- Frame streaming control -- */
