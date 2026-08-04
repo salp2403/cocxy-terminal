@@ -21,6 +21,10 @@ struct AgentTeamExecutablePreflightSwiftTestingTests {
             params: ["provider": "codex"]
         ) == .codex)
         #expect(AppDelegate.agentTeamProviderForPreflight(
+            command: .agentTeamLaunch,
+            params: ["provider": " \n "]
+        ) == .claudeCode)
+        #expect(AppDelegate.agentTeamProviderForPreflight(
             command: .handoffImport,
             params: ["agent": "  \n"]
         ) == .claudeCode)

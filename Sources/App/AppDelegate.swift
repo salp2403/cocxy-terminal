@@ -1947,9 +1947,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     ) -> AgentTeamProvider? {
         switch command {
         case .agentTeamLaunch:
-            let provider = (params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
+            let requestedProvider = (params["provider"] ?? AgentTeamProvider.claudeCode.rawValue)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            return AgentTeamProvider(rawValue: provider)
+            let normalizedProvider = requestedProvider.isEmpty
+                ? AgentTeamProvider.claudeCode.rawValue
+                : requestedProvider
+            return AgentTeamProvider(rawValue: normalizedProvider)
         case .handoffImport:
             let requestedProvider = (params["agent"] ?? AgentTeamProvider.claudeCode.rawValue)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
