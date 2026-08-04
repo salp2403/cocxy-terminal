@@ -329,6 +329,28 @@ struct ProjectRegistrySwiftTestingTests {
         #expect(try String(contentsOf: fileURL, encoding: .utf8) == "not-json")
     }
 
+    @Test("one invalid record is discarded without making valid projects read-only")
+    func invalidRecordRecoversValidRegistryEntries() throws {
+        let sandbox = makeSandbox()
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        let fileURL = sandbox.appendingPathComponent("registry.json")
+        try FileManager.default.createDirectory(at: sandbox, withIntermediateDirectories: true)
+        try Data(#"[{"id":"/tmp/valid-project","isPinned":true},{"id":"relative/project"}]"#.utf8)
+            .write(to: fileURL)
+
+        let registry = ProjectRegistry(store: ProjectRegistryStore(fileURL: fileURL))
+
+        #expect(registry.records.map(\.id) == [ProjectID(rawValue: "/tmp/valid-project")])
+        #expect(registry.records.first?.isPinned == true)
+        #expect(registry.persistenceErrorDescription?.contains("1 invalid record") == true)
+        try registry.recordOpen(descriptor("/tmp/new-project"))
+        #expect(registry.persistenceErrorDescription == nil)
+        #expect(Set(try ProjectRegistryStore(fileURL: fileURL).load().map(\.id)) == [
+            ProjectID(rawValue: "/tmp/valid-project"),
+            ProjectID(rawValue: "/tmp/new-project"),
+        ])
+    }
+
     private func makeSandbox() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectRegistryTests-\(UUID().uuidString)", isDirectory: true)

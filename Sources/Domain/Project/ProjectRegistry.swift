@@ -99,6 +99,11 @@ enum ProjectRegistryStoreError: Error, Equatable, CustomStringConvertible {
     }
 }
 
+struct ProjectRegistryStoreLoadReport: Equatable, Sendable {
+    let records: [ProjectRecord]
+    let discardedRecordCount: Int
+}
+
 struct ProjectRegistryStore: Sendable {
     let fileURL: URL
     private let fileManager: FileManager
@@ -113,7 +118,13 @@ struct ProjectRegistryStore: Sendable {
     }
 
     func load() throws -> [ProjectRecord] {
-        guard fileManager.fileExists(atPath: fileURL.path) else { return [] }
+        try loadReport().records
+    }
+
+    func loadReport() throws -> ProjectRegistryStoreLoadReport {
+        guard fileManager.fileExists(atPath: fileURL.path) else {
+            return ProjectRegistryStoreLoadReport(records: [], discardedRecordCount: 0)
+        }
         do {
             try validateRoot(createIfMissing: false)
             try rejectSymbolicLink(at: fileURL)
@@ -122,17 +133,36 @@ struct ProjectRegistryStore: Sendable {
                 throw ProjectRegistryStoreError.invalidRecord("Registry is not a regular file")
             }
             let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
-            let records = try Self.decoder.decode(
-                [ProjectRecord].self,
-                from: data
-            )
+            guard let rawRecords = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+                throw ProjectRegistryStoreError.invalidRecord("Registry root must be an array")
+            }
+            var records: [ProjectRecord] = []
+            var discardedRecordCount = 0
+            for rawRecord in rawRecords {
+                do {
+                    let recordData = try JSONSerialization.data(withJSONObject: rawRecord)
+                    records.append(try Self.decoder.decode(ProjectRecord.self, from: recordData))
+                } catch {
+                    discardedRecordCount += 1
+                }
+            }
+            if records.isEmpty, discardedRecordCount > 0 {
+                throw ProjectRegistryStoreError.invalidRecord(
+                    "No valid project records remain after validation"
+                )
+            }
             let migrated = Self.coalescedCanonicalRecords(records)
-            let rawIDs = (try? JSONSerialization.jsonObject(with: data) as? [[String: Any]])?
+            let rawIDs = (rawRecords as? [[String: Any]])?
                 .compactMap { $0["id"] as? String } ?? []
-            if migrated.count != records.count || rawIDs != records.map(\.id.rawValue) {
+            if discardedRecordCount > 0
+                || migrated.count != records.count
+                || rawIDs != records.map(\.id.rawValue) {
                 try save(migrated)
             }
-            return migrated
+            return ProjectRegistryStoreLoadReport(
+                records: migrated,
+                discardedRecordCount: discardedRecordCount
+            )
         } catch let error as ProjectRegistryStoreError {
             throw error
         } catch {
@@ -263,8 +293,11 @@ final class ProjectRegistry: ObservableObject {
         self.store = store
         self.clock = clock
         do {
-            records = try store.load()
-            persistenceErrorDescription = nil
+            let report = try store.loadReport()
+            records = report.records
+            persistenceErrorDescription = report.discardedRecordCount == 0
+                ? nil
+                : "Recovered the project registry after discarding \(report.discardedRecordCount) invalid record(s)."
         } catch {
             records = []
             persistenceErrorDescription = String(describing: error)
