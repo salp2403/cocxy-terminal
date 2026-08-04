@@ -230,12 +230,18 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             preferredSurfaceID: terminalSurfaceID.rawValue.uuidString
         )
         let authenticatedHeaders = ["cookie": "cocxy_mobile=\(cookie)"]
-        guard case .proxy = await router.route(
-            request: request(path: "/index.html", headers: authenticatedHeaders),
-            identity: identity
-        ) else {
-            Issue.record("Expected authenticated static asset proxy")
-            return
+        #expect(MobileMirrorStaticAssets.allowedPaths.contains("/mobile_ui.js"))
+        #expect(Set(MobileMirrorStaticAssets.orderedPaths).count
+            == MobileMirrorStaticAssets.orderedPaths.count)
+        for path in MobileMirrorStaticAssets.orderedPaths {
+            guard case .proxy(let target) = await router.route(
+                request: request(path: path, headers: authenticatedHeaders),
+                identity: identity
+            ) else {
+                Issue.record("Expected authenticated proxy for \(path)")
+                continue
+            }
+            #expect(target.rewrittenPath == path)
         }
         guard case .eventStream = await router.route(
             request: request(path: "/mobile/api/events", headers: authenticatedHeaders),

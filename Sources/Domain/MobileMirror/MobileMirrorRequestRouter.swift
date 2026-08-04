@@ -331,13 +331,8 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             ))
         }
 
-        let allowedStaticPaths = Set([
-            "/", "/index.html", "/terminal.js", "/mobile.js", "/mobile_crypto.js",
-            "/protocol.js",
-            "/decoder.js", "/input.js", "/atlas.js", "/renderer.js", "/shaders.js",
-            "/style.css",
-        ])
-        guard request.path == "/ws" || allowedStaticPaths.contains(request.path) else {
+        guard request.path == "/ws"
+                || MobileMirrorStaticAssets.allowedPaths.contains(request.path) else {
             return .response(.error("Not found.", status: 404))
         }
         let selectedSurfaceID = authority.selectedTerminal(cookie: cookie)?.surfaceID
