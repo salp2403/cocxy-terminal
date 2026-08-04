@@ -4,6 +4,10 @@
 import SwiftUI
 
 enum TaskQueuePresentation {
+    static func layoutDirection(localizer: AppLocalizer) -> LayoutDirection {
+        localizer.isRightToLeft ? .rightToLeft : .leftToRight
+    }
+
     static func status(
         _ status: TaskQueueItemStatus,
         localizer: AppLocalizer
@@ -140,7 +144,10 @@ struct TaskQueueCenterView: View {
         .frame(minWidth: 900, minHeight: 620)
         .glassPanelBackground()
         .environment(\.locale, localizer.locale)
-        .environment(\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)
+        .environment(
+            \.layoutDirection,
+            TaskQueuePresentation.layoutDirection(localizer: localizer)
+        )
         .task {
             await viewModel.reload()
             while !Task.isCancelled {

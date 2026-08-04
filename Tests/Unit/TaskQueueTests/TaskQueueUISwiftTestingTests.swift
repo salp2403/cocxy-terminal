@@ -175,20 +175,20 @@ struct TaskQueueUISwiftTestingTests {
         )
     }
 
-    @Test("queue root propagates Arabic right-to-left layout")
-    func queueRootPropagatesArabicLayoutDirection() throws {
-        let localizer = AppLocalizer(
+    @Test("queue presentation resolves locale-aware layout direction")
+    func queuePresentationResolvesLocaleAwareLayoutDirection() throws {
+        let bundle = try #require(localizationBundle())
+        let arabic = AppLocalizer(
             languagePreference: .arabic,
-            bundle: try #require(localizationBundle())
+            bundle: bundle
         )
-        let sourceURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("Sources/UI/TaskQueue/TaskQueueCenterView.swift")
-        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+        let english = AppLocalizer(
+            languagePreference: .english,
+            bundle: bundle
+        )
 
-        #expect(localizer.isRightToLeft)
-        #expect(source.contains(
-            ".environment(\\.layoutDirection, localizer.isRightToLeft ? .rightToLeft : .leftToRight)"
-        ))
+        #expect(TaskQueuePresentation.layoutDirection(localizer: arabic) == .rightToLeft)
+        #expect(TaskQueuePresentation.layoutDirection(localizer: english) == .leftToRight)
     }
 
     @Test("queue center view constructs with bounded controls")
