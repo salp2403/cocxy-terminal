@@ -155,7 +155,10 @@ struct LocalizationUsageSwiftTestingTests {
         )
         let expected = Set(PluginEvent.allCases.map { "taskQueue.event.\($0.rawValue)" })
         let expanded = expandedDynamicKeys(scan.dynamicUsages)
-        let unsupported = scan.dynamicUsages.filter {
+        let taskQueueEventUsages = scan.dynamicUsages.filter {
+            $0.template.hasPrefix("taskQueue.event.")
+        }
+        let unsupported = taskQueueEventUsages.filter {
             $0.template != #"taskQueue.event.\(event.rawValue)"#
         }
         let unsupportedDescription = unsupported.map { usage in
@@ -163,6 +166,7 @@ struct LocalizationUsageSwiftTestingTests {
         }.joined(separator: "; ")
 
         #expect(PluginEvent.allCases.count == 11)
+        #expect(!taskQueueEventUsages.isEmpty)
         #expect(expected.isSubset(of: expanded))
         #expect(
             unsupported.isEmpty,
@@ -242,10 +246,11 @@ struct LocalizationUsageSwiftTestingTests {
         let timestamp = formatter.string(from: date)
         let title = localizer.string("real.key", fallback: "Real")
         let detail = localized("wrapped.key", fallback: "Wrapped")
+        let error = formattedProjectString("formatted.key", fallback: "Formatted: %@", value)
         """#
         let scan = SwiftLocalizationUsageScanner.scan(source: source, path: "Fixture.swift")
 
-        #expect(Set(scan.staticUsages.keys) == ["real.key", "wrapped.key"])
+        #expect(Set(scan.staticUsages.keys) == ["formatted.key", "real.key", "wrapped.key"])
         #expect(scan.dynamicUsages.isEmpty)
     }
 
@@ -383,7 +388,7 @@ private enum SwiftLocalizationUsageScanner {
 
         for index in tokens.indices {
             guard case .identifier(let function) = tokens[index].kind,
-                  ["localized", "localizedString", "string"].contains(function),
+                  ["formattedProjectString", "localized", "localizedString", "string"].contains(function),
                   index + 2 < tokens.count,
                   tokens[index + 1].kind == .symbol("("),
                   case .stringLiteral(let key) = tokens[index + 2].kind,
