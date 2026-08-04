@@ -81,6 +81,7 @@ extension MainWindowController {
         updateAIEditHistoryPanelLocalizers(localizer)
         updateDBCloudHelperPanelLocalizers(localizer)
         updateProjectTemplatePanelLocalizers(localizer)
+        updateProjectHomePanelLocalizers(localizer)
         updateMacroSnippetPanelLocalizers(localizer)
         updateBrowserPanelLocalizers(localizer)
         updateNotebookAndWorkflowPanelLocalizers(localizer)
@@ -88,6 +89,7 @@ extension MainWindowController {
         updateSearchBarLocalizer(localizer)
         updateDashboardPanelLocalizer(localizer)
         updateStatusBarLocalizer(localizer)
+        updateTaskQueueCenterLocalizer(localizer)
         updateTerminalHostLocalizers(localizer)
         updateTerminalCommandBlockConfiguration(config.commandBlocks)
         updateTerminalCursorClickToMove(config.terminal.cursorClickToMove)
@@ -307,6 +309,25 @@ extension MainWindowController {
         }
     }
 
+    private func updateProjectHomePanelLocalizers(_ localizer: AppLocalizer) {
+        func update(_ view: NSView) {
+            if let hostingView = view as? NSHostingView<ProjectHomePanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            } else if let hostingView = view as? NSHostingView<ProjectHomeUnavailablePanelView> {
+                hostingView.rootView = hostingView.rootView.updatedLocalizer(localizer)
+            }
+        }
+
+        for view in panelContentViews.values {
+            update(view)
+        }
+        for panelViews in savedTabPanelContentViews.values {
+            for view in panelViews.values {
+                update(view)
+            }
+        }
+    }
+
     private func updateMacroSnippetPanelLocalizers(_ localizer: AppLocalizer) {
         for view in panelContentViews.values {
             if let hostingView = view as? NSHostingView<MacroSnippetPanelView> {
@@ -424,6 +445,14 @@ extension MainWindowController {
         var root = hostingView.rootView
         root.localizer = localizer
         hostingView.rootView = root
+    }
+
+    private func updateTaskQueueCenterLocalizer(_ localizer: AppLocalizer) {
+        guard let sheet = window?.attachedSheet,
+              let hostingController = sheet.contentViewController
+                as? NSHostingController<TaskQueueCenterView> else { return }
+        hostingController.rootView = hostingController.rootView.updatedLocalizer(localizer)
+        sheet.title = localizer.string("taskQueue.title", fallback: "Task Queue")
     }
 
     private func updateTerminalHostLocalizers(_ localizer: AppLocalizer) {

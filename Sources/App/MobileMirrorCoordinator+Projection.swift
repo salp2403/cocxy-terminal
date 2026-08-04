@@ -4,6 +4,11 @@
 import Foundation
 
 extension MobileMirrorCoordinator {
+    func updateLocalization(_ localizer: AppLocalizer) {
+        router?.updateLocalization(MobileMirrorWebLocalization(localizer: localizer))
+        refreshSnapshotAndPublish()
+    }
+
     func refreshSnapshotAndPublish() {
         guard activePairing != nil else { return }
         refreshSnapshot()

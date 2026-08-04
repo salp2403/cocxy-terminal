@@ -110,6 +110,21 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         ) == true)
     }
 
+    @Test("fan-out uses a newly selected language without losing its run")
+    func fanOutUpdatesLocalizerWithoutLosingRun() async throws {
+        let harness = try Harness()
+        let model = harness.makeModel()
+        await model.showComparison(runID: harness.run.id)
+        model.selectedCandidateID = harness.run.candidates[0].id
+        await model.preparePromotion()
+
+        model.updateLocalizer(try spanishLocalizer())
+        await model.confirmPromotion()
+
+        #expect(model.run?.id == harness.run.id)
+        #expect(model.successMessage == "Candidato promovido.")
+    }
+
     @Test("discarded candidate opens a prefilled launch without copy paste")
     func discardedCandidateRecycles() async throws {
         let harness = try Harness(completed: true)
@@ -222,6 +237,14 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                 TaskCollisionParticipant(id: "live", label: "Live", kind: .liveSession),
             ]
         )
+    }
+
+    private func spanishLocalizer() throws -> AppLocalizer {
+        let root = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        let bundle = try #require(Bundle(
+            url: root.appendingPathComponent("Resources/Localization", isDirectory: true)
+        ))
+        return AppLocalizer(languagePreference: .spanish, bundle: bundle)
     }
 
     @MainActor

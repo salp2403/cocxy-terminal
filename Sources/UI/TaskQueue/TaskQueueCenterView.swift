@@ -130,6 +130,14 @@ struct TaskQueueCenterView: View {
     @State private var cancellationTask: TaskQueueItem?
     @State private var removalTask: TaskQueueItem?
 
+    func updatedLocalizer(_ localizer: AppLocalizer) -> Self {
+        Self(
+            viewModel: viewModel,
+            localizer: localizer,
+            onDismiss: onDismiss
+        )
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header

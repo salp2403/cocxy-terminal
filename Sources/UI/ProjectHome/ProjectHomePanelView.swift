@@ -30,6 +30,16 @@ struct ProjectHomePanelView: View {
         self.localizer = localizer
     }
 
+    func updatedLocalizer(_ localizer: AppLocalizer) -> Self {
+        viewModel.updateLocalizer(localizer)
+        fanOutViewModel.updateLocalizer(localizer)
+        return Self(
+            viewModel: viewModel, fanOutViewModel: fanOutViewModel,
+            inboxStore: inboxStore, fanOutCoordinator: fanOutCoordinator,
+            targetTabID: targetTabID, localizer: localizer
+        )
+    }
+
     private var entries: [TaskInboxEntry] {
         inboxStore.entries(for: viewModel.projectID)
     }

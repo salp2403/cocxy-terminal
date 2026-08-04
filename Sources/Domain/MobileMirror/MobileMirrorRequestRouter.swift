@@ -24,7 +24,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     let routeRegistry: MobileMirrorRouteRegistry
 
     private let publicAddress: String
-    private let localization: MobileMirrorWebLocalization
+    private var localization: MobileMirrorWebLocalization
     private let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint?
     private let snapshotProvider: SnapshotProvider
     private let actionHandler: ActionHandler
@@ -32,6 +32,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     private let rejectionAuditor: RejectionAuditor
     private let monotonicNow: @Sendable () -> TimeInterval
     private let endpointLock = NSLock()
+    private let localizationLock = NSLock()
     private let requestRateLock = NSLock()
     private var gatewayPort: UInt16?
     private var requestRatePolicy: MobileMirrorRequestRatePolicy
@@ -68,6 +69,18 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         endpointLock.lock()
         gatewayPort = port
         endpointLock.unlock()
+    }
+
+    func updateLocalization(_ localization: MobileMirrorWebLocalization) {
+        localizationLock.lock()
+        self.localization = localization
+        localizationLock.unlock()
+    }
+
+    private func currentLocalization() -> MobileMirrorWebLocalization {
+        localizationLock.lock()
+        defer { localizationLock.unlock() }
+        return localization
     }
 
     var baseURL: String? {
@@ -116,6 +129,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
             do {
                 let credentials = try authority.credentials(cookie: cookie)
                 let snapshot = try await snapshotProvider(cookie)
+                let localization = currentLocalization()
                 return .response(.json(MobileMirrorBootstrap(
                     snapshot: snapshot,
                     actionSecret: credentials.actionSecret,
@@ -360,6 +374,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     }
 
     private func pairingPage(pendingID: UUID) -> MobileMirrorHTTPResponse {
+        let localization = currentLocalization()
         let nonce = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
         let confirmTitle = Self.htmlEscaped(localization.text("mobile.mirror.confirm.title"))
         let waiting = Self.htmlEscaped(localization.text("mobile.mirror.status.confirmation"))

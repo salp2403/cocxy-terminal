@@ -191,8 +191,8 @@ struct TaskQueueUISwiftTestingTests {
         #expect(TaskQueuePresentation.layoutDirection(localizer: english) == .leftToRight)
     }
 
-    @Test("queue center view constructs with bounded controls")
-    func queueCenterViewConstructs() {
+    @Test("queue center repaints without replacing its view model")
+    func queueCenterRepaintsWithoutReplacingViewModel() throws {
         let model = TaskQueueCenterViewModel(
             defaultWorktree: "/tmp",
             operations: TaskQueueCenterOperations(
@@ -203,10 +203,19 @@ struct TaskQueueUISwiftTestingTests {
                 remove: { _ in throw TaskQueueError.taskNotFound("missing") }
             )
         )
-        _ = TaskQueueCenterView(
+        let view = TaskQueueCenterView(
             viewModel: model,
             onDismiss: {}
-        ).body
+        )
+        let spanish = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+        let updated = view.updatedLocalizer(spanish)
+
+        #expect(updated.viewModel === model)
+        #expect(updated.localizer.resolvedLanguage == .spanish)
+        _ = updated.body
     }
 
     private func makeTemporaryDirectory() throws -> URL {

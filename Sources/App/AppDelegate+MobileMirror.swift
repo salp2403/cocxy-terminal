@@ -53,6 +53,11 @@ extension AppDelegate {
         mobileMirrorCoordinator = nil
     }
 
+    func updateMobileMirrorLocalization(_ localizer: AppLocalizer) {
+        mobileMirrorWindowController?.updateLocalizer(localizer)
+        mobileMirrorCoordinator?.updateLocalization(localizer)
+    }
+
     private func presentMobileMirrorUnavailableAlert() {
         NSSound.beep()
         let localizer = appLocalizer()

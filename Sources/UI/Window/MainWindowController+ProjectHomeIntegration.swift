@@ -31,10 +31,8 @@ extension MainWindowController {
               isDirectory.boolValue else {
             return NSHostingView(rootView: ProjectHomeUnavailablePanelView(
                 localizer: localizer,
-                message: localizer.string(
-                    "projectHome.unavailable.folder",
-                    fallback: "The project folder is no longer available."
-                )
+                messageKey: "projectHome.unavailable.folder",
+                messageFallback: "The project folder is no longer available."
             ))
         }
 

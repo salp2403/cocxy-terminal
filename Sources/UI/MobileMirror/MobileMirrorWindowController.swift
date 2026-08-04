@@ -6,9 +6,14 @@ import SwiftUI
 
 @MainActor
 final class MobileMirrorWindowController: NSWindowController, NSWindowDelegate {
+    private let coordinator: MobileMirrorCoordinator
+    private let hostingController: NSHostingController<MobileMirrorView>
+
     init(coordinator: MobileMirrorCoordinator, localizer: AppLocalizer) {
         let view = MobileMirrorView(coordinator: coordinator, localizer: localizer)
         let hostingController = NSHostingController(rootView: view)
+        self.coordinator = coordinator
+        self.hostingController = hostingController
         let window = NSWindow(contentViewController: hostingController)
         window.title = localizer.string("mobile.mirror.title", fallback: "Pair Phone")
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
@@ -19,6 +24,14 @@ final class MobileMirrorWindowController: NSWindowController, NSWindowDelegate {
         window.setFrameAutosaveName("MobileMirrorWindow")
         super.init(window: window)
         window.delegate = self
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        hostingController.rootView = MobileMirrorView(
+            coordinator: coordinator,
+            localizer: localizer
+        )
+        window?.title = localizer.string("mobile.mirror.title", fallback: "Pair Phone")
     }
 
     @available(*, unavailable)

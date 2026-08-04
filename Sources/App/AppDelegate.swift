@@ -643,6 +643,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self else { return }
                 if config.appearance.appLanguage != lastLanguage {
                     setupMainMenu()
+                    updateMobileMirrorLocalization(AppLocalizer(
+                        languagePreference: config.appearance.appLanguage
+                    ))
                     lastLanguage = config.appearance.appLanguage
                 }
                 guard let mainMenu = NSApplication.shared.mainMenu else { return }

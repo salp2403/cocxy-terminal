@@ -56,7 +56,7 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
 
     private let defaultProviders: [AgentTeamProvider]
     private let defaultBaseRef: String
-    private let localizer: AppLocalizer
+    private var localizer: AppLocalizer
     private let actions: ProjectFanOutActions
     private var loadRevision = 0
     private var collisionRevision = 0
@@ -125,6 +125,10 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     var canForgetRun: Bool { run?.status.isFinished == true && !isBusy }
     var durabilityNotice: String? {
         persistenceIssue ?? (run?.recoveredFromInterruption == true ? run?.failureMessage : nil)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
     }
 
     func handle(_ destination: ProjectFanOutDestination) async {

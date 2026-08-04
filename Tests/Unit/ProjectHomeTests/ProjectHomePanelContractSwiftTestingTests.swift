@@ -105,6 +105,23 @@ struct ProjectHomePanelContractSwiftTestingTests {
         #expect(closeCopy.informativeText.contains("project home panel"))
     }
 
+    @Test("unavailable project home repaints its reason in place")
+    func unavailablePanelRepaintsReason() throws {
+        let bundle = try #require(localizationBundle())
+        let view = ProjectHomeUnavailablePanelView(
+            localizer: AppLocalizer(languagePreference: .english, bundle: bundle),
+            messageKey: "projectHome.unavailable.folder",
+            messageFallback: "The project folder is no longer available."
+        )
+        let updated = view.updatedLocalizer(AppLocalizer(
+            languagePreference: .spanish,
+            bundle: bundle
+        ))
+
+        #expect(view.messageText == "The project folder is no longer available.")
+        #expect(updated.messageText == "La carpeta del proyecto ya no está disponible.")
+    }
+
     private func localizationBundle() -> Bundle? {
         Bundle(url: repositoryRoot().appendingPathComponent("Resources/Localization", isDirectory: true))
     }

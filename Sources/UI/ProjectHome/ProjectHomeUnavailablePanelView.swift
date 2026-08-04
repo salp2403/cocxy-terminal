@@ -5,9 +5,22 @@ import SwiftUI
 
 struct ProjectHomeUnavailablePanelView: View {
     let localizer: AppLocalizer
-    var message: String? = nil
+    var messageKey = "projectHome.unavailable.message"
+    var messageFallback = "Project services are not ready for this restored panel."
 
     @Environment(\.designThemePalette) private var palette
+
+    var messageText: String {
+        localizer.string(messageKey, fallback: messageFallback)
+    }
+
+    func updatedLocalizer(_ localizer: AppLocalizer) -> Self {
+        Self(
+            localizer: localizer,
+            messageKey: messageKey,
+            messageFallback: messageFallback
+        )
+    }
 
     var body: some View {
         VStack(spacing: 12) {
@@ -19,10 +32,7 @@ struct ProjectHomeUnavailablePanelView: View {
                 fallback: "Project Home Unavailable"
             ))
                 .font(.system(size: 16, weight: .semibold))
-            Text(message ?? localizer.string(
-                "projectHome.unavailable.message",
-                fallback: "Project services are not ready for this restored panel."
-            ))
+            Text(messageText)
                 .font(.system(size: 12))
                 .foregroundStyle(palette.textMedium.resolvedColor())
                 .multilineTextAlignment(.center)

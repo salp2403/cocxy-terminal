@@ -114,9 +114,8 @@ struct ProjectErrorLocalizationSwiftTestingTests {
         #expect(!unknown.contains("secret-domain"))
     }
 
-    @Test("Project Home view model presents localized action failures")
-    func projectHomeViewModelUsesInjectedLocalizer() async throws {
-        let localizer = try spanishLocalizer()
+    @Test("Project Home view model uses a newly selected language")
+    func projectHomeViewModelUpdatesLocalizer() async throws {
         let model = ProjectHomePanelViewModel(
             projectID: ProjectID(rawValue: "/tmp/localized-project"),
             projectRoot: URL(fileURLWithPath: "/tmp/localized-project", isDirectory: true),
@@ -124,7 +123,7 @@ struct ProjectErrorLocalizationSwiftTestingTests {
             accent: nil,
             fallbackRemote: nil,
             worktreeConfig: .defaults,
-            localizer: localizer,
+            localizer: AppLocalizer(languagePreference: .english),
             recentDiffProvider: { nil },
             actions: ProjectHomeActions(
                 createSession: {},
@@ -143,6 +142,7 @@ struct ProjectErrorLocalizationSwiftTestingTests {
             prompt: "Implementar"
         )
 
+        model.updateLocalizer(try spanishLocalizer())
         await model.launchTeam(request)
 
         #expect(model.actionErrorMessage == "El proveedor de agente local seleccionado no está disponible.")

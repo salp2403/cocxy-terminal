@@ -42,7 +42,7 @@ final class ProjectHomePanelViewModel: ObservableObject {
     @Published var actionErrorMessage: String?
 
     private var fallbackRemote: String?
-    private let localizer: AppLocalizer
+    private var localizer: AppLocalizer
     private let contextLoader: ProjectHomeContextLoader
     private let activitySummaryLoader: @MainActor (ProjectID) async -> ProjectActivitySummaryState
     private let recentDiffProvider: () -> String?
@@ -114,6 +114,10 @@ final class ProjectHomePanelViewModel: ObservableObject {
             }
             isLoadingContext = false
         }
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
     }
 
     func reloadActivitySummary(after delay: Duration = .zero) {

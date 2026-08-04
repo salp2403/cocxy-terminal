@@ -108,6 +108,22 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         #expect(bootstrap.catalog["mobile.web.projects.title"] == "Proyectos")
         #expect(bootstrap.catalog["mobile.web.terminal.input"] == "Escribe en el terminal")
 
+        router.updateLocalization(try webLocalization(.arabic))
+        let localizedBootstrapResult = await router.route(
+            request: request(
+                path: "/mobile/api/bootstrap",
+                headers: ["cookie": "cocxy_mobile=\(cookie)"]
+            ),
+            identity: identity
+        )
+        let localizedBootstrap = try JSONDecoder().decode(
+            MobileMirrorBootstrap.self,
+            from: try response(from: localizedBootstrapResult).body
+        )
+        #expect(localizedBootstrap.actionSecret == bootstrap.actionSecret)
+        #expect(localizedBootstrap.locale == "ar")
+        #expect(localizedBootstrap.direction == "rtl")
+
         let action = MobileMirrorAction(
             kind: .selectSession,
             sessionID: UUID().uuidString,
