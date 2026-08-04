@@ -186,7 +186,7 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
     ) throws -> MobileMirrorPairingPollResult {
         let now = clock()
         return try lock.withLock {
-            guard let current = pending,
+            guard var current = pending,
                   current.value.id == pendingID,
                   current.value.identity.fingerprint == identity.fingerprint else {
                 throw MobileMirrorError.invalidPairingToken
@@ -204,6 +204,8 @@ final class MobileMirrorPairingAuthority: @unchecked Sendable {
                 guard let cookie = current.cookieDeliveryToken else {
                     throw MobileMirrorError.sessionExpired
                 }
+                current.cookieDeliveryToken = nil
+                pending = current
                 return .confirmed(cookie: cookie)
             }
         }

@@ -36,6 +36,42 @@ final class MobileMirrorApprovalRegistry: ObservableObject {
         var isResolving: Bool
     }
 
+    @MainActor
+    private final class ResolutionClaimGate {
+        var isConsumed = false
+    }
+
+    @MainActor
+    struct ResolutionClaim {
+        let record: MobileMirrorApprovalRecord
+        private let gate: ResolutionClaimGate
+        fileprivate let executeResolution: @MainActor () async -> Bool
+        fileprivate let cancelResolution: @MainActor () -> Void
+
+        fileprivate init(
+            record: MobileMirrorApprovalRecord,
+            executeResolution: @escaping @MainActor () async -> Bool,
+            cancelResolution: @escaping @MainActor () -> Void
+        ) {
+            self.record = record
+            self.gate = ResolutionClaimGate()
+            self.executeResolution = executeResolution
+            self.cancelResolution = cancelResolution
+        }
+
+        func execute() async -> Bool {
+            guard !gate.isConsumed else { return false }
+            gate.isConsumed = true
+            return await executeResolution()
+        }
+
+        func cancel() {
+            guard !gate.isConsumed else { return }
+            gate.isConsumed = true
+            cancelResolution()
+        }
+    }
+
     @Published private(set) var records: [MobileMirrorApprovalRecord] = []
     private var targetsBySourceID: [String: Target] = [:]
 
@@ -49,6 +85,12 @@ final class MobileMirrorApprovalRegistry: ObservableObject {
         guard Self.isValid(sourceID: sourceID, record: record, at: Date()),
               isCurrent() else {
             remove(sourceID: sourceID)
+            return false
+        }
+        guard targetsBySourceID[sourceID]?.isResolving != true,
+              !targetsBySourceID.values.contains(where: {
+                  $0.record.id == record.id && $0.isResolving
+              }) else {
             return false
         }
         let duplicateSourceIDs = targetsBySourceID.compactMap { otherSourceID, target in
@@ -82,20 +124,53 @@ final class MobileMirrorApprovalRegistry: ObservableObject {
         decision: MobileMirrorApprovalDecision,
         at date: Date = Date()
     ) async -> Bool {
+        guard let claim = claimResolution(id: id, decision: decision, at: date) else {
+            return false
+        }
+        return await claim.execute()
+    }
+
+    func claimResolution(
+        id: String,
+        decision: MobileMirrorApprovalDecision,
+        at date: Date = Date()
+    ) -> ResolutionClaim? {
         prune(at: date)
         guard let sourceID = targetsBySourceID.first(where: { $0.value.record.id == id })?.key,
               var target = targetsBySourceID[sourceID],
               !target.isResolving,
               target.isCurrent() else {
-            return false
+            return nil
         }
         target.isResolving = true
         targetsBySourceID[sourceID] = target
+        publishRecords()
 
-        let resolved = await target.resolve(decision)
-        guard let current = targetsBySourceID[sourceID], current.record.id == id else {
-            return resolved
-        }
+        return ResolutionClaim(
+            record: target.record,
+            executeResolution: { [weak self] in
+                let resolved = await target.resolve(decision)
+                self?.finishResolution(
+                    sourceID: sourceID,
+                    recordID: id,
+                    resolved: resolved
+                )
+                return resolved
+            },
+            cancelResolution: { [weak self] in
+                self?.cancelResolution(sourceID: sourceID, recordID: id)
+            }
+        )
+    }
+
+    private func finishResolution(
+        sourceID: String,
+        recordID: String,
+        resolved: Bool
+    ) {
+        guard let current = targetsBySourceID[sourceID],
+              current.record.id == recordID,
+              current.isResolving else { return }
         if resolved || !current.isCurrent() {
             targetsBySourceID.removeValue(forKey: sourceID)
         } else {
@@ -104,7 +179,19 @@ final class MobileMirrorApprovalRegistry: ObservableObject {
             targetsBySourceID[sourceID] = retryable
         }
         publishRecords()
-        return resolved
+    }
+
+    private func cancelResolution(sourceID: String, recordID: String) {
+        guard var current = targetsBySourceID[sourceID],
+              current.record.id == recordID,
+              current.isResolving else { return }
+        if current.isCurrent() {
+            current.isResolving = false
+            targetsBySourceID[sourceID] = current
+        } else {
+            targetsBySourceID.removeValue(forKey: sourceID)
+        }
+        publishRecords()
     }
 
     private func prune(at date: Date) {
@@ -121,6 +208,7 @@ final class MobileMirrorApprovalRegistry: ObservableObject {
 
     private func publishRecords() {
         let updated = targetsBySourceID.values
+            .filter { !$0.isResolving }
             .map(\.record)
             .sorted { $0.id < $1.id }
         if updated != records {

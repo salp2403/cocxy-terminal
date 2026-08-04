@@ -270,6 +270,37 @@ struct MobileMirrorSecuritySwiftTestingTests {
         #expect(json.contains(MobileMirrorPairingAuthority.digest(Data(projectName.utf8))))
     }
 
+    @Test("action audit distinguishes queued and partial effects")
+    func actionAuditTracksDeferredOutcomes() throws {
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: UUID().uuidString,
+            controlType: "paste",
+            text: "content"
+        )
+        let identity = MobileMirrorClientIdentity(
+            remoteAddress: "local relay",
+            userAgent: "Phone"
+        )
+
+        for outcome in [
+            MobileMirrorActionAudit.Outcome.queued,
+            MobileMirrorActionAudit.Outcome.partial,
+        ] {
+            let event = MobileMirrorActionAudit.event(
+                action: action,
+                channelID: UUID(),
+                identity: identity,
+                outcome: outcome
+            )
+            let data = try JSONSerialization.data(withJSONObject: event.toJSON())
+            let json = String(decoding: data, as: UTF8.self)
+            #expect(json.contains("\"outcome\":\"\(outcome.rawValue)\""))
+            #expect(!json.contains("content"))
+        }
+    }
+
     private func sign(
         timestamp: String,
         nonce: String,

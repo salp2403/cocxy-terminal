@@ -61,6 +61,7 @@ extension AppDelegate {
             }
         )
         connectionManager.relayManager = relayManager
+        self.relayManager = relayManager
 
         // Daemon manager — optional, zero overhead when unused.
         let deployAdapter = DaemonDeployAdapter(connectionManager: connectionManager)

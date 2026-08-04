@@ -5,6 +5,20 @@ import AppKit
 import Foundation
 
 extension MobileMirrorCoordinator {
+    func prepareProjectCreation(
+        named rawName: String,
+        identity: MobileMirrorClientIdentity
+    ) throws -> @MainActor () async throws -> Void {
+        guard let root = projectCreationRootHandle else {
+            throw MobileMirrorError.projectCreationUnavailable
+        }
+        let name = try MobileMirrorProjectService.normalizedProjectName(rawName)
+        return { [weak self] in
+            guard let self else { throw MobileMirrorError.projectCreationUnavailable }
+            try await self.createProject(named: name, identity: identity, root: root)
+        }
+    }
+
     func chooseProjectCreationRoot() {
         let panel = NSOpenPanel()
         let localizer = appDelegate?.appLocalizer()
@@ -39,12 +53,10 @@ extension MobileMirrorCoordinator {
 
     func createProject(
         named name: String,
-        identity: MobileMirrorClientIdentity
+        identity: MobileMirrorClientIdentity,
+        root: ProjectDirectoryRoot
     ) async throws {
         try Task.checkCancellation()
-        guard let root = projectCreationRootHandle else {
-            throw MobileMirrorError.projectCreationUnavailable
-        }
         guard await confirmProjectCreation(named: name, identity: identity) else {
             try Task.checkCancellation()
             throw MobileMirrorError.authorizationDenied

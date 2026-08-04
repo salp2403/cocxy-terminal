@@ -15,6 +15,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     @Published var snapshot: MobileMirrorSnapshot = .empty
     @Published private(set) var tunnelTargets: [MobileMirrorTunnelTarget] = []
     @Published var selectedTunnelTargetID: UUID?
+    @Published var usesSSHTunnel = false
 
     weak var appDelegate: AppDelegate?
     let projectRegistry: ProjectRegistry
@@ -26,13 +27,17 @@ final class MobileMirrorCoordinator: ObservableObject {
     let authority: MobileMirrorPairingAuthority
     let routeRegistry = MobileMirrorRouteRegistry()
     let terminalPasteDeliveryCoordinator = TerminalPasteDeliveryCoordinator()
+    let backgroundActionQueue = MobileMirrorBackgroundActionQueue()
+    let staticAssetServer = MobileMirrorStaticAssetServer()
     let projectService: any MobileMirrorProjectCreating
+    let relayManager: RelayManagerImpl
     let tunnelController: MobileMirrorSSHTunnelController
     var projectRecordsSnapshot: [ProjectRecord]
     var sessionEntriesSnapshot: [SessionEntry]
     var gateway: MobileMirrorGateway?
     var router: MobileMirrorRequestRouter?
     var tunnelLease: MobileMirrorTunnelLease?
+    var localRelayLease: MobileMirrorLocalRelayLease?
     var pairingChannelID: UUID?
     var ownedStreams: [SurfaceID: OwnedStream] = [:]
     var cancellables = Set<AnyCancellable>()
@@ -43,6 +48,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     var transportGeneration: UInt64 = 0
     var announcedApprovalIDs: Set<String> = []
     var projectCreationRootHandle: ProjectDirectoryRoot?
+    var projectCreationIsQueued = false
 
     init(
         appDelegate: AppDelegate,
@@ -52,6 +58,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         sessionRegistry: SessionRegistryImpl,
         approvalRegistry: MobileMirrorApprovalRegistry,
         auditLog: RelayAuditLog,
+        relayManager: RelayManagerImpl,
         tunnelController: MobileMirrorSSHTunnelController,
         authority: MobileMirrorPairingAuthority = MobileMirrorPairingAuthority(),
         projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService()
@@ -63,6 +70,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         self.sessionRegistry = sessionRegistry
         self.approvalRegistry = approvalRegistry
         self.auditLog = auditLog
+        self.relayManager = relayManager
         self.tunnelController = tunnelController
         self.authority = authority
         self.projectService = projectService
@@ -77,10 +85,18 @@ final class MobileMirrorCoordinator: ObservableObject {
         priorPairing?.cancel()
         pairingTask = nil
         stopTransport(revoke: true)
-        guard let targetID = selectedTunnelTargetID,
-              let target = tunnelTargets.first(where: { $0.id == targetID }) else {
-            state = .unavailable(MobileMirrorTunnelError.noConnectedTarget.localizedDescription)
-            return
+        let target: MobileMirrorTunnelTarget?
+        if usesSSHTunnel {
+            guard let targetID = selectedTunnelTargetID,
+                  let selected = tunnelTargets.first(where: { $0.id == targetID }) else {
+                state = .unavailable(
+                    MobileMirrorTunnelError.noConnectedTarget.localizedDescription
+                )
+                return
+            }
+            target = selected
+        } else {
+            target = nil
         }
         transportGeneration &+= 1
         let generation = transportGeneration
@@ -97,10 +113,11 @@ final class MobileMirrorCoordinator: ObservableObject {
                 )
                 return
             }
-            await self.openPairingTransport(
-                target: target,
-                generation: generation
-            )
+            if let target {
+                await self.openPairingTransport(target: target, generation: generation)
+            } else {
+                await self.openLocalPairingTransport(generation: generation)
+            }
         }
     }
 
@@ -109,13 +126,151 @@ final class MobileMirrorCoordinator: ObservableObject {
         generation: UInt64
     ) async {
         let publicAddress = "127.0.0.1"
+        let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
+        do {
+            staticAssetEndpoint = try staticAssetServer.start()
+        } catch {
+            state = .failed(error.localizedDescription)
+            return
+        }
+        let router = makePairingRouter(
+            publicAddress: publicAddress,
+            staticAssetEndpoint: staticAssetEndpoint
+        )
+        let gateway = MobileMirrorGateway(
+            clientIdentityLabel: "SSH \(target.destination)"
+        ) { [weak router] request, identity in
+            guard let router else {
+                return .response(.error("Mobile mirror is unavailable.", status: 503))
+            }
+            return await router.route(request: request, identity: identity)
+        }
+
+        do {
+            let localPort = try gateway.start()
+            let lease = try await tunnelController.open(
+                profileID: target.id,
+                localPort: localPort
+            )
+            tunnelLease = lease
+            guard !Task.isCancelled, generation == transportGeneration else {
+                gateway.stop()
+                staticAssetServer.stop()
+                await closeUnpublishedTunnelLease(lease)
+                return
+            }
+            router.updatePublicPort(lease.remotePort)
+            let offer = authority.makeOffer()
+            guard let url = URL(
+                string: "http://\(publicAddress):\(lease.remotePort)/pair?token=\(offer.token)"
+            ) else {
+                gateway.stop()
+                await closeUnpublishedTunnelLease(lease)
+                throw MobileMirrorError.unavailable
+            }
+            do {
+                try publishPairingOffer(
+                    router: router,
+                    gateway: gateway,
+                    url: url,
+                    offer: offer
+                )
+            } catch {
+                gateway.stop()
+                _ = authority.revoke()
+                await closeUnpublishedTunnelLease(lease)
+                throw error
+            }
+        } catch {
+            gateway.stop()
+            staticAssetServer.stop()
+            guard generation == transportGeneration else { return }
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func openLocalPairingTransport(generation: UInt64) async {
+        guard let publicAddress = relayManager.privateMobileMirrorAddress() else {
+            state = .unavailable(MobileMirrorError.noPrivateNetwork.localizedDescription)
+            return
+        }
+        let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
+        do {
+            staticAssetEndpoint = try staticAssetServer.start()
+        } catch {
+            state = .failed(error.localizedDescription)
+            return
+        }
+        let preambleSecret = MobileMirrorPairingAuthority.base64URL(
+            RelayToken.generate().secret
+        )
+        let router = makePairingRouter(
+            publicAddress: publicAddress,
+            staticAssetEndpoint: staticAssetEndpoint
+        )
+        let gateway = MobileMirrorGateway(
+            trustedRelaySecret: preambleSecret
+        ) { [weak router] request, identity in
+            guard let router else {
+                return .response(.error("Mobile mirror is unavailable.", status: 503))
+            }
+            return await router.route(request: request, identity: identity)
+        }
+        var openedLease: MobileMirrorLocalRelayLease?
+        do {
+            let gatewayPort = try gateway.start()
+            let lease = try relayManager.openMobileMirrorRelay(
+                gatewayPort: gatewayPort,
+                preambleSecret: preambleSecret,
+                bindAddress: publicAddress
+            )
+            openedLease = lease
+            localRelayLease = lease
+            guard !Task.isCancelled, generation == transportGeneration else {
+                gateway.stop()
+                staticAssetServer.stop()
+                relayManager.closeMobileMirrorRelay(leaseID: lease.id)
+                localRelayLease = nil
+                return
+            }
+            router.updatePublicPort(lease.port)
+            let offer = authority.makeOffer()
+            guard let url = URL(
+                string: "http://\(lease.address):\(lease.port)/pair?token=\(offer.token)"
+            ) else {
+                throw MobileMirrorError.unavailable
+            }
+            try publishPairingOffer(
+                router: router,
+                gateway: gateway,
+                url: url,
+                offer: offer
+            )
+        } catch {
+            gateway.stop()
+            staticAssetServer.stop()
+            if let openedLease {
+                relayManager.closeMobileMirrorRelay(leaseID: openedLease.id)
+                if localRelayLease == openedLease { localRelayLease = nil }
+            }
+            _ = authority.revoke()
+            guard generation == transportGeneration else { return }
+            state = .failed(error.localizedDescription)
+        }
+    }
+
+    private func makePairingRouter(
+        publicAddress: String,
+        staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
+    ) -> MobileMirrorRequestRouter {
         let localizer = appDelegate?.appLocalizer()
             ?? AppLocalizer(languagePreference: .system)
-        let router = MobileMirrorRequestRouter(
+        return MobileMirrorRequestRouter(
             publicAddress: publicAddress,
             authority: authority,
             routeRegistry: routeRegistry,
             localization: MobileMirrorWebLocalization(localizer: localizer),
+            staticAssetEndpoint: staticAssetEndpoint,
             snapshotProvider: { [weak self] cookie in
                 guard let self else { throw MobileMirrorError.unavailable }
                 return try await self.snapshot(for: cookie)
@@ -141,57 +296,23 @@ final class MobileMirrorCoordinator: ObservableObject {
                 await self?.receivePendingPairing(pending)
             }
         )
-        let gateway = MobileMirrorGateway(
-            clientIdentityLabel: "SSH \(target.destination)"
-        ) { [weak router] request, identity in
-            guard let router else {
-                return .response(.error("Mobile mirror is unavailable.", status: 503))
-            }
-            return await router.route(request: request, identity: identity)
-        }
+    }
 
-        do {
-            let localPort = try gateway.start()
-            let lease = try await tunnelController.open(
-                profileID: target.id,
-                localPort: localPort
-            )
-            tunnelLease = lease
-            guard !Task.isCancelled, generation == transportGeneration else {
-                gateway.stop()
-                await closeUnpublishedTunnelLease(lease)
-                return
-            }
-            router.updatePublicPort(lease.remotePort)
-            let offer = authority.makeOffer()
-            guard let url = URL(
-                string: "http://\(publicAddress):\(lease.remotePort)/pair?token=\(offer.token)"
-            ) else {
-                gateway.stop()
-                await closeUnpublishedTunnelLease(lease)
-                throw MobileMirrorError.unavailable
-            }
-            do {
-                try auditLog.log(.channelOpened(channelID: offer.id, name: "Mobile mirror"))
-            } catch {
-                gateway.stop()
-                _ = authority.revoke()
-                await closeUnpublishedTunnelLease(lease)
-                throw error
-            }
-            self.router = router
-            self.gateway = gateway
-            pairingURL = url
-            pendingPairing = nil
-            activePairing = nil
-            pairingChannelID = offer.id
-            state = .offering
-            scheduleOfferExpiry(offer)
-        } catch {
-            gateway.stop()
-            guard generation == transportGeneration else { return }
-            state = .failed(error.localizedDescription)
-        }
+    private func publishPairingOffer(
+        router: MobileMirrorRequestRouter,
+        gateway: MobileMirrorGateway,
+        url: URL,
+        offer: MobileMirrorPairingOffer
+    ) throws {
+        try auditLog.log(.channelOpened(channelID: offer.id, name: "Mobile mirror"))
+        self.router = router
+        self.gateway = gateway
+        pairingURL = url
+        pendingPairing = nil
+        activePairing = nil
+        pairingChannelID = offer.id
+        state = .offering
+        scheduleOfferExpiry(offer)
     }
 
     private func closeUnpublishedTunnelLease(_ lease: MobileMirrorTunnelLease) async {
@@ -266,7 +387,10 @@ final class MobileMirrorCoordinator: ObservableObject {
     }
 
     func openRemoteWorkspaceSetup() {
-        appDelegate?.focusedWindowController()?.showRemoteWorkspacePanel()
+        guard let controller = appDelegate?.focusedWindowController() else { return }
+        controller.showRemoteWorkspacePanel()
+        controller.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
     }
 
     private func subscribeToAppState() {
@@ -377,219 +501,6 @@ final class MobileMirrorCoordinator: ObservableObject {
             refreshSnapshot()
         }
         return snapshot
-    }
-
-    private func handle(
-        action: MobileMirrorAction,
-        cookie: String,
-        channelID: UUID,
-        identity: MobileMirrorClientIdentity
-    ) async throws -> MobileMirrorSnapshot {
-        do {
-            guard let active = authority.activePairing(cookie: cookie),
-                  active.channelID == channelID,
-                  active.identity.fingerprint == identity.fingerprint else {
-                throw MobileMirrorError.sessionExpired
-            }
-            refreshSnapshot()
-            var publishesState = true
-            switch action.kind {
-            case .selectSession:
-                let selection = try terminalSelection(for: action)
-                guard authority.selectTerminal(
-                    sessionID: selection.entry.sessionID.rawValue.uuidString,
-                    surfaceID: selection.route.surfaceID.rawValue.uuidString,
-                    cookie: cookie
-                ) else {
-                    throw MobileMirrorError.targetUnavailable
-                }
-            case .terminalControl:
-                let selection = try terminalSelection(for: action)
-                if action.controlType == "viewport-scroll" {
-                    guard let scrollDelta = action.scrollDelta else {
-                        throw MobileMirrorError.invalidAction
-                    }
-                    try scrollTerminal(
-                        selection.entry,
-                        route: selection.route,
-                        deltaRows: scrollDelta
-                    )
-                } else {
-                    guard let writer = makeTerminalWriter(channelID: active.channelID) else {
-                        throw MobileMirrorError.targetUnavailable
-                    }
-                    try await writer.write(
-                        action: action,
-                        to: selection.entry.tabID,
-                        surfaceID: selection.route.surfaceID
-                    )
-                }
-                publishesState = false
-            case .agentRespond:
-                let selection = try terminalSelection(for: action)
-                let surfaceState = selection.controller.injectedPerSurfaceStore?
-                    .state(for: selection.route.surfaceID)
-                guard (surfaceState?.agentState ?? selection.entry.agentState) == .waitingInput,
-                      let text = action.text,
-                      let writer = makeTerminalWriter(channelID: active.channelID) else {
-                    throw MobileMirrorError.targetUnavailable
-                }
-                try await writer.respond(
-                    text,
-                    to: selection.entry.tabID,
-                    surfaceID: selection.route.surfaceID
-                )
-            case .approvalApprove, .approvalReject:
-                try await handleApproval(action)
-            case .projectCreate:
-                guard let name = action.name else { throw MobileMirrorError.invalidAction }
-                try await createProject(named: name, identity: identity)
-            }
-            if publishesState {
-                refreshSnapshotAndPublish()
-            }
-        } catch {
-            do {
-                try auditLog.log(MobileMirrorActionAudit.event(
-                    action: action,
-                    channelID: channelID,
-                    identity: identity,
-                    accepted: false
-                ))
-            } catch let auditError {
-                throw auditError
-            }
-            throw error
-        }
-        try auditLog.log(MobileMirrorActionAudit.event(
-            action: action,
-            channelID: channelID,
-            identity: identity,
-            accepted: true
-        ))
-        return snapshot
-    }
-
-    private func recordRequestRejection(
-        _ reason: MobileMirrorActionAudit.RejectionReason,
-        channelID: UUID,
-        identity: MobileMirrorClientIdentity
-    ) throws {
-        try auditLog.log(MobileMirrorActionAudit.rejectionEvent(
-            reason: reason,
-            channelID: channelID,
-            identity: identity
-        ))
-    }
-
-    private struct TerminalSelection {
-        let entry: SessionEntry
-        let route: MobileMirrorTerminalRoute
-        let controller: MainWindowController
-    }
-
-    private func terminalSelection(for action: MobileMirrorAction) throws -> TerminalSelection {
-        guard let rawSessionID = action.sessionID,
-              let rawSurfaceID = action.surfaceID,
-              let surfaceUUID = UUID(uuidString: rawSurfaceID),
-              let entry = sessionEntriesSnapshot.first(where: {
-                  $0.sessionID.rawValue.uuidString == rawSessionID
-              }), sessionRegistry.session(for: entry.sessionID) == entry,
-              let controller = appDelegate?.allWindowControllers.first(where: {
-                  $0.windowID == entry.ownerWindowID
-              }), controller.tabManager.tab(for: entry.tabID) != nil,
-              controller.tabID(for: SurfaceID(rawValue: surfaceUUID)) == entry.tabID,
-              let route = routeRegistry.route(
-                  sessionID: rawSessionID,
-                  surfaceID: rawSurfaceID
-              ), route.surfaceID.rawValue == surfaceUUID else {
-            throw MobileMirrorError.targetUnavailable
-        }
-        return TerminalSelection(entry: entry, route: route, controller: controller)
-    }
-
-    private func scrollTerminal(
-        _ entry: SessionEntry,
-        route: MobileMirrorTerminalRoute,
-        deltaRows: Int
-    ) throws {
-        guard let controller = appDelegate?.allWindowControllers.first(where: {
-            $0.windowID == entry.ownerWindowID
-        }), controller.tabManager.tab(for: entry.tabID) != nil,
-              controller.surfaceIDs(for: entry.tabID).contains(route.surfaceID),
-              let bridge = controller.cocxyCoreBridge(forSurface: route.surfaceID) else {
-            throw MobileMirrorError.targetUnavailable
-        }
-        bridge.scrollViewport(surfaceID: route.surfaceID, deltaRows: deltaRows)
-    }
-
-    private func makeTerminalWriter(channelID: UUID) -> MobileMirrorTerminalWriter? {
-        guard let appDelegate else { return nil }
-        return MobileMirrorTerminalWriter(
-            grantProvider: { [weak self, weak appDelegate] request in
-                guard let self, let appDelegate,
-                      let initial = appDelegate.privilegedSocketCommandPresentationTarget(
-                          for: request
-                      ), let current = appDelegate.privilegedSocketCommandPresentationTarget(
-                          for: request
-                      ), current.context == initial.context,
-                      let rawTabID = initial.context.tabID else {
-                    return nil
-                }
-                return MobileMirrorPrivilegedAuthorization.grant(
-                    for: request,
-                    channelID: channelID,
-                    activePairing: self.authority.activePairing(),
-                    tabID: TabID(rawValue: rawTabID),
-                    context: current.context
-                )
-            },
-            targetProvider: { [weak appDelegate] context in
-                guard let rawTabID = context.tabID,
-                      let rawSurfaceID = context.surfaceID,
-                      let target = appDelegate?.privilegedSocketTerminalTarget(for: context),
-                      target.surfaceID.rawValue == rawSurfaceID,
-                      target.controller.tabID(for: target.surfaceID) == TabID(rawValue: rawTabID) else {
-                    return nil
-                }
-                let engine = target.controller.terminalEngine(for: target.surfaceID)
-                let surfaceID = target.surfaceID
-                return MobileMirrorTerminalTarget(
-                    sendText: { engine.sendText($0, to: surfaceID) },
-                    sendKeyEvent: { event in
-                        if let bridge = engine as? CocxyCoreBridge {
-                            return bridge.sendKeyEventConfirmingDelivery(
-                                event,
-                                to: surfaceID
-                            )
-                        }
-                        return engine.sendKeyEvent(event, to: surfaceID)
-                    },
-                    pasteConfiguration: {
-                        let agentPaced = target.controller.surfaceLooksLikeActiveAgent(surfaceID)
-                        guard let bridge = engine as? CocxyCoreBridge,
-                              let diagnostics = bridge.modeDiagnostics(for: surfaceID) else {
-                            return TerminalPasteDeliveryConfiguration(
-                                usesBracketedPaste: false,
-                                agentPaced: true
-                            )
-                        }
-                        return TerminalPasteDeliveryConfiguration(
-                            usesBracketedPaste: diagnostics.bracketedPasteMode,
-                            agentPaced: agentPaced
-                                || diagnostics.altScreen
-                                || diagnostics.mouseTrackingMode > 0
-                        )
-                    },
-                    isAvailable: {
-                        target.controller.tabID(for: surfaceID) == TabID(rawValue: rawTabID)
-                            && ((engine as? CocxyCoreBridge)?.surfaceState(for: surfaceID) != nil
-                                || !(engine is CocxyCoreBridge))
-                    }
-                )
-            },
-            pasteDeliveryCoordinator: terminalPasteDeliveryCoordinator
-        )
     }
 
 }

@@ -42,7 +42,7 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
         in authorizedRoot: ProjectDirectoryRoot
     ) async throws -> ProjectDirectoryPublication {
         try Task.checkCancellation()
-        let name = try normalizedProjectName(rawName)
+        let name = try Self.normalizedProjectName(rawName)
         let operation = Task.detached(priority: .userInitiated) {
             try createProjectSynchronously(named: name, in: authorizedRoot)
         }
@@ -70,6 +70,10 @@ struct MobileMirrorProjectService: MobileMirrorProjectCreating, Sendable {
     }
 
     func normalizedProjectName(_ rawName: String) throws -> String {
+        try Self.normalizedProjectName(rawName)
+    }
+
+    static func normalizedProjectName(_ rawName: String) throws -> String {
         let name = rawName
             .precomposedStringWithCanonicalMapping
             .trimmingCharacters(in: .whitespacesAndNewlines)

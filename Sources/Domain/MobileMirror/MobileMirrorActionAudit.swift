@@ -4,6 +4,13 @@
 import Foundation
 
 enum MobileMirrorActionAudit {
+    enum Outcome: String, Sendable {
+        case accepted
+        case rejected
+        case queued
+        case partial
+    }
+
     enum RejectionReason: String, Sendable {
         case invalidEnvelope = "invalid-envelope"
         case invalidSignature = "invalid-signature"
@@ -18,6 +25,20 @@ enum MobileMirrorActionAudit {
         identity: MobileMirrorClientIdentity,
         accepted: Bool
     ) -> RelayAuditEvent {
+        event(
+            action: action,
+            channelID: channelID,
+            identity: identity,
+            outcome: accepted ? .accepted : .rejected
+        )
+    }
+
+    static func event(
+        action: MobileMirrorAction,
+        channelID: UUID,
+        identity: MobileMirrorClientIdentity,
+        outcome: Outcome
+    ) -> RelayAuditEvent {
         let target = action.sessionID
             ?? action.approvalID
             ?? action.name
@@ -27,7 +48,7 @@ enum MobileMirrorActionAudit {
             remoteHost: identity.remoteAddress,
             action: action.kind.rawValue,
             targetDigest: MobileMirrorPairingAuthority.digest(Data(target.utf8)),
-            outcome: accepted ? "accepted" : "rejected"
+            outcome: outcome.rawValue
         )
     }
 

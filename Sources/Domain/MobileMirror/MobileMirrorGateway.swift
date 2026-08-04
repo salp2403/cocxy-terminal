@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// MobileMirrorGateway.swift - Loopback HTTP and WebSocket relay behind SSH.
+// MobileMirrorGateway.swift - Loopback HTTP gateway behind private transports.
 
 import Darwin
 import Dispatch
@@ -38,6 +38,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
     private let requestedPort: UInt16
     private let routeHandler: RouteHandler
     private let clientIdentityLabel: String?
+    private let trustedRelaySecret: String?
     private let requestTimeout: TimeInterval
     private let monotonicNow: @Sendable () -> TimeInterval
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.listener")
@@ -47,7 +48,6 @@ final class MobileMirrorGateway: @unchecked Sendable {
         attributes: .concurrent
     )
     private let stateLock = NSLock()
-    private var listenerDescriptor: Int32 = -1
     private var listenerSource: DispatchSourceRead?
     private var clientDescriptors: [Int32: String] = [:]
     private var connectionPolicy: MobileMirrorConnectionPolicy
@@ -57,6 +57,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         requestedPort: UInt16 = 0,
         eventHub: MobileMirrorEventHub = MobileMirrorEventHub(),
         clientIdentityLabel: String? = nil,
+        trustedRelaySecret: String? = nil,
         requestTimeout: TimeInterval = 8,
         connectionLimits: MobileMirrorConnectionLimits = .default,
         monotonicNow: @escaping @Sendable () -> TimeInterval = {
@@ -67,6 +68,7 @@ final class MobileMirrorGateway: @unchecked Sendable {
         self.requestedPort = requestedPort
         self.eventHub = eventHub
         self.clientIdentityLabel = clientIdentityLabel
+        self.trustedRelaySecret = trustedRelaySecret
         self.requestTimeout = requestTimeout.isFinite
             ? min(60, max(0.05, requestTimeout))
             : 8
@@ -122,12 +124,13 @@ final class MobileMirrorGateway: @unchecked Sendable {
             throw MobileMirrorGatewayError.portUnavailable
         }
         let resolvedPort = UInt16(bigEndian: bound.sin_port)
-        listenerDescriptor = descriptor
         port = resolvedPort
         ownsDescriptor = false
 
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: listenerQueue)
-        source.setEventHandler { [weak self] in self?.acceptAvailableConnections() }
+        source.setEventHandler { [weak self] in
+            self?.acceptAvailableConnections(from: descriptor)
+        }
         source.setCancelHandler { Darwin.close(descriptor) }
         listenerSource = source
         source.resume()
@@ -139,7 +142,6 @@ final class MobileMirrorGateway: @unchecked Sendable {
         stateLock.lock()
         source = listenerSource
         listenerSource = nil
-        listenerDescriptor = -1
         port = nil
         for descriptor in clientDescriptors.keys {
             Darwin.shutdown(descriptor, SHUT_RDWR)
@@ -149,13 +151,13 @@ final class MobileMirrorGateway: @unchecked Sendable {
         eventHub.stop()
     }
 
-    private func acceptAvailableConnections() {
+    private func acceptAvailableConnections(from listener: Int32) {
         while true {
             var remote = sockaddr_storage()
             var remoteLength = socklen_t(MemoryLayout<sockaddr_storage>.size)
             let descriptor = withUnsafeMutablePointer(to: &remote) { pointer in
                 pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    Darwin.accept(listenerDescriptor, $0, &remoteLength)
+                    Darwin.accept(listener, $0, &remoteLength)
                 }
             }
             if descriptor < 0 {
@@ -209,6 +211,8 @@ final class MobileMirrorGateway: @unchecked Sendable {
 
     private func readRequest(from descriptor: Int32, remoteAddress: String) {
         var data = Data()
+        var relayedRemoteAddress: String?
+        var consumedRelayPreamble = trustedRelaySecret == nil
         var buffer = [UInt8](repeating: 0, count: 8 * 1_024)
         let deadline = MobileMirrorRequestDeadline(
             startedAt: monotonicNow(),
@@ -216,9 +220,27 @@ final class MobileMirrorGateway: @unchecked Sendable {
         )
         do {
             while true {
+                if !consumedRelayPreamble, let trustedRelaySecret {
+                    guard let address = try MobileMirrorRelayPreamble.consumeIfComplete(
+                        from: &data,
+                        expectedSecret: trustedRelaySecret
+                    ) else {
+                        try receiveMoreRequestData(
+                            into: &data,
+                            buffer: &buffer,
+                            descriptor: descriptor,
+                            deadline: deadline
+                        )
+                        continue
+                    }
+                    relayedRemoteAddress = address
+                    consumedRelayPreamble = true
+                }
                 if let request = try MobileMirrorHTTPRequest.parseIfComplete(data) {
                     let identity = MobileMirrorClientIdentity(
-                        remoteAddress: clientIdentityLabel ?? remoteAddress,
+                        remoteAddress: relayedRemoteAddress
+                            ?? clientIdentityLabel
+                            ?? remoteAddress,
                         userAgent: request.userAgent
                     )
                     route(
@@ -228,22 +250,39 @@ final class MobileMirrorGateway: @unchecked Sendable {
                     )
                     return
                 }
-                guard let timeout = deadline.remainingPollMilliseconds(at: monotonicNow()) else {
-                    throw MobileMirrorHTTPError.malformedRequest
-                }
-                var descriptorPoll = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
-                let pollResult = Darwin.poll(&descriptorPoll, 1, timeout)
-                if pollResult < 0, errno == EINTR { continue }
-                guard pollResult > 0, descriptorPoll.revents & Int16(POLLIN) != 0 else {
-                    throw MobileMirrorHTTPError.malformedRequest
-                }
-                let count = Darwin.recv(descriptor, &buffer, buffer.count, 0)
-                if count < 0, errno == EINTR { continue }
-                guard count > 0 else { throw MobileMirrorHTTPError.malformedRequest }
-                data.append(buffer, count: count)
+                try receiveMoreRequestData(
+                    into: &data,
+                    buffer: &buffer,
+                    descriptor: descriptor,
+                    deadline: deadline
+                )
             }
         } catch {
             respond(.error("Invalid local request.", status: 400), to: descriptor)
+        }
+    }
+
+    private func receiveMoreRequestData(
+        into data: inout Data,
+        buffer: inout [UInt8],
+        descriptor: Int32,
+        deadline: MobileMirrorRequestDeadline
+    ) throws {
+        while true {
+            guard let timeout = deadline.remainingPollMilliseconds(at: monotonicNow()) else {
+                throw MobileMirrorHTTPError.malformedRequest
+            }
+            var descriptorPoll = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+            let pollResult = Darwin.poll(&descriptorPoll, 1, timeout)
+            if pollResult < 0, errno == EINTR { continue }
+            guard pollResult > 0, descriptorPoll.revents & Int16(POLLIN) != 0 else {
+                throw MobileMirrorHTTPError.malformedRequest
+            }
+            let count = Darwin.recv(descriptor, &buffer, buffer.count, 0)
+            if count < 0, errno == EINTR { continue }
+            guard count > 0 else { throw MobileMirrorHTTPError.malformedRequest }
+            data.append(buffer, count: count)
+            return
         }
     }
 

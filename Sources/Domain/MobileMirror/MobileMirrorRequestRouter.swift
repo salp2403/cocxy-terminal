@@ -25,6 +25,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
     private let publicAddress: String
     private let localization: MobileMirrorWebLocalization
+    private let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint?
     private let snapshotProvider: SnapshotProvider
     private let actionHandler: ActionHandler
     private let pendingPairingHandler: PendingPairingHandler
@@ -40,6 +41,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         authority: MobileMirrorPairingAuthority,
         routeRegistry: MobileMirrorRouteRegistry,
         localization: MobileMirrorWebLocalization = .english,
+        staticAssetEndpoint: MobileMirrorStaticAssetEndpoint? = nil,
         connectionLimits: MobileMirrorConnectionLimits = .default,
         monotonicNow: @escaping @Sendable () -> TimeInterval = {
             ProcessInfo.processInfo.systemUptime
@@ -53,6 +55,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         self.authority = authority
         self.routeRegistry = routeRegistry
         self.localization = localization
+        self.staticAssetEndpoint = staticAssetEndpoint
         self.monotonicNow = monotonicNow
         self.snapshotProvider = snapshotProvider
         self.actionHandler = actionHandler
@@ -334,6 +337,13 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         guard request.path == "/ws"
                 || MobileMirrorStaticAssets.allowedPaths.contains(request.path) else {
             return .response(.error("Not found.", status: 404))
+        }
+        if request.path != "/ws", let staticAssetEndpoint {
+            return .proxy(MobileMirrorProxyTarget(
+                port: staticAssetEndpoint.port,
+                bearerToken: staticAssetEndpoint.bearerToken,
+                rewrittenPath: request.target
+            ))
         }
         let selectedSurfaceID = authority.selectedTerminal(cookie: cookie)?.surfaceID
         let route = selectedSurfaceID.flatMap(routeRegistry.route(forSurfaceID:))

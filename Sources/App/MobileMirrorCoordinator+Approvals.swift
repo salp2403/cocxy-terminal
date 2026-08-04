@@ -4,7 +4,9 @@
 import Foundation
 
 extension MobileMirrorCoordinator {
-    func handleApproval(_ action: MobileMirrorAction) async throws {
+    func claimApproval(
+        _ action: MobileMirrorAction
+    ) throws -> MobileMirrorApprovalRegistry.ResolutionClaim {
         guard let approvalID = action.approvalID else {
             throw MobileMirrorError.invalidAction
         }
@@ -17,8 +19,12 @@ extension MobileMirrorCoordinator {
         default:
             throw MobileMirrorError.invalidAction
         }
-        guard await approvalRegistry.resolve(id: approvalID, decision: decision) else {
+        guard let claim = approvalRegistry.claimResolution(
+            id: approvalID,
+            decision: decision
+        ) else {
             throw MobileMirrorError.targetUnavailable
         }
+        return claim
     }
 }

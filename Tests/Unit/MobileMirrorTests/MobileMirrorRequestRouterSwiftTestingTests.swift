@@ -68,6 +68,17 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             .split(separator: "=", maxSplits: 1).last
             .map(String.init))
 
+        let replayedPoll = await router.route(
+            request: request(
+                path: "/mobile/api/pair-status",
+                query: ["id": pending.id.uuidString]
+            ),
+            identity: identity
+        )
+        let replayedResponse = try response(from: replayedPoll)
+        #expect(replayedResponse.status == 401)
+        #expect(replayedResponse.headers["Set-Cookie"] == nil)
+
         let foreignBootstrap = await router.route(
             request: request(
                 path: "/mobile/api/bootstrap",
@@ -386,6 +397,10 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             publicAddress: "127.0.0.1",
             authority: authority,
             routeRegistry: MobileMirrorRouteRegistry(),
+            staticAssetEndpoint: MobileMirrorStaticAssetEndpoint(
+                port: 45678,
+                bearerToken: "compiled-assets"
+            ),
             snapshotProvider: { _ in .empty },
             actionHandler: { _, _, _, _ in .empty },
             pendingPairingHandler: { _ in }
@@ -409,6 +424,22 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             Issue.record("Expected confirmed pairing")
             return
         }
+        let compiledAsset = await router.route(
+            request: request(
+                path: "/mobile_ui.js",
+                host: "127.0.0.1:4444",
+                headers: ["cookie": "cocxy_mobile=\(cookie)"]
+            ),
+            identity: identity
+        )
+        guard case .proxy(let target) = compiledAsset else {
+            Issue.record("Expected the app-scoped compiled asset route")
+            return
+        }
+        #expect(target.port == 45678)
+        #expect(target.bearerToken == "compiled-assets")
+        #expect(target.rewrittenPath == "/mobile_ui.js")
+
         let internalAsset = await router.route(
             request: request(
                 path: "/tests/render-smoke.html",

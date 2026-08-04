@@ -81,7 +81,7 @@ extension MobileMirrorCoordinator {
         snapshot = MobileMirrorSnapshot(
             selectedSessionID: selected?.sessionID,
             selectedSurfaceID: selected?.surfaceID,
-            projectCreationEnabled: projectCreationRootHandle != nil,
+            projectCreationEnabled: projectCreationRootHandle != nil && !projectCreationIsQueued,
             projects: projects,
             agents: agents,
             approvals: approvals
@@ -117,85 +117,89 @@ extension MobileMirrorCoordinator {
 
     func synchronizeTerminalStreams() {
         guard let appDelegate else { return }
-        let desiredSurfaceIDs = Set(sessionEntriesSnapshot.flatMap { entry -> [SurfaceID] in
+        var candidates: [(SessionEntry, MainWindowController, SurfaceID)] = []
+        for entry in sessionEntriesSnapshot.sorted(by: Self.sortSessions) {
             guard let controller = appDelegate.allWindowControllers.first(where: {
                 $0.windowID == entry.ownerWindowID
-            }), controller.tabManager.tab(for: entry.tabID) != nil else { return [] }
-            return orderedSurfaceIDs(for: entry.tabID, controller: controller).filter {
-                controller.tabID(for: $0) == entry.tabID
+            }), controller.tabManager.tab(for: entry.tabID) != nil else { continue }
+            for surfaceID in orderedSurfaceIDs(for: entry.tabID, controller: controller)
+                where controller.tabID(for: surfaceID) == entry.tabID {
+                candidates.append((entry, controller, surfaceID))
             }
-        })
+        }
+        let preferredSurfaceID = authority.selectedTerminal()
+            .flatMap { UUID(uuidString: $0.surfaceID) }
+            .map(SurfaceID.init(rawValue:))
+        let desired = preferredSurfaceID.flatMap { preferred in
+            candidates.first { $0.2 == preferred }
+        } ?? candidates.first
+        let desiredSurfaceIDs: Set<SurfaceID> = Set(desired.map { [$0.2] } ?? [])
         for (surfaceID, stream) in Array(ownedStreams)
             where !desiredSurfaceIDs.contains(surfaceID) {
             stopOwnedStream(stream)
             ownedStreams.removeValue(forKey: surfaceID)
         }
 
-        var routes: [MobileMirrorTerminalRoute] = []
-        for entry in sessionEntriesSnapshot.sorted(by: Self.sortSessions) {
-            let sessionID = entry.sessionID.rawValue.uuidString
-            guard let controller = appDelegate.allWindowControllers.first(where: {
-                $0.windowID == entry.ownerWindowID
-            }), controller.tabManager.tab(for: entry.tabID) != nil else { continue }
-            for surfaceID in orderedSurfaceIDs(for: entry.tabID, controller: controller)
-                where controller.tabID(for: surfaceID) == entry.tabID {
-                guard let bridge = controller.cocxyCoreBridge(forSurface: surfaceID) else {
-                    if let stream = ownedStreams.removeValue(forKey: surfaceID) {
-                        stopOwnedStream(stream)
-                    }
-                    continue
-                }
-
-                if let stream = ownedStreams[surfaceID] {
-                    let status = stream.bridge.webTerminalStatus(for: stream.surfaceID)
-                    if stream.bridge === bridge,
-                       status?.running == true, status?.port == stream.port,
-                       status?.allowsInput == false {
-                        routes.append(MobileMirrorTerminalRoute(
-                            sessionID: sessionID,
-                            surfaceID: surfaceID,
-                            port: stream.port,
-                            bearerToken: stream.token
-                        ))
-                        continue
-                    }
-                    stopOwnedStream(stream)
-                    ownedStreams.removeValue(forKey: surfaceID)
-                }
-
-                guard bridge.webTerminalStatus(for: surfaceID) == nil else { continue }
-                let token = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
-                guard let status = bridge.startWebTerminal(
-                    for: surfaceID,
-                    configuration: WebTerminalConfiguration(
-                        bindAddress: WebTerminalConfiguration.defaultBindAddress,
-                        port: 0,
-                        authToken: token,
-                        maxConnections: 2,
-                        maxFrameRate: 30,
-                        allowsInput: false
-                    )
-                ), status.running, !status.allowsInput else {
-                    continue
-                }
-                let stream = OwnedStream(
-                    bridge: bridge,
-                    surfaceID: surfaceID,
-                    port: status.port,
-                    token: token
-                )
-                ownedStreams[surfaceID] = stream
-                routes.append(MobileMirrorTerminalRoute(
-                    sessionID: sessionID,
-                    surfaceID: surfaceID,
-                    port: status.port,
-                    bearerToken: token
-                ))
-            }
+        guard let (entry, controller, surfaceID) = desired,
+              let bridge = controller.cocxyCoreBridge(forSurface: surfaceID) else {
+            routeRegistry.replace(routes: [], preferredSurfaceID: nil)
+            return
         }
+        let sessionID = entry.sessionID.rawValue.uuidString
+        if let stream = ownedStreams[surfaceID] {
+            let status = stream.bridge.webTerminalStatus(for: stream.surfaceID)
+            if stream.bridge === bridge,
+               status?.running == true, status?.port == stream.port,
+               status?.allowsInput == false {
+                routeRegistry.replace(
+                    routes: [MobileMirrorTerminalRoute(
+                        sessionID: sessionID,
+                        surfaceID: surfaceID,
+                        port: stream.port,
+                        bearerToken: stream.token
+                    )],
+                    preferredSurfaceID: surfaceID.rawValue.uuidString
+                )
+                return
+            }
+            stopOwnedStream(stream)
+            ownedStreams.removeValue(forKey: surfaceID)
+        }
+
+        guard bridge.webTerminalStatus(for: surfaceID) == nil else {
+            routeRegistry.replace(routes: [], preferredSurfaceID: nil)
+            return
+        }
+        let token = MobileMirrorPairingAuthority.base64URL(RelayToken.generate().secret)
+        guard let status = bridge.startWebTerminal(
+            for: surfaceID,
+            configuration: WebTerminalConfiguration(
+                bindAddress: WebTerminalConfiguration.defaultBindAddress,
+                port: 0,
+                authToken: token,
+                maxConnections: 2,
+                maxFrameRate: 30,
+                allowsInput: false
+            )
+        ), status.running, !status.allowsInput else {
+            routeRegistry.replace(routes: [], preferredSurfaceID: nil)
+            return
+        }
+        let stream = OwnedStream(
+            bridge: bridge,
+            surfaceID: surfaceID,
+            port: status.port,
+            token: token
+        )
+        ownedStreams[surfaceID] = stream
         routeRegistry.replace(
-            routes: routes,
-            preferredSurfaceID: authority.selectedTerminal()?.surfaceID
+            routes: [MobileMirrorTerminalRoute(
+                sessionID: sessionID,
+                surfaceID: surfaceID,
+                port: status.port,
+                bearerToken: token
+            )],
+            preferredSurfaceID: surfaceID.rawValue.uuidString
         )
     }
 
@@ -274,7 +278,7 @@ extension MobileMirrorCoordinator {
 
     func startRefreshTimer() {
         refreshTimer?.invalidate()
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 0.75, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in self?.refreshSnapshotAndPublish() }
         }
     }
@@ -333,8 +337,13 @@ extension MobileMirrorCoordinator {
         if revoke {
             _ = authority.revoke()
         }
+        if let lease = localRelayLease {
+            relayManager.closeMobileMirrorRelay(leaseID: lease.id)
+            localRelayLease = nil
+        }
         gateway?.stop()
         gateway = nil
+        staticAssetServer.stop()
         router = nil
         if let lease = tunnelLease {
             if tunnelClosureTask == nil {

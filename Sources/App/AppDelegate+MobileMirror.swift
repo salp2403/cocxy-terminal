@@ -9,7 +9,8 @@ extension AppDelegate {
               let sessionRegistry,
               let remoteConnectionManager,
               let remoteProfileStore,
-              let tunnelManager else { return }
+              let tunnelManager,
+              let relayManager else { return }
         let tunnelController = MobileMirrorSSHTunnelController(
             connectionManager: remoteConnectionManager,
             profileStore: remoteProfileStore,
@@ -23,13 +24,17 @@ extension AppDelegate {
             sessionRegistry: sessionRegistry,
             approvalRegistry: mobileMirrorApprovalRegistry,
             auditLog: relayAuditLog,
+            relayManager: relayManager,
             tunnelController: tunnelController
         )
     }
 
     @objc func showMobileMirrorAction(_ sender: Any?) {
         setupMobileMirror()
-        guard let coordinator = mobileMirrorCoordinator else { return }
+        guard let coordinator = mobileMirrorCoordinator else {
+            presentMobileMirrorUnavailableAlert()
+            return
+        }
         if mobileMirrorWindowController == nil {
             mobileMirrorWindowController = MobileMirrorWindowController(
                 coordinator: coordinator,
@@ -46,5 +51,26 @@ extension AppDelegate {
         mobileMirrorWindowController?.close()
         mobileMirrorWindowController = nil
         mobileMirrorCoordinator = nil
+    }
+
+    private func presentMobileMirrorUnavailableAlert() {
+        NSSound.beep()
+        let localizer = appLocalizer()
+        let alert = NSAlert()
+        alert.messageText = localizer.string(
+            "mobile.mirror.title",
+            fallback: "Pair Phone"
+        )
+        alert.informativeText = localizer.string(
+            "mobile.web.status.unavailable",
+            fallback: "Mobile pairing is unavailable."
+        )
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: localizer.string("common.ok", fallback: "OK"))
+        if let window = focusedWindowController()?.window, window.attachedSheet == nil {
+            alert.beginSheetModal(for: window)
+        } else {
+            alert.runModal()
+        }
     }
 }

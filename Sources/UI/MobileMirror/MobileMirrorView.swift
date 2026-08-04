@@ -55,12 +55,12 @@ struct MobileMirrorView: View {
     private var statusSection: some View {
         switch coordinator.state {
         case .stopped, .denied, .unavailable, .failed:
-            if coordinator.tunnelTargets.isEmpty {
+            if coordinator.usesSSHTunnel && coordinator.tunnelTargets.isEmpty {
                 VStack(spacing: 10) {
                     Label(
                         localizer.string(
                             "mobile.mirror.transport.unavailable",
-                            fallback: "Connect an SSH profile for this phone first."
+                            fallback: "Connect an SSH profile or use the local relay."
                         ),
                         systemImage: "lock.trianglebadge.exclamationmark"
                     )
@@ -95,8 +95,12 @@ struct MobileMirrorView: View {
                 ProgressView()
                     .controlSize(.small)
                 Text(localizer.string(
-                    "mobile.mirror.status.starting",
-                    fallback: "Opening encrypted phone tunnel"
+                    coordinator.usesSSHTunnel
+                        ? "mobile.mirror.status.startingSSH"
+                        : "mobile.mirror.status.starting",
+                    fallback: coordinator.usesSSHTunnel
+                        ? "Opening secure SSH connection"
+                        : "Opening private phone relay"
                 ))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
@@ -119,8 +123,12 @@ struct MobileMirrorView: View {
                 Image(systemName: "lock.shield.fill")
                     .foregroundStyle(.green)
                 Text(localizer.string(
-                    "mobile.mirror.security",
-                    fallback: "One-use code - encrypted SSH - 90 seconds"
+                    coordinator.usesSSHTunnel
+                        ? "mobile.mirror.securitySSH"
+                        : "mobile.mirror.security",
+                    fallback: coordinator.usesSSHTunnel
+                        ? "One-use code - encrypted SSH - 90 seconds"
+                        : "One-use code - desktop confirmation - 90 seconds"
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -138,42 +146,53 @@ struct MobileMirrorView: View {
         VStack(alignment: .leading, spacing: 10) {
             Label(
                 localizer.string(
-                    "mobile.mirror.transport.label",
-                    fallback: "Encrypted Phone Connection"
+                    coordinator.usesSSHTunnel
+                        ? "mobile.mirror.transport.sshLabel"
+                        : "mobile.mirror.transport.label",
+                    fallback: coordinator.usesSSHTunnel
+                        ? "Secure SSH Connection"
+                        : "Private Phone Relay"
                 ),
-                systemImage: "lock.shield"
+                systemImage: coordinator.usesSSHTunnel ? "lock.shield" : "network"
             )
             .font(.subheadline.weight(.semibold))
-            if coordinator.tunnelTargets.isEmpty {
-                Text(localizer.string(
-                    "mobile.mirror.transport.detail.unavailable",
-                    fallback: "Pairing is available after Cocxy connects by SSH to the phone. The browser endpoint remains on the phone's loopback interface."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Picker(
-                    localizer.string(
-                        "mobile.mirror.transport.profile",
-                        fallback: "Phone SSH profile"
-                    ),
-                    selection: $coordinator.selectedTunnelTargetID
-                ) {
-                    ForEach(coordinator.tunnelTargets) { target in
-                        Text("\(target.name) - \(target.destination)")
-                            .tag(Optional(target.id))
+            Text(localizer.string(
+                coordinator.usesSSHTunnel
+                    ? "mobile.mirror.transport.sshDetail"
+                    : "mobile.mirror.transport.localDetail",
+                fallback: coordinator.usesSSHTunnel
+                    ? "SSH is optional and publishes the pairing endpoint only through the selected connection."
+                    : "The pairing relay is available only on this private network. Terminal servers stay on loopback and no cloud service is used."
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Toggle(
+                localizer.string(
+                    "mobile.mirror.transport.sshOptional",
+                    fallback: "Use a connected SSH profile"
+                ),
+                isOn: $coordinator.usesSSHTunnel
+            )
+            .toggleStyle(.switch)
+            .disabled(!canChangeTransport)
+            if coordinator.usesSSHTunnel {
+                if !coordinator.tunnelTargets.isEmpty {
+                    Picker(
+                        localizer.string(
+                            "mobile.mirror.transport.profile",
+                            fallback: "Phone SSH profile"
+                        ),
+                        selection: $coordinator.selectedTunnelTargetID
+                    ) {
+                        ForEach(coordinator.tunnelTargets) { target in
+                            Text("\(target.name) - \(target.destination)")
+                                .tag(Optional(target.id))
+                        }
                     }
+                    .pickerStyle(.menu)
+                    .disabled(!canChangeTransport)
                 }
-                .pickerStyle(.menu)
-                .disabled(!canChangeTunnelTarget)
-                Text(localizer.string(
-                    "mobile.mirror.transport.detail",
-                    fallback: "The QR opens through the selected SSH session. No LAN listener or external relay is created."
-                ))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(16)
@@ -338,7 +357,7 @@ struct MobileMirrorView: View {
             .accessibilityHidden(true)
     }
 
-    private var canChangeTunnelTarget: Bool {
+    private var canChangeTransport: Bool {
         switch coordinator.state {
         case .stopped, .failed, .unavailable, .denied:
             return true
@@ -362,8 +381,12 @@ struct MobileMirrorView: View {
             return localizer.string("mobile.mirror.status.stopped", fallback: "Not paired")
         case .starting:
             return localizer.string(
-                "mobile.mirror.status.starting",
-                fallback: "Opening encrypted phone tunnel"
+                coordinator.usesSSHTunnel
+                    ? "mobile.mirror.status.startingSSH"
+                    : "mobile.mirror.status.starting",
+                fallback: coordinator.usesSSHTunnel
+                    ? "Opening secure SSH connection"
+                    : "Opening private phone relay"
             )
         case .offering:
             return localizer.string("mobile.mirror.status.offering", fallback: "Pairing code ready")
@@ -373,7 +396,14 @@ struct MobileMirrorView: View {
                 fallback: "Desktop confirmation required"
             )
         case .active:
-            return localizer.string("mobile.mirror.status.active", fallback: "Connected through SSH")
+            return localizer.string(
+                coordinator.usesSSHTunnel
+                    ? "mobile.mirror.status.activeSSH"
+                    : "mobile.mirror.status.active",
+                fallback: coordinator.usesSSHTunnel
+                    ? "Connected through SSH"
+                    : "Connected on the private network"
+            )
         case .denied:
             return localizer.string("mobile.mirror.status.denied", fallback: "Pairing denied")
         case .unavailable(let message), .failed(let message):

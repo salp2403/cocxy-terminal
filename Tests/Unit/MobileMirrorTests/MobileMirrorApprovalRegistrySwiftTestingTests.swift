@@ -7,6 +7,79 @@ import Testing
 @Suite("Mobile mirror app-scoped approvals")
 @MainActor
 struct MobileMirrorApprovalRegistrySwiftTestingTests {
+    @Test("claimed approval leaves the snapshot before its resolver finishes")
+    func claimedApprovalRunsIndependently() async throws {
+        let registry = MobileMirrorApprovalRegistry()
+        let resolution = SuspendedApprovalResolution()
+        let record = Self.record(id: "approval-slow", sessionID: UUID())
+        #expect(registry.register(
+            sourceID: "window-slow",
+            record: record,
+            isCurrent: { true },
+            resolve: { decision in await resolution.resolve(decision) }
+        ))
+
+        let claim = try #require(registry.claimResolution(
+            id: record.id,
+            decision: .approve(response: nil)
+        ))
+
+        #expect(registry.currentRecords().isEmpty)
+        let operation = Task { @MainActor in await claim.execute() }
+        await resolution.waitUntilStarted()
+        #expect(registry.currentRecords().isEmpty)
+        resolution.release(result: true)
+        #expect(await operation.value)
+        #expect(registry.currentRecords().isEmpty)
+    }
+
+    @Test("a claimed approval can be restored before execution")
+    func claimedApprovalCanBeRestored() throws {
+        let registry = MobileMirrorApprovalRegistry()
+        let resolution = ApprovalResolutionCapture()
+        let record = Self.record(id: "approval-rollback", sessionID: UUID())
+        #expect(registry.register(
+            sourceID: "window-rollback",
+            record: record,
+            isCurrent: { true },
+            resolve: { decision in resolution.resolve(decision) }
+        ))
+        let claim = try #require(registry.claimResolution(
+            id: record.id,
+            decision: .reject
+        ))
+
+        claim.cancel()
+
+        #expect(registry.currentRecords() == [record])
+        #expect(resolution.decisions.isEmpty)
+    }
+
+    @Test("a copied approval claim still resolves only once")
+    func copiedClaimCannotResolveTwice() async throws {
+        let registry = MobileMirrorApprovalRegistry()
+        let resolution = ApprovalResolutionCapture()
+        let record = Self.record(id: "approval-once", sessionID: UUID())
+        #expect(registry.register(
+            sourceID: "window-once",
+            record: record,
+            isCurrent: { true },
+            resolve: { decision in resolution.resolve(decision) }
+        ))
+        let claim = try #require(registry.claimResolution(
+            id: record.id,
+            decision: .reject
+        ))
+        let copiedClaim = claim
+
+        let firstResult = await claim.execute()
+        let replayResult = await copiedClaim.execute()
+
+        #expect(firstResult)
+        #expect(!replayResult)
+        #expect(resolution.decisions == [.reject])
+    }
+
     @Test("records from independent producers remain visible and decisions are one-use")
     func independentProducersAndOneUseDecisions() async {
         let registry = MobileMirrorApprovalRegistry()
@@ -171,6 +244,32 @@ struct MobileMirrorApprovalRegistrySwiftTestingTests {
     }
 }
 
+@Suite("Mobile mirror background action ownership")
+@MainActor
+struct MobileMirrorBackgroundActionQueueSwiftTestingTests {
+    @Test("queued work outlives the task that enqueued it")
+    func queueOwnsWorkUntilCompletion() async {
+        let queue = MobileMirrorBackgroundActionQueue()
+        let capture = SuspendedBackgroundAction()
+        let requestTask = Task { @MainActor in
+            queue.enqueue {
+                await capture.run()
+            }
+        }
+        _ = await requestTask.value
+        requestTask.cancel()
+        await capture.waitUntilStarted()
+
+        #expect(queue.activeCount == 1)
+        #expect(!capture.finished)
+        capture.release()
+        while queue.activeCount != 0 {
+            await Task.yield()
+        }
+        #expect(capture.finished)
+    }
+}
+
 @MainActor
 private final class ApprovalResolutionCapture {
     var isCurrent = true
@@ -179,6 +278,57 @@ private final class ApprovalResolutionCapture {
     func resolve(_ decision: MobileMirrorApprovalDecision) -> Bool {
         decisions.append(decision)
         return true
+    }
+}
+
+@MainActor
+private final class SuspendedApprovalResolution {
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var resolution: CheckedContinuation<Bool, Never>?
+    private(set) var started = false
+
+    func resolve(_ decision: MobileMirrorApprovalDecision) async -> Bool {
+        _ = decision
+        started = true
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        return await withCheckedContinuation { resolution = $0 }
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func release(result: Bool) {
+        resolution?.resume(returning: result)
+        resolution = nil
+    }
+}
+
+@MainActor
+private final class SuspendedBackgroundAction {
+    private var startWaiters: [CheckedContinuation<Void, Never>] = []
+    private var completion: CheckedContinuation<Void, Never>?
+    private(set) var started = false
+    private(set) var finished = false
+
+    func run() async {
+        started = true
+        startWaiters.forEach { $0.resume() }
+        startWaiters.removeAll()
+        await withCheckedContinuation { completion = $0 }
+        finished = true
+    }
+
+    func waitUntilStarted() async {
+        guard !started else { return }
+        await withCheckedContinuation { startWaiters.append($0) }
+    }
+
+    func release() {
+        completion?.resume()
+        completion = nil
     }
 }
 

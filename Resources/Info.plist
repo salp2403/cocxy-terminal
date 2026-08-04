@@ -52,6 +52,8 @@
 	<string>Cocxy uses the camera only when you explicitly import an image with Continuity Camera.</string>
 	<key>NSCameraUseContinuityCameraDeviceType</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Cocxy uses your private local network only when you pair a mobile device or connect to a local workspace.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
