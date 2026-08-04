@@ -36,11 +36,46 @@ struct LocalizationUsageSwiftTestingTests {
         "mobile.mirror.transport.sshDetail",
         "mobile.mirror.transport.sshOptional",
         "project.activation.verifiedSurfaceUnavailable",
+        "projectHome.fanOut.error.baseChanged",
+        "projectHome.fanOut.error.cancelled",
+        "projectHome.fanOut.error.duplicateRun",
+        "projectHome.fanOut.error.gitFailed",
+        "projectHome.fanOut.error.gitUnavailable",
+        "projectHome.fanOut.error.launchFailed",
+        "projectHome.fanOut.error.launchRollbackIncomplete",
+        "projectHome.fanOut.error.manifestUnavailable",
+        "projectHome.fanOut.error.notRepository",
+        "projectHome.fanOut.error.originDirty",
+        "projectHome.fanOut.error.promotionUnavailable",
+        "projectHome.fanOut.error.targetUnavailable",
+        "projectHome.fanOut.error.uncommittedChanges",
+        "projectHome.fanOut.error.unknown",
+        "projectHome.fanOut.error.worktreeCollision",
+        "projectHome.fanOut.error.worktreeMissing",
         "projectHome.fanOut.inferredPaths",
         "projectHome.fanOut.noInferredPaths",
         "projectHome.fanOut.promotionRefreshed",
         "taskQueue.event.task-run-finished",
         "taskQueue.event.task-run-started",
+    ]
+
+    private static let fanOutErrorEnglishCopy: [String: String] = [
+        "projectHome.fanOut.error.targetUnavailable": "The task target is no longer available. Reopen Project Home and try again.",
+        "projectHome.fanOut.error.duplicateRun": "A task run with this identifier is already active: %@",
+        "projectHome.fanOut.error.launchFailed": "The parallel task could not start. Verify the selected providers and worktree state, then try again.",
+        "projectHome.fanOut.error.launchRollbackIncomplete": "The parallel task could not start, and %d cleanup operation(s) need attention.",
+        "projectHome.fanOut.error.promotionUnavailable": "The promotion preview is no longer valid: %@",
+        "projectHome.fanOut.error.cancelled": "The parallel task was cancelled.",
+        "projectHome.fanOut.error.gitUnavailable": "Git is unavailable. Check your installation and PATH.",
+        "projectHome.fanOut.error.notRepository": "The project is no longer a Git repository: %@",
+        "projectHome.fanOut.error.worktreeCollision": "A unique worktree could not be created after %d attempts.",
+        "projectHome.fanOut.error.gitFailed": "Git could not complete the operation (exit %d). Review the repository state and try again.",
+        "projectHome.fanOut.error.worktreeMissing": "The worktree is no longer available: %@",
+        "projectHome.fanOut.error.uncommittedChanges": "Commit or stash the changes in %@ before continuing.",
+        "projectHome.fanOut.error.originDirty": "Commit or stash the changes in the project checkout before promotion: %@",
+        "projectHome.fanOut.error.baseChanged": "The project branch changed after the parallel task started. Refresh or restart the task.",
+        "projectHome.fanOut.error.manifestUnavailable": "The worktree registry could not be updated safely.",
+        "projectHome.fanOut.error.unknown": "The parallel task could not be completed. Technical category: %@",
     ]
 
     @Test("every Swift localization key exists in the English resource")
@@ -110,6 +145,22 @@ struct LocalizationUsageSwiftTestingTests {
                 empty.isEmpty,
                 Comment(rawValue: "\(language.rawValue) has empty required localizations: \(empty.joined(separator: ", "))")
             )
+        }
+    }
+
+    @Test("fan-out error copy matches the safe public contract")
+    func fanOutErrorCopyMatchesSafePublicContract() throws {
+        let root = repositoryRoot()
+        let english = try localizationStrings(locale: "en", root: root)
+
+        for (key, expected) in Self.fanOutErrorEnglishCopy {
+            let actual = try #require(english[key])
+            #expect(
+                actual == expected,
+                Comment(rawValue: "Unexpected English fan-out error copy for \(key)")
+            )
+            #expect(!actual.localizedCaseInsensitiveContains("stderr"))
+            #expect(!actual.localizedCaseInsensitiveContains("process output"))
         }
     }
 
