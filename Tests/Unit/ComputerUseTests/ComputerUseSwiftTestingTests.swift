@@ -193,6 +193,17 @@ struct ComputerUseSwiftTestingTests {
         #expect(try Data(contentsOf: screenshot.fileURL).starts(with: [0x89, 0x50, 0x4E, 0x47]))
     }
 
+    @Test("ScreenCaptureKit uses physical display pixels for Retina captures")
+    func screenCaptureKitUsesPhysicalDisplayPixels() {
+        let displayID = CGMainDisplayID()
+        let dimensions = ScreenCaptureKitComputerUseScreenshotCapture.pixelDimensions(
+            for: displayID
+        )
+
+        #expect(dimensions.width == max(1, CGDisplayPixelsWide(displayID)))
+        #expect(dimensions.height == max(1, CGDisplayPixelsHigh(displayID)))
+    }
+
     private func temporaryLogURL() -> URL {
         FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-computer-use-\(UUID().uuidString).jsonl")

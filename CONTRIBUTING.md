@@ -48,7 +48,7 @@ Open an issue using the **Feature Request** template. Describe the problem you a
 
 ### Prerequisites
 
-- macOS 14 Sonoma or later (macOS 15 recommended)
+- macOS 15 Sequoia or later
 - Xcode 16 or later
 - Zig 0.15+ (`brew install zig`)
 

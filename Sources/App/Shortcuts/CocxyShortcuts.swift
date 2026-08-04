@@ -119,7 +119,7 @@ enum CocxyShortcutError: Error, LocalizedError {
 #if canImport(AppIntents)
 import AppIntents
 
-@available(macOS 14.0, *)
+@available(macOS 15.0, *)
 struct CocxyOpenAppIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Cocxy"
     static let description = IntentDescription("Bring the local Cocxy Terminal window forward.")
@@ -135,7 +135,7 @@ struct CocxyOpenAppIntent: AppIntent {
     }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 15.0, *)
 struct CocxyRunCommandIntent: AppIntent {
     static let title: LocalizedStringResource = "Run Command in Cocxy"
     static let description = IntentDescription("Send text to the focused Cocxy terminal and optionally press Return.")
@@ -169,7 +169,7 @@ struct CocxyRunCommandIntent: AppIntent {
     }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 15.0, *)
 struct CocxyOpenNotebookIntent: AppIntent {
     static let title: LocalizedStringResource = "Open Cocxy Notebook"
     static let description = IntentDescription("Open a local Cocxy notebook panel in the current workspace.")
@@ -187,7 +187,7 @@ struct CocxyOpenNotebookIntent: AppIntent {
     }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 15.0, *)
 struct CocxyListSkillsIntent: AppIntent {
     static let title: LocalizedStringResource = "List Cocxy Skills"
     static let description = IntentDescription("Return local Cocxy skill identifiers.")
@@ -200,7 +200,7 @@ struct CocxyListSkillsIntent: AppIntent {
     }
 }
 
-@available(macOS 14.0, *)
+@available(macOS 15.0, *)
 struct CocxyShortcutsProvider: AppShortcutsProvider {
     static let shortcutTileColor: ShortcutTileColor = .navy
 

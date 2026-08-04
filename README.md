@@ -5,7 +5,7 @@
 [![Build](https://github.com/salp2403/cocxy-terminal/actions/workflows/ci.yml/badge.svg)](https://github.com/salp2403/cocxy-terminal/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/salp2403/cocxy-terminal?label=latest&color=8839ef)](https://github.com/salp2403/cocxy-terminal/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![macOS](https://img.shields.io/badge/macOS-14%2B-black.svg)](https://www.apple.com/macos/)
+[![macOS](https://img.shields.io/badge/macOS-15%2B-black.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-5.10-orange.svg)](https://swift.org)
 [![No Telemetry](https://img.shields.io/badge/telemetry-zero-brightgreen.svg)](#zero-telemetry)
 [![Stars](https://img.shields.io/github/stars/salp2403/cocxy-terminal?style=flat&color=fab387)](https://github.com/salp2403/cocxy-terminal/stargazers)
@@ -319,7 +319,7 @@ Native shell integration for zsh, bash, and fish — installed automatically, no
 
 ### Liquid Glass UI
 
-A polished glass-material design system covering 36+ surfaces — sidebar, command palette, status bar, panels, overlays, and contextual sheets — tuned for macOS 14 through macOS 26 and ready for the Liquid Glass aesthetic when the host supports it.
+A polished glass-material design system covering 36+ surfaces — sidebar, command palette, status bar, panels, overlays, and contextual sheets — tuned for macOS 15 through macOS 26 and ready for the Liquid Glass aesthetic when the host supports it.
 
 ### Localization
 
@@ -461,7 +461,7 @@ Run `cocxy help` for the full reference.
 
 ### Prerequisites
 
-- macOS 14.0 (Sonoma) or later
+- macOS 15.0 (Sequoia) or later
 - Xcode 16 or later
 - Swift 5.10+
 - Zig 0.15+ (`brew install zig`) — required to build CocxyCore locally

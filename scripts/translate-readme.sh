@@ -91,7 +91,7 @@ Cocxy لا يحتوي على analytics SDK، ولا مُرسِل تشخيصات 
 
 ## البناء من المصدر
 
-يتطلب macOS 14+ و Xcode 16+ و Swift 5.10+ و Zig 0.15+. شغل `swift build`، ثم `swift test`، أو أنشئ app محلي باستخدام `./scripts/build-app.sh release`.
+يتطلب macOS 15+ و Xcode 16+ و Swift 5.10+ و Zig 0.15+. شغل `swift build`، ثم `swift test`، أو أنشئ app محلي باستخدام `./scripts/build-app.sh release`.
 TEXT
       ;;
     bs)
@@ -128,7 +128,7 @@ Cocxy nema analytics SDK, automatski pošiljalac dijagnostike ni backend za term
 
 ## Build iz izvora
 
-Potrebni su macOS 14+, Xcode 16+, Swift 5.10+ i Zig 0.15+. Pokreni `swift build`, zatim `swift test`, ili napravi lokalni app sa `./scripts/build-app.sh release`.
+Potrebni su macOS 15+, Xcode 16+, Swift 5.10+ i Zig 0.15+. Pokreni `swift build`, zatim `swift test`, ili napravi lokalni app sa `./scripts/build-app.sh release`.
 TEXT
       ;;
     da)
@@ -165,7 +165,7 @@ Cocxy har ingen analytics SDK, ingen automatisk diagnostikafsender og ingen back
 
 ## Byg fra source
 
-Kræver macOS 14+, Xcode 16+, Swift 5.10+ og Zig 0.15+. Kør `swift build`, derefter `swift test`, eller byg en lokal app med `./scripts/build-app.sh release`.
+Kræver macOS 15+, Xcode 16+, Swift 5.10+ og Zig 0.15+. Kør `swift build`, derefter `swift test`, eller byg en lokal app med `./scripts/build-app.sh release`.
 TEXT
       ;;
     de)
@@ -202,7 +202,7 @@ Cocxy enthält kein analytics SDK, keinen automatischen Diagnosedienst und kein 
 
 ## Aus dem Quellcode bauen
 
-Erfordert macOS 14+, Xcode 16+, Swift 5.10+ und Zig 0.15+. `swift build`, danach `swift test`, oder eine lokale app mit `./scripts/build-app.sh release` bauen.
+Erfordert macOS 15+, Xcode 16+, Swift 5.10+ und Zig 0.15+. `swift build`, danach `swift test`, oder eine lokale app mit `./scripts/build-app.sh release` bauen.
 TEXT
       ;;
     es)
@@ -239,7 +239,7 @@ Cocxy no tiene analytics SDK, envío automático de diagnósticos ni backend par
 
 ## Build desde código fuente
 
-Requiere macOS 14+, Xcode 16+, Swift 5.10+ y Zig 0.15+. Ejecuta `swift build`, luego `swift test`, o genera la app local con `./scripts/build-app.sh release`.
+Requiere macOS 15+, Xcode 16+, Swift 5.10+ y Zig 0.15+. Ejecuta `swift build`, luego `swift test`, o genera la app local con `./scripts/build-app.sh release`.
 TEXT
       ;;
     fr)
@@ -276,7 +276,7 @@ Cocxy n'a pas d'analytics SDK, pas d'envoi automatique de diagnostics et pas de 
 
 ## Construire depuis la source
 
-Nécessite macOS 14+, Xcode 16+, Swift 5.10+ et Zig 0.15+. Exécutez `swift build`, puis `swift test`, ou créez l'app locale avec `./scripts/build-app.sh release`.
+Nécessite macOS 15+, Xcode 16+, Swift 5.10+ et Zig 0.15+. Exécutez `swift build`, puis `swift test`, ou créez l'app locale avec `./scripts/build-app.sh release`.
 TEXT
       ;;
     it)
@@ -313,7 +313,7 @@ Cocxy non include analytics SDK, invio automatico di diagnostica o backend per l
 
 ## Build da sorgente
 
-Richiede macOS 14+, Xcode 16+, Swift 5.10+ e Zig 0.15+. Esegui `swift build`, poi `swift test`, oppure crea l'app locale con `./scripts/build-app.sh release`.
+Richiede macOS 15+, Xcode 16+, Swift 5.10+ e Zig 0.15+. Esegui `swift build`, poi `swift test`, oppure crea l'app locale con `./scripts/build-app.sh release`.
 TEXT
       ;;
     ja)
@@ -350,7 +350,7 @@ Cocxy には analytics SDK、自動診断送信、terminal activity 用 backend 
 
 ## ソースからビルド
 
-macOS 14+、Xcode 16+、Swift 5.10+、Zig 0.15+ が必要です。`swift build`、`swift test` を実行するか、`./scripts/build-app.sh release` でローカル app を作成します。
+macOS 15+、Xcode 16+、Swift 5.10+、Zig 0.15+ が必要です。`swift build`、`swift test` を実行するか、`./scripts/build-app.sh release` でローカル app を作成します。
 TEXT
       ;;
     km)
@@ -387,7 +387,7 @@ Cocxy មិនមាន analytics SDK, automatic diagnostic sender ឬ backend 
 
 ## Build ពី source
 
-ត្រូវការ macOS 14+, Xcode 16+, Swift 5.10+ និង Zig 0.15+។ រត់ `swift build`, បន្ទាប់មក `swift test`, ឬបង្កើត app មូលដ្ឋានជាមួយ `./scripts/build-app.sh release`។
+ត្រូវការ macOS 15+, Xcode 16+, Swift 5.10+ និង Zig 0.15+។ រត់ `swift build`, បន្ទាប់មក `swift test`, ឬបង្កើត app មូលដ្ឋានជាមួយ `./scripts/build-app.sh release`។
 TEXT
       ;;
     ko)
@@ -424,7 +424,7 @@ Cocxy에는 analytics SDK, 자동 진단 전송, terminal activity backend가 �
 
 ## source에서 빌드
 
-macOS 14+, Xcode 16+, Swift 5.10+, Zig 0.15+가 필요합니다. `swift build`, `swift test`를 실행하거나 `./scripts/build-app.sh release`로 로컬 app을 빌드하세요.
+macOS 15+, Xcode 16+, Swift 5.10+, Zig 0.15+가 필요합니다. `swift build`, `swift test`를 실행하거나 `./scripts/build-app.sh release`로 로컬 app을 빌드하세요.
 TEXT
       ;;
     no)
@@ -461,7 +461,7 @@ Cocxy har ingen analytics SDK, ingen automatisk diagnostikksender og ingen backe
 
 ## Bygg fra kilde
 
-Krever macOS 14+, Xcode 16+, Swift 5.10+ og Zig 0.15+. Kjør `swift build`, deretter `swift test`, eller bygg en lokal app med `./scripts/build-app.sh release`.
+Krever macOS 15+, Xcode 16+, Swift 5.10+ og Zig 0.15+. Kjør `swift build`, deretter `swift test`, eller bygg en lokal app med `./scripts/build-app.sh release`.
 TEXT
       ;;
     pl)
@@ -498,7 +498,7 @@ Cocxy nie ma analytics SDK, automatycznego wysyłania diagnostyki ani backendu d
 
 ## Budowanie ze źródeł
 
-Wymaga macOS 14+, Xcode 16+, Swift 5.10+ i Zig 0.15+. Uruchom `swift build`, potem `swift test`, albo zbuduj lokalną app przez `./scripts/build-app.sh release`.
+Wymaga macOS 15+, Xcode 16+, Swift 5.10+ i Zig 0.15+. Uruchom `swift build`, potem `swift test`, albo zbuduj lokalną app przez `./scripts/build-app.sh release`.
 TEXT
       ;;
     pt-BR)
@@ -535,7 +535,7 @@ Cocxy não possui analytics SDK, envio automático de diagnósticos nem backend 
 
 ## Build a partir do código-fonte
 
-Requer macOS 14+, Xcode 16+, Swift 5.10+ e Zig 0.15+. Execute `swift build`, depois `swift test`, ou crie a app local com `./scripts/build-app.sh release`.
+Requer macOS 15+, Xcode 16+, Swift 5.10+ e Zig 0.15+. Execute `swift build`, depois `swift test`, ou crie a app local com `./scripts/build-app.sh release`.
 TEXT
       ;;
     ru)
@@ -572,7 +572,7 @@ Cocxy не содержит analytics SDK, автоматической отпр
 
 ## Сборка из исходного кода
 
-Требуются macOS 14+, Xcode 16+, Swift 5.10+ и Zig 0.15+. Запустите `swift build`, затем `swift test`, или соберите локальное app через `./scripts/build-app.sh release`.
+Требуются macOS 15+, Xcode 16+, Swift 5.10+ и Zig 0.15+. Запустите `swift build`, затем `swift test`, или соберите локальное app через `./scripts/build-app.sh release`.
 TEXT
       ;;
     th)
@@ -609,7 +609,7 @@ Cocxy ไม่มี analytics SDK, ไม่มีการส่ง diagnosti
 
 ## Build จาก source
 
-ต้องใช้ macOS 14+, Xcode 16+, Swift 5.10+ และ Zig 0.15+ รัน `swift build`, ตามด้วย `swift test`, หรือสร้าง app ภายในเครื่องด้วย `./scripts/build-app.sh release`
+ต้องใช้ macOS 15+, Xcode 16+, Swift 5.10+ และ Zig 0.15+ รัน `swift build`, ตามด้วย `swift test`, หรือสร้าง app ภายในเครื่องด้วย `./scripts/build-app.sh release`
 TEXT
       ;;
     tr)
@@ -646,7 +646,7 @@ Cocxy'de analytics SDK, otomatik tanılama gönderimi veya terminal activity bac
 
 ## Kaynaktan build
 
-macOS 14+, Xcode 16+, Swift 5.10+ ve Zig 0.15+ gerekir. `swift build`, ardından `swift test` çalıştırın veya `./scripts/build-app.sh release` ile yerel app oluşturun.
+macOS 15+, Xcode 16+, Swift 5.10+ ve Zig 0.15+ gerekir. `swift build`, ardından `swift test` çalıştırın veya `./scripts/build-app.sh release` ile yerel app oluşturun.
 TEXT
       ;;
     uk)
@@ -683,7 +683,7 @@ Cocxy не має analytics SDK, автоматичного надсилання
 
 ## Build із source
 
-Потрібні macOS 14+, Xcode 16+, Swift 5.10+ і Zig 0.15+. Запустіть `swift build`, потім `swift test`, або створіть локальний app через `./scripts/build-app.sh release`.
+Потрібні macOS 15+, Xcode 16+, Swift 5.10+ і Zig 0.15+. Запустіть `swift build`, потім `swift test`, або створіть локальний app через `./scripts/build-app.sh release`.
 TEXT
       ;;
     vi)
@@ -720,7 +720,7 @@ Cocxy không có analytics SDK, không tự động gửi chẩn đoán và khô
 
 ## Build từ source
 
-Cần macOS 14+, Xcode 16+, Swift 5.10+ và Zig 0.15+. Chạy `swift build`, sau đó `swift test`, hoặc tạo app cục bộ bằng `./scripts/build-app.sh release`.
+Cần macOS 15+, Xcode 16+, Swift 5.10+ và Zig 0.15+. Chạy `swift build`, sau đó `swift test`, hoặc tạo app cục bộ bằng `./scripts/build-app.sh release`.
 TEXT
       ;;
     zh-CN)
@@ -757,7 +757,7 @@ Cocxy 没有 analytics SDK、没有自动诊断发送，也没有用于 terminal
 
 ## 从 source 构建
 
-需要 macOS 14+、Xcode 16+、Swift 5.10+ 和 Zig 0.15+。运行 `swift build`、`swift test`，或使用 `./scripts/build-app.sh release` 构建本地 app。
+需要 macOS 15+、Xcode 16+、Swift 5.10+ 和 Zig 0.15+。运行 `swift build`、`swift test`，或使用 `./scripts/build-app.sh release` 构建本地 app。
 TEXT
       ;;
     zh-TW)
@@ -794,7 +794,7 @@ Cocxy 沒有 analytics SDK、沒有自動診斷傳送，也沒有用於 terminal
 
 ## 從 source 建置
 
-需要 macOS 14+、Xcode 16+、Swift 5.10+ 與 Zig 0.15+。執行 `swift build`、`swift test`，或使用 `./scripts/build-app.sh release` 建置本機 app。
+需要 macOS 15+、Xcode 16+、Swift 5.10+ 與 Zig 0.15+。執行 `swift build`、`swift test`，或使用 `./scripts/build-app.sh release` 建置本機 app。
 TEXT
       ;;
   esac

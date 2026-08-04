@@ -104,8 +104,9 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
             let configuration = SCStreamConfiguration()
-            configuration.width = display.width
-            configuration.height = display.height
+            let pixelSize = Self.pixelDimensions(for: display.displayID)
+            configuration.width = pixelSize.width
+            configuration.height = pixelSize.height
             configuration.showsCursor = true
 
             let image: CGImage
@@ -119,6 +120,15 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             }
             return try write(image)
         }
+    }
+
+    static func pixelDimensions(
+        for displayID: CGDirectDisplayID
+    ) -> (width: Int, height: Int) {
+        (
+            width: max(1, CGDisplayPixelsWide(displayID)),
+            height: max(1, CGDisplayPixelsHigh(displayID))
+        )
     }
 
     func write(_ image: CGImage) throws -> ComputerUseScreenshot {
