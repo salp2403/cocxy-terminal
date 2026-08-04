@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Отклонено";
 "taskRun.status.orphaned" = "Связь потеряна";
 "taskRun.status.cancelled" = "Отменено";
+"taskRun.lifecycle.cancel.title" = "Отменить параллельную задачу?";
+"taskRun.lifecycle.cancel.action" = "Отменить задачу";
+"taskRun.lifecycle.cancel.message" = "Запущенные агенты будут остановлены. Их рабочие деревья и файлы сохранятся.";
+"taskRun.lifecycle.forget.title" = "Удалить историю задачи?";
+"taskRun.lifecycle.forget.action" = "Удалить историю";
+"taskRun.lifecycle.forget.message" = "Сохранённая запись задачи будет удалена. Рабочие деревья и файлы сохранятся.";
 "command.taskQueue.manage.name" = "Очередь задач…";
 "command.taskQueue.manage.description" = "Планировать и управлять постоянными локальными конвейерами агентов";
 "taskQueue.title" = "Очередь задач";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Подключение телефона";
 "mobile.mirror.start" = "Создать код подключения";
 "mobile.mirror.security" = "Одноразовый код · подтверждение на компьютере · 90 секунд";
+"mobile.mirror.securitySSH" = "Одноразовый код · зашифрованный SSH · 90 секунд";
 "mobile.mirror.cancel" = "Отменить подключение";
 "mobile.mirror.qr.accessibility" = "Одноразовый код подключения телефона";
 "mobile.mirror.scan" = "Отсканируйте с помощью телефона";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Код подключения готов";
 "mobile.mirror.status.confirmation" = "Требуется подтверждение на Mac";
 "mobile.mirror.status.active" = "Подключено в частной сети";
+"mobile.mirror.status.activeSSH" = "Подключено через SSH";
 "mobile.mirror.status.denied" = "В подключении отказано";
 "mobile.mirror.status.starting" = "Запуск частного ретранслятора для телефона";
+"mobile.mirror.status.startingSSH" = "Установка защищённого SSH-соединения";
 "mobile.mirror.transport.label" = "Частный ретранслятор для телефона";
 "mobile.mirror.transport.profile" = "SSH-профиль телефона";
 "mobile.mirror.transport.detail" = "QR-код открывается через выбранный сеанс SSH. Слушатель в локальной сети и внешний ретранслятор не создаются.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Выбранный профиль SSH недоступен. Используйте другой подключённый профиль или локальный ретранслятор.";
 "mobile.mirror.transport.localDetail" = "Ретранслятор сопряжения доступен только в этой частной сети. Серверы терминалов остаются на интерфейсе loopback, облачные службы не используются.";
 "mobile.mirror.transport.sshOptional" = "Использовать подключённый профиль SSH";
+"mobile.mirror.transport.sshLabel" = "Защищённое SSH-соединение";
 "mobile.mirror.transport.sshDetail" = "SSH необязателен и публикует конечную точку сопряжения только через выбранное подключение.";
 "mobile.mirror.transport.open" = "Открыть удалённые подключения";
 "common.choose" = "Выбрать";

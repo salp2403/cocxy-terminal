@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "已捨棄";
 "taskRun.status.orphaned" = "已失去關聯";
 "taskRun.status.cancelled" = "已取消";
+"taskRun.lifecycle.cancel.title" = "取消平行工作？";
+"taskRun.lifecycle.cancel.action" = "取消工作";
+"taskRun.lifecycle.cancel.message" = "執行中的代理程式將停止。其工作樹與檔案會保留。";
+"taskRun.lifecycle.forget.title" = "移除工作歷史記錄？";
+"taskRun.lifecycle.forget.action" = "移除歷史記錄";
+"taskRun.lifecycle.forget.message" = "這會移除已儲存的工作記錄。工作樹與檔案會保留。";
 "command.taskQueue.manage.name" = "任務佇列...";
 "command.taskQueue.manage.description" = "排程及管理持續運作的本機智慧代理管線";
 "taskQueue.title" = "任務佇列";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "配對手機";
 "mobile.mirror.start" = "產生配對碼";
 "mobile.mirror.security" = "一次性代碼 · 桌面確認 · 90 秒";
+"mobile.mirror.securitySSH" = "一次性代碼 · 加密 SSH · 90 秒";
 "mobile.mirror.cancel" = "取消配對";
 "mobile.mirror.qr.accessibility" = "一次性手機配對碼";
 "mobile.mirror.scan" = "使用手機掃描";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "配對碼已就緒";
 "mobile.mirror.status.confirmation" = "需要在桌面端確認";
 "mobile.mirror.status.active" = "已在私人網路上連線";
+"mobile.mirror.status.activeSSH" = "已透過 SSH 連線";
 "mobile.mirror.status.denied" = "配對遭拒";
 "mobile.mirror.status.starting" = "正在開啟手機私人轉送";
+"mobile.mirror.status.startingSSH" = "正在開啟安全 SSH 連線";
 "mobile.mirror.transport.label" = "手機私人轉送";
 "mobile.mirror.transport.profile" = "手機 SSH 設定檔";
 "mobile.mirror.transport.detail" = "QR 碼會透過選取的 SSH 工作階段開啟。不會建立區域網路接聽器或外部轉送服務。";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "所選 SSH 設定檔無法使用。請使用其他已連接的設定檔或本機轉送。";
 "mobile.mirror.transport.localDetail" = "配對轉送僅能在此私人網路上使用。終端機伺服器仍繫結至迴路介面，且不使用任何雲端服務。";
 "mobile.mirror.transport.sshOptional" = "使用已連接的 SSH 設定檔";
+"mobile.mirror.transport.sshLabel" = "安全 SSH 連線";
 "mobile.mirror.transport.sshDetail" = "SSH 為選用方式，且只會透過所選連線發佈配對端點。";
 "mobile.mirror.transport.open" = "開啟遠端連線";
 "common.choose" = "選擇";

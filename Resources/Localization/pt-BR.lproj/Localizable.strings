@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Descartada";
 "taskRun.status.orphaned" = "Órfã";
 "taskRun.status.cancelled" = "Cancelada";
+"taskRun.lifecycle.cancel.title" = "Cancelar tarefa paralela?";
+"taskRun.lifecycle.cancel.action" = "Cancelar tarefa";
+"taskRun.lifecycle.cancel.message" = "Os agentes em execução serão interrompidos. As árvores de trabalho e os arquivos deles serão mantidos.";
+"taskRun.lifecycle.forget.title" = "Remover histórico da tarefa?";
+"taskRun.lifecycle.forget.action" = "Remover histórico";
+"taskRun.lifecycle.forget.message" = "Isso remove o registro salvo da tarefa. As árvores de trabalho e os arquivos serão mantidos.";
 "command.taskQueue.manage.name" = "Fila de Tarefas...";
 "command.taskQueue.manage.description" = "Agendar e gerenciar pipelines persistentes de agentes locais";
 "taskQueue.title" = "Fila de Tarefas";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Emparelhar Telefone";
 "mobile.mirror.start" = "Gerar Código de Emparelhamento";
 "mobile.mirror.security" = "Código de uso único · confirmação no computador · 90 segundos";
+"mobile.mirror.securitySSH" = "Código de uso único · SSH criptografado · 90 segundos";
 "mobile.mirror.cancel" = "Cancelar emparelhamento";
 "mobile.mirror.qr.accessibility" = "Código de uso único para emparelhar o telefone";
 "mobile.mirror.scan" = "Escaneie com o telefone";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Código de emparelhamento pronto";
 "mobile.mirror.status.confirmation" = "Confirmação no Mac necessária";
 "mobile.mirror.status.active" = "Conectado na rede privada";
+"mobile.mirror.status.activeSSH" = "Conectado via SSH";
 "mobile.mirror.status.denied" = "Emparelhamento negado";
 "mobile.mirror.status.starting" = "Abrindo retransmissor privado para o telefone";
+"mobile.mirror.status.startingSSH" = "Abrindo conexão SSH segura";
 "mobile.mirror.transport.label" = "Retransmissor privado para o telefone";
 "mobile.mirror.transport.profile" = "Perfil SSH do telefone";
 "mobile.mirror.transport.detail" = "O código QR é aberto pela sessão SSH selecionada. Nenhum serviço de escuta na rede local nem retransmissor externo é criado.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "O perfil SSH selecionado não está disponível. Use outro perfil conectado ou o retransmissor local.";
 "mobile.mirror.transport.localDetail" = "O retransmissor de emparelhamento está disponível apenas nesta rede privada. Os servidores de terminal permanecem em loopback e nenhum serviço de nuvem é usado.";
 "mobile.mirror.transport.sshOptional" = "Usar um perfil SSH conectado";
+"mobile.mirror.transport.sshLabel" = "Conexão SSH segura";
 "mobile.mirror.transport.sshDetail" = "O SSH é opcional e publica o endpoint de emparelhamento apenas pela conexão selecionada.";
 "mobile.mirror.transport.open" = "Abrir conexões remotas";
 "common.choose" = "Escolher";

@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Discarded";
 "taskRun.status.orphaned" = "Orphaned";
 "taskRun.status.cancelled" = "Cancelled";
+"taskRun.lifecycle.cancel.title" = "Cancel Parallel Task?";
+"taskRun.lifecycle.cancel.action" = "Cancel Task";
+"taskRun.lifecycle.cancel.message" = "Running agents will stop. Their worktrees and files will be kept.";
+"taskRun.lifecycle.forget.title" = "Remove Task History?";
+"taskRun.lifecycle.forget.action" = "Remove History";
+"taskRun.lifecycle.forget.message" = "This removes the saved task record. Worktrees and files will be kept.";
 "command.taskQueue.manage.name" = "Task Queue...";
 "command.taskQueue.manage.description" = "Schedule and manage persistent local agent pipelines";
 "taskQueue.title" = "Task Queue";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Pair Phone";
 "mobile.mirror.start" = "Generate Pairing Code";
 "mobile.mirror.security" = "One-use code · desktop confirmation · 90 seconds";
+"mobile.mirror.securitySSH" = "One-use code · encrypted SSH · 90 seconds";
 "mobile.mirror.cancel" = "Cancel pairing";
 "mobile.mirror.qr.accessibility" = "One-use phone pairing code";
 "mobile.mirror.scan" = "Scan with your phone";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Pairing code ready";
 "mobile.mirror.status.confirmation" = "Desktop confirmation required";
 "mobile.mirror.status.active" = "Connected on the private network";
+"mobile.mirror.status.activeSSH" = "Connected through SSH";
 "mobile.mirror.status.denied" = "Pairing denied";
 "mobile.mirror.status.starting" = "Opening private phone relay";
+"mobile.mirror.status.startingSSH" = "Opening secure SSH connection";
 "mobile.mirror.transport.label" = "Private Phone Relay";
 "mobile.mirror.transport.profile" = "Phone SSH profile";
 "mobile.mirror.transport.detail" = "The QR opens through the selected SSH session. No LAN listener or external relay is created.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "The selected SSH profile is unavailable. Use another connected profile or the local relay.";
 "mobile.mirror.transport.localDetail" = "The pairing relay is available only on this private network. Terminal servers stay on loopback and no cloud service is used.";
 "mobile.mirror.transport.sshOptional" = "Use a connected SSH profile";
+"mobile.mirror.transport.sshLabel" = "Secure SSH Connection";
 "mobile.mirror.transport.sshDetail" = "SSH is optional and publishes the pairing endpoint only through the selected connection.";
 "mobile.mirror.transport.open" = "Open Remote Connections";
 "common.choose" = "Choose";

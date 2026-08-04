@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Scartata";
 "taskRun.status.orphaned" = "Orfana";
 "taskRun.status.cancelled" = "Annullata";
+"taskRun.lifecycle.cancel.title" = "Annullare l’attività parallela?";
+"taskRun.lifecycle.cancel.action" = "Annulla attività";
+"taskRun.lifecycle.cancel.message" = "Gli agenti in esecuzione verranno arrestati. I relativi alberi di lavoro e file verranno conservati.";
+"taskRun.lifecycle.forget.title" = "Rimuovere la cronologia dell’attività?";
+"taskRun.lifecycle.forget.action" = "Rimuovi cronologia";
+"taskRun.lifecycle.forget.message" = "Questa azione rimuove il record salvato dell’attività. Gli alberi di lavoro e i file verranno conservati.";
 "command.taskQueue.manage.name" = "Coda attività...";
 "command.taskQueue.manage.description" = "Pianifica e gestisci pipeline persistenti di agenti locali";
 "taskQueue.title" = "Coda attività";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Abbina telefono";
 "mobile.mirror.start" = "Genera codice di abbinamento";
 "mobile.mirror.security" = "Codice monouso · conferma sul computer · 90 secondi";
+"mobile.mirror.securitySSH" = "Codice monouso · SSH cifrato · 90 secondi";
 "mobile.mirror.cancel" = "Annulla abbinamento";
 "mobile.mirror.qr.accessibility" = "Codice di abbinamento telefono monouso";
 "mobile.mirror.scan" = "Scansiona con il telefono";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Codice di abbinamento pronto";
 "mobile.mirror.status.confirmation" = "Conferma desktop richiesta";
 "mobile.mirror.status.active" = "Connesso alla rete privata";
+"mobile.mirror.status.activeSSH" = "Connesso tramite SSH";
 "mobile.mirror.status.denied" = "Abbinamento negato";
 "mobile.mirror.status.starting" = "Apertura del servizio di inoltro privato per il telefono";
+"mobile.mirror.status.startingSSH" = "Apertura della connessione SSH sicura";
 "mobile.mirror.transport.label" = "Servizio di inoltro privato per il telefono";
 "mobile.mirror.transport.profile" = "Profilo SSH del telefono";
 "mobile.mirror.transport.detail" = "Il codice QR si apre tramite la sessione SSH selezionata. Non viene creato alcun listener sulla LAN né alcun servizio di inoltro esterno.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Il profilo SSH selezionato non è disponibile. Usa un altro profilo connesso o il servizio di inoltro locale.";
 "mobile.mirror.transport.localDetail" = "Il servizio di inoltro per l’abbinamento è disponibile solo su questa rete privata. I server terminale restano sull’interfaccia di loopback e non viene usato alcun servizio cloud.";
 "mobile.mirror.transport.sshOptional" = "Usa un profilo SSH connesso";
+"mobile.mirror.transport.sshLabel" = "Connessione SSH sicura";
 "mobile.mirror.transport.sshDetail" = "SSH è facoltativo e pubblica l’endpoint di abbinamento solo tramite la connessione selezionata.";
 "mobile.mirror.transport.open" = "Apri connessioni remote";
 "common.choose" = "Scegli";

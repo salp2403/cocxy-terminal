@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "已丢弃";
 "taskRun.status.orphaned" = "已失去关联";
 "taskRun.status.cancelled" = "已取消";
+"taskRun.lifecycle.cancel.title" = "取消并行任务？";
+"taskRun.lifecycle.cancel.action" = "取消任务";
+"taskRun.lifecycle.cancel.message" = "正在运行的代理将停止。其工作树和文件会保留。";
+"taskRun.lifecycle.forget.title" = "移除任务历史记录？";
+"taskRun.lifecycle.forget.action" = "移除历史记录";
+"taskRun.lifecycle.forget.message" = "这会移除已保存的任务记录。工作树和文件会保留。";
 "command.taskQueue.manage.name" = "任务队列...";
 "command.taskQueue.manage.description" = "调度和管理持久的本地智能体流水线";
 "taskQueue.title" = "任务队列";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "配对手机";
 "mobile.mirror.start" = "生成配对码";
 "mobile.mirror.security" = "一次性代码 · 桌面确认 · 90 秒";
+"mobile.mirror.securitySSH" = "一次性代码 · 加密 SSH · 90 秒";
 "mobile.mirror.cancel" = "取消配对";
 "mobile.mirror.qr.accessibility" = "手机一次性配对码";
 "mobile.mirror.scan" = "使用手机扫描";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "配对码已就绪";
 "mobile.mirror.status.confirmation" = "需要在桌面端确认";
 "mobile.mirror.status.active" = "已在私有网络上连接";
+"mobile.mirror.status.activeSSH" = "已通过 SSH 连接";
 "mobile.mirror.status.denied" = "配对已拒绝";
 "mobile.mirror.status.starting" = "正在打开手机私有中继";
+"mobile.mirror.status.startingSSH" = "正在打开安全 SSH 连接";
 "mobile.mirror.transport.label" = "手机私有中继";
 "mobile.mirror.transport.profile" = "手机 SSH 配置";
 "mobile.mirror.transport.detail" = "二维码通过选定的 SSH 会话打开。不会创建局域网监听器或外部中继。";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "所选 SSH 配置不可用。请使用其他已连接的配置或本地中继。";
 "mobile.mirror.transport.localDetail" = "配对中继仅在此私有网络上可用。终端服务器仍绑定到环回接口，且不使用任何云服务。";
 "mobile.mirror.transport.sshOptional" = "使用已连接的 SSH 配置";
+"mobile.mirror.transport.sshLabel" = "安全 SSH 连接";
 "mobile.mirror.transport.sshDetail" = "SSH 为可选方式，且仅通过所选连接发布配对端点。";
 "mobile.mirror.transport.open" = "打开远程连接";
 "common.choose" = "选择";

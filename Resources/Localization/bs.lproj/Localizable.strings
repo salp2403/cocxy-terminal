@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Odbačeno";
 "taskRun.status.orphaned" = "Bez nadređenog procesa";
 "taskRun.status.cancelled" = "Otkazano";
+"taskRun.lifecycle.cancel.title" = "Otkazati paralelni zadatak?";
+"taskRun.lifecycle.cancel.action" = "Otkaži zadatak";
+"taskRun.lifecycle.cancel.message" = "Aktivni agenti će se zaustaviti. Njihova radna stabla i datoteke bit će sačuvani.";
+"taskRun.lifecycle.forget.title" = "Ukloniti historiju zadatka?";
+"taskRun.lifecycle.forget.action" = "Ukloni historiju";
+"taskRun.lifecycle.forget.message" = "Ovim se uklanja sačuvani zapis zadatka. Radna stabla i datoteke bit će sačuvani.";
 "command.taskQueue.manage.name" = "Red zadataka...";
 "command.taskQueue.manage.description" = "Zakaži i upravljaj trajnim cjevovodima lokalnih agenata";
 "taskQueue.title" = "Red zadataka";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Upari telefon";
 "mobile.mirror.start" = "Generiši kod za uparivanje";
 "mobile.mirror.security" = "Jednokratni kod · potvrda na računaru · 90 sekundi";
+"mobile.mirror.securitySSH" = "Jednokratni kod · šifrirani SSH · 90 sekundi";
 "mobile.mirror.cancel" = "Otkaži uparivanje";
 "mobile.mirror.qr.accessibility" = "Jednokratni kod za uparivanje telefona";
 "mobile.mirror.scan" = "Skenirajte telefonom";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Kod za uparivanje je spreman";
 "mobile.mirror.status.confirmation" = "Potrebna je potvrda na računaru";
 "mobile.mirror.status.active" = "Povezano na privatnoj mreži";
+"mobile.mirror.status.activeSSH" = "Povezano putem SSH-a";
 "mobile.mirror.status.denied" = "Uparivanje je odbijeno";
 "mobile.mirror.status.starting" = "Otvaranje privatnog releja za telefon";
+"mobile.mirror.status.startingSSH" = "Otvaranje sigurne SSH veze";
 "mobile.mirror.transport.label" = "Privatni relej za telefon";
 "mobile.mirror.transport.profile" = "SSH profil telefona";
 "mobile.mirror.transport.detail" = "QR kôd se otvara putem odabrane SSH sesije. Ne kreira se osluškivač na LAN mreži niti vanjski relej.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Odabrani SSH profil nije dostupan. Koristite drugi povezani profil ili lokalni relej.";
 "mobile.mirror.transport.localDetail" = "Relej za uparivanje dostupan je samo na ovoj privatnoj mreži. Terminalski serveri ostaju na loopback interfejsu i ne koristi se nijedna usluga u oblaku.";
 "mobile.mirror.transport.sshOptional" = "Koristi povezani SSH profil";
+"mobile.mirror.transport.sshLabel" = "Sigurna SSH veza";
 "mobile.mirror.transport.sshDetail" = "SSH je opcionalan i objavljuje krajnju tačku za uparivanje samo putem odabrane veze.";
 "mobile.mirror.transport.open" = "Otvori udaljene veze";
 "common.choose" = "Odaberi";

@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Odrzucone";
 "taskRun.status.orphaned" = "Osierocone";
 "taskRun.status.cancelled" = "Anulowane";
+"taskRun.lifecycle.cancel.title" = "Anulować zadanie równoległe?";
+"taskRun.lifecycle.cancel.action" = "Anuluj zadanie";
+"taskRun.lifecycle.cancel.message" = "Uruchomieni agenci zostaną zatrzymani. Ich drzewa robocze i pliki zostaną zachowane.";
+"taskRun.lifecycle.forget.title" = "Usunąć historię zadania?";
+"taskRun.lifecycle.forget.action" = "Usuń historię";
+"taskRun.lifecycle.forget.message" = "Spowoduje to usunięcie zapisanego rekordu zadania. Drzewa robocze i pliki zostaną zachowane.";
 "command.taskQueue.manage.name" = "Kolejka zadań...";
 "command.taskQueue.manage.description" = "Planuj i zarządzaj trwałymi lokalnymi potokami agentów";
 "taskQueue.title" = "Kolejka zadań";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Sparuj telefon";
 "mobile.mirror.start" = "Wygeneruj kod parowania";
 "mobile.mirror.security" = "Kod jednorazowy · potwierdzenie na komputerze · 90 sekund";
+"mobile.mirror.securitySSH" = "Kod jednorazowy · szyfrowane SSH · 90 sekund";
 "mobile.mirror.cancel" = "Anuluj parowanie";
 "mobile.mirror.qr.accessibility" = "Jednorazowy kod parowania telefonu";
 "mobile.mirror.scan" = "Zeskanuj telefonem";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Kod parowania gotowy";
 "mobile.mirror.status.confirmation" = "Wymagane potwierdzenie na komputerze";
 "mobile.mirror.status.active" = "Połączono w sieci prywatnej";
+"mobile.mirror.status.activeSSH" = "Połączono przez SSH";
 "mobile.mirror.status.denied" = "Odrzucono parowanie";
 "mobile.mirror.status.starting" = "Otwieranie prywatnego przekaźnika telefonu";
+"mobile.mirror.status.startingSSH" = "Otwieranie bezpiecznego połączenia SSH";
 "mobile.mirror.transport.label" = "Prywatny przekaźnik telefonu";
 "mobile.mirror.transport.profile" = "Profil SSH telefonu";
 "mobile.mirror.transport.detail" = "Kod QR otwiera się przez wybraną sesję SSH. Nie jest tworzony nasłuch w sieci LAN ani zewnętrzny przekaźnik.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Wybrany profil SSH jest niedostępny. Użyj innego połączonego profilu lub lokalnego przekaźnika.";
 "mobile.mirror.transport.localDetail" = "Przekaźnik parowania jest dostępny tylko w tej sieci prywatnej. Serwery terminali pozostają na interfejsie loopback i nie jest używana żadna usługa chmurowa.";
 "mobile.mirror.transport.sshOptional" = "Użyj połączonego profilu SSH";
+"mobile.mirror.transport.sshLabel" = "Bezpieczne połączenie SSH";
 "mobile.mirror.transport.sshDetail" = "Użycie SSH jest opcjonalne, a punkt końcowy parowania jest udostępniany tylko przez wybrane połączenie.";
 "mobile.mirror.transport.open" = "Otwórz połączenia zdalne";
 "common.choose" = "Wybierz";

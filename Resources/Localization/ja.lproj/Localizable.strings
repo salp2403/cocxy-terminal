@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "破棄済み";
 "taskRun.status.orphaned" = "孤立状態";
 "taskRun.status.cancelled" = "キャンセル済み";
+"taskRun.lifecycle.cancel.title" = "並列タスクをキャンセルしますか？";
+"taskRun.lifecycle.cancel.action" = "タスクをキャンセル";
+"taskRun.lifecycle.cancel.message" = "実行中のエージェントは停止します。ワークツリーとファイルは保持されます。";
+"taskRun.lifecycle.forget.title" = "タスク履歴を削除しますか？";
+"taskRun.lifecycle.forget.action" = "履歴を削除";
+"taskRun.lifecycle.forget.message" = "保存済みのタスク記録を削除します。ワークツリーとファイルは保持されます。";
 "command.taskQueue.manage.name" = "タスクキュー...";
 "command.taskQueue.manage.description" = "継続的なローカルエージェントパイプラインのスケジュール設定と管理を行います";
 "taskQueue.title" = "タスクキュー";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "スマートフォンをペアリング";
 "mobile.mirror.start" = "ペアリングコードを生成";
 "mobile.mirror.security" = "1回限りのコード · デスクトップでの確認 · 90秒";
+"mobile.mirror.securitySSH" = "1回限りのコード · 暗号化 SSH · 90秒";
 "mobile.mirror.cancel" = "ペアリングをキャンセル";
 "mobile.mirror.qr.accessibility" = "スマートフォン用の1回限りのペアリングコード";
 "mobile.mirror.scan" = "スマートフォンでスキャン";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "ペアリングコードの準備完了";
 "mobile.mirror.status.confirmation" = "デスクトップでの確認が必要です";
 "mobile.mirror.status.active" = "プライベートネットワークで接続済み";
+"mobile.mirror.status.activeSSH" = "SSH 経由で接続済み";
 "mobile.mirror.status.denied" = "ペアリングが拒否されました";
 "mobile.mirror.status.starting" = "電話用プライベートリレーを開いています";
+"mobile.mirror.status.startingSSH" = "安全な SSH 接続を開いています";
 "mobile.mirror.transport.label" = "電話用プライベートリレー";
 "mobile.mirror.transport.profile" = "電話の SSH プロファイル";
 "mobile.mirror.transport.detail" = "QR コードは選択した SSH セッション経由で開きます。LAN リスナーや外部リレーは作成されません。";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "選択した SSH プロファイルは利用できません。接続済みの別のプロファイルまたはローカルリレーを使用してください。";
 "mobile.mirror.transport.localDetail" = "ペアリングリレーはこのプライベートネットワーク内でのみ利用できます。ターミナルサーバーはループバック上に留まり、クラウドサービスは使用されません。";
 "mobile.mirror.transport.sshOptional" = "接続済みの SSH プロファイルを使用";
+"mobile.mirror.transport.sshLabel" = "安全な SSH 接続";
 "mobile.mirror.transport.sshDetail" = "SSH は任意であり、ペアリングエンドポイントは選択した接続を通じてのみ公開されます。";
 "mobile.mirror.transport.open" = "リモート接続を開く";
 "common.choose" = "選択";

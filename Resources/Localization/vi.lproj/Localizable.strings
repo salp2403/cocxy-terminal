@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Đã hủy bỏ";
 "taskRun.status.orphaned" = "Mất liên kết";
 "taskRun.status.cancelled" = "Đã hủy";
+"taskRun.lifecycle.cancel.title" = "Hủy tác vụ song song?";
+"taskRun.lifecycle.cancel.action" = "Hủy tác vụ";
+"taskRun.lifecycle.cancel.message" = "Các tác nhân đang chạy sẽ dừng lại. Cây làm việc và tệp của họ sẽ được giữ lại.";
+"taskRun.lifecycle.forget.title" = "Xóa lịch sử tác vụ?";
+"taskRun.lifecycle.forget.action" = "Xóa lịch sử";
+"taskRun.lifecycle.forget.message" = "Thao tác này xóa bản ghi tác vụ đã lưu. Cây làm việc và tệp sẽ được giữ lại.";
 "command.taskQueue.manage.name" = "Hàng đợi tác vụ...";
 "command.taskQueue.manage.description" = "Lên lịch và quản lý các quy trình tác nhân cục bộ liên tục";
 "taskQueue.title" = "Hàng đợi tác vụ";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Ghép đôi điện thoại";
 "mobile.mirror.start" = "Tạo mã ghép đôi";
 "mobile.mirror.security" = "Mã dùng một lần · xác nhận trên máy tính · 90 giây";
+"mobile.mirror.securitySSH" = "Mã dùng một lần · SSH được mã hóa · 90 giây";
 "mobile.mirror.cancel" = "Hủy ghép đôi";
 "mobile.mirror.qr.accessibility" = "Mã ghép đôi điện thoại dùng một lần";
 "mobile.mirror.scan" = "Quét bằng điện thoại";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Mã ghép đôi đã sẵn sàng";
 "mobile.mirror.status.confirmation" = "Cần xác nhận trên máy Mac";
 "mobile.mirror.status.active" = "Đã kết nối trên mạng riêng";
+"mobile.mirror.status.activeSSH" = "Đã kết nối qua SSH";
 "mobile.mirror.status.denied" = "Đã từ chối ghép đôi";
 "mobile.mirror.status.starting" = "Đang mở bộ chuyển tiếp riêng cho điện thoại";
+"mobile.mirror.status.startingSSH" = "Đang mở kết nối SSH bảo mật";
 "mobile.mirror.transport.label" = "Bộ chuyển tiếp riêng cho điện thoại";
 "mobile.mirror.transport.profile" = "Hồ sơ SSH của điện thoại";
 "mobile.mirror.transport.detail" = "Mã QR được mở qua phiên SSH đã chọn. Không tạo trình lắng nghe trên mạng LAN hoặc bộ chuyển tiếp bên ngoài.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Hồ sơ SSH đã chọn không khả dụng. Hãy dùng hồ sơ khác đã kết nối hoặc bộ chuyển tiếp cục bộ.";
 "mobile.mirror.transport.localDetail" = "Bộ chuyển tiếp ghép đôi chỉ khả dụng trên mạng riêng này. Máy chủ trình dòng lệnh vẫn dùng giao diện loopback và không sử dụng dịch vụ đám mây.";
 "mobile.mirror.transport.sshOptional" = "Dùng hồ sơ SSH đã kết nối";
+"mobile.mirror.transport.sshLabel" = "Kết nối SSH bảo mật";
 "mobile.mirror.transport.sshDetail" = "SSH là tùy chọn và chỉ công bố điểm cuối ghép đôi qua kết nối đã chọn.";
 "mobile.mirror.transport.open" = "Mở kết nối từ xa";
 "common.choose" = "Chọn";

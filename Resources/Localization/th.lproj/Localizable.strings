@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "ละทิ้งแล้ว";
 "taskRun.status.orphaned" = "ไม่เชื่อมโยง";
 "taskRun.status.cancelled" = "ยกเลิกแล้ว";
+"taskRun.lifecycle.cancel.title" = "ยกเลิกงานแบบขนานหรือไม่";
+"taskRun.lifecycle.cancel.action" = "ยกเลิกงาน";
+"taskRun.lifecycle.cancel.message" = "เอเจนต์ที่กำลังทำงานจะหยุด เวิร์กทรีและไฟล์ของเอเจนต์จะยังคงอยู่";
+"taskRun.lifecycle.forget.title" = "นำประวัติงานออกหรือไม่";
+"taskRun.lifecycle.forget.action" = "นำประวัติออก";
+"taskRun.lifecycle.forget.message" = "การดำเนินการนี้จะนำบันทึกงานที่บันทึกไว้ออก เวิร์กทรีและไฟล์จะยังคงอยู่";
 "command.taskQueue.manage.name" = "คิวงาน...";
 "command.taskQueue.manage.description" = "กำหนดเวลาและจัดการไปป์ไลน์ถาวรของเอเจนต์ภายในเครื่อง";
 "taskQueue.title" = "คิวงาน";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "จับคู่โทรศัพท์";
 "mobile.mirror.start" = "สร้างรหัสจับคู่";
 "mobile.mirror.security" = "รหัสใช้ครั้งเดียว · การยืนยันบนคอมพิวเตอร์ · 90 วินาที";
+"mobile.mirror.securitySSH" = "รหัสใช้ครั้งเดียว · SSH ที่เข้ารหัส · 90 วินาที";
 "mobile.mirror.cancel" = "ยกเลิกการจับคู่";
 "mobile.mirror.qr.accessibility" = "รหัสใช้ครั้งเดียวสำหรับจับคู่โทรศัพท์";
 "mobile.mirror.scan" = "สแกนด้วยโทรศัพท์ของคุณ";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "รหัสจับคู่พร้อมแล้ว";
 "mobile.mirror.status.confirmation" = "ต้องยืนยันบนเดสก์ท็อป";
 "mobile.mirror.status.active" = "เชื่อมต่อบนเครือข่ายส่วนตัวแล้ว";
+"mobile.mirror.status.activeSSH" = "เชื่อมต่อผ่าน SSH แล้ว";
 "mobile.mirror.status.denied" = "ปฏิเสธการจับคู่แล้ว";
 "mobile.mirror.status.starting" = "กำลังเปิดรีเลย์ส่วนตัวสำหรับโทรศัพท์";
+"mobile.mirror.status.startingSSH" = "กำลังเปิดการเชื่อมต่อ SSH ที่ปลอดภัย";
 "mobile.mirror.transport.label" = "รีเลย์ส่วนตัวสำหรับโทรศัพท์";
 "mobile.mirror.transport.profile" = "โปรไฟล์ SSH ของโทรศัพท์";
 "mobile.mirror.transport.detail" = "รหัส QR จะเปิดผ่านเซสชัน SSH ที่เลือก โดยจะไม่มีการสร้างตัวรับฟังบน LAN หรือรีเลย์ภายนอก";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "โปรไฟล์ SSH ที่เลือกไม่พร้อมใช้งาน โปรดใช้โปรไฟล์อื่นที่เชื่อมต่อแล้วหรือรีเลย์ภายในเครื่อง";
 "mobile.mirror.transport.localDetail" = "รีเลย์สำหรับการจับคู่ใช้งานได้เฉพาะบนเครือข่ายส่วนตัวนี้ เซิร์ฟเวอร์เทอร์มินัลยังคงอยู่บนลูปแบ็กและไม่มีการใช้บริการคลาวด์";
 "mobile.mirror.transport.sshOptional" = "ใช้โปรไฟล์ SSH ที่เชื่อมต่อแล้ว";
+"mobile.mirror.transport.sshLabel" = "การเชื่อมต่อ SSH ที่ปลอดภัย";
 "mobile.mirror.transport.sshDetail" = "SSH เป็นตัวเลือก และจะเผยแพร่จุดเชื่อมต่อสำหรับการจับคู่ผ่านการเชื่อมต่อที่เลือกเท่านั้น";
 "mobile.mirror.transport.open" = "เปิดการเชื่อมต่อระยะไกล";
 "common.choose" = "เลือก";

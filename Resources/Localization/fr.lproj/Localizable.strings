@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Écartée";
 "taskRun.status.orphaned" = "Orpheline";
 "taskRun.status.cancelled" = "Annulée";
+"taskRun.lifecycle.cancel.title" = "Annuler la tâche parallèle ?";
+"taskRun.lifecycle.cancel.action" = "Annuler la tâche";
+"taskRun.lifecycle.cancel.message" = "Les agents en cours d’exécution s’arrêteront. Leurs arbres de travail et leurs fichiers seront conservés.";
+"taskRun.lifecycle.forget.title" = "Supprimer l’historique de la tâche ?";
+"taskRun.lifecycle.forget.action" = "Supprimer l’historique";
+"taskRun.lifecycle.forget.message" = "Cette action supprime l’enregistrement de tâche sauvegardé. Les arbres de travail et les fichiers seront conservés.";
 "command.taskQueue.manage.name" = "File d’attente des tâches...";
 "command.taskQueue.manage.description" = "Planifie et gère des pipelines persistants d’agents locaux";
 "taskQueue.title" = "File d’attente des tâches";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Jumeler un téléphone";
 "mobile.mirror.start" = "Générer un code de jumelage";
 "mobile.mirror.security" = "Code à usage unique · confirmation sur l’ordinateur · 90 secondes";
+"mobile.mirror.securitySSH" = "Code à usage unique · SSH chiffré · 90 secondes";
 "mobile.mirror.cancel" = "Annuler le jumelage";
 "mobile.mirror.qr.accessibility" = "Code de jumelage du téléphone à usage unique";
 "mobile.mirror.scan" = "Scannez avec votre téléphone";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Code de jumelage prêt";
 "mobile.mirror.status.confirmation" = "Confirmation sur l’ordinateur requise";
 "mobile.mirror.status.active" = "Connecté au réseau privé";
+"mobile.mirror.status.activeSSH" = "Connecté via SSH";
 "mobile.mirror.status.denied" = "Jumelage refusé";
 "mobile.mirror.status.starting" = "Ouverture du relais privé pour téléphone";
+"mobile.mirror.status.startingSSH" = "Ouverture d’une connexion SSH sécurisée";
 "mobile.mirror.transport.label" = "Relais privé pour téléphone";
 "mobile.mirror.transport.profile" = "Profil SSH du téléphone";
 "mobile.mirror.transport.detail" = "Le code QR s’ouvre via la session SSH sélectionnée. Aucun écouteur sur le réseau local ni relais externe n’est créé.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Le profil SSH sélectionné est indisponible. Utilisez un autre profil connecté ou le relais local.";
 "mobile.mirror.transport.localDetail" = "Le relais de jumelage est disponible uniquement sur ce réseau privé. Les serveurs de terminal restent sur l’interface de bouclage et aucun service infonuagique n’est utilisé.";
 "mobile.mirror.transport.sshOptional" = "Utiliser un profil SSH connecté";
+"mobile.mirror.transport.sshLabel" = "Connexion SSH sécurisée";
 "mobile.mirror.transport.sshDetail" = "SSH est facultatif et ne publie le point de terminaison du jumelage que via la connexion sélectionnée.";
 "mobile.mirror.transport.open" = "Ouvrir les connexions distantes";
 "common.choose" = "Choisir";

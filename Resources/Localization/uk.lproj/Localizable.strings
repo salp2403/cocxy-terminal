@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Відкинуто";
 "taskRun.status.orphaned" = "Втрачено зв’язок";
 "taskRun.status.cancelled" = "Скасовано";
+"taskRun.lifecycle.cancel.title" = "Скасувати паралельне завдання?";
+"taskRun.lifecycle.cancel.action" = "Скасувати завдання";
+"taskRun.lifecycle.cancel.message" = "Запущені агенти буде зупинено. Їхні робочі дерева й файли буде збережено.";
+"taskRun.lifecycle.forget.title" = "Видалити історію завдання?";
+"taskRun.lifecycle.forget.action" = "Видалити історію";
+"taskRun.lifecycle.forget.message" = "Збережений запис завдання буде видалено. Робочі дерева й файли буде збережено.";
 "command.taskQueue.manage.name" = "Черга завдань...";
 "command.taskQueue.manage.description" = "Планувати постійні конвеєри локальних агентів і керувати ними";
 "taskQueue.title" = "Черга завдань";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Створення пари з телефоном";
 "mobile.mirror.start" = "Створити код спарювання";
 "mobile.mirror.security" = "Одноразовий код · підтвердження на комп’ютері · 90 секунд";
+"mobile.mirror.securitySSH" = "Одноразовий код · зашифрований SSH · 90 секунд";
 "mobile.mirror.cancel" = "Скасувати спарювання";
 "mobile.mirror.qr.accessibility" = "Одноразовий код спарювання з телефоном";
 "mobile.mirror.scan" = "Відскануйте телефоном";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Код спарювання готовий";
 "mobile.mirror.status.confirmation" = "Потрібне підтвердження на комп’ютері";
 "mobile.mirror.status.active" = "Підключено у приватній мережі";
+"mobile.mirror.status.activeSSH" = "Підключено через SSH";
 "mobile.mirror.status.denied" = "У спарюванні відмовлено";
 "mobile.mirror.status.starting" = "Запуск приватного ретранслятора для телефона";
+"mobile.mirror.status.startingSSH" = "Відкриття захищеного SSH-з’єднання";
 "mobile.mirror.transport.label" = "Приватний ретранслятор для телефона";
 "mobile.mirror.transport.profile" = "SSH-профіль телефона";
 "mobile.mirror.transport.detail" = "QR-код відкривається через вибраний сеанс SSH. Слухач у локальній мережі та зовнішній ретранслятор не створюються.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Вибраний профіль SSH недоступний. Використайте інший підключений профіль або локальний ретранслятор.";
 "mobile.mirror.transport.localDetail" = "Ретранслятор спарювання доступний лише в цій приватній мережі. Сервери терміналів залишаються на інтерфейсі loopback, хмарні служби не використовуються.";
 "mobile.mirror.transport.sshOptional" = "Використовувати підключений профіль SSH";
+"mobile.mirror.transport.sshLabel" = "Захищене SSH-з’єднання";
 "mobile.mirror.transport.sshDetail" = "SSH необов’язковий і публікує кінцеву точку спарювання лише через вибране підключення.";
 "mobile.mirror.transport.open" = "Відкрити віддалені підключення";
 "common.choose" = "Вибрати";

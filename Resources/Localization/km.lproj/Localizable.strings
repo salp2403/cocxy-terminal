@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "បានបោះចោល";
 "taskRun.status.orphaned" = "គ្មានម្ចាស់";
 "taskRun.status.cancelled" = "បានបោះបង់";
+"taskRun.lifecycle.cancel.title" = "បោះបង់ភារកិច្ចស្របគ្នា?";
+"taskRun.lifecycle.cancel.action" = "បោះបង់ភារកិច្ច";
+"taskRun.lifecycle.cancel.message" = "ភ្នាក់ងារដែលកំពុងដំណើរការនឹងឈប់។ worktree និងឯកសាររបស់ពួកគេនឹងត្រូវរក្សាទុក។";
+"taskRun.lifecycle.forget.title" = "លុបប្រវត្តិភារកិច្ច?";
+"taskRun.lifecycle.forget.action" = "លុបប្រវត្តិ";
+"taskRun.lifecycle.forget.message" = "វានឹងលុបកំណត់ត្រាភារកិច្ចដែលបានរក្សាទុក។ worktree និងឯកសារនឹងត្រូវរក្សាទុក។";
 "command.taskQueue.manage.name" = "ជួរភារកិច្ច...";
 "command.taskQueue.manage.description" = "កំណត់កាលវិភាគ និងគ្រប់គ្រង pipeline ភ្នាក់ងារមូលដ្ឋានដែលបន្តមាន";
 "taskQueue.title" = "ជួរភារកិច្ច";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "ផ្គូផ្គងទូរស័ព្ទ";
 "mobile.mirror.start" = "បង្កើតកូដផ្គូផ្គង";
 "mobile.mirror.security" = "កូដប្រើម្តង · ការបញ្ជាក់នៅលើកុំព្យូទ័រ · 90 វិនាទី";
+"mobile.mirror.securitySSH" = "កូដប្រើម្តង · SSH ដែលបានអ៊ិនគ្រីប · 90 វិនាទី";
 "mobile.mirror.cancel" = "បោះបង់ការផ្គូផ្គង";
 "mobile.mirror.qr.accessibility" = "កូដផ្គូផ្គងទូរស័ព្ទប្រើម្តង";
 "mobile.mirror.scan" = "ស្កេនដោយប្រើទូរស័ព្ទរបស់អ្នក";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "កូដផ្គូផ្គងរួចរាល់";
 "mobile.mirror.status.confirmation" = "ត្រូវការការបញ្ជាក់ពី Desktop";
 "mobile.mirror.status.active" = "បានភ្ជាប់នៅលើបណ្ដាញឯកជន";
+"mobile.mirror.status.activeSSH" = "បានភ្ជាប់តាមរយៈ SSH";
 "mobile.mirror.status.denied" = "ការផ្គូផ្គងត្រូវបានបដិសេធ";
 "mobile.mirror.status.starting" = "កំពុងបើករ៉ឺឡេឯកជនសម្រាប់ទូរសព្ទ";
+"mobile.mirror.status.startingSSH" = "កំពុងបើកការតភ្ជាប់ SSH ដែលមានសុវត្ថិភាព";
 "mobile.mirror.transport.label" = "រ៉ឺឡេឯកជនសម្រាប់ទូរសព្ទ";
 "mobile.mirror.transport.profile" = "ប្រវត្តិរូប SSH របស់ទូរសព្ទ";
 "mobile.mirror.transport.detail" = "កូដ QR បើកតាមរយៈសម័យ SSH ដែលបានជ្រើស។ មិនមានការបង្កើតកម្មវិធីស្តាប់លើ LAN ឬកម្មវិធីបញ្ជូនតខាងក្រៅទេ។";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "ប្រវត្តិរូប SSH ដែលបានជ្រើសមិនអាចប្រើបានទេ។ ប្រើប្រវត្តិរូបផ្សេងដែលបានភ្ជាប់ ឬរ៉ឺឡេមូលដ្ឋាន។";
 "mobile.mirror.transport.localDetail" = "រ៉ឺឡេសម្រាប់ការផ្គូផ្គងអាចប្រើបានតែនៅលើបណ្ដាញឯកជននេះប៉ុណ្ណោះ។ ម៉ាស៊ីនមេស្ថានីយនៅតែប្រើ loopback ហើយមិនប្រើសេវាពពកទេ។";
 "mobile.mirror.transport.sshOptional" = "ប្រើប្រវត្តិរូប SSH ដែលបានភ្ជាប់";
+"mobile.mirror.transport.sshLabel" = "ការតភ្ជាប់ SSH ដែលមានសុវត្ថិភាព";
 "mobile.mirror.transport.sshDetail" = "SSH ជាជម្រើស ហើយបង្ហាញចំណុចបញ្ចប់សម្រាប់ការផ្គូផ្គងតែតាមការតភ្ជាប់ដែលបានជ្រើសប៉ុណ្ណោះ។";
 "mobile.mirror.transport.open" = "បើកការតភ្ជាប់ពីចម្ងាយ";
 "common.choose" = "ជ្រើសរើស";

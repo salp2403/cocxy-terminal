@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Verworfen";
 "taskRun.status.orphaned" = "Verwaist";
 "taskRun.status.cancelled" = "Abgebrochen";
+"taskRun.lifecycle.cancel.title" = "Parallele Aufgabe abbrechen?";
+"taskRun.lifecycle.cancel.action" = "Aufgabe abbrechen";
+"taskRun.lifecycle.cancel.message" = "Laufende Agenten werden angehalten. Ihre Worktrees und Dateien bleiben erhalten.";
+"taskRun.lifecycle.forget.title" = "Aufgabenverlauf entfernen?";
+"taskRun.lifecycle.forget.action" = "Verlauf entfernen";
+"taskRun.lifecycle.forget.message" = "Dadurch wird der gespeicherte Aufgabeneintrag entfernt. Worktrees und Dateien bleiben erhalten.";
 "command.taskQueue.manage.name" = "Aufgabenwarteschlange …";
 "command.taskQueue.manage.description" = "Dauerhafte lokale Agenten-Pipelines planen und verwalten";
 "taskQueue.title" = "Aufgabenwarteschlange";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Telefon koppeln";
 "mobile.mirror.start" = "Kopplungscode erzeugen";
 "mobile.mirror.security" = "Einmalcode · Bestätigung am Computer · 90 Sekunden";
+"mobile.mirror.securitySSH" = "Einmalcode · verschlüsseltes SSH · 90 Sekunden";
 "mobile.mirror.cancel" = "Kopplung abbrechen";
 "mobile.mirror.qr.accessibility" = "Einmaliger Kopplungscode für das Telefon";
 "mobile.mirror.scan" = "Mit dem Telefon scannen";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Kopplungscode bereit";
 "mobile.mirror.status.confirmation" = "Bestätigung am Mac erforderlich";
 "mobile.mirror.status.active" = "Im privaten Netzwerk verbunden";
+"mobile.mirror.status.activeSSH" = "Über SSH verbunden";
 "mobile.mirror.status.denied" = "Kopplung abgelehnt";
 "mobile.mirror.status.starting" = "Privater Telefon-Vermittlungsdienst wird geöffnet";
+"mobile.mirror.status.startingSSH" = "Sichere SSH-Verbindung wird geöffnet";
 "mobile.mirror.transport.label" = "Privater Telefon-Vermittlungsdienst";
 "mobile.mirror.transport.profile" = "SSH-Profil des Telefons";
 "mobile.mirror.transport.detail" = "Der QR-Code wird über die ausgewählte SSH-Sitzung geöffnet. Es werden weder ein Listener im LAN noch ein externer Vermittlungsdienst erstellt.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Das ausgewählte SSH-Profil ist nicht verfügbar. Verwenden Sie ein anderes verbundenes Profil oder den lokalen Vermittlungsdienst.";
 "mobile.mirror.transport.localDetail" = "Der Kopplungsdienst ist nur in diesem privaten Netzwerk verfügbar. Terminalserver bleiben an Loopback gebunden und es wird kein Cloud-Dienst verwendet.";
 "mobile.mirror.transport.sshOptional" = "Verbundenes SSH-Profil verwenden";
+"mobile.mirror.transport.sshLabel" = "Sichere SSH-Verbindung";
 "mobile.mirror.transport.sshDetail" = "SSH ist optional und stellt den Kopplungsendpunkt nur über die ausgewählte Verbindung bereit.";
 "mobile.mirror.transport.open" = "Remoteverbindungen öffnen";
 "common.choose" = "Auswählen";

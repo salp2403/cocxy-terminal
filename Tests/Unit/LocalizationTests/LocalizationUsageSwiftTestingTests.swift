@@ -32,8 +32,12 @@ struct LocalizationUsageSwiftTestingTests {
         "mobile.web.action.completed",
         "mobile.web.action.failed",
         "mobile.web.action.partial",
+        "mobile.mirror.securitySSH",
+        "mobile.mirror.status.activeSSH",
+        "mobile.mirror.status.startingSSH",
         "mobile.mirror.transport.localDetail",
         "mobile.mirror.transport.sshDetail",
+        "mobile.mirror.transport.sshLabel",
         "mobile.mirror.transport.sshOptional",
         "project.activation.verifiedSurfaceUnavailable",
         "projectHome.fanOut.error.baseChanged",
@@ -55,8 +59,27 @@ struct LocalizationUsageSwiftTestingTests {
         "projectHome.fanOut.inferredPaths",
         "projectHome.fanOut.noInferredPaths",
         "projectHome.fanOut.promotionRefreshed",
+        "taskRun.lifecycle.cancel.action",
+        "taskRun.lifecycle.cancel.message",
+        "taskRun.lifecycle.cancel.title",
+        "taskRun.lifecycle.forget.action",
+        "taskRun.lifecycle.forget.message",
+        "taskRun.lifecycle.forget.title",
         "taskQueue.event.task-run-finished",
         "taskQueue.event.task-run-started",
+    ]
+
+    private static let catalogOnlyKeys: Set<String> = [
+        "mobile.mirror.securitySSH",
+        "mobile.mirror.status.activeSSH",
+        "mobile.mirror.status.startingSSH",
+        "mobile.mirror.transport.sshLabel",
+        "taskRun.lifecycle.cancel.action",
+        "taskRun.lifecycle.cancel.message",
+        "taskRun.lifecycle.cancel.title",
+        "taskRun.lifecycle.forget.action",
+        "taskRun.lifecycle.forget.message",
+        "taskRun.lifecycle.forget.title",
     ]
 
     private static let fanOutErrorEnglishCopy: [String: String] = [
@@ -78,6 +101,22 @@ struct LocalizationUsageSwiftTestingTests {
         "projectHome.fanOut.error.unknown": "The parallel task could not be completed. Technical category: %@",
     ]
 
+    private static let sshTransportEnglishCopy: [String: String] = [
+        "mobile.mirror.status.startingSSH": "Opening secure SSH connection",
+        "mobile.mirror.status.activeSSH": "Connected through SSH",
+        "mobile.mirror.securitySSH": "One-use code · encrypted SSH · 90 seconds",
+        "mobile.mirror.transport.sshLabel": "Secure SSH Connection",
+    ]
+
+    private static let taskRunLifecycleEnglishCopy: [String: String] = [
+        "taskRun.lifecycle.cancel.title": "Cancel Parallel Task?",
+        "taskRun.lifecycle.cancel.action": "Cancel Task",
+        "taskRun.lifecycle.cancel.message": "Running agents will stop. Their worktrees and files will be kept.",
+        "taskRun.lifecycle.forget.title": "Remove Task History?",
+        "taskRun.lifecycle.forget.action": "Remove History",
+        "taskRun.lifecycle.forget.message": "This removes the saved task record. Worktrees and files will be kept.",
+    ]
+
     @Test("every Swift localization key exists in the English resource")
     func everySwiftLocalizationKeyExistsInEnglishResource() throws {
         let root = repositoryRoot()
@@ -91,7 +130,8 @@ struct LocalizationUsageSwiftTestingTests {
             .union(MobileMirrorWebLocalization.english.catalog.keys)
         let english = try localizationStrings(locale: "en", root: root)
         let missing = usedKeys.subtracting(english.keys).sorted()
-        let uncoveredRequired = Self.requiredKeys.subtracting(usedKeys).sorted()
+        let requiredSwiftUsageKeys = Self.requiredKeys.subtracting(Self.catalogOnlyKeys)
+        let uncoveredRequired = requiredSwiftUsageKeys.subtracting(usedKeys).sorted()
 
         #expect(
             uncoveredRequired.isEmpty,
@@ -161,6 +201,32 @@ struct LocalizationUsageSwiftTestingTests {
             )
             #expect(!actual.localizedCaseInsensitiveContains("stderr"))
             #expect(!actual.localizedCaseInsensitiveContains("process output"))
+        }
+    }
+
+    @Test("SSH transport variants match the public copy contract")
+    func sshTransportVariantsMatchPublicCopyContract() throws {
+        let root = repositoryRoot()
+        let english = try localizationStrings(locale: "en", root: root)
+
+        for (key, expected) in Self.sshTransportEnglishCopy {
+            #expect(
+                english[key] == expected,
+                Comment(rawValue: "Unexpected English SSH transport copy for \(key)")
+            )
+        }
+    }
+
+    @Test("task run lifecycle copy matches the preservation contract")
+    func taskRunLifecycleCopyMatchesPreservationContract() throws {
+        let root = repositoryRoot()
+        let english = try localizationStrings(locale: "en", root: root)
+
+        for (key, expected) in Self.taskRunLifecycleEnglishCopy {
+            #expect(
+                english[key] == expected,
+                Comment(rawValue: "Unexpected English task lifecycle copy for \(key)")
+            )
         }
     }
 

@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "تم تجاهلها";
 "taskRun.status.orphaned" = "متروكة";
 "taskRun.status.cancelled" = "أُلغيت";
+"taskRun.lifecycle.cancel.title" = "هل تريد إلغاء المهمة المتوازية؟";
+"taskRun.lifecycle.cancel.action" = "إلغاء المهمة";
+"taskRun.lifecycle.cancel.message" = "سيتوقف الوكلاء الذين يعملون حاليًا. سيُحتفظ بأشجار العمل وملفاتهم.";
+"taskRun.lifecycle.forget.title" = "هل تريد إزالة سجل المهمة؟";
+"taskRun.lifecycle.forget.action" = "إزالة السجل";
+"taskRun.lifecycle.forget.message" = "يؤدي هذا إلى إزالة سجل المهمة المحفوظ. سيُحتفظ بأشجار العمل والملفات.";
 "command.taskQueue.manage.name" = "قائمة انتظار المهام...";
 "command.taskQueue.manage.description" = "جدولة وإدارة خطوط أنابيب الوكلاء المحليين المستمرة";
 "taskQueue.title" = "قائمة انتظار المهام";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "إقران الهاتف";
 "mobile.mirror.start" = "إنشاء رمز الإقران";
 "mobile.mirror.security" = "رمز للاستخدام مرة واحدة · تأكيد على سطح المكتب · 90 ثانية";
+"mobile.mirror.securitySSH" = "رمز للاستخدام مرة واحدة · SSH مشفّر · 90 ثانية";
 "mobile.mirror.cancel" = "إلغاء الإقران";
 "mobile.mirror.qr.accessibility" = "رمز إقران الهاتف للاستخدام مرة واحدة";
 "mobile.mirror.scan" = "امسح باستخدام هاتفك";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "رمز الإقران جاهز";
 "mobile.mirror.status.confirmation" = "مطلوب تأكيد من سطح المكتب";
 "mobile.mirror.status.active" = "متصل على الشبكة الخاصة";
+"mobile.mirror.status.activeSSH" = "متصل عبر SSH";
 "mobile.mirror.status.denied" = "تم رفض الإقران";
 "mobile.mirror.status.starting" = "جارٍ فتح مرحّل خاص للهاتف";
+"mobile.mirror.status.startingSSH" = "جارٍ فتح اتصال SSH آمن";
 "mobile.mirror.transport.label" = "مرحّل خاص للهاتف";
 "mobile.mirror.transport.profile" = "ملف تعريف SSH للهاتف";
 "mobile.mirror.transport.detail" = "يُفتح رمز QR عبر جلسة SSH المحددة. لا يتم إنشاء مستمع على شبكة LAN أو مرحّل خارجي.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "ملف تعريف SSH المحدد غير متاح. استخدم ملفًا متصلًا آخر أو المرحّل المحلي.";
 "mobile.mirror.transport.localDetail" = "لا يتوفر مرحّل الإقران إلا على هذه الشبكة الخاصة. تبقى خوادم الطرفية على واجهة loopback ولا تُستخدم أي خدمة سحابية.";
 "mobile.mirror.transport.sshOptional" = "استخدام ملف تعريف SSH متصل";
+"mobile.mirror.transport.sshLabel" = "اتصال SSH آمن";
 "mobile.mirror.transport.sshDetail" = "SSH اختياري، ولا تُنشر نقطة نهاية الإقران إلا عبر الاتصال المحدد.";
 "mobile.mirror.transport.open" = "فتح الاتصالات البعيدة";
 "common.choose" = "اختيار";

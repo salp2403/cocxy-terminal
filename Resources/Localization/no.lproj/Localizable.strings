@@ -3434,6 +3434,12 @@
 "taskRun.status.discarded" = "Forkastet";
 "taskRun.status.orphaned" = "Foreldreløs";
 "taskRun.status.cancelled" = "Avbrutt";
+"taskRun.lifecycle.cancel.title" = "Avbryte parallell oppgave?";
+"taskRun.lifecycle.cancel.action" = "Avbryt oppgave";
+"taskRun.lifecycle.cancel.message" = "Kjørende agenter stoppes. Arbeidstrærne og filene deres beholdes.";
+"taskRun.lifecycle.forget.title" = "Fjerne oppgavehistorikk?";
+"taskRun.lifecycle.forget.action" = "Fjern historikk";
+"taskRun.lifecycle.forget.message" = "Dette fjerner den lagrede oppgaveoppføringen. Arbeidstrær og filer beholdes.";
 "command.taskQueue.manage.name" = "Oppgavekø...";
 "command.taskQueue.manage.description" = "Planlegg og administrer vedvarende lokale agentforløp";
 "taskQueue.title" = "Oppgavekø";
@@ -3529,6 +3535,7 @@
 "mobile.mirror.title" = "Koble sammen med telefon";
 "mobile.mirror.start" = "Generer sammenkoblingskode";
 "mobile.mirror.security" = "Engangskode · bekreftelse på datamaskinen · 90 sekunder";
+"mobile.mirror.securitySSH" = "Engangskode · kryptert SSH · 90 sekunder";
 "mobile.mirror.cancel" = "Avbryt sammenkobling";
 "mobile.mirror.qr.accessibility" = "Engangskode for sammenkobling med telefon";
 "mobile.mirror.scan" = "Skann med telefonen";
@@ -3546,8 +3553,10 @@
 "mobile.mirror.status.offering" = "Sammenkoblingskoden er klar";
 "mobile.mirror.status.confirmation" = "Må bekreftes på Macen";
 "mobile.mirror.status.active" = "Tilkoblet på det private nettverket";
+"mobile.mirror.status.activeSSH" = "Tilkoblet via SSH";
 "mobile.mirror.status.denied" = "Sammenkobling avvist";
 "mobile.mirror.status.starting" = "Åpner privat telefonrelé";
+"mobile.mirror.status.startingSSH" = "Åpner sikker SSH-forbindelse";
 "mobile.mirror.transport.label" = "Privat telefonrelé";
 "mobile.mirror.transport.profile" = "Telefonens SSH-profil";
 "mobile.mirror.transport.detail" = "QR-koden åpnes gjennom den valgte SSH-økten. Det opprettes ingen lytter på lokalnettet eller eksternt relé.";
@@ -3555,6 +3564,7 @@
 "mobile.mirror.transport.detail.unavailable" = "Den valgte SSH-profilen er utilgjengelig. Bruk en annen tilkoblet profil eller det lokale reléet.";
 "mobile.mirror.transport.localDetail" = "Sammenkoblingsreléet er bare tilgjengelig på dette private nettverket. Terminalservere forblir på loopback, og ingen skytjeneste brukes.";
 "mobile.mirror.transport.sshOptional" = "Bruk en tilkoblet SSH-profil";
+"mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfritt og gjør sammenkoblingsendepunktet tilgjengelig bare gjennom den valgte forbindelsen.";
 "mobile.mirror.transport.open" = "Åpne eksterne tilkoblinger";
 "common.choose" = "Velg";
