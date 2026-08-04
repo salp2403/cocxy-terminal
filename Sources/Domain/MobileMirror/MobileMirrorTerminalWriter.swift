@@ -39,6 +39,10 @@ final class MobileMirrorTerminalWriter {
         case paste(String)
     }
 
+    struct PreparedWrite {
+        let execute: @MainActor () async throws -> TerminalPasteDeliveryResult
+    }
+
     private let grantProvider: GrantProvider
     private let targetProvider: TargetProvider
     private let pasteDeliveryCoordinator: TerminalPasteDeliveryCoordinator
@@ -58,15 +62,12 @@ final class MobileMirrorTerminalWriter {
         to tabID: TabID,
         surfaceID: SurfaceID
     ) async throws {
-        guard action.kind == .terminalControl,
-              action.surfaceID == surfaceID.rawValue.uuidString else {
-            throw MobileMirrorError.invalidAction
-        }
-        try await authorizeAndApply(
-            effect: try Self.effect(for: action),
+        let prepared = try await prepare(
+            action: action,
             tabID: tabID,
             surfaceID: surfaceID
         )
+        _ = try await prepared.execute()
     }
 
     func respond(_ text: String, to tabID: TabID, surfaceID: SurfaceID) async throws {
@@ -74,18 +75,35 @@ final class MobileMirrorTerminalWriter {
               text.utf8.count <= 8_192 else {
             throw MobileMirrorError.invalidAction
         }
-        try await authorizeAndApply(
+        let prepared = try await authorize(
             effect: .text(text + "\r"),
+            tabID: tabID,
+            surfaceID: surfaceID
+        )
+        _ = try await prepared.execute()
+    }
+
+    func prepare(
+        action: MobileMirrorAction,
+        tabID: TabID,
+        surfaceID: SurfaceID
+    ) async throws -> PreparedWrite {
+        guard action.kind == .terminalControl,
+              action.surfaceID == surfaceID.rawValue.uuidString else {
+            throw MobileMirrorError.invalidAction
+        }
+        return try await authorize(
+            effect: try Self.effect(for: action),
             tabID: tabID,
             surfaceID: surfaceID
         )
     }
 
-    private func authorizeAndApply(
+    private func authorize(
         effect: Effect,
         tabID: TabID,
         surfaceID: SurfaceID
-    ) async throws {
+    ) async throws -> PreparedWrite {
         let command: CLICommandName
         let params: [String: String]
         switch effect {
@@ -126,26 +144,38 @@ final class MobileMirrorTerminalWriter {
             throw MobileMirrorError.authorizationDenied
         }
 
-        let delivered: Bool
         switch effect {
         case .text(let text):
-            delivered = target.sendText(text)
+            return PreparedWrite {
+                guard target.sendText(text) else {
+                    throw MobileMirrorError.targetUnavailable
+                }
+                return .completed
+            }
         case .key(_, let event):
-            delivered = target.sendKeyEvent(event)
+            return PreparedWrite {
+                guard target.sendKeyEvent(event) else {
+                    throw MobileMirrorError.targetUnavailable
+                }
+                return .completed
+            }
         case .paste(let text):
             guard let configuration = target.pasteConfiguration() else {
                 throw MobileMirrorError.targetUnavailable
             }
-            delivered = await pasteDeliveryCoordinator.deliver(
-                text,
-                to: surfaceID,
-                configuration: configuration,
-                isAvailable: target.isAvailable,
-                sendText: target.sendText
-            )
-        }
-        guard delivered else {
-            throw MobileMirrorError.targetUnavailable
+            return PreparedWrite { [pasteDeliveryCoordinator] in
+                let result = await pasteDeliveryCoordinator.deliverReportingProgress(
+                    text,
+                    to: surfaceID,
+                    configuration: configuration,
+                    isAvailable: target.isAvailable,
+                    sendText: target.sendText
+                )
+                guard result != .notDelivered else {
+                    throw MobileMirrorError.targetUnavailable
+                }
+                return result
+            }
         }
     }
 

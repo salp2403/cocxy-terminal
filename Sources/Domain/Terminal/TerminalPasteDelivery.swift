@@ -91,13 +91,18 @@ enum TerminalPasteDelivery {
         bracketState: TerminalPasteBracketState,
         isAvailable: @escaping @MainActor () -> Bool,
         sendText: @escaping @MainActor (String) -> Bool
-    ) async -> Bool {
+    ) async -> TerminalPasteDeliveryResult {
         let payload = configuration.normalizesText ? normalizedText(text) : text
         let maximumBytes = configuration.agentPaced
             ? timing.agentChunkMaxUTF8Bytes
             : timing.standardChunkMaxUTF8Bytes
         let chunks = chunks(for: payload, maxUTF8Bytes: maximumBytes)
-        guard !chunks.isEmpty, isAvailable() else { return false }
+        guard !chunks.isEmpty, isAvailable() else { return .notDelivered }
+
+        var deliveredContent = false
+        func interruptedResult() -> TerminalPasteDeliveryResult {
+            deliveredContent ? .partial : .notDelivered
+        }
 
         defer {
             if bracketState.isOpen, isAvailable() {
@@ -108,36 +113,40 @@ enum TerminalPasteDelivery {
 
         var startIndex = 0
         if configuration.usesBracketedPaste {
+            guard sendText(bracketedPasteStart + chunks[0]) else {
+                return .notDelivered
+            }
             bracketState.isOpen = true
-            guard sendText(bracketedPasteStart + chunks[0]) else { return false }
+            deliveredContent = true
             startIndex = 1
             guard await pauseIfNeeded(
                 afterChunkAt: 0,
                 chunkCount: chunks.count,
                 configuration: configuration,
                 timing: timing
-            ) else { return false }
+            ) else { return interruptedResult() }
         }
 
         for index in startIndex..<chunks.count {
             guard !Task.isCancelled, isAvailable(), sendText(chunks[index]) else {
-                return false
+                return interruptedResult()
             }
+            deliveredContent = true
             guard await pauseIfNeeded(
                 afterChunkAt: index,
                 chunkCount: chunks.count,
                 configuration: configuration,
                 timing: timing
-            ) else { return false }
+            ) else { return interruptedResult() }
         }
 
-        guard !Task.isCancelled, isAvailable() else { return false }
+        guard !Task.isCancelled, isAvailable() else { return interruptedResult() }
         if bracketState.isOpen {
             let closed = sendText(bracketedPasteEnd)
             bracketState.isOpen = false
-            return closed
+            return closed ? .completed : interruptedResult()
         }
-        return true
+        return .completed
     }
 
     @MainActor
@@ -161,6 +170,12 @@ enum TerminalPasteDelivery {
     }
 }
 
+enum TerminalPasteDeliveryResult: Equatable, Sendable {
+    case completed
+    case partial
+    case notDelivered
+}
+
 @MainActor
 private final class TerminalPasteBracketState {
     var isOpen = false
@@ -170,7 +185,7 @@ private final class TerminalPasteBracketState {
 final class TerminalPasteDeliveryCoordinator {
     private struct Session {
         let id: UUID
-        let task: Task<Bool, Never>
+        let task: Task<TerminalPasteDeliveryResult, Never>
         let closeActiveBracket: @MainActor () -> Void
     }
 
@@ -188,6 +203,22 @@ final class TerminalPasteDeliveryCoordinator {
         isAvailable: @escaping @MainActor () -> Bool,
         sendText: @escaping @MainActor (String) -> Bool
     ) async -> Bool {
+        await deliverReportingProgress(
+            text,
+            to: surfaceID,
+            configuration: configuration,
+            isAvailable: isAvailable,
+            sendText: sendText
+        ) == .completed
+    }
+
+    func deliverReportingProgress(
+        _ text: String,
+        to surfaceID: SurfaceID,
+        configuration: TerminalPasteDeliveryConfiguration,
+        isAvailable: @escaping @MainActor () -> Bool,
+        sendText: @escaping @MainActor (String) -> Bool
+    ) async -> TerminalPasteDeliveryResult {
         let previousSession = sessions[surfaceID]
         previousSession?.closeActiveBracket()
         previousSession?.task.cancel()
@@ -202,7 +233,7 @@ final class TerminalPasteDeliveryCoordinator {
         }
         let task = Task { @MainActor in
             _ = await previousTask?.value
-            guard !Task.isCancelled else { return false }
+            guard !Task.isCancelled else { return TerminalPasteDeliveryResult.notDelivered }
             return await TerminalPasteDelivery.deliver(
                 text,
                 configuration: configuration,
@@ -218,7 +249,7 @@ final class TerminalPasteDeliveryCoordinator {
             closeActiveBracket: closeActiveBracket
         )
 
-        let delivered = await withTaskCancellationHandler {
+        let result = await withTaskCancellationHandler {
             await task.value
         } onCancel: {
             task.cancel()
@@ -226,7 +257,7 @@ final class TerminalPasteDeliveryCoordinator {
         if sessions[surfaceID]?.id == sessionID {
             sessions.removeValue(forKey: surfaceID)
         }
-        return delivered
+        return result
     }
 
     func cancel(surfaceID: SurfaceID) {

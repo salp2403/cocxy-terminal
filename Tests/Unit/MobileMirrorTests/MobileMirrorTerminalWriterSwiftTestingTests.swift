@@ -8,7 +8,7 @@ import Testing
 @Suite("Mobile mirror privileged terminal writes")
 @MainActor
 struct MobileMirrorTerminalWriterSwiftTestingTests {
-    @Test("one MiB paste uses a digest-bound grant and bracketed delivery")
+    @Test("one MiB paste reconstructs exactly with deterministic pacing")
     func largePasteUsesSafeAuthorizedDelivery() async throws {
         let tabID = TabID()
         let surfaceID = SurfaceID()
@@ -79,6 +79,42 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
         }.joined()
         #expect(delivered == payload)
         _ = identity
+    }
+
+    @Test("production-paced paste is authorized before delivery and reports partial writes")
+    func productionPastePreparationReportsPartialDelivery() async throws {
+        let tabID = TabID()
+        let surfaceID = SurfaceID()
+        let capture = MobileMirrorTerminalWriteCapture()
+        capture.maximumSuccessfulTextWrites = 1
+        let writer = MobileMirrorTerminalWriter(
+            grantProvider: { request in
+                SocketPrivilegedCommandAuthorizationGrant(
+                    request: request,
+                    context: Self.context(tabID: tabID, surfaceID: surfaceID)
+                )
+            },
+            targetProvider: { _ in capture.pasteTarget }
+        )
+        let payload = String(repeating: "p", count: 200 * 1_024)
+        let action = MobileMirrorAction(
+            kind: .terminalControl,
+            sessionID: UUID().uuidString,
+            surfaceID: surfaceID.rawValue.uuidString,
+            controlType: "paste",
+            text: payload
+        )
+
+        let prepared = try await writer.prepare(
+            action: action,
+            tabID: tabID,
+            surfaceID: surfaceID
+        )
+
+        #expect(capture.texts.isEmpty)
+        #expect(try await prepared.execute() == .partial)
+        #expect(capture.texts.first?.hasPrefix(TerminalPasteDelivery.bracketedPasteStart) == true)
+        #expect(capture.texts.count >= 2)
     }
 
     @Test("terminal writer reaches the target through the real paired-session authority")
@@ -337,12 +373,18 @@ private final class MobileMirrorTerminalWriteCapture {
     var targetRequests = 0
     var deliversText = true
     var deliversKeyEvent = true
+    var maximumSuccessfulTextWrites: Int?
+
+    private func deliverText(_ text: String) -> Bool {
+        texts.append(text)
+        guard deliversText else { return false }
+        return maximumSuccessfulTextWrites.map { texts.count <= $0 } ?? true
+    }
 
     var target: MobileMirrorTerminalTarget {
         MobileMirrorTerminalTarget(
             sendText: { [weak self] text in
-                self?.texts.append(text)
-                return self?.deliversText == true
+                self?.deliverText(text) == true
             },
             sendKeyEvent: { [weak self] event in
                 self?.keyCodes.append(event.keyCode)
@@ -355,8 +397,7 @@ private final class MobileMirrorTerminalWriteCapture {
     var pasteTarget: MobileMirrorTerminalTarget {
         MobileMirrorTerminalTarget(
             sendText: { [weak self] text in
-                self?.texts.append(text)
-                return self?.deliversText == true
+                self?.deliverText(text) == true
             },
             sendKeyEvent: { _ in false },
             pasteConfiguration: {
