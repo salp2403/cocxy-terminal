@@ -211,6 +211,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var taskRunStore = TaskRunStore()
     var taskRunPersistenceCoordinator: TaskRunPersistenceCoordinator?
     var taskRunRestorationTask: Task<Void, Never>?
+    var taskRunPersistenceIssues: [String: String] = [:]
 
     /// Reverse lookup used to fold provider hook events into one TaskRun row.
     var taskRunIDByTeamID: [String: String] = [:]
@@ -253,6 +254,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// SSH tunnel manager shared across all windows.
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
     var tunnelManager: SSHTunnelManager?
+
+    /// Relay manager shared by remote channels and the local mobile bridge.
+    var relayManager: RelayManagerImpl?
 
     /// SSH key manager shared across all windows.
     /// Internal setter: extensions (+RemoteWorkspace) assign during setup.
@@ -458,9 +462,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         remotePortScanner?.stopScanning()
         remotePortScanner = nil
         remoteConnectionManager?.shutdownForApplicationTermination()
+        relayManager?.stopExpirationTimer()
         cocxydRemoteSSHBootstrapper = nil
         daemonDeployAdapter = nil
         remoteConnectionManager = nil
+        relayManager = nil
         remoteProfileStore = nil
         browserProfileManager = nil
         browserHistoryStore = nil
