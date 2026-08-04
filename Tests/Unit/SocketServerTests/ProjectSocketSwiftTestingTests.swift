@@ -80,7 +80,88 @@ struct ProjectSocketSwiftTestingTests {
         #expect(providerCalls.value == 0)
     }
 
-    @Test("seven ordinary project commands route without approval")
+    @Test("project-clone requires one approval and reaches its provider once")
+    func cloneRequiresApproval() {
+        let approvals = ProjectSocketCounter()
+        let providerCalls = ProjectSocketCounter()
+        let params = [
+            "remote": "https://example.com/team/repo.git",
+            "parent": "/tmp",
+        ]
+        let handler = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                approvals.increment()
+                #expect(request.command == .projectClone)
+                #expect(request.category == .project)
+                #expect(request.params == params)
+                return .internalTrusted(for: request)
+            },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            projectCLIProvider: { kind, receivedParams in
+                providerCalls.increment()
+                #expect(kind == "clone")
+                #expect(receivedParams == params)
+                return (true, ["status": "cloned", "path": "/tmp/repo"])
+            }
+        )
+
+        let response = handler.handleCommand(SocketRequest(
+            id: "project-clone",
+            command: "project-clone",
+            params: params
+        ))
+
+        #expect(response.success)
+        #expect(approvals.value == 1)
+        #expect(providerCalls.value == 1)
+    }
+
+    @Test("project-clone denial and invalid input stop before provider work")
+    func cloneFailsClosed() {
+        let providerCalls = ProjectSocketCounter()
+        let params = [
+            "remote": "https://example.com/team/repo.git",
+            "parent": "/tmp",
+        ]
+        let denied = AppSocketCommandHandler(
+            tabManager: nil,
+            hookEventReceiver: nil,
+            projectCLIProvider: { _, _ in
+                providerCalls.increment()
+                return (true, [:])
+            }
+        ).handleCommand(SocketRequest(
+            id: "clone-denied",
+            command: "project-clone",
+            params: params
+        ))
+        #expect(!denied.success)
+        #expect(providerCalls.value == 0)
+
+        let approvalCalls = ProjectSocketCounter()
+        let invalid = AppSocketCommandHandler(
+            privilegedCommandAuthorizationProvider: { request in
+                approvalCalls.increment()
+                return .internalTrusted(for: request)
+            },
+            tabManager: nil,
+            hookEventReceiver: nil,
+            projectCLIProvider: { _, _ in
+                providerCalls.increment()
+                return (true, [:])
+            }
+        ).handleCommand(SocketRequest(
+            id: "clone-invalid",
+            command: "project-clone",
+            params: ["remote": "file:///tmp/repo", "parent": "/tmp"]
+        ))
+        #expect(!invalid.success)
+        #expect(approvalCalls.value == 0)
+        #expect(providerCalls.value == 0)
+    }
+
+    @Test("six ordinary project commands route without approval")
     func ordinaryCommandsDoNotRequestApproval() {
         let approvals = ProjectSocketCounter()
         let providerCalls = ProjectSocketCounter()
@@ -90,10 +171,6 @@ struct ProjectSocketSwiftTestingTests {
             ("project-unpin", ["project": "/tmp/repo"]),
             ("project-alias", ["project": "/tmp/repo", "alias": "API"]),
             ("project-forget", ["project": "/tmp/repo"]),
-            ("project-clone", [
-                "remote": "https://example.com/team/repo.git",
-                "parent": "/tmp",
-            ]),
             ("project-tasks", ["project": "/tmp/repo"]),
         ]
         let handler = AppSocketCommandHandler(

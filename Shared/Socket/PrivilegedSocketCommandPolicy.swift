@@ -166,7 +166,7 @@ public enum CocxyPrivilegedSocketCommandPolicy {
         case "ssh":
             return .remoteConnection
 
-        case "project-open":
+        case "project-open", "project-clone":
             return .project
 
         default:

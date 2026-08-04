@@ -514,7 +514,8 @@ enum SocketPrivilegedCommandSecurity {
              .gitAssistantCommitMessage,
              .gitAssistantPRDraft,
              .gitAssistantReleaseNotes,
-             .projectOpen:
+             .projectOpen,
+             .projectClone:
             guard let category = CocxyPrivilegedSocketCommandPolicy.category(
                 forRawCommand: command.rawValue
             ) else {
@@ -587,7 +588,6 @@ enum SocketPrivilegedCommandSecurity {
              .projectUnpin,
              .projectAlias,
              .projectForget,
-             .projectClone,
              .projectTasks,
              .windowNew,
              .windowList,

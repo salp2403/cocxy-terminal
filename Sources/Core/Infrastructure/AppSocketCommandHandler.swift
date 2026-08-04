@@ -805,7 +805,7 @@ final class AppSocketCommandHandler: SocketCommandHandling, @unchecked Sendable 
         self.worktreeCLIProvider = worktreeCLIProvider
         if let projectCLIProvider {
             self.projectCLIProvider = { kind, params in
-                if kind == "open" {
+                if kind == "open" || kind == "clone" {
                     guard SocketPrivilegedCommandExecutionContext.authorizeCurrentSession() else {
                         return (false, ["error": "Authorization denied"])
                     }

@@ -23,6 +23,7 @@ private struct ProjectCLIProjectPayload: Codable {
 
 private enum ProjectCLIRequestError: Error, LocalizedError {
     case unauthorizedOpen
+    case unauthorizedClone
     case unknownProject(String)
     case registryUnavailable(String)
     case encodingFailed
@@ -31,6 +32,8 @@ private enum ProjectCLIRequestError: Error, LocalizedError {
         switch self {
         case .unauthorizedOpen:
             return "Approved project-open context is unavailable"
+        case .unauthorizedClone:
+            return "Approved project-clone context is unavailable"
         case .unknownProject(let path):
             return "Project is not registered or available: \(path)"
         case .registryUnavailable(let message):
@@ -92,11 +95,26 @@ extension AppDelegate {
                     try mutateProjectForCLI(kind: kind, params: params)
                 }
             case "clone":
+                guard let context = approvedContext,
+                      context.scope == .project,
+                      let bound = context.bindingLocalResourcePaths(
+                        in: params,
+                        keys: ["parent"],
+                        requiredScope: .project
+                      ),
+                      let parentPath = bound["parent"],
+                      parentPath == context.workingDirectory,
+                      context.authorityDetails["operation"] == "clone",
+                      let rawRemote = params["remote"],
+                      let remote = try? ProjectCloneService.validatedRemote(rawRemote),
+                      context.authorityDetails["remote"] == remote.absoluteString else {
+                    throw ProjectCLIRequestError.unauthorizedClone
+                }
                 let parent = try ProjectDirectoryRoot.open(
-                    URL(fileURLWithPath: params["parent"] ?? "", isDirectory: true)
+                    URL(fileURLWithPath: parentPath, isDirectory: true)
                 )
                 let clone = try ProjectCloneService().clone(
-                    remote: params["remote"] ?? "",
+                    remote: remote.absoluteString,
                     in: parent
                 )
                 return try await MainActor.run { try finishProjectCloneForCLI(clone) }
