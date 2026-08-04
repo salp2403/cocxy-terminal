@@ -228,10 +228,11 @@ extension AppDelegate {
         guard let candidateID = run.candidates.first(where: { $0.teamID == teamID })?.id else {
             return
         }
-        try? run.updateCandidate(id: candidateID) {
+        let changed = (try? run.updateCandidate(id: candidateID) {
             $0.status = candidateStatus
             $0.failureMessage = candidateStatus == .failed ? "Provider reported an error" : nil
-        }
+        }) ?? false
+        guard changed else { return }
         publishTaskRun(
             run,
             fallbackTabID: run.candidates.compactMap(\.worktree?.tabID?.rawValue).first ?? UUID()
@@ -249,7 +250,7 @@ extension AppDelegate {
               let candidateID = run.candidates.first(where: { $0.teamID == teamID })?.id else {
             return
         }
-        try? run.updateCandidate(id: candidateID) {
+        _ = try? run.updateCandidate(id: candidateID) {
             $0.status = .failed
             $0.failureMessage = reason
         }
@@ -367,7 +368,7 @@ extension AppDelegate {
     ) async -> (run: TaskRun, failures: [String]) {
         var run = originalRun
         for candidate in run.candidates {
-            try? run.updateCandidate(id: candidate.id) {
+            _ = try? run.updateCandidate(id: candidate.id) {
                 $0.status = .failed
                 $0.failureMessage = reason
             }
@@ -398,7 +399,7 @@ extension AppDelegate {
                     originRepoPath: run.originRepoPath,
                     store: store
                 )
-                try? run.updateCandidate(id: candidate.id) { $0.worktree = nil }
+                _ = try? run.updateCandidate(id: candidate.id) { $0.worktree = nil }
             } catch {
                 failures.append("\(entry.id): \(error)")
             }

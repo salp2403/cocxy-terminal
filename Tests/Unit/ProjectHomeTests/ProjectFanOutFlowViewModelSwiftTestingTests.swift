@@ -71,6 +71,25 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         #expect(model.mode == .comparison)
     }
 
+    @Test("stale promotion regenerates a reviewable preview")
+    func stalePromotionRefreshesPreview() async throws {
+        let harness = try Harness()
+        harness.executionError = TaskRunExecutionError.promotionUnavailable("task changed")
+        let model = harness.makeModel()
+        await model.showComparison(runID: harness.run.id)
+        model.selectedCandidateID = harness.run.candidates[0].id
+        await model.preparePromotion()
+
+        await model.confirmPromotion()
+
+        #expect(harness.executedPreviews == [harness.preview])
+        #expect(harness.prepareCallCount == 2)
+        #expect(model.mode == .promotion)
+        #expect(model.promotionPreview == harness.preview)
+        #expect(model.errorMessage?.contains("refreshed cleanup plan") == true)
+        #expect(!model.isBusy)
+    }
+
     @Test("discarded candidate opens a prefilled launch without copy paste")
     func discardedCandidateRecycles() async throws {
         let harness = try Harness(completed: true)
@@ -153,6 +172,8 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         var launchCollisionReport = TaskCollisionReport.empty
         var launchedRequests: [TaskRunRequest] = []
         var executedPreviews: [TaskRunPromotionPreview] = []
+        var prepareCallCount = 0
+        var executionError: TaskRunExecutionError?
 
         init(completed: Bool = false) throws {
             var run = TaskRun(
@@ -242,9 +263,13 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                         )
                     },
                     launchCollisions: { [self] _ in launchCollisionReport },
-                    preparePromotion: { [self] _, _ in preview },
+                    preparePromotion: { [self] _, _ in
+                        prepareCallCount += 1
+                        return preview
+                    },
                     executePromotion: { [self] value in
                         executedPreviews.append(value)
+                        if let executionError { throw executionError }
                         return TaskRunPromotionOutcome(
                             run: run,
                             gitResult: WorktreePromotionResult(

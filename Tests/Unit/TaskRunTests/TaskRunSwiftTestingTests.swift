@@ -68,6 +68,32 @@ struct TaskRunSwiftTestingTests {
         #expect(run.candidates[0].estimatedCostMicros == 42)
     }
 
+    @Test("candidate no-op updates preserve the run revision")
+    func candidateNoOpPreservesRevision() throws {
+        var run = TaskRun(
+            id: "stable-revision",
+            request: try TaskRunRequest.make(prompt: "Ship", agents: "codex,claude"),
+            originRepoPath: URL(fileURLWithPath: "/tmp/repo"),
+            baseCommit: "abc123",
+            now: Date(timeIntervalSince1970: 10)
+        )
+        let candidateID = try #require(run.candidates.first?.id)
+
+        let changed = try run.updateCandidate(
+            id: candidateID,
+            now: Date(timeIntervalSince1970: 20)
+        ) { $0.status = .running }
+        #expect(changed)
+        #expect(run.updatedAt == Date(timeIntervalSince1970: 20))
+
+        let unchanged = try run.updateCandidate(
+            id: candidateID,
+            now: Date(timeIntervalSince1970: 30)
+        ) { $0.status = .running }
+        #expect(!unchanged)
+        #expect(run.updatedAt == Date(timeIntervalSince1970: 20))
+    }
+
     @Test("failed promotion detaches only the selected candidate and keeps an alternative runnable")
     func failedPromotionKeepsAlternativeRunnable() throws {
         let request = try TaskRunRequest.make(

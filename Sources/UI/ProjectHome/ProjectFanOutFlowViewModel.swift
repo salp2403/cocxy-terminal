@@ -296,8 +296,19 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             isBusy = false
             await loadComparison(runID: outcome.run.id, ownsBusyState: false)
         } catch {
-            isBusy = false
-            errorMessage = message(for: error)
+            if let executionError = error as? TaskRunExecutionError,
+               case .promotionUnavailable = executionError,
+               let run,
+               let selectedCandidateID {
+                await refreshPromotionPreview(
+                    runID: run.id,
+                    candidateID: selectedCandidateID,
+                    originalError: error
+                )
+            } else {
+                isBusy = false
+                errorMessage = message(for: error)
+            }
         }
     }
 
@@ -339,6 +350,35 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             isBusy = false
             errorMessage = message(for: error)
             if ownsBusyState { mode = .launch }
+        }
+    }
+
+    private func refreshPromotionPreview(
+        runID: String,
+        candidateID: String,
+        originalError: Error
+    ) async {
+        promotionPreview = nil
+        do {
+            let refreshed = try await actions.preparePromotion(runID, candidateID)
+            run = refreshed.run
+            comparisons = refreshed.comparisons
+            selectedCandidateID = candidateID
+            promotionPreview = refreshed
+            mode = .promotion
+            errorMessage = localizer.string(
+                "projectHome.fanOut.promotionRefreshed",
+                fallback: "The task changed. Review the refreshed cleanup plan before continuing."
+            )
+            isBusy = false
+        } catch {
+            mode = .comparison
+            isBusy = false
+            errorMessage = message(for: originalError)
+            await loadComparison(runID: runID, ownsBusyState: false)
+            if errorMessage == nil {
+                errorMessage = message(for: originalError)
+            }
         }
     }
 

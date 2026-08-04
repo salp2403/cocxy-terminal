@@ -27,8 +27,65 @@ struct TaskRunPromotionPreview: Equatable, Sendable {
 
     var selectedCandidateID: String { selectedComparison.candidate.id }
 
+    func matchesPromotionState(_ currentRun: TaskRun) -> Bool {
+        TaskRunPromotionState(
+            run: currentRun,
+            selectedCandidateID: selectedCandidateID
+        ) == TaskRunPromotionState(
+            run: run,
+            selectedCandidateID: selectedCandidateID
+        )
+    }
+
     func matches(currentComparisons: [TaskRunCandidateComparison]) -> Bool {
-        currentComparisons == comparisons
+        let expected = Dictionary(
+            comparisons.map { ($0.id, $0.diffs) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        let current = Dictionary(
+            currentComparisons.map { ($0.id, $0.diffs) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return expected == current
+    }
+}
+
+private struct TaskRunPromotionState: Equatable {
+    struct Candidate: Equatable {
+        let id: String
+        let provider: AgentTeamProvider
+        let teamID: String
+        let worktree: WorktreeManifest.WorktreeEntry?
+    }
+
+    let runID: String
+    let projectID: ProjectID
+    let originRepoPath: URL
+    let worktreeBasePath: String
+    let baseCommit: String
+    let runStatus: TaskRunStatus
+    let selectedCandidateID: String
+    let selectedCandidateStatus: TaskRunCandidateStatus?
+    let candidates: [Candidate]
+
+    init(run: TaskRun, selectedCandidateID: String) {
+        runID = run.id
+        projectID = run.projectID
+        originRepoPath = run.originRepoPath.resolvingSymlinksInPath().standardizedFileURL
+        worktreeBasePath = run.worktreeBasePath
+        baseCommit = run.baseCommit
+        runStatus = run.status
+        self.selectedCandidateID = selectedCandidateID
+        selectedCandidateStatus = run.candidates
+            .first(where: { $0.id == selectedCandidateID })?.status
+        candidates = run.candidates.map {
+            Candidate(
+                id: $0.id,
+                provider: $0.provider,
+                teamID: $0.teamID,
+                worktree: $0.worktree
+            )
+        }.sorted { $0.id < $1.id }
     }
 }
 

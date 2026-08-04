@@ -122,12 +122,12 @@ extension AppDelegate {
         }) else {
             throw TaskRunError.runNotFound(preview.run.id)
         }
-        guard run == preview.run else {
+        guard preview.matchesPromotionState(run) else {
             throw stalePromotionError()
         }
         let candidateID = preview.selectedCandidateID
-        guard let candidate = run.candidates.first(where: { $0.id == candidateID }),
-              let selectedEntry = candidate.worktree else {
+        guard let selectedEntry = run.candidates
+            .first(where: { $0.id == candidateID })?.worktree else {
             throw TaskRunError.candidateNotFound(candidateID)
         }
         let freshComparisons = try await loadTaskRunComparisons(run)
@@ -136,8 +136,13 @@ extension AppDelegate {
         }
         let dashboardSessions = await MainActor.run { self.taskRunLiveSessionsSnapshot() }
         let excludedRuntimeIDs = Set(run.candidates.flatMap { [$0.id, $0.teamID] })
+        guard let freshSelectedComparison = freshComparisons.first(where: {
+            $0.id == candidateID
+        }) else {
+            throw TaskRunError.candidateNotFound(candidateID)
+        }
         let freshCollisionReport = TaskCollisionDetector.beforePromotion(
-            candidate: preview.selectedComparison,
+            candidate: freshSelectedComparison,
             liveSessions: dashboardSessions,
             projectID: run.projectID,
             projectRoot: run.originRepoPath,
@@ -164,18 +169,18 @@ extension AppDelegate {
             throw stalePromotionError()
         }
 
-        let expectedRunningRun = run
-        try run.markPromoting(candidateID: candidateID)
         let fallbackTabID = selectedEntry.tabID?.rawValue ?? UUID()
-        try await publishReservedTaskRunPromotionSnapshot(
-            run,
-            replacing: expectedRunningRun,
+        run = try await beginReservedTaskRunPromotion(
+            preview,
             lease: lease,
             fallbackTabID: fallbackTabID
         )
+        guard let reservedCandidate = run.candidates.first(where: { $0.id == candidateID }) else {
+            throw TaskRunError.candidateNotFound(candidateID)
+        }
         await MainActor.run {
             _ = self.removeAgentTeamRuntime(
-                teamID: candidate.teamID,
+                teamID: reservedCandidate.teamID,
                 worktreeClosePolicyOverride: .keep,
                 removeDashboardRow: false
             )
@@ -340,15 +345,37 @@ extension AppDelegate {
     ) async throws -> TaskRunPromotionLease {
         let reservationStore = await MainActor.run { self.taskRunPromotionReservationStore }
         let revision = try await MainActor.run { () throws -> Date in
-            guard self.activeTaskRuns[preview.run.id] == preview.run else {
+            guard let currentRun = self.activeTaskRuns[preview.run.id],
+                  preview.matchesPromotionState(currentRun) else {
                 throw stalePromotionError()
             }
-            return preview.run.updatedAt
+            return currentRun.updatedAt
         }
         return try await reservationStore.acquire(
             runID: preview.run.id,
             revision: revision
         )
+    }
+
+    nonisolated private func beginReservedTaskRunPromotion(
+        _ preview: TaskRunPromotionPreview,
+        lease: TaskRunPromotionLease,
+        fallbackTabID: UUID
+    ) async throws -> TaskRun {
+        let reservationStore = await MainActor.run { self.taskRunPromotionReservationStore }
+        guard await reservationStore.owns(lease),
+              lease.runID == preview.run.id else {
+            throw stalePromotionError()
+        }
+        return try await MainActor.run {
+            guard var currentRun = self.activeTaskRuns[preview.run.id],
+                  preview.matchesPromotionState(currentRun) else {
+                throw stalePromotionError()
+            }
+            try currentRun.markPromoting(candidateID: preview.selectedCandidateID)
+            self.publishTaskRun(currentRun, fallbackTabID: fallbackTabID)
+            return currentRun
+        }
     }
 
     nonisolated private func releaseTaskRunPromotionLease(

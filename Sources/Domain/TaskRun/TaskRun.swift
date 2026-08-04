@@ -242,16 +242,20 @@ struct TaskRun: Identifiable, Codable, Sendable, Equatable {
         self.completionWarning = nil
     }
 
+    @discardableResult
     mutating func updateCandidate(
         id candidateID: String,
         now: Date = Date(),
         _ update: (inout TaskRunCandidate) -> Void
-    ) throws {
+    ) throws -> Bool {
         guard let index = candidates.firstIndex(where: { $0.id == candidateID }) else {
             throw TaskRunError.candidateNotFound(candidateID)
         }
+        let previous = candidates[index]
         update(&candidates[index])
+        guard candidates[index] != previous else { return false }
         updatedAt = now
+        return true
     }
 
     mutating func markRunning(now: Date = Date()) {

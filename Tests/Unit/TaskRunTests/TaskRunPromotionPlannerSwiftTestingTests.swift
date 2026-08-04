@@ -55,6 +55,69 @@ struct TaskRunPromotionPlannerSwiftTestingTests {
         #expect(entries.first?.disposition == .retainWinner)
     }
 
+    @Test("promotion freshness ignores activity metadata but binds promotion invariants")
+    func promotionFreshnessUsesExplicitInvariants() throws {
+        var run = try makeRun()
+        let winner = entry(id: "winner")
+        let loser = entry(id: "loser")
+        try run.updateCandidate(id: run.candidates[0].id) {
+            $0.worktree = winner
+            $0.status = .finished
+        }
+        try run.updateCandidate(id: run.candidates[1].id) {
+            $0.worktree = loser
+            $0.status = .running
+        }
+        run.markRunning(now: Date(timeIntervalSince1970: 10))
+        let selected = TaskRunCandidateComparison(candidate: run.candidates[0], diffs: [])
+        let preview = TaskRunPromotionPreview(
+            run: run,
+            comparisons: [
+                selected,
+                TaskRunCandidateComparison(candidate: run.candidates[1], diffs: []),
+            ],
+            selectedComparison: selected,
+            collisionReport: .empty,
+            mergedCleanupPlan: WorktreeBatchCleanupPlan(removable: [], blocked: [], skipped: []),
+            cleanupEntries: []
+        )
+
+        var activityUpdate = run
+        try activityUpdate.updateCandidate(
+            id: activityUpdate.candidates[1].id,
+            now: Date(timeIntervalSince1970: 20)
+        ) {
+            $0.status = .finished
+            $0.touchedFiles = ["Sources/Background.swift"]
+        }
+        #expect(preview.matchesPromotionState(activityUpdate))
+        #expect(preview.matches(currentComparisons: activityUpdate.candidates.map {
+            TaskRunCandidateComparison(candidate: $0, diffs: [])
+        }))
+
+        var selectedStatusChanged = activityUpdate
+        try selectedStatusChanged.updateCandidate(id: selectedStatusChanged.candidates[0].id) {
+            $0.status = .failed
+        }
+        #expect(!preview.matchesPromotionState(selectedStatusChanged))
+
+        var worktreeChanged = activityUpdate
+        try worktreeChanged.updateCandidate(id: worktreeChanged.candidates[1].id) {
+            $0.worktree = entry(id: "replacement")
+        }
+        #expect(!preview.matchesPromotionState(worktreeChanged))
+
+        let changedDiff = FileDiff(
+            filePath: "Sources/App.swift",
+            status: .modified,
+            hunks: []
+        )
+        #expect(!preview.matches(currentComparisons: [
+            TaskRunCandidateComparison(candidate: activityUpdate.candidates[0], diffs: [changedDiff]),
+            TaskRunCandidateComparison(candidate: activityUpdate.candidates[1], diffs: []),
+        ]))
+    }
+
     private func makeRun() throws -> TaskRun {
         let request = try TaskRunRequest.make(prompt: "Ship", agents: "codex,claude")
         return TaskRun(
