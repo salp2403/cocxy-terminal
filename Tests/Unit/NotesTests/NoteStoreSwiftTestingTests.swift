@@ -320,4 +320,41 @@ struct NoteStoreSwiftTestingTests {
         // to "empty array" without throwing.
         #expect(summaries[missingID]?.count == 0)
     }
+
+    @Test("legacy workspace migration merges notes without overwriting a divergent UUID")
+    func migrationPreservesDivergentNotes() async throws {
+        let (store, root) = makeStore(format: .markdownFrontmatter)
+        defer { cleanup(root) }
+        let legacyID = NoteWorkspaceID(rawValue: "legacy000001")
+        let canonicalID = NoteWorkspaceID(rawValue: "canon0000001")
+        let sharedID = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let canonical = Note(
+            id: sharedID,
+            workspaceID: canonicalID,
+            body: "# Canonical",
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let legacy = Note(
+            id: sharedID,
+            workspaceID: legacyID,
+            body: "# Legacy edit",
+            createdAt: createdAt,
+            updatedAt: createdAt.addingTimeInterval(60)
+        )
+        try await store.save(canonical)
+        try await store.save(legacy)
+
+        let migrated = try await store.migrateNotes(from: legacyID, to: canonicalID)
+        let notes = try await store.notes(in: canonicalID)
+        let legacyDirectory = await store.directoryURL(for: legacyID)
+
+        #expect(migrated == 1)
+        #expect(notes.count == 2)
+        #expect(Set(notes.map(\.body)) == ["# Canonical", "# Legacy edit"])
+        #expect(Set(notes.map(\.id)).count == 2)
+        #expect(!FileManager.default.fileExists(atPath: legacyDirectory.path))
+        #expect(try await store.migrateNotes(from: legacyID, to: canonicalID) == 0)
+    }
 }

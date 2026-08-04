@@ -8,6 +8,20 @@ import Testing
 @MainActor
 @Suite("Project identity in Aurora", .serialized)
 struct ProjectAuroraIntegrationSwiftTestingTests {
+    private final class InMemoryConfigProvider: ConfigFileProviding, @unchecked Sendable {
+        private var content: String?
+
+        init(content: String?) {
+            self.content = content
+        }
+
+        func readConfigFile() -> String? { content }
+
+        func writeConfigFile(_ content: String) throws {
+            self.content = content
+        }
+    }
+
     private final class StubProjectResolver: ProjectResolving {
         var descriptors: [String: ProjectDescriptor]
         private(set) var invalidatedPaths: [String] = []
@@ -125,6 +139,70 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(controller.currentNotesWorkingDirectory() == origin.standardizedFileURL)
         #expect(controller.tabForNotesWorkspace(rawID: originID.storageKey)?.id == liveTabID)
         #expect(controller.tabForNotesWorkspace(rawID: childID.storageKey) == nil)
+    }
+
+    @Test("a lone worktree migrates legacy notes into the folded sidebar identity")
+    func worktreeNotesMigrateBeforeSidebarAndOverlayLoads() async throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ProjectNotesMigration-\(UUID().uuidString)", isDirectory: true)
+        let storageRoot = sandbox.appendingPathComponent("notes", isDirectory: true)
+        let origin = sandbox.appendingPathComponent("origin", isDirectory: true)
+        let child = sandbox.appendingPathComponent("worktree", isDirectory: true)
+        try FileManager.default.createDirectory(at: origin, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let childID = ProjectID(rootURL: child)
+        let originID = ProjectID(rootURL: origin)
+        let descriptor = ProjectDescriptor(
+            id: childID,
+            rootURL: child,
+            automaticName: "worktree",
+            displayName: "worktree",
+            parent: originID
+        )
+        let resolver = StubProjectResolver(descriptors: [child.path: descriptor])
+        let git = StubGitInfoProvider(branches: [origin.path: "main", child.path: "feature/notes"])
+        let tabManager = TabManager(gitInfoProvider: git)
+        let tabID = try #require(tabManager.tabs.first?.id)
+        tabManager.updateTab(id: tabID) { tab in
+            tab.workingDirectory = child
+            tab.worktreeRoot = child
+        }
+
+        let provider = InMemoryConfigProvider(content: """
+        [notes]
+        enabled = true
+        storage-dir = "\(storageRoot.path)"
+        format = "markdown"
+        """)
+        let configService = ConfigService(fileProvider: provider)
+        try configService.reload()
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            tabManager: tabManager,
+            configService: configService,
+            gitInfoProvider: git,
+            projectResolver: resolver
+        )
+        let legacyID = NoteWorkspaceID(workspaceRoot: child)
+        let canonicalID = NoteWorkspaceID(workspaceRoot: origin)
+        let seedStore = NoteStore(storageRoot: storageRoot, format: .markdown)
+        let first = try await seedStore.create(in: legacyID, body: "# Worktree note")
+        _ = try await seedStore.create(in: legacyID, body: "# Another note")
+
+        let summaries = await controller.fetchAuroraNotesSummaries(for: [canonicalID.rawValue])
+        let viewModel = controller.resolveNotesViewModel(config: configService.current.notes)
+        await controller.loadNotesForVisibleTab(using: viewModel)
+        controller.isNotesVisible = true
+        controller.openNote(workspaceIDRaw: canonicalID.rawValue, noteIDRaw: first.id.uuidString)
+
+        #expect(summaries[canonicalID.rawValue]?.count == 2)
+        #expect(controller.tabForNotesWorkspace(rawID: canonicalID.rawValue)?.id == tabID)
+        #expect(viewModel.workspace?.workspaceID == canonicalID)
+        #expect(viewModel.notes.count == 2)
+        #expect(viewModel.selectedNote?.id == first.id)
+        #expect(try await seedStore.notes(in: legacyID).isEmpty)
     }
 
     @Test("workspace rename migrates every open worktree alias to the folded identity")

@@ -166,7 +166,15 @@ extension MainWindowController {
     }
 
     func loadNotesForVisibleTab(using viewModel: NotesViewModel) async {
-        guard let directory = currentNotesWorkingDirectory() else { return }
+        guard let tabID = visibleTabID ?? tabManager.activeTabID,
+              let tab = tabManager.tab(for: tabID) else { return }
+        let directory = notesGroupingRoot(for: tab)
+        let config = configService?.current.notes ?? .defaults
+        let store = NoteStore(
+            storageRoot: Self.expandedNotesStorageURL(config.storageDir),
+            format: config.format
+        )
+        await migrateLegacyNotes(for: [tab], using: store)
         await viewModel.load(directory: directory)
     }
 
@@ -259,6 +267,11 @@ extension MainWindowController {
 
         let storageRoot = Self.expandedNotesStorageURL(config.storageDir)
         let store = NoteStore(storageRoot: storageRoot, format: config.format)
+        let relevantTabs = tabManager.tabs.filter { tab in
+            let canonicalID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
+            return workspaceIDs.contains(canonicalID.rawValue)
+        }
+        await migrateLegacyNotes(for: relevantTabs, using: store)
         let typedIDs = workspaceIDs.map { NoteWorkspaceID(rawValue: $0) }
         let summaries = await store.summaries(for: typedIDs, recentLimit: 5)
 
@@ -294,6 +307,23 @@ extension MainWindowController {
     private func notesGroupingRoot(for tab: Tab) -> URL {
         let directory = tab.worktreeRoot ?? tab.workingDirectory
         return projectResolver.resolveProject(for: directory).groupingRootURL
+    }
+
+    private func migrateLegacyNotes(for tabs: [Tab], using store: NoteStore) async {
+        var migrations: [NoteWorkspaceID: NoteWorkspaceID] = [:]
+        for tab in tabs {
+            let legacyRoot = tab.worktreeRoot ?? tab.workingDirectory
+            let legacyID = NoteWorkspaceID(workspaceRoot: legacyRoot)
+            let canonicalID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
+            guard legacyID != canonicalID else { continue }
+            migrations[legacyID] = canonicalID
+        }
+
+        for (legacyID, canonicalID) in migrations {
+            // A failed move leaves the legacy files in place. A later load
+            // retries, so transient filesystem errors never delete notes.
+            _ = try? await store.migrateNotes(from: legacyID, to: canonicalID)
+        }
     }
 
     /// Opens the per-workspace overlay focused on the supplied note.
