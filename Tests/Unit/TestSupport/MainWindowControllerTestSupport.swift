@@ -20,6 +20,9 @@ extension MainWindowController {
         voiceConsentCoordinator: VoiceConsentCoordinator = VoiceConsentCoordinator(),
         deferContentSetup: Bool = false
     ) {
+        let resolvedGitInfoProvider = gitInfoProvider ?? GitInfoProviderImpl()
+        let resolvedWorktreeService = worktreeService
+            ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
         self.init(
             bridge: bridge,
             configService: configService,
@@ -29,11 +32,11 @@ extension MainWindowController {
                 projectRegistry: projectRegistry,
                 projectConfigWatcherRegistry: ProjectConfigWatcherRegistry(),
                 tabConfigProjectContextStore: TabConfigProjectContextStore(),
-                commandBlockStore: commandBlockStore ?? TerminalBlockStore()
+                commandBlockStore: commandBlockStore ?? TerminalBlockStore(),
+                worktreeService: resolvedWorktreeService
             ),
-            gitInfoProvider: gitInfoProvider,
+            gitInfoProvider: resolvedGitInfoProvider,
             projectResolver: projectResolver,
-            worktreeService: worktreeService,
             terminalEngineFactory: terminalEngineFactory,
             voiceConsentCoordinator: voiceConsentCoordinator,
             deferContentSetup: deferContentSetup

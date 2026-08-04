@@ -125,6 +125,8 @@ struct ProjectConfigWatcherRegistrySwiftTestingTests {
         #expect(second.tabConfigProjectContextStore === stores.contextStore)
         #expect(first.commandBlockStore === stores.blockStore)
         #expect(second.commandBlockStore === stores.blockStore)
+        #expect(first.worktreeService === stores.worktreeService)
+        #expect(second.worktreeService === stores.worktreeService)
     }
 
     @Test("one project file reloads every subscribed window")
@@ -206,6 +208,12 @@ private struct WindowStoreFixture {
     let titleStore = AuroraWorkspaceTitleStore()
     let contextStore = TabConfigProjectContextStore()
     let blockStore = TerminalBlockStore()
+    let gitInfoProvider = GitInfoProviderImpl()
+    let worktreeService: WorktreeService
+
+    init() {
+        worktreeService = WorktreeService(gitInfoProvider: gitInfoProvider)
+    }
 
     func makeController(registry: ProjectConfigWatcherRegistry) -> MainWindowController {
         MainWindowController(
@@ -215,8 +223,10 @@ private struct WindowStoreFixture {
                 projectRegistry: nil,
                 projectConfigWatcherRegistry: registry,
                 tabConfigProjectContextStore: contextStore,
-                commandBlockStore: blockStore
+                commandBlockStore: blockStore,
+                worktreeService: worktreeService
             ),
+            gitInfoProvider: gitInfoProvider,
             deferContentSetup: true
         )
     }

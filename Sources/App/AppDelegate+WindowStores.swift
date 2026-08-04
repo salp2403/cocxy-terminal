@@ -8,7 +8,8 @@ extension AppDelegate {
             projectRegistry: projectRegistry,
             projectConfigWatcherRegistry: projectConfigWatcherRegistry,
             tabConfigProjectContextStore: tabConfigProjectContextStore,
-            commandBlockStore: terminalBlockStore
+            commandBlockStore: terminalBlockStore,
+            worktreeService: sharedWorktreeService
         )
     }
 }

@@ -730,7 +730,6 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         appStores: MainWindowAppStores,
         gitInfoProvider: (any GitInfoProviding)? = nil,
         projectResolver: (any ProjectResolving)? = nil,
-        worktreeService: WorktreeService? = nil,
         terminalEngineFactory: ((TerminalEnginePreference) -> (any TerminalEngine)?)? = nil,
         voiceConsentCoordinator: VoiceConsentCoordinator = VoiceConsentCoordinator(),
         deferContentSetup: Bool = false
@@ -746,8 +745,7 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         self.projectConfigWatcherRegistry = appStores.projectConfigWatcherRegistry
         self.tabConfigProjectContextStore = appStores.tabConfigProjectContextStore
         self.commandBlockStore = appStores.commandBlockStore
-        self.worktreeService = worktreeService
-            ?? WorktreeService(gitInfoProvider: resolvedGitInfoProvider)
+        self.worktreeService = appStores.worktreeService
         self.tabManager = tabManager ?? TabManager(gitInfoProvider: resolvedGitInfoProvider)
         self.auroraWorkspaceTitleStore = appStores.auroraWorkspaceTitleStore
         self.terminalViewModel = TerminalViewModel(engine: bridge)

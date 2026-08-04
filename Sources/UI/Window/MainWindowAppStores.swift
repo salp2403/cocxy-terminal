@@ -8,4 +8,5 @@ struct MainWindowAppStores {
     let projectConfigWatcherRegistry: ProjectConfigWatcherRegistry
     let tabConfigProjectContextStore: TabConfigProjectContextStore
     let commandBlockStore: TerminalBlockStore
+    let worktreeService: WorktreeService
 }

@@ -68,6 +68,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
     }()
 
+    /// Workspace aliases are app-scoped so concurrent windows never persist
+    /// divergent snapshots of the same identity map.
     let auroraWorkspaceTitleStore = AuroraWorkspaceTitleStore()
     let relayAuditLog = RelayAuditLog(writer: DiskAuditLogWriter())
     var mobileMirrorCoordinator: MobileMirrorCoordinator?
@@ -1638,7 +1640,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             appStores: mainWindowAppStores,
             gitInfoProvider: gitInfoProvider,
             projectResolver: projectResolver,
-            worktreeService: sharedWorktreeService,
             terminalEngineFactory: { [weak self] preference in
                 self?.makeInitializedTerminalEngine(preference: preference)
             },
