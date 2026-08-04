@@ -95,8 +95,8 @@ struct WorktreePromotionE2ESwiftTestingTests {
         #expect(FileManager.default.fileExists(atPath: unrelated.path.path))
     }
 
-    @Test("a loser changed after preview invalidates confirmation and is retained")
-    func staleLoserIsRetained() async throws {
+    @Test("a changed loser invalidates its preview and confirmed discard removes it")
+    func confirmedDirtyLoserIsDiscarded() async throws {
         guard let git = CodeReviewGit.resolveGitExecutableURL() else { return }
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("cocxy-promotion-stale-loser-\(UUID().uuidString)", isDirectory: true)
@@ -188,22 +188,14 @@ struct WorktreePromotionE2ESwiftTestingTests {
         )
 
         #expect(!preview.matches(currentComparisons: [freshComparison]))
-        do {
-            _ = try await service.remove(
-                id: loser.id,
-                force: false,
-                originRepoPath: origin,
-                store: store
-            )
-            Issue.record("Expected dirty loser retention")
-        } catch let error as WorktreeServiceError {
-            guard case .uncommittedChanges = error else {
-                Issue.record("Unexpected cleanup error: \(error)")
-                return
-            }
-        }
-        #expect(FileManager.default.fileExists(atPath: loser.path.path))
-        #expect(try await service.list(store: store).contains { $0.id == loser.id })
+        _ = try await service.remove(
+            id: loser.id,
+            force: true,
+            originRepoPath: origin,
+            store: store
+        )
+        #expect(!FileManager.default.fileExists(atPath: loser.path.path))
+        #expect(try await service.list(store: store).contains { $0.id == loser.id } == false)
     }
 
     private func makeRun(

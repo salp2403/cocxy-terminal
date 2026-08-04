@@ -314,15 +314,19 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
             run = outcome.run
             mode = .comparison
             promotionPreview = nil
-            successMessage = outcome.cleanupFailures.isEmpty
-                ? localizer.string(
+            if outcome.cleanupFailures.isEmpty {
+                successMessage = localizer.string(
                     "projectHome.fanOut.candidatePromoted",
                     fallback: "Candidate promoted."
                 )
-                : localizer.string(
+            } else {
+                let heading = localizer.string(
                     "projectHome.fanOut.candidatePromotedWithWarnings",
                     fallback: "Candidate promoted with cleanup warnings."
                 )
+                successMessage = ([heading] + outcome.cleanupFailures.map { "- \($0)" })
+                    .joined(separator: "\n")
+            }
             isBusy = false
             await loadComparison(runID: outcome.run.id, ownsBusyState: false)
         } catch {

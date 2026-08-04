@@ -278,7 +278,10 @@ extension AppDelegate {
                     failures.append("\(winner.worktree.id): retained by cleanup plan")
                 }
             } catch {
-                failures.append("\(winner.worktree.id): \(error)")
+                failures.append(taskRunCleanupFailure(
+                    worktreeID: winner.worktree.id,
+                    error: error
+                ))
             }
         } else if let winner = preview.cleanupEntries.first(where: {
             $0.disposition == .retainWinner
@@ -291,15 +294,41 @@ extension AppDelegate {
             do {
                 _ = try await service.remove(
                     id: entry.worktree.id,
-                    force: false,
+                    force: true,
                     originRepoPath: preview.run.originRepoPath,
                     store: store
                 )
             } catch {
-                failures.append("\(entry.worktree.id): \(error)")
+                failures.append(taskRunCleanupFailure(
+                    worktreeID: entry.worktree.id,
+                    error: error
+                ))
             }
         }
         return failures
+    }
+
+    nonisolated private func taskRunCleanupFailure(
+        worktreeID: String,
+        error: Error
+    ) -> String {
+        let reason: String
+        if let serviceError = error as? WorktreeServiceError {
+            switch serviceError {
+            case .gitCommandFailed(_, _, let exitCode):
+                reason = "git cleanup exited \(exitCode)"
+            case .manifestError:
+                reason = "worktree metadata could not be updated"
+            default:
+                reason = Self.describe(serviceError)
+            }
+        } else {
+            reason = String(describing: error)
+        }
+        let singleLine = reason.components(separatedBy: .newlines)
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return "\(worktreeID): \(singleLine.prefix(512))"
     }
 
     nonisolated private func recoverFailedTaskRunPromotion(

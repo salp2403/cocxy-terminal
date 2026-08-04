@@ -90,6 +90,26 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         #expect(!model.isBusy)
     }
 
+    @Test("promotion reports each worktree cleanup failure and its cause")
+    func promotionReportsCleanupFailureDetails() async throws {
+        let harness = try Harness()
+        harness.cleanupFailures = [
+            "loser-a: git cleanup exited 3",
+            "loser-b: worktree metadata could not be updated",
+        ]
+        let model = harness.makeModel()
+        await model.showComparison(runID: harness.run.id)
+        model.selectedCandidateID = harness.run.candidates[0].id
+        await model.preparePromotion()
+
+        await model.confirmPromotion()
+
+        #expect(model.successMessage?.contains("loser-a: git cleanup exited 3") == true)
+        #expect(model.successMessage?.contains(
+            "loser-b: worktree metadata could not be updated"
+        ) == true)
+    }
+
     @Test("discarded candidate opens a prefilled launch without copy paste")
     func discardedCandidateRecycles() async throws {
         let harness = try Harness(completed: true)
@@ -174,6 +194,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         var executedPreviews: [TaskRunPromotionPreview] = []
         var prepareCallCount = 0
         var executionError: TaskRunExecutionError?
+        var cleanupFailures: [String] = []
 
         init(completed: Bool = false) throws {
             var run = TaskRun(
@@ -285,7 +306,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                                 mergedCommit: "merged",
                                 createdCandidateCommit: true
                             ),
-                            cleanupFailures: []
+                            cleanupFailures: cleanupFailures
                         )
                     },
                     recycle: { [self] _, _ in recycleDraft }

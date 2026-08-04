@@ -484,7 +484,8 @@ struct ProjectFanOutFlowView: View {
             Label(success, systemImage: "checkmark.circle.fill")
                 .font(.system(size: 10.5))
                 .foregroundStyle(Color(nsColor: .systemGreen))
-                .lineLimit(2)
+                .lineLimit(10)
+                .textSelection(.enabled)
         }
     }
 
