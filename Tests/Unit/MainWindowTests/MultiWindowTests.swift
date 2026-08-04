@@ -55,6 +55,8 @@ final class MultiWindowTests: XCTestCase {
         XCTAssertTrue(handled, "Router must report success for a tab owned by another window")
         XCTAssertEqual(windowB.tabManager.activeTabID, firstWindowBTab,
                        "Router must activate the target tab in its owning window")
+        XCTAssertEqual(windowB.visibleTabID, firstWindowBTab,
+                       "Router must commit the owning window's visible tab synchronously")
         XCTAssertEqual(windowA.tabManager.activeTabID, windowA.tabManager.tabs.first?.id,
                        "Routing to window B must not disturb window A")
         XCTAssertNotEqual(windowB.tabManager.activeTabID, secondWindowBTab,

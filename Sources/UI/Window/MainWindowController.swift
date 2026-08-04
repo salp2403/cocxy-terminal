@@ -2349,9 +2349,8 @@ final class MainWindowController: NSWindowController, NSWindowDelegate, NSSplitV
         guard tabManager.tab(for: id) != nil else { return false }
         if tabManager.activeTabID != id {
             tabManager.setActive(id: id)
-        } else {
-            handleTabSwitch(to: id)
         }
+        handleTabSwitch(to: id)
         return true
     }
 

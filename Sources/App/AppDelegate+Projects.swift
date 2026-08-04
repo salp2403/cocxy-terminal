@@ -108,7 +108,7 @@ extension AppDelegate {
                 if let windowTabRouter {
                     windowTabRouter.activateTab(id: tab.id)
                 } else {
-                    controller.tabManager.setActive(id: tab.id)
+                    _ = controller.focusTab(id: tab.id)
                     controller.window?.makeKeyAndOrderFront(nil)
                 }
                 return tab.id

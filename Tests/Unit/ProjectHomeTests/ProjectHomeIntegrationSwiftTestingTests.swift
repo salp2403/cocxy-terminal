@@ -85,6 +85,33 @@ struct ProjectHomeIntegrationSwiftTestingTests {
         #expect(homes.first?.filePath?.standardizedFileURL == root.standardizedFileURL)
     }
 
+    @Test("cross-tab open targets the requested project tab synchronously")
+    func crossTabOpenUsesRequestedTab() throws {
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("cocxy-project-home-tabs-\(UUID().uuidString)", isDirectory: true)
+        let firstRoot = base.appendingPathComponent("first", isDirectory: true)
+        let secondRoot = base.appendingPathComponent("second", isDirectory: true)
+        try FileManager.default.createDirectory(at: firstRoot, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: secondRoot, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: base) }
+
+        let resolver = CachedProjectResolver()
+        let controller = MainWindowController(bridge: MockTerminalEngine(), projectResolver: resolver)
+        controller.injectedTaskInboxStore = TaskInboxStore(projectResolver: resolver)
+        controller.injectedProjectFanOutCoordinator = ProjectFanOutCoordinator()
+        let firstTabID = try #require(controller.tabManager.activeTabID)
+        controller.tabManager.updateTab(id: firstTabID) { $0.workingDirectory = firstRoot }
+        let secondTabID = controller.createTab(workingDirectory: secondRoot)
+
+        #expect(controller.visibleTabID == secondTabID)
+        #expect(controller.openProjectHome(projectRoot: firstRoot, in: firstTabID))
+        #expect(controller.visibleTabID == firstTabID)
+        let firstPanels = controller.tabSplitCoordinator.splitManager(for: firstTabID).panelTypes.values
+        let secondPanels = controller.tabSplitCoordinator.splitManager(for: secondTabID).panelTypes.values
+        #expect(firstPanels.filter { $0.type == .projectHome }.count == 1)
+        #expect(secondPanels.allSatisfy { $0.type != .projectHome })
+    }
+
     @Test("restored factory degrades to a real unavailable view")
     func restoredFactoryUnavailableState() {
         let controller = MainWindowController(

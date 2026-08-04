@@ -23,7 +23,7 @@ extension AppDelegate {
                 } else {
                     _ = controller.focusTab(id: tab.id)
                 }
-                guard controller.openProjectHome(projectRoot: canonicalRoot) else {
+                guard controller.openProjectHome(projectRoot: canonicalRoot, in: tab.id) else {
                     throw ProjectActivationError.projectHomeUnavailable
                 }
                 return tab.id
@@ -34,13 +34,13 @@ extension AppDelegate {
         guard let controller = controllerContainingTab(tabID) else {
             throw ProjectActivationError.noWindow
         }
-        if controller.openProjectHome(projectRoot: canonicalRoot) {
+        if controller.openProjectHome(projectRoot: canonicalRoot, in: tabID) {
             return tabID
         }
 
         let dedicatedTabID = controller.createTab(workingDirectory: canonicalRoot)
         _ = controller.focusTab(id: dedicatedTabID)
-        guard controller.openProjectHome(projectRoot: canonicalRoot) else {
+        guard controller.openProjectHome(projectRoot: canonicalRoot, in: dedicatedTabID) else {
             throw ProjectActivationError.projectHomeUnavailable
         }
         return dedicatedTabID

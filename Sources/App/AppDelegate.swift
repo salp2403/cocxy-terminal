@@ -3274,6 +3274,7 @@ final class WindowControllerTabRouter: NotificationTabRouting, DashboardTabNavig
     func activateTab(id: TabID) {
         guard let controller = appDelegate?.controllerContainingTab(id) else { return }
         controller.tabManager.setActive(id: id)
+        controller.handleTabSwitch(to: id)
         NSApp.activate(ignoringOtherApps: true)
         controller.showWindow(nil)
         controller.window?.makeKeyAndOrderFront(nil)

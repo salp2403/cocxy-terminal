@@ -161,8 +161,12 @@ extension MainWindowController {
     }
 
     @discardableResult
-    func openProjectHome(projectRoot: URL) -> Bool {
-        guard let tabID = visibleTabID ?? tabManager.activeTabID else { return false }
+    func openProjectHome(projectRoot: URL, in targetTabID: TabID? = nil) -> Bool {
+        if let targetTabID, visibleTabID != targetTabID {
+            guard focusTab(id: targetTabID) else { return false }
+        }
+        guard let tabID = targetTabID ?? visibleTabID ?? tabManager.activeTabID,
+              visibleTabID == tabID else { return false }
         let splitManager = tabSplitCoordinator.splitManager(for: tabID)
         let canonicalRoot = projectRoot.resolvingSymlinksInPath().standardizedFileURL
         if let contentID = splitManager.panelTypes.first(where: { _, info in

@@ -109,6 +109,22 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(project.branch == "main")
         #expect(project.sessions[0].branch == "feature/search")
         #expect(project.notesWorkspaceID == originID.storageKey)
+
+        let tabManager = TabManager(gitInfoProvider: git)
+        let liveTabID = tabManager.tabs[0].id
+        tabManager.updateTab(id: liveTabID) { liveTab in
+            liveTab.workingDirectory = child
+            liveTab.worktreeRoot = child
+        }
+        let controller = MainWindowController(
+            bridge: MockTerminalEngine(),
+            tabManager: tabManager,
+            gitInfoProvider: git,
+            projectResolver: resolver
+        )
+        #expect(controller.currentNotesWorkingDirectory() == origin.standardizedFileURL)
+        #expect(controller.tabForNotesWorkspace(rawID: originID.storageKey)?.id == liveTabID)
+        #expect(controller.tabForNotesWorkspace(rawID: childID.storageKey) == nil)
     }
 
     @Test("workspace rename migrates every open worktree alias to the folded identity")

@@ -160,7 +160,7 @@ extension MainWindowController {
     func currentNotesWorkingDirectory() -> URL? {
         if let tabID = visibleTabID ?? tabManager.activeTabID,
            let tab = tabManager.tab(for: tabID) {
-            return tab.worktreeRoot ?? tab.workingDirectory
+            return notesGroupingRoot(for: tab)
         }
         return nil
     }
@@ -280,23 +280,20 @@ extension MainWindowController {
         return result
     }
 
-    /// Resolves the tab whose workspace identifier matches `rawID`.
-    /// Walks the live tab list through the same resolver the Notes
-    /// store uses on disk so the lookup follows the user's git-root
-    /// grouping exactly. Returns `nil` when no tab matches (closed
-    /// tab, stale sidebar fetch) so the caller can no-op silently.
+    /// Resolves the tab whose canonical project grouping identifier matches `rawID`.
     func tabForNotesWorkspace(rawID: String) -> Tab? {
-        let resolver = DefaultNoteWorkspaceResolver()
         for tab in tabManager.tabs {
-            let directory = tab.worktreeRoot ?? tab.workingDirectory
-            guard let resolved = resolver.resolveWorkspace(for: directory) else {
-                continue
-            }
-            if resolved.workspaceID.rawValue == rawID {
+            let workspaceID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
+            if workspaceID.rawValue == rawID {
                 return tab
             }
         }
         return nil
+    }
+
+    private func notesGroupingRoot(for tab: Tab) -> URL {
+        let directory = tab.worktreeRoot ?? tab.workingDirectory
+        return projectResolver.resolveProject(for: directory).groupingRootURL
     }
 
     /// Opens the per-workspace overlay focused on the supplied note.
