@@ -24,6 +24,11 @@ struct PrivilegedSocketApprovalTimeoutSwiftTestingTests {
         #expect(runner.socketClient(for: .browserWait(selector: "#ready", timeoutMilliseconds: 90_000)).timeoutSeconds == 98)
         #expect(runner.socketClient(for: .gitAssistantCommitMessage).timeoutSeconds == 130)
         #expect(runner.socketClient(for: .cellList).timeoutSeconds == 365)
+        #expect(runner.socketClient(for: .projectOpen(path: "/tmp/repo")).timeoutSeconds == 70)
+        #expect(runner.socketClient(for: .projectClone(
+            remote: "https://example.com/repo.git",
+            parentDirectory: "/tmp"
+        )).timeoutSeconds == 365)
         #expect(runner.socketClient(for: .status).timeoutSeconds == 5)
         #expect(runner.socketClient(for: .browserInitScriptAdd(script: "1")).timeoutSeconds == 605)
     }
@@ -43,6 +48,8 @@ struct PrivilegedSocketApprovalTimeoutSwiftTestingTests {
         #expect(CommandRunner.requiresPrivilegedSocketApproval("notebook-run"))
         #expect(CommandRunner.requiresPrivilegedSocketApproval("workflow-run"))
         #expect(CommandRunner.requiresPrivilegedSocketApproval("cell-list"))
+        #expect(CommandRunner.requiresPrivilegedSocketApproval("project-open"))
+        #expect(CommandRunner.requiresPrivilegedSocketApproval("project-clone"))
         #expect(CommandRunner.requiresPrivilegedSocketApproval("ssh"))
         #expect(!CommandRunner.requiresPrivilegedSocketApproval("agent-team-list"))
         #expect(!CommandRunner.requiresPrivilegedSocketApproval("status"))
@@ -52,6 +59,8 @@ struct PrivilegedSocketApprovalTimeoutSwiftTestingTests {
             "browser-split",
             "timeline-show",
             "cell-list",
+            "project-open",
+            "project-clone",
             "agent-team-list",
             "status",
         ] {

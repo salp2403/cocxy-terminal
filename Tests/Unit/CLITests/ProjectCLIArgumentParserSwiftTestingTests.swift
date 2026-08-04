@@ -114,6 +114,7 @@ struct ProjectCLIArgumentParserSwiftTestingTests {
         #expect(runner.socketClient(for: .projectClone(
             remote: "https://example.com/repo.git",
             parentDirectory: "/tmp"
-        )).timeoutSeconds == 300)
+        )).timeoutSeconds == CommandRunner.extendedCellSocketTimeoutSeconds
+            + CommandRunner.privilegedSocketApprovalGraceSeconds)
     }
 }
