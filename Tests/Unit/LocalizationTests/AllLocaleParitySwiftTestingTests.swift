@@ -285,7 +285,7 @@ struct AllLocaleParitySwiftTestingTests {
         #expect(english.isRightToLeft == false)
     }
 
-    @Test("language help stays evergreen and mobile transport copy matches SSH")
+    @Test("language help stays evergreen and mobile transport copy matches local-first policy")
     func languageHelpAndMobileTransportRemainSemanticallyCurrent() throws {
         let obsoleteLanguagePairs = [
             "en": "English and Spanish", "es": "Inglés y español",
@@ -300,16 +300,78 @@ struct AllLocaleParitySwiftTestingTests {
             "vi": "tiếng Anh và tiếng Tây Ban Nha", "zh-CN": "英语和西班牙语",
             "zh-TW": "英文和西班牙文",
         ]
+        let obsoleteEncryptionMarkers = [
+            "en": ["encrypted"], "es": ["cifrad"], "ar": ["مشفّر"],
+            "bs": ["šifrovan"], "da": ["krypteret"], "de": ["verschlüsselt"],
+            "fr": ["chiffr"], "it": ["crittograf", "cifrat"], "ja": ["暗号化"],
+            "km": ["អ៊ិនគ្រីប"], "ko": ["암호화"], "no": ["kryptert"],
+            "pl": ["szyfrowan"], "pt-BR": ["criptograf"], "ru": ["зашифрован"],
+            "th": ["เข้ารหัส"], "tr": ["şifreli"], "uk": ["зашифрован"],
+            "vi": ["mã hóa"], "zh-CN": ["加密"], "zh-TW": ["加密"],
+        ]
+        let localRelayMarkers = [
+            "en": "local relay", "es": "relay local", "ar": "المرحّل المحلي",
+            "bs": "lokalni relej", "da": "lokale relæ", "de": "lokalen Vermittlungsdienst",
+            "fr": "relais local", "it": "servizio di inoltro locale", "ja": "ローカルリレー",
+            "km": "រ៉ឺឡេមូលដ្ឋាន", "ko": "로컬 릴레이", "no": "lokale relé",
+            "pl": "lokalnego przekaźnika", "pt-BR": "retransmissor local",
+            "ru": "локальный ретранслятор", "th": "รีเลย์ภายในเครื่อง",
+            "tr": "yerel aktarıcı", "uk": "локальний ретранслятор",
+            "vi": "bộ chuyển tiếp cục bộ", "zh-CN": "本地中继", "zh-TW": "本機轉送",
+        ]
+        let localTransportSummaryKeys = [
+            "mobile.mirror.security",
+            "mobile.mirror.status.active",
+            "mobile.mirror.status.starting",
+            "mobile.mirror.transport.label",
+        ]
         let resources = localizationResourcesURL()
 
         for locale in Self.localeCodes {
             let strings = try localizationStrings(locale: locale, resources: resources)
             let help = try #require(strings["preferences.appearance.language.help"])
             let obsoletePair = try #require(obsoleteLanguagePairs[locale])
+            let encryptionMarkers = try #require(obsoleteEncryptionMarkers[locale])
+            let localRelayMarker = try #require(localRelayMarkers[locale])
+            let localTransportSummary = try localTransportSummaryKeys
+                .map { try #require(strings[$0]) }
+                .joined(separator: " ")
             #expect(!help.localizedCaseInsensitiveContains(obsoletePair))
-            #expect(strings["mobile.mirror.security"]?.contains("SSH") == true)
-            #expect(strings["mobile.mirror.status.active"]?.contains("SSH") == true)
+            #expect(!localTransportSummary.localizedCaseInsensitiveContains("SSH"))
+            for marker in encryptionMarkers {
+                #expect(!localTransportSummary.localizedCaseInsensitiveContains(marker))
+            }
+            for key in [
+                "mobile.mirror.transport.unavailable",
+                "mobile.mirror.transport.detail.unavailable",
+            ] {
+                let unavailableCopy = try #require(strings[key])
+                #expect(unavailableCopy.localizedCaseInsensitiveContains(localRelayMarker))
+            }
         }
+
+        let english = try localizationStrings(locale: "en", resources: resources)
+        #expect(english["mobile.mirror.transport.label"] == "Private Phone Relay")
+        #expect(english["mobile.mirror.status.starting"] == "Opening private phone relay")
+        #expect(english["mobile.mirror.status.active"] == "Connected on the private network")
+        #expect(english["mobile.mirror.security"] == "One-use code · desktop confirmation · 90 seconds")
+        #expect(
+            english["mobile.mirror.transport.unavailable"]
+                == "Connect an SSH profile or use the local relay."
+        )
+        #expect(
+            english["mobile.mirror.transport.detail.unavailable"]
+                == "The selected SSH profile is unavailable. Use another connected profile or the local relay."
+        )
+        #expect(
+            english["mobile.mirror.transport.localDetail"]
+                == "The pairing relay is available only on this private network. Terminal servers stay on loopback and no cloud service is used."
+        )
+        #expect(english["mobile.mirror.transport.sshOptional"] == "Use a connected SSH profile")
+        #expect(
+            english["mobile.mirror.transport.sshDetail"]
+                == "SSH is optional and publishes the pairing endpoint only through the selected connection."
+        )
     }
 
     private func localizationResourcesURL() -> URL {
