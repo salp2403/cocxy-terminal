@@ -1,5 +1,5 @@
 // Copyright (c) 2026 Said Arturo Lopez. MIT License.
-// MainWindowController+NotificationPanel.swift - Notification panel lifecycle.
+// MainWindowController+NotificationLifecycle.swift - Notification panel lifecycle.
 
 import AppKit
 import QuartzCore
