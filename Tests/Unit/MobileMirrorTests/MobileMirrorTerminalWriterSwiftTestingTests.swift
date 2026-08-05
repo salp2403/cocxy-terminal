@@ -8,7 +8,7 @@ import Testing
 @Suite("Mobile mirror privileged terminal writes")
 @MainActor
 struct MobileMirrorTerminalWriterSwiftTestingTests {
-    @Test("one MiB paste reconstructs exactly with deterministic pacing")
+    @Test("one MiB paste reconstructs exactly with production pacing")
     func largePasteUsesSafeAuthorizedDelivery() async throws {
         let tabID = TabID()
         let surfaceID = SurfaceID()
@@ -32,12 +32,6 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
             pairedAt: Date(),
             expiresAt: Date().addingTimeInterval(60)
         )
-        let timing = TerminalPasteDeliveryTiming(
-            standardChunkMaxUTF8Bytes: 64 * 1_024,
-            agentChunkMaxUTF8Bytes: 64 * 1_024,
-            standardDelayNanoseconds: 0,
-            agentDelayNanoseconds: 0
-        )
         let writer = MobileMirrorTerminalWriter(
             grantProvider: { request in
                 capture.requests.append(request)
@@ -49,8 +43,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
                     context: context
                 )
             },
-            targetProvider: { _ in capture.pasteTarget },
-            pasteDeliveryCoordinator: TerminalPasteDeliveryCoordinator(timing: timing)
+            targetProvider: { _ in capture.pasteTarget }
         )
         let payload = String(
             repeating: "p",
@@ -64,7 +57,10 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
             text: payload
         )
 
+        let clock = ContinuousClock()
+        let startedAt = clock.now
         try await writer.write(action: action, to: tabID, surfaceID: surfaceID)
+        let deliveryDuration = startedAt.duration(to: clock.now)
 
         let request = try #require(capture.requests.first)
         #expect(request.params["text"] == nil)
@@ -78,6 +74,7 @@ struct MobileMirrorTerminalWriterSwiftTestingTests {
             return chunk
         }.joined()
         #expect(delivered == payload)
+        #expect(deliveryDuration >= .seconds(10))
         _ = identity
     }
 
