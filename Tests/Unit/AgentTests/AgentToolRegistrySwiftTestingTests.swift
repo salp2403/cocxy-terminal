@@ -65,6 +65,16 @@ struct AgentToolRegistrySwiftTestingTests {
         let typeTextSchema = try #require(registry.descriptor(for: "computer_type_text")?.inputSchema)
         #expect(typeTextSchema.required == ["text"])
         #expect(typeTextSchema.properties["text"]?.type == .string)
+
+        let moveSchema = try #require(registry.descriptor(for: "computer_move_mouse")?.inputSchema)
+        let clickSchema = try #require(registry.descriptor(for: "computer_click")?.inputSchema)
+        let xContract = "Global display X coordinate in points. For screenshot pixels, multiply this value by the screenshot scaleFactor."
+        let yContract = "Global display Y coordinate in points. For screenshot pixels, multiply this value by the screenshot scaleFactor."
+        #expect(moveSchema.properties["x"]?.description == xContract)
+        #expect(moveSchema.properties["y"]?.description == yContract)
+        #expect(clickSchema.properties["x"]?.description == xContract)
+        #expect(clickSchema.properties["y"]?.description == yContract)
+        #expect(registry.descriptor(for: "computer_screenshot")?.description == "Capture the main display to a local PNG. The returned width and height are physical pixels; scaleFactor converts global point coordinates to image pixels.")
     }
 
     @Test("registry rejects duplicate tool identifiers")

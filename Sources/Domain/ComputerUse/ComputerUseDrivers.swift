@@ -118,25 +118,42 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             } catch {
                 throw ComputerUseError.screenshotCaptureFailed
             }
-            return try write(image, scaleFactor: geometry.scaleFactor)
+            return try write(
+                image,
+                pointWidth: Self.displayPointWidth(for: display.displayID)
+            )
         }
     }
 
     static func pixelGeometry(
         for displayID: CGDirectDisplayID
-    ) -> (width: Int, height: Int, scaleFactor: Double) {
+    ) -> (width: Int, height: Int) {
         let mode = CGDisplayCopyDisplayMode(displayID)
-        let width = max(1, mode?.pixelWidth ?? CGDisplayPixelsWide(displayID))
-        let height = max(1, mode?.pixelHeight ?? CGDisplayPixelsHigh(displayID))
-        let pointWidth = max(1, CGDisplayBounds(displayID).width)
         return (
-            width: width,
-            height: height,
-            scaleFactor: max(1, Double(width) / Double(pointWidth))
+            width: physicalPixelDimension(
+                preferred: mode?.pixelWidth,
+                fallback: CGDisplayPixelsWide(displayID)
+            ),
+            height: physicalPixelDimension(
+                preferred: mode?.pixelHeight,
+                fallback: CGDisplayPixelsHigh(displayID)
+            )
         )
     }
 
-    func write(_ image: CGImage, scaleFactor: Double = 1) throws -> ComputerUseScreenshot {
+    static func physicalPixelDimension(preferred: Int?, fallback: Int) -> Int {
+        guard let preferred, preferred > 0 else { return max(1, fallback) }
+        return preferred
+    }
+
+    static func scale(pixelWidth: Int, pointWidth: Double) -> Double {
+        guard pixelWidth > 0, pointWidth.isFinite, pointWidth > 0 else { return 1 }
+        let value = Double(pixelWidth) / pointWidth
+        guard value.isFinite else { return 1 }
+        return max(1, value)
+    }
+
+    func write(_ image: CGImage, pointWidth: Double) throws -> ComputerUseScreenshot {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileURL = directory.appendingPathComponent("screenshot-\(Self.fileTimestamp())-\(UUID().uuidString).png")
         guard let destination = CGImageDestinationCreateWithURL(
@@ -155,13 +172,20 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             fileURL: fileURL,
             width: image.width,
             height: image.height,
-            scaleFactor: scaleFactor
+            scaleFactor: Self.scale(
+                pixelWidth: image.width,
+                pointWidth: pointWidth
+            )
         )
     }
 
     static func defaultDirectory() -> URL {
         FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".config/cocxy/agent/computer-use-screenshots", isDirectory: true)
+    }
+
+    private static func displayPointWidth(for displayID: CGDirectDisplayID) -> Double {
+        max(1, Double(CGDisplayBounds(displayID).width))
     }
 
     private static func fileTimestamp() -> String {

@@ -28,7 +28,7 @@ struct ComputerUseScreenshot: Sendable, Equatable {
     let height: Int
     let scaleFactor: Double
 
-    init(fileURL: URL, width: Int, height: Int, scaleFactor: Double = 1) {
+    init(fileURL: URL, width: Int, height: Int, scaleFactor: Double) {
         self.fileURL = fileURL
         self.width = width
         self.height = height
