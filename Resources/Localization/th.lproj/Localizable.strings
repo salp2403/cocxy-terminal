@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "สาขาของโครงการเปลี่ยนหลังจากเริ่มงานแบบขนาน โปรดรีเฟรชหรือเริ่มงานใหม่";
 "projectHome.fanOut.error.manifestUnavailable" = "ไม่สามารถอัปเดตทะเบียนเวิร์กทรีได้อย่างปลอดภัย";
 "projectHome.fanOut.error.unknown" = "ไม่สามารถทำงานแบบขนานให้เสร็จได้ หมวดหมู่ทางเทคนิค: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "ไม่สามารถยกเลิกงานนี้ในสถานะปัจจุบันได้";
+"projectHome.fanOut.error.removalUnavailable" = "ไม่สามารถนำงานนี้ออกในสถานะปัจจุบันได้";
+"projectHome.fanOut.error.persistenceFailed" = "งานเปลี่ยนแปลงในหน่วยความจำ แต่ไม่สามารถบันทึกสถานะล่าสุดได้";
+"taskRun.persistence.restoreFailed" = "ไม่สามารถกู้คืนการทำงานของงานที่บันทึกไว้ได้";
+"taskRun.persistence.invalidSnapshots" = "ละเว้นสแนปช็อตการทำงานของงานที่ไม่ถูกต้อง %d รายการ";
+"taskRun.persistence.retentionFailed" = "ไม่สามารถล้างสแนปช็อตการทำงานของงานเก่า %d รายการได้";
+"taskRun.persistence.saveFailed" = "ไม่สามารถบันทึกงาน %@ ได้ การเปลี่ยนแปลงยังคงอยู่ในหน่วยความจำ";

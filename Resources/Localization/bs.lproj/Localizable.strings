@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Grana projekta promijenila se nakon pokretanja paralelnog zadatka. Osvježite ili ponovo pokrenite zadatak.";
 "projectHome.fanOut.error.manifestUnavailable" = "Registar radnih stabala nije se mogao sigurno ažurirati.";
 "projectHome.fanOut.error.unknown" = "Paralelni zadatak nije se mogao dovršiti. Tehnička kategorija: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Ovaj zadatak se ne može otkazati u trenutnom stanju.";
+"projectHome.fanOut.error.removalUnavailable" = "Ovaj zadatak se ne može ukloniti u trenutnom stanju.";
+"projectHome.fanOut.error.persistenceFailed" = "Zadatak je promijenjen u memoriji, ali njegovo najnovije stanje nije moglo biti sačuvano.";
+"taskRun.persistence.restoreFailed" = "Sačuvana izvršavanja zadataka nisu mogla biti vraćena.";
+"taskRun.persistence.invalidSnapshots" = "Zanemareno je %d nevažećih snimaka izvršavanja zadataka.";
+"taskRun.persistence.retentionFailed" = "Nije bilo moguće ukloniti %d starijih snimaka izvršavanja zadataka.";
+"taskRun.persistence.saveFailed" = "Zadatak %@ nije mogao biti sačuvan. Promjene ostaju u memoriji.";

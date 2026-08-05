@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Ветка проекта изменилась после запуска параллельной задачи. Обновите или перезапустите задачу.";
 "projectHome.fanOut.error.manifestUnavailable" = "Не удалось безопасно обновить реестр рабочих деревьев.";
 "projectHome.fanOut.error.unknown" = "Не удалось завершить параллельную задачу. Техническая категория: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Эту задачу нельзя отменить в её текущем состоянии.";
+"projectHome.fanOut.error.removalUnavailable" = "Эту задачу нельзя удалить в её текущем состоянии.";
+"projectHome.fanOut.error.persistenceFailed" = "Задача изменилась в памяти, но её последнее состояние не удалось сохранить.";
+"taskRun.persistence.restoreFailed" = "Не удалось восстановить сохранённые запуски задач.";
+"taskRun.persistence.invalidSnapshots" = "Пропущено недопустимых снимков запусков задач: %d.";
+"taskRun.persistence.retentionFailed" = "Не удалось удалить старые снимки запусков задач: %d.";
+"taskRun.persistence.saveFailed" = "Не удалось сохранить задачу %@. Изменения остаются в памяти.";

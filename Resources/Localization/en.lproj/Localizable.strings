@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "The project branch changed after the parallel task started. Refresh or restart the task.";
 "projectHome.fanOut.error.manifestUnavailable" = "The worktree registry could not be updated safely.";
 "projectHome.fanOut.error.unknown" = "The parallel task could not be completed. Technical category: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "This task cannot be cancelled in its current state.";
+"projectHome.fanOut.error.removalUnavailable" = "This task cannot be removed in its current state.";
+"projectHome.fanOut.error.persistenceFailed" = "The task changed in memory, but its latest state could not be saved.";
+"taskRun.persistence.restoreFailed" = "Saved task runs could not be restored.";
+"taskRun.persistence.invalidSnapshots" = "Ignored %d invalid task run snapshot(s).";
+"taskRun.persistence.retentionFailed" = "Could not prune %d older task run snapshot(s).";
+"taskRun.persistence.saveFailed" = "Task %@ could not be saved. Changes remain in memory.";

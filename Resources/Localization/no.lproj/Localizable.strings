@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Prosjektgrenen ble endret etter at den parallelle oppgaven startet. Oppdater eller start oppgaven på nytt.";
 "projectHome.fanOut.error.manifestUnavailable" = "Arbeidstreregisteret kunne ikke oppdateres sikkert.";
 "projectHome.fanOut.error.unknown" = "Den parallelle oppgaven kunne ikke fullføres. Teknisk kategori: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Denne oppgaven kan ikke avbrytes i sin nåværende tilstand.";
+"projectHome.fanOut.error.removalUnavailable" = "Denne oppgaven kan ikke fjernes i sin nåværende tilstand.";
+"projectHome.fanOut.error.persistenceFailed" = "Oppgaven ble endret i minnet, men den nyeste tilstanden kunne ikke lagres.";
+"taskRun.persistence.restoreFailed" = "Lagrede oppgavekjøringer kunne ikke gjenopprettes.";
+"taskRun.persistence.invalidSnapshots" = "%d ugyldige øyeblikksbilder av oppgavekjøringer ble ignorert.";
+"taskRun.persistence.retentionFailed" = "%d eldre øyeblikksbilder av oppgavekjøringer kunne ikke fjernes.";
+"taskRun.persistence.saveFailed" = "Oppgaven %@ kunne ikke lagres. Endringene forblir i minnet.";

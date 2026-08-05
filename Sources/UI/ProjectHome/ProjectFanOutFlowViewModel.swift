@@ -510,9 +510,6 @@ final class ProjectFanOutFlowViewModel: ObservableObject {
     }
 
     private func message(for error: Error) -> String {
-        if let lifecycleError = error as? TaskRunLifecycleError {
-            return lifecycleError.description
-        }
         return localizer.projectErrorMessage(for: error, context: .fanOut)
     }
 }

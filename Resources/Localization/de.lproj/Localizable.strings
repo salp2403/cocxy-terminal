@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Der Projekt-Branch wurde nach dem Start der parallelen Aufgabe geändert. Aktualisiere oder starte die Aufgabe neu.";
 "projectHome.fanOut.error.manifestUnavailable" = "Die Worktree-Registrierung konnte nicht sicher aktualisiert werden.";
 "projectHome.fanOut.error.unknown" = "Die parallele Aufgabe konnte nicht abgeschlossen werden. Technische Kategorie: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Diese Aufgabe kann in ihrem aktuellen Zustand nicht abgebrochen werden.";
+"projectHome.fanOut.error.removalUnavailable" = "Diese Aufgabe kann in ihrem aktuellen Zustand nicht entfernt werden.";
+"projectHome.fanOut.error.persistenceFailed" = "Die Aufgabe wurde im Arbeitsspeicher geändert, ihr neuester Zustand konnte jedoch nicht gespeichert werden.";
+"taskRun.persistence.restoreFailed" = "Gespeicherte Aufgabenausführungen konnten nicht wiederhergestellt werden.";
+"taskRun.persistence.invalidSnapshots" = "%d ungültige Schnappschüsse von Aufgabenausführungen wurden ignoriert.";
+"taskRun.persistence.retentionFailed" = "%d ältere Schnappschüsse von Aufgabenausführungen konnten nicht bereinigt werden.";
+"taskRun.persistence.saveFailed" = "Aufgabe %@ konnte nicht gespeichert werden. Die Änderungen bleiben im Arbeitsspeicher.";

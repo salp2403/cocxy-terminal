@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "La branche du projet a changé après le démarrage de la tâche parallèle. Actualisez ou redémarrez la tâche.";
 "projectHome.fanOut.error.manifestUnavailable" = "Le registre des arbres de travail n’a pas pu être mis à jour de manière sûre.";
 "projectHome.fanOut.error.unknown" = "La tâche parallèle n’a pas pu être terminée. Catégorie technique : %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Cette tâche ne peut pas être annulée dans son état actuel.";
+"projectHome.fanOut.error.removalUnavailable" = "Cette tâche ne peut pas être supprimée dans son état actuel.";
+"projectHome.fanOut.error.persistenceFailed" = "La tâche a changé en mémoire, mais son état le plus récent n’a pas pu être enregistré.";
+"taskRun.persistence.restoreFailed" = "Les exécutions de tâches enregistrées n’ont pas pu être restaurées.";
+"taskRun.persistence.invalidSnapshots" = "%d instantanés non valides d’exécutions de tâches ont été ignorés.";
+"taskRun.persistence.retentionFailed" = "%d anciens instantanés d’exécutions de tâches n’ont pas pu être supprimés.";
+"taskRun.persistence.saveFailed" = "La tâche %@ n’a pas pu être enregistrée. Les modifications restent en mémoire.";

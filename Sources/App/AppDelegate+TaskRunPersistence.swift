@@ -44,8 +44,7 @@ extension AppDelegate {
             }.value
             guard !Task.isCancelled, let self else { return }
             if let failure = outcome.failure {
-                let issue =
-                    "Task run restoration failed: \(Self.singleLinePersistenceMessage(failure))"
+                let issue = appLocalizer().taskRunRestoreFailureMessage()
                 taskRunPersistenceIssues[Self.taskRunRestoreIssueKey] = issue
                 taskInboxStore.markFailed(.taskRuns, message: issue)
                 Self.taskRunPersistenceLogger.error(
@@ -130,6 +129,7 @@ extension AppDelegate {
     }
 
     private func installRestoredTaskRuns(_ report: TaskRunRestorationReport) {
+        let localizer = appLocalizer()
         var installedRunIDs: Set<String> = []
         for run in report.runs where activeTaskRuns[run.id] == nil {
             activeTaskRuns[run.id] = run
@@ -151,7 +151,7 @@ extension AppDelegate {
         var restorationIssues: [String] = []
         if !report.rejectedFiles.isEmpty {
             restorationIssues.append(
-                "Ignored \(report.rejectedFiles.count) invalid task run snapshot(s)"
+                localizer.taskRunRejectedSnapshotsMessage(count: report.rejectedFiles.count)
             )
             Self.taskRunPersistenceLogger.warning(
                 "Task run restore ignored \(report.rejectedFiles.count, privacy: .public) invalid snapshot(s)"
@@ -159,7 +159,7 @@ extension AppDelegate {
         }
         if !report.maintenanceFailures.isEmpty {
             restorationIssues.append(
-                "Could not prune \(report.maintenanceFailures.count) older task run snapshot(s)"
+                localizer.taskRunRetentionFailureMessage(count: report.maintenanceFailures.count)
             )
             Self.taskRunPersistenceLogger.error(
                 "Task run retention failed for \(report.maintenanceFailures.count, privacy: .public) snapshot(s)"
@@ -199,9 +199,7 @@ extension AppDelegate {
         case .saved(let runID):
             taskRunPersistenceIssues.removeValue(forKey: runID)
         case .failed(let runID, let message):
-            let safeMessage = Self.singleLinePersistenceMessage(message)
-            taskRunPersistenceIssues[runID] =
-                "Task \(runID) could not be saved. Changes remain in memory. \(safeMessage)"
+            taskRunPersistenceIssues[runID] = appLocalizer().taskRunSaveFailureMessage(runID: runID)
             Self.taskRunPersistenceLogger.error(
                 "Task run \(runID, privacy: .public) save failed: \(message, privacy: .private)"
             )
@@ -218,11 +216,4 @@ extension AppDelegate {
         taskInboxStore.markDegraded(.taskRuns, message: message)
     }
 
-    nonisolated private static func singleLinePersistenceMessage(_ message: String) -> String {
-        String(
-            message.components(separatedBy: .newlines)
-                .joined(separator: " ")
-                .prefix(512)
-        )
-    }
 }

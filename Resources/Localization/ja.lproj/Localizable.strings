@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "並列タスクの開始後にプロジェクトのブランチが変更されました。タスクを更新するか再開してください。";
 "projectHome.fanOut.error.manifestUnavailable" = "ワークツリーの登録情報を安全に更新できませんでした。";
 "projectHome.fanOut.error.unknown" = "並列タスクを完了できませんでした。技術カテゴリ：%@";
+"projectHome.fanOut.error.cancellationUnavailable" = "現在の状態では、このタスクをキャンセルできません。";
+"projectHome.fanOut.error.removalUnavailable" = "現在の状態では、このタスクを削除できません。";
+"projectHome.fanOut.error.persistenceFailed" = "メモリ内のタスクは変更されましたが、最新の状態を保存できませんでした。";
+"taskRun.persistence.restoreFailed" = "保存されたタスク実行を復元できませんでした。";
+"taskRun.persistence.invalidSnapshots" = "無効なタスク実行スナップショット %d 件を無視しました。";
+"taskRun.persistence.retentionFailed" = "古いタスク実行スナップショット %d 件を削除できませんでした。";
+"taskRun.persistence.saveFailed" = "タスク %@ を保存できませんでした。変更はメモリ内に保持されています。";

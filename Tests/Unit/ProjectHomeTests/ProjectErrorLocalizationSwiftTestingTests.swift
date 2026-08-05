@@ -114,6 +114,46 @@ struct ProjectErrorLocalizationSwiftTestingTests {
         #expect(!unknown.contains("secret-domain"))
     }
 
+    @Test("task run lifecycle and persistence failures are localized and redacted")
+    func taskRunFailuresAreLocalizedAndRedacted() throws {
+        let localizer = try spanishLocalizer()
+        let lifecycleMessages = [
+            localizer.projectErrorMessage(
+                for: TaskRunLifecycleError.cancellationUnavailable(status: .completed),
+                context: .fanOut
+            ),
+            localizer.projectErrorMessage(
+                for: TaskRunLifecycleError.removalUnavailable(status: .running),
+                context: .fanOut
+            ),
+            localizer.projectErrorMessage(
+                for: TaskRunLifecycleError.persistenceFailed(
+                    action: "removal",
+                    reason: "/Users/private/project/task-runs/run.json"
+                ),
+                context: .fanOut
+            ),
+        ]
+
+        #expect(lifecycleMessages == [
+            "No se puede cancelar esta tarea en su estado actual.",
+            "No se puede eliminar esta tarea en su estado actual.",
+            "La tarea cambió en memoria, pero no se pudo guardar su estado más reciente.",
+        ])
+        #expect(!lifecycleMessages.joined().contains("completed"))
+        #expect(!lifecycleMessages.joined().contains("running"))
+        #expect(!lifecycleMessages.joined().contains("/Users/private"))
+
+        #expect(localizer.taskRunRestoreFailureMessage()
+            == "No se pudieron restaurar las ejecuciones de tareas guardadas.")
+        #expect(localizer.taskRunRejectedSnapshotsMessage(count: 2)
+            == "Se ignoraron 2 instantáneas no válidas de ejecuciones de tareas.")
+        #expect(localizer.taskRunRetentionFailureMessage(count: 3)
+            == "No se pudieron depurar 3 instantáneas antiguas de ejecuciones de tareas.")
+        #expect(localizer.taskRunSaveFailureMessage(runID: "run-seguro")
+            == "No se pudo guardar la tarea run-seguro. Los cambios permanecen en memoria.")
+    }
+
     @Test("Project Home view model uses a newly selected language")
     func projectHomeViewModelUpdatesLocalizer() async throws {
         let model = ProjectHomePanelViewModel(

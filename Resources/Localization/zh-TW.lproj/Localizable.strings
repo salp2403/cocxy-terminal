@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "平行工作啟動後，專案分支已變更。請重新整理或重新啟動工作。";
 "projectHome.fanOut.error.manifestUnavailable" = "無法安全地更新工作樹登錄。";
 "projectHome.fanOut.error.unknown" = "無法完成平行工作。技術類別：%@";
+"projectHome.fanOut.error.cancellationUnavailable" = "無法在目前狀態下取消此工作。";
+"projectHome.fanOut.error.removalUnavailable" = "無法在目前狀態下移除此工作。";
+"projectHome.fanOut.error.persistenceFailed" = "工作已在記憶體中變更，但無法儲存其最新狀態。";
+"taskRun.persistence.restoreFailed" = "無法還原已儲存的工作執行。";
+"taskRun.persistence.invalidSnapshots" = "已忽略 %d 個無效的工作執行快照。";
+"taskRun.persistence.retentionFailed" = "無法清理 %d 個較舊的工作執行快照。";
+"taskRun.persistence.saveFailed" = "無法儲存工作 %@。變更仍保留在記憶體中。";

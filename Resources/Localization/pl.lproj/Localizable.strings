@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Gałąź projektu zmieniła się po rozpoczęciu zadania równoległego. Odśwież lub uruchom zadanie ponownie.";
 "projectHome.fanOut.error.manifestUnavailable" = "Nie udało się bezpiecznie zaktualizować rejestru drzew roboczych.";
 "projectHome.fanOut.error.unknown" = "Nie udało się ukończyć zadania równoległego. Kategoria techniczna: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Nie można anulować tego zadania w jego obecnym stanie.";
+"projectHome.fanOut.error.removalUnavailable" = "Nie można usunąć tego zadania w jego obecnym stanie.";
+"projectHome.fanOut.error.persistenceFailed" = "Zadanie zmieniło się w pamięci, ale nie udało się zapisać jego najnowszego stanu.";
+"taskRun.persistence.restoreFailed" = "Nie udało się przywrócić zapisanych uruchomień zadań.";
+"taskRun.persistence.invalidSnapshots" = "Zignorowano %d nieprawidłowych migawek uruchomień zadań.";
+"taskRun.persistence.retentionFailed" = "Nie udało się usunąć %d starszych migawek uruchomień zadań.";
+"taskRun.persistence.saveFailed" = "Nie udało się zapisać zadania %@. Zmiany pozostają w pamięci.";

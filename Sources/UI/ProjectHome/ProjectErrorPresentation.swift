@@ -26,6 +26,9 @@ extension AppLocalizer {
         if let activationError = error as? ProjectActivationError {
             return projectActivationErrorMessage(activationError)
         }
+        if let lifecycleError = error as? TaskRunLifecycleError {
+            return taskRunLifecycleErrorMessage(lifecycleError)
+        }
         if let executionError = error as? TaskRunExecutionError,
            executionError == .featureDisabled {
             return string(
@@ -241,6 +244,57 @@ extension AppLocalizer {
                 fallback: "The parallel task was cancelled."
             )
         }
+    }
+
+    private func taskRunLifecycleErrorMessage(_ error: TaskRunLifecycleError) -> String {
+        switch error {
+        case .cancellationUnavailable:
+            return string(
+                "projectHome.fanOut.error.cancellationUnavailable",
+                fallback: "This task cannot be cancelled in its current state."
+            )
+        case .removalUnavailable:
+            return string(
+                "projectHome.fanOut.error.removalUnavailable",
+                fallback: "This task cannot be removed in its current state."
+            )
+        case .persistenceFailed:
+            return string(
+                "projectHome.fanOut.error.persistenceFailed",
+                fallback: "The task changed in memory, but its latest state could not be saved."
+            )
+        }
+    }
+
+    func taskRunRestoreFailureMessage() -> String {
+        string(
+            "taskRun.persistence.restoreFailed",
+            fallback: "Saved task runs could not be restored."
+        )
+    }
+
+    func taskRunRejectedSnapshotsMessage(count: Int) -> String {
+        formattedProjectString(
+            "taskRun.persistence.invalidSnapshots",
+            fallback: "Ignored %d invalid task run snapshot(s).",
+            Int32(clamping: count)
+        )
+    }
+
+    func taskRunRetentionFailureMessage(count: Int) -> String {
+        formattedProjectString(
+            "taskRun.persistence.retentionFailed",
+            fallback: "Could not prune %d older task run snapshot(s).",
+            Int32(clamping: count)
+        )
+    }
+
+    func taskRunSaveFailureMessage(runID: String) -> String {
+        formattedProjectString(
+            "taskRun.persistence.saveFailed",
+            fallback: "Task %@ could not be saved. Changes remain in memory.",
+            runID
+        )
     }
 
     private func worktreeServiceErrorMessage(_ error: WorktreeServiceError) -> String {

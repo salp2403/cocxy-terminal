@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "병렬 작업이 시작된 후 프로젝트 브랜치가 변경되었습니다. 작업을 새로 고치거나 다시 시작하십시오.";
 "projectHome.fanOut.error.manifestUnavailable" = "워크트리 레지스트리를 안전하게 업데이트할 수 없습니다.";
 "projectHome.fanOut.error.unknown" = "병렬 작업을 완료할 수 없습니다. 기술 범주: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "현재 상태에서는 이 작업을 취소할 수 없습니다.";
+"projectHome.fanOut.error.removalUnavailable" = "현재 상태에서는 이 작업을 제거할 수 없습니다.";
+"projectHome.fanOut.error.persistenceFailed" = "메모리의 작업은 변경되었지만 최신 상태를 저장할 수 없습니다.";
+"taskRun.persistence.restoreFailed" = "저장된 작업 실행을 복원할 수 없습니다.";
+"taskRun.persistence.invalidSnapshots" = "잘못된 작업 실행 스냅샷 %d개를 무시했습니다.";
+"taskRun.persistence.retentionFailed" = "이전 작업 실행 스냅샷 %d개를 정리할 수 없습니다.";
+"taskRun.persistence.saveFailed" = "작업 %@을(를) 저장할 수 없습니다. 변경 사항은 메모리에 유지됩니다.";

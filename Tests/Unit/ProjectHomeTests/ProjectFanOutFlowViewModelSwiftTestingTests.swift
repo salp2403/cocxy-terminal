@@ -153,6 +153,24 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         #expect(model.canForgetRun)
     }
 
+    @Test("cancellation persistence failures use localized redacted presentation")
+    func cancellationFailureUsesLocalizedRedactedPresentation() async throws {
+        let harness = try Harness()
+        harness.cancellationError = .persistenceFailed(
+            action: "cancellation",
+            reason: "/Users/private/project/task-runs/run.json"
+        )
+        let model = harness.makeModel(localizer: try spanishLocalizer())
+        await model.showComparison(runID: harness.run.id)
+
+        await model.cancelRun()
+
+        #expect(model.errorMessage
+            == "La tarea cambió en memoria, pero no se pudo guardar su estado más reciente.")
+        #expect(model.errorMessage?.contains("/Users/private") == false)
+        #expect(model.run?.status == .running)
+    }
+
     @Test("finished task run can be forgotten from the comparison surface")
     func finishedRunForgets() async throws {
         let harness = try Harness(completed: true)
@@ -262,6 +280,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         var cancelledRunIDs: [String] = []
         var forgottenRunIDs: [String] = []
         var persistenceIssue: String?
+        var cancellationError: TaskRunLifecycleError?
 
         init(completed: Bool = false) throws {
             var run = TaskRun(
@@ -327,7 +346,8 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
         func makeModel(
             defaultAgents: [String] = ["codex", "claude"],
             defaultBaseRef: String? = "HEAD",
-            availableProviders: [AgentTeamProvider] = [.claudeCode, .codex, .gemini]
+            availableProviders: [AgentTeamProvider] = [.claudeCode, .codex, .gemini],
+            localizer: AppLocalizer = AppLocalizer(languagePreference: .english)
         ) -> ProjectFanOutFlowViewModel {
             ProjectFanOutFlowViewModel(
                 projectID: run.projectID,
@@ -336,6 +356,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                 availableBaseRefs: ["HEAD", "main"],
                 defaultBaseRef: defaultBaseRef,
                 defaultAgentNames: defaultAgents,
+                localizer: localizer,
                 actions: ProjectFanOutActions(
                     launch: { [self] request in
                         launchedRequests.append(request)
@@ -380,6 +401,7 @@ struct ProjectFanOutFlowViewModelSwiftTestingTests {
                     recycle: { [self] _, _ in recycleDraft },
                     cancel: { [self] runID in
                         cancelledRunIDs.append(runID)
+                        if let cancellationError { throw cancellationError }
                         try run.markCancelled()
                         return run
                     },

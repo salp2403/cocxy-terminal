@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Proje dalı paralel görev başladıktan sonra değişti. Görevi yenileyin veya yeniden başlatın.";
 "projectHome.fanOut.error.manifestUnavailable" = "Çalışma ağacı kaydı güvenli şekilde güncellenemedi.";
 "projectHome.fanOut.error.unknown" = "Paralel görev tamamlanamadı. Teknik kategori: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Bu görev mevcut durumunda iptal edilemez.";
+"projectHome.fanOut.error.removalUnavailable" = "Bu görev mevcut durumunda kaldırılamaz.";
+"projectHome.fanOut.error.persistenceFailed" = "Görev bellekte değişti ancak en son durumu kaydedilemedi.";
+"taskRun.persistence.restoreFailed" = "Kaydedilmiş görev çalıştırmaları geri yüklenemedi.";
+"taskRun.persistence.invalidSnapshots" = "%d geçersiz görev çalıştırma anlık görüntüsü yok sayıldı.";
+"taskRun.persistence.retentionFailed" = "%d eski görev çalıştırma anlık görüntüsü temizlenemedi.";
+"taskRun.persistence.saveFailed" = "%@ görevi kaydedilemedi. Değişiklikler bellekte kalır.";

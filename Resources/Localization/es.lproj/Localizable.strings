@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "La rama del proyecto cambió después de iniciar la tarea paralela. Actualiza o reinicia la tarea.";
 "projectHome.fanOut.error.manifestUnavailable" = "No se pudo actualizar de forma segura el registro de worktrees.";
 "projectHome.fanOut.error.unknown" = "No se pudo completar la tarea paralela. Categoría técnica: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "No se puede cancelar esta tarea en su estado actual.";
+"projectHome.fanOut.error.removalUnavailable" = "No se puede eliminar esta tarea en su estado actual.";
+"projectHome.fanOut.error.persistenceFailed" = "La tarea cambió en memoria, pero no se pudo guardar su estado más reciente.";
+"taskRun.persistence.restoreFailed" = "No se pudieron restaurar las ejecuciones de tareas guardadas.";
+"taskRun.persistence.invalidSnapshots" = "Se ignoraron %d instantáneas no válidas de ejecuciones de tareas.";
+"taskRun.persistence.retentionFailed" = "No se pudieron depurar %d instantáneas antiguas de ejecuciones de tareas.";
+"taskRun.persistence.saveFailed" = "No se pudo guardar la tarea %@. Los cambios permanecen en memoria.";

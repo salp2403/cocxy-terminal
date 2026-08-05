@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Il branch del progetto è cambiato dopo l’avvio dell’attività parallela. Aggiorna o riavvia l’attività.";
 "projectHome.fanOut.error.manifestUnavailable" = "Non è stato possibile aggiornare in sicurezza il registro degli alberi di lavoro.";
 "projectHome.fanOut.error.unknown" = "Non è stato possibile completare l’attività parallela. Categoria tecnica: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Questa attività non può essere annullata nello stato attuale.";
+"projectHome.fanOut.error.removalUnavailable" = "Questa attività non può essere rimossa nello stato attuale.";
+"projectHome.fanOut.error.persistenceFailed" = "L’attività è cambiata in memoria, ma non è stato possibile salvarne lo stato più recente.";
+"taskRun.persistence.restoreFailed" = "Non è stato possibile ripristinare le esecuzioni delle attività salvate.";
+"taskRun.persistence.invalidSnapshots" = "Sono state ignorate %d istantanee non valide delle esecuzioni delle attività.";
+"taskRun.persistence.retentionFailed" = "Non è stato possibile eliminare %d istantanee precedenti delle esecuzioni delle attività.";
+"taskRun.persistence.saveFailed" = "Non è stato possibile salvare l’attività %@. Le modifiche restano in memoria.";

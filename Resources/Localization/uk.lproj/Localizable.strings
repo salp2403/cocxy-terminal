@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Гілка проєкту змінилася після запуску паралельного завдання. Оновіть або перезапустіть завдання.";
 "projectHome.fanOut.error.manifestUnavailable" = "Не вдалося безпечно оновити реєстр робочих дерев.";
 "projectHome.fanOut.error.unknown" = "Не вдалося завершити паралельне завдання. Технічна категорія: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Це завдання не можна скасувати в його поточному стані.";
+"projectHome.fanOut.error.removalUnavailable" = "Це завдання не можна видалити в його поточному стані.";
+"projectHome.fanOut.error.persistenceFailed" = "Завдання змінилося в пам’яті, але його останній стан не вдалося зберегти.";
+"taskRun.persistence.restoreFailed" = "Не вдалося відновити збережені запуски завдань.";
+"taskRun.persistence.invalidSnapshots" = "Пропущено недійсних знімків запусків завдань: %d.";
+"taskRun.persistence.retentionFailed" = "Не вдалося видалити старі знімки запусків завдань: %d.";
+"taskRun.persistence.saveFailed" = "Не вдалося зберегти завдання %@. Зміни залишаються в пам’яті.";

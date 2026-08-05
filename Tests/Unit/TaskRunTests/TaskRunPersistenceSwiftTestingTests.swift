@@ -391,9 +391,9 @@ struct TaskRunPersistenceSwiftTestingTests {
         let event = try #require(probe.events.last)
         delegate.handleTaskRunPersistenceEvent(event)
 
-        #expect(delegate.taskRunPersistenceIssue(for: run.id)?.contains(
-            "controlled disk failure"
-        ) == true)
+        let persistenceIssue = try #require(delegate.taskRunPersistenceIssue(for: run.id))
+        #expect(persistenceIssue == "Task visible-failure could not be saved. Changes remain in memory.")
+        #expect(!persistenceIssue.contains("controlled disk failure"))
         guard case .partial(let issues) = delegate.taskInboxStore.snapshot.availability else {
             Issue.record("Expected degraded task inbox state")
             return
@@ -492,7 +492,7 @@ struct TaskRunPersistenceSwiftTestingTests {
         #expect(result.success)
         #expect(result.data["count"] == "1")
         #expect(payload.map { $0["id"] as? String } == ["run-a"])
-        #expect(payload.first?["project"] as? String == projectA.path)
+        #expect(payload.first?["project"] as? String == ProjectPathCanonicalizer.canonicalURL(projectA).path)
     }
 
     @Test("restore keeps five candidates and marks a deleted worktree orphaned")

@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "O branch do projeto mudou depois que a tarefa paralela começou. Atualize ou reinicie a tarefa.";
 "projectHome.fanOut.error.manifestUnavailable" = "O registro das árvores de trabalho não pôde ser atualizado com segurança.";
 "projectHome.fanOut.error.unknown" = "A tarefa paralela não pôde ser concluída. Categoria técnica: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Esta tarefa não pode ser cancelada no estado atual.";
+"projectHome.fanOut.error.removalUnavailable" = "Esta tarefa não pode ser removida no estado atual.";
+"projectHome.fanOut.error.persistenceFailed" = "A tarefa foi alterada na memória, mas não foi possível salvar seu estado mais recente.";
+"taskRun.persistence.restoreFailed" = "Não foi possível restaurar as execuções de tarefas salvas.";
+"taskRun.persistence.invalidSnapshots" = "%d instantâneos inválidos de execuções de tarefas foram ignorados.";
+"taskRun.persistence.retentionFailed" = "Não foi possível remover %d instantâneos antigos de execuções de tarefas.";
+"taskRun.persistence.saveFailed" = "Não foi possível salvar a tarefa %@. As alterações permanecem na memória.";

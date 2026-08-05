@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "សាខាគម្រោងបានផ្លាស់ប្ដូរ បន្ទាប់ពីភារកិច្ចស្របគ្នាបានចាប់ផ្ដើម។ ធ្វើឱ្យភារកិច្ចស្រស់ ឬចាប់ផ្ដើមវាឡើងវិញ។";
 "projectHome.fanOut.error.manifestUnavailable" = "មិនអាចធ្វើបច្ចុប្បន្នភាពបញ្ជី worktree ដោយសុវត្ថិភាពបានទេ។";
 "projectHome.fanOut.error.unknown" = "មិនអាចបញ្ចប់ភារកិច្ចស្របគ្នាបានទេ។ ប្រភេទបច្ចេកទេស៖ %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "មិនអាចបោះបង់ភារកិច្ចនេះក្នុងស្ថានភាពបច្ចុប្បន្នបានទេ។";
+"projectHome.fanOut.error.removalUnavailable" = "មិនអាចលុបភារកិច្ចនេះក្នុងស្ថានភាពបច្ចុប្បន្នបានទេ។";
+"projectHome.fanOut.error.persistenceFailed" = "ភារកិច្ចបានផ្លាស់ប្តូរក្នុងអង្គចងចាំ ប៉ុន្តែមិនអាចរក្សាទុកស្ថានភាពចុងក្រោយបានទេ។";
+"taskRun.persistence.restoreFailed" = "មិនអាចស្ដារការដំណើរការភារកិច្ចដែលបានរក្សាទុកបានទេ។";
+"taskRun.persistence.invalidSnapshots" = "បានរំលងរូបថតស្ថានភាពការដំណើរការភារកិច្ចមិនត្រឹមត្រូវចំនួន %d។";
+"taskRun.persistence.retentionFailed" = "មិនអាចលុបរូបថតស្ថានភាពការដំណើរការភារកិច្ចចាស់ចំនួន %d បានទេ។";
+"taskRun.persistence.saveFailed" = "មិនអាចរក្សាទុកភារកិច្ច %@ បានទេ។ ការផ្លាស់ប្តូរនៅតែមានក្នុងអង្គចងចាំ។";

@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "并行任务启动后，项目分支发生了更改。请刷新或重新启动该任务。";
 "projectHome.fanOut.error.manifestUnavailable" = "无法安全地更新工作树注册表。";
 "projectHome.fanOut.error.unknown" = "无法完成并行任务。技术类别：%@";
+"projectHome.fanOut.error.cancellationUnavailable" = "无法在当前状态下取消此任务。";
+"projectHome.fanOut.error.removalUnavailable" = "无法在当前状态下移除此任务。";
+"projectHome.fanOut.error.persistenceFailed" = "任务已在内存中更改，但无法保存其最新状态。";
+"taskRun.persistence.restoreFailed" = "无法恢复已保存的任务运行。";
+"taskRun.persistence.invalidSnapshots" = "已忽略 %d 个无效的任务运行快照。";
+"taskRun.persistence.retentionFailed" = "无法清理 %d 个较旧的任务运行快照。";
+"taskRun.persistence.saveFailed" = "无法保存任务 %@。更改仍保留在内存中。";

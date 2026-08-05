@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "تغيّر فرع المشروع بعد بدء المهمة المتوازية. حدّث المهمة أو أعد تشغيلها.";
 "projectHome.fanOut.error.manifestUnavailable" = "تعذر تحديث سجل أشجار العمل بأمان.";
 "projectHome.fanOut.error.unknown" = "تعذر إكمال المهمة المتوازية. الفئة التقنية: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "لا يمكن إلغاء هذه المهمة في حالتها الحالية.";
+"projectHome.fanOut.error.removalUnavailable" = "لا يمكن إزالة هذه المهمة في حالتها الحالية.";
+"projectHome.fanOut.error.persistenceFailed" = "تغيرت المهمة في الذاكرة، ولكن تعذر حفظ حالتها الأخيرة.";
+"taskRun.persistence.restoreFailed" = "تعذرت استعادة عمليات تشغيل المهام المحفوظة.";
+"taskRun.persistence.invalidSnapshots" = "تم تجاهل %d من لقطات تشغيل المهام غير الصالحة.";
+"taskRun.persistence.retentionFailed" = "تعذر حذف %d من لقطات تشغيل المهام القديمة.";
+"taskRun.persistence.saveFailed" = "تعذر حفظ المهمة %@. تظل التغييرات في الذاكرة.";

@@ -3655,3 +3655,10 @@
 "projectHome.fanOut.error.baseChanged" = "Nhánh dự án đã thay đổi sau khi tác vụ song song bắt đầu. Hãy làm mới hoặc khởi động lại tác vụ.";
 "projectHome.fanOut.error.manifestUnavailable" = "Không thể cập nhật sổ đăng ký cây làm việc một cách an toàn.";
 "projectHome.fanOut.error.unknown" = "Không thể hoàn tất tác vụ song song. Danh mục kỹ thuật: %@";
+"projectHome.fanOut.error.cancellationUnavailable" = "Không thể hủy tác vụ này ở trạng thái hiện tại.";
+"projectHome.fanOut.error.removalUnavailable" = "Không thể xóa tác vụ này ở trạng thái hiện tại.";
+"projectHome.fanOut.error.persistenceFailed" = "Tác vụ đã thay đổi trong bộ nhớ nhưng không thể lưu trạng thái mới nhất.";
+"taskRun.persistence.restoreFailed" = "Không thể khôi phục các lần chạy tác vụ đã lưu.";
+"taskRun.persistence.invalidSnapshots" = "Đã bỏ qua %d ảnh chụp lần chạy tác vụ không hợp lệ.";
+"taskRun.persistence.retentionFailed" = "Không thể dọn dẹp %d ảnh chụp lần chạy tác vụ cũ.";
+"taskRun.persistence.saveFailed" = "Không thể lưu tác vụ %@. Các thay đổi vẫn còn trong bộ nhớ.";
