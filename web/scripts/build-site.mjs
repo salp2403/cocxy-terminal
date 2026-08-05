@@ -757,7 +757,7 @@ function home(lang = 'en') {
     ${stat('21', es ? 'idiomas' : 'languages')}
     ${stat('0', es ? 'telemetría' : 'telemetry')}
     ${stat('MIT', es ? 'licencia' : 'license')}
-    ${stat('14+', 'macOS')}
+    ${stat('15+', 'macOS')}
   </div>
 </section>
 <section class="section" id="comparison" aria-labelledby="different-title">
@@ -1530,7 +1530,7 @@ function previewComponents() {
     <section class="section"><div class="container">
       <div class="hero-actions"><a class="button button-primary" href="#">Primary</a><a class="button button-secondary" href="#">Secondary</a><button class="theme-toggle" type="button" aria-label="Toggle theme"><span class="theme-toggle__sun">☀</span><span class="theme-toggle__moon">◐</span></button></div>
       <div class="feature-grid">${featurePages.slice(0, 3).map((feature) => featureCard(feature, 'en')).join('')}</div>
-      <div class="stats-grid">${stat('11', 'agents')}${stat('21', 'languages')}${stat('0', 'telemetry')}${stat('MIT', 'license')}${stat('14+', 'macOS')}</div>
+      <div class="stats-grid">${stat('11', 'agents')}${stat('21', 'languages')}${stat('0', 'telemetry')}${stat('MIT', 'license')}${stat('15+', 'macOS')}</div>
       <div class="docs-search"><label for="preview-search">Search</label><input id="preview-search" type="search" data-doc-search placeholder="ssh, agents, plugins"><div data-doc-search-results class="docs-search-results"></div></div>
       <pre class="code-block"><code>cocxy status</code><button class="copy-button" type="button">Copy</button></pre>
     </div></section>

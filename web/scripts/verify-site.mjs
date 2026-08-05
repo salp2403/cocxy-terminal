@@ -232,6 +232,7 @@ const spanishHome = read('es/index.html');
 for (const section of ['hero', 'features', 'demo', 'comparison', 'faq', 'download', 'opensource']) {
   if (!spanishHome.includes(`id="${section}"`)) fail(`Spanish homepage missing #${section}`);
 }
+verifyPublishedMacOSFloor(home, spanishHome);
 
 const featuresHub = read('features.html');
 for (const anchor of [
@@ -450,6 +451,34 @@ function verifyServiceWorker() {
     if (!content.includes(needle)) fail(`service-worker.js missing ${needle}`);
   }
   if (/https?:\/\//i.test(content)) fail('service-worker.js must not hard-code external URLs');
+}
+
+function verifyPublishedMacOSFloor(homeContent, spanishHomeContent) {
+  const packageManifest = fs.readFileSync(path.join(repoRoot, 'Package.swift'), 'utf8');
+  const platformMatch = packageManifest.match(/\.macOS\("(\d+)\.(\d+)"\)/);
+  if (!platformMatch) {
+    fail('Package.swift does not declare a parseable macOS deployment target');
+    return;
+  }
+
+  const minimumVersion = `${platformMatch[1]}.${platformMatch[2]}`;
+  const minimumMajor = platformMatch[1];
+  const expectedVersionBadge = `macOS ${minimumVersion}+`;
+  const expectedStat = `<strong>${minimumMajor}+</strong><span>macOS</span>`;
+  const targets = [
+    ['index.html', homeContent, true],
+    ['es/index.html', spanishHomeContent, true],
+    ['preview/components.html', fs.readFileSync(path.join(webRoot, 'preview/components.html'), 'utf8'), false],
+  ];
+
+  for (const [relative, content, requiresVersionBadge] of targets) {
+    if (!content.includes(expectedStat)) {
+      fail(`${relative} does not match the macOS ${minimumVersion} deployment floor`);
+    }
+    if (requiresVersionBadge && !content.includes(expectedVersionBadge)) {
+      fail(`${relative} lacks the macOS ${minimumVersion} version badge`);
+    }
+  }
 }
 
 function verifyCSSCustomProperties(files) {

@@ -341,7 +341,7 @@ jobs:
               <item>
                 <title>Version ${VERSION}</title>
                 <pubDate>${DATE}</pubDate>
-                <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+                <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
                 <enclosure
                   url="${DMG_URL}"
                   sparkle:version="${VERSION}"
@@ -988,7 +988,7 @@ jobs:
               strategy :github_latest
             end
 
-            depends_on macos: ">= :sonoma"
+            depends_on macos: ">= :sequoia"
 
             app "Cocxy Terminal.app"
 
