@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Par telefon...";
 "mobile.mirror.title" = "Par telefon";
 "mobile.mirror.start" = "Generér parringskode";
-"mobile.mirror.security" = "Engangskode · bekræftelse på computeren · 90 sekunder";
+"mobile.mirror.security" = "Engangskode · krypteret TLS · 90 sekunder";
 "mobile.mirror.securitySSH" = "Engangskode · krypteret SSH · 90 sekunder";
 "mobile.mirror.cancel" = "Annuller parring";
 "mobile.mirror.qr.accessibility" = "Engangskode til telefonparring";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "QR-koden åbnes via den valgte SSH-session. Der oprettes ingen lytter på LAN'et eller eksternt relæ.";
 "mobile.mirror.transport.unavailable" = "Tilslut en SSH-profil, eller brug det lokale relæ.";
 "mobile.mirror.transport.detail.unavailable" = "Den valgte SSH-profil er ikke tilgængelig. Brug en anden tilsluttet profil eller det lokale relæ.";
-"mobile.mirror.transport.localDetail" = "Parringsrelæet er kun tilgængeligt på dette private netværk. Terminalservere forbliver på loopback, og ingen skytjeneste anvendes.";
+"mobile.mirror.transport.localDetail" = "TLS krypterer dette relæ på det private netværk. Terminalservere forbliver på loopback; ingen skytjeneste anvendes.";
+"mobile.mirror.tls.fingerprint" = "SHA-256-certifikatpin";
+"mobile.mirror.tls.verify" = "Sammenlign denne pin med sessionscertifikatet, før du fortsætter.";
 "mobile.mirror.transport.sshOptional" = "Brug en tilsluttet SSH-profil";
 "mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfrit og gør kun parringsslutpunktet tilgængeligt via den valgte forbindelse.";

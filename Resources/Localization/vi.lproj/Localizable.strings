@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Ghép đôi điện thoại...";
 "mobile.mirror.title" = "Ghép đôi điện thoại";
 "mobile.mirror.start" = "Tạo mã ghép đôi";
-"mobile.mirror.security" = "Mã dùng một lần · xác nhận trên máy tính · 90 giây";
+"mobile.mirror.security" = "Mã dùng một lần · TLS được mã hóa · 90 giây";
 "mobile.mirror.securitySSH" = "Mã dùng một lần · SSH được mã hóa · 90 giây";
 "mobile.mirror.cancel" = "Hủy ghép đôi";
 "mobile.mirror.qr.accessibility" = "Mã ghép đôi điện thoại dùng một lần";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "Mã QR được mở qua phiên SSH đã chọn. Không tạo trình lắng nghe trên mạng LAN hoặc bộ chuyển tiếp bên ngoài.";
 "mobile.mirror.transport.unavailable" = "Kết nối hồ sơ SSH hoặc dùng bộ chuyển tiếp cục bộ.";
 "mobile.mirror.transport.detail.unavailable" = "Hồ sơ SSH đã chọn không khả dụng. Hãy dùng hồ sơ khác đã kết nối hoặc bộ chuyển tiếp cục bộ.";
-"mobile.mirror.transport.localDetail" = "Bộ chuyển tiếp ghép đôi chỉ khả dụng trên mạng riêng này. Máy chủ trình dòng lệnh vẫn dùng giao diện loopback và không sử dụng dịch vụ đám mây.";
+"mobile.mirror.transport.localDetail" = "TLS mã hóa bộ chuyển tiếp trên mạng riêng này. Máy chủ trình dòng lệnh vẫn dùng giao diện loopback; không sử dụng dịch vụ đám mây.";
+"mobile.mirror.tls.fingerprint" = "Mã ghim SHA-256 của chứng chỉ";
+"mobile.mirror.tls.verify" = "So sánh mã ghim này với chứng chỉ phiên trước khi tiếp tục.";
 "mobile.mirror.transport.sshOptional" = "Dùng hồ sơ SSH đã kết nối";
 "mobile.mirror.transport.sshLabel" = "Kết nối SSH bảo mật";
 "mobile.mirror.transport.sshDetail" = "SSH là tùy chọn và chỉ công bố điểm cuối ghép đôi qua kết nối đã chọn.";

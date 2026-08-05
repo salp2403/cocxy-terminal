@@ -50,6 +50,10 @@ final class MobileMirrorCoordinator: ObservableObject {
     var projectCreationRootHandle: ProjectDirectoryRoot?
     var projectCreationIsQueued = false
 
+    var localPairingCertificateFingerprint: String? {
+        usesSSHTunnel ? nil : localRelayLease?.certificateFingerprint
+    }
+
     init(
         appDelegate: AppDelegate,
         projectRegistry: ProjectRegistry,
@@ -219,7 +223,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         var openedLease: MobileMirrorLocalRelayLease?
         do {
             let gatewayPort = try gateway.start()
-            let lease = try relayManager.openMobileMirrorRelay(
+            let lease = try await relayManager.openMobileMirrorRelay(
                 gatewayPort: gatewayPort,
                 preambleSecret: preambleSecret,
                 bindAddress: publicAddress
@@ -235,8 +239,11 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
             router.updatePublicPort(lease.port)
             let offer = authority.makeOffer()
-            guard let url = URL(
-                string: "http://\(lease.address):\(lease.port)/pair?token=\(offer.token)"
+            guard let url = MobileMirrorPairingURL.local(
+                address: lease.address,
+                port: lease.port,
+                token: offer.token,
+                certificateFingerprint: lease.certificateFingerprint
             ) else {
                 throw MobileMirrorError.unavailable
             }

@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Upari telefon...";
 "mobile.mirror.title" = "Upari telefon";
 "mobile.mirror.start" = "Generiši kod za uparivanje";
-"mobile.mirror.security" = "Jednokratni kod · potvrda na računaru · 90 sekundi";
+"mobile.mirror.security" = "Jednokratni kod · šifrirani TLS · 90 sekundi";
 "mobile.mirror.securitySSH" = "Jednokratni kod · šifrirani SSH · 90 sekundi";
 "mobile.mirror.cancel" = "Otkaži uparivanje";
 "mobile.mirror.qr.accessibility" = "Jednokratni kod za uparivanje telefona";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "QR kôd se otvara putem odabrane SSH sesije. Ne kreira se osluškivač na LAN mreži niti vanjski relej.";
 "mobile.mirror.transport.unavailable" = "Povežite SSH profil ili koristite lokalni relej.";
 "mobile.mirror.transport.detail.unavailable" = "Odabrani SSH profil nije dostupan. Koristite drugi povezani profil ili lokalni relej.";
-"mobile.mirror.transport.localDetail" = "Relej za uparivanje dostupan je samo na ovoj privatnoj mreži. Terminalski serveri ostaju na loopback interfejsu i ne koristi se nijedna usluga u oblaku.";
+"mobile.mirror.transport.localDetail" = "TLS šifrira ovaj relej na privatnoj mreži. Terminalski serveri ostaju na loopback interfejsu; ne koristi se nijedna usluga u oblaku.";
+"mobile.mirror.tls.fingerprint" = "SHA-256 pin certifikata";
+"mobile.mirror.tls.verify" = "Uporedite ovaj pin s certifikatom sesije prije nego što nastavite.";
 "mobile.mirror.transport.sshOptional" = "Koristi povezani SSH profil";
 "mobile.mirror.transport.sshLabel" = "Sigurna SSH veza";
 "mobile.mirror.transport.sshDetail" = "SSH je opcionalan i objavljuje krajnju tačku za uparivanje samo putem odabrane veze.";

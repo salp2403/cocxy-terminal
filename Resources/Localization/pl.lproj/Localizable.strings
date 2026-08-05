@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Sparuj telefon...";
 "mobile.mirror.title" = "Sparuj telefon";
 "mobile.mirror.start" = "Wygeneruj kod parowania";
-"mobile.mirror.security" = "Kod jednorazowy · potwierdzenie na komputerze · 90 sekund";
+"mobile.mirror.security" = "Kod jednorazowy · szyfrowane TLS · 90 sekund";
 "mobile.mirror.securitySSH" = "Kod jednorazowy · szyfrowane SSH · 90 sekund";
 "mobile.mirror.cancel" = "Anuluj parowanie";
 "mobile.mirror.qr.accessibility" = "Jednorazowy kod parowania telefonu";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "Kod QR otwiera się przez wybraną sesję SSH. Nie jest tworzony nasłuch w sieci LAN ani zewnętrzny przekaźnik.";
 "mobile.mirror.transport.unavailable" = "Połącz profil SSH lub użyj lokalnego przekaźnika.";
 "mobile.mirror.transport.detail.unavailable" = "Wybrany profil SSH jest niedostępny. Użyj innego połączonego profilu lub lokalnego przekaźnika.";
-"mobile.mirror.transport.localDetail" = "Przekaźnik parowania jest dostępny tylko w tej sieci prywatnej. Serwery terminali pozostają na interfejsie loopback i nie jest używana żadna usługa chmurowa.";
+"mobile.mirror.transport.localDetail" = "TLS szyfruje ten przekaźnik w sieci prywatnej. Serwery terminali pozostają na interfejsie loopback; żadna usługa chmurowa nie jest używana.";
+"mobile.mirror.tls.fingerprint" = "Pin SHA-256 certyfikatu";
+"mobile.mirror.tls.verify" = "Przed kontynuowaniem porównaj ten pin z certyfikatem sesji.";
 "mobile.mirror.transport.sshOptional" = "Użyj połączonego profilu SSH";
 "mobile.mirror.transport.sshLabel" = "Bezpieczne połączenie SSH";
 "mobile.mirror.transport.sshDetail" = "Użycie SSH jest opcjonalne, a punkt końcowy parowania jest udostępniany tylko przez wybrane połączenie.";

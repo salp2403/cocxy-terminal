@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Jumeler un téléphone...";
 "mobile.mirror.title" = "Jumeler un téléphone";
 "mobile.mirror.start" = "Générer un code de jumelage";
-"mobile.mirror.security" = "Code à usage unique · confirmation sur l’ordinateur · 90 secondes";
+"mobile.mirror.security" = "Code à usage unique · TLS chiffré · 90 secondes";
 "mobile.mirror.securitySSH" = "Code à usage unique · SSH chiffré · 90 secondes";
 "mobile.mirror.cancel" = "Annuler le jumelage";
 "mobile.mirror.qr.accessibility" = "Code de jumelage du téléphone à usage unique";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "Le code QR s’ouvre via la session SSH sélectionnée. Aucun écouteur sur le réseau local ni relais externe n’est créé.";
 "mobile.mirror.transport.unavailable" = "Connectez un profil SSH ou utilisez le relais local.";
 "mobile.mirror.transport.detail.unavailable" = "Le profil SSH sélectionné est indisponible. Utilisez un autre profil connecté ou le relais local.";
-"mobile.mirror.transport.localDetail" = "Le relais de jumelage est disponible uniquement sur ce réseau privé. Les serveurs de terminal restent sur l’interface de bouclage et aucun service infonuagique n’est utilisé.";
+"mobile.mirror.transport.localDetail" = "TLS chiffre ce relais de réseau privé. Les serveurs de terminal restent sur l’interface de bouclage ; aucun service infonuagique n’est utilisé.";
+"mobile.mirror.tls.fingerprint" = "Empreinte SHA-256 du certificat";
+"mobile.mirror.tls.verify" = "Comparez cette empreinte au certificat de la session avant de continuer.";
 "mobile.mirror.transport.sshOptional" = "Utiliser un profil SSH connecté";
 "mobile.mirror.transport.sshLabel" = "Connexion SSH sécurisée";
 "mobile.mirror.transport.sshDetail" = "SSH est facultatif et ne publie le point de terminaison du jumelage que via la connexion sélectionnée.";

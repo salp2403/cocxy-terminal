@@ -11,13 +11,13 @@ final class MobileMirrorLocalRelayPool {
         gatewayPort: UInt16,
         preambleSecret: String,
         bindAddress: String
-    ) throws -> MobileMirrorLocalRelayLease {
+    ) async throws -> MobileMirrorLocalRelayLease {
         let relay = MobileMirrorLocalRelay(
             gatewayPort: gatewayPort,
             preambleSecret: preambleSecret,
             addressProvider: { bindAddress }
         )
-        let lease = try relay.start()
+        let lease = try await relay.start()
         relays[lease.id] = relay
         return lease
     }
@@ -38,8 +38,8 @@ extension RelayManagerImpl {
         gatewayPort: UInt16,
         preambleSecret: String,
         bindAddress: String
-    ) throws -> MobileMirrorLocalRelayLease {
-        try mobileMirrorRelayPool.open(
+    ) async throws -> MobileMirrorLocalRelayLease {
+        try await mobileMirrorRelayPool.open(
             gatewayPort: gatewayPort,
             preambleSecret: preambleSecret,
             bindAddress: bindAddress

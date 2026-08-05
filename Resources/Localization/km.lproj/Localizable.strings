@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "ផ្គូផ្គងទូរស័ព្ទ...";
 "mobile.mirror.title" = "ផ្គូផ្គងទូរស័ព្ទ";
 "mobile.mirror.start" = "បង្កើតកូដផ្គូផ្គង";
-"mobile.mirror.security" = "កូដប្រើម្តង · ការបញ្ជាក់នៅលើកុំព្យូទ័រ · 90 វិនាទី";
+"mobile.mirror.security" = "កូដប្រើម្តង · TLS ដែលបានអ៊ិនគ្រីប · 90 វិនាទី";
 "mobile.mirror.securitySSH" = "កូដប្រើម្តង · SSH ដែលបានអ៊ិនគ្រីប · 90 វិនាទី";
 "mobile.mirror.cancel" = "បោះបង់ការផ្គូផ្គង";
 "mobile.mirror.qr.accessibility" = "កូដផ្គូផ្គងទូរស័ព្ទប្រើម្តង";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "កូដ QR បើកតាមរយៈសម័យ SSH ដែលបានជ្រើស។ មិនមានការបង្កើតកម្មវិធីស្តាប់លើ LAN ឬកម្មវិធីបញ្ជូនតខាងក្រៅទេ។";
 "mobile.mirror.transport.unavailable" = "ភ្ជាប់ប្រវត្តិរូប SSH ឬប្រើរ៉ឺឡេមូលដ្ឋាន។";
 "mobile.mirror.transport.detail.unavailable" = "ប្រវត្តិរូប SSH ដែលបានជ្រើសមិនអាចប្រើបានទេ។ ប្រើប្រវត្តិរូបផ្សេងដែលបានភ្ជាប់ ឬរ៉ឺឡេមូលដ្ឋាន។";
-"mobile.mirror.transport.localDetail" = "រ៉ឺឡេសម្រាប់ការផ្គូផ្គងអាចប្រើបានតែនៅលើបណ្ដាញឯកជននេះប៉ុណ្ណោះ។ ម៉ាស៊ីនមេស្ថានីយនៅតែប្រើ loopback ហើយមិនប្រើសេវាពពកទេ។";
+"mobile.mirror.transport.localDetail" = "TLS អ៊ិនគ្រីបរ៉ឺឡេនៅលើបណ្ដាញឯកជននេះ។ ម៉ាស៊ីនមេស្ថានីយនៅតែប្រើ loopback ហើយមិនប្រើសេវាពពកទេ។";
+"mobile.mirror.tls.fingerprint" = "PIN វិញ្ញាបនបត្រ SHA-256";
+"mobile.mirror.tls.verify" = "ប្រៀបធៀប PIN នេះជាមួយវិញ្ញាបនបត្រសម័យ មុនពេលបន្ត។";
 "mobile.mirror.transport.sshOptional" = "ប្រើប្រវត្តិរូប SSH ដែលបានភ្ជាប់";
 "mobile.mirror.transport.sshLabel" = "ការតភ្ជាប់ SSH ដែលមានសុវត្ថិភាព";
 "mobile.mirror.transport.sshDetail" = "SSH ជាជម្រើស ហើយបង្ហាញចំណុចបញ្ចប់សម្រាប់ការផ្គូផ្គងតែតាមការតភ្ជាប់ដែលបានជ្រើសប៉ុណ្ណោះ។";

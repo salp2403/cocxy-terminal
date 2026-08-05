@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Створити пару з телефоном...";
 "mobile.mirror.title" = "Створення пари з телефоном";
 "mobile.mirror.start" = "Створити код спарювання";
-"mobile.mirror.security" = "Одноразовий код · підтвердження на комп’ютері · 90 секунд";
+"mobile.mirror.security" = "Одноразовий код · зашифрований TLS · 90 секунд";
 "mobile.mirror.securitySSH" = "Одноразовий код · зашифрований SSH · 90 секунд";
 "mobile.mirror.cancel" = "Скасувати спарювання";
 "mobile.mirror.qr.accessibility" = "Одноразовий код спарювання з телефоном";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "QR-код відкривається через вибраний сеанс SSH. Слухач у локальній мережі та зовнішній ретранслятор не створюються.";
 "mobile.mirror.transport.unavailable" = "Підключіть профіль SSH або використайте локальний ретранслятор.";
 "mobile.mirror.transport.detail.unavailable" = "Вибраний профіль SSH недоступний. Використайте інший підключений профіль або локальний ретранслятор.";
-"mobile.mirror.transport.localDetail" = "Ретранслятор спарювання доступний лише в цій приватній мережі. Сервери терміналів залишаються на інтерфейсі loopback, хмарні служби не використовуються.";
+"mobile.mirror.transport.localDetail" = "TLS шифрує цей ретранслятор у приватній мережі. Сервери терміналів залишаються на інтерфейсі loopback; хмарні служби не використовуються.";
+"mobile.mirror.tls.fingerprint" = "Пін SHA-256 сертифіката";
+"mobile.mirror.tls.verify" = "Перш ніж продовжити, порівняйте цей пін із сертифікатом сеансу.";
 "mobile.mirror.transport.sshOptional" = "Використовувати підключений профіль SSH";
 "mobile.mirror.transport.sshLabel" = "Захищене SSH-з’єднання";
 "mobile.mirror.transport.sshDetail" = "SSH необов’язковий і публікує кінцеву точку спарювання лише через вибране підключення.";

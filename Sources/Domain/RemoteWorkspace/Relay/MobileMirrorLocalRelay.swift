@@ -4,20 +4,22 @@
 import Darwin
 import Dispatch
 import Foundation
+import Network
+import Security
 
 struct MobileMirrorLocalRelayLease: Equatable, Sendable {
     let id: UUID
     let address: String
     let port: UInt16
+    let certificateFingerprint: String
 }
 
 enum MobileMirrorLocalRelayError: Error, Equatable, LocalizedError {
     case noPrivateNetwork
     case invalidGatewayPort
-    case socketCreationFailed(Int32)
-    case bindFailed(Int32)
-    case listenFailed(Int32)
-    case portUnavailable
+    case alreadyStarting
+    case tlsIdentityUnavailable
+    case listenerUnavailable
 
     var errorDescription: String? {
         switch self {
@@ -25,14 +27,12 @@ enum MobileMirrorLocalRelayError: Error, Equatable, LocalizedError {
             return MobileMirrorError.noPrivateNetwork.localizedDescription
         case .invalidGatewayPort:
             return "The local mobile gateway port is invalid."
-        case .socketCreationFailed(let code):
-            return "Could not create the private mobile relay (\(code))."
-        case .bindFailed(let code):
-            return "Could not bind the private mobile relay (\(code))."
-        case .listenFailed(let code):
-            return "Could not start the private mobile relay (\(code))."
-        case .portUnavailable:
-            return "The private mobile relay did not receive a port."
+        case .alreadyStarting:
+            return "The private mobile relay is already starting."
+        case .tlsIdentityUnavailable:
+            return "Could not create encryption for the private mobile relay."
+        case .listenerUnavailable:
+            return "Could not start the private mobile relay."
         }
     }
 }
@@ -163,6 +163,20 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     typealias PeerAddressNormalizer = @Sendable (String) -> String?
 
     static let idleTimeout: TimeInterval = 45
+    private static let handshakeTimeout: TimeInterval = 8
+
+    private final class StartupGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var claimed = false
+
+        func claim() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !claimed else { return false }
+            claimed = true
+            return true
+        }
+    }
 
     private let id = UUID()
     private let gatewayPort: UInt16
@@ -173,15 +187,12 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
     private let connectionLimits: MobileMirrorConnectionLimits
     private let connectionIdleTimeout: TimeInterval
     private let listenerQueue = DispatchQueue(label: "dev.cocxy.mobile.relay.listener")
-    private let workerQueue = DispatchQueue(
-        label: "dev.cocxy.mobile.relay.connections",
-        qos: .userInitiated,
-        attributes: .concurrent
-    )
     private let lock = NSLock()
-    private var listenerSource: DispatchSourceRead?
+    private var listener: NWListener?
+    private var tlsIdentity: MobileMirrorEphemeralTLSIdentity?
     private var connections: [UUID: MobileMirrorLocalRelayConnection] = [:]
     private var connectionPolicy: MobileMirrorConnectionPolicy
+    private var isStarting = false
     private(set) var lease: MobileMirrorLocalRelayLease?
 
     init(
@@ -207,121 +218,276 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         self.connectionPolicy = MobileMirrorConnectionPolicy(limits: connectionLimits)
     }
 
-    func start() throws -> MobileMirrorLocalRelayLease {
-        lock.lock()
-        defer { lock.unlock() }
-        if let lease { return lease }
-        guard gatewayPort > 0 else { throw MobileMirrorLocalRelayError.invalidGatewayPort }
+    func start() async throws -> MobileMirrorLocalRelayLease {
+        if let existingLease = try beginStart() { return existingLease }
+
+        guard gatewayPort > 0 else {
+            finishFailedStart()
+            throw MobileMirrorLocalRelayError.invalidGatewayPort
+        }
         guard let bindAddress = addressProvider(),
               bindAddressPolicy(bindAddress) else {
+            finishFailedStart()
             throw MobileMirrorLocalRelayError.noPrivateNetwork
         }
 
-        let descriptor = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard descriptor >= 0 else {
-            throw MobileMirrorLocalRelayError.socketCreationFailed(errno)
-        }
-        var ownsDescriptor = true
-        defer { if ownsDescriptor { Darwin.close(descriptor) } }
-        var one: Int32 = 1
-        setsockopt(descriptor, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout.size(ofValue: one)))
-        setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
-        guard fcntl(descriptor, F_SETFD, FD_CLOEXEC) == 0,
-              fcntl(descriptor, F_SETFL, O_NONBLOCK) == 0 else {
-            throw MobileMirrorLocalRelayError.socketCreationFailed(errno)
+        let identity: MobileMirrorEphemeralTLSIdentity
+        do {
+            identity = try MobileMirrorEphemeralTLSIdentity.generate(bindAddress: bindAddress)
+        } catch {
+            finishFailedStart()
+            throw MobileMirrorLocalRelayError.tlsIdentityUnavailable
         }
 
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = 0
-        guard inet_pton(AF_INET, bindAddress, &address.sin_addr) == 1 else {
-            throw MobileMirrorLocalRelayError.noPrivateNetwork
-        }
-        let bindResult = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.bind(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard bindResult == 0 else { throw MobileMirrorLocalRelayError.bindFailed(errno) }
-        guard Darwin.listen(descriptor, Int32(max(1, connectionLimits.maximumTotal))) == 0 else {
-            throw MobileMirrorLocalRelayError.listenFailed(errno)
-        }
-        var bound = sockaddr_in()
-        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
-        let nameResult = withUnsafeMutablePointer(to: &bound) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.getsockname(descriptor, $0, &length)
-            }
-        }
-        guard nameResult == 0, bound.sin_port != 0 else {
-            throw MobileMirrorLocalRelayError.portUnavailable
+        let candidate: NWListener
+        do {
+            candidate = try Self.makeListener(bindAddress: bindAddress, identity: identity)
+        } catch {
+            identity.removeFromKeychain()
+            finishFailedStart()
+            throw MobileMirrorLocalRelayError.listenerUnavailable
         }
 
-        let resolved = MobileMirrorLocalRelayLease(
-            id: id,
-            address: bindAddress,
-            port: UInt16(bigEndian: bound.sin_port)
-        )
-        lease = resolved
-        ownsDescriptor = false
-        let source = DispatchSource.makeReadSource(
-            fileDescriptor: descriptor,
-            queue: listenerQueue
-        )
-        source.setEventHandler { [weak self] in
-            self?.acceptAvailableConnections(from: descriptor)
+        guard install(listener: candidate, identity: identity) else {
+            candidate.cancel()
+            identity.removeFromKeychain()
+            throw CancellationError()
         }
-        source.setCancelHandler { Darwin.close(descriptor) }
-        listenerSource = source
-        source.resume()
-        return resolved
+
+        candidate.newConnectionHandler = { [weak self] connection in
+            self?.handleConnection(connection)
+        }
+
+        let startupGate = StartupGate()
+        do {
+            return try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation {
+                    (continuation: CheckedContinuation<MobileMirrorLocalRelayLease, any Error>) in
+                    candidate.stateUpdateHandler = { [weak self] state in
+                        guard let self else {
+                            guard startupGate.claim() else { return }
+                            continuation.resume(throwing: CancellationError())
+                            return
+                        }
+                        switch state {
+                        case .ready:
+                            guard startupGate.claim() else { return }
+                            guard let port = candidate.port?.rawValue, port > 0,
+                                  let lease = self.finishSuccessfulStart(
+                                    listener: candidate,
+                                    identity: identity,
+                                    bindAddress: bindAddress,
+                                    port: port
+                                  ) else {
+                                self.discard(listener: candidate, identity: identity)
+                                continuation.resume(
+                                    throwing: MobileMirrorLocalRelayError.listenerUnavailable
+                                )
+                                return
+                            }
+                            continuation.resume(returning: lease)
+                        case .failed:
+                            if startupGate.claim() {
+                                self.discard(listener: candidate, identity: identity)
+                                continuation.resume(
+                                    throwing: MobileMirrorLocalRelayError.listenerUnavailable
+                                )
+                            } else {
+                                self.stopIfCurrent(candidate)
+                            }
+                        case .cancelled:
+                            guard startupGate.claim() else { return }
+                            self.discard(listener: candidate, identity: identity)
+                            continuation.resume(throwing: CancellationError())
+                        default:
+                            break
+                        }
+                    }
+                    candidate.start(queue: listenerQueue)
+                }
+            } onCancel: {
+                candidate.cancel()
+            }
+        } catch {
+            discard(listener: candidate, identity: identity)
+            throw error
+        }
     }
 
     func stop() {
-        let source: DispatchSourceRead?
+        let candidate: NWListener?
+        let identity: MobileMirrorEphemeralTLSIdentity?
         let activeConnections: [MobileMirrorLocalRelayConnection]
         lock.lock()
-        source = listenerSource
-        listenerSource = nil
+        candidate = listener
+        listener = nil
+        identity = tlsIdentity
+        tlsIdentity = nil
         lease = nil
+        isStarting = false
         activeConnections = Array(connections.values)
         connections.removeAll()
         connectionPolicy.reset()
         lock.unlock()
-        source?.cancel()
+
+        candidate?.stateUpdateHandler = nil
+        candidate?.newConnectionHandler = nil
+        candidate?.cancel()
         activeConnections.forEach { $0.close() }
+        identity?.removeFromKeychain()
     }
 
-    private func acceptAvailableConnections(from listener: Int32) {
-        while true {
-            var remote = sockaddr_storage()
-            var length = socklen_t(MemoryLayout<sockaddr_storage>.size)
-            let client = withUnsafeMutablePointer(to: &remote) { pointer in
-                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    Darwin.accept(listener, $0, &length)
-                }
-            }
-            if client < 0 {
-                if errno == EINTR { continue }
-                return
-            }
-            guard let numericAddress = Self.numericIPv4(remote),
-                  let remoteAddress = peerAddressNormalizer(numericAddress),
-                  MobileMirrorPrivateNetworkAddress.isPrivateIPv4(remoteAddress),
-                  reserveConnectionSlot(for: remoteAddress) else {
-                Darwin.close(client)
-                continue
-            }
-            Self.configureSocket(client, receiveTimeout: min(15, connectionIdleTimeout))
-            workerQueue.async { [weak self] in
-                guard let self else {
-                    Darwin.close(client)
-                    return
-                }
-                self.openConnection(client: client, remoteAddress: remoteAddress)
-            }
+    private static func makeListener(
+        bindAddress: String,
+        identity: MobileMirrorEphemeralTLSIdentity
+    ) throws -> NWListener {
+        let tlsOptions = NWProtocolTLS.Options()
+        guard let localIdentity = sec_identity_create(identity.identity) else {
+            throw MobileMirrorLocalRelayError.tlsIdentityUnavailable
         }
+        sec_protocol_options_set_local_identity(
+            tlsOptions.securityProtocolOptions,
+            localIdentity
+        )
+        sec_protocol_options_set_min_tls_protocol_version(
+            tlsOptions.securityProtocolOptions,
+            .TLSv13
+        )
+        sec_protocol_options_set_max_tls_protocol_version(
+            tlsOptions.securityProtocolOptions,
+            .TLSv13
+        )
+
+        let tcpOptions = NWProtocolTCP.Options()
+        tcpOptions.enableKeepalive = true
+        tcpOptions.keepaliveIdle = 15
+        tcpOptions.keepaliveInterval = 5
+        tcpOptions.keepaliveCount = 3
+        tcpOptions.connectionTimeout = Int(handshakeTimeout)
+
+        let parameters = NWParameters(tls: tlsOptions, tcp: tcpOptions)
+        parameters.allowLocalEndpointReuse = true
+        parameters.requiredLocalEndpoint = .hostPort(
+            host: NWEndpoint.Host(bindAddress),
+            port: .any
+        )
+        return try NWListener(using: parameters)
+    }
+
+    private func beginStart() throws -> MobileMirrorLocalRelayLease? {
+        lock.lock()
+        defer { lock.unlock() }
+        if let lease { return lease }
+        guard !isStarting else { throw MobileMirrorLocalRelayError.alreadyStarting }
+        isStarting = true
+        return nil
+    }
+
+    private func install(
+        listener candidate: NWListener,
+        identity: MobileMirrorEphemeralTLSIdentity
+    ) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isStarting else { return false }
+        listener = candidate
+        tlsIdentity = identity
+        return true
+    }
+
+    private func finishSuccessfulStart(
+        listener candidate: NWListener,
+        identity: MobileMirrorEphemeralTLSIdentity,
+        bindAddress: String,
+        port: UInt16
+    ) -> MobileMirrorLocalRelayLease? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard listener === candidate, tlsIdentity === identity, isStarting else {
+            return nil
+        }
+        let resolved = MobileMirrorLocalRelayLease(
+            id: id,
+            address: bindAddress,
+            port: port,
+            certificateFingerprint: identity.fingerprint
+        )
+        lease = resolved
+        isStarting = false
+        return resolved
+    }
+
+    private func finishFailedStart() {
+        lock.lock()
+        isStarting = false
+        lock.unlock()
+    }
+
+    private func discard(
+        listener candidate: NWListener,
+        identity: MobileMirrorEphemeralTLSIdentity
+    ) {
+        var shouldRemoveIdentity = false
+        lock.lock()
+        if listener === candidate {
+            listener = nil
+            lease = nil
+            isStarting = false
+        }
+        if tlsIdentity === identity {
+            tlsIdentity = nil
+            shouldRemoveIdentity = true
+        }
+        lock.unlock()
+
+        candidate.stateUpdateHandler = nil
+        candidate.newConnectionHandler = nil
+        candidate.cancel()
+        if shouldRemoveIdentity {
+            identity.removeFromKeychain()
+        }
+    }
+
+    private func stopIfCurrent(_ candidate: NWListener) {
+        lock.lock()
+        let isCurrent = listener === candidate
+        lock.unlock()
+        if isCurrent { stop() }
+    }
+
+    private func handleConnection(_ client: NWConnection) {
+        guard let numericAddress = Self.numericIPv4(client),
+              let remoteAddress = peerAddressNormalizer(numericAddress),
+              MobileMirrorPrivateNetworkAddress.isPrivateIPv4(remoteAddress),
+              reserveConnectionSlot(for: remoteAddress) else {
+            client.cancel()
+            return
+        }
+
+        let connectionID = UUID()
+        let connection = MobileMirrorLocalRelayConnection(
+            client: client,
+            gatewayPort: gatewayPort,
+            remoteAddress: remoteAddress,
+            preamble: MobileMirrorRelayPreamble.encode(
+                secret: preambleSecret,
+                remoteAddress: remoteAddress
+            ),
+            idleTimeout: connectionIdleTimeout,
+            handshakeTimeout: Self.handshakeTimeout,
+            onClose: { [weak self] in self?.removeConnection(connectionID) }
+        )
+
+        lock.lock()
+        guard lease != nil, listener != nil else {
+            connectionPolicy.release(address: remoteAddress)
+            lock.unlock()
+            connection.close()
+            return
+        }
+        connections[connectionID] = connection
+        lock.unlock()
+        connection.start()
     }
 
     private func reserveConnectionSlot(for remoteAddress: String) -> Bool {
@@ -334,221 +500,21 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         ) == .accepted
     }
 
-    private func openConnection(client: Int32, remoteAddress: String) {
-        let connectionID = UUID()
-        let connection: MobileMirrorLocalRelayConnection
-        do {
-            connection = try MobileMirrorLocalRelayConnection(
-                client: client,
-                gatewayPort: gatewayPort,
-                remoteAddress: remoteAddress,
-                preamble: MobileMirrorRelayPreamble.encode(
-                    secret: preambleSecret,
-                    remoteAddress: remoteAddress
-                ),
-                queue: workerQueue,
-                idleTimeout: connectionIdleTimeout,
-                onClose: { [weak self] in self?.removeConnection(connectionID) }
-            )
-        } catch {
-            Darwin.close(client)
-            lock.lock()
-            connectionPolicy.release(address: remoteAddress)
-            lock.unlock()
-            return
-        }
-        lock.lock()
-        guard lease != nil else {
-            connectionPolicy.release(address: remoteAddress)
-            lock.unlock()
-            connection.start()
-            connection.close()
-            return
-        }
-        connections[connectionID] = connection
-        lock.unlock()
-        connection.start()
-    }
-
     private func removeConnection(_ id: UUID) {
         lock.lock()
         let remoteAddress = connections.removeValue(forKey: id)?.remoteAddress
-        if let remoteAddress { connectionPolicy.release(address: remoteAddress) }
-        lock.unlock()
-    }
-
-    fileprivate static func configureSocket(_ descriptor: Int32, receiveTimeout: TimeInterval) {
-        var one: Int32 = 1
-        setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
-        setsockopt(descriptor, SOL_SOCKET, SO_KEEPALIVE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
-        var keepalive: Int32 = 15
-        setsockopt(descriptor, IPPROTO_TCP, TCP_KEEPALIVE, &keepalive, socklen_t(MemoryLayout.size(ofValue: keepalive)))
-        var interval: Int32 = 5
-        setsockopt(descriptor, IPPROTO_TCP, TCP_KEEPINTVL, &interval, socklen_t(MemoryLayout.size(ofValue: interval)))
-        var probes: Int32 = 3
-        setsockopt(descriptor, IPPROTO_TCP, TCP_KEEPCNT, &probes, socklen_t(MemoryLayout.size(ofValue: probes)))
-        let seconds = floor(receiveTimeout)
-        var timeout = timeval(
-            tv_sec: Int(seconds),
-            tv_usec: Int32((receiveTimeout - seconds) * 1_000_000)
-        )
-        setsockopt(descriptor, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
-        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &timeout, socklen_t(MemoryLayout.size(ofValue: timeout)))
-        _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
-        let flags = fcntl(descriptor, F_GETFL)
-        if flags >= 0 { _ = fcntl(descriptor, F_SETFL, flags & ~O_NONBLOCK) }
-    }
-
-    private static func numericIPv4(_ storage: sockaddr_storage) -> String? {
-        guard storage.ss_family == sa_family_t(AF_INET) else { return nil }
-        var copy = storage
-        return withUnsafePointer(to: &copy) { pointer in
-            pointer.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { ipv4 in
-                var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                var address = ipv4.pointee.sin_addr
-                guard inet_ntop(
-                    AF_INET,
-                    &address,
-                    &buffer,
-                    socklen_t(buffer.count)
-                ) != nil else { return nil }
-                return String(cString: buffer)
-            }
-        }
-    }
-}
-
-private final class MobileMirrorLocalRelayConnection: @unchecked Sendable {
-    let remoteAddress: String
-
-    private let client: Int32
-    private let upstream: Int32
-    private let queue: DispatchQueue
-    private let idleTimeout: TimeInterval
-    private let onClose: @Sendable () -> Void
-    private let lock = NSLock()
-    private var completedDirections = 0
-    private var isClosing = false
-    private var didNotifyClose = false
-    private var lastActivity = ProcessInfo.processInfo.systemUptime
-
-    init(
-        client: Int32,
-        gatewayPort: UInt16,
-        remoteAddress: String,
-        preamble: Data,
-        queue: DispatchQueue,
-        idleTimeout: TimeInterval,
-        onClose: @escaping @Sendable () -> Void
-    ) throws {
-        self.client = client
-        self.remoteAddress = remoteAddress
-        self.queue = queue
-        self.idleTimeout = idleTimeout
-        self.onClose = onClose
-        let upstream = Darwin.socket(AF_INET, SOCK_STREAM, 0)
-        guard upstream >= 0 else {
-            throw MobileMirrorLocalRelayError.socketCreationFailed(errno)
-        }
-        self.upstream = upstream
-        MobileMirrorLocalRelay.configureSocket(upstream, receiveTimeout: min(15, idleTimeout))
-        var address = sockaddr_in()
-        address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
-        address.sin_family = sa_family_t(AF_INET)
-        address.sin_port = gatewayPort.bigEndian
-        inet_pton(AF_INET, MobileMirrorGateway.loopbackAddress, &address.sin_addr)
-        let connected = withUnsafePointer(to: &address) { pointer in
-            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                Darwin.connect(upstream, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
-            }
-        }
-        guard connected == 0, Self.sendAll(preamble, to: upstream) else {
-            Darwin.close(upstream)
-            throw MobileMirrorError.unavailable
-        }
-    }
-
-    func start() {
-        queue.async { [self] in pump(from: client, to: upstream) }
-        queue.async { [self] in pump(from: upstream, to: client) }
-    }
-
-    func close() {
-        requestClose()
-    }
-
-    private func pump(from source: Int32, to destination: Int32) {
-        var buffer = [UInt8](repeating: 0, count: 64 * 1_024)
-        while true {
-            let count = Darwin.recv(source, &buffer, buffer.count, 0)
-            if count > 0 {
-                recordActivity()
-                guard Self.sendAll(Data(buffer[0..<count]), to: destination) else {
-                    requestClose()
-                    break
-                }
-                continue
-            }
-            if count < 0, errno == EINTR { continue }
-            if count < 0, (errno == EAGAIN || errno == EWOULDBLOCK), !hasExpired {
-                continue
-            }
-            requestClose()
-            break
-        }
-        finishDirection()
-    }
-
-    private func requestClose() {
-        lock.lock()
-        guard !isClosing else {
-            lock.unlock()
-            return
-        }
-        isClosing = true
-        lock.unlock()
-        Darwin.shutdown(client, SHUT_RDWR)
-        Darwin.shutdown(upstream, SHUT_RDWR)
-    }
-
-    private func recordActivity() {
-        lock.lock()
-        lastActivity = ProcessInfo.processInfo.systemUptime
-        lock.unlock()
-    }
-
-    private var hasExpired: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return ProcessInfo.processInfo.systemUptime - lastActivity >= idleTimeout
-    }
-
-    private func finishDirection() {
-        var shouldClose = false
-        lock.lock()
-        completedDirections += 1
-        if completedDirections == 2, !didNotifyClose {
-            didNotifyClose = true
-            shouldClose = true
+        if let remoteAddress {
+            connectionPolicy.release(address: remoteAddress)
         }
         lock.unlock()
-        guard shouldClose else { return }
-        Darwin.close(client)
-        Darwin.close(upstream)
-        onClose()
     }
 
-    private static func sendAll(_ data: Data, to descriptor: Int32) -> Bool {
-        data.withUnsafeBytes { rawBuffer in
-            guard let base = rawBuffer.baseAddress else { return true }
-            var sent = 0
-            while sent < rawBuffer.count {
-                let result = Darwin.send(descriptor, base.advanced(by: sent), rawBuffer.count - sent, 0)
-                if result < 0, errno == EINTR { continue }
-                guard result > 0 else { return false }
-                sent += result
-            }
-            return true
+    private static func numericIPv4(_ connection: NWConnection) -> String? {
+        let endpoint = connection.currentPath?.remoteEndpoint ?? connection.endpoint
+        guard case .hostPort(let host, _) = endpoint,
+              case .ipv4(let address) = host else {
+            return nil
         }
+        return address.debugDescription
     }
 }

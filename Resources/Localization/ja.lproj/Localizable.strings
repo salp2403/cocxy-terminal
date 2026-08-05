@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "スマートフォンをペアリング...";
 "mobile.mirror.title" = "スマートフォンをペアリング";
 "mobile.mirror.start" = "ペアリングコードを生成";
-"mobile.mirror.security" = "1回限りのコード · デスクトップでの確認 · 90秒";
+"mobile.mirror.security" = "1回限りのコード · 暗号化 TLS · 90秒";
 "mobile.mirror.securitySSH" = "1回限りのコード · 暗号化 SSH · 90秒";
 "mobile.mirror.cancel" = "ペアリングをキャンセル";
 "mobile.mirror.qr.accessibility" = "スマートフォン用の1回限りのペアリングコード";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "QR コードは選択した SSH セッション経由で開きます。LAN リスナーや外部リレーは作成されません。";
 "mobile.mirror.transport.unavailable" = "SSH プロファイルを接続するか、ローカルリレーを使用してください。";
 "mobile.mirror.transport.detail.unavailable" = "選択した SSH プロファイルは利用できません。接続済みの別のプロファイルまたはローカルリレーを使用してください。";
-"mobile.mirror.transport.localDetail" = "ペアリングリレーはこのプライベートネットワーク内でのみ利用できます。ターミナルサーバーはループバック上に留まり、クラウドサービスは使用されません。";
+"mobile.mirror.transport.localDetail" = "TLS がこのプライベートネットワークのリレーを暗号化します。ターミナルサーバーはループバック上に留まり、クラウドサービスは使用されません。";
+"mobile.mirror.tls.fingerprint" = "証明書の SHA-256 ピン";
+"mobile.mirror.tls.verify" = "続行する前に、このピンをセッション証明書と照合してください。";
 "mobile.mirror.transport.sshOptional" = "接続済みの SSH プロファイルを使用";
 "mobile.mirror.transport.sshLabel" = "安全な SSH 接続";
 "mobile.mirror.transport.sshDetail" = "SSH は任意であり、ペアリングエンドポイントは選択した接続を通じてのみ公開されます。";

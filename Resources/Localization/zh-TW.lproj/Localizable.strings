@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "配對手機...";
 "mobile.mirror.title" = "配對手機";
 "mobile.mirror.start" = "產生配對碼";
-"mobile.mirror.security" = "一次性代碼 · 桌面確認 · 90 秒";
+"mobile.mirror.security" = "一次性代碼 · TLS 加密 · 90 秒";
 "mobile.mirror.securitySSH" = "一次性代碼 · 加密 SSH · 90 秒";
 "mobile.mirror.cancel" = "取消配對";
 "mobile.mirror.qr.accessibility" = "一次性手機配對碼";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "QR 碼會透過選取的 SSH 工作階段開啟。不會建立區域網路接聽器或外部轉送服務。";
 "mobile.mirror.transport.unavailable" = "連接 SSH 設定檔，或使用本機轉送。";
 "mobile.mirror.transport.detail.unavailable" = "所選 SSH 設定檔無法使用。請使用其他已連接的設定檔或本機轉送。";
-"mobile.mirror.transport.localDetail" = "配對轉送僅能在此私人網路上使用。終端機伺服器仍繫結至迴路介面，且不使用任何雲端服務。";
+"mobile.mirror.transport.localDetail" = "TLS 會加密此私人網路轉送。終端機伺服器仍繫結至迴路介面；不使用任何雲端服務。";
+"mobile.mirror.tls.fingerprint" = "憑證 SHA-256 釘選值";
+"mobile.mirror.tls.verify" = "繼續之前，請將此釘選值與工作階段憑證進行比較。";
 "mobile.mirror.transport.sshOptional" = "使用已連接的 SSH 設定檔";
 "mobile.mirror.transport.sshLabel" = "安全 SSH 連線";
 "mobile.mirror.transport.sshDetail" = "SSH 為選用方式，且只會透過所選連線發佈配對端點。";

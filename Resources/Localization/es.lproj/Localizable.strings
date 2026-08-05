@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Emparejar teléfono...";
 "mobile.mirror.title" = "Emparejar teléfono";
 "mobile.mirror.start" = "Generar código de emparejamiento";
-"mobile.mirror.security" = "Código de un uso · confirmación en el escritorio · 90 segundos";
+"mobile.mirror.security" = "Código de un uso · TLS cifrado · 90 segundos";
 "mobile.mirror.securitySSH" = "Código de un uso · SSH cifrado · 90 segundos";
 "mobile.mirror.cancel" = "Cancelar emparejamiento";
 "mobile.mirror.qr.accessibility" = "Código de un uso para emparejar el teléfono";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "El QR se abre mediante la sesión SSH seleccionada. No se crea un listener en la LAN ni un relay externo.";
 "mobile.mirror.transport.unavailable" = "Conecta un perfil SSH o usa el relay local.";
 "mobile.mirror.transport.detail.unavailable" = "El perfil SSH seleccionado no está disponible. Usa otro perfil conectado o el relay local.";
-"mobile.mirror.transport.localDetail" = "El relay de emparejamiento solo está disponible en esta red privada. Los servidores de terminal permanecen en loopback y no se usa ningún servicio en la nube.";
+"mobile.mirror.transport.localDetail" = "TLS cifra este relay de red privada. Los servidores de terminal permanecen en loopback; no se usa ningún servicio en la nube.";
+"mobile.mirror.tls.fingerprint" = "Pin SHA-256 del certificado";
+"mobile.mirror.tls.verify" = "Compara este pin con el certificado de la sesión antes de continuar.";
 "mobile.mirror.transport.sshOptional" = "Usar un perfil SSH conectado";
 "mobile.mirror.transport.sshLabel" = "Conexión SSH segura";
 "mobile.mirror.transport.sshDetail" = "SSH es opcional y publica el endpoint de emparejamiento solo mediante la conexión seleccionada.";

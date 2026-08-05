@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Emparelhar Telefone...";
 "mobile.mirror.title" = "Emparelhar Telefone";
 "mobile.mirror.start" = "Gerar Código de Emparelhamento";
-"mobile.mirror.security" = "Código de uso único · confirmação no computador · 90 segundos";
+"mobile.mirror.security" = "Código de uso único · TLS criptografado · 90 segundos";
 "mobile.mirror.securitySSH" = "Código de uso único · SSH criptografado · 90 segundos";
 "mobile.mirror.cancel" = "Cancelar emparelhamento";
 "mobile.mirror.qr.accessibility" = "Código de uso único para emparelhar o telefone";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "O código QR é aberto pela sessão SSH selecionada. Nenhum serviço de escuta na rede local nem retransmissor externo é criado.";
 "mobile.mirror.transport.unavailable" = "Conecte um perfil SSH ou use o retransmissor local.";
 "mobile.mirror.transport.detail.unavailable" = "O perfil SSH selecionado não está disponível. Use outro perfil conectado ou o retransmissor local.";
-"mobile.mirror.transport.localDetail" = "O retransmissor de emparelhamento está disponível apenas nesta rede privada. Os servidores de terminal permanecem em loopback e nenhum serviço de nuvem é usado.";
+"mobile.mirror.transport.localDetail" = "O TLS criptografa este retransmissor de rede privada. Os servidores de terminal permanecem em loopback; nenhum serviço de nuvem é usado.";
+"mobile.mirror.tls.fingerprint" = "Pin SHA-256 do certificado";
+"mobile.mirror.tls.verify" = "Compare este pin com o certificado da sessão antes de continuar.";
 "mobile.mirror.transport.sshOptional" = "Usar um perfil SSH conectado";
 "mobile.mirror.transport.sshLabel" = "Conexão SSH segura";
 "mobile.mirror.transport.sshDetail" = "O SSH é opcional e publica o endpoint de emparelhamento apenas pela conexão selecionada.";

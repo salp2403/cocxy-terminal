@@ -128,7 +128,7 @@ struct MobileMirrorView: View {
                         : "mobile.mirror.security",
                     fallback: coordinator.usesSSHTunnel
                         ? "One-use code - encrypted SSH - 90 seconds"
-                        : "One-use code - desktop confirmation - 90 seconds"
+                        : "One-use code - encrypted TLS - 90 seconds"
                 ))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -162,7 +162,7 @@ struct MobileMirrorView: View {
                     : "mobile.mirror.transport.localDetail",
                 fallback: coordinator.usesSSHTunnel
                     ? "SSH is optional and publishes the pairing endpoint only through the selected connection."
-                    : "The pairing relay is available only on this private network. Terminal servers stay on loopback and no cloud service is used."
+                    : "TLS encrypts this private-network relay. Terminal servers stay on loopback; no cloud service is used."
             ))
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -218,6 +218,26 @@ struct MobileMirrorView: View {
             }
             Text(localizer.string("mobile.mirror.scan", fallback: "Scan with your phone"))
                 .font(.subheadline.weight(.medium))
+            if let fingerprint = coordinator.localPairingCertificateFingerprint {
+                VStack(spacing: 6) {
+                    Text(localizer.string(
+                        "mobile.mirror.tls.fingerprint",
+                        fallback: "SHA-256 certificate pin"
+                    ))
+                    .font(.caption.weight(.semibold))
+                    Text(MobileMirrorPairingURL.displayFingerprint(fingerprint))
+                        .font(.system(.caption2, design: .monospaced))
+                        .textSelection(.enabled)
+                        .multilineTextAlignment(.center)
+                    Text(localizer.string(
+                        "mobile.mirror.tls.verify",
+                        fallback: "Compare this pin with the session certificate before continuing."
+                    ))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(20)

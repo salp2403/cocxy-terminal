@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Telefonu eşle...";
 "mobile.mirror.title" = "Telefonu Eşleştir";
 "mobile.mirror.start" = "Eşleştirme Kodu Oluştur";
-"mobile.mirror.security" = "Tek kullanımlık kod · masaüstü onayı · 90 saniye";
+"mobile.mirror.security" = "Tek kullanımlık kod · şifreli TLS · 90 saniye";
 "mobile.mirror.securitySSH" = "Tek kullanımlık kod · şifreli SSH · 90 saniye";
 "mobile.mirror.cancel" = "Eşleştirmeyi iptal et";
 "mobile.mirror.qr.accessibility" = "Tek kullanımlık telefon eşleştirme kodu";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "QR kodu seçilen SSH oturumu üzerinden açılır. LAN üzerinde dinleyici veya harici aktarıcı oluşturulmaz.";
 "mobile.mirror.transport.unavailable" = "Bir SSH profili bağlayın veya yerel aktarıcıyı kullanın.";
 "mobile.mirror.transport.detail.unavailable" = "Seçilen SSH profili kullanılamıyor. Bağlı başka bir profil veya yerel aktarıcı kullanın.";
-"mobile.mirror.transport.localDetail" = "Eşleştirme aktarıcısı yalnızca bu özel ağda kullanılabilir. Terminal sunucuları geri döngüde kalır ve bulut hizmeti kullanılmaz.";
+"mobile.mirror.transport.localDetail" = "TLS, bu özel ağ aktarıcısını şifreler. Terminal sunucuları geri döngüde kalır; bulut hizmeti kullanılmaz.";
+"mobile.mirror.tls.fingerprint" = "SHA-256 sertifika sabitleme kodu";
+"mobile.mirror.tls.verify" = "Devam etmeden önce bu kodu oturum sertifikasıyla karşılaştırın.";
 "mobile.mirror.transport.sshOptional" = "Bağlı bir SSH profili kullan";
 "mobile.mirror.transport.sshLabel" = "Güvenli SSH Bağlantısı";
 "mobile.mirror.transport.sshDetail" = "SSH isteğe bağlıdır ve eşleştirme uç noktasını yalnızca seçilen bağlantı üzerinden yayınlar.";

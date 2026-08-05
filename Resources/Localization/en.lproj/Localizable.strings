@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Pair Phone...";
 "mobile.mirror.title" = "Pair Phone";
 "mobile.mirror.start" = "Generate Pairing Code";
-"mobile.mirror.security" = "One-use code · desktop confirmation · 90 seconds";
+"mobile.mirror.security" = "One-use code · encrypted TLS · 90 seconds";
 "mobile.mirror.securitySSH" = "One-use code · encrypted SSH · 90 seconds";
 "mobile.mirror.cancel" = "Cancel pairing";
 "mobile.mirror.qr.accessibility" = "One-use phone pairing code";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "The QR opens through the selected SSH session. No LAN listener or external relay is created.";
 "mobile.mirror.transport.unavailable" = "Connect an SSH profile or use the local relay.";
 "mobile.mirror.transport.detail.unavailable" = "The selected SSH profile is unavailable. Use another connected profile or the local relay.";
-"mobile.mirror.transport.localDetail" = "The pairing relay is available only on this private network. Terminal servers stay on loopback and no cloud service is used.";
+"mobile.mirror.transport.localDetail" = "TLS encrypts this private-network relay. Terminal servers stay on loopback; no cloud service is used.";
+"mobile.mirror.tls.fingerprint" = "SHA-256 certificate pin";
+"mobile.mirror.tls.verify" = "Compare this pin with the session certificate before continuing.";
 "mobile.mirror.transport.sshOptional" = "Use a connected SSH profile";
 "mobile.mirror.transport.sshLabel" = "Secure SSH Connection";
 "mobile.mirror.transport.sshDetail" = "SSH is optional and publishes the pairing endpoint only through the selected connection.";

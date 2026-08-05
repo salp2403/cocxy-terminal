@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "Abbina telefono...";
 "mobile.mirror.title" = "Abbina telefono";
 "mobile.mirror.start" = "Genera codice di abbinamento";
-"mobile.mirror.security" = "Codice monouso · conferma sul computer · 90 secondi";
+"mobile.mirror.security" = "Codice monouso · TLS cifrato · 90 secondi";
 "mobile.mirror.securitySSH" = "Codice monouso · SSH cifrato · 90 secondi";
 "mobile.mirror.cancel" = "Annulla abbinamento";
 "mobile.mirror.qr.accessibility" = "Codice di abbinamento telefono monouso";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "Il codice QR si apre tramite la sessione SSH selezionata. Non viene creato alcun listener sulla LAN né alcun servizio di inoltro esterno.";
 "mobile.mirror.transport.unavailable" = "Collega un profilo SSH oppure usa il servizio di inoltro locale.";
 "mobile.mirror.transport.detail.unavailable" = "Il profilo SSH selezionato non è disponibile. Usa un altro profilo connesso o il servizio di inoltro locale.";
-"mobile.mirror.transport.localDetail" = "Il servizio di inoltro per l’abbinamento è disponibile solo su questa rete privata. I server terminale restano sull’interfaccia di loopback e non viene usato alcun servizio cloud.";
+"mobile.mirror.transport.localDetail" = "TLS cifra questo relay sulla rete privata. I server terminale restano sull’interfaccia di loopback; non viene usato alcun servizio cloud.";
+"mobile.mirror.tls.fingerprint" = "Pin SHA-256 del certificato";
+"mobile.mirror.tls.verify" = "Confronta questo pin con il certificato della sessione prima di continuare.";
 "mobile.mirror.transport.sshOptional" = "Usa un profilo SSH connesso";
 "mobile.mirror.transport.sshLabel" = "Connessione SSH sicura";
 "mobile.mirror.transport.sshDetail" = "SSH è facoltativo e pubblica l’endpoint di abbinamento solo tramite la connessione selezionata.";

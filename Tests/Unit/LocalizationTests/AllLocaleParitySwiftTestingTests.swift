@@ -285,7 +285,7 @@ struct AllLocaleParitySwiftTestingTests {
         #expect(english.isRightToLeft == false)
     }
 
-    @Test("language help stays evergreen and mobile transport copy matches local-first policy")
+    @Test("language help stays evergreen and mobile transport copy matches TLS policy")
     func languageHelpAndMobileTransportRemainSemanticallyCurrent() throws {
         let obsoleteLanguagePairs = [
             "en": "English and Spanish", "es": "Inglés y español",
@@ -299,15 +299,6 @@ struct AllLocaleParitySwiftTestingTests {
             "tr": "İngilizce ve İspanyolca", "uk": "англійська та іспанська",
             "vi": "tiếng Anh và tiếng Tây Ban Nha", "zh-CN": "英语和西班牙语",
             "zh-TW": "英文和西班牙文",
-        ]
-        let obsoleteEncryptionMarkers = [
-            "en": ["encrypted"], "es": ["cifrad"], "ar": ["مشفّر"],
-            "bs": ["šifrovan"], "da": ["krypteret"], "de": ["verschlüsselt"],
-            "fr": ["chiffr"], "it": ["crittograf", "cifrat"], "ja": ["暗号化"],
-            "km": ["អ៊ិនគ្រីប"], "ko": ["암호화"], "no": ["kryptert"],
-            "pl": ["szyfrowan"], "pt-BR": ["criptograf"], "ru": ["зашифрован"],
-            "th": ["เข้ารหัส"], "tr": ["şifreli"], "uk": ["зашифрован"],
-            "vi": ["mã hóa"], "zh-CN": ["加密"], "zh-TW": ["加密"],
         ]
         let localRelayMarkers = [
             "en": "local relay", "es": "relay local", "ar": "المرحّل المحلي",
@@ -331,16 +322,17 @@ struct AllLocaleParitySwiftTestingTests {
             let strings = try localizationStrings(locale: locale, resources: resources)
             let help = try #require(strings["preferences.appearance.language.help"])
             let obsoletePair = try #require(obsoleteLanguagePairs[locale])
-            let encryptionMarkers = try #require(obsoleteEncryptionMarkers[locale])
             let localRelayMarker = try #require(localRelayMarkers[locale])
             let localTransportSummary = try localTransportSummaryKeys
                 .map { try #require(strings[$0]) }
                 .joined(separator: " ")
+            let localDetail = try #require(strings["mobile.mirror.transport.localDetail"])
+            let certificatePin = try #require(strings["mobile.mirror.tls.fingerprint"])
             #expect(!help.localizedCaseInsensitiveContains(obsoletePair))
             #expect(!localTransportSummary.localizedCaseInsensitiveContains("SSH"))
-            for marker in encryptionMarkers {
-                #expect(!localTransportSummary.localizedCaseInsensitiveContains(marker))
-            }
+            #expect(localTransportSummary.localizedCaseInsensitiveContains("TLS"))
+            #expect(localDetail.localizedCaseInsensitiveContains("TLS"))
+            #expect(certificatePin.localizedCaseInsensitiveContains("SHA-256"))
             for key in [
                 "mobile.mirror.transport.unavailable",
                 "mobile.mirror.transport.detail.unavailable",
@@ -354,7 +346,7 @@ struct AllLocaleParitySwiftTestingTests {
         #expect(english["mobile.mirror.transport.label"] == "Private Phone Relay")
         #expect(english["mobile.mirror.status.starting"] == "Opening private phone relay")
         #expect(english["mobile.mirror.status.active"] == "Connected on the private network")
-        #expect(english["mobile.mirror.security"] == "One-use code · desktop confirmation · 90 seconds")
+        #expect(english["mobile.mirror.security"] == "One-use code · encrypted TLS · 90 seconds")
         #expect(
             english["mobile.mirror.transport.unavailable"]
                 == "Connect an SSH profile or use the local relay."
@@ -365,8 +357,9 @@ struct AllLocaleParitySwiftTestingTests {
         )
         #expect(
             english["mobile.mirror.transport.localDetail"]
-                == "The pairing relay is available only on this private network. Terminal servers stay on loopback and no cloud service is used."
+                == "TLS encrypts this private-network relay. Terminal servers stay on loopback; no cloud service is used."
         )
+        #expect(english["mobile.mirror.tls.fingerprint"] == "SHA-256 certificate pin")
         #expect(english["mobile.mirror.transport.sshOptional"] == "Use a connected SSH profile")
         #expect(
             english["mobile.mirror.transport.sshDetail"]

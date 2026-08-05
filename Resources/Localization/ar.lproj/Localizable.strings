@@ -3537,7 +3537,7 @@
 "menu.view.pairPhone" = "إقران الهاتف...";
 "mobile.mirror.title" = "إقران الهاتف";
 "mobile.mirror.start" = "إنشاء رمز الإقران";
-"mobile.mirror.security" = "رمز للاستخدام مرة واحدة · تأكيد على سطح المكتب · 90 ثانية";
+"mobile.mirror.security" = "رمز للاستخدام مرة واحدة · TLS مشفّر · 90 ثانية";
 "mobile.mirror.securitySSH" = "رمز للاستخدام مرة واحدة · SSH مشفّر · 90 ثانية";
 "mobile.mirror.cancel" = "إلغاء الإقران";
 "mobile.mirror.qr.accessibility" = "رمز إقران الهاتف للاستخدام مرة واحدة";
@@ -3565,7 +3565,9 @@
 "mobile.mirror.transport.detail" = "يُفتح رمز QR عبر جلسة SSH المحددة. لا يتم إنشاء مستمع على شبكة LAN أو مرحّل خارجي.";
 "mobile.mirror.transport.unavailable" = "صِل ملف تعريف SSH أو استخدم المرحّل المحلي.";
 "mobile.mirror.transport.detail.unavailable" = "ملف تعريف SSH المحدد غير متاح. استخدم ملفًا متصلًا آخر أو المرحّل المحلي.";
-"mobile.mirror.transport.localDetail" = "لا يتوفر مرحّل الإقران إلا على هذه الشبكة الخاصة. تبقى خوادم الطرفية على واجهة loopback ولا تُستخدم أي خدمة سحابية.";
+"mobile.mirror.transport.localDetail" = "يشفّر TLS مرحّل الشبكة الخاصة هذا. تبقى خوادم الطرفية على واجهة loopback ولا تُستخدم أي خدمة سحابية.";
+"mobile.mirror.tls.fingerprint" = "رمز تثبيت SHA-256 للشهادة";
+"mobile.mirror.tls.verify" = "قارن رمز التثبيت هذا بشهادة الجلسة قبل المتابعة.";
 "mobile.mirror.transport.sshOptional" = "استخدام ملف تعريف SSH متصل";
 "mobile.mirror.transport.sshLabel" = "اتصال SSH آمن";
 "mobile.mirror.transport.sshDetail" = "SSH اختياري، ولا تُنشر نقطة نهاية الإقران إلا عبر الاتصال المحدد.";
