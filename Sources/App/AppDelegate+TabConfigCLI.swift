@@ -200,6 +200,9 @@ extension AppDelegate {
     ) {
         Task { @MainActor [weak controller] in
             try? await Task.sleep(for: .milliseconds(500))
+            let authorizedWorkingDirectory = ProjectPathCanonicalizer.canonicalURL(
+                URL(fileURLWithPath: authorization.workingDirectory)
+            )
             guard let controller,
                   Date() < authorization.expiresAt,
                   controller.tabManager.activeTabID == authorization.destinationTabID,
@@ -207,7 +210,7 @@ extension AppDelegate {
                     for: authorization.destinationTabID
                   ),
                   ProjectPathCanonicalizer.canonicalURL(currentWorkingDirectory).path
-                    == authorization.workingDirectory,
+                    == authorizedWorkingDirectory.path,
                   let surfaceID = controller.tabSurfaceMap[authorization.destinationTabID] else {
                 return
             }
