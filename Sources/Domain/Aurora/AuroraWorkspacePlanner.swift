@@ -17,8 +17,10 @@ enum AuroraWorkspacePlanner {
         for tab: Tab,
         resolver: AuroraWorkspaceRootResolver
     ) -> AuroraWorkspaceDescriptor {
-        let root = (resolver.workspaceRoot(for: tab.workingDirectory) ?? tab.workingDirectory)
-            .standardizedFileURL
+        let anchor = tab.worktreeRoot ?? tab.workingDirectory
+        let root = ProjectPathCanonicalizer.canonicalURL(
+            resolver.workspaceRoot(for: anchor) ?? anchor
+        )
         let path = root.path
         let identity = path.isEmpty ? "tab:\(tab.id.rawValue.uuidString)" : path
         let folderName = root.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,7 +46,8 @@ enum AuroraWorkspacePlanner {
         for tab: Tab,
         projectResolver: any ProjectResolving
     ) -> AuroraWorkspaceDescriptor {
-        let project = projectResolver.resolveProject(for: tab.workingDirectory)
+        let anchor = tab.worktreeRoot ?? tab.workingDirectory
+        let project = projectResolver.resolveProject(for: anchor)
         return AuroraWorkspaceDescriptor(
             identity: project.groupingID.rawValue,
             unfoldedIdentity: project.id.rawValue,

@@ -34,6 +34,38 @@ struct AuroraNotesSectionSwiftTestingTests {
         #expect(workspaces.first?.notesWorkspaceID == expected)
     }
 
+    @Test("workspace resolves symlinks before hashing its notes identifier")
+    func workspaceCanonicalizesNotesRootPath() throws {
+        let sandbox = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuroraNotesAlias-\(UUID().uuidString)", isDirectory: true)
+        let physical = sandbox.appendingPathComponent("physical", isDirectory: true)
+        let alias = sandbox.appendingPathComponent("alias", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+        try FileManager.default.createDirectory(at: physical, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: physical)
+        let tab = Design.AuroraSourceTab(
+            id: "tab-1",
+            name: "tab",
+            workspaceGroup: "project",
+            surfaces: [],
+            workingDirectory: alias.path,
+            workspaceRootPath: alias.path
+        )
+
+        let workspace = try #require(
+            Design.AuroraWorkspaceAdapter.workspaces(from: [tab]).first
+        )
+        let physicalPath = physical.path.hasPrefix("/var/")
+            ? "/private\(physical.path)"
+            : physical.path
+        let expected = NoteWorkspaceID(
+            workspaceRoot: URL(fileURLWithPath: physicalPath, isDirectory: true)
+        ).rawValue
+
+        #expect(workspace.notesWorkspaceID == expected)
+        #expect(NoteWorkspaceID(workspaceRoot: alias) != NoteWorkspaceID(workspaceRoot: physical))
+    }
+
     @Test("workspaceRootPath wins over workingDirectory when both are present so git ancestors group sibling tabs under the same notes folder")
     func workspaceRootPathPreferredOverWorkingDirectory() {
         let root = "/Users/test/code/cocxy"
@@ -70,7 +102,7 @@ struct AuroraNotesSectionSwiftTestingTests {
         let workspaces = Design.AuroraWorkspaceAdapter.workspaces(from: [tab])
 
         let expected = NoteWorkspaceID(
-            workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
+            workspaceRoot: URL(fileURLWithPath: "/private/tmp/scratch", isDirectory: true)
         ).rawValue
         #expect(workspaces.first?.notesWorkspaceID == expected)
     }

@@ -459,7 +459,7 @@ struct AuroraSourceBuilderSwiftTestingTests {
 
         let b = result[1]
         #expect(b.name == "ephemeral")
-        #expect(b.workspaceGroup == "/tmp/ephemeral")
+        #expect(b.workspaceGroup == "/private/tmp/ephemeral")
         #expect(b.workspaceDefaultName == "ephemeral")
         #expect(b.branch == nil)
         #expect(b.surfaces.count == 1)

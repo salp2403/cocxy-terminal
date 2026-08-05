@@ -306,13 +306,17 @@ extension MainWindowController {
 
     private func notesGroupingRoot(for tab: Tab) -> URL {
         let directory = tab.worktreeRoot ?? tab.workingDirectory
-        return projectResolver.resolveProject(for: directory).groupingRootURL
+        return ProjectPathCanonicalizer.canonicalURL(
+            projectResolver.resolveProject(for: directory).groupingRootURL
+        )
     }
 
     private func migrateLegacyNotes(for tabs: [Tab], using store: NoteStore) async {
         var migrations: [NoteWorkspaceID: NoteWorkspaceID] = [:]
         for tab in tabs {
-            let legacyRoot = tab.worktreeRoot ?? tab.workingDirectory
+            let legacyRoot = ProjectPathCanonicalizer.canonicalURL(
+                tab.worktreeRoot ?? tab.workingDirectory
+            )
             let legacyID = NoteWorkspaceID(workspaceRoot: legacyRoot)
             let canonicalID = NoteWorkspaceID(workspaceRoot: notesGroupingRoot(for: tab))
             guard legacyID != canonicalID else { continue }

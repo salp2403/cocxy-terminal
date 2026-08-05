@@ -82,6 +82,7 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
     func sourceAndAdapterPreserveOriginAndChildMetadata() {
         let origin = URL(fileURLWithPath: "/repo/product", isDirectory: true)
         let child = URL(fileURLWithPath: "/tmp/product-feature", isDirectory: true)
+        let outside = URL(fileURLWithPath: "/tmp/unrelated-project", isDirectory: true)
         let childID = ProjectID(rootURL: child)
         let originID = ProjectID(rootURL: origin)
         let descriptor = ProjectDescriptor(
@@ -95,8 +96,12 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         let git = StubGitInfoProvider(branches: [origin.path: "main"])
         let tab = Tab(
             title: "Feature",
-            workingDirectory: child,
-            gitBranch: "feature/search"
+            workingDirectory: outside,
+            gitBranch: "feature/search",
+            worktreeID: "product-feature",
+            worktreeRoot: child,
+            worktreeOriginRepo: origin,
+            worktreeBranch: "feature/search"
         )
 
         let sources = AuroraSourceBuilder.buildSources(
@@ -127,7 +132,7 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         let tabManager = TabManager(gitInfoProvider: git)
         let liveTabID = tabManager.tabs[0].id
         tabManager.updateTab(id: liveTabID) { liveTab in
-            liveTab.workingDirectory = child
+            liveTab.workingDirectory = outside
             liveTab.worktreeRoot = child
         }
         let controller = MainWindowController(
@@ -141,15 +146,20 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
         #expect(controller.tabForNotesWorkspace(rawID: childID.storageKey) == nil)
     }
 
-    @Test("a lone worktree migrates legacy notes into the folded sidebar identity")
+    @Test("a symlinked worktree migrates canonical legacy notes into the folded sidebar identity")
     func worktreeNotesMigrateBeforeSidebarAndOverlayLoads() async throws {
         let sandbox = FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectNotesMigration-\(UUID().uuidString)", isDirectory: true)
         let storageRoot = sandbox.appendingPathComponent("notes", isDirectory: true)
         let origin = sandbox.appendingPathComponent("origin", isDirectory: true)
         let child = sandbox.appendingPathComponent("worktree", isDirectory: true)
+        let childAlias = sandbox.appendingPathComponent("worktree-alias", isDirectory: true)
         try FileManager.default.createDirectory(at: origin, withIntermediateDirectories: true)
         try FileManager.default.createDirectory(at: child, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(
+            at: childAlias,
+            withDestinationURL: child
+        )
         defer { try? FileManager.default.removeItem(at: sandbox) }
 
         let childID = ProjectID(rootURL: child)
@@ -161,13 +171,16 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
             displayName: "worktree",
             parent: originID
         )
-        let resolver = StubProjectResolver(descriptors: [child.path: descriptor])
-        let git = StubGitInfoProvider(branches: [origin.path: "main", child.path: "feature/notes"])
+        let resolver = StubProjectResolver(descriptors: [childAlias.path: descriptor])
+        let git = StubGitInfoProvider(branches: [
+            origin.path: "main",
+            childAlias.path: "feature/notes",
+        ])
         let tabManager = TabManager(gitInfoProvider: git)
         let tabID = try #require(tabManager.tabs.first?.id)
         tabManager.updateTab(id: tabID) { tab in
-            tab.workingDirectory = child
-            tab.worktreeRoot = child
+            tab.workingDirectory = childAlias
+            tab.worktreeRoot = childAlias
         }
 
         let provider = InMemoryConfigProvider(content: """
@@ -185,7 +198,9 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
             gitInfoProvider: git,
             projectResolver: resolver
         )
-        let legacyID = NoteWorkspaceID(workspaceRoot: child)
+        let legacyID = NoteWorkspaceID(
+            workspaceRoot: ProjectPathCanonicalizer.canonicalURL(childAlias)
+        )
         let canonicalID = NoteWorkspaceID(workspaceRoot: origin)
         let seedStore = NoteStore(storageRoot: storageRoot, format: .markdown)
         let first = try await seedStore.create(in: legacyID, body: "# Worktree note")
@@ -282,6 +297,10 @@ struct ProjectAuroraIntegrationSwiftTestingTests {
             projectResolver: resolver
         )
 
-        #expect(aliases == Set([linked.standardizedFileURL.path]))
+        var expectedAliases = Set([linked.standardizedFileURL.path])
+        if physical.standardizedFileURL.path != projectID.rawValue {
+            expectedAliases.insert(physical.standardizedFileURL.path)
+        }
+        #expect(aliases == expectedAliases)
     }
 }

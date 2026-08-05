@@ -209,14 +209,18 @@ extension Design {
             for tab in tabs {
                 if let path = tab.workspaceRootPath, !path.isEmpty {
                     return NoteWorkspaceID(
-                        workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
+                        workspaceRoot: ProjectPathCanonicalizer.canonicalURL(
+                            URL(fileURLWithPath: path, isDirectory: true)
+                        )
                     ).rawValue
                 }
             }
             for tab in tabs {
                 if let path = tab.workingDirectory, !path.isEmpty {
                     return NoteWorkspaceID(
-                        workspaceRoot: URL(fileURLWithPath: path, isDirectory: true)
+                        workspaceRoot: ProjectPathCanonicalizer.canonicalURL(
+                            URL(fileURLWithPath: path, isDirectory: true)
+                        )
                     ).rawValue
                 }
             }
