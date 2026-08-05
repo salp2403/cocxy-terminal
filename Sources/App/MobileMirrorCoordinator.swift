@@ -139,6 +139,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         }
         let router = makePairingRouter(
             publicAddress: publicAddress,
+            transport: .sshTunnel,
             staticAssetEndpoint: staticAssetEndpoint
         )
         let gateway = MobileMirrorGateway(
@@ -210,6 +211,7 @@ final class MobileMirrorCoordinator: ObservableObject {
         )
         let router = makePairingRouter(
             publicAddress: publicAddress,
+            transport: .localTLS,
             staticAssetEndpoint: staticAssetEndpoint
         )
         let gateway = MobileMirrorGateway(
@@ -268,12 +270,14 @@ final class MobileMirrorCoordinator: ObservableObject {
 
     private func makePairingRouter(
         publicAddress: String,
+        transport: MobileMirrorRouterTransport,
         staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
     ) -> MobileMirrorRequestRouter {
         let localizer = appDelegate?.appLocalizer()
             ?? AppLocalizer(languagePreference: .system)
         return MobileMirrorRequestRouter(
             publicAddress: publicAddress,
+            transport: transport,
             authority: authority,
             routeRegistry: routeRegistry,
             localization: MobileMirrorWebLocalization(localizer: localizer),

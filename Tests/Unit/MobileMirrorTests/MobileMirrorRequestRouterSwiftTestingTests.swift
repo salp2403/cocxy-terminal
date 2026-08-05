@@ -18,6 +18,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let localization = try webLocalization(.spanish)
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
+            transport: .localTLS,
             authority: authority,
             routeRegistry: routes,
             localization: localization,
@@ -159,7 +160,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             path: "/mobile/api/action",
             headers: [
                 "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "http://127.0.0.1:43120",
+                "origin": "https://127.0.0.1:43120",
                 "content-type": "application/json",
                 "x-cocxy-timestamp": timestamp,
                 "x-cocxy-nonce": nonce,
@@ -180,7 +181,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             path: "/mobile/api/action",
             headers: [
                 "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "http://127.0.0.1:43120",
+                "origin": "https://127.0.0.1:43120",
                 "content-type": "application/json",
                 "x-cocxy-timestamp": String(UInt64(Date().timeIntervalSince1970)),
                 "x-cocxy-nonce": UUID().uuidString,
@@ -200,7 +201,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
             path: "/mobile/api/action",
             headers: [
                 "cookie": "cocxy_mobile=\(cookie)",
-                "origin": "http://127.0.0.1:43120",
+                "origin": "https://127.0.0.1:43120",
                 "content-type": "application/json",
                 "x-cocxy-timestamp": malformedTimestamp,
                 "x-cocxy-nonce": malformedNonce,
@@ -238,7 +239,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 path: "/mobile/api/action",
                 headers: [
                     "cookie": "cocxy_mobile=\(cookie)",
-                    "origin": "http://127.0.0.1:43120",
+                    "origin": "https://127.0.0.1:43120",
                     "content-type": "application/json",
                     "x-cocxy-timestamp": terminalTimestamp,
                     "x-cocxy-nonce": terminalNonce,
@@ -298,7 +299,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                 path: "/terminal/\(terminalSurfaceID.rawValue.uuidString)/ws",
                 headers: [
                     "cookie": "cocxy_mobile=\(cookie)",
-                    "origin": "http://127.0.0.1:43120",
+                    "origin": "https://127.0.0.1:43120",
                     "upgrade": "websocket",
                 ]
             ),
@@ -318,7 +319,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
                     path: "/mobile/api/action",
                     headers: [
                         "cookie": "cocxy_mobile=\(cookie)",
-                        "origin": "http://127.0.0.1:43120",
+                        "origin": "https://127.0.0.1:43120",
                         "content-type": "application/json",
                         "x-cocxy-timestamp": sustainedTimestamp,
                         "x-cocxy-nonce": sustainedNonce,
@@ -343,6 +344,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let authority = MobileMirrorPairingAuthority()
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
+            transport: .sshTunnel,
             authority: authority,
             routeRegistry: MobileMirrorRouteRegistry(),
             localization: try webLocalization(.arabic),
@@ -391,6 +393,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let actionRecorder = MobileMirrorActionRecorder()
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
+            transport: .sshTunnel,
             authority: authority,
             routeRegistry: MobileMirrorRouteRegistry(),
             snapshotProvider: { _ in .empty },
@@ -427,6 +430,7 @@ struct MobileMirrorRequestRouterSwiftTestingTests {
         let authority = MobileMirrorPairingAuthority()
         let router = MobileMirrorRequestRouter(
             publicAddress: "127.0.0.1",
+            transport: .sshTunnel,
             authority: authority,
             routeRegistry: MobileMirrorRouteRegistry(),
             staticAssetEndpoint: MobileMirrorStaticAssetEndpoint(

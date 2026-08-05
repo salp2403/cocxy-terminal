@@ -3,6 +3,18 @@
 
 import Foundation
 
+enum MobileMirrorRouterTransport: Sendable {
+    case localTLS
+    case sshTunnel
+
+    var scheme: String {
+        switch self {
+        case .localTLS: "https"
+        case .sshTunnel: "http"
+        }
+    }
+}
+
 final class MobileMirrorRequestRouter: @unchecked Sendable {
     typealias SnapshotProvider = @Sendable (String) async throws -> MobileMirrorSnapshot
     typealias ActionHandler = @Sendable (
@@ -24,6 +36,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     let routeRegistry: MobileMirrorRouteRegistry
 
     private let publicAddress: String
+    private let transport: MobileMirrorRouterTransport
     private var localization: MobileMirrorWebLocalization
     private let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint?
     private let snapshotProvider: SnapshotProvider
@@ -39,6 +52,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
 
     init(
         publicAddress: String,
+        transport: MobileMirrorRouterTransport,
         authority: MobileMirrorPairingAuthority,
         routeRegistry: MobileMirrorRouteRegistry,
         localization: MobileMirrorWebLocalization = .english,
@@ -53,6 +67,7 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
         pendingPairingHandler: @escaping PendingPairingHandler
     ) {
         self.publicAddress = publicAddress
+        self.transport = transport
         self.authority = authority
         self.routeRegistry = routeRegistry
         self.localization = localization
@@ -86,14 +101,17 @@ final class MobileMirrorRequestRouter: @unchecked Sendable {
     var baseURL: String? {
         endpointLock.lock()
         defer { endpointLock.unlock() }
-        return gatewayPort.map { "http://\(publicAddress):\($0)" }
+        return gatewayPort.map { "\(transport.scheme)://\(publicAddress):\($0)" }
     }
 
     func route(
         request: MobileMirrorHTTPRequest,
         identity: MobileMirrorClientIdentity
     ) async -> MobileMirrorHTTPRouteResult {
-        guard let baseURL, request.host == String(baseURL.dropFirst("http://".count)) else {
+        guard let baseURL,
+              let expectedHost = URLComponents(string: baseURL)?.host,
+              let expectedPort = URLComponents(string: baseURL)?.port,
+              request.host == "\(expectedHost):\(expectedPort)" else {
             return rejected(
                 .error("Invalid local host.", status: 403),
                 identity: identity
