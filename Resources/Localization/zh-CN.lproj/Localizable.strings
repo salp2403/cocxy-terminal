@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "安全 SSH 连接";
 "mobile.mirror.transport.sshDetail" = "SSH 为可选方式，且仅通过所选连接发布配对端点。";
 "mobile.mirror.transport.open" = "打开远程连接";
+"mobile.mirror.error.noPrivateNetwork" = "没有可用的私有本地网络。";
+"mobile.mirror.error.invalidGatewayPort" = "本地移动网关端口无效。";
+"mobile.mirror.error.alreadyStarting" = "私有移动中继已在启动。";
+"mobile.mirror.error.tlsIdentityUnavailable" = "无法为私有移动中继创建加密。";
+"mobile.mirror.error.listenerUnavailable" = "无法启动私有移动中继。";
 "common.choose" = "选择";
 "common.deny" = "拒绝";
 "common.allow" = "允许";

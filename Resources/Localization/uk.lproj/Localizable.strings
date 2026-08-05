@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "Захищене SSH-з’єднання";
 "mobile.mirror.transport.sshDetail" = "SSH необов’язковий і публікує кінцеву точку спарювання лише через вибране підключення.";
 "mobile.mirror.transport.open" = "Відкрити віддалені підключення";
+"mobile.mirror.error.noPrivateNetwork" = "Приватна локальна мережа недоступна.";
+"mobile.mirror.error.invalidGatewayPort" = "Порт локального мобільного шлюзу недійсний.";
+"mobile.mirror.error.alreadyStarting" = "Приватний мобільний ретранслятор уже запускається.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "Не вдалося створити шифрування для приватного мобільного ретранслятора.";
+"mobile.mirror.error.listenerUnavailable" = "Не вдалося запустити приватний мобільний ретранслятор.";
 "common.choose" = "Вибрати";
 "common.deny" = "Відхилити";
 "common.allow" = "Дозволити";

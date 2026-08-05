@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "Kết nối SSH bảo mật";
 "mobile.mirror.transport.sshDetail" = "SSH là tùy chọn và chỉ công bố điểm cuối ghép đôi qua kết nối đã chọn.";
 "mobile.mirror.transport.open" = "Mở kết nối từ xa";
+"mobile.mirror.error.noPrivateNetwork" = "Không có mạng cục bộ riêng tư nào khả dụng.";
+"mobile.mirror.error.invalidGatewayPort" = "Cổng của gateway di động cục bộ không hợp lệ.";
+"mobile.mirror.error.alreadyStarting" = "Relay di động riêng tư đang được khởi động.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "Không thể tạo mã hóa cho relay di động riêng tư.";
+"mobile.mirror.error.listenerUnavailable" = "Không thể khởi động relay di động riêng tư.";
 "common.choose" = "Chọn";
 "common.deny" = "Từ chối";
 "common.allow" = "Cho phép";

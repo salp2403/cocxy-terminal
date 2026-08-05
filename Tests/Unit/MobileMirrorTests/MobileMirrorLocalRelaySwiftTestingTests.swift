@@ -8,7 +8,7 @@ import Security
 import Testing
 @testable import CocxyTerminal
 
-@Suite("Mobile mirror private relay")
+@Suite("Mobile mirror private relay", .serialized)
 struct MobileMirrorLocalRelaySwiftTestingTests {
     @Test("private address policy accepts only RFC 1918 IPv4")
     func privateAddressPolicy() {
@@ -18,6 +18,14 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         for address in ["127.0.0.1", "169.254.1.1", "172.32.0.1", "8.8.8.8", "::1"] {
             #expect(!MobileMirrorPrivateNetworkAddress.isPrivateIPv4(address))
         }
+    }
+
+    @Test("peer addresses are formatted from exactly four network bytes")
+    func peerAddressFormatting() {
+        #expect(MobileMirrorLocalRelay.numericIPv4(bytes: Data([10, 0, 0, 3])) == "10.0.0.3")
+        #expect(MobileMirrorLocalRelay.numericIPv4(bytes: Data([192, 168, 255, 1])) == "192.168.255.1")
+        #expect(MobileMirrorLocalRelay.numericIPv4(bytes: Data([10, 0, 0])) == nil)
+        #expect(MobileMirrorLocalRelay.numericIPv4(bytes: Data([10, 0, 0, 3, 4])) == nil)
     }
 
     @Test("authenticated relay preamble is fragmented safely and consumed once")
@@ -111,6 +119,47 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
         #expect(keyLookupStatus == errSecItemNotFound)
     }
 
+    @Test("startup sweep removes stale relay identities and preserves unrelated keys")
+    func staleTLSIdentitySweep() throws {
+        let identity = try MobileMirrorEphemeralTLSIdentity.generate(bindAddress: "127.0.0.1")
+        let unrelatedTag = Data("dev.cocxy.tests.unrelated.\(UUID().uuidString)".utf8)
+        var keyError: Unmanaged<CFError>?
+        let unrelatedKey = try #require(SecKeyCreateRandomKey([
+            kSecAttrKeyType as String: kSecAttrKeyTypeECSECPrimeRandom,
+            kSecAttrKeySizeInBits as String: 256,
+            kSecPrivateKeyAttrs as String: [
+                kSecAttrIsPermanent as String: true,
+                kSecAttrApplicationTag as String: unrelatedTag,
+            ],
+        ] as CFDictionary, &keyError))
+        _ = unrelatedKey
+        defer {
+            SecItemDelete([
+                kSecClass as String: kSecClassKey,
+                kSecAttrApplicationTag as String: unrelatedTag,
+            ] as CFDictionary)
+        }
+
+        let result = MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems()
+
+        #expect(result.matchedIdentityCount >= 1)
+        #expect(Self.keychainStatus(itemClass: kSecClassCertificate, attribute: kSecAttrLabel, value: identity.storageLabel) == errSecItemNotFound)
+        #expect(Self.keychainStatus(itemClass: kSecClassKey, attribute: kSecAttrApplicationTag, value: identity.storageKeyTag) == errSecItemNotFound)
+        #expect(Self.keychainStatus(itemClass: kSecClassKey, attribute: kSecAttrApplicationTag, value: unrelatedTag) == errSecSuccess)
+    }
+
+    @Test("relay startup errors follow the configured language")
+    func relayErrorsAreLocalized() throws {
+        let bundle = try #require(Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)))
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+
+        #expect(MobileMirrorLocalRelayError.invalidGatewayPort.localizedDescription(using: spanish) == "El puerto del gateway móvil local no es válido.")
+        #expect(MobileMirrorLocalRelayError.alreadyStarting.localizedDescription(using: spanish) == "El relay móvil privado ya se está iniciando.")
+        #expect(MobileMirrorLocalRelayError.tlsIdentityUnavailable.localizedDescription(using: spanish) == "No se pudo crear el cifrado para el relay móvil privado.")
+        #expect(MobileMirrorLocalRelayError.listenerUnavailable.localizedDescription(using: spanish) == "No se pudo iniciar el relay móvil privado.")
+    }
+
     @Test("local pairing URL carries a one-use application key")
     func localPairingURLContract() throws {
         let url = try #require(MobileMirrorPairingURL.local(
@@ -148,7 +197,10 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             preambleSecret: secret,
             addressProvider: { MobileMirrorGateway.loopbackAddress },
             bindAddressPolicy: { $0 == MobileMirrorGateway.loopbackAddress },
-            peerAddressNormalizer: { _ in relayedAddress }
+            peerAddressNormalizer: { address in
+                guard address == MobileMirrorGateway.loopbackAddress else { return nil }
+                return relayedAddress
+            }
         )
         let lease = try await relay.start()
         defer {
@@ -169,7 +221,12 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
 
     @Test("production relay binds its exact RFC 1918 interface")
     func productionRelayBindsPrivateInterface() async throws {
-        guard let address = MobileMirrorPrivateNetworkAddress.current() else { return }
+        guard let address = MobileMirrorPrivateNetworkAddress.current() else {
+            withKnownIssue("No RFC 1918 interface is available on this test host") {
+                Issue.record("Production relay binding requires a private network interface")
+            }
+            return
+        }
         let relay = MobileMirrorLocalRelay(
             gatewayPort: 1,
             preambleSecret: "private-bind-test",
@@ -312,6 +369,20 @@ struct MobileMirrorLocalRelaySwiftTestingTests {
             path: path,
             delegate: delegate
         )
+    }
+
+    private static func keychainStatus(
+        itemClass: CFString,
+        attribute: CFString,
+        value: Any
+    ) -> OSStatus {
+        var item: CFTypeRef?
+        return SecItemCopyMatching([
+            kSecClass as String: itemClass,
+            attribute as String: value,
+            kSecReturnRef as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ] as CFDictionary, &item)
     }
 
     private static func request(

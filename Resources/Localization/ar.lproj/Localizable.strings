@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "اتصال SSH آمن";
 "mobile.mirror.transport.sshDetail" = "SSH اختياري، ولا تُنشر نقطة نهاية الإقران إلا عبر الاتصال المحدد.";
 "mobile.mirror.transport.open" = "فتح الاتصالات البعيدة";
+"mobile.mirror.error.noPrivateNetwork" = "لا تتوفر شبكة محلية خاصة.";
+"mobile.mirror.error.invalidGatewayPort" = "منفذ بوابة الهاتف المحلية غير صالح.";
+"mobile.mirror.error.alreadyStarting" = "بدأ تشغيل مرحّل الهاتف الخاص بالفعل.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "تعذر إنشاء التشفير لمرحّل الهاتف الخاص.";
+"mobile.mirror.error.listenerUnavailable" = "تعذر تشغيل مرحّل الهاتف الخاص.";
 "common.choose" = "اختيار";
 "common.deny" = "رفض";
 "common.allow" = "السماح";

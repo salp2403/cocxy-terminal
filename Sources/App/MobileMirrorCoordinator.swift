@@ -195,7 +195,9 @@ final class MobileMirrorCoordinator: ObservableObject {
 
     private func openLocalPairingTransport(generation: UInt64) async {
         guard let publicAddress = relayManager.privateMobileMirrorAddress() else {
-            state = .unavailable(MobileMirrorError.noPrivateNetwork.localizedDescription)
+            state = .unavailable(MobileMirrorLocalRelayError.noPrivateNetwork.localizedDescription(
+                using: mobileMirrorLocalizer
+            ))
             return
         }
         let staticAssetEndpoint: MobileMirrorStaticAssetEndpoint
@@ -263,8 +265,19 @@ final class MobileMirrorCoordinator: ObservableObject {
             }
             _ = authority.revoke()
             guard generation == transportGeneration else { return }
-            state = .failed(error.localizedDescription)
+            state = .failed(localizedLocalRelayError(error))
         }
+    }
+
+    private var mobileMirrorLocalizer: AppLocalizer {
+        appDelegate?.appLocalizer() ?? AppLocalizer(languagePreference: .system)
+    }
+
+    private func localizedLocalRelayError(_ error: any Error) -> String {
+        guard let relayError = error as? MobileMirrorLocalRelayError else {
+            return error.localizedDescription
+        }
+        return relayError.localizedDescription(using: mobileMirrorLocalizer)
     }
 
     private func makePairingRouter(

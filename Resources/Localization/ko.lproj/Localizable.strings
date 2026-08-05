@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "보안 SSH 연결";
 "mobile.mirror.transport.sshDetail" = "SSH는 선택 사항이며 페어링 엔드포인트는 선택한 연결을 통해서만 공개됩니다.";
 "mobile.mirror.transport.open" = "원격 연결 열기";
+"mobile.mirror.error.noPrivateNetwork" = "사용 가능한 비공개 로컬 네트워크가 없습니다.";
+"mobile.mirror.error.invalidGatewayPort" = "로컬 모바일 게이트웨이 포트가 올바르지 않습니다.";
+"mobile.mirror.error.alreadyStarting" = "비공개 모바일 릴레이가 이미 시작 중입니다.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "비공개 모바일 릴레이의 암호화를 생성할 수 없습니다.";
+"mobile.mirror.error.listenerUnavailable" = "비공개 모바일 릴레이를 시작할 수 없습니다.";
 "common.choose" = "선택";
 "common.deny" = "거부";
 "common.allow" = "허용";

@@ -47,6 +47,8 @@ extension AppDelegate {
         )
         connectionManager.proxyManager = proxyManager
 
+        MobileMirrorEphemeralTLSIdentity.removeStaleKeychainItems()
+
         // Relay manager — optional, zero overhead when unused.
         let relayManager = RelayManagerImpl(
             tunnelManager: tunnelManager,

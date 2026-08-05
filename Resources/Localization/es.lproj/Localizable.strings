@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "Conexión SSH segura";
 "mobile.mirror.transport.sshDetail" = "SSH es opcional y publica el endpoint de emparejamiento solo mediante la conexión seleccionada.";
 "mobile.mirror.transport.open" = "Abrir conexiones remotas";
+"mobile.mirror.error.noPrivateNetwork" = "No hay ninguna red local privada disponible.";
+"mobile.mirror.error.invalidGatewayPort" = "El puerto del gateway móvil local no es válido.";
+"mobile.mirror.error.alreadyStarting" = "El relay móvil privado ya se está iniciando.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "No se pudo crear el cifrado para el relay móvil privado.";
+"mobile.mirror.error.listenerUnavailable" = "No se pudo iniciar el relay móvil privado.";
 "common.choose" = "Elegir";
 "common.deny" = "Denegar";
 "common.allow" = "Permitir";

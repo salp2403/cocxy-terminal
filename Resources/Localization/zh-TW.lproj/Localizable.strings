@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "安全 SSH 連線";
 "mobile.mirror.transport.sshDetail" = "SSH 為選用方式，且只會透過所選連線發佈配對端點。";
 "mobile.mirror.transport.open" = "開啟遠端連線";
+"mobile.mirror.error.noPrivateNetwork" = "沒有可用的私人本機網路。";
+"mobile.mirror.error.invalidGatewayPort" = "本機行動閘道連接埠無效。";
+"mobile.mirror.error.alreadyStarting" = "私人行動中繼已在啟動。";
+"mobile.mirror.error.tlsIdentityUnavailable" = "無法為私人行動中繼建立加密。";
+"mobile.mirror.error.listenerUnavailable" = "無法啟動私人行動中繼。";
 "common.choose" = "選擇";
 "common.deny" = "拒絕";
 "common.allow" = "允許";

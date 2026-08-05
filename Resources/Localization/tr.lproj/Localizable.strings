@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "Güvenli SSH Bağlantısı";
 "mobile.mirror.transport.sshDetail" = "SSH isteğe bağlıdır ve eşleştirme uç noktasını yalnızca seçilen bağlantı üzerinden yayınlar.";
 "mobile.mirror.transport.open" = "Uzak Bağlantıları Aç";
+"mobile.mirror.error.noPrivateNetwork" = "Kullanılabilir özel bir yerel ağ yok.";
+"mobile.mirror.error.invalidGatewayPort" = "Yerel mobil ağ geçidi bağlantı noktası geçersiz.";
+"mobile.mirror.error.alreadyStarting" = "Özel mobil aktarıcı zaten başlatılıyor.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "Özel mobil aktarıcı için şifreleme oluşturulamadı.";
+"mobile.mirror.error.listenerUnavailable" = "Özel mobil aktarıcı başlatılamadı.";
 "common.choose" = "Seç";
 "common.deny" = "Reddet";
 "common.allow" = "İzin Ver";

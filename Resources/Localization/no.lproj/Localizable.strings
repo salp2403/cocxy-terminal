@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "Sikker SSH-forbindelse";
 "mobile.mirror.transport.sshDetail" = "SSH er valgfritt og gjør sammenkoblingsendepunktet tilgjengelig bare gjennom den valgte forbindelsen.";
 "mobile.mirror.transport.open" = "Åpne eksterne tilkoblinger";
+"mobile.mirror.error.noPrivateNetwork" = "Et privat lokalnettverk er ikke tilgjengelig.";
+"mobile.mirror.error.invalidGatewayPort" = "Porten til den lokale mobilgatewayen er ugyldig.";
+"mobile.mirror.error.alreadyStarting" = "Det private mobilreléet starter allerede.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "Kunne ikke opprette kryptering for det private mobilreléet.";
+"mobile.mirror.error.listenerUnavailable" = "Kunne ikke starte det private mobilreléet.";
 "common.choose" = "Velg";
 "common.deny" = "Avvis";
 "common.allow" = "Tillat";

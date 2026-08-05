@@ -22,17 +22,36 @@ enum MobileMirrorLocalRelayError: Error, Equatable, LocalizedError {
     case listenerUnavailable
 
     var errorDescription: String? {
+        localizedDescription(using: AppLocalizer(languagePreference: .english))
+    }
+
+    func localizedDescription(using localizer: AppLocalizer) -> String {
         switch self {
         case .noPrivateNetwork:
-            return MobileMirrorError.noPrivateNetwork.localizedDescription
+            return localizer.string(
+                "mobile.mirror.error.noPrivateNetwork",
+                fallback: "No private local network is available."
+            )
         case .invalidGatewayPort:
-            return "The local mobile gateway port is invalid."
+            return localizer.string(
+                "mobile.mirror.error.invalidGatewayPort",
+                fallback: "The local mobile gateway port is invalid."
+            )
         case .alreadyStarting:
-            return "The private mobile relay is already starting."
+            return localizer.string(
+                "mobile.mirror.error.alreadyStarting",
+                fallback: "The private mobile relay is already starting."
+            )
         case .tlsIdentityUnavailable:
-            return "Could not create encryption for the private mobile relay."
+            return localizer.string(
+                "mobile.mirror.error.tlsIdentityUnavailable",
+                fallback: "Could not create encryption for the private mobile relay."
+            )
         case .listenerUnavailable:
-            return "Could not start the private mobile relay."
+            return localizer.string(
+                "mobile.mirror.error.listenerUnavailable",
+                fallback: "Could not start the private mobile relay."
+            )
         }
     }
 }
@@ -509,12 +528,17 @@ final class MobileMirrorLocalRelay: @unchecked Sendable {
         lock.unlock()
     }
 
+    static func numericIPv4(bytes: Data) -> String? {
+        guard bytes.count == 4 else { return nil }
+        return bytes.map(String.init).joined(separator: ".")
+    }
+
     private static func numericIPv4(_ connection: NWConnection) -> String? {
         let endpoint = connection.currentPath?.remoteEndpoint ?? connection.endpoint
         guard case .hostPort(let host, _) = endpoint,
               case .ipv4(let address) = host else {
             return nil
         }
-        return address.debugDescription
+        return numericIPv4(bytes: address.rawValue)
     }
 }

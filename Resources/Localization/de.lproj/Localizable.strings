@@ -3574,6 +3574,11 @@
 "mobile.mirror.transport.sshLabel" = "Sichere SSH-Verbindung";
 "mobile.mirror.transport.sshDetail" = "SSH ist optional und stellt den Kopplungsendpunkt nur über die ausgewählte Verbindung bereit.";
 "mobile.mirror.transport.open" = "Remoteverbindungen öffnen";
+"mobile.mirror.error.noPrivateNetwork" = "Es ist kein privates lokales Netzwerk verfügbar.";
+"mobile.mirror.error.invalidGatewayPort" = "Der Port des lokalen Mobil-Gateways ist ungültig.";
+"mobile.mirror.error.alreadyStarting" = "Das private Mobil-Relay wird bereits gestartet.";
+"mobile.mirror.error.tlsIdentityUnavailable" = "Die Verschlüsselung für das private Mobil-Relay konnte nicht erstellt werden.";
+"mobile.mirror.error.listenerUnavailable" = "Das private Mobil-Relay konnte nicht gestartet werden.";
 "common.choose" = "Auswählen";
 "common.deny" = "Ablehnen";
 "common.allow" = "Erlauben";

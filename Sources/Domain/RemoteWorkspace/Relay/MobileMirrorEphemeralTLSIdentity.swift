@@ -19,6 +19,8 @@ enum MobileMirrorTLSIdentityError: Error, Equatable {
 
 final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
     private static let keychainLock = NSLock()
+    private static let keyTagPrefix = "dev.cocxy.mobile.tls."
+    private static let certificateLabelPrefix = "Cocxy Mobile Pairing "
 
     let identity: SecIdentity
     let certificate: SecCertificate
@@ -67,8 +69,8 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
     ) throws -> MobileMirrorEphemeralTLSIdentity {
         let addressBytes = try ipv4Bytes(bindAddress)
         let identifier = UUID().uuidString.lowercased()
-        let keyTag = Data("dev.cocxy.mobile.tls.\(identifier)".utf8)
-        let label = "Cocxy Mobile Pairing \(identifier)"
+        let keyTag = Data("\(keyTagPrefix)\(identifier)".utf8)
+        let label = "\(certificateLabelPrefix)\(identifier)"
         let privateKey = try makePrivateKey(tag: keyTag, label: label)
         var shouldDeleteKey = true
         defer {
@@ -140,6 +142,33 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
         lock.unlock()
     }
 
+    @discardableResult
+    static func removeStaleKeychainItems() -> MobileMirrorTLSIdentitySweepResult {
+        keychainLock.lock()
+        defer { keychainLock.unlock() }
+
+        let taggedIdentities: [(tag: Data, certificateLabel: String)] =
+            matchingAttributes(for: kSecClassKey).compactMap { attributes in
+                guard let tag = attributes[kSecAttrApplicationTag as String] as? Data,
+                      let value = String(data: tag, encoding: .utf8),
+                      value.hasPrefix(keyTagPrefix) else {
+                    return nil
+                }
+                return (
+                    tag: tag,
+                    certificateLabel: certificateLabelPrefix
+                        + String(value.dropFirst(keyTagPrefix.count))
+                )
+            }
+        for identity in taggedIdentities {
+            deleteCertificate(label: identity.certificateLabel)
+            deleteKey(tag: identity.tag)
+        }
+        return MobileMirrorTLSIdentitySweepResult(
+            matchedIdentityCount: taggedIdentities.count
+        )
+    }
+
     deinit {
         removeFromKeychain()
     }
@@ -160,6 +189,19 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
             throw MobileMirrorTLSIdentityError.keyGenerationFailed
         }
         return key
+    }
+
+    private static func matchingAttributes(for itemClass: CFString) -> [[String: Any]] {
+        var result: CFTypeRef?
+        let status = SecItemCopyMatching([
+            kSecClass as String: itemClass,
+            kSecReturnAttributes as String: true,
+            kSecMatchLimit as String: kSecMatchLimitAll,
+        ] as CFDictionary, &result)
+        guard status == errSecSuccess else { return [] }
+        if let entries = result as? [[String: Any]] { return entries }
+        if let entry = result as? [String: Any] { return [entry] }
+        return []
     }
 
     private static func makeCertificate(
@@ -272,6 +314,10 @@ final class MobileMirrorEphemeralTLSIdentity: @unchecked Sendable {
             kSecAttrApplicationTag as String: tag,
         ] as CFDictionary)
     }
+}
+
+struct MobileMirrorTLSIdentitySweepResult: Equatable, Sendable {
+    let matchedIdentityCount: Int
 }
 
 private enum DER {
