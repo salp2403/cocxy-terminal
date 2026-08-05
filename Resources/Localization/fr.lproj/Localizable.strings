@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Mettre en file d’attente";
 "taskQueue.source.prompt" = "Invite";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "L’action de la file d’attente n’a pas pu être effectuée.";
+"taskQueue.error.selection" = "Le fichier ou dossier sélectionné n’a pas pu être utilisé.";
 "taskQueue.validation.taskID" = "Saisissez un ID de tâche contenant des lettres ou des chiffres.";
 "taskQueue.validation.taskIDTooLong" = "L’ID de tâche doit contenir 128 octets UTF-8 ou moins.";
 "taskQueue.validation.prompt" = "Saisissez une invite de tâche.";

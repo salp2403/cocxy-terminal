@@ -131,7 +131,8 @@ struct TaskQueueCenterView: View {
     @State private var removalTask: TaskQueueItem?
 
     func updatedLocalizer(_ localizer: AppLocalizer) -> Self {
-        Self(
+        viewModel.updateLocalizer(localizer)
+        return Self(
             viewModel: viewModel,
             localizer: localizer,
             onDismiss: onDismiss

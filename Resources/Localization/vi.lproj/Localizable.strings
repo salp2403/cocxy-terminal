@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Thêm vào hàng đợi";
 "taskQueue.source.prompt" = "Lời nhắc";
 "taskQueue.source.pipeline" = "JSON quy trình";
+"taskQueue.error.unavailable" = "Không thể hoàn tất thao tác trên hàng đợi tác vụ.";
+"taskQueue.error.selection" = "Không thể sử dụng tệp hoặc thư mục đã chọn.";
 "taskQueue.validation.taskID" = "Nhập ID tác vụ có chứa chữ cái hoặc chữ số.";
 "taskQueue.validation.taskIDTooLong" = "ID tác vụ không được vượt quá 128 byte UTF-8.";
 "taskQueue.validation.prompt" = "Nhập lời nhắc tác vụ.";

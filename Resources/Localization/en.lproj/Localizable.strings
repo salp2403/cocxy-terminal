@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Enqueue";
 "taskQueue.source.prompt" = "Prompt";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "The task queue action could not be completed.";
+"taskQueue.error.selection" = "The selected file or folder could not be used.";
 "taskQueue.validation.taskID" = "Enter a task ID containing letters or numbers.";
 "taskQueue.validation.taskIDTooLong" = "Task ID must be 128 UTF-8 bytes or fewer.";
 "taskQueue.validation.prompt" = "Enter a task prompt.";

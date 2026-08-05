@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "キューに追加";
 "taskQueue.source.prompt" = "プロンプト";
 "taskQueue.source.pipeline" = "パイプライン JSON";
+"taskQueue.error.unavailable" = "タスクキューの操作を完了できませんでした。";
+"taskQueue.error.selection" = "選択したファイルまたはフォルダを使用できませんでした。";
 "taskQueue.validation.taskID" = "英字または数字を含むタスク ID を入力してください。";
 "taskQueue.validation.taskIDTooLong" = "タスク ID は128 UTF-8 バイト以下にしてください。";
 "taskQueue.validation.prompt" = "タスクのプロンプトを入力してください。";

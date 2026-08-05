@@ -76,6 +76,7 @@ extension MainWindowController {
         let viewModel = TaskQueueCenterViewModel(
             defaultWorktree: defaultWorktree,
             defaultProject: defaultProject,
+            localizer: localizer,
             operations: operations
         )
 

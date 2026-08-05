@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Додати до черги";
 "taskQueue.source.prompt" = "Запит";
 "taskQueue.source.pipeline" = "Конвеєр JSON";
+"taskQueue.error.unavailable" = "Не вдалося виконати дію з чергою завдань.";
+"taskQueue.error.selection" = "Не вдалося використати вибраний файл або папку.";
 "taskQueue.validation.taskID" = "Введіть ідентифікатор завдання, що містить літери або цифри.";
 "taskQueue.validation.taskIDTooLong" = "Ідентифікатор завдання має містити не більше 128 байтів UTF-8.";
 "taskQueue.validation.prompt" = "Введіть запит завдання.";

@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Kuyruğa al";
 "taskQueue.source.prompt" = "İstem";
 "taskQueue.source.pipeline" = "İşlem Hattı JSON'u";
+"taskQueue.error.unavailable" = "Görev kuyruğu işlemi tamamlanamadı.";
+"taskQueue.error.selection" = "Seçilen dosya veya klasör kullanılamadı.";
 "taskQueue.validation.taskID" = "Harf veya rakam içeren bir görev kimliği girin.";
 "taskQueue.validation.taskIDTooLong" = "Görev kimliği en fazla 128 UTF-8 bayt olmalıdır.";
 "taskQueue.validation.prompt" = "Bir görev istemi girin.";

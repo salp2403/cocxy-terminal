@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Добавить в очередь";
 "taskQueue.source.prompt" = "Запрос";
 "taskQueue.source.pipeline" = "JSON конвейера";
+"taskQueue.error.unavailable" = "Не удалось выполнить действие с очередью задач.";
+"taskQueue.error.selection" = "Не удалось использовать выбранный файл или папку.";
 "taskQueue.validation.taskID" = "Введите идентификатор задачи, содержащий буквы или цифры.";
 "taskQueue.validation.taskIDTooLong" = "Идентификатор задачи должен занимать не более 128 байт в UTF-8.";
 "taskQueue.validation.prompt" = "Введите запрос задачи.";

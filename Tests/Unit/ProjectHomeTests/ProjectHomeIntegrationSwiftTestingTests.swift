@@ -55,6 +55,30 @@ struct ProjectHomeIntegrationSwiftTestingTests {
         #expect(visibleEntries.first?.navigation?.sessionID == run.id)
     }
 
+    @Test("project tasks CLI publishes safe localized availability copy")
+    func projectTasksCLIPublishesLocalizedAvailabilityWarning() async throws {
+        let delegate = AppDelegate()
+        delegate.taskInboxStore.markFailed(.queue, message: "/Users/private/queue")
+
+        let result = try await delegate.projectTasksForCLI(projectReference: nil)
+
+        #expect(result.0)
+        #expect(
+            result.1["warning"]
+                == "Some project activity is temporarily unavailable."
+        )
+        #expect(result.1["warning"]?.contains("/Users/private") == false)
+
+        let bundle = try #require(Bundle(url: URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources/Localization", isDirectory: true)))
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        #expect(
+            AppDelegate.projectTasksAvailabilityWarning(.partial([]), localizer: spanish)
+                == "Parte de la actividad del proyecto no está disponible temporalmente."
+        )
+        #expect(AppDelegate.projectTasksAvailabilityWarning(.ready, localizer: spanish) == nil)
+    }
+
     @Test("restored factory is non-nil and duplicate opens reuse one panel")
     func restoredFactoryAndDuplicateOpenContract() throws {
         let root = FileManager.default.temporaryDirectory

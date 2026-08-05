@@ -184,7 +184,11 @@ public struct CommandRunner {
                 command: parsedCommand,
                 response: response
             )
-            return CLIResult(exitCode: 0, stdout: output, stderr: "")
+            let warning = OutputFormatter.formatSuccessWarning(
+                command: parsedCommand,
+                response: response
+            )
+            return CLIResult(exitCode: 0, stdout: output, stderr: warning ?? "")
         } else {
             let errorMessage = response.error ?? "Unknown error"
             var formattedError = CLIError.serverError(errorMessage).userMessage

@@ -169,16 +169,28 @@ enum ProjectCLIOutputFormatter {
         case .projectForget:
             return "Project forgotten: \(response.data?["path"] ?? "unknown")"
         case .projectClone:
-            var output = "Project cloned: \(response.data?["path"] ?? "unknown")"
-            if let warning = response.data?["warning"], !warning.isEmpty {
-                output += "\nWarning: \(warning)"
-            }
-            return output
+            let output = "Project cloned: \(response.data?["path"] ?? "unknown")"
+            return appendingWarning(response, to: output)
         case .projectTasks(_, let json):
-            return collection(response, key: "tasks", json: json, empty: "No project tasks.")
+            let output = collection(response, key: "tasks", json: json, empty: "No project tasks.")
+            return json ? output : appendingWarning(response, to: output)
         default:
             return ""
         }
+    }
+
+    static func successWarning(command: ParsedCommand, response: CLISocketResponse) -> String? {
+        guard case .projectTasks(_, json: true) = command,
+              let warning = response.data?["warning"],
+              !warning.isEmpty else {
+            return nil
+        }
+        return warning
+    }
+
+    private static func appendingWarning(_ response: CLISocketResponse, to output: String) -> String {
+        guard let warning = response.data?["warning"], !warning.isEmpty else { return output }
+        return "\(output)\n\(warning)"
     }
 
     private static func collection(

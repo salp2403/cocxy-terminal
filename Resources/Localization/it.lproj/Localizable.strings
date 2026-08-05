@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Accoda";
 "taskQueue.source.prompt" = "Prompt";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "Non è stato possibile completare l’azione della coda attività.";
+"taskQueue.error.selection" = "Non è stato possibile usare il file o la cartella selezionati.";
 "taskQueue.validation.taskID" = "Inserisci un ID attività contenente lettere o numeri.";
 "taskQueue.validation.taskIDTooLong" = "L'ID attività deve essere di 128 byte UTF-8 o meno.";
 "taskQueue.validation.prompt" = "Inserisci un prompt attività.";

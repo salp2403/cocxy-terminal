@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "ដាក់ចូលជួរ";
 "taskQueue.source.prompt" = "សំណើ";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "មិនអាចបញ្ចប់សកម្មភាពជួរភារកិច្ចបានទេ។";
+"taskQueue.error.selection" = "មិនអាចប្រើឯកសារ ឬថតដែលបានជ្រើសរើសបានទេ។";
 "taskQueue.validation.taskID" = "បញ្ចូលលេខសម្គាល់ភារកិច្ចដែលមានអក្សរ ឬលេខ។";
 "taskQueue.validation.taskIDTooLong" = "លេខសម្គាល់ភារកិច្ចត្រូវតែមាន 128 បៃ UTF-8 ឬតិចជាងនេះ។";
 "taskQueue.validation.prompt" = "បញ្ចូល prompt ភារកិច្ច។";

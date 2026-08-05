@@ -3,6 +3,7 @@
 
 import Combine
 import Foundation
+import os.log
 
 enum TaskQueueDraftSourceMode: String, CaseIterable, Identifiable, Sendable {
     case prompt
@@ -223,6 +224,16 @@ final class TaskQueueCenterViewModel: ObservableObject {
         case operation
     }
 
+    private enum PresentedError {
+        case unavailable
+        case selection
+    }
+
+    nonisolated private static let logger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "TaskQueuePresentation"
+    )
+
     @Published private(set) var items: [TaskQueueItem] = []
     @Published var selectedTaskID: String?
     @Published private(set) var isCreating = false
@@ -236,17 +247,21 @@ final class TaskQueueCenterViewModel: ObservableObject {
     private let defaultWorktree: String
     private let defaultProject: String?
     private let operations: TaskQueueCenterOperations
+    private var localizer: AppLocalizer
     private var loadRevision = 0
     private var hasLoaded = false
     private var errorSource: ErrorSource?
+    private var presentedError: PresentedError?
 
     init(
         defaultWorktree: String,
         defaultProject: String? = nil,
+        localizer: AppLocalizer,
         operations: TaskQueueCenterOperations
     ) {
         self.defaultWorktree = defaultWorktree
         self.defaultProject = defaultProject
+        self.localizer = localizer
         self.operations = operations
         draft = TaskQueueEnqueueDraft(worktree: defaultWorktree, project: defaultProject)
     }
@@ -287,8 +302,14 @@ final class TaskQueueCenterViewModel: ObservableObject {
     }
 
     func setExternalError(_ error: Error) {
-        errorMessage = String(describing: error)
-        errorSource = .operation
+        present(error, as: .selection, source: .operation)
+    }
+
+    func updateLocalizer(_ localizer: AppLocalizer) {
+        self.localizer = localizer
+        if let presentedError {
+            errorMessage = localizedMessage(for: presentedError)
+        }
     }
 
     func reload(showProgress: Bool = true) async {
@@ -320,8 +341,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
             guard revision == loadRevision else { return }
             isLoading = false
             if showProgress || items.isEmpty {
-                errorMessage = String(describing: error)
-                errorSource = .load
+                present(error, as: .unavailable, source: .load)
             }
         }
     }
@@ -340,8 +360,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
             await reload(showProgress: false)
         } catch {
             isSubmitting = false
-            errorMessage = String(describing: error)
-            errorSource = .operation
+            present(error, as: .unavailable, source: .operation)
         }
     }
 
@@ -356,8 +375,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
             await reload(showProgress: false)
         } catch {
             cancellingTaskID = nil
-            errorMessage = String(describing: error)
-            errorSource = .operation
+            present(error, as: .unavailable, source: .operation)
         }
     }
 
@@ -372,8 +390,7 @@ final class TaskQueueCenterViewModel: ObservableObject {
             await reload(showProgress: false)
         } catch {
             operatingTaskID = nil
-            errorMessage = String(describing: error)
-            errorSource = .operation
+            present(error, as: .unavailable, source: .operation)
         }
     }
 
@@ -391,8 +408,35 @@ final class TaskQueueCenterViewModel: ObservableObject {
             await reload(showProgress: false)
         } catch {
             operatingTaskID = nil
-            errorMessage = String(describing: error)
-            errorSource = .operation
+            present(error, as: .unavailable, source: .operation)
+        }
+    }
+
+    private func present(
+        _ error: any Error,
+        as presentedError: PresentedError,
+        source: ErrorSource
+    ) {
+        Self.logger.error(
+            "Task queue operation failed: \(String(describing: error), privacy: .private)"
+        )
+        self.presentedError = presentedError
+        errorMessage = localizedMessage(for: presentedError)
+        errorSource = source
+    }
+
+    private func localizedMessage(for error: PresentedError) -> String {
+        switch error {
+        case .unavailable:
+            return localizer.string(
+                "taskQueue.error.unavailable",
+                fallback: "The task queue action could not be completed."
+            )
+        case .selection:
+            return localizer.string(
+                "taskQueue.error.selection",
+                fallback: "The selected file or folder could not be used."
+            )
         }
     }
 
@@ -407,5 +451,6 @@ final class TaskQueueCenterViewModel: ObservableObject {
     private func clearError() {
         errorMessage = nil
         errorSource = nil
+        presentedError = nil
     }
 }

@@ -100,6 +100,7 @@ struct TaskQueueUISwiftTestingTests {
         let backend = TaskQueueUITestBackend()
         let model = TaskQueueCenterViewModel(
             defaultWorktree: root.path,
+            localizer: AppLocalizer(languagePreference: .english),
             operations: TaskQueueCenterOperations(
                 load: { backend.load() },
                 enqueue: { draft in try backend.enqueue(draft) },
@@ -195,6 +196,7 @@ struct TaskQueueUISwiftTestingTests {
     func queueCenterRepaintsWithoutReplacingViewModel() throws {
         let model = TaskQueueCenterViewModel(
             defaultWorktree: "/tmp",
+            localizer: AppLocalizer(languagePreference: .english),
             operations: TaskQueueCenterOperations(
                 load: { [] },
                 enqueue: { draft in try draft.makeItem() },
@@ -216,6 +218,34 @@ struct TaskQueueUISwiftTestingTests {
         #expect(updated.viewModel === model)
         #expect(updated.localizer.resolvedLanguage == .spanish)
         _ = updated.body
+    }
+
+    @Test("queue errors are localized without exposing technical paths")
+    func queueErrorsAreLocalizedWithoutTechnicalPaths() async throws {
+        let bundle = try #require(localizationBundle())
+        let spanish = AppLocalizer(languagePreference: .spanish, bundle: bundle)
+        let model = TaskQueueCenterViewModel(
+            defaultWorktree: "/tmp",
+            localizer: spanish,
+            operations: TaskQueueCenterOperations(
+                load: { throw TaskQueueStoreError.invalidRoot("/Users/private/queue") },
+                enqueue: { _ in throw TaskQueueStoreError.persistenceFailed("/Users/private/item") },
+                cancel: { _ in throw TaskQueueError.taskNotFound("private-task") },
+                rerun: { _ in throw TaskQueueError.taskNotFound("private-task") },
+                remove: { _ in throw TaskQueueError.taskNotFound("private-task") }
+            )
+        )
+
+        await model.reload()
+        #expect(model.errorMessage == "No se pudo completar la acción de la cola de tareas.")
+        #expect(model.errorMessage?.contains("/Users/private") == false)
+
+        model.setExternalError(TaskQueueStoreError.symbolicLinkRejected("/Users/private/link"))
+        #expect(model.errorMessage == "No se pudo usar el archivo o la carpeta seleccionados.")
+        #expect(model.errorMessage?.contains("/Users/private") == false)
+
+        model.updateLocalizer(AppLocalizer(languagePreference: .english, bundle: bundle))
+        #expect(model.errorMessage == "The selected file or folder could not be used.")
     }
 
     private func makeTemporaryDirectory() throws -> URL {

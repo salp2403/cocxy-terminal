@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "إضافة إلى قائمة الانتظار";
 "taskQueue.source.prompt" = "المطالبة";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "تعذر إكمال إجراء قائمة انتظار المهام.";
+"taskQueue.error.selection" = "تعذر استخدام الملف أو المجلد المحدد.";
 "taskQueue.validation.taskID" = "أدخل معرّف مهمة يحتوي على أحرف أو أرقام.";
 "taskQueue.validation.taskIDTooLong" = "يجب ألا يزيد معرّف المهمة عن 128 بايت UTF-8.";
 "taskQueue.validation.prompt" = "أدخل مطالبة مهمة.";

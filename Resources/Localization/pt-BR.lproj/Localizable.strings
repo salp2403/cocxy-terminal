@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Adicionar à Fila";
 "taskQueue.source.prompt" = "Solicitação";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "Não foi possível concluir a ação da fila de tarefas.";
+"taskQueue.error.selection" = "Não foi possível usar o arquivo ou a pasta selecionados.";
 "taskQueue.validation.taskID" = "Insira um ID de tarefa que contenha letras ou números.";
 "taskQueue.validation.taskIDTooLong" = "O ID da tarefa deve ter no máximo 128 bytes UTF-8.";
 "taskQueue.validation.prompt" = "Insira uma solicitação para a tarefa.";

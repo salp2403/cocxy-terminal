@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Legg i kø";
 "taskQueue.source.prompt" = "Instruksjon";
 "taskQueue.source.pipeline" = "Forløp-JSON";
+"taskQueue.error.unavailable" = "Handlingen i oppgavekøen kunne ikke fullføres.";
+"taskQueue.error.selection" = "Den valgte filen eller mappen kunne ikke brukes.";
 "taskQueue.validation.taskID" = "Skriv inn en oppgave-ID som inneholder bokstaver eller tall.";
 "taskQueue.validation.taskIDTooLong" = "Oppgave-ID-en kan ikke være større enn 128 UTF-8-byte.";
 "taskQueue.validation.prompt" = "Skriv inn en oppgaveinstruksjon.";

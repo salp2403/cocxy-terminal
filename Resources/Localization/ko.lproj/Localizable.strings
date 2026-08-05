@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "대기열에 추가";
 "taskQueue.source.prompt" = "프롬프트";
 "taskQueue.source.pipeline" = "파이프라인 JSON";
+"taskQueue.error.unavailable" = "작업 대기열 동작을 완료할 수 없습니다.";
+"taskQueue.error.selection" = "선택한 파일 또는 폴더를 사용할 수 없습니다.";
 "taskQueue.validation.taskID" = "문자 또는 숫자가 포함된 작업 ID를 입력하십시오.";
 "taskQueue.validation.taskIDTooLong" = "작업 ID는 128 UTF-8바이트 이하여야 합니다.";
 "taskQueue.validation.prompt" = "작업 프롬프트를 입력하십시오.";

@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "加入队列";
 "taskQueue.source.prompt" = "提示词";
 "taskQueue.source.pipeline" = "流水线 JSON";
+"taskQueue.error.unavailable" = "无法完成任务队列操作。";
+"taskQueue.error.selection" = "无法使用所选文件或文件夹。";
 "taskQueue.validation.taskID" = "请输入包含字母或数字的任务 ID。";
 "taskQueue.validation.taskIDTooLong" = "任务 ID 不得超过 128 个 UTF-8 字节。";
 "taskQueue.validation.prompt" = "请输入任务提示词。";

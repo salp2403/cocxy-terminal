@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Sæt i kø";
 "taskQueue.source.prompt" = "Prompt";
 "taskQueue.source.pipeline" = "Pipeline-JSON";
+"taskQueue.error.unavailable" = "Handlingen i opgavekøen kunne ikke fuldføres.";
+"taskQueue.error.selection" = "Den valgte fil eller mappe kunne ikke bruges.";
 "taskQueue.validation.taskID" = "Angiv et opgave-id, der indeholder bogstaver eller tal.";
 "taskQueue.validation.taskIDTooLong" = "Opgave-id skal være højst 128 UTF-8-byte.";
 "taskQueue.validation.prompt" = "Angiv en opgaveprompt.";

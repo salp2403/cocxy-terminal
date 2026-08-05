@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "เพิ่มเข้าคิว";
 "taskQueue.source.prompt" = "พรอมต์";
 "taskQueue.source.pipeline" = "JSON ไปป์ไลน์";
+"taskQueue.error.unavailable" = "ไม่สามารถดำเนินการคิวงานให้เสร็จสมบูรณ์ได้";
+"taskQueue.error.selection" = "ไม่สามารถใช้ไฟล์หรือโฟลเดอร์ที่เลือกได้";
 "taskQueue.validation.taskID" = "ป้อน ID งานที่ประกอบด้วยตัวอักษรหรือตัวเลข";
 "taskQueue.validation.taskIDTooLong" = "ID งานต้องมีขนาดไม่เกิน 128 ไบต์ UTF-8";
 "taskQueue.validation.prompt" = "ป้อนพรอมต์งาน";

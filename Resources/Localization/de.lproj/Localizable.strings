@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Einreihen";
 "taskQueue.source.prompt" = "Eingabe";
 "taskQueue.source.pipeline" = "Pipeline-JSON";
+"taskQueue.error.unavailable" = "Die Aktion in der Aufgabenwarteschlange konnte nicht abgeschlossen werden.";
+"taskQueue.error.selection" = "Die ausgewählte Datei oder der ausgewählte Ordner konnte nicht verwendet werden.";
 "taskQueue.validation.taskID" = "Geben Sie eine Aufgaben-ID mit Buchstaben oder Ziffern ein.";
 "taskQueue.validation.taskIDTooLong" = "Die Aufgaben-ID darf höchstens 128 UTF-8-Bytes lang sein.";
 "taskQueue.validation.prompt" = "Geben Sie eine Aufgabeneingabe ein.";

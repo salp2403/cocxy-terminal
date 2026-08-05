@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "Añadir a la cola";
 "taskQueue.source.prompt" = "Instrucción";
 "taskQueue.source.pipeline" = "Pipeline JSON";
+"taskQueue.error.unavailable" = "No se pudo completar la acción de la cola de tareas.";
+"taskQueue.error.selection" = "No se pudo usar el archivo o la carpeta seleccionados.";
 "taskQueue.validation.taskID" = "Escribe un ID de tarea que contenga letras o números.";
 "taskQueue.validation.taskIDTooLong" = "El ID debe tener 128 bytes UTF-8 o menos.";
 "taskQueue.validation.prompt" = "Escribe una instrucción para la tarea.";

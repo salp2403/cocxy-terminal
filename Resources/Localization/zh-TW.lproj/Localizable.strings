@@ -3515,6 +3515,8 @@
 "taskQueue.composer.enqueue" = "加入佇列";
 "taskQueue.source.prompt" = "提示詞";
 "taskQueue.source.pipeline" = "管線 JSON";
+"taskQueue.error.unavailable" = "無法完成任務佇列操作。";
+"taskQueue.error.selection" = "無法使用所選檔案或資料夾。";
 "taskQueue.validation.taskID" = "請輸入包含字母或數字的任務 ID。";
 "taskQueue.validation.taskIDTooLong" = "任務 ID 不得超過 128 個 UTF-8 位元組。";
 "taskQueue.validation.prompt" = "請輸入任務提示詞。";

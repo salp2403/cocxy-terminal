@@ -2,6 +2,7 @@
 // AppDelegate+ProjectCLI.swift - App-owned project CLI operations.
 
 import Foundation
+import os.log
 
 private struct ProjectCLIProjectPayload: Codable {
     let id: String
@@ -45,6 +46,11 @@ private enum ProjectCLIRequestError: Error, LocalizedError {
 }
 
 extension AppDelegate {
+    nonisolated private static let projectCLILogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "ProjectCLI"
+    )
+
     nonisolated func handleProjectCLIRequest(
         kind: String,
         params: [String: String],
@@ -228,7 +234,13 @@ extension AppDelegate {
                 remoteOrigin: clone.remoteOrigin
             )
         } catch {
-            warning = error.localizedDescription
+            warning = appLocalizer().projectErrorMessage(
+                for: error,
+                context: .metadataWarning
+            )
+            Self.projectCLILogger.error(
+                "Project clone metadata save failed: \(String(describing: error), privacy: .private)"
+            )
         }
         var data = [
             "status": "cloned",
@@ -247,10 +259,14 @@ extension AppDelegate {
         let filter = try await MainActor.run {
             try projectReference.map { try resolveProjectReference($0, registerIfAvailable: false) }
         }
-        let (payloads, availability) = await MainActor.run {
+        let (payloads, warning) = await MainActor.run {
             let snapshot = taskInboxStore.snapshot
             let entries = filter.map { taskInboxStore.entries(for: $0) } ?? snapshot.entries
-            return (entries, snapshot.availability)
+            let warning = Self.projectTasksAvailabilityWarning(
+                snapshot.availability,
+                localizer: appLocalizer()
+            )
+            return (entries, warning)
         }
         var data = [
             "status": "listed",
@@ -258,10 +274,19 @@ extension AppDelegate {
             "tasks": try encodeProjectCLI(payloads),
             "summary": projectTaskSummary(payloads),
         ]
-        if availability != .ready {
-            data["warning"] = "Some project activity is still loading or unavailable"
-        }
+        if let warning { data["warning"] = warning }
         return (true, data)
+    }
+
+    static func projectTasksAvailabilityWarning(
+        _ availability: TaskInboxAvailability,
+        localizer: AppLocalizer
+    ) -> String? {
+        guard availability != .ready else { return nil }
+        return localizer.string(
+            "projectHome.inbox.partial",
+            fallback: "Some project activity is temporarily unavailable."
+        )
     }
 
     @MainActor

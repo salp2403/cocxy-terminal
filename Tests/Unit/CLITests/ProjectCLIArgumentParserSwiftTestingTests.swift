@@ -108,6 +108,51 @@ struct ProjectCLIArgumentParserSwiftTestingTests {
         ) == "[live] API - /tmp/repo")
     }
 
+    @Test("project commands preserve localized warnings without corrupting JSON")
+    func formatsLocalizedProjectWarnings() throws {
+        let warning = "Parte de la actividad del proyecto no está disponible temporalmente."
+        let clone = CLISocketResponse(
+            id: "clone",
+            success: true,
+            data: ["path": "/tmp/repo", "warning": warning],
+            error: nil
+        )
+        let tasks = CLISocketResponse(
+            id: "tasks",
+            success: true,
+            data: [
+                "tasks": #"[{"id":"task-1"}]"#,
+                "summary": "Una tarea.",
+                "warning": warning,
+            ],
+            error: nil
+        )
+
+        #expect(OutputFormatter.formatSuccess(
+            command: .projectClone(remote: "https://example.com/repo.git", parentDirectory: "/tmp"),
+            response: clone
+        ) == "Project cloned: /tmp/repo\n\(warning)")
+        #expect(OutputFormatter.formatSuccess(
+            command: .projectTasks(project: nil, json: false),
+            response: tasks
+        ) == "Una tarea.\n\(warning)")
+        let json = OutputFormatter.formatSuccess(
+            command: .projectTasks(project: nil, json: true),
+            response: tasks
+        )
+        let jsonData = try #require(json.data(using: .utf8))
+        let decoded = try #require(
+            JSONSerialization.jsonObject(with: jsonData) as? [[String: Any]]
+        )
+        #expect(decoded.count == 1)
+        #expect(decoded.first?["id"] as? String == "task-1")
+        #expect(!json.contains(warning))
+        #expect(OutputFormatter.formatSuccessWarning(
+            command: .projectTasks(project: nil, json: true),
+            response: tasks
+        ) == warning)
+    }
+
     @Test("project open receives approval grace and clone receives bounded Git time")
     func usesBoundedSocketTimeouts() {
         #expect(runner.socketClient(for: .projectOpen(path: "/tmp/repo")).timeoutSeconds == 70)

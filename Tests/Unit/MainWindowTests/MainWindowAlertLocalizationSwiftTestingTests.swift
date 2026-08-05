@@ -120,6 +120,19 @@ struct MainWindowAlertLocalizationSwiftTestingTests {
         #expect(startupCopy.previewAccessibilityLabel == "Entrada exacta de terminal para aprobación")
     }
 
+    @Test("task run failures use safe localized copy")
+    func taskRunFailuresUseSafeLocalizedCopy() throws {
+        let localizer = AppLocalizer(
+            languagePreference: .spanish,
+            bundle: try #require(localizationBundle())
+        )
+
+        let message = MainWindowController.localizedTaskRunFailureMessage(localizer: localizer)
+
+        #expect(message == "No se pudo completar la acción del proyecto.")
+        #expect(!message.contains("/Users/private"))
+    }
+
     @Test("GitHub socket approval copy identifies the exact Spanish target")
     func githubSocketApprovalCopyIdentifiesExactSpanishTarget() throws {
         let localizer = AppLocalizer(

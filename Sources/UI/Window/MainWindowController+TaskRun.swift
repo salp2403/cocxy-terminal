@@ -2,9 +2,15 @@
 // MainWindowController+TaskRun.swift - Project Home fan-out command routing.
 
 import AppKit
+import os.log
 
 @MainActor
 extension MainWindowController {
+    private static let taskRunPresentationLogger = Logger(
+        subsystem: "dev.cocxy.terminal",
+        category: "TaskRunPresentation"
+    )
+
     func showTaskRunLaunchSheet() {
         guard window != nil,
               let delegate = NSApp.delegate as? AppDelegate,
@@ -38,7 +44,7 @@ extension MainWindowController {
                 targetTabID: targetTabID
             )
         } catch {
-            presentTaskRunAlert(message: String(describing: error))
+            presentTaskRunFailure(error)
         }
     }
 
@@ -108,8 +114,24 @@ extension MainWindowController {
                 runID: run.id
             )
         } catch {
-            presentTaskRunAlert(message: String(describing: error))
+            presentTaskRunFailure(error)
         }
+    }
+
+    static func localizedTaskRunFailureMessage(localizer: AppLocalizer) -> String {
+        localizer.string(
+            "project.error.message",
+            fallback: "The project action could not be completed."
+        )
+    }
+
+    private func presentTaskRunFailure(_ error: any Error) {
+        Self.taskRunPresentationLogger.error(
+            "Task run presentation failed: \(String(describing: error), privacy: .private)"
+        )
+        presentTaskRunAlert(
+            message: Self.localizedTaskRunFailureMessage(localizer: appLocalizer())
+        )
     }
 
     private func presentTaskRunAlert(message: String) {
