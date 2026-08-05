@@ -127,15 +127,25 @@ struct LocalizationUsageSwiftTestingTests {
             directory: root.appendingPathComponent("Sources", isDirectory: true),
             relativeTo: root
         )
-        let dynamicKeys = expandedDynamicKeys(scan.dynamicUsages)
+        let expansion = expandedDynamicKeys(
+            scan.dynamicUsages,
+            registry: try dynamicKeyRegistry(root: root)
+        )
+        let unregistered = expansion.unregistered.map { usage in
+            "\(usage.template) [\(usage.location.path):\(usage.location.line)]"
+        }.joined(separator: "; ")
         let usedKeys = Set(scan.staticUsages.keys)
-            .union(dynamicKeys)
+            .union(expansion.keys)
             .union(MobileMirrorWebLocalization.english.catalog.keys)
         let english = try localizationStrings(locale: "en", root: root)
         let missing = usedKeys.subtracting(english.keys).sorted()
         let requiredSwiftUsageKeys = Self.requiredKeys.subtracting(Self.catalogOnlyKeys)
         let uncoveredRequired = requiredSwiftUsageKeys.subtracting(usedKeys).sorted()
 
+        #expect(
+            expansion.unregistered.isEmpty,
+            Comment(rawValue: "Dynamic localization usages need an explicit expansion: \(unregistered)")
+        )
         #expect(
             uncoveredRequired.isEmpty,
             Comment(rawValue: "Required keys not discovered by the Swift scanner: \(uncoveredRequired.joined(separator: ", "))")
@@ -154,22 +164,22 @@ struct LocalizationUsageSwiftTestingTests {
             relativeTo: root
         )
         let expected = Set(PluginEvent.allCases.map { "taskQueue.event.\($0.rawValue)" })
-        let expanded = expandedDynamicKeys(scan.dynamicUsages)
+        let expansion = expandedDynamicKeys(
+            scan.dynamicUsages,
+            registry: try dynamicKeyRegistry(root: root)
+        )
         let taskQueueEventUsages = scan.dynamicUsages.filter {
             $0.template.hasPrefix("taskQueue.event.")
         }
-        let unsupported = taskQueueEventUsages.filter {
-            $0.template != #"taskQueue.event.\(event.rawValue)"#
-        }
-        let unsupportedDescription = unsupported.map { usage in
+        let unsupportedDescription = expansion.unregistered.map { usage in
             "\(usage.template) [\(usage.location.path):\(usage.location.line)]"
         }.joined(separator: "; ")
 
         #expect(PluginEvent.allCases.count == 11)
         #expect(!taskQueueEventUsages.isEmpty)
-        #expect(expected.isSubset(of: expanded))
+        #expect(expected.isSubset(of: expansion.keys))
         #expect(
-            unsupported.isEmpty,
+            expansion.unregistered.isEmpty,
             Comment(rawValue: "Dynamic localization usages need an explicit expansion: \(unsupportedDescription)")
         )
     }
@@ -237,21 +247,58 @@ struct LocalizationUsageSwiftTestingTests {
         }
     }
 
-    @Test("scanner ignores non-localization string calls and comments")
-    func scannerIgnoresNonLocalizationStringCallsAndComments() {
+    @Test("scanner resolves native variable and conditional localization calls")
+    func scannerResolvesNativeVariableAndConditionalLocalizationCalls() {
         let source = #"""
         let payload: JSONValue = .string("payload.value")
         let fallback = json.string("payload.fallback", fallback: "none")
         // localizer.string("comment.key", fallback: "Comment")
         let timestamp = formatter.string(from: date)
+        let variableKey = "variable.key"
+        let conditionalKey = enabled ? "conditional.enabled" : "conditional.disabled"
         let title = localizer.string("real.key", fallback: "Real")
+        let variable = localizer.string(variableKey, fallback: "Variable")
+        let conditional = localizer.string(conditionalKey, fallback: "Conditional")
         let detail = localized("wrapped.key", fallback: "Wrapped")
         let error = formattedProjectString("formatted.key", fallback: "Formatted: %@", value)
+        let foundation = NSLocalizedString("foundation.key", comment: "Foundation")
+        let native = String(localized: enabled ? "native.enabled" : "native.disabled")
+        let computed = localizer.string(computedKey, fallback: "Computed")
+        let dynamic = localizer.string("dynamic.\(value)", fallback: "Dynamic")
+        var computedKey: String {
+            if enabled { return "computed.enabled" }
+            return "computed.disabled"
+        }
         """#
         let scan = SwiftLocalizationUsageScanner.scan(source: source, path: "Fixture.swift")
 
-        #expect(Set(scan.staticUsages.keys) == ["formatted.key", "real.key", "wrapped.key"])
-        #expect(scan.dynamicUsages.isEmpty)
+        #expect(Set(scan.staticUsages.keys) == [
+            "conditional.disabled",
+            "conditional.enabled",
+            "computed.disabled",
+            "computed.enabled",
+            "formatted.key",
+            "foundation.key",
+            "native.disabled",
+            "native.enabled",
+            "real.key",
+            "variable.key",
+            "wrapped.key",
+        ])
+        #expect(Set(scan.dynamicUsages.map(\.template)) == [#"dynamic.\(value)"#])
+    }
+
+    @Test("unregistered dynamic templates fail expansion")
+    func unregisteredDynamicTemplatesFailExpansion() {
+        let scan = SwiftLocalizationUsageScanner.scan(
+            source: #"localizer.string("fixture.\(value)", fallback: "Fixture")"#,
+            path: "Fixture.swift"
+        )
+
+        let expansion = expandedDynamicKeys(scan.dynamicUsages, registry: [:])
+
+        #expect(expansion.keys.isEmpty)
+        #expect(expansion.unregistered.map(\.template) == [#"fixture.\(value)"#])
     }
 
     @Test("revocation placeholders preserve capability and plugin roles")
@@ -280,14 +327,104 @@ struct LocalizationUsageSwiftTestingTests {
         }
     }
 
+    private struct DynamicExpansion {
+        let keys: Set<String>
+        let unregistered: [SwiftLocalizationUsageScanner.DynamicUsage]
+    }
+
     private func expandedDynamicKeys(
-        _ usages: [SwiftLocalizationUsageScanner.DynamicUsage]
-    ) -> Set<String> {
+        _ usages: [SwiftLocalizationUsageScanner.DynamicUsage],
+        registry: [String: Set<String>]
+    ) -> DynamicExpansion {
         var keys: Set<String> = []
-        for usage in usages where usage.template == #"taskQueue.event.\(event.rawValue)"# {
-            keys.formUnion(PluginEvent.allCases.map { "taskQueue.event.\($0.rawValue)" })
+        var unregistered: [SwiftLocalizationUsageScanner.DynamicUsage] = []
+        for usage in usages {
+            guard let expansion = registry[usage.template] else {
+                unregistered.append(usage)
+                continue
+            }
+            keys.formUnion(expansion)
         }
-        return keys
+        return DynamicExpansion(keys: keys, unregistered: unregistered)
+    }
+
+    private func dynamicKeyRegistry(root: URL) throws -> [String: Set<String>] {
+        let plugins = try BundledPluginCatalog(
+            pluginsDirectory: root.appendingPathComponent("Resources/Plugins", isDirectory: true)
+        ).loadManifests()
+        let helperIDs = DBCloudHelperCatalog.descriptors(from: plugins).map(\.id)
+        let skillIDs = try SkillRegistry(directories: [SkillDirectory(
+            url: root.appendingPathComponent("Resources/Skills", isDirectory: true),
+            source: .builtIn
+        )]).loadSkills().map(\.id)
+        let templates = try ProjectTemplateRegistry(directories: [ProjectTemplateDirectory(
+            url: root.appendingPathComponent("Resources/Templates", isDirectory: true),
+            source: .builtIn
+        )]).loadTemplates()
+        let templateIDs = templates.map(\.id)
+        let pluginIDs = plugins.map(\.id)
+        let shortcutIDs = CocxyShortcutsCatalog.descriptors.map(\.id)
+        let worktreeTemplateIDs = WorktreeTemplate.builtIns.map(\.id)
+        let remoteSubPanelIDs = RemoteConnectionViewModel.SubPanel.allCases.map(\.rawValue)
+        let lspSuggestionIDs = LSPLanguageRegistry.defaults.servers
+            .filter { $0.installSuggestion.command == nil }
+            .map(\.languageID)
+        let englishKeys = Set(try localizationStrings(locale: "en", root: root).keys)
+        let commandNameKeys = englishKeys.filter {
+            $0.hasPrefix("command.") && $0.hasSuffix(".name")
+        }
+        let commandDescriptionKeys = englishKeys.filter {
+            $0.hasPrefix("command.") && $0.contains(".description")
+        }
+
+        return [
+            #"agent.panel.skill.builtIn.\(skill.id).name"#: family(skillIDs, prefix: "agent.panel.skill.builtIn.", suffix: ".name"),
+            #"agent.panel.skill.builtIn.\(skill.id).summary"#: family(skillIDs, prefix: "agent.panel.skill.builtIn.", suffix: ".summary"),
+            #"dbCloud.helper.\(descriptor.id).description"#: family(helperIDs, prefix: "dbCloud.helper.", suffix: ".description"),
+            #"dbCloud.status.postgres.\(keySuffix)"#: family(["finished", "failed"], prefix: "dbCloud.status.postgres."),
+            #"dbCloud.status.s3.\(keySuffix)"#: family(["finished", "failed"], prefix: "dbCloud.status.s3."),
+            #"dbCloud.status.sqlite.\(keySuffix)"#: family(["finished", "failed"], prefix: "dbCloud.status.sqlite."),
+            #"keybindings.action.\(id).name"#: family(KeybindingActionCatalog.all.map(\.id), prefix: "keybindings.action.", suffix: ".name"),
+            #"keybindings.action.\(id).summary"#: family(KeybindingActionCatalog.all.map(\.id), prefix: "keybindings.action.", suffix: ".summary"),
+            #"keybindings.category.\(id)"#: family(KeybindingCategory.allCases.map(\.rawValue), prefix: "keybindings.category."),
+            #"command.category.\(rawValue.lowercased())"#: family(CommandCategory.allCases.map { $0.rawValue.lowercased() }, prefix: "command.category."),
+            #"command.\(id).description"#: commandDescriptionKeys,
+            #"command.\(id).name"#: commandNameKeys,
+            #"plugins.builtin.\(plugin.id).description"#: family(pluginIDs, prefix: "plugins.builtin.", suffix: ".description"),
+            #"plugins.builtin.\(plugin.id).name"#: family(pluginIDs, prefix: "plugins.builtin.", suffix: ".name"),
+            #"preferences.appearance.sidebarDensity.\(rawValue)"#: family(AuroraSidebarDisplayMode.allCases.map(\.rawValue), prefix: "preferences.appearance.sidebarDensity."),
+            #"preferences.appearance.sidebarRowDetail.\(rawValue)"#: family(AuroraSidebarPrimaryInfo.allCases.map(\.rawValue), prefix: "preferences.appearance.sidebarRowDetail."),
+            #"preferences.lsp.install.\(server.languageID)"#: family(lspSuggestionIDs, prefix: "preferences.lsp.install."),
+            #"preferences.section.\(rawValue)"#: family(PreferencesSection.allCases.map(\.rawValue), prefix: "preferences.section."),
+            #"preferences.updates.channel.\(channel.rawValue)"#: family(ChannelKind.allCases.map(\.rawValue), prefix: "preferences.updates.channel."),
+            #"remoteWorkspace.subPanel.\(rawValue)"#: family(remoteSubPanelIDs, prefix: "remoteWorkspace.subPanel."),
+            #"remoteWorkspace.subPanel.\(rawValue).detail"#: family(remoteSubPanelIDs, prefix: "remoteWorkspace.subPanel.", suffix: ".detail"),
+            #"sandboxInspector.capability.\(capability.rawValue)"#: family(PluginCapability.allCases.map(\.rawValue), prefix: "sandboxInspector.capability."),
+            #"shortcuts.\(id).privacy"#: family(shortcutIDs, prefix: "shortcuts.", suffix: ".privacy"),
+            #"shortcuts.\(id).summary"#: family(shortcutIDs, prefix: "shortcuts.", suffix: ".summary"),
+            #"shortcuts.\(id).title"#: family(shortcutIDs, prefix: "shortcuts.", suffix: ".title"),
+            #"taskQueue.event.\(event.rawValue)"#: family(PluginEvent.allCases.map(\.rawValue), prefix: "taskQueue.event."),
+            #"taskQueue.status.\(rawValue)"#: family(["scheduled", "queued", "running", "retrying", "succeeded", "failed", "cancelled"], prefix: "taskQueue.status."),
+            #"taskQueue.status.\(status.rawValue)"#: family(["scheduled", "queued", "running", "retrying", "succeeded", "failed", "cancelled"], prefix: "taskQueue.status."),
+            #"taskRun.status.\(rawValue)"#: family(["launching", "running", "promoting", "completed", "failed", "cancelled"], prefix: "taskRun.status."),
+            #"agentDashboard.state.\(dashboardValue)"#: family(AgentDashboardState.allCases.map(\.rawValue), prefix: "agentDashboard.state."),
+            #"markdown.search.matches.\(matchSegment).\(fileSegment)"#: family(["one.oneFile", "one.manyFiles", "many.oneFile", "many.manyFiles"], prefix: "markdown.search.matches."),
+            #"templates.builtIn.\(template.id).name"#: family(templateIDs, prefix: "templates.builtIn.", suffix: ".name"),
+            #"templates.builtIn.\(template.id).summary"#: family(templateIDs, prefix: "templates.builtIn.", suffix: ".summary"),
+            #"templates.builtIn.\(template.id).variable.\(variable.name).prompt"#: Set(templates.flatMap { template in
+                template.variables.map { "templates.builtIn.\(template.id).variable.\($0.name).prompt" }
+            }),
+            #"worktree.template.\(id).description"#: family(worktreeTemplateIDs, prefix: "worktree.template.", suffix: ".description"),
+            #"worktree.template.\(id).name"#: family(worktreeTemplateIDs, prefix: "worktree.template.", suffix: ".name"),
+        ]
+    }
+
+    private func family(
+        _ values: [String],
+        prefix: String,
+        suffix: String = ""
+    ) -> Set<String> {
+        Set(values.map { prefix + $0 + suffix })
     }
 
     private func missingMessage(
@@ -319,231 +456,5 @@ struct LocalizationUsageSwiftTestingTests {
             format: nil
         )
         return try #require(propertyList as? [String: String])
-    }
-}
-
-private enum SwiftLocalizationUsageScanner {
-    struct Location: Hashable {
-        let path: String
-        let line: Int
-    }
-
-    struct DynamicUsage: Hashable {
-        let template: String
-        let location: Location
-    }
-
-    struct Result {
-        var staticUsages: [String: [Location]] = [:]
-        var dynamicUsages: [DynamicUsage] = []
-
-        mutating func merge(_ other: Result) {
-            for (key, locations) in other.staticUsages {
-                staticUsages[key, default: []].append(contentsOf: locations)
-            }
-            dynamicUsages.append(contentsOf: other.dynamicUsages)
-        }
-    }
-
-    private enum TokenKind: Equatable {
-        case identifier(String)
-        case stringLiteral(String)
-        case symbol(Character)
-    }
-
-    private struct Token: Equatable {
-        let kind: TokenKind
-        let line: Int
-    }
-
-    static func scan(directory: URL, relativeTo root: URL) throws -> Result {
-        guard let enumerator = FileManager.default.enumerator(
-            at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { return Result() }
-
-        var result = Result()
-        for case let fileURL as URL in enumerator {
-            guard fileURL.pathExtension == "swift" else { continue }
-            let values = try fileURL.resourceValues(forKeys: [.isRegularFileKey])
-            guard values.isRegularFile == true else { continue }
-            let source = try String(contentsOf: fileURL, encoding: .utf8)
-            result.merge(scan(source: source, path: relativePath(for: fileURL, from: root)))
-        }
-        return result
-    }
-
-    static func scan(source: String, path: String) -> Result {
-        let tokens = tokenize(source)
-        let appLocalizerExtension = tokens.indices.contains { index in
-            guard case .identifier("extension") = tokens[index].kind,
-                  index + 1 < tokens.count,
-                  case .identifier("AppLocalizer") = tokens[index + 1].kind else {
-                return false
-            }
-            return true
-        }
-        var result = Result()
-
-        for index in tokens.indices {
-            guard case .identifier(let function) = tokens[index].kind,
-                  ["formattedProjectString", "localized", "localizedString", "string"].contains(function),
-                  index + 2 < tokens.count,
-                  tokens[index + 1].kind == .symbol("("),
-                  case .stringLiteral(let key) = tokens[index + 2].kind,
-                  callHasFallbackLabel(tokens, openingAt: index + 1) else {
-                continue
-            }
-            if function == "string",
-               !isLocalizationStringCall(tokens, functionAt: index, appLocalizerExtension: appLocalizerExtension) {
-                continue
-            }
-
-            let location = Location(path: path, line: tokens[index].line)
-            if key.contains(#"\("#) {
-                result.dynamicUsages.append(DynamicUsage(template: key, location: location))
-            } else if key.range(of: #"^[A-Za-z0-9_.-]+$"#, options: .regularExpression) != nil {
-                result.staticUsages[key, default: []].append(location)
-            }
-        }
-        return result
-    }
-
-    private static func isLocalizationStringCall(
-        _ tokens: [Token],
-        functionAt index: Int,
-        appLocalizerExtension: Bool
-    ) -> Bool {
-        guard index > 0, tokens[index - 1].kind == .symbol(".") else {
-            return appLocalizerExtension
-        }
-        let lowerBound = max(0, index - 16)
-        return tokens[lowerBound..<index].contains { token in
-            guard case .identifier(let identifier) = token.kind else { return false }
-            return identifier.localizedCaseInsensitiveContains("localizer")
-        }
-    }
-
-    private static func callHasFallbackLabel(_ tokens: [Token], openingAt opening: Int) -> Bool {
-        var depth = 0
-        var index = opening
-        while index < tokens.count {
-            switch tokens[index].kind {
-            case .symbol("("):
-                depth += 1
-            case .symbol(")"):
-                depth -= 1
-                if depth == 0 { return false }
-            case .identifier("fallback") where depth == 1:
-                if index + 1 < tokens.count, tokens[index + 1].kind == .symbol(":") {
-                    return true
-                }
-            default:
-                break
-            }
-            index += 1
-        }
-        return false
-    }
-
-    private static func tokenize(_ source: String) -> [Token] {
-        var tokens: [Token] = []
-        var index = source.startIndex
-        var line = 1
-        var blockCommentDepth = 0
-
-        while index < source.endIndex {
-            let character = source[index]
-            let next = source.index(after: index)
-            let nextCharacter = next < source.endIndex ? source[next] : nil
-
-            if blockCommentDepth > 0 {
-                if character == "/", nextCharacter == "*" {
-                    blockCommentDepth += 1
-                    index = source.index(after: next)
-                } else if character == "*", nextCharacter == "/" {
-                    blockCommentDepth -= 1
-                    index = source.index(after: next)
-                } else {
-                    if character == "\n" { line += 1 }
-                    index = next
-                }
-                continue
-            }
-            if character == "/", nextCharacter == "/" {
-                while index < source.endIndex, source[index] != "\n" {
-                    index = source.index(after: index)
-                }
-                continue
-            }
-            if character == "/", nextCharacter == "*" {
-                blockCommentDepth = 1
-                index = source.index(after: next)
-                continue
-            }
-            if character == "\n" {
-                line += 1
-                index = next
-                continue
-            }
-            if character.isWhitespace {
-                index = next
-                continue
-            }
-            if character == "\"" {
-                let tokenLine = line
-                var value = ""
-                index = next
-                var escaped = false
-                while index < source.endIndex {
-                    let current = source[index]
-                    if current == "\n" { line += 1 }
-                    if escaped {
-                        value.append("\\")
-                        value.append(current)
-                        escaped = false
-                    } else if current == "\\" {
-                        escaped = true
-                    } else if current == "\"" {
-                        index = source.index(after: index)
-                        break
-                    } else {
-                        value.append(current)
-                    }
-                    index = source.index(after: index)
-                }
-                tokens.append(Token(kind: .stringLiteral(value), line: tokenLine))
-                continue
-            }
-            if isIdentifierStart(character) {
-                let start = index
-                index = next
-                while index < source.endIndex, isIdentifierContinuation(source[index]) {
-                    index = source.index(after: index)
-                }
-                tokens.append(Token(kind: .identifier(String(source[start..<index])), line: line))
-                continue
-            }
-
-            tokens.append(Token(kind: .symbol(character), line: line))
-            index = next
-        }
-        return tokens
-    }
-
-    private static func isIdentifierStart(_ character: Character) -> Bool {
-        character == "_" || character.isLetter
-    }
-
-    private static func isIdentifierContinuation(_ character: Character) -> Bool {
-        isIdentifierStart(character) || character.isNumber
-    }
-
-    private static func relativePath(for fileURL: URL, from root: URL) -> String {
-        let rootPath = root.standardizedFileURL.path
-        let filePath = fileURL.standardizedFileURL.path
-        guard filePath.hasPrefix(rootPath + "/") else { return filePath }
-        return String(filePath.dropFirst(rootPath.count + 1))
     }
 }
