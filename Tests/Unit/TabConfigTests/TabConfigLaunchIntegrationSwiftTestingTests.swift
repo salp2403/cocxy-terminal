@@ -5,7 +5,7 @@ import Testing
 @testable import CocxyTerminal
 
 @MainActor
-@Suite("Tab config launch integration")
+@Suite("Tab config launch integration", .serialized)
 struct TabConfigLaunchIntegrationSwiftTestingTests {
     @Test("socket open of command-bearing config never writes terminal input")
     func socketOpenNeverWritesStartupInput() async throws {
@@ -146,6 +146,71 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         #expect(config.workingDirectory == fixture.workspace.path)
     }
 
+    @Test("save omits a layout containing a remote browser URL")
+    func saveOmitsRemoteBrowserLayout() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+        let remoteURL = try #require(URL(string: "https://example.com/dashboard"))
+        #expect(fixture.controller.performVisualSplitWithPanel(
+            isVertical: false,
+            panel: .browser(url: remoteURL)
+        ))
+
+        let saved = fixture.delegate.saveFocusedTabConfigForCLI(
+            name: "remote-browser",
+            command: nil,
+            theme: nil,
+            environment: [:],
+            store: fixture.store
+        )
+        let config = try fixture.store.load(named: "remote-browser")
+
+        #expect(saved?.warning != nil)
+        #expect(config.layout == nil)
+        #expect(config.workingDirectory == fixture.workspace.path)
+    }
+
+    @Test("save omits a layout containing a live subagent pane")
+    func saveOmitsSubagentLayout() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        _ = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+        fixture.controller.injectedDashboardViewModel = AgentDashboardViewModel()
+        #expect(fixture.controller.performVisualSplitWithPanel(
+            isVertical: false,
+            panel: .subagent(id: "sub-1", sessionId: "session-1")
+        ))
+
+        let saved = fixture.delegate.saveFocusedTabConfigForCLI(
+            name: "subagent",
+            command: nil,
+            theme: nil,
+            environment: [:],
+            store: fixture.store
+        )
+        let config = try fixture.store.load(named: "subagent")
+
+        #expect(saved?.warning != nil)
+        #expect(config.layout == nil)
+        #expect(config.workingDirectory == fixture.workspace.path)
+    }
+
+    @Test("open fails without creating resources when the project directory is missing")
+    func openRejectsMissingProjectDirectory() throws {
+        let fixture = try makeFixture()
+        defer { fixture.cleanup() }
+        let originalTabIDs = Set(fixture.controller.tabManager.tabs.map(\.id))
+        let originalSurfaceIDs = Set(fixture.engine.createdSurfaces.keys)
+        try FileManager.default.removeItem(at: fixture.workspace)
+
+        let result = fixture.delegate.openTabConfigForCLI(named: "api", store: fixture.store)
+
+        #expect(result == nil)
+        #expect(Set(fixture.controller.tabManager.tabs.map(\.id)) == originalTabIDs)
+        #expect(Set(fixture.engine.createdSurfaces.keys) == originalSurfaceIDs)
+    }
+
     @Test("open replaces only missing pane resources and reports the degradation")
     func openReplacesMissingPaneResources() throws {
         let fixture = try makeFixture()
@@ -270,6 +335,8 @@ struct TabConfigLaunchIntegrationSwiftTestingTests {
         let baselineCreateSurfaceCount = engine.createSurfaceRequests.count
         let delegate = AppDelegate()
         delegate.installWindowControllerForTesting(controller)
+        controller.showWindow(nil)
+        controller.window?.makeKeyAndOrderFront(nil)
         return Fixture(
             root: root,
             workspace: workspace,
