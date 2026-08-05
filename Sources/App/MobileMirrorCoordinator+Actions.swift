@@ -117,7 +117,9 @@ extension MobileMirrorCoordinator {
                 }
                 let projectCreation = try prepareProjectCreation(
                     named: name,
-                    identity: identity
+                    identity: identity,
+                    cookie: cookie,
+                    channelID: channelID
                 )
                 projectCreationIsQueued = true
                 auditOutcome = .queued

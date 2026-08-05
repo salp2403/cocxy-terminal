@@ -5,6 +5,11 @@ import AppKit
 import Combine
 import Foundation
 
+typealias MobileMirrorProjectCreationConfirmation = @MainActor (
+    String,
+    MobileMirrorClientIdentity
+) async -> Bool
+
 @MainActor
 final class MobileMirrorCoordinator: ObservableObject {
     @Published var state: MobileMirrorServiceState = .stopped
@@ -30,6 +35,7 @@ final class MobileMirrorCoordinator: ObservableObject {
     let backgroundActionQueue = MobileMirrorBackgroundActionQueue()
     let staticAssetServer = MobileMirrorStaticAssetServer()
     let projectService: any MobileMirrorProjectCreating
+    let projectCreationConfirmation: MobileMirrorProjectCreationConfirmation
     let relayManager: RelayManagerImpl
     let tunnelController: MobileMirrorSSHTunnelController
     var projectRecordsSnapshot: [ProjectRecord]
@@ -61,7 +67,8 @@ final class MobileMirrorCoordinator: ObservableObject {
         relayManager: RelayManagerImpl,
         tunnelController: MobileMirrorSSHTunnelController,
         authority: MobileMirrorPairingAuthority = MobileMirrorPairingAuthority(),
-        projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService()
+        projectService: any MobileMirrorProjectCreating = MobileMirrorProjectService(),
+        projectCreationConfirmation: MobileMirrorProjectCreationConfirmation? = nil
     ) {
         self.appDelegate = appDelegate
         self.projectRegistry = projectRegistry
@@ -74,6 +81,13 @@ final class MobileMirrorCoordinator: ObservableObject {
         self.tunnelController = tunnelController
         self.authority = authority
         self.projectService = projectService
+        self.projectCreationConfirmation = projectCreationConfirmation ?? { [weak appDelegate] name, identity in
+            await MobileMirrorProjectConfirmationPresenter.confirm(
+                named: name,
+                identity: identity,
+                appDelegate: appDelegate
+            )
+        }
         projectRecordsSnapshot = projectRegistry.records
         sessionEntriesSnapshot = sessionRegistry.allSessions
         subscribeToAppState()

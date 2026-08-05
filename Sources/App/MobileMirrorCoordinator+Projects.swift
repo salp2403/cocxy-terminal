@@ -7,7 +7,9 @@ import Foundation
 extension MobileMirrorCoordinator {
     func prepareProjectCreation(
         named rawName: String,
-        identity: MobileMirrorClientIdentity
+        identity: MobileMirrorClientIdentity,
+        cookie: String,
+        channelID: UUID
     ) throws -> @MainActor () async throws -> Void {
         guard let root = projectCreationRootHandle else {
             throw MobileMirrorError.projectCreationUnavailable
@@ -15,7 +17,13 @@ extension MobileMirrorCoordinator {
         let name = try MobileMirrorProjectService.normalizedProjectName(rawName)
         return { [weak self] in
             guard let self else { throw MobileMirrorError.projectCreationUnavailable }
-            try await self.createProject(named: name, identity: identity, root: root)
+            try await self.createProject(
+                named: name,
+                identity: identity,
+                cookie: cookie,
+                channelID: channelID,
+                root: root
+            )
         }
     }
 
@@ -54,15 +62,20 @@ extension MobileMirrorCoordinator {
     func createProject(
         named name: String,
         identity: MobileMirrorClientIdentity,
+        cookie: String,
+        channelID: UUID,
         root: ProjectDirectoryRoot
     ) async throws {
+        try requireActivePairing(cookie: cookie, channelID: channelID, identity: identity)
         try Task.checkCancellation()
-        guard await confirmProjectCreation(named: name, identity: identity) else {
+        guard await projectCreationConfirmation(name, identity) else {
             try Task.checkCancellation()
             throw MobileMirrorError.authorizationDenied
         }
         try Task.checkCancellation()
         let publication = try await projectService.createProject(named: name, in: root)
+        try requireActivePairing(cookie: cookie, channelID: channelID, identity: identity)
+        try Task.checkCancellation()
         guard let appDelegate else {
             throw MobileMirrorError.projectCreationUnavailable
         }
@@ -93,9 +106,26 @@ extension MobileMirrorCoordinator {
         appDelegate.windowEventBus?.broadcast(.custom(name: "project.changed", payload: [:]))
     }
 
-    private func confirmProjectCreation(
-        named name: String,
+    private func requireActivePairing(
+        cookie: String,
+        channelID: UUID,
         identity: MobileMirrorClientIdentity
+    ) throws {
+        guard let active = authority.activePairing(cookie: cookie),
+              active.channelID == channelID,
+              active.identity.fingerprint == identity.fingerprint else {
+            throw MobileMirrorError.sessionExpired
+        }
+    }
+
+}
+
+@MainActor
+enum MobileMirrorProjectConfirmationPresenter {
+    static func confirm(
+        named name: String,
+        identity: MobileMirrorClientIdentity,
+        appDelegate: AppDelegate?
     ) async -> Bool {
         guard let appDelegate,
               let window = appDelegate.mobileMirrorWindowController?.window,
