@@ -620,7 +620,8 @@ struct AgentSessionRunnerSwiftTestingTests {
         let controller = RecordingSessionComputerUseController(result: .screenshot(
             fileURL: URL(fileURLWithPath: "/tmp/cocxy-runner-shot.png"),
             width: 100,
-            height: 80
+            height: 80,
+            scaleFactor: 2
         ))
         let runner = AgentSessionRunner(
             clientFactory: RecordingSessionRunnerClientFactory(client: provider),
@@ -726,7 +727,8 @@ struct AgentSessionRunnerSwiftTestingTests {
         let controller = RecordingSessionComputerUseController(result: .screenshot(
             fileURL: screenshotURL,
             width: 100,
-            height: 80
+            height: 80,
+            scaleFactor: 2
         ))
         let runner = AgentSessionRunner(
             clientFactory: RecordingSessionRunnerClientFactory(client: provider),
@@ -760,6 +762,7 @@ struct AgentSessionRunnerSwiftTestingTests {
             "path": .string(screenshotURL.path),
             "width": .number(100),
             "height": .number(80),
+            "scaleFactor": .number(2),
         ]))
     }
 

@@ -641,12 +641,13 @@ struct AgentLocalToolExecutor: AgentToolExecuting, AgentToolPreviewing {
                 "action": .string("keyboard.type_text"),
                 "characters": .number(Double(characters)),
             ])
-        case .screenshot(let fileURL, let width, let height):
+        case .screenshot(let fileURL, let width, let height, let scaleFactor):
             return .object([
                 "action": .string("screenshot.main_display"),
                 "path": .string(fileURL.path),
                 "width": .number(Double(width)),
                 "height": .number(Double(height)),
+                "scaleFactor": .number(scaleFactor),
             ])
         }
     }

@@ -75,11 +75,13 @@ actor ComputerUseActor: ComputerUseControlling {
                     "path": .string(screenshot.fileURL.path),
                     "width": .number(Double(screenshot.width)),
                     "height": .number(Double(screenshot.height)),
+                    "scaleFactor": .number(screenshot.scaleFactor),
                 ])
                 return .screenshot(
                     fileURL: screenshot.fileURL,
                     width: screenshot.width,
-                    height: screenshot.height
+                    height: screenshot.height,
+                    scaleFactor: screenshot.scaleFactor
                 )
             } catch {
                 try record(action: request.auditName, outcome: .failure)

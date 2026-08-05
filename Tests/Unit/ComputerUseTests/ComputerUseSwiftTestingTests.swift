@@ -151,14 +151,20 @@ struct ComputerUseSwiftTestingTests {
             screenshotCapture: RecordingScreenshotCapture(result: ComputerUseScreenshot(
                 fileURL: screenshotURL,
                 width: 120,
-                height: 80
+                height: 80,
+                scaleFactor: 2
             )),
             auditLog: ComputerUseAuditLog(fileURL: logURL)
         )
 
         let result = try await actor.perform(.screenshot(.mainDisplay))
 
-        #expect(result == .screenshot(fileURL: screenshotURL, width: 120, height: 80))
+        #expect(result == .screenshot(
+            fileURL: screenshotURL,
+            width: 120,
+            height: 80,
+            scaleFactor: 2
+        ))
         #expect(await permission.promptFlags.isEmpty)
         let log = try String(contentsOf: logURL, encoding: .utf8)
         #expect(log.contains("\"action\":\"screenshot.main_display\""))
@@ -188,6 +194,7 @@ struct ComputerUseSwiftTestingTests {
 
         #expect(screenshot.width == 3)
         #expect(screenshot.height == 2)
+        #expect(screenshot.scaleFactor == 1)
         #expect(screenshot.fileURL.pathExtension == "png")
         #expect(FileManager.default.fileExists(atPath: screenshot.fileURL.path))
         #expect(try Data(contentsOf: screenshot.fileURL).starts(with: [0x89, 0x50, 0x4E, 0x47]))
@@ -196,12 +203,21 @@ struct ComputerUseSwiftTestingTests {
     @Test("ScreenCaptureKit uses physical display pixels for Retina captures")
     func screenCaptureKitUsesPhysicalDisplayPixels() {
         let displayID = CGMainDisplayID()
-        let dimensions = ScreenCaptureKitComputerUseScreenshotCapture.pixelDimensions(
+        let mode = CGDisplayCopyDisplayMode(displayID)
+        let geometry = ScreenCaptureKitComputerUseScreenshotCapture.pixelGeometry(
             for: displayID
         )
+        let physicalWidth = max(1, mode?.pixelWidth ?? CGDisplayPixelsWide(displayID))
+        let physicalHeight = max(1, mode?.pixelHeight ?? CGDisplayPixelsHigh(displayID))
+        let pointWidth = max(1, CGDisplayBounds(displayID).width)
 
-        #expect(dimensions.width == max(1, CGDisplayPixelsWide(displayID)))
-        #expect(dimensions.height == max(1, CGDisplayPixelsHigh(displayID)))
+        #expect(geometry.width == physicalWidth)
+        #expect(geometry.height == physicalHeight)
+        #expect(geometry.scaleFactor == Double(physicalWidth) / Double(pointWidth))
+        if let mode {
+            #expect(geometry.width == mode.pixelWidth)
+            #expect(geometry.height == mode.pixelHeight)
+        }
     }
 
     private func temporaryLogURL() -> URL {

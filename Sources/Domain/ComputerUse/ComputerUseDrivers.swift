@@ -104,9 +104,9 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
 
             let filter = SCContentFilter(display: display, excludingWindows: [])
             let configuration = SCStreamConfiguration()
-            let pixelSize = Self.pixelDimensions(for: display.displayID)
-            configuration.width = pixelSize.width
-            configuration.height = pixelSize.height
+            let geometry = Self.pixelGeometry(for: display.displayID)
+            configuration.width = geometry.width
+            configuration.height = geometry.height
             configuration.showsCursor = true
 
             let image: CGImage
@@ -118,20 +118,25 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
             } catch {
                 throw ComputerUseError.screenshotCaptureFailed
             }
-            return try write(image)
+            return try write(image, scaleFactor: geometry.scaleFactor)
         }
     }
 
-    static func pixelDimensions(
+    static func pixelGeometry(
         for displayID: CGDirectDisplayID
-    ) -> (width: Int, height: Int) {
-        (
-            width: max(1, CGDisplayPixelsWide(displayID)),
-            height: max(1, CGDisplayPixelsHigh(displayID))
+    ) -> (width: Int, height: Int, scaleFactor: Double) {
+        let mode = CGDisplayCopyDisplayMode(displayID)
+        let width = max(1, mode?.pixelWidth ?? CGDisplayPixelsWide(displayID))
+        let height = max(1, mode?.pixelHeight ?? CGDisplayPixelsHigh(displayID))
+        let pointWidth = max(1, CGDisplayBounds(displayID).width)
+        return (
+            width: width,
+            height: height,
+            scaleFactor: max(1, Double(width) / Double(pointWidth))
         )
     }
 
-    func write(_ image: CGImage) throws -> ComputerUseScreenshot {
+    func write(_ image: CGImage, scaleFactor: Double = 1) throws -> ComputerUseScreenshot {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let fileURL = directory.appendingPathComponent("screenshot-\(Self.fileTimestamp())-\(UUID().uuidString).png")
         guard let destination = CGImageDestinationCreateWithURL(
@@ -149,7 +154,8 @@ struct ScreenCaptureKitComputerUseScreenshotCapture: ComputerUseScreenshotCaptur
         return ComputerUseScreenshot(
             fileURL: fileURL,
             width: image.width,
-            height: image.height
+            height: image.height,
+            scaleFactor: scaleFactor
         )
     }
 
