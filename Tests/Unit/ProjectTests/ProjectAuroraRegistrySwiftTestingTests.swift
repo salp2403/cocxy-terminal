@@ -74,6 +74,6 @@ struct ProjectAuroraRegistrySwiftTestingTests {
         let url = FileManager.default.temporaryDirectory
             .appendingPathComponent("ProjectAuroraRegistry-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+        return ProjectPathCanonicalizer.canonicalURL(url)
     }
 }
